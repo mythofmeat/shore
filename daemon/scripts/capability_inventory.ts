@@ -4,6 +4,8 @@ import * as ts from "typescript/unstable/ast";
 import { API } from "typescript/unstable/async";
 import { createVirtualFileSystem } from "typescript/unstable/fs";
 
+import { commandCatalogue } from "../src/commands/registry.ts";
+
 const ROOT = join(import.meta.dir, "..");
 export const INVENTORY_PATH = join(ROOT, "../docs/capabilities/daemon.generated.json");
 
@@ -74,9 +76,16 @@ export async function currentDaemonInventory(): Promise<object> {
     ...readdirSync(protocolDir).filter((name) => name.endsWith(".ts")).sort().map((name) => readFileSync(join(protocolDir, name), "utf8")),
   ]);
   if (dispatch === undefined) throw new Error("Missing parsed dispatcher");
+  const legacy = dispatchInventory(dispatch);
+  const operations = { ...legacy };
+  for (const operation of commandCatalogue()) {
+    if (Object.hasOwn(legacy, operation.name)) throw new Error(`Operation still has a legacy dispatch path: ${operation.name}`);
+    operations[operation.name] = ["registry", `scope:${operation.scope}`];
+  }
   return {
     format: 1,
-    operations: dispatchInventory(dispatch),
+    operations: Object.fromEntries(Object.entries(operations).sort(([a], [b]) => a.localeCompare(b))),
+    legacy_operations: Object.keys(legacy),
     protocol: protocolInventory(protocol),
   };
 }

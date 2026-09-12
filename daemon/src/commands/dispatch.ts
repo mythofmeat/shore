@@ -46,13 +46,7 @@ import {
   setModelSetting,
   switchModel,
 } from "./models.ts";
-import {
-  characterInfo,
-  createCharacter,
-  listCharacters,
-  switchCharacter,
-  type Args,
-} from "./navigation.ts";
+import type { Args } from "./navigation.ts";
 import {
   listProviderModels,
   listProviders,
@@ -68,19 +62,9 @@ import {
   status,
 } from "./status.ts";
 import { usage } from "./usage.ts";
-import {
-  archiveThread,
-  listThreads,
-  newThread,
-  switchThread,
-  forkThread,
-  threadHome,
-  threadLabel,
-  threadModel,
-  type ThreadContext,
-  type ThreadRegistry,
-} from "./threads.ts";
-import { threadTurnCounts } from "../engine/threads.ts";
+import type { ThreadRegistry } from "./threads.ts";
+import { archiveWithSignal } from "./thread_context.ts";
+import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
@@ -129,8 +113,6 @@ export interface CommandDeps {
 }
 
 const CHARACTERLESS = new Set([
-  "list_characters",
-  "create_character",
   "list_models",
   "favorite_model",
   "list_providers",
@@ -146,48 +128,14 @@ export async function runCommand(
   deps: CommandDeps,
   cmd: Command,
 ): Promise<unknown> {
+  if (isRegisteredOperation(cmd.name)) {
+    return await runRegisteredOperation(cmd.name, { engine, session, deps }, cmd.args);
+  }
   const args = (cmd.args ?? {}) as Args;
   const character = engine.characterName;
   const threads = deps.threads;
-  const configDir = session.config.dirs.config;
-  const workspaceRoot = session.config.dirs.workspace;
 
   switch (cmd.name) {
-    case "list_characters":
-      return listCharacters(configDir, character, workspaceRoot);
-    case "create_character":
-      return createCharacter(configDir, args, workspaceRoot);
-    case "switch_character":
-      return switchCharacter(configDir, character, args, workspaceRoot);
-    case "character_info":
-      return await characterInfo(
-        { configDir, dataDir: session.dataDir, active: character, workspaceRoot },
-        args,
-      );
-
-    case "list_threads":
-      return listThreads(await threadListingContext(deps, engine, session));
-    case "switch_thread":
-      return switchThread(threadContext(deps, engine, session.signal), args);
-    case "create_thread":
-      return await newThread(await threadListingContext(deps, engine, session), args);
-    case "archive_thread": {
-      const result = await archiveThread(await threadListingContext(deps, engine, session), args);
-      deps.historyIndex?.noteMutation?.(character);
-      return result;
-    }
-    case "fork_thread": {
-      const result = await forkThread(await threadListingContext(deps, engine, session), args);
-      deps.historyIndex?.noteMutation?.(character);
-      return result;
-    }
-    case "thread_home":
-      return await threadHome(await threadListingContext(deps, engine, session), args);
-    case "thread_label":
-      return await threadLabel(await threadListingContext(deps, engine, session), args);
-    case "thread_model":
-      return await threadModel(await threadListingContext(deps, engine, session), args);
-
     case "log":
       return await log(engine, args);
     case "history_page":
@@ -352,16 +300,14 @@ export function runCharacterlessCommand(
   deps: CommandDeps,
   cmd: Command,
 ): unknown {
+  if (isRegisteredOperation(cmd.name)) {
+    if (commandOperations[cmd.name].presentation.scope !== "global") {
+      throw invalidRequest(`Command '${cmd.name}' requires a character`);
+    }
+    return runRegisteredOperation(cmd.name, { session, deps }, cmd.args);
+  }
   const args = (cmd.args ?? {}) as Args;
   switch (cmd.name) {
-    case "list_characters":
-      return listCharacters(
-        session.config.dirs.config,
-        undefined,
-        session.config.dirs.workspace,
-      );
-    case "create_character":
-      return createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
     case "list_models":
       return listModels(session, args);
     case "favorite_model":
@@ -387,80 +333,8 @@ export function runCharacterlessCommand(
   }
 }
 
-type SnapshotRunner = <T>(run: () => Promise<T>) => Promise<T>;
-
-function guardedSnapshot(
-  withSnapshot: SnapshotRunner,
-  signal: AbortSignal | undefined,
-): SnapshotRunner {
-  if (signal === undefined) return withSnapshot;
-  return async <T>(run: () => Promise<T>): Promise<T> =>
-    await withSnapshot(async () => {
-      signal.throwIfAborted();
-      return await run();
-    });
-}
-
-function threadContext(
-  deps: CommandDeps,
-  engine: ConversationEngine,
-  signal?: AbortSignal,
-): ThreadContext {
-  const registry = deps.threads;
-  if (registry === undefined) {
-    throw internalError("thread commands need a character registry, and this one has none");
-  }
-  return {
-    registry,
-    character: engine.characterName,
-    current: engine.thread,
-    ...(signal === undefined ? {} : { signal }),
-  };
-}
-
-async function threadListingContext(
-  deps: CommandDeps,
-  engine: ConversationEngine,
-  session: CommandSession,
-): Promise<ThreadContext> {
-  const base = threadContext(deps, engine, session.signal);
-  const warm = deps.keepalive?.keepalive.warmThread(base.character);
-  const archive = deps.archive;
-  return {
-    ...base,
-    ...(archive === undefined
-      ? {}
-      : {
-          withSnapshot: guardedSnapshot(
-            async <T>(run: () => Promise<T>) => await archive.withSnapshot(run),
-            session.signal,
-          ),
-        }),
-    turns: await threadTurnCounts(
-      session.dataDir,
-      base.character,
-      base.registry.listThreads(base.character).map((t) => t.id),
-    ),
-    ...(warm === undefined ? {} : { warm }),
-  };
-}
-
-function archiveWithSignal(
-  archive: ArchiveContext,
-  signal: AbortSignal | undefined,
-): ArchiveContext {
-  if (signal === undefined) return archive;
-  return {
-    ...archive,
-    withSnapshot: guardedSnapshot(
-      async <T>(run: () => Promise<T>) => await archive.withSnapshot(run),
-      signal,
-    ),
-  };
-}
-
 export function isCharacterless(name: string): boolean {
-  return CHARACTERLESS.has(name);
+  return isRegisteredOperation(name) ? commandOperations[name].presentation.scope === "global" : CHARACTERLESS.has(name);
 }
 
 export function commandFrame(name: string, outcome: { ok: unknown } | { err: unknown }): ServerMessage {

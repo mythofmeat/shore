@@ -1,0 +1,1579 @@
+[
+  {
+    "name": "list_characters",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CharacterListing",
+      "type": "object",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CharacterInfo"
+          }
+        }
+      },
+      "required": [
+        "characters"
+      ],
+      "$defs": {
+        "CharacterInfo": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "avatar": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CharacterAvatar"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "CharacterAvatar": {
+          "type": "object",
+          "properties": {
+            "mime_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mime_type",
+            "data"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "create_character",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CharacterCreated",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "workspace_dir": {
+          "type": "string"
+        },
+        "config_dir": {
+          "type": "string"
+        },
+        "created_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "character",
+        "workspace_dir",
+        "config_dir",
+        "created_files"
+      ]
+    }
+  },
+  {
+    "name": "switch_character",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CharacterSelection",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "selected_character": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "active_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "changed"
+      ]
+    }
+  },
+  {
+    "name": "character_info",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CharacterInfoArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CharacterDetails",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "config_dir": {
+          "type": "string"
+        },
+        "workspace_dir": {
+          "type": "string"
+        },
+        "has_definition": {
+          "type": "boolean"
+        },
+        "definition_preview": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bootstrap_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "has_config_override": {
+          "type": "boolean"
+        },
+        "pending_deferred_edits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "data_dir": {
+          "type": "string"
+        },
+        "has_data": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "active",
+        "config_dir",
+        "workspace_dir",
+        "has_definition",
+        "definition_preview",
+        "bootstrap_files",
+        "has_config_override",
+        "pending_deferred_edits",
+        "data_dir",
+        "has_data"
+      ]
+    }
+  },
+  {
+    "name": "list_threads",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "switch_thread",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SwitchThreadArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "resync": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadSelection",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "selected_thread": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "thread",
+        "changed"
+      ],
+      "$defs": {
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "create_thread",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CreateThreadArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "compaction": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "archive_thread",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "fork_thread",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ForkThreadArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadForkResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fork": {
+          "$ref": "#/$defs/ThreadForkDetails"
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current",
+        "fork"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        },
+        "ThreadForkDetails": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "scope": {
+              "$ref": "#/$defs/ForkScope"
+            },
+            "requested_turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "thread",
+            "source",
+            "created_at",
+            "messages",
+            "turns",
+            "scope"
+          ]
+        },
+        "ForkScope": {
+          "type": "string",
+          "enum": [
+            "full",
+            "last_turns"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_home",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_label",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadLabelArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_model",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadModelArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  }
+]

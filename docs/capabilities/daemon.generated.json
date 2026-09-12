@@ -5,13 +5,15 @@
       "runCommand"
     ],
     "archive_thread": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "call_log": [
       "runCommand"
     ],
     "character_info": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "clear": [
       "runCommand"
@@ -32,11 +34,12 @@
       "runCommand"
     ],
     "create_character": [
-      "runCommand",
-      "runCharacterlessCommand"
+      "registry",
+      "scope:global"
     ],
     "create_thread": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "delete": [
       "runCommand"
@@ -58,7 +61,8 @@
       "runCharacterlessCommand"
     ],
     "fork_thread": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "get": [
       "runCommand"
@@ -91,8 +95,8 @@
       "runCommand"
     ],
     "list_characters": [
-      "runCommand",
-      "runCharacterlessCommand"
+      "registry",
+      "scope:global"
     ],
     "list_models": [
       "runCommand",
@@ -107,7 +111,8 @@
       "runCharacterlessCommand"
     ],
     "list_threads": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "log": [
       "runCommand"
@@ -146,22 +151,27 @@
       "runCommand"
     ],
     "switch_character": [
-      "runCommand"
+      "registry",
+      "scope:selection"
     ],
     "switch_model": [
       "runCommand"
     ],
     "switch_thread": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "thread_home": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "thread_label": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "thread_model": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "tools": [
       "runCommand"
@@ -173,11 +183,62 @@
       "runCommand"
     ]
   },
+  "legacy_operations": [
+    "alt",
+    "call_log",
+    "clear",
+    "compact",
+    "config",
+    "config_check",
+    "config_reload",
+    "config_schema",
+    "delete",
+    "delete_character",
+    "edit",
+    "error_log",
+    "export_character",
+    "favorite_model",
+    "get",
+    "heartbeat_log",
+    "heartbeat_set_active",
+    "heartbeat_set_dormant",
+    "heartbeat_tick_now",
+    "history_page",
+    "import_character",
+    "inject_system",
+    "keepalive_ping_now",
+    "list_alternatives",
+    "list_models",
+    "list_provider_models",
+    "list_providers",
+    "log",
+    "model_info",
+    "model_settings",
+    "refresh_all_provider_models",
+    "refresh_provider_models",
+    "reset_model",
+    "run_tool",
+    "segments",
+    "session_activate",
+    "set_model_setting",
+    "status",
+    "subagent_trace",
+    "switch_model",
+    "tools",
+    "transcript",
+    "usage"
+  ],
   "protocol": {
+    "CacheInvalidation": "{ cached_request: boolean, }",
     "CacheWarning": "{ expected_tokens: number, message: string, }",
     "Cancel": "Record<symbol, never>",
     "CharacterAvatar": "{ mime_type: string, data: string, }",
+    "CharacterCreated": "{ character: string, workspace_dir: string, config_dir: string, created_files: Array<string>, }",
+    "CharacterDetails": "{ name: string, active: boolean, config_dir: string, workspace_dir: string, has_definition: boolean, definition_preview: string | null, bootstrap_files: Array<string>, has_config_override: boolean, pending_deferred_edits: Array<string>, data_dir: string, has_data: boolean, }",
     "CharacterInfo": "{ name: string, avatar?: CharacterAvatar | null, }",
+    "CharacterInfoArgs": "{ name?: string | null, }",
+    "CharacterListing": "{ characters: Array<CharacterInfo>, }",
+    "CharacterSelection": "{ character: string, changed: boolean, selected_character?: string, active_model?: string | null, }",
     "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, token?: string | null, }",
     "ClientMessage": "{ \"type\": \"hello\" } & ClientHello | { \"type\": \"message\" } & ClientMessageBody | { \"type\": \"regen\" } & Regen | { \"type\": \"command\" } & Command | { \"type\": \"cancel\" } & Cancel",
     "ClientMessageBody": "{ rid?: string | null, text: string, stream: boolean, images: Array<string>, image_data?: Array<ImageUpload>, absence_seconds?: number, }",
@@ -185,8 +246,12 @@
     "CommandOutput": "{ rid?: string | null, name: string, data: unknown, }",
     "ConfigWarning": "{ rid?: string | null, path: string, character?: string | null, message: string, }",
     "ContentBlock": "{ \"type\": \"text\", text: string, } | { \"type\": \"thinking\", thinking: string, signature?: string | null, } | { \"type\": \"tool_use\", id: string, name: string, input: unknown, } | { \"type\": \"redacted_thinking\", data: string, } | { \"type\": \"tool_result\", tool_use_id: string, content: string, is_error: boolean, }",
+    "CreateThreadArgs": "{ name: string, label?: string | null, model?: string | null, compaction?: boolean | null, }",
+    "EmptyOperationArgs": "Record<symbol, never>",
     "Error": "{ rid?: string | null, code: ErrorCode, message: string, retry_after_ms?: number | null, }",
     "ErrorCode": "\"protocol_error\" | \"invalid_request\" | \"not_found\" | \"busy\" | \"provider_error\" | \"timeout\" | \"internal_error\" | \"unauthorized\"",
+    "ForkScope": "\"full\" | \"last_turns\"",
+    "ForkThreadArgs": "{ name: string, from?: string | null, turns?: number | null, }",
     "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, active_start?: number, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
     "HistoryDelta": "{ base_revision: number, after: string | null, }",
     "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
@@ -194,7 +259,10 @@
     "Message": "{ msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
     "MessageAlternative": "{ content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, timestamp: string, provider_key?: string | null, model?: string | null, }",
     "MessageOrigin": "\"user_input\" | \"assistant_reply\" | \"autonomous\"",
+    "NamedOperationArgs": "{ name: string, }",
     "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "OperationRequest": "{ \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs }",
+    "OperationResponse": "{ \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing }",
     "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
     "Ping": "Record<symbol, never>",
     "ProviderFallbackWarning": "{ rid?: string | null, provider: string, from_key: string, to_key: string, kind: string, status?: number | null, message: string, }",
@@ -209,6 +277,15 @@
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
     "StreamMetadata": "{ tokens: TokenCounts, timing: TimingInfo, model: string, }",
     "StreamStart": "{ rid?: string | null, regen: boolean, subagent?: string | null, task_id?: string | null, }",
+    "SwitchThreadArgs": "{ name: string, resync?: boolean | null, }",
+    "ThreadForkDetails": "{ fork_id: string, thread: string, source: string, created_at: string, messages: number, turns: number, scope: ForkScope, requested_turns?: number, }",
+    "ThreadForkOrigin": "{ fork_id: string, source: string, created_at: string, messages: number, turns: number, }",
+    "ThreadForkResult": "{ fork: ThreadForkDetails, character: string, threads: Array<ThreadView>, home: string, current: string, invalidated?: CacheInvalidation, }",
+    "ThreadLabelArgs": "{ name: string, label?: string | null, }",
+    "ThreadListing": "{ character: string, threads: Array<ThreadView>, home: string, current: string, invalidated?: CacheInvalidation, }",
+    "ThreadModelArgs": "{ name: string, model?: string | null, }",
+    "ThreadSelection": "{ character: string, thread: string, changed: boolean, selected_thread?: string, invalidated?: CacheInvalidation, }",
+    "ThreadView": "{ id: string, label?: string, created_at: string, last_active?: string, chat_model?: string, compaction: boolean, home: boolean, current: boolean, turns?: number, warm?: boolean, forked_from?: ThreadForkOrigin, }",
     "TimingInfo": "{ total_ms: number, ttft_ms: number, }",
     "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",
     "ToolCall": "{ rid?: string | null, tool_id: string, tool_name: string, input: unknown, subagent?: string | null, task_id?: string | null, }",

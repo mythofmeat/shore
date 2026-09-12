@@ -309,14 +309,14 @@ pub fn derive_content_from_blocks(blocks: &[ContentBlock]) -> String {
     derive_content_from_blocks_with(blocks, true)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CharacterAvatar {
     pub mime_type: String,
     pub data: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CharacterInfo {
     pub name: String,

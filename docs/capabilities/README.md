@@ -11,15 +11,17 @@ input, **not evidence that a browser workflow exists**. There is currently no br
   It also records examples passed through the actual `to_swp_command` mapping, the complete `ViewKey`
   preferences, and the production key bindings and shortcut menu. A null example mapping means that
   a special runner or local workflow must be accounted for; it is not an exception from browser parity.
-- `daemon.generated.json` is produced by parsing the actual daemon dispatcher and every generated wire
-  type. It includes characterless dispatch, core message/regen/cancel requests, results, images, tools,
-  warnings, and all known server-event variants. This records the current open payload contracts; it
-  does not validate those payloads or make the legacy dispatcher authoritative discovery.
+- `daemon.generated.json` combines the executable operation registry, the remaining legacy dispatch
+  paths and every generated wire type. It includes characterless dispatch, core message/regen/cancel
+  requests, results, images, tools, warnings, and all known server-event variants. Its
+  `legacy_operations` list makes unmigrated contracts explicit. Registered operation schemas validate
+  the twelve migrated character/thread payloads; the inventory itself is not a runtime validator.
 
 Regenerate from `client/`, then from `daemon/`:
 
 ```sh
 cargo test -p shore-common --lib export_bindings
+cargo test -p shore-common --lib export_operation_schemas
 cargo test -p shore-cli export_capability_inventory -- --ignored
 ```
 
@@ -29,8 +31,9 @@ bun run inventory:generate
 
 The normal Rust and daemon test suites compare the inventories against the running source. Review
 regenerated differences together with the corresponding browser controls and conformance fixtures.
-These first gates detect source drift. They do not yet enforce operation contracts, GUI renderers,
-field accessibility, known event handling, or transport conformance. Those gates remain required.
+These gates detect source drift. The migrated registry also enforces handler/contract bindings and
+input-field metadata. GUI renderers, field accessibility, known event handling and transport
+conformance remain required gates; metadata alone does not establish a usable browser control.
 
 ## Capability mappings
 
