@@ -13,6 +13,7 @@ bindings describe the shape, that file pins the bytes.
 
 ```
 cargo test -p shore-common --lib export_bindings
+cargo test -p shore-common --lib export_wire_schemas
 ```
 
 No environment variable, and that is deliberate. ts-rs resolves `export_to` against
@@ -49,3 +50,23 @@ ts-rs cannot express "any unrecognized tag", so it used to emit it as a literal
 `| { "type": "unknown" }` member — a frame TypeScript had to handle and could never receive.
 `5aab5715` took it back out with `#[ts(skip)]`. If it reappears in `ServerMessage.ts`, the skip
 was lost rather than the protocol having changed.
+
+## Browser runtime validation
+
+`wire.generated.json` comes from Schemars derives on the same Rust wire types. Client input uses
+the deserialize schema; server output uses the serialize schema so required TypeScript properties
+cannot disappear behind Rust input defaults. `Unknown` is also excluded with `#[schemars(skip)]`.
+The browser validates known events against this contract, retains additive result fields, and
+exposes genuinely future event tags separately. Invalid known events stop the connection.
+JavaScript integer formats reject values outside the safe integer range rather than rounding
+revision counters silently.
+
+From `daemon/`, `bun run browser:generate` precompiles browser validators with Ajv's standalone
+generator; `bun run browser:check` verifies reproducibility. Browser bundles do not compile schemas
+at runtime or require dynamic code evaluation. Both generated layers are checked in PR CI.
+
+Peers announcing `request-lifecycle` receive `request_finished` directly from the shared handler,
+independent of current selection. Outcomes are completed, failed, cancelled or superseded, with
+structured error details when applicable. Completion follows actual handler/provider settlement;
+an immediate cancelled `stream_end` alone does not mean the work has released its resources.
+Web peers opt into this capability. Existing terminal peers retain their existing event sequence.

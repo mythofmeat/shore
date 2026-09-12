@@ -6,10 +6,13 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { Error as ProtocolError } from "../protocol/Error.ts";
+import type { RequestOutcome } from "../protocol/RequestOutcome.ts";
 import { sanitiseRid } from "../swp/admission.ts";
 import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
 import {
   isControlRoutedMessage,
+  REQUEST_LIFECYCLE_CAPABILITY,
   type DirectSender,
   type ControlRoutedMessage,
   type RequestMeta,
@@ -130,6 +133,7 @@ export { sanitiseRid } from "../swp/admission.ts";
 interface ActiveGeneration {
   readonly abort: () => void;
   readonly rid: string | null;
+  outcome?: "cancelled" | "superseded";
 }
 
 export class MessageHandler {
@@ -202,12 +206,17 @@ export class MessageHandler {
     const registered = this.#commandAborts.get(sessionId) ?? new Set<AbortController>();
     registered.add(controller);
     this.#commandAborts.set(sessionId, registered);
+    let outcome: RequestOutcome = "completed";
+    let failure: ProtocolError | undefined;
 
     try {
       const result = await this.#deps.dispatchCommand(cmd, meta, controller.signal);
       if (controller.signal.aborted) return;
+      if (result.type === "error") { outcome = "failed"; failure = result; }
       await this.#deps.router.sendToSession(sessionId, result);
     } catch (error) {
+      outcome = "failed";
+      failure = { code: "internal_error", message: describeError(error) };
       if (!controller.signal.aborted) throw error;
     } finally {
       const live = this.#commandAborts.get(sessionId);
@@ -215,7 +224,15 @@ export class MessageHandler {
         live.delete(controller);
         if (live.size === 0) this.#commandAborts.delete(sessionId);
       }
+      await this.#finishRequest(meta, meta.rid, controller.signal.aborted ? "cancelled" : outcome, failure);
     }
+  }
+
+  async #finishRequest(meta: RequestMeta, rid: string | null, outcome: RequestOutcome, error?: ProtocolError): Promise<void> {
+    if (rid === null || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
+    await this.#deps.router.sendToSession(meta.session.sessionId, {
+      type: "request_finished", rid, outcome, ...(error === undefined ? {} : { error }),
+    });
   }
 
   async handleControl(routed: ControlRoutedMessage): Promise<void> {
@@ -278,6 +295,7 @@ export class MessageHandler {
           meta.rid,
         ),
       );
+      await this.#finishRequest(meta, meta.rid, "failed", { code: "invalid_request", message: resolved.error });
       return;
     }
 
@@ -338,6 +356,7 @@ export class MessageHandler {
     const previous = generations.get(scope);
     if (previous !== undefined) {
       this.#deps.log?.info?.("aborting previous generation (superseded by new request)");
+      previous.outcome = "superseded";
       previous.abort();
       if (previous.rid !== null) await issuerSend(cancelledStreamEnd(previous.rid));
     }
@@ -358,12 +377,18 @@ export class MessageHandler {
       signal: controller.signal,
     };
 
-    const running: Promise<void> = this.#deps
-      .runGeneration(params)
-      .catch(async (error: unknown) => {
+    let failure: ProtocolError | undefined;
+    const running = (async () => {
+      try {
+        await this.#deps.runGeneration(params);
+      } catch (error) {
         if (controller.signal.aborted) return;
         const message = describeError(error);
         const retryAfterMs = retryAfterHint(error);
+        failure = {
+          code: generationErrorCode(error), message,
+          ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
+        };
         this.#deps.log?.error?.("error processing engine message", { error: message });
         try {
           await send(withRid({
@@ -378,13 +403,14 @@ export class MessageHandler {
           });
         }
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
-      })
-      .finally(() => {
+      } finally {
         if (generations.get(scope) === generation) {
           generations.delete(scope);
           if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);
         }
-      });
+        await this.#finishRequest(meta, rid, generation.outcome ?? (failure === undefined ? "completed" : "failed"), failure);
+      }
+    })();
 
     this.#track(this.#guard(running));
   }
@@ -406,6 +432,7 @@ export class MessageHandler {
     if (selected.length === 0) return;
     this.#deps.log?.info?.("cancelling active generation", { reason });
     for (const [key, generation] of selected) {
+      generation.outcome = "cancelled";
       generation.abort();
       generations.delete(key);
     }

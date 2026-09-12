@@ -14,7 +14,8 @@
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
-    "src/protocol/**"
+    "src/protocol/**",
+    "src/browser/validators.generated.js"
   ],
   "categories": {
     "correctness": "error"

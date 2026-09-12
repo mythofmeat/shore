@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -9,7 +9,7 @@ pub enum Role {
     System,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageRef {
     pub path: String,
@@ -90,7 +90,7 @@ impl<'de> Deserialize<'de> for ThinkingSignature {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(untagged)]
 pub enum ToolResultContent {
@@ -137,6 +137,7 @@ pub enum ContentBlock {
         thinking: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(as = "Option<String>")]
+        #[schemars(with = "Option<String>")]
         signature: Option<ThinkingSignature>,
     },
     ToolUse {
@@ -162,7 +163,9 @@ pub enum ContentBlock {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ts_rs::TS)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS,
+)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(rename_all = "snake_case")]
 pub enum MessageOrigin {
@@ -171,7 +174,7 @@ pub enum MessageOrigin {
     Autonomous,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Message {
     pub msg_id: String,
@@ -196,7 +199,7 @@ pub struct Message {
     pub origin: Option<MessageOrigin>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct MessageAlternative {
     #[serde(default)]
@@ -245,7 +248,7 @@ impl Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct TokenCounts {
     #[ts(type = "number")]
@@ -258,14 +261,14 @@ pub struct TokenCounts {
     pub cache_write: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct TimingInfo {
     pub total_ms: u32,
     pub ttft_ms: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamMetadata {
     pub tokens: TokenCounts,

@@ -149,8 +149,8 @@ No browser UI or static assets are served by this transport milestone.
 Each WebSocket sends a normal SWP hello with `client_type: "web"`, then waits for server hello/history.
 The adapter applies the same wire decoder and admission rules as TCP, then forwards messages through
 `attachLocal`. Each tab has independent character/thread selection. Commands and generation requests
-require a distinct pending ASCII request ID of 1–128 bytes without NUL. Results/errors/final generation
-frames release pending allowance. Cancel uses the existing immediate control route. Creation now
+require a distinct pending ASCII request ID of 1–128 bytes without NUL. The shared request-completion
+event releases pending allowance after the command/provider settles. Cancel uses the existing immediate control route. Creation now
 refreshes the shared runtime, indexes and autonomy before acknowledgement, and shared routing preserves the original
 request ID when a generation is cancelled or superseded.
 
@@ -194,16 +194,55 @@ Rust workspace tests, formatting and Clippy also pass for the final transport ch
 Actionlint accepts the generation workflow. Logs remain in `out/issue-214/`; GitHub execution and
 merge-policy enforcement remain unverified.
 
+### Browser connection and synchronization foundation
+
+The browser connection layer now signs in with the existing cookie API, negotiates the contract,
+waits for a complete initial history, and reconnects with its last confirmed character/thread.
+Rust-owned schemas cover the complete current wire. Browser validators are generated ahead of time
+using [Ajv standalone generation](https://ajv.js.org/standalone.html), preserving the strict CSP;
+a bundled-validator test disables dynamic code generation. Known malformed events stop the connection.
+Unknown future events remain explicitly inspectable and additive fields survive validation.
+
+Shared, independently specified event sequences in `fixtures/protocol/sync.json` run in both Rust
+and TypeScript. They check distinct snapshot/message revision watermarks, duplicates, stale/foreign
+events, missing deltas, null/main thread compatibility and selection changes to older revisions.
+A gap triggers a fresh connection and complete history. Transport interruption rejects pending
+promises with an uncertain-outcome error and publishes the request plus its original selection for
+reconciliation. Requests are never automatically replayed. Cookie expiry requests sign-in;
+incompatible contracts request a page reload before peer attachment. Client requests and queued
+bytes are bounded, and cancellation bypasses pending request admission.
+
+The shared handler sends opt-in `request_finished` events directly to the issuing peer even after
+it selects another thread. Outcomes distinguish completion, failure, cancellation and supersession.
+Failure details therefore remain visible without mixing background stream content into the current
+thread. The completion event follows actual handler/provider settlement, so cancelled providers
+that ignore abort cannot free pending allowance while continuing to run. Existing terminal clients
+do not announce the new capability and preserve their previous event sequence. Golden Rust tests
+cover correlation and all outcomes.
+
+Native WebSocket tests exercise the actual browser connection class: sign-in/out, bounded pending
+requests, controls, correlated completion, uncertain mutations, selected-thread reconnect, revision
+gaps, expiry, stale contracts and malformed/future events. Full-daemon tests restart the daemon at
+the same address, sign in again, and recover the selected thread and persisted question/answer.
+A separate held-provider journey switches threads mid-stream and still receives completion for the
+original request. Deliberately removing that completion reproduces the timeout through this journey.
+These are transport/state tests; browser DOM workflows, rendering, drafts and user-facing outcome
+reconciliation are still outstanding.
+
+State-layer validation: all eight required daemon checks passed with 8,197 tests and all 56 mutation
+passes free of stale source patterns. The new browser-state mutation pass killed all ten mutants,
+including replaying an uncertain mutation, accepting stale contracts and delivering discontinuous
+history. Rust workspace tests, formatting and Clippy passed. Browser validator regeneration and
+the capability inventory check passed; Actionlint accepted the expanded PR generation workflow.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
-2. Complete request lifecycle tracking across thread changes and reconnects, audit all exposed
-   payloads/redaction, and add authenticated controlled upload/download adapters. The initial web
-   transport is implemented; file transfer and browser recovery are still outstanding.
-3. Browser state layer and designed screens: shared revision-sequence fixtures with Rust, pending
-   request correlation and uncertain mutation recovery, drafts/preferences, navigation/composer,
+2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
+   Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
+3. Browser presentation state and designed screens: history/delta merging, drafts/preferences, navigation/composer,
    streaming/alternatives/editing/media, generated action forms and schema-backed settings.
 4. Close all advanced workflows: models/providers/roles, diagnostics and raw data, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.

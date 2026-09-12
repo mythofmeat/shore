@@ -16,6 +16,8 @@
     "rerecord:check": "bun run scripts/rerecord.ts --check",
     "build:patch": "bun run scripts/build_patch.ts",
     "inventory:generate": "bun run scripts/capability_inventory.ts --write",
+    "browser:generate": "bun run scripts/browser_validators.ts --write",
+    "browser:check": "bun run scripts/browser_validators.ts",
     "inventory:check": "bun run scripts/capability_inventory.ts"
   },
   "dependencies": {
