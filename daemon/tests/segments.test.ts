@@ -272,7 +272,7 @@ describe("segment management", () => {
     await mkdir(join(characterDir, "threads", "eval"), { recursive: true });
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const homeActive = `${JSON.stringify(message("u-home", "keep home active", 3))}\n`;
-    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), homeActive);
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), homeActive);
     putUnder(root, "ada", 0, [message("u0", "home talk", 0), message("a0", "home reply", 1)]);
     putUnder(root, "ada/eval", 0, [message("u1", "an earlier eval run", 1)]);
     writeDurable(join(characterDir, "threads", "eval", "active.jsonl"), `${JSON.stringify(message("u2", "eval talk", 2))}\n`);

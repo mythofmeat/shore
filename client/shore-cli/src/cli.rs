@@ -2301,19 +2301,19 @@ pub(crate) fn to_swp_command(
             output,
             ..
         } => {
+            use shore_common::protocol::operations::{ExportCharacter, ExportCharacterArgs};
             let fallback = PathBuf::from(format!("{export_character}.shore.tar.gz"));
-            Some((
-                "export_character",
-                json!({
-                    "character": export_character,
-                    "output": absolute_path(output.as_deref().unwrap_or(&fallback)),
-                }),
-            ))
+            operation_to_swp::<ExportCharacter>(ExportCharacterArgs {
+                character: export_character.clone(),
+                output: absolute_path(output.as_deref().unwrap_or(&fallback)),
+            })
         }
-        CliCommand::Import { archive, .. } => Some((
-            "import_character",
-            json!({ "archive": absolute_path(archive) }),
-        )),
+        CliCommand::Import { archive, .. } => {
+            use shore_common::protocol::operations::{ImportCharacter, ImportCharacterArgs};
+            operation_to_swp::<ImportCharacter>(ImportCharacterArgs {
+                archive: absolute_path(archive),
+            })
+        }
 
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,

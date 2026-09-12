@@ -1,5 +1,158 @@
 [
   {
+    "name": "export_character",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ExportCharacterArgs",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "character",
+        "output"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ExportCharacterResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "archive": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "live": {
+          "type": "boolean"
+        },
+        "call_diagnostics": {
+          "type": "string"
+        },
+        "external_memory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "archive",
+        "bytes",
+        "live",
+        "call_diagnostics",
+        "external_memory"
+      ]
+    }
+  },
+  {
+    "name": "import_character",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ImportCharacterArgs",
+      "type": "object",
+      "properties": {
+        "archive": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "archive"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ImportCharacterResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "archive": {
+          "type": "string"
+        },
+        "imported": {
+          "type": "boolean"
+        },
+        "external_memory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "character",
+        "archive",
+        "imported",
+        "external_memory"
+      ]
+    }
+  },
+  {
+    "name": "delete_character",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DeleteCharacterArgs",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "confirm": {
+          "type": "string"
+        },
+        "archive": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "character",
+        "confirm"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DeleteCharacterResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archive": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "deleted",
+        "removed",
+        "archive"
+      ]
+    }
+  },
+  {
     "name": "usage",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -914,9 +1067,6 @@
             "timezone": {
               "type": "string"
             },
-            "allow_compaction_over_budget": {
-              "type": "boolean"
-            },
             "budgets": {
               "type": "array",
               "items": {
@@ -929,7 +1079,6 @@
           },
           "required": [
             "timezone",
-            "allow_compaction_over_budget",
             "budgets",
             "call_attempts"
           ]
@@ -1797,8 +1946,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "alt_index": {
               "type": [
@@ -2066,8 +2214,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "timestamp": {
               "type": "string",
@@ -4065,8 +4212,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "alt_index": {
               "type": [
@@ -4334,8 +4480,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "timestamp": {
               "type": "string",
@@ -4970,7 +5115,8 @@
             "session_activation",
             "compaction",
             "tool_execution",
-            "ledger"
+            "ledger",
+            "archive"
           ]
         },
         "OperationEffect": {
@@ -7784,8 +7930,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "alt_index": {
               "type": [
@@ -8053,8 +8198,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "timestamp": {
               "type": "string",
@@ -8231,8 +8375,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "alt_index": {
               "type": [
@@ -8500,8 +8643,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "timestamp": {
               "type": "string",
@@ -8593,8 +8735,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/ContentBlock"
-          },
-          "default": []
+          }
         },
         "alt_index": {
           "type": [
@@ -8862,8 +9003,7 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/ContentBlock"
-              },
-              "default": []
+              }
             },
             "timestamp": {
               "type": "string",

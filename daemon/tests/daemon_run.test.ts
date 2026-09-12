@@ -31,6 +31,7 @@ import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
 import type { BrowserRequest } from "../src/browser/connection.ts";
 import { segments } from "../src/commands/segments.ts";
 import { characterMemoryDir, characterWorkspaceDir } from "../src/config/dirs.ts";
+import { characterMediaDir } from "../src/storage/media.ts";
 import { toolFixture } from "./support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "./support/usage_fixture.ts";
 import { ledgerFor } from "../src/ledger/record.ts";
@@ -245,6 +246,86 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("character archives agree across TCP and browser with backups, refusals and restored storage", async () => {
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, ["nova", "other"]);
+      const daemon = await start(place, [], {}, false);
+      const config = daemon.runtime.registry.globalConfig();
+      await seedUsageFixture(daemon.runtime, "2026-09-01T00:00:00Z");
+      const workspace = characterWorkspaceDir(config.dirs.config, "nova", config.dirs.workspace);
+      const media = join(characterMediaDir(config.dirs.data, "nova"), "fixture.png");
+      await mkdir(characterMediaDir(config.dirs.data, "nova"), { recursive: true });
+      await writeFile(media, new Uint8Array([137, 80, 78, 71]));
+      await writeFile(join(workspace, "notes.txt"), "Archive fixture <untrusted>\n");
+      const activePath = threadFile(config.dirs.data, "nova", "main", "active.jsonl");
+      const store = await MessageStore.load(activePath);
+      await store.append({ msg_id: "archive-user", role: "user", content: "Keep this conversation", images: [], content_blocks: [], timestamp: "2026-09-01T00:00:00Z" });
+      const output = join(place.root, "export.tar.gz");
+      const backup = join(place.root, "backup.tar.gz");
+      const steps = [
+        { name: "export_character", args: { character: "nova", output } },
+        { name: "export_character", args: { character: "nova", output }, error: true },
+        { name: "import_character", args: { archive: output }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "wrong" }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", archive: output }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", archive: backup }, absent: true },
+        { name: "import_character", args: { archive: backup } },
+        { name: "delete_character", args: { character: "nova", confirm: "nova" }, absent: true },
+        { name: "import_character", args: { archive: output } },
+        { name: "import_character", args: { archive: join(place.root, "missing.tar.gz") }, error: true },
+        { name: "export_character", args: { character: "nova", output: "local-filename.tar.gz" }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", overwrite: true }, error: true },
+      ];
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "other", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "other", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      const db = required(ledgerFor(join(config.dirs.data, "shore.db"))).database;
+      const snapshot = async () => ({
+        present: daemon.runtime.registry.hasCharacter("nova"), other: daemon.runtime.registry.hasCharacter("other"),
+        soul: await readFile(join(workspace, "SOUL.md"), "utf8").catch(() => null), notes: await readFile(join(workspace, "notes.txt"), "utf8").catch(() => null),
+        media: await readFile(media).then((bytes) => [...bytes]).catch(() => null),
+        messages: daemon.runtime.registry.hasCharacter("nova") ? [...(await MessageStore.load(activePath)).messages()].map(({ role, content }) => ({ role, content })) : [],
+        calls: db.query("SELECT character, COUNT(*) AS calls, SUM(total_cost) AS cost FROM calls GROUP BY character ORDER BY character").all(),
+      });
+      const before = await snapshot();
+      let exported: Buffer | undefined;
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Archive browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          if (!isOperationName(step.name)) throw new Error(`Missing archive operation: ${step.name}`);
+          let rid = `archive-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: step.name, args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} archive step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const result = observed.find((frame) => frame["type"] === "command_output")?.["data"] as Record<string, unknown> | undefined;
+          if (step.error !== true) expect(validOperationResult(step.name, result)).toBe(true);
+          if (index === 0) {
+            exported = await readFile(output);
+            expect(result).toMatchObject({ character: "nova", archive: output, bytes: exported.byteLength, live: true, call_diagnostics: "included", external_memory: "rebuild_from_archived_segments" });
+          }
+          expect<unknown>(await readFile(output)).toEqual(exported);
+          if (index === 5) expect((await readFile(backup)).byteLength).toBeGreaterThan(0);
+          if (index === 7) expect(result).toMatchObject({ deleted: true, archive: null });
+          const state = await snapshot();
+          if (step.absent === true) expect(state).toEqual({ present: false, other: true, soul: null, notes: null, media: null, messages: [], calls: [{ character: "other", calls: 1, cost: 1.75 }] });
+          else expect(state).toEqual(before);
+          const normalized = observed.map((frame) => frame["type"] === "command_output" && result?.["bytes"] !== undefined ? { ...frame, data: { ...result, bytes: "verified archive size" } } : frame);
+          results.push({ observed: JSON.parse(JSON.stringify(normalized).replaceAll(rid, `archive-${String(index)}`).replaceAll(place.root, "/fixture")) as unknown, state });
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
   test("usage agrees across independent TCP and browser sessions without changing the ledger", async () => {
     const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown> }[] = [
       { args: {}, check: { mode: "summary", period: "budget", summary: [{ total_cost: 3.5, call_count: 2 }, { total_cost: 1.75, call_count: 1 }] } },

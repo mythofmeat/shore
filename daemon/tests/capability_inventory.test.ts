@@ -4,11 +4,13 @@ import { join } from "node:path";
 
 import {
   assertInventoryCurrent,
+  assertRegisteredDispatch,
   currentDaemonInventory,
   dispatchInventory,
   INVENTORY_PATH,
   parseInventorySources,
   protocolInventory,
+  registryInventory,
 } from "../scripts/capability_inventory.ts";
 
 describe("capability inventory", () => {
@@ -41,15 +43,17 @@ describe("capability inventory", () => {
       import_character: ["runCharacterlessCommand"],
       list_characters: ["runCommand", "runCharacterlessCommand"],
     });
+    expect(() => assertRegisteredDispatch(parsed)).toThrow("Unregistered production dispatch paths");
   });
 
   test("removing a real production operation fails the inventory gate", async () => {
-    const original = readFileSync(join(import.meta.dir, "../src/commands/dispatch.ts"), "utf8");
-    const removed = original.replace('case "export_character":', "");
+    const original = readFileSync(join(import.meta.dir, "../src/commands/registry.ts"), "utf8");
+    const removed = original.replace('  export_character: register("export_character",', '  missing_export_character: register("export_character",');
     expect(removed).not.toBe(original);
     const [before, after] = await parseInventorySources([original, removed]);
-    if (before === undefined || after === undefined) throw new Error("Missing parsed dispatcher");
-    expect(() => assertInventoryCurrent(dispatchInventory(before), dispatchInventory(after))).toThrow("capabilities changed");
+    if (before === undefined || after === undefined) throw new Error("Missing parsed registry");
+    expect(registryInventory(before)).toContain("export_character");
+    expect(() => registryInventory(after)).toThrow("Registration key must match");
   });
 
   test.each([

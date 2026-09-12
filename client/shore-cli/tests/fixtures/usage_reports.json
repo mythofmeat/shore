@@ -160,7 +160,6 @@
   {
     "mode": "budget",
     "timezone": "utc",
-    "allow_compaction_over_budget": false,
     "budgets": [
       {
         "name": "Nova monthly",

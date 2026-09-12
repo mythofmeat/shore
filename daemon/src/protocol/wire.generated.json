@@ -590,8 +590,7 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/ContentBlock"
-            },
-            "default": []
+            }
           },
           "alt_index": {
             "type": [
@@ -859,8 +858,7 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/ContentBlock"
-            },
-            "default": []
+            }
           },
           "timestamp": {
             "type": "string",
@@ -1281,8 +1279,7 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/ContentBlock"
-            },
-            "default": []
+            }
           },
           "alt_index": {
             "type": [

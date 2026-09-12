@@ -43,7 +43,7 @@ def terminal_frame(rid, text):
                          "timing": {"total_ms": 1, "ttft_ms": 1}, "model": "test"}}
 
 
-def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edit=False):
+def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edit=False, expect_request=True):
     with tempfile.TemporaryDirectory() as root, socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         listener.listen()
@@ -64,7 +64,10 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
                     send({"type": "hello", "v": 1, "server_name": "test", "characters": []})
                     seen.append(json.loads(stream.readline()))
                     send({"type": "history", "messages": [], "config": {}, "selected_character": "ada", "selected_thread": "main", "revision": 1})
-                    request = json.loads(stream.readline())
+                    line = stream.readline()
+                    if not line and not expect_request:
+                        return
+                    request = json.loads(line)
                     seen.append(request)
                     respond(request, send, stream, seen)
             except BaseException as error:
@@ -88,6 +91,36 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 
 class ReliabilityFlows(unittest.TestCase):
+    def test_cli_character_archives_preserve_server_paths_backups_and_complete_results(self):
+        fixtures = json.loads((Path(__file__).parent / "fixtures" / "character_archives.json").read_text())
+        commands = [["export", "ada", "--output", "/fixture/ada.tar.gz"], ["import", "/fixture/ada.tar.gz"], ["character", "delete", "ada", "--archive", "/fixture/ada.tar.gz", "--yes"]]
+        for fixture, command in zip(fixtures, commands):
+            for json_output in [False, True]:
+                def respond(request, send, _stream, _seen):
+                    self.assertEqual(request["name"], fixture["name"])
+                    self.assertEqual(request["args"], fixture["input"])
+                    send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**fixture["result"], "future_archive_detail": "retained"}})
+                result, _ = run_cli([*command, *(["--json"] if json_output else [])], respond)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if json_output:
+                    self.assertEqual(json.loads(result.stdout), {**fixture["result"], "future_archive_detail": "retained"})
+                else:
+                    self.assertIn(b"Imported character ada" if fixture["name"] == "import_character" else b"/fixture/ada.tar.gz", result.stdout)
+            def malformed(request, send, _stream, _seen):
+                send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {"character": "ada"}})
+            result, _ = run_cli([*command, "--json"], malformed)
+            self.assertNotEqual(result.returncode, 0)
+        def without_backup(request, send, _stream, _seen):
+            self.assertEqual(request["args"], {"character": "ada", "confirm": "ada"})
+            send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**fixtures[2]["result"], "archive": None}})
+        result, _ = run_cli(["character", "delete", "ada", "--yes", "--json"], without_backup)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(json.loads(result.stdout)["archive"])
+        result, seen = run_cli(["character", "delete", "ada"], without_backup, expect_request=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"--yes", result.stderr)
+        self.assertEqual([request for request in seen if request["type"] == "command"], [])
+
     def test_cli_usage_filters_views_and_export_bytes(self):
         reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
         common = {"last": "all", "character": "ada", "provider": "anthropic", "api_key": "default", "model": "usage-model-a", "call_type": "message", "group_by": None, "budget": False, "anomalies": False, "export_csv": False, "export_tsv": False}
@@ -266,6 +299,7 @@ class ReliabilityFlows(unittest.TestCase):
             memory_requests = []
             tool_requests = []
             usage_requests = []
+            archive_requests = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -308,6 +342,11 @@ class ReliabilityFlows(unittest.TestCase):
                                 diagnostic_requests.append(request)
                                 output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                            elif name in ["export_character", "import_character"]:
+                                archive_requests.append(request)
+                                fixture = next(item for item in json.loads((Path(__file__).parent / "fixtures" / "character_archives.json").read_text()) if item["name"] == name)
+                                self.assertEqual(request["args"], fixture["input"])
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": fixture["result"]})
                             elif name == "usage":
                                 reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
                                 args = request["args"]
@@ -462,6 +501,24 @@ class ReliabilityFlows(unittest.TestCase):
                             break
                     self.assertEqual(len(usage_requests), index + 1, frames.read_text()[-3000:])
                     self.assertEqual(usage_requests[index]["args"], {**usage_defaults, **expected})
+                    self.assertTrue(visible in frames.read_text()[frame_offset:], frames.read_text()[-3000:])
+                for index, (command, visible) in enumerate([
+                    (b":export ada --output /fixture/ada.tar.gz --json\r", "rebuild_from_archived_segments"),
+                    (b":import /fixture/ada.tar.gz --json\r", "queued_for_rebuild_when_retain_is_enabled"),
+                ]):
+                    frame_offset = len(frames.read_text())
+                    os.write(master, b"\x1b")
+                    time.sleep(.05)
+                    os.write(master, command)
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        if select.select([master], [], [], .01)[0]:
+                            os.read(master, 65536)
+                        if len(archive_requests) > index:
+                            os.write(master, b"G")
+                        if visible in frames.read_text()[frame_offset:]:
+                            break
+                    self.assertEqual(len(archive_requests), index + 1, frames.read_text()[-3000:])
                     self.assertTrue(visible in frames.read_text()[frame_offset:], frames.read_text()[-3000:])
                 self.assertEqual(errors, [])
             finally:
