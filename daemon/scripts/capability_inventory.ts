@@ -9,9 +9,9 @@ import { commandCatalogue } from "../src/commands/registry.ts";
 const ROOT = join(import.meta.dir, "..");
 export const INVENTORY_PATH = join(ROOT, "../docs/capabilities/daemon.generated.json");
 
-export async function parseInventorySources(texts: readonly string[]): Promise<ts.SourceFile[]> {
+export async function parseInventorySources(texts: readonly string[], extension: "ts" | "tsx" = "ts"): Promise<ts.SourceFile[]> {
   const base = "/__shore_inventory__";
-  const paths = texts.map((_text, index) => `${base}/${String(index)}.ts`);
+  const paths = texts.map((_text, index) => `${base}/${String(index)}.${extension}`);
   const files = Object.fromEntries(paths.map((path, index) => [path, texts[index] ?? ""]));
   files[`${base}/tsconfig.json`] = JSON.stringify({ files: paths, compilerOptions: { noLib: true, noResolve: true } });
   const api = new API({ cwd: base, fs: createVirtualFileSystem(files) });

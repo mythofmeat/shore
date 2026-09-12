@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/daemon/run.ts",
-    "build": "bun run build:patch && bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
-    "typecheck": "tsc --noEmit",
+    "build": "bun run build:patch && bun run browser:build && bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
+    "typecheck": "tsc --noEmit && tsc --project src/browser/tsconfig.json",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",
@@ -17,7 +17,9 @@
     "build:patch": "bun run scripts/build_patch.ts",
     "inventory:generate": "bun run scripts/capability_inventory.ts --write",
     "browser:generate": "bun run scripts/browser_validators.ts --write",
-    "browser:check": "bun run scripts/browser_validators.ts",
+    "browser:check": "bun run scripts/browser_validators.ts && bun run scripts/build_browser.ts --check",
+    "browser:build": "bun run scripts/build_browser.ts",
+    "test:browser": "bun run build && playwright test",
     "inventory:check": "bun run scripts/capability_inventory.ts"
   },
   "dependencies": {

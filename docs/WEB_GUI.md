@@ -279,6 +279,47 @@ were killed. Rust workspace tests, formatting and Clippy passed. Inventory/valid
 checks and Actionlint passed. The compiled daemon ran from empty working directories with web both
 disabled and enabled; TCP, authenticated WebSocket history and clean shutdown worked in both cases.
 
+### First browser workspace
+
+The optional listener now serves a React conversation workspace, cookie sign-in, character/thread
+navigation and deep links. Conversation controls include send/stop, guided regeneration, message
+editing/deletion, alternative inspection/selection, system instructions and earlier-history paging.
+Thread creation and advanced forks use the shared contracts. A searchable action dialog renders
+every field of the 21 currently registered operations, including optional/null distinctions,
+enumerations, numbers, booleans and string collections. Destructive actions show the exact submitted
+values for confirmation. Complete command results remain inspectable.
+
+The connection and workspace state are separate from React. History deltas replace only their suffix,
+preserve earlier pages, detect missing anchors and retain image bytes omitted by incremental updates,
+matching the TUI. Draft text is stored per character/thread; reasoning/tool preferences are local.
+Interrupted requests remain visible for explicit reconciliation and are never replayed. Stream text,
+reasoning, tools, subagent activity, warnings, phases and structured result/configuration data have
+declared handling and inspectable presentations. The activity panel currently retains the latest
+100 non-token events. Image selection uses the existing message upload path, with browser size/type
+limits; the viewer accepts embedded raster data, supports download and never treats a server path
+as an arbitrary fetch URL. Attachments remain in memory while the page is open.
+
+Browser JavaScript and CSS are built into a generated module imported by the daemon, with hashed asset
+URLs and the embedded release contract. The normal daemon build constructs the frontend. Public
+HTML/assets do not attach peers or disclose history; API requests retain the existing authentication,
+Origin checks and CSP. Browser code has its own DOM-only TypeScript project. The container now copies
+the generated capability data and constructs its frontend during image creation.
+
+Coverage tests inspect the actual field-renderer and event-dispatch syntax, compare them with the
+canonical contracts, and deliberately remove a numeric renderer, image event handler and field
+presentation to prove failures. Unsupported input schemas fail the control check. These checks cover
+the migrated contracts; they do not yet close the remaining terminal inventory or legacy operations.
+
+Two real Chromium tests pass: a complete workspace journey (including advanced fork options,
+confirmation/cancellation, independent thread state, draft reload, escaped hostile text, image
+upload/viewing, CSP and phone navigation), and a copied compiled executable launched from empty working
+directories with web both disabled and enabled. The latter checks TCP availability, actual browser
+sign-in, character creation, embedded assets, deep-link reload and shutdown. Desktop and phone
+screenshots were reviewed. All eight required daemon checks passed with 8,211 tests and 57 current
+mutation passes; browser assets/validators and the capability inventory regenerate exactly. The PR
+workflow installs Chromium and runs the browser suite. Container build and runtime verification are
+recorded in `out/issue-214/`. GitHub execution and merge-policy enforcement remain unverified.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the contract migration through the 35 legacy names, core message/regen/cancel requests,
@@ -286,15 +327,16 @@ Remaining work follows the issue's sequence:
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
-3. Browser presentation state and designed screens: history/delta merging, drafts/preferences, navigation/composer,
-   streaming/alternatives/editing/media, generated action forms and schema-backed settings.
+3. Extend the initial workspace with schema-backed settings and the remaining dedicated screens,
+   richer message formatting, complete media/draft persistence, and all local presentation workflows.
 4. Close all advanced workflows: models/providers/roles, diagnostics and raw data, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and
    cancellation. Demonstrate deliberate omission failures for operations, fields, renderers/events.
-6. Embed assets in the daemon, update package/container/release workflows, and test the compiled
-   binary from an empty directory, deep links, default-off behavior and incompatible stale tabs.
+6. Audit remaining package/release integrations and expand compiled-binary journeys to the remaining
+   advanced workflows. Embedded assets, deep links, empty-directory startup and default-off behavior
+   now have executable/browser coverage; incompatible-tab presentation still needs DOM coverage.
 7. Run all required verification plus browser, generation, security and parity gates in PR CI.
    Coordinate repository merge-policy changes separately, as requested by the issue. No merge-policy
    change has been made or assumed. Full completion requires evidence for every acceptance criterion.

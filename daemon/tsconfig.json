@@ -18,6 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "lib": ["ESNext"],
+    "jsx": "react-jsx",
     "noEmit": true,
     "noUnusedLocals": true
   },
