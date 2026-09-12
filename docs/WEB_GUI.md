@@ -320,16 +320,50 @@ mutation passes; browser assets/validators and the capability inventory regenera
 workflow installs Chromium and runs the browser suite. Container build and runtime verification are
 recorded in `out/issue-214/`. GitHub execution and merge-policy enforcement remain unverified.
 
+### Provider catalogue and discovery
+
+The canonical catalogue now includes `list_providers`, `list_provider_models`,
+`refresh_provider_models` and `refresh_all_provider_models` (25 registered operations;
+31 legacy names remain). These bind the existing provider handlers. All four use global
+configuration and work without a selected character, including batch refresh. The former
+special route for single-provider refresh has been removed.
+
+Inputs reject misspelled fields and string/number boolean substitutes; omitted or null
+`include_hidden` still means false. Results type key availability, cache counts and timestamps,
+static/discovered model metadata, subscription details, and each batch success/failure/skip.
+Rust and browser validators require the batch `ok` flag to match its result shape. Required
+nullable result fields must be present. CLI and TUI provider commands use canonical inputs and
+validate results before rendering, retaining additional fields in JSON views.
+
+The Providers panel shows key availability without key values, discovery status, cache freshness,
+model capabilities, filtered model search, hidden models, and single/batch refresh outcomes.
+Partial failures remain visible alongside successes and skipped providers. The generated action
+forms also offer live provider choices and preserve the explicit-null filter option.
+
+The browser journey uses the real daemon plus a local discovery HTTP fixture, starting before any
+character exists. It verifies refresh/cache changes, hidden-model selection, model search, partial
+failure and skip details, generated controls, mobile layout, and the absence of direct browser
+provider requests or exposed fixture credentials. The CLI socket flow rejects malformed provider
+results and retains additional fields; TUI rendering and Rust/TypeScript contract regressions cover
+the same result guarantees. The original independent provider captures remain intact; formerly
+coerced invalid input examples now explicitly assert rejection at the canonical input boundary.
+
+All eight required daemon checks passed (8,213 tests), along with the Rust workspace suite,
+formatting and Clippy. Generated browser assets/validators and both capability inventories were
+checked. All three browser journeys passed, including the compiled daemon, and the provider,
+command-path and dispatch mutation passes killed 90/90 probes. Evidence remains under
+`out/issue-214/` and the task's temporary verification logs.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the 35 legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the 31 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
 3. Extend the initial workspace with schema-backed settings and the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
-4. Close all advanced workflows: models/providers/roles, diagnostics and raw data, usage exports,
+4. Close all advanced workflows: models/roles, diagnostics and raw data, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and

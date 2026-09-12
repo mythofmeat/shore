@@ -114,12 +114,12 @@
       "runCharacterlessCommand"
     ],
     "list_provider_models": [
-      "runCommand",
-      "runCharacterlessCommand"
+      "registry",
+      "scope:global"
     ],
     "list_providers": [
-      "runCommand",
-      "runCharacterlessCommand"
+      "registry",
+      "scope:global"
     ],
     "list_threads": [
       "registry",
@@ -136,10 +136,12 @@
       "runCommand"
     ],
     "refresh_all_provider_models": [
-      "runCommand"
+      "registry",
+      "scope:global"
     ],
     "refresh_provider_models": [
-      "runCommand"
+      "registry",
+      "scope:global"
     ],
     "reset_model": [
       "runCommand"
@@ -214,12 +216,8 @@
     "import_character",
     "keepalive_ping_now",
     "list_models",
-    "list_provider_models",
-    "list_providers",
     "model_info",
     "model_settings",
-    "refresh_all_provider_models",
-    "refresh_provider_models",
     "reset_model",
     "run_tool",
     "segments",
@@ -258,6 +256,7 @@
     "ConversationPage": "{ messages: Array<Message>, active_start: number, cursor: number, next_before: number, has_more_before: boolean, global_active_start: number, total_messages: number, total_turns: number, }",
     "CreateThreadArgs": "{ name: string, label?: string | null, model?: string | null, compaction?: boolean | null, }",
     "DeleteMessagesArgs": "{ refs: MessageReferences, }",
+    "DiscoveredModelSource": "\"discovered\"",
     "EditMessageArgs": "{ ref: string, content: string, }",
     "EmptyOperationArgs": "Record<symbol, never>",
     "Error": "{ rid?: string | null, code: ErrorCode, message: string, retry_after_ms?: number | null, }",
@@ -285,19 +284,34 @@
     "NamedOperationArgs": "{ name: string, }",
     "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
     "OperationCatalogue": "{ operations: Array<OperationDescriptor>, }",
-    "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\"",
-    "OperationChoices": "\"characters\" | \"threads\" | \"models\"",
+    "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\" | \"Providers\"",
+    "OperationChoices": "\"characters\" | \"threads\" | \"models\" | \"providers\"",
     "OperationConfirmation": "\"none\" | \"archive\" | \"delete\"",
     "OperationDescriptor": "{ name: string, label: string, category: OperationCategory, scope: OperationScope, prerequisites: Array<OperationPrerequisite>, effects: Array<OperationEffect>, confirmation: OperationConfirmation, fields: { [key in string]: OperationField }, input: unknown, output: unknown, available?: boolean, }",
-    "OperationEffect": "\"read\" | \"workspace_write\" | \"history_write\" | \"selection\" | \"model_selection\"",
+    "OperationEffect": "\"read\" | \"workspace_write\" | \"history_write\" | \"selection\" | \"model_selection\" | \"provider_discovery\"",
     "OperationField": "{ label: string, hint?: string, choices?: OperationChoices, multiline?: boolean, }",
     "OperationPrerequisite": "\"threads\"",
-    "OperationRequest": "{ \"name\": \"discover_operations\", \"args\": EmptyOperationArgs } | { \"name\": \"log\", \"args\": ConversationLogArgs } | { \"name\": \"history_page\", \"args\": HistoryPageArgs } | { \"name\": \"get\", \"args\": GetMessageArgs } | { \"name\": \"edit\", \"args\": EditMessageArgs } | { \"name\": \"delete\", \"args\": DeleteMessagesArgs } | { \"name\": \"list_alternatives\", \"args\": ListAlternativesArgs } | { \"name\": \"alt\", \"args\": SelectAlternativeArgs } | { \"name\": \"inject_system\", \"args\": InjectSystemArgs } | { \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs }",
-    "OperationResponse": "{ \"name\": \"discover_operations\", \"data\": OperationCatalogue } | { \"name\": \"log\", \"data\": ConversationPage } | { \"name\": \"history_page\", \"data\": ConversationPage } | { \"name\": \"get\", \"data\": Message } | { \"name\": \"edit\", \"data\": MessageEdited } | { \"name\": \"delete\", \"data\": MessagesDeleted } | { \"name\": \"list_alternatives\", \"data\": AlternativeListing } | { \"name\": \"alt\", \"data\": AlternativeSelected } | { \"name\": \"inject_system\", \"data\": SystemInjected } | { \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing }",
+    "OperationRequest": "{ \"name\": \"discover_operations\", \"args\": EmptyOperationArgs } | { \"name\": \"list_providers\", \"args\": EmptyOperationArgs } | { \"name\": \"list_provider_models\", \"args\": ProviderModelsArgs } | { \"name\": \"refresh_provider_models\", \"args\": ProviderArgs } | { \"name\": \"refresh_all_provider_models\", \"args\": EmptyOperationArgs } | { \"name\": \"log\", \"args\": ConversationLogArgs } | { \"name\": \"history_page\", \"args\": HistoryPageArgs } | { \"name\": \"get\", \"args\": GetMessageArgs } | { \"name\": \"edit\", \"args\": EditMessageArgs } | { \"name\": \"delete\", \"args\": DeleteMessagesArgs } | { \"name\": \"list_alternatives\", \"args\": ListAlternativesArgs } | { \"name\": \"alt\", \"args\": SelectAlternativeArgs } | { \"name\": \"inject_system\", \"args\": InjectSystemArgs } | { \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs }",
+    "OperationResponse": "{ \"name\": \"discover_operations\", \"data\": OperationCatalogue } | { \"name\": \"list_providers\", \"data\": ProviderListing } | { \"name\": \"list_provider_models\", \"data\": ProviderModelListing } | { \"name\": \"refresh_provider_models\", \"data\": ProviderRefreshed } | { \"name\": \"refresh_all_provider_models\", \"data\": ProvidersRefreshed } | { \"name\": \"log\", \"data\": ConversationPage } | { \"name\": \"history_page\", \"data\": ConversationPage } | { \"name\": \"get\", \"data\": Message } | { \"name\": \"edit\", \"data\": MessageEdited } | { \"name\": \"delete\", \"data\": MessagesDeleted } | { \"name\": \"list_alternatives\", \"data\": AlternativeListing } | { \"name\": \"alt\", \"data\": AlternativeSelected } | { \"name\": \"inject_system\", \"data\": SystemInjected } | { \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing }",
     "OperationScope": "\"global\" | \"selection\" | \"character\" | \"optional_character\"",
     "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
     "Ping": "Record<symbol, never>",
+    "ProviderArgs": "{ provider: string, }",
+    "ProviderCacheStatus": "{ present: boolean, models: number, visible: number, hidden: number, fetched_at: string | null, }",
+    "ProviderDiscoveredModel": "{ source: DiscoveredModelSource, model_id: string, display_name: string | null, sdk: string, owned_by: string | null, context_length: number | null, max_output_tokens: number | null, supports_tools: boolean | null, supports_images: boolean | null, supports_reasoning: boolean | null, supports_prompt_cache: boolean | null, subscription_included?: boolean, subscription_input_multiplier?: number, discovered_at: string, }",
     "ProviderFallbackWarning": "{ rid?: string | null, provider: string, from_key: string, to_key: string, kind: string, status?: number | null, message: string, }",
+    "ProviderKeyStatus": "{ name: string, enabled: boolean, warn_on_fallback: boolean, env_set: boolean, }",
+    "ProviderListing": "{ providers: Array<ProviderStatus>, }",
+    "ProviderModelCache": "{ fetched_at: string | null, model_count: number, }",
+    "ProviderModelListing": "{ provider: string, discovered: Array<ProviderDiscoveredModel>, hidden: Array<ProviderDiscoveredModel>, static: Array<ProviderStaticModel>, include_hidden: boolean, cache: ProviderModelCache, }",
+    "ProviderModelsArgs": "{ provider: string, include_hidden?: boolean | null, }",
+    "ProviderRefreshed": "{ provider: string, model_count: number, fetched_at: string, cache_path: string, }",
+    "ProviderRefreshResult": "{ ok: true, provider: string, model_count: number, fetched_at: string, cache_path: string, } | { provider: string, ok: false, error: string, }",
+    "ProviderSkipped": "{ provider: string, reason: ProviderSkipReason, }",
+    "ProviderSkipReason": "\"disabled\" | \"discovery disabled\"",
+    "ProvidersRefreshed": "{ results: Array<ProviderRefreshResult>, skipped: Array<ProviderSkipped>, }",
+    "ProviderStaticModel": "{ source: StaticModelSource, name: string, qualified_name: string, model_id: string, sdk: string, max_output_tokens: number | null, }",
+    "ProviderStatus": "{ name: string, enabled: boolean, sdk: string, base_url: string | null, discovery_enabled: boolean, keys: Array<ProviderKeyStatus>, cache: ProviderCacheStatus, }",
     "ProviderWarning": "{ rid?: string | null, message: string, }",
     "Regen": "{ rid?: string | null, stream: boolean, guidance?: string | null, }",
     "RequestFinished": "{ rid: string, outcome: RequestOutcome, error?: Error | null, }",
@@ -308,6 +322,7 @@
     "ServerHello": "{ v: number, server_name: string, characters: Array<CharacterInfo>, }",
     "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
     "Shutdown": "Record<symbol, never>",
+    "StaticModelSource": "\"static\"",
     "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
     "StreamMetadata": "{ tokens: TokenCounts, timing: TimingInfo, model: string, }",

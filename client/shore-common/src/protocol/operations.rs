@@ -10,6 +10,45 @@ fn deserialize_present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     T::deserialize(deserializer).map(Some)
 }
 
+fn deserialize_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    Option::<T>::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderRefreshFlag<const SUCCESS: bool>;
+
+impl<const SUCCESS: bool> Serialize for ProviderRefreshFlag<SUCCESS> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bool(SUCCESS)
+    }
+}
+
+impl<'de, const SUCCESS: bool> Deserialize<'de> for ProviderRefreshFlag<SUCCESS> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if bool::deserialize(deserializer)? == SUCCESS {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::custom("invalid provider refresh outcome"))
+        }
+    }
+}
+
+impl<const SUCCESS: bool> JsonSchema for ProviderRefreshFlag<SUCCESS> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        if SUCCESS {
+            "ProviderRefreshSucceeded".into()
+        } else {
+            "ProviderRefreshFailed".into()
+        }
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> Schema {
+        schemars::json_schema!({ "type": "boolean", "const": SUCCESS })
+    }
+}
+
 macro_rules! wire_types {
     ($($item:item)*) => {$ (
         #[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, ts_rs::TS)]
@@ -19,7 +58,7 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
@@ -28,13 +67,13 @@ wire_types! {
     pub enum OperationPrerequisite { Threads }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection }
+    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationConfirmation { None, Archive, Delete }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationChoices { Characters, Threads, Models }
+    pub enum OperationChoices { Characters, Threads, Models, Providers }
 
     pub struct OperationField {
         pub label: String,
@@ -68,6 +107,140 @@ wire_types! {
     }
 
     pub struct OperationCatalogue { pub operations: Vec<OperationDescriptor> }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ProviderArgs { pub provider: String }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ProviderModelsArgs {
+        pub provider: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub include_hidden: Option<bool>,
+    }
+
+    pub struct ProviderKeyStatus {
+        pub name: String,
+        pub enabled: bool,
+        pub warn_on_fallback: bool,
+        pub env_set: bool,
+    }
+
+    pub struct ProviderCacheStatus {
+        pub present: bool,
+        pub models: usize,
+        pub visible: usize,
+        pub hidden: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub fetched_at: Option<String>,
+    }
+
+    pub struct ProviderStatus {
+        pub name: String,
+        pub enabled: bool,
+        pub sdk: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub base_url: Option<String>,
+        pub discovery_enabled: bool,
+        pub keys: Vec<ProviderKeyStatus>,
+        pub cache: ProviderCacheStatus,
+    }
+
+    pub struct ProviderListing { pub providers: Vec<ProviderStatus> }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum DiscoveredModelSource { Discovered }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum StaticModelSource { Static }
+
+    pub struct ProviderDiscoveredModel {
+        pub source: DiscoveredModelSource,
+        pub model_id: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub display_name: Option<String>,
+        pub sdk: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub owned_by: Option<String>,
+        #[ts(type = "number | null")]
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub context_length: Option<u64>,
+        #[ts(type = "number | null")]
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub max_output_tokens: Option<u64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub supports_tools: Option<bool>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub supports_images: Option<bool>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub supports_reasoning: Option<bool>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub supports_prompt_cache: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subscription_included: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subscription_input_multiplier: Option<f64>,
+        pub discovered_at: String,
+    }
+
+    pub struct ProviderStaticModel {
+        pub source: StaticModelSource,
+        pub name: String,
+        pub qualified_name: String,
+        pub model_id: String,
+        pub sdk: String,
+        #[ts(type = "number | null")]
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub max_output_tokens: Option<u64>,
+    }
+
+    pub struct ProviderModelCache {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub fetched_at: Option<String>,
+        pub model_count: usize,
+    }
+
+    pub struct ProviderModelListing {
+        pub provider: String,
+        pub discovered: Vec<ProviderDiscoveredModel>,
+        pub hidden: Vec<ProviderDiscoveredModel>,
+        pub r#static: Vec<ProviderStaticModel>,
+        pub include_hidden: bool,
+        pub cache: ProviderModelCache,
+    }
+
+    pub struct ProviderRefreshed {
+        pub provider: String,
+        pub model_count: usize,
+        pub fetched_at: String,
+        pub cache_path: String,
+    }
+
+    #[serde(untagged)]
+    pub enum ProviderRefreshResult {
+        Success {
+            #[ts(type = "true")]
+            ok: ProviderRefreshFlag<true>,
+            #[serde(flatten)]
+            refreshed: ProviderRefreshed,
+        },
+        Failure { provider: String, #[ts(type = "false")] ok: ProviderRefreshFlag<false>, error: String },
+    }
+
+    pub enum ProviderSkipReason {
+        #[serde(rename = "disabled")]
+        Disabled,
+        #[serde(rename = "discovery disabled")]
+        DiscoveryDisabled,
+    }
+
+    pub struct ProviderSkipped { pub provider: String, pub reason: ProviderSkipReason }
+
+    pub struct ProvidersRefreshed {
+        pub results: Vec<ProviderRefreshResult>,
+        pub skipped: Vec<ProviderSkipped>,
+    }
 
     #[serde(deny_unknown_fields)]
     pub struct ConversationLogArgs {
@@ -454,6 +627,10 @@ macro_rules! operations {
 
 operations! {
     DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,
+    ListProviders: "list_providers" (EmptyOperationArgs) => ProviderListing,
+    ListProviderModels: "list_provider_models" (ProviderModelsArgs) => ProviderModelListing,
+    RefreshProviderModels: "refresh_provider_models" (ProviderArgs) => ProviderRefreshed,
+    RefreshAllProviderModels: "refresh_all_provider_models" (EmptyOperationArgs) => ProvidersRefreshed,
     ConversationLog: "log" (ConversationLogArgs) => ConversationPage,
     HistoryPage: "history_page" (HistoryPageArgs) => ConversationPage,
     GetMessage: "get" (GetMessageArgs) => Message,
@@ -479,6 +656,44 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_results_require_matching_outcomes_and_present_nullable_fields() {
+        let success = serde_json::json!({"provider":"fixture","ok":true,"model_count":2,"fetched_at":"now","cache_path":"/cache/models.json","future":"inspectable"});
+        let failure = serde_json::json!({"provider":"broken","ok":false,"error":"Unavailable"});
+        for result in [&success, &failure] {
+            assert!(serde_json::from_value::<ProviderRefreshResult>(result.clone()).is_ok());
+        }
+        let mut invalid_success = success;
+        *invalid_success.get_mut("ok").unwrap() = serde_json::json!(false);
+        let mut invalid_failure = failure;
+        *invalid_failure.get_mut("ok").unwrap() = serde_json::json!(true);
+        for result in [invalid_success, invalid_failure] {
+            assert!(serde_json::from_value::<ProviderRefreshResult>(result).is_err());
+        }
+        assert!(
+            serde_json::from_value::<ProviderModelCache>(
+                serde_json::json!({"fetched_at":null,"model_count":0})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<ProviderModelCache>(serde_json::json!({"model_count":0}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ProviderModelsArgs>(
+                serde_json::json!({"provider":"fixture","include_hidden":null})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<ProviderModelsArgs>(
+                serde_json::json!({"provider":"fixture","include_hidden":"true"})
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn conversation_inputs_distinguish_omitted_and_explicit_null_filters() {

@@ -87,7 +87,8 @@
             "Application",
             "Characters",
             "Threads",
-            "Conversation"
+            "Conversation",
+            "Providers"
           ]
         },
         "OperationScope": {
@@ -112,7 +113,8 @@
             "workspace_write",
             "history_write",
             "selection",
-            "model_selection"
+            "model_selection",
+            "provider_discovery"
           ]
         },
         "OperationConfirmation": {
@@ -161,7 +163,526 @@
           "enum": [
             "characters",
             "threads",
-            "models"
+            "models",
+            "providers"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "list_providers",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderListing",
+      "type": "object",
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderStatus"
+          }
+        }
+      },
+      "required": [
+        "providers"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "list_provider_models",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderModelsArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "include_hidden": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderModelListing",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "discovered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderDiscoveredModel"
+          }
+        },
+        "hidden": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderDiscoveredModel"
+          }
+        },
+        "static": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderStaticModel"
+          }
+        },
+        "include_hidden": {
+          "type": "boolean"
+        },
+        "cache": {
+          "$ref": "#/$defs/ProviderModelCache"
+        }
+      },
+      "required": [
+        "provider",
+        "discovered",
+        "hidden",
+        "static",
+        "include_hidden",
+        "cache"
+      ],
+      "$defs": {
+        "ProviderDiscoveredModel": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/DiscoveredModelSource"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "display_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "owned_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context_length": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "max_output_tokens": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "supports_tools": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "supports_images": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "supports_reasoning": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "supports_prompt_cache": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "subscription_included": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "subscription_input_multiplier": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "discovered_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "model_id",
+            "display_name",
+            "sdk",
+            "owned_by",
+            "context_length",
+            "max_output_tokens",
+            "supports_tools",
+            "supports_images",
+            "supports_reasoning",
+            "supports_prompt_cache",
+            "discovered_at"
+          ]
+        },
+        "DiscoveredModelSource": {
+          "type": "string",
+          "enum": [
+            "discovered"
+          ]
+        },
+        "ProviderStaticModel": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/StaticModelSource"
+            },
+            "name": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "max_output_tokens": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "source",
+            "name",
+            "qualified_name",
+            "model_id",
+            "sdk",
+            "max_output_tokens"
+          ]
+        },
+        "StaticModelSource": {
+          "type": "string",
+          "enum": [
+            "static"
+          ]
+        },
+        "ProviderModelCache": {
+          "type": "object",
+          "properties": {
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fetched_at",
+            "model_count"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "refresh_provider_models",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderRefreshed",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "fetched_at": {
+          "type": "string"
+        },
+        "cache_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model_count",
+        "fetched_at",
+        "cache_path"
+      ]
+    }
+  },
+  {
+    "name": "refresh_all_provider_models",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProvidersRefreshed",
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderRefreshResult"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderSkipped"
+          }
+        }
+      },
+      "required": [
+        "results",
+        "skipped"
+      ],
+      "$defs": {
+        "ProviderRefreshResult": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "$ref": "#/$defs/ProviderRefreshSucceeded"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "model_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "fetched_at": {
+                  "type": "string"
+                },
+                "cache_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ok",
+                "provider",
+                "model_count",
+                "fetched_at",
+                "cache_path"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "ok": {
+                  "$ref": "#/$defs/ProviderRefreshFailed"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "ok",
+                "error"
+              ]
+            }
+          ]
+        },
+        "ProviderRefreshSucceeded": {
+          "type": "boolean",
+          "const": true
+        },
+        "ProviderRefreshFailed": {
+          "type": "boolean",
+          "const": false
+        },
+        "ProviderSkipped": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/ProviderSkipReason"
+            }
+          },
+          "required": [
+            "provider",
+            "reason"
+          ]
+        },
+        "ProviderSkipReason": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "discovery disabled"
           ]
         }
       }
