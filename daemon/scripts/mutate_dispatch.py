@@ -67,14 +67,17 @@ MUTANTS = [
      '(context, args) => historyPage(engineOf(context), args)',
      '(context, args) => log(engineOf(context), args)'),
     ('wire: `switch_model` reaches `reset_model`',
+     'src/commands/registry.ts',
      '      return switchModel(session, args);',
      '      return resetModel(session);'),
     ('wire: `reset_model` reaches `switch_model`',
+     'src/commands/registry.ts',
      '      return resetModel(session, args);',
      '      return switchModel(session, args);'),
-    ("wire: `model_info` reaches `model_settings`",
-     '    case "model_info":\n      return modelInfo(session, args);',
-     '    case "model_info":\n      return modelSettings(session, args);'),
+    ('wire: `model_info` reaches `model_settings`',
+     'src/commands/registry.ts',
+     '({ session }, args) => modelInfo(session, args)',
+     '({ session }, args) => modelSettings(session, args)'),
     ("wire: `list_providers` reaches `list_provider_models`", "src/commands/registry.ts",
      '(context) => listProviders(providersContext(context))',
      '(context) => listProviderModels(providersContext(context), { provider: "anthropic" })'),
@@ -106,9 +109,14 @@ MUTANTS = [
      ""),
 
     # --- the characterless split ---------------------------------------------
-    ("split: `status` answers without a character",
-     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "list_models":',
-     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "status":\n      return {};\n    case "list_models":'),
+    ('split: `status` answers without a character',
+     '  const args = (cmd.args ?? {}) as Args;\n'
+     '  switch (cmd.name) {\n'
+     '    case "export_character":',
+     '  const args = (cmd.args ?? {}) as Args;\n'
+     '  switch (cmd.name) {\n'
+     '    case "status": return {};\n'
+     '    case "export_character":'),
     ("split: `list_providers` is refused without a character", "src/commands/registry.ts",
      'list_providers: register("list_providers", { ...providerPresentation,',
      'list_providers: register("list_providers", { ...providerPresentation, scope: "character",'),

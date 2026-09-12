@@ -802,7 +802,7 @@ function readImageGenSettings(table: Record<string, unknown>): ParseResult<Image
   return { ok: out };
 }
 
-export function resolvedModelToWire(model: ResolvedModel): Record<string, unknown> {
+export function resolvedModelToWire(model: ResolvedModel): import("../protocol/ModelInfoResult.ts").ModelInfoResult {
   const or = <T>(v: T | undefined): T | null => v ?? null;
   return {
     name: model.name,

@@ -58,7 +58,7 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
@@ -73,7 +73,7 @@ wire_types! {
     pub enum OperationConfirmation { None, Archive, Delete }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationChoices { Characters, Threads, Models, Providers, ConfigKeys }
+    pub enum OperationChoices { Characters, Threads, Models, Providers, ConfigKeys, Subagents, ModelSettings }
 
     pub struct OperationField {
         pub label: String,
@@ -139,6 +139,370 @@ wire_types! {
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
     }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum BackgroundModelTarget { All, Heartbeat, Compaction }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ModelPreferenceScope { Character, Global }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct ListModelsArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub include_hidden: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub favorites_only: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct FavoriteModelArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub favorite: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct ModelInfoArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub subagent: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct SwitchModelArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub subagent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub include_hidden: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct ResetModelArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub subagent: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct ModelSettingsArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub subagent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub key: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub overview: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct SetModelSettingArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub subagent: Option<String>,
+        pub key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub scope: Option<ModelPreferenceScope>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "unknown")]
+        pub value: Option<serde_json::Value>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ModelSource { Static, Discovered, Favorite }
+
+    pub struct ModelSummary {
+        pub name: String,
+        pub qualified_name: String,
+        pub sdk: String,
+        pub model_id: String,
+        pub source: ModelSource,
+        pub hidden: bool,
+        pub favorite: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subscription_included: Option<bool>,
+    }
+
+    pub struct ModelRole {
+        pub role: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub source: Option<String>,
+    }
+
+    pub struct ModelListing {
+        pub models: std::collections::BTreeMap<String, Vec<ModelSummary>>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active: Option<String>,
+        pub roles: Vec<ModelRole>,
+        pub include_hidden: bool,
+        pub favorites_only: bool,
+        pub favorite_count: usize,
+        pub hidden_count: usize,
+    }
+
+    pub struct ModelFavorite {
+        pub qualified_name: String,
+        pub provider: String,
+        pub model_id: String,
+        pub favorite: bool,
+        pub changed: bool,
+        pub favorites: Vec<String>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ModelSettingKind { Number, U32, Boolean, String, Duration, DurationOrOff, JsonObject }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ModelSettingApplicability { Always, Honored, Ignored, Rejected }
+
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    pub enum ModelSettingEditor { Slider { min: f64, max: f64, step: f64 } }
+
+    pub struct ModelSettingSchemaEntry {
+        pub key: String,
+        pub kind: ModelSettingKind,
+        pub applicability: ModelSettingApplicability,
+        pub suggestions: Vec<String>,
+        pub allow_custom: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub editor: Option<ModelSettingEditor>,
+    }
+
+    pub struct ModelInfoResult {
+        pub name: String,
+        pub qualified_name: String,
+        pub category: String,
+        pub provider_key: String,
+        pub sdk: String,
+        pub model_id: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub api_key_env: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub base_url: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub max_context_tokens: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub max_output_tokens: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub temperature: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub top_p: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub budget_tokens: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub gemini_generation: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub max_tool_iterations: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub reasoning_effort: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub cache_ttl: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub cache_keepalive: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub cache_keepalive_max: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub replay_prior_thinking: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub zai_clear_thinking: Option<bool>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub supports_images: Option<bool>,
+        #[ts(type = "unknown")]
+        pub openrouter_provider: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "Record<string, unknown>")]
+        pub effective_sampler: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub scopes: Option<std::collections::BTreeMap<String, Option<String>>>,
+    }
+
+    pub struct ModelInvalidated {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub cached_request: Option<bool>,
+    }
+
+    pub struct ModelActive {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active: Option<String>,
+    }
+
+    pub struct ModelSelected {
+        pub active: String,
+        pub qualified_name: String,
+        pub provider: String,
+        pub model_id: String,
+        pub changed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ModelInvalidated>,
+    }
+
+    pub struct CharacterModelSelected {
+        #[serde(flatten)]
+        pub selection: ModelSelected,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub shadowed_by_thread: Option<Option<String>>,
+    }
+
+    pub struct RoleModelSelected {
+        #[serde(flatten)]
+        pub selection: ModelSelected,
+        pub role: String,
+        pub config_key: String,
+        pub cleared: Vec<String>,
+        pub file: String,
+        pub restart_required: Vec<String>,
+    }
+
+    #[serde(tag = "target", rename_all = "snake_case")]
+    pub enum ModelSwitchResult { Current(ModelActive), Thread(ModelSelected), Character(CharacterModelSelected), Role(RoleModelSelected) }
+
+    pub struct ThreadModelReset {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active: Option<String>,
+        pub reset_to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ModelInvalidated>,
+    }
+
+    pub struct CharacterModelReset {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub previous_provider: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub previous_model_id: Option<String>,
+        pub reset_to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ModelInvalidated>,
+    }
+
+    pub struct RoleModelReset {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active: Option<String>,
+        pub role: String,
+        pub cleared: Vec<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub source: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub file: Option<String>,
+        pub reset_to: String,
+    }
+
+    #[serde(tag = "target", rename_all = "snake_case")]
+    pub enum ModelResetResult { Thread(ThreadModelReset), Character(CharacterModelReset), Role(RoleModelReset) }
+
+    pub struct ModelSettingChanged {
+        pub changed: bool,
+        pub scope: ModelPreferenceScope,
+        pub model: String,
+        pub provider: String,
+        pub model_id: String,
+        pub key: String,
+        #[ts(type = "unknown")]
+        pub value: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subagent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub applies_to: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub background_task: Option<BackgroundModelTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub also_affects: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ModelInvalidated>,
+    }
+
+    pub struct SavedModelSetting {
+        pub key: String,
+        #[ts(type = "unknown")]
+        pub value: serde_json::Value,
+        pub scope: ModelPreferenceScope,
+    }
+
+    pub struct ModelOverviewRole {
+        pub role: String,
+        pub flag: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub source: Option<String>,
+        pub inherited: bool,
+        pub settings: Vec<SavedModelSetting>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub same_settings_as: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub error: Option<String>,
+    }
+
+    pub struct ModelSettingsOverview {
+        pub overview: bool,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        pub roles: Vec<ModelOverviewRole>,
+        pub inherited_count: usize,
+    }
+
+    pub struct ModelSettingsDetail {
+        pub model: String,
+        pub provider: String,
+        pub model_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subagent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub applies_to: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub key: Option<String>,
+        #[ts(type = "Record<string, unknown>")]
+        pub effective_sampler: std::collections::BTreeMap<String, serde_json::Value>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        #[ts(type = "Record<string, unknown> | null")]
+        pub saved_global: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        #[ts(type = "Record<string, unknown> | null")]
+        pub saved_character: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+        pub setting_schema: Vec<ModelSettingSchemaEntry>,
+        pub scopes: std::collections::BTreeMap<String, Option<String>>,
+    }
+
+    #[serde(untagged)]
+    pub enum ModelSettingsResult { Overview(ModelSettingsOverview), Detail(Box<ModelSettingsDetail>) }
 
     pub struct ConfigSources {
         pub chat_models: Vec<String>, pub embedding_models: Vec<String>, pub image_models: Vec<String>,
@@ -744,7 +1108,7 @@ macro_rules! operations {
             }
             #[serde(tag = "name", content = "data")]
             pub enum OperationResponse {
-                $(#[serde(rename = $name)] $marker($output)),*
+                $(#[serde(rename = $name)] $marker(Box<$output>)),*
             }
         }
         pub fn operation_schemas() -> Vec<OperationSchemas> {
@@ -755,6 +1119,13 @@ macro_rules! operations {
 
 operations! {
     DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,
+    ListModels: "list_models" (ListModelsArgs) => ModelListing,
+    FavoriteModel: "favorite_model" (FavoriteModelArgs) => ModelFavorite,
+    InspectModel: "model_info" (ModelInfoArgs) => ModelInfoResult,
+    SwitchModel: "switch_model" (SwitchModelArgs) => ModelSwitchResult,
+    ResetModel: "reset_model" (ResetModelArgs) => ModelResetResult,
+    ModelSettings: "model_settings" (ModelSettingsArgs) => ModelSettingsResult,
+    SetModelSetting: "set_model_setting" (SetModelSettingArgs) => ModelSettingChanged,
     Configuration: "config" (ConfigArgs) => ConfigResult,
     CheckConfiguration: "config_check" (EmptyOperationArgs) => ConfigCheckResult,
     ConfigurationSchema: "config_schema" (EmptyOperationArgs) => ConfigSchemaResult,
@@ -789,6 +1160,70 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_contracts_require_named_writes_and_complete_targeted_results() {
+        for args in [serde_json::json!({}), serde_json::json!({"name":null})] {
+            assert!(serde_json::from_value::<FavoriteModelArgs>(args).is_err());
+        }
+        for args in [
+            serde_json::json!({"value":0.2}),
+            serde_json::json!({"key":null}),
+            serde_json::json!({"key":"temperature","scope":"shared"}),
+            serde_json::json!({"key":"temperature","background_task":"dreaming"}),
+            serde_json::json!({"key":"temperature","typo":true}),
+        ] {
+            assert!(serde_json::from_value::<SetModelSettingArgs>(args).is_err());
+        }
+        for value in [
+            serde_json::json!(false),
+            serde_json::json!(0),
+            serde_json::json!({"order":["a"],"allow_fallbacks":false}),
+        ] {
+            let command = SetModelSetting::command(
+                SetModelSettingArgs {
+                    name: Some("fixture".to_owned()),
+                    background_task: None,
+                    subagent: None,
+                    key: "openrouter_provider".to_owned(),
+                    scope: Some(ModelPreferenceScope::Global),
+                    value: Some(value.clone()),
+                },
+                Some("model-1".to_owned()),
+            )
+            .unwrap();
+            assert_eq!(
+                serde_json::to_value(command).unwrap(),
+                serde_json::json!({"name":"set_model_setting","args":{"name":"fixture","key":"openrouter_provider","scope":"global","value":value},"rid":"model-1"})
+            );
+        }
+        let selected = serde_json::json!({"target":"thread","active":"fixture","qualified_name":"fixture","provider":"anthropic","model_id":"fixture","changed":true,"future_detail":{"inspectable":true}});
+        assert!(serde_json::from_value::<ModelSwitchResult>(selected.clone()).is_ok());
+        for key in ["qualified_name", "provider", "model_id", "changed"] {
+            let mut incomplete = selected.clone();
+            assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
+            assert!(serde_json::from_value::<ModelSwitchResult>(incomplete).is_err());
+        }
+        assert!(
+            serde_json::from_value::<ModelSwitchResult>(
+                serde_json::json!({"target":"current","active":null})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<ModelSwitchResult>(
+                serde_json::json!({"target":"thread","active":null})
+            )
+            .is_err()
+        );
+        let reset = serde_json::json!({"target":"role","active":null,"role":"heartbeat","cleared":[],"source":null,"file":null,"reset_to":"inherited"});
+        assert!(serde_json::from_value::<ModelResetResult>(reset.clone()).is_ok());
+        for key in ["active", "source", "file"] {
+            let mut incomplete = reset.clone();
+            assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
+            assert!(serde_json::from_value::<ModelResetResult>(incomplete).is_err());
+        }
+    }
 
     #[test]
     fn provider_results_require_matching_outcomes_and_present_nullable_fields() {

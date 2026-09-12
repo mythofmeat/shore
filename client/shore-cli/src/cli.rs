@@ -1,11 +1,14 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    CheckConfiguration, ConfigArgs, Configuration, ConfigurationSchema, ConversationLog,
-    ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage, EditMessageArgs,
-    EmptyOperationArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
-    ListProviderModels, ListProviders, MessageReferences, Operation, ProviderArgs,
-    ProviderModelsArgs, RefreshAllProviderModels, RefreshProviderModels, ToolAccessListing,
+    BackgroundModelTarget, CheckConfiguration, ConfigArgs, Configuration, ConfigurationSchema,
+    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage,
+    EditMessageArgs, EmptyOperationArgs, FavoriteModel, FavoriteModelArgs, GetMessage,
+    GetMessageArgs, InjectSystem, InjectSystemArgs, InspectModel, ListModels, ListModelsArgs,
+    ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope,
+    ModelSettings, ModelSettingsArgs, Operation, ProviderArgs, ProviderModelsArgs,
+    RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, SetModelSetting,
+    SetModelSettingArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
 };
 use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
@@ -879,11 +882,11 @@ pub(crate) enum BackgroundTarget {
 }
 
 impl BackgroundTarget {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub(crate) fn as_protocol_target(self) -> BackgroundModelTarget {
         match self {
-            BackgroundTarget::All => "all",
-            BackgroundTarget::Heartbeat => "heartbeat",
-            BackgroundTarget::Compaction => "compaction",
+            Self::All => BackgroundModelTarget::All,
+            Self::Heartbeat => BackgroundModelTarget::Heartbeat,
+            Self::Compaction => BackgroundModelTarget::Compaction,
         }
     }
 }
@@ -1080,13 +1083,11 @@ impl ModelTarget {
         !self.chat && self.background.is_none() && self.subagent.is_none()
     }
 
-    pub(crate) fn write_into(&self, obj: &mut serde_json::Map<String, serde_json::Value>) {
-        use serde_json::json;
-        if let Some(task) = self.background {
-            let _ignored = obj.insert("background_task".into(), json!(task.as_str()));
-        }
-        if let Some(name) = &self.subagent {
-            let _ignored = obj.insert("subagent".into(), json!(name));
+    pub(crate) fn operation_args(&self) -> ModelInfoArgs {
+        ModelInfoArgs {
+            name: None,
+            background_task: self.background.map(BackgroundTarget::as_protocol_target),
+            subagent: self.subagent.clone(),
         }
     }
 }
@@ -2547,7 +2548,6 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
 }
 
 fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Model {
         subcommand,
         info,
@@ -2559,91 +2559,86 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     else {
         return None;
     };
-    if let Some(ModelCommand::Info {
-        name: info_name,
-        target,
-    }) = subcommand
-    {
-        let mut obj = Map::new();
-        let _ignored = obj.insert("name".into(), json!(info_name.clone().unwrap_or_default()));
-        target.write_into(&mut obj);
-        return Some(("model_info", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Use { name, target }) = subcommand {
-        let mut obj = Map::new();
-        let _ignored = obj.insert("name".into(), json!(name));
-        target.write_into(&mut obj);
-        return Some(("switch_model", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Fav { name }) = subcommand {
-        return Some(("favorite_model", json!({ "name": name, "favorite": true })));
-    }
-    if let Some(ModelCommand::Unfav { name }) = subcommand {
-        return Some(("favorite_model", json!({ "name": name, "favorite": false })));
-    }
-    if let Some(ModelCommand::Reset { target }) = subcommand {
-        let mut obj = Map::new();
-        target.write_into(&mut obj);
-        return Some(("reset_model", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Setting {
-        key,
-        value,
-        global,
-        reset: setting_reset,
-        target,
-        model: setting_model,
-        ..
-    }) = subcommand
-    {
-        let scope = if *global { "global" } else { "character" };
-        let with_target = |mut obj: Map<String, Value>| -> Value {
-            target.write_into(&mut obj);
-            if let Some(name) = setting_model {
-                let _ignored = obj.insert("name".into(), json!(name));
+    match subcommand {
+        Some(ModelCommand::Info { name, target }) => {
+            operation_to_swp::<InspectModel>(ModelInfoArgs {
+                name: Some(name.clone().unwrap_or_default()),
+                ..target.operation_args()
+            })
+        }
+        Some(ModelCommand::Use { name, target }) => {
+            let selected = target.operation_args();
+            operation_to_swp::<SwitchModel>(SwitchModelArgs {
+                name: Some(name.clone()),
+                include_hidden: all.then_some(true),
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        Some(ModelCommand::Fav { name }) => operation_to_swp::<FavoriteModel>(FavoriteModelArgs {
+            name: name.clone(),
+            favorite: Some(true),
+        }),
+        Some(ModelCommand::Unfav { name }) => {
+            operation_to_swp::<FavoriteModel>(FavoriteModelArgs {
+                name: name.clone(),
+                favorite: Some(false),
+            })
+        }
+        Some(ModelCommand::Reset { target }) => {
+            let selected = target.operation_args();
+            operation_to_swp::<ResetModel>(ResetModelArgs {
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        Some(ModelCommand::Setting {
+            key,
+            value,
+            global,
+            reset: setting_reset,
+            target,
+            model,
+            ..
+        }) => {
+            let selected = target.operation_args();
+            if let Some(setting_key) = key
+                && (*setting_reset || value.is_some())
+            {
+                return operation_to_swp::<SetModelSetting>(SetModelSettingArgs {
+                    key: setting_key.clone(),
+                    name: model.clone(),
+                    value: if *setting_reset {
+                        Some(serde_json::Value::Null)
+                    } else {
+                        value
+                            .as_ref()
+                            .map(|raw_value| parse_setting_value(setting_key, raw_value))
+                    },
+                    scope: Some(if *global {
+                        ModelPreferenceScope::Global
+                    } else {
+                        ModelPreferenceScope::Character
+                    }),
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                });
             }
-            Value::Object(obj)
-        };
-        let untargeted = target.is_bare() && setting_model.is_none();
-        return match (key.as_deref(), value.as_deref(), *setting_reset) {
-            (Some(k), _, true) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                _ = obj.insert("value".into(), Value::Null);
-                _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_target(obj)))
-            }
-            (None, _, _) if untargeted => Some(("model_settings", json!({ "overview": true }))),
-            (None, _, _) => Some(("model_settings", with_target(Map::new()))),
-            (Some(k), None, false) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                Some(("model_settings", with_target(obj)))
-            }
-            (Some(k), Some(v), false) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                _ = obj.insert("value".into(), parse_setting_value(k, v));
-                _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_target(obj)))
-            }
-        };
+            operation_to_swp::<ModelSettings>(ModelSettingsArgs {
+                name: model.clone(),
+                key: key.clone(),
+                overview: (key.is_none() && target.is_bare() && model.is_none()).then_some(true),
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        None if *reset => operation_to_swp::<ResetModel>(ResetModelArgs::default()),
+        None if *info => operation_to_swp::<InspectModel>(ModelInfoArgs::default()),
+        None => operation_to_swp::<ListModels>(ListModelsArgs {
+            include_hidden: all.then_some(true),
+            favorites_only: favorites.then_some(true),
+        }),
     }
-
-    if *reset {
-        return Some(("reset_model", json!({})));
-    }
-    if *info {
-        return Some(("model_info", json!({})));
-    }
-    let mut args = Map::new();
-    if *all {
-        let _ignored = args.insert("include_hidden".into(), json!(true));
-    }
-    if *favorites {
-        let _ignored = args.insert("favorites_only".into(), json!(true));
-    }
-    Some(("list_models", Value::Object(args)))
 }
 
 fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {

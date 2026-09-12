@@ -1,4 +1,6 @@
 import { writeDurable } from "../src/storage/files.ts";
+import { readThreadsIndex } from "../src/engine/threads.ts";
+import { globalPreferencesPath, characterPreferencesPath } from "../src/config/preferences.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -171,7 +173,7 @@ class Client {
 
   private constructor(readonly socket: Socket) {}
 
-  static async open(port: number, selected: string | null): Promise<Client> {
+  static async open(port: number, selected: string | null, capabilities: string[] = []): Promise<Client> {
     const socket = connect({ host: "127.0.0.1", port, noDelay: true });
     await new Promise<void>((resolve, reject) => {
       socket.once("connect", resolve);
@@ -184,7 +186,7 @@ class Client {
         type: "hello",
         client_type: "tui",
         client_name: "test",
-        capabilities: [],
+        capabilities,
         token: TEST_TOKEN,
         ...(selected === null ? {} : { character: selected }),
       })}\n`,
@@ -231,6 +233,88 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("model operations agree over TCP and WebSocket on results, errors and persisted preferences", async () => {
+    const config = `${MODEL_CONFIG}\n[chat."anthropic:fast"]\nsdk = "anthropic"\n[chat."openrouter:vendor"]\nsdk = "openrouter"\n[subagents.worker]\ndescription = "test"\nprompt = "test"\nmodel = "anthropic:fast"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
+    const steps = [
+      { name: "list_models", args: {} },
+      { name: "favorite_model", args: { name: "anthropic:fast", favorite: true } },
+      { name: "favorite_model", args: { name: "anthropic:fast", favorite: true } },
+      { name: "list_models", args: { favorites_only: true } },
+      { name: "switch_model", args: { name: "anthropic:fast" } },
+      { name: "set_model_setting", args: { name: "anthropic:fast", key: "temperature", value: 0.6, scope: "global" } },
+      { name: "set_model_setting", args: { key: "temperature", value: 0.2, scope: "character" } },
+      { name: "model_settings", args: {} },
+      { name: "model_info", args: {} },
+      { name: "set_model_setting", args: { name: "openrouter:vendor", key: "openrouter_provider", value: { order: ["provider-a"], allow_fallbacks: false }, scope: "global" } },
+      { name: "switch_model", args: { name: "anthropic:fast", background_task: "heartbeat" } },
+      { name: "switch_model", args: { name: "openrouter:vendor", background_task: "compaction" } },
+      { name: "model_settings", args: { background_task: "all" } },
+      { name: "switch_model", args: { name: "anthropic:fast", subagent: "all" } },
+      { name: "switch_model", args: { name: "openrouter:vendor", subagent: "worker" } },
+      { name: "set_model_setting", args: { subagent: "worker", key: "top_p", value: 0.7, scope: "global" } },
+      { name: "model_settings", args: { subagent: "worker" } },
+      { name: "model_info", args: { subagent: "worker" } },
+      { name: "model_settings", args: { overview: true } },
+      { name: "reset_model", args: { background_task: "all" } },
+      { name: "reset_model", args: { subagent: "all" } },
+      { name: "set_model_setting", args: { key: "temperature", value: null, scope: "character" } },
+      { name: "model_settings", args: {} },
+      { name: "switch_model", args: { name: "not-a-model" } },
+      { name: "set_model_setting", args: { key: "top_p", value: 0.5, scope: "not-a-scope" } },
+      { name: "reset_model", args: {} },
+      { name: "list_models", args: { include_hidden: true } },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(config);
+      const daemon = await start(place, [], {}, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Model browser did not connect"); }
+        const results: unknown[] = [];
+        const data = daemon.runtime.registry.globalConfig().dirs.data;
+        const readOptional = async (path: string) => existsSync(path) ? await readFile(path, "utf8") : null;
+        for (const [index, step] of steps.entries()) {
+          let rid = `model-conformance-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ type: "command", rid, ...step });
+          else if (browser !== undefined) { const ticket = browser.client.submit({ type: "command", ...step }); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} ${step.name} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          const normalized = JSON.parse(JSON.stringify(observed).replaceAll(place.root, "<root>").replaceAll(rid, `model-conformance-${String(index)}`)) as unknown;
+          const threads = await readThreadsIndex(data, "ada");
+          const saved = {
+            config: (await readFile(place.configPath, "utf8")).replaceAll(place.root, "<root>"),
+            global: await readOptional(globalPreferencesPath(data)), character: await readOptional(characterPreferencesPath(data, "ada")),
+            model: threads?.threads.find((thread) => thread.id === "main")?.chat_model ?? null,
+          };
+          if (index === 4) expect(saved.model).toBe("anthropic:fast");
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          const error = observed.find((frame) => frame["type"] === "error");
+          const expectedError = index === 23 ? "not_found" : index === 12 || index === 24 ? "invalid_request" : undefined;
+          if (expectedError === undefined) {
+            expect(error, `${transport} ${String(index)} ${step.name}`).toBeUndefined();
+            expect(output).toMatchObject({ name: step.name });
+          } else {
+            expect(output).toBeUndefined();
+            expect(error).toMatchObject({ code: expectedError });
+          }
+          expect(observed.find((frame) => frame["type"] === "request_finished")).toMatchObject({ outcome: expectedError === undefined ? "completed" : "failed" });
+          if (index === 7) expect(output).toMatchObject({ data: { effective_sampler: { temperature: 0.2 }, saved_global: { temperature: 0.6 } } });
+          if (step.name === "model_info" && "subagent" in step.args) expect(output).toMatchObject({ data: { effective_sampler: { top_p: 0.7 } } });
+          results.push({ observed: normalized, saved });
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[1]).toEqual(outcomes[0]);
+  }, 20_000);
+
   test("global configuration reload retains restart requirements and redacts rejected secret edits", async () => {
     const original = `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
     const place = await layout(original, []);

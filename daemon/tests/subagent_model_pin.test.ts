@@ -63,6 +63,14 @@ const roleOf = (ctx: ModelsContext, role: string) =>
 
 const readToml = (path: string) => readFile(path, "utf8");
 
+test("model information reports the targeted subagent's sampler and scope", async () => {
+  const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+  setModelSetting(ctx, { key: "temperature", value: 0.2 });
+  setModelSetting(ctx, { subagent: "music", key: "temperature", value: 0.8 });
+  expect(modelInfo(ctx, {})).toMatchObject({ effective_sampler: { temperature: 0.2 }, scopes: { temperature: "character_model" } });
+  expect(modelInfo(ctx, { subagent: "music" })).toMatchObject({ effective_sampler: { temperature: 0.8 }, scopes: { temperature: "character_subagent" } });
+});
+
 const record = (value: unknown) => value as Record<string, unknown>;
 
 interface OverviewRole {
