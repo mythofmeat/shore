@@ -11,6 +11,28 @@ import { SDK_VARIANTS } from "../src/llm/types.ts";
 import { assertBrowserCoverage, assertCompactionResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
+import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
+import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
+import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
+
+test("built-in, subagent and connected tool schemas reach structured controls and omissions fail", async () => {
+  const schemas = [...ALL_TOOLS.map((tool) => ({ name: tool.name, schema: tool.parameters })), { name: "ask_worker", schema: SUBAGENT_INPUT_SCHEMA }, { name: "mcp__fixture__nested", schema: toolResults[0]?.input_schema }];
+  const components = await readFile(new URL("../src/browser/components.tsx", import.meta.url), "utf8");
+  const renderers = await switchCases(components, "Field", "control.kind");
+  expect(() => assertToolControlCoverage(schemas, renderers)).not.toThrow();
+  for (const kind of ["array", "object", "boolean", "string", "integer", "json", "union", "null"]) {
+    expect(() => assertToolControlCoverage(schemas, new Set([...renderers].filter((renderer) => renderer !== kind)))).toThrow(`.${kind}`);
+  }
+  const shape = toolControl({ type: "object", properties: { query: { type: "string" }, count: { type: "integer", default: 5 } }, required: ["query"], additionalProperties: { type: "string" } });
+  expect(initialValue(shape)).toEqual({ query: "" });
+  expect(shape.fields["query"]).toMatchObject({ multiline: true });
+  expect(shape.hints?.["count"]).toContain("Default: 5");
+  expect(shape.additional).toMatchObject({ kind: "string" });
+  expect(toolControl({ type: "object", additionalProperties: { type: "string" }, propertyNames: { type: "string" } }).additional).toMatchObject({ kind: "string" });
+  expect(() => toolControl({ type: "object", propertyNames: { type: "string", pattern: "^field" } })).toThrow("Constrained object keys");
+  expect(() => toolControl({ type: "object", patternProperties: { "^key": { type: "string" } } })).toThrow("patternProperties");
+  expect(toolNames({ tools: [{ tool: "read", main: true, subagents: [] }], subagents: [{ name: "worker", enabled: false, model: null, tools: [] }], mcp: ["mcp__fixture__nested", "read"], warnings: [] })).toEqual(["ask_worker", "mcp__fixture__nested", "read"]);
+});
 
 test("every canonical compaction outcome has a dedicated renderer and omissions fail", async () => {
   const source = await readFile(new URL("../src/browser/memory.tsx", import.meta.url), "utf8");
@@ -75,7 +97,7 @@ test("every registered action field reaches an implemented control, and every kn
   const { turns: _turns, ...fields } = fork.fields;
   expect(() => actionControl({ ...fork, fields })).toThrow("Unaccounted GUI fields: fork_thread");
   expect(() => controlFor({ type: "string", format: "date", pattern: "pattern-needing-a-renderer" })).toThrow("Unsupported action schema keyword: pattern");
-  expect(() => controlFor({ type: "object", additionalProperties: true })).toThrow("Open object inputs need a dedicated control");
+  expect(controlFor({ type: "object", additionalProperties: true })).toMatchObject({ kind: "object", additional: { kind: "json" } });
   expect(initialValue(actionControl(fork))).toEqual({ name: "" });
 });
 

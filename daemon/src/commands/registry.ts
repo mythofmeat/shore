@@ -1,4 +1,5 @@
 import { compact } from "./compact.ts";
+import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
 import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
 import { statusContext } from "./status_context.ts";
@@ -81,6 +82,19 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  run_tool: register("run_tool", { category: "Tools", scope: "character", prerequisites: ["tool_execution"], effects: ["workspace_write", "history_write", "config_write", "provider_call"], confirmation: "execute", label: "Run tool", fields: {
+    tool: { label: "Tool", choices: "tools", hint: "Built-in tool, configured ask_<subagent>, or connected MCP tool" },
+    input: { label: "Tool input", hint: "Structured arguments; the daemon validates them using the selected tool's schema" },
+    pairs: { label: "Argument overrides", hint: "Text values are converted using the tool schema and override matching Tool input fields" },
+    raw: { label: "Include full output", hint: "Keep the complete result and nested tool inputs/outputs, including text omitted from the normal window" },
+    describe: { label: "Describe only", hint: "Read the tool definition without running it" },
+  }, policies: [{ condition: { kind: "equals", field: "describe", value: true }, effects: ["read"], confirmation: "none" }] }, (context, args) => {
+    const engine = engineOf(context);
+    const dependencies = context.deps.runTool;
+    if (dependencies === undefined) throw internalError("run_tool is not available in this build");
+    const toolContext = { ...dependencies, config: context.session.config, dataDir: context.session.dataDir, conversation: engine.messages(), ...(context.session.signal === undefined ? {} : { signal: context.session.signal }) };
+    return args.describe === true ? describeTool(engine.characterName, toolContext, args) : runTool(engine.characterName, toolContext, args);
+  }),
   compact: register("compact", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["history_write", "workspace_write", "provider_call"], confirmation: "archive", label: "Compact active context", fields: {
     dry_run: { label: "Preview only", hint: "Uses the provider to preview memory writes without archiving the conversation" },
     restart: { label: "Restart paused work", hint: "Discard the paused checkpoint and summarize again; already written memory files remain" },
@@ -294,6 +308,7 @@ export function isRegisteredOperation(name: string): name is OperationName {
 }
 
 const prerequisiteAvailable: Record<OperationPrerequisite, (context: CommandOperationContext) => boolean> = {
+  tool_execution: (context) => context.deps.runTool !== undefined,
   compaction: (context) => context.deps.compaction !== undefined,
   threads: (context) => context.deps.threads !== undefined,
   autonomy: (context) => context.engine !== undefined && context.deps.autonomy.status(context.engine.characterName) !== undefined,

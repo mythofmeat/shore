@@ -14,3 +14,8 @@
 .diagnostics{min-width:0}.diagnostic-data{font-size:12px;overflow-wrap:anywhere;padding-left:0}.diagnostic-data>div{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,2fr);gap:12px;border-bottom:1px solid var(--line);padding:8px 0}.diagnostic-data dt{color:var(--muted)}.diagnostic-data dd{margin:0;min-width:0}.diagnostic-data ol,ol.diagnostic-data{padding-left:20px}.diagnostic-data li{margin:10px 0}.diagnostic-entry{padding:14px 0;border-top:1px solid var(--line)}.diagnostic-entry h4{margin:8px 0}.diagnostic-entry time{font-size:11px;color:var(--muted)}.diagnostics .actions{flex-wrap:wrap}.diff-added{border-left:3px solid #418159;padding-left:9px}.diff-removed{border-left:3px solid #a65b49;padding-left:9px}.inspect>button{margin:0 0 8px}.diagnostics .message-text{font-size:12px}
 
 .memory-panel .actions{flex-wrap:wrap;margin:12px 0}.memory-panel h3{font-size:16px}.memory-panel h4{font-size:13px}.memory-panel p,.memory-panel li{font-size:12px;overflow-wrap:anywhere}.memory-panel .section-heading{padding:0}.memory-panel fieldset{min-width:0}.memory-panel section{margin:18px 0}.memory-panel .message{margin-top:12px}
+
+.tool-workbench { display: grid; gap: 1rem; }
+.tool-choices { display: flex; flex-wrap: wrap; gap: .4rem; max-height: 12rem; overflow: auto; }
+.tool-workbench fieldset { min-width: 0; }
+.tool-workbench > section { border-top: 1px solid var(--line); padding-top: 1rem; }

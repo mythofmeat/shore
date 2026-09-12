@@ -16,6 +16,12 @@ import {
 import { renderTemplate } from "../engine/prompt.ts";
 import { invalidRequest } from "./errors.ts";
 import type { Args } from "./navigation.ts";
+import type { OperationInput } from "../operations/types.ts";
+import type { ToolDescription } from "../protocol/ToolDescription.ts";
+import type { ToolRunReport } from "../protocol/ToolRunReport.ts";
+import type { NestedToolCall } from "../protocol/NestedToolCall.ts";
+import type { ToolKind } from "../protocol/ToolKind.ts";
+export type { ToolKind } from "../protocol/ToolKind.ts";
 
 const NESTED_OUTPUT_CHARS = 600;
 
@@ -44,21 +50,13 @@ export interface RunToolRequest {
   raw: boolean;
 }
 
-export type ToolKind = "builtin" | "subagent" | "mcp";
-
 export interface ResolvedTool {
   kind: ToolKind;
   schema: CompiledToolSchema | undefined;
   enabled: boolean;
 }
 
-export interface NestedCall {
-  tool: string;
-  subagent: string | null;
-  ok: boolean;
-  input: string;
-  output: string;
-}
+export type NestedCall = NestedToolCall;
 
 export function parseRunToolArgs(args: Args): RunToolRequest {
   const tool = args["tool"];
@@ -181,11 +179,11 @@ function coerceValue(key: string, value: string, type: string | undefined): unkn
   }
 }
 
-export function describeTool(character: string, ctx: RunToolContext, args: Args): unknown {
+export function describeTool(character: string, ctx: RunToolContext, args: OperationInput<"run_tool">): ToolDescription {
   const { tool } = parseRunToolArgs(args);
   const cfg = ctx.config.app.tools;
   const vars = templateVars(character, resolveDisplayName(ctx.config.app.defaults));
-  const seen = (kind: string, enabled: boolean, description: string, schema: unknown) => ({
+  const seen = (kind: ToolKind, enabled: boolean, description: string, schema: Record<string, unknown>): ToolDescription => ({
     mode: "tool_definition",
     tool,
     kind,
@@ -231,8 +229,8 @@ export function describeTool(character: string, ctx: RunToolContext, args: Args)
 export async function runTool(
   character: string,
   ctx: RunToolContext,
-  args: Args,
-): Promise<unknown> {
+  args: OperationInput<"run_tool">,
+): Promise<ToolRunReport> {
   const request = parseRunToolArgs(args);
   const resolved = resolveTool(request.tool, ctx.config, ctx.mcpTools());
   const input = { ...request.input, ...coercePairs(request.pairs, resolved.schema) };

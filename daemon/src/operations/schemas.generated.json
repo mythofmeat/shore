@@ -1,5 +1,205 @@
 [
   {
+    "name": "run_tool",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "RunToolArgs",
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "pairs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "raw": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "describe": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "RunToolResult",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolDescription"
+        },
+        {
+          "$ref": "#/$defs/ToolRunReport"
+        }
+      ],
+      "$defs": {
+        "ToolDescription": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ToolDescriptionMode"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ToolKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "description": {
+              "type": "string"
+            },
+            "input_schema": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "mode",
+            "tool",
+            "kind",
+            "enabled",
+            "description",
+            "input_schema"
+          ]
+        },
+        "ToolDescriptionMode": {
+          "type": "string",
+          "enum": [
+            "tool_definition"
+          ]
+        },
+        "ToolKind": {
+          "type": "string",
+          "enum": [
+            "builtin",
+            "subagent",
+            "mcp"
+          ]
+        },
+        "ToolRunReport": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string"
+            },
+            "character": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ToolKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "rejected": {
+              "type": "boolean"
+            },
+            "duration_ms": {
+              "type": "number",
+              "format": "double",
+              "minimum": 0.0
+            },
+            "output": {
+              "type": "string"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "result_chars": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "calls": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NestedToolCall"
+              }
+            }
+          },
+          "required": [
+            "tool",
+            "character",
+            "kind",
+            "enabled",
+            "input",
+            "ok",
+            "rejected",
+            "duration_ms",
+            "output",
+            "truncated",
+            "result_chars",
+            "raw",
+            "calls"
+          ]
+        },
+        "NestedToolCall": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string"
+            },
+            "subagent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "input": {
+              "type": "string"
+            },
+            "output": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "subagent",
+            "ok",
+            "input",
+            "output"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "compact",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3742,7 +3942,8 @@
             "Configuration",
             "Models",
             "Diagnostics",
-            "Memory"
+            "Memory",
+            "Tools"
           ]
         },
         "OperationScope": {
@@ -3761,7 +3962,8 @@
             "autonomy",
             "keepalive",
             "session_activation",
-            "compaction"
+            "compaction",
+            "tool_execution"
           ]
         },
         "OperationEffect": {
@@ -3783,7 +3985,8 @@
           "enum": [
             "none",
             "archive",
-            "delete"
+            "delete",
+            "execute"
           ]
         },
         "OperationPolicy": {
@@ -3907,7 +4110,8 @@
             "providers",
             "config_keys",
             "subagents",
-            "model_settings"
+            "model_settings",
+            "tools"
           ]
         }
       }

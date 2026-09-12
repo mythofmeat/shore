@@ -526,9 +526,49 @@ with explicit assertions that clearing a side thread preserves home's active mes
 checks bypassed an unavailable sccache service using `RUSTC_WRAPPER=`. GitHub CI execution, required
 merge gates and the remaining acceptance criteria are still unverified or unfinished.
 
+### Manual tool workbench
+
+`run_tool` now uses canonical Rust input/result contracts, a registered daemon handler and generated
+browser validators. There are 52 registered operations and four legacy names remaining: `usage`,
+`delete_character`, `export_character` and `import_character`. Tool and subagent CLI mappings use
+the canonical input type. Results distinguish complete tool definitions from execution reports,
+including rejected inputs, failures, truncation, full output and nested calls. Read-only descriptions
+skip execution confirmation in the browser and TUI; an actual manual run still asks for review.
+
+The workbench discovers built-ins, configured subagents and connected MCP tools, displays each live
+schema and edits its fields. Controls preserve multiline strings, optional omissions, nested objects
+and arrays, booleans, nullable values, enums and typed dictionaries. String overrides use the daemon's
+existing schema-based conversion and override matching structured arguments. Unsupported schema
+constructs explicitly select the structured advanced editor, with full server validation. The
+generated action form also exposes every canonical option. Complete definitions and results have
+JSON downloads; execution errors preserve the arguments and last selected definition.
+
+A browser journey exercises file creation and replacement, rejected arguments and recovery, full
+output beyond the configured window, subagent reads, a real MCP server with nested/nullable inputs,
+the generated form and mobile layout. A 15-step independent-world TCP/WebSocket journey compares
+definitions, results, errors, completion and resulting files. Real CLI and pseudo-terminal journeys
+exercise structured inputs, string overrides, description/run confirmations, both result variants,
+raw nested output and malformed-result rejection. An executable schema/control gate covers every
+built-in and subagent schema plus a representative MCP schema, with deliberate renderer omissions.
+
+Before implementation, toolchains and dependencies were refreshed again. Bun 1.4.2, Rust/Cargo
+1.98.1, cargo-edit 0.13.13, cargo-sweep 0.8.0 and sccache 0.17.0 matched current stable releases.
+Both dependency update/install sequences completed without changes. The package-managed rustup
+cannot self-update; its installed 1.29.1 matches the upstream stable manifest. Baseline daemon and
+CLI checks passed before the absent browser workbench was reproduced. Rust checks continue to
+bypass the unavailable sccache service with `RUSTC_WRAPPER=`.
+
+Tool validation passed all eight required daemon checks with 8,238 tests, all three Rust workspace
+checks, all nine browser journeys, and browser-generation/inventory checks. Three affected mutation
+passes killed 44/44 mutants, and all 59 staleness passes are current. Independent legacy recordings
+remain unchanged. GitHub CI execution and required merge gates remain unverified.
+
+Live manual-tool progress, targeted cancellation, recovery after closing/reconnecting the workbench,
+and broader dynamic MCP schema coverage remain unfinished acceptance work.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the five legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the four legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.

@@ -6,6 +6,8 @@ import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { Providers } from "./providers.tsx";
 import { Diagnostics } from "./diagnostics.tsx";
 import { Memory } from "./memory.tsx";
+import { ToolWorkbench } from "./tool_workbench.tsx";
+import { toolNames } from "./tool_forms.ts";
 import { Models } from "./models.tsx";
 import { Settings } from "./settings.tsx";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
@@ -41,9 +43,13 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
   const [subagentNames, setSubagentNames] = useState<string[]>([]);
   const [modelSettingKeys, setModelSettingKeys] = useState<string[]>([]);
   const [providerNames, setProviderNames] = useState<string[]>([]);
+  const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [configSchema, setConfigSchema] = useState<ConfigSchemaEntry[]>([]);
   useEffect(() => {
     let current = true;
+    if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "tools")) {
+      void workspace.actions.run("tools", {}).then((access) => { if (current) setAvailableTools(toolNames(access)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+    }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "providers")) {
       void workspace.actions.run("list_providers", {}).then((catalogue) => { if (current) setProviderNames(catalogue.providers.map((provider) => provider.name)); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     }
@@ -61,7 +67,7 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
     }
     return () => { current = false; };
   }, [operation, state.status]);
-  const choices = { models: modelNames, subagents: subagentNames, model_settings: modelSettingKeys, config_keys: configSchema.map((entry) => entry.key), providers: providerNames, characters: state.characters.map((character) => character.name), threads: state.threads.map((thread) => thread.id) };
+  const choices = { tools: availableTools, models: modelNames, subagents: subagentNames, model_settings: modelSettingKeys, config_keys: configSchema.map((entry) => entry.key), providers: providerNames, characters: state.characters.map((character) => character.name), threads: state.threads.map((thread) => thread.id) };
   const execute = async () => {
     setBusy(true); setError("");
     try { setResult(await workspace.actions.runDiscovered(operation.name, values)); await workspace.refreshNavigation(); setConfirming(false); }
@@ -163,6 +169,7 @@ function App() {
   const [models, setModels] = useState(false);
   const [diagnostics, setDiagnostics] = useState(false);
   const [memory, setMemory] = useState(false);
+  const [toolWorkbench, setToolWorkbench] = useState(false);
   const [navigation, setNavigation] = useState(false);
   const [reasoning, setReasoning] = useState(() => saved("shore.reasoning") !== "false");
   const [tools, setTools] = useState(() => saved("shore.tools") !== "false");
@@ -191,7 +198,7 @@ function App() {
     <aside className="sidebar"><div className="brand">SHORE <span>WORKSPACE</span></div><div className="section-heading"><h2>Characters</h2><button disabled={!ready} onClick={() => action("create_character")}>New</button></div>
       <nav aria-label="Characters">{state.characters.map((character) => <button key={character.name} aria-current={state.character === character.name ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(character.name))}><span className="avatar">{character.name.slice(0, 1).toUpperCase()}</span>{character.name}</button>)}</nav>
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
-      <div className="sidebar-footer"><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
+      <div className="sidebar-footer"><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
     <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
@@ -206,6 +213,7 @@ function App() {
     </main>
     {activity ? <aside className="activity"><h2>Activity & details</h2><Inspect label="Conversation configuration" value={state.config} />{state.streams.filter((stream) => stream.subagent !== null).map((stream) => <section key={stream.key}><h3>{stream.subagent}</h3><div className="message-text">{stream.text}</div><Blocks blocks={stream.blocks} reasoning={reasoning} tools={tools} openImage={setImage} /></section>)}{state.activity.slice().reverse().map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}</aside> : null}
     {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
+    {toolWorkbench && state.character !== null ? <ToolWorkbench key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} close={() => setToolWorkbench(false)} advanced={(args) => { setToolWorkbench(false); action("run_tool", args); }} /> : null}
     {diagnostics && state.character !== null ? <Diagnostics key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} characters={state.characters.map((item) => item.name)} changed={() => workspace.refreshNavigation()} advanced={(name) => { setDiagnostics(false); action(name); }} close={() => setDiagnostics(false)} openImage={setImage} /> : null}
     {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}

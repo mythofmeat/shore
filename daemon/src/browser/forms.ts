@@ -2,19 +2,19 @@ import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 
 export type Control =
   | { kind: "json" }
-  | { kind: "string"; choices?: string[] }
+  | { kind: "string"; choices?: string[]; multiline?: boolean }
   | { kind: "integer" | "number"; minimum?: number; maximum?: number }
   | { kind: "boolean" | "null" }
   | { kind: "array"; item: Control }
   | { kind: "union"; options: Control[] }
-  | { kind: "object"; fields: Record<string, Control>; required: string[] };
+  | { kind: "object"; fields: Record<string, Control>; required: string[]; additional?: Control; hints?: Record<string, string> };
 
 export function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a schema object");
   return value as Record<string, unknown>;
 }
 
-const keywords = new Set(["$schema", "$defs", "$ref", "title", "description", "type", "properties", "additionalProperties", "required", "enum", "anyOf", "items", "minimum", "maximum", "format"]);
+const keywords = new Set(["$schema", "$defs", "$ref", "title", "description", "default", "type", "properties", "additionalProperties", "propertyNames", "required", "enum", "anyOf", "items", "minimum", "maximum", "minLength", "maxLength", "format"]);
 
 export function controlFor(schema: unknown, root: unknown = schema, depth = 0): Control {
   if (depth > 24) throw new Error("Recursive action schemas need a dedicated control");
@@ -46,10 +46,19 @@ export function controlFor(schema: unknown, root: unknown = schema, depth = 0): 
     case "null": return { kind: "null" };
     case "array": return { kind: "array", item: next(node["items"]) };
     case "object": {
-      if (node["additionalProperties"] !== false) throw new Error("Open object inputs need a dedicated control");
+      if (node["propertyNames"] !== undefined) {
+        const keys = record(node["propertyNames"]);
+        if (keys["type"] !== "string" || Object.keys(keys).length !== 1) throw new Error("Constrained object keys need an advanced editor");
+      }
       const required = node["required"] ?? [];
       if (!Array.isArray(required) || !required.every((value) => typeof value === "string")) throw new Error("Invalid required fields");
-      return { kind: "object", fields: Object.fromEntries(Object.entries(record(node["properties"] ?? {})).map(([key, value]) => [key, next(value)])), required };
+      const properties = Object.entries(record(node["properties"] ?? {}));
+      const hints = Object.fromEntries(properties.map(([key, value]) => {
+        const field = value !== null && typeof value === "object" && !Array.isArray(value) ? record(value) : {};
+        const parts = [typeof field["description"] === "string" ? field["description"] : "", Object.hasOwn(field, "default") ? `Default: ${JSON.stringify(field["default"])}` : ""];
+        return [key, parts.filter(Boolean).join(" ")];
+      }));
+      return { kind: "object", fields: Object.fromEntries(properties.map(([key, value]) => [key, next(value)])), required, hints, ...(node["additionalProperties"] === false ? {} : { additional: next(node["additionalProperties"] ?? true) }) };
     }
     default: throw new Error(`Unsupported action control: ${String(node["type"])}`);
   }

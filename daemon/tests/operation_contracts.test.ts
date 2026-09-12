@@ -6,10 +6,48 @@ import { validOperationInput, validOperationResult } from "../src/browser/operat
 import { operationPolicy } from "../src/operations/policy.ts";
 import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
 import memorySegments from "../../client/shore-cli/tests/fixtures/memory_segments.json" with { type: "json" };
+import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("tool inputs retain structured values and string overrides while rejecting malformed envelopes", () => {
+    for (const input of [
+      { tool: "read" }, { tool: "edit", input: { path: "notes.md", entries: [{ enabled: false, number: 0, text: "", unset: null }] }, pairs: { limit: "0", path: "override.md" }, raw: true, describe: false },
+      { tool: "read", input: {}, pairs: {}, raw: null, describe: null },
+    ]) {
+      expect(parseOperationInput("run_tool", input)).toEqual(input);
+      expect(validOperationInput("run_tool", input)).toBe(true);
+    }
+    for (const input of [{}, { tool: "" }, { tool: 1 }, { tool: "read", input: null }, { tool: "read", input: [] }, { tool: "read", pairs: null }, { tool: "read", pairs: { count: 1 } }, { tool: "read", raw: "true" }, { tool: "read", describe: 1 }, { tool: "read", typo: true }]) {
+      expect(() => parseOperationInput("run_tool", input)).toThrow();
+      expect(validOperationInput("run_tool", input)).toBe(false);
+    }
+  });
+
+  test("tool descriptions and execution reports require complete fields without dropping future details", () => {
+    for (const result of toolResults) {
+      const future = { ...result, future_detail: { still: "inspectable" } };
+      expect<unknown>(parseOperationResult("run_tool", future)).toEqual(future);
+      expect(validOperationResult("run_tool", future)).toBe(true);
+      for (const key of Object.keys(result)) {
+        const incomplete = Object.fromEntries(Object.entries(result).filter(([field]) => field !== key));
+        expect(() => parseOperationResult("run_tool", incomplete), key).toThrow();
+        expect(validOperationResult("run_tool", incomplete), key).toBe(false);
+      }
+    }
+    const report = toolResults[1];
+    for (const changed of [{ kind: "unknown" }, { input: null }, { duration_ms: -1 }, { result_chars: 0.5 }, { calls: [{ tool: "read", ok: true }] }]) {
+      expect(validOperationResult("run_tool", { ...report, ...changed })).toBe(false);
+    }
+    const operation = commandCatalogue().find((item) => item.name === "run_tool");
+    if (operation === undefined) throw new Error("Missing tool operation");
+    expect(operation.prerequisites).toContain("tool_execution");
+    expect(operation.fields).toMatchObject({ tool: { choices: "tools" } });
+    expect(operationPolicy(operation, { tool: "edit", describe: true })).toMatchObject({ effects: ["read"], confirmation: "none" });
+    for (const input of [{}, { describe: null }, { describe: false }]) expect(operationPolicy(operation, input).confirmation).toBe("execute");
+  });
+
   test("memory inputs retain null, omission, zero and false without coercion", () => {
     for (const [name, input] of [
       ["compact", {}], ["compact", { dry_run: true, restart: false, keep_turns: 0 }], ["compact", { dry_run: null, restart: null, keep_turns: null }],
