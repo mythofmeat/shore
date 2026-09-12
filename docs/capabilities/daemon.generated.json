@@ -2,7 +2,8 @@
   "format": 1,
   "operations": {
     "alt": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "archive_thread": [
       "registry",
@@ -42,13 +43,19 @@
       "scope:character"
     ],
     "delete": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "delete_character": [
       "runCharacterlessCommand"
     ],
+    "discover_operations": [
+      "registry",
+      "scope:optional_character"
+    ],
     "edit": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "error_log": [
       "runCommand"
@@ -65,7 +72,8 @@
       "scope:character"
     ],
     "get": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "heartbeat_log": [
       "runCommand"
@@ -80,19 +88,22 @@
       "runCommand"
     ],
     "history_page": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "import_character": [
       "runCharacterlessCommand"
     ],
     "inject_system": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "keepalive_ping_now": [
       "runCommand"
     ],
     "list_alternatives": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "list_characters": [
       "registry",
@@ -115,7 +126,8 @@
       "scope:character"
     ],
     "log": [
-      "runCommand"
+      "registry",
+      "scope:character"
     ],
     "model_info": [
       "runCommand"
@@ -184,7 +196,6 @@
     ]
   },
   "legacy_operations": [
-    "alt",
     "call_log",
     "clear",
     "compact",
@@ -192,26 +203,19 @@
     "config_check",
     "config_reload",
     "config_schema",
-    "delete",
     "delete_character",
-    "edit",
     "error_log",
     "export_character",
     "favorite_model",
-    "get",
     "heartbeat_log",
     "heartbeat_set_active",
     "heartbeat_set_dormant",
     "heartbeat_tick_now",
-    "history_page",
     "import_character",
-    "inject_system",
     "keepalive_ping_now",
-    "list_alternatives",
     "list_models",
     "list_provider_models",
     "list_providers",
-    "log",
     "model_info",
     "model_settings",
     "refresh_all_provider_models",
@@ -229,6 +233,10 @@
     "usage"
   ],
   "protocol": {
+    "AlternativeDirection": "\"next\" | \"prev\" | \"previous\" | \"first\" | \"last\"",
+    "AlternativeListing": "{ ref: string, alt_index: number | null, position: number | null, alt_count: number, alternatives: Array<AlternativeView>, }",
+    "AlternativeSelected": "{ ref: string, alt_index: number, position: number, alt_count: number, content: string, }",
+    "AlternativeView": "{ index: number, position: number, active: boolean, content: string, images: Array<ImageRef>, timestamp: string, }",
     "CacheInvalidation": "{ cached_request: boolean, }",
     "CacheWarning": "{ expected_tokens: number, message: string, }",
     "Cancel": "Record<symbol, never>",
@@ -245,24 +253,48 @@
     "Command": "{ rid?: string | null, name: string, args: unknown, }",
     "CommandOutput": "{ rid?: string | null, name: string, data: unknown, }",
     "ConfigWarning": "{ rid?: string | null, path: string, character?: string | null, message: string, }",
-    "ContentBlock": "{ \"type\": \"text\", text: string, } | { \"type\": \"thinking\", thinking: string, signature?: string | null, } | { \"type\": \"tool_use\", id: string, name: string, input: unknown, } | { \"type\": \"redacted_thinking\", data: string, } | { \"type\": \"tool_result\", tool_use_id: string, content: string, is_error: boolean, }",
+    "ContentBlock": "{ \"type\": \"text\", text: string, } | { \"type\": \"thinking\", thinking: string, signature?: string | null, } | { \"type\": \"tool_use\", id: string, name: string, input: unknown, } | { \"type\": \"redacted_thinking\", data: string, } | { \"type\": \"tool_result\", tool_use_id: string, content: ToolResultContent, is_error?: boolean | null, } | { \"type\": \"image\", source: InlineImageSource, }",
+    "ConversationLogArgs": "{ turns?: number | null, count?: number | null, role?: Role, }",
+    "ConversationPage": "{ messages: Array<Message>, active_start: number, cursor: number, next_before: number, has_more_before: boolean, global_active_start: number, total_messages: number, total_turns: number, }",
     "CreateThreadArgs": "{ name: string, label?: string | null, model?: string | null, compaction?: boolean | null, }",
+    "DeleteMessagesArgs": "{ refs: MessageReferences, }",
+    "EditMessageArgs": "{ ref: string, content: string, }",
     "EmptyOperationArgs": "Record<symbol, never>",
     "Error": "{ rid?: string | null, code: ErrorCode, message: string, retry_after_ms?: number | null, }",
     "ErrorCode": "\"protocol_error\" | \"invalid_request\" | \"not_found\" | \"busy\" | \"provider_error\" | \"timeout\" | \"internal_error\" | \"unauthorized\"",
     "ForkScope": "\"full\" | \"last_turns\"",
     "ForkThreadArgs": "{ name: string, from?: string | null, turns?: number | null, }",
+    "GetMessageArgs": "{ ref: string, role?: Role, }",
     "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, active_start?: number, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
+    "HistoryBefore": "number | HistoryBoundary",
+    "HistoryBoundary": "\"active\"",
     "HistoryDelta": "{ base_revision: number, after: string | null, }",
+    "HistoryPageArgs": "{ turns?: number | null, count?: number | null, role?: Role, before?: HistoryBefore, }",
     "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
     "ImageUpload": "{ filename: string, data: string, mime_type?: string | null, }",
+    "InjectSystemArgs": "{ text: string, }",
+    "InlineImageEncoding": "\"base64\"",
+    "InlineImageSource": "{ type: InlineImageEncoding, media_type: string, data: string, }",
+    "ListAlternativesArgs": "{ ref?: string | null, }",
     "Message": "{ msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
     "MessageAlternative": "{ content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, timestamp: string, provider_key?: string | null, model?: string | null, }",
+    "MessageEdited": "{ ref: string, edited: boolean, }",
     "MessageOrigin": "\"user_input\" | \"assistant_reply\" | \"autonomous\"",
+    "MessageReferences": "string | Array<string>",
+    "MessagesDeleted": "{ deleted: Array<string>, }",
     "NamedOperationArgs": "{ name: string, }",
     "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
-    "OperationRequest": "{ \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs }",
-    "OperationResponse": "{ \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing }",
+    "OperationCatalogue": "{ operations: Array<OperationDescriptor>, }",
+    "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\"",
+    "OperationChoices": "\"characters\" | \"threads\" | \"models\"",
+    "OperationConfirmation": "\"none\" | \"archive\" | \"delete\"",
+    "OperationDescriptor": "{ name: string, label: string, category: OperationCategory, scope: OperationScope, prerequisites: Array<OperationPrerequisite>, effects: Array<OperationEffect>, confirmation: OperationConfirmation, fields: { [key in string]: OperationField }, input: unknown, output: unknown, available?: boolean, }",
+    "OperationEffect": "\"read\" | \"workspace_write\" | \"history_write\" | \"selection\" | \"model_selection\"",
+    "OperationField": "{ label: string, hint?: string, choices?: OperationChoices, multiline?: boolean, }",
+    "OperationPrerequisite": "\"threads\"",
+    "OperationRequest": "{ \"name\": \"discover_operations\", \"args\": EmptyOperationArgs } | { \"name\": \"log\", \"args\": ConversationLogArgs } | { \"name\": \"history_page\", \"args\": HistoryPageArgs } | { \"name\": \"get\", \"args\": GetMessageArgs } | { \"name\": \"edit\", \"args\": EditMessageArgs } | { \"name\": \"delete\", \"args\": DeleteMessagesArgs } | { \"name\": \"list_alternatives\", \"args\": ListAlternativesArgs } | { \"name\": \"alt\", \"args\": SelectAlternativeArgs } | { \"name\": \"inject_system\", \"args\": InjectSystemArgs } | { \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs }",
+    "OperationResponse": "{ \"name\": \"discover_operations\", \"data\": OperationCatalogue } | { \"name\": \"log\", \"data\": ConversationPage } | { \"name\": \"history_page\", \"data\": ConversationPage } | { \"name\": \"get\", \"data\": Message } | { \"name\": \"edit\", \"data\": MessageEdited } | { \"name\": \"delete\", \"data\": MessagesDeleted } | { \"name\": \"list_alternatives\", \"data\": AlternativeListing } | { \"name\": \"alt\", \"data\": AlternativeSelected } | { \"name\": \"inject_system\", \"data\": SystemInjected } | { \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing }",
+    "OperationScope": "\"global\" | \"selection\" | \"character\" | \"optional_character\"",
     "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
     "Ping": "Record<symbol, never>",
     "ProviderFallbackWarning": "{ rid?: string | null, provider: string, from_key: string, to_key: string, kind: string, status?: number | null, message: string, }",
@@ -271,6 +303,7 @@
     "RequestFinished": "{ rid: string, outcome: RequestOutcome, error?: Error | null, }",
     "RequestOutcome": "\"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "Role": "\"user\" | \"assistant\" | \"system\"",
+    "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
     "ServerHello": "{ v: number, server_name: string, characters: Array<CharacterInfo>, }",
     "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
@@ -280,6 +313,7 @@
     "StreamMetadata": "{ tokens: TokenCounts, timing: TimingInfo, model: string, }",
     "StreamStart": "{ rid?: string | null, regen: boolean, subagent?: string | null, task_id?: string | null, }",
     "SwitchThreadArgs": "{ name: string, resync?: boolean | null, }",
+    "SystemInjected": "{ injected: boolean, }",
     "ThreadForkDetails": "{ fork_id: string, thread: string, source: string, created_at: string, messages: number, turns: number, scope: ForkScope, requested_turns?: number, }",
     "ThreadForkOrigin": "{ fork_id: string, source: string, created_at: string, messages: number, turns: number, }",
     "ThreadForkResult": "{ fork: ThreadForkDetails, character: string, threads: Array<ThreadView>, home: string, current: string, invalidated?: CacheInvalidation, }",
@@ -292,6 +326,7 @@
     "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",
     "ToolCall": "{ rid?: string | null, tool_id: string, tool_name: string, input: unknown, subagent?: string | null, task_id?: string | null, }",
     "ToolResult": "{ rid?: string | null, tool_id: string, tool_name: string, output: string, is_error: boolean, subagent?: string | null, task_id?: string | null, }",
+    "ToolResultContent": "string | Array<ContentBlock>",
     "UsageWarning": "{ rid?: string | null, budget: string, message: string, current_cost: number, cost_limit: number, percent_used: number, crossed_warn_at: Array<number>, period: string, period_start: string, reset_at: string, reset_at_display: string, scope?: string | null, }",
     "WebLogin": "{ token: string, }",
     "WebProblem": "{ code: WebProblemCode, message: string, }",

@@ -107,7 +107,7 @@ fn arb_content_block() -> BoxedStrategy<ContentBlock> {
             |(tool_use_id, content, is_error)| ContentBlock::ToolResult {
                 tool_use_id,
                 content: content.into(),
-                is_error,
+                is_error: Some(is_error),
             },
         ),
     ]

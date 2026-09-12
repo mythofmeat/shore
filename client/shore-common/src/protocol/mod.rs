@@ -686,7 +686,7 @@ mod tests {
         let block = ContentBlock::ToolResult {
             tool_use_id: "tu_123".into(),
             content: "2026-03-27T12:00:00Z".into(),
-            is_error: false,
+            is_error: Some(false),
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(field(&json, "type"), "tool_result");
@@ -701,7 +701,7 @@ mod tests {
         let block = ContentBlock::ToolResult {
             tool_use_id: "tu_456".into(),
             content: "Tool not found".into(),
-            is_error: true,
+            is_error: Some(true),
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(field(&json, "is_error"), true);
@@ -716,7 +716,7 @@ mod tests {
         let ContentBlock::ToolResult { is_error, .. } = block else {
             panic!("Expected ToolResult");
         };
-        assert!(!is_error);
+        assert!(!is_error.unwrap_or(false));
     }
 
     #[test]

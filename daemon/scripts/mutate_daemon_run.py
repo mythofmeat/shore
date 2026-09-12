@@ -122,7 +122,7 @@ MUTANTS = [
     # --- the push channels ----------------------------------------------------
     ("push: history changes are not broadcast, so a conversation stops appearing",
      R,
-     "    onHistory: (history) => server.broadcast({ type: \"history\", ...history } as ServerMessage),",
+     "    onHistory: (history) => server.broadcast({ type: \"history\", ...history }),",
      "    onHistory: () => {},"),
     ("push: the broadcast is used for routed replies, so a command answers everyone",
      R,

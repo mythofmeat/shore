@@ -21,16 +21,7 @@ import {
   tools,
   type ConfigRuntime,
 } from "./config.ts";
-import {
-  alt,
-  edit,
-  deleteMessages,
-  get,
-  historyPage,
-  injectSystem,
-  listAlternatives,
-  log,
-} from "./conversation.ts";
+
 import { compact, type CompactContext } from "./compact.ts";
 import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
@@ -137,23 +128,6 @@ export async function runCommand(
   const threads = deps.threads;
 
   switch (cmd.name) {
-    case "log":
-      return await log(engine, args);
-    case "history_page":
-      return await historyPage(engine, args);
-    case "get":
-      return get(engine, args);
-    case "edit":
-      return await edit(engine, args);
-    case "delete":
-      return await deleteMessages(engine, args);
-    case "alt":
-      return await alt(engine, args);
-    case "list_alternatives":
-      return listAlternatives(engine, args);
-    case "inject_system":
-      return await injectSystem(engine, args);
-
     case "status":
       return await status(statusContext(engine, session, deps));
     case "list_models":
@@ -302,7 +276,7 @@ export function runCharacterlessCommand(
   cmd: Command,
 ): unknown {
   if (isRegisteredOperation(cmd.name)) {
-    if (commandOperations[cmd.name].presentation.scope !== "global") {
+    if (!["global", "optional_character"].includes(commandOperations[cmd.name].presentation.scope)) {
       throw invalidRequest(`Command '${cmd.name}' requires a character`);
     }
     return runRegisteredOperation(cmd.name, { session, deps }, cmd.args);

@@ -1,5 +1,6 @@
 use shore_common::protocol::operations::{
-    CreateCharacter, NamedOperationArgs, Operation, SwitchCharacter, SwitchThread, SwitchThreadArgs,
+    ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage, GetMessageArgs,
+    NamedOperationArgs, Operation, SwitchCharacter, SwitchThread, SwitchThreadArgs,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -557,18 +558,15 @@ async fn handle_log_command(
         return Ok(());
     }
 
-    let mut args = serde_json::Map::new();
-    _ = args.insert("turns".into(), serde_json::json!(count));
-    if let Some(role_filter) = role {
-        _ = args.insert(
-            "role".into(),
-            serde_json::json!(role_filter.as_protocol_role()),
-        );
-    }
-    _ = conn
-        .send_command("log", serde_json::Value::Object(args))
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ConversationLog>(
+        conn,
+        ConversationLogArgs {
+            turns: Some(u64::from(*count)),
+            count: None,
+            role: role.map(LogRole::as_protocol_role),
+        },
+    )
+    .await?;
 
     render_log_list(&data, *json, *content, display_character, filter)?;
 
@@ -619,18 +617,15 @@ async fn fetch_single_message(
     msg_ref: &str,
     role: Option<&LogRole>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let mut args = serde_json::Map::new();
-    _ = args.insert("ref".into(), serde_json::json!(msg_ref));
-    if let Some(role_filter) = role {
-        _ = args.insert(
-            "role".into(),
-            serde_json::json!(role_filter.as_protocol_role()),
-        );
-    }
-    _ = conn
-        .send_command("get", serde_json::Value::Object(args))
-        .await?;
-    recv_command_data(conn).await
+    let (_, data) = execute_operation_with_raw::<GetMessage>(
+        conn,
+        GetMessageArgs {
+            reference: msg_ref.to_owned(),
+            role: role.copied().map(LogRole::as_protocol_role),
+        },
+    )
+    .await?;
+    Ok(data)
 }
 
 fn render_log_list(
@@ -1926,8 +1921,16 @@ async fn execute_operation<O: Operation>(
     conn: &mut SWPConnection,
     input: O::Input,
 ) -> Result<O::Output, Box<dyn std::error::Error>> {
+    Ok(execute_operation_with_raw::<O>(conn, input).await?.0)
+}
+
+async fn execute_operation_with_raw<O: Operation>(
+    conn: &mut SWPConnection,
+    input: O::Input,
+) -> Result<(O::Output, serde_json::Value), Box<dyn std::error::Error>> {
     let _request = conn.send_operation::<O>(input).await?;
-    Ok(serde_json::from_value(recv_command_data(conn).await?)?)
+    let data = recv_command_data(conn).await?;
+    Ok((serde_json::from_value(data.clone())?, data))
 }
 
 async fn recv_command_data(

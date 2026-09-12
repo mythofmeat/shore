@@ -5,6 +5,7 @@ import { tokenMatches } from "../src/config/token.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { InterruptedRequestError } from "../src/browser/connection.ts";
+import { OperationClient, OperationFailure } from "../src/browser/operations.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
 import type { HandshakeProvider } from "../src/swp/connection.ts";
@@ -72,6 +73,46 @@ function connectBrowser(origin: string, cookie: string, protocol = WEB_SUBPROTOC
 }
 
 describe("browser connection state", () => {
+  test("typed actions reject invalid results and failures while preserving correlation and additive results", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin);
+    const actions = new OperationClient(b.client);
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      const session = f.swp.sessionRouter.sessions().at(0)?.[0];
+      if (session === undefined) throw new Error("Missing session");
+      // @ts-expect-error the canonical input rejects unknown fields at compile time and runtime
+      expect(actions.run("edit", { ref: "1", content: "hi", typo: true })).rejects.toThrow("Invalid arguments");
+      expect(b.client.pendingCount).toBe(0);
+      for (const scenario of ["invalid", "missing", "wrong-name", "duplicate", "failed", "valid"] as const) {
+        const action = actions.run("edit", { ref: "1", content: "hi" });
+        const outcome = action.then((value) => ({ value }), (error: unknown) => ({ error }));
+        await until(() => f.routed.length > 0);
+        const route = f.routed.shift();
+        if (route?.kind !== "command") throw new Error("Missing command route");
+        const rid = route.meta.rid;
+        if (rid === undefined || rid === null) throw new Error("Missing action request");
+        const data = { ref: "1", edited: true, future_metadata: "inspectable" };
+        await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid: "unrelated", name: "edit", data: {} });
+        if (scenario !== "missing") await f.swp.sessionRouter.sendToSession(session, {
+          type: "command_output", rid, name: scenario === "wrong-name" ? "get" : "edit", data: scenario === "invalid" ? { ref: "1" } : data,
+        });
+        if (scenario === "duplicate") await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid, name: "edit", data });
+        await f.swp.sessionRouter.sendToSession(session, {
+          type: "request_finished", rid, outcome: scenario === "failed" ? "failed" : "completed",
+          ...(scenario === "failed" ? { error: { code: "not_found" as const, message: "Message disappeared" } } : {}),
+        });
+        const result = await outcome;
+        if (scenario === "valid") expect(result).toEqual({ value: data });
+        else if ("error" in result) {
+          expect(result.error).toBeInstanceOf(scenario === "failed" ? OperationFailure : Error);
+          expect(String(result.error)).toContain(scenario === "failed" ? "Message disappeared" : "Invalid result for edit");
+        } else throw new Error(`Unexpected success: ${scenario}`);
+        expect(b.client.pendingCount).toBe(0);
+      }
+    } finally { b.client.stop(); }
+  });
+
   test("advertised pending byte limits apply after socket drain and are released by completion", async () => {
     const f = await fixture(); f.web.activate();
     const { cookie, info } = await f.login();

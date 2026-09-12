@@ -275,7 +275,7 @@ function terminalBlocksForWire(blocks: readonly ContentBlock[]): WireContentBloc
           is_error: block.is_error ?? false,
         }];
       case "image":
-        return [block];
+        return [{ type: "image", source: { ...block.source } }];
     }
   });
 }

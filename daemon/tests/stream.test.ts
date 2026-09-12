@@ -777,6 +777,17 @@ describe("emit_stream_end", () => {
       ],
     });
   });
+
+  test("structured image results retain their content in the authoritative stream ending", () => {
+    const frames: ServerMessage[] = [];
+    const result = fixtureResult(required((f["stream_end"] as Row[])[0])["result"] as Row);
+    const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } } as const;
+    result.content_blocks = [{ type: "tool_result", tool_use_id: "image-tool", content: [{ type: "text", text: "result" }, image] }, image];
+    emitStreamEnd((message) => frames.push(message), result, { isFinal: true });
+    expect(frames[0]).toMatchObject({
+      terminal_content_blocks: [{ type: "tool_result", tool_use_id: "image-tool", content: [{ type: "text", text: "result" }, image], is_error: false }, image],
+    });
+  });
 });
 
 function fixtureResult(row: Row): StreamResult {

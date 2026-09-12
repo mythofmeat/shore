@@ -95,8 +95,8 @@ MUTANTS = [
 
     # --- the contexts ---------------------------------------------------------
     ("context: the character path is given the global config",
-     "  const config = deps.registry.effectiveConfig(character);",
-     "  const config = deps.globalConfig();"),
+     "    config = deps.registry.effectiveConfig(character);",
+     "    config = deps.globalConfig();"),
     ("context: the post-processing is given the config from before the command",
      "      character,\n      config: session.config,\n      sessionId,",
      "      character,\n      config,\n      sessionId,"),

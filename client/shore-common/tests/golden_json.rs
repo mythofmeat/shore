@@ -104,6 +104,23 @@ fn request_finished_preserves_correlation_and_failure() {
 }
 
 #[test]
+fn structured_image_history_preserves_nested_wire_data_and_display_images() {
+    let frame: ServerMessage =
+        assert_golden(include_str!("../../../fixtures/protocol/rich-history.json"));
+    assert_variant!(frame, ServerMessage::History(history) => {
+        let message = history.messages.first().unwrap();
+        let ContentBlock::ToolResult { content, is_error, .. } = message.content_blocks.get(1).unwrap() else { panic!("Missing structured tool result"); };
+        assert_eq!(content.display_text(), "Image result");
+        assert!(!is_error.unwrap_or(false));
+        assert_eq!(inline_images(&message.content_blocks).len(), 1);
+        let images = message.display_images();
+        assert_eq!(images.len(), 1);
+        assert!(images.first().unwrap().path.starts_with("embedded/tool-answer/"));
+        assert!(images.first().unwrap().data.as_ref().unwrap().starts_with("iVBOR"));
+    });
+}
+
+#[test]
 fn server_hello_golden() {
     let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("server_hello")));
     assert_variant!(

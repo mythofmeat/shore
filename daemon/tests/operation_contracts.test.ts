@@ -2,10 +2,37 @@ import { describe, expect, test } from "bun:test";
 import { commandCatalogue, commandOperations, type CommandOperationContext } from "../src/commands/registry.ts";
 import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
+import { validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("conversation optional values preserve the daemon's null and integer semantics in both clients", () => {
+    for (const [name, input] of [
+      ["log", { turns: 0, count: null, role: "assistant" }],
+      ["history_page", { before: "active", count: 1, role: "system" }],
+      ["history_page", { before: 0 }],
+      ["get", { ref: "-1", role: "user" }],
+      ["alt", { ref: null, index: null, position: 2, direction: "previous" }],
+      ["delete", { refs: ["1", "last"] }],
+      ["delete", { refs: "last" }],
+    ] as const) {
+      expect<unknown>(parseOperationInput(name, input)).toEqual(input);
+      expect(validOperationInput(name, input)).toBe(true);
+    }
+    for (const [name, input] of [
+      ["log", { role: null }], ["get", { ref: "last", role: null }],
+      ["history_page", { before: null }], ["log", { before: 1 }],
+      ["log", { count: -1 }], ["history_page", { before: Number.MAX_SAFE_INTEGER + 1 }],
+      ["alt", { direction: "backwards" }], ["delete", { refs: [1] }],
+    ] as const) {
+      expect(() => parseOperationInput(name, input)).toThrow();
+      expect(validOperationInput(name, input)).toBe(false);
+    }
+    expect(validOperationResult("get", { ref: "1", edited: true })).toBe(false);
+    expect(validOperationResult("edit", { ref: "1", edited: true, future: "inspectable" })).toBe(true);
+  });
+
   test("every canonical operation has exactly one registered handler", () => {
     expect(() => assertContractBindings(Object.keys(commandOperations))).not.toThrow();
     expect(() => assertContractBindings(Object.keys(commandOperations).filter((name) => name !== "fork_thread"))).toThrow("Missing operation handler: fork_thread");

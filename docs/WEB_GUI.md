@@ -242,9 +242,46 @@ checks passed again with 8,197 tests before UI implementation. Playwright's down
 the browser cache is at `/tmp/shore-214-tools/playwright`. No browser application or end-to-end GUI
 coverage is implied by this tooling smoke test.
 
+### Conversation contracts and rich history
+
+Twenty-one named operations now have Rust-canonical input/result pairs and executable handler
+registrations. The latest slice covers log/history paging, individual messages, editing, deletion,
+alternative listing/selection, system instructions and operation discovery. Discovery uses the same
+registry as dispatch and reports actual character/thread availability; it remains usable with no
+characters or a character whose configuration cannot load. Thirty-five legacy names remain.
+
+The browser's typed operation client validates inputs before submission, validates correlated results
+after confirmed completion, rejects malformed/missing/duplicate results and reports confirmed failures.
+Additive result fields remain inspectable. Its validators are generated ahead of time from the same
+Rust schemas and run without dynamic code generation. CLI log/get runners validate their paired
+results while retaining additive JSON output; log/get/edit/delete/system-message mappings use canonical
+inputs. Existing captured command results remain independent assertions. Previously ignored or
+unsupported input fields now receive explicit validation errors.
+
+The migration reproduced a real history failure: persisted tool results containing structured text
+and images could not pass the browser's old string-only wire schema. Rust now owns the recursive
+text/block result shape and inline image source. History and terminal stream blocks preserve these
+values. A shared rich-history fixture checks lossless Rust/browser decoding, and TUI tests exercise
+the existing image viewer's entries, including recovery from a stream with no preceding chunks.
+
+A native browser-connection journey starts with no characters, discovers available actions, creates
+and selects a character, sends and regenerates a turn, selects an alternative with precedence options,
+edits and inspects a message, pages history, adds instructions and deletes messages. It compares the
+resulting history with TCP and persisted engine state. Separate transport tests reject invalid inputs,
+wrong/missing/duplicate results and confirmed failures. These are application/transport journeys;
+the visible browser application remains the next implementation slice.
+
+Verification: all required daemon checks passed after fixing lint/type errors and moving stale
+mutation probes to the registry. The full suite passed 8,206 tests; the final changed-test run passed
+201 tests, including a new log-filter assertion. All 57 mutation passes are free of stale patterns.
+The five new browser-operation mutants, all 22 dispatch mutants and three relocated mutation probes
+were killed. Rust workspace tests, formatting and Clippy passed. Inventory/validator regeneration
+checks and Actionlint passed. The compiled daemon ran from empty working directories with web both
+disabled and enabled; TCP, authenticated WebSocket history and clean shutdown worked in both cases.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the 35 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.

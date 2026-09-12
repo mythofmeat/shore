@@ -2,4 +2,4 @@
 import type { ImageSource } from "./ImageSource";
 import type { ToolResultContent } from "./ToolResultContent";
 
-export type ContentBlock = { "type": "text", text: string, } | { "type": "thinking", thinking: string, signature?: string | null, } | { "type": "tool_use", id: string, name: string, input: unknown, thought_signature?: string, } | { "type": "redacted_thinking", data: string, } | { "type": "image", source: ImageSource, } | { "type": "tool_result", tool_use_id: string, content: ToolResultContent, is_error: boolean, };
+export type ContentBlock = { "type": "text", text: string, } | { "type": "thinking", thinking: string, signature?: string | null, } | { "type": "tool_use", id: string, name: string, input: unknown, thought_signature?: string, } | { "type": "redacted_thinking", data: string, } | { "type": "image", source: ImageSource, } | { "type": "tool_result", tool_use_id: string, content: ToolResultContent, is_error?: boolean | null, };
