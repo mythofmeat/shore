@@ -90,9 +90,9 @@ MUTANTS = [
     ("wire: `config_check` reaches `config_reload`",
      '    case "config_check":\n      return configCheck(session, session.env ?? process.env);',
      '    case "config_check":\n      return await configReload(session, args);'),
-    ("wire: `character_info` is given the data dir as its config dir",
-     "        { configDir, dataDir: session.dataDir, active: character, workspaceRoot },",
-     "        { configDir: session.dataDir, dataDir: session.dataDir, active: character, workspaceRoot },"),
+    ("wire: `character_info` is given the data dir as its config dir", "src/commands/registry.ts",
+     "    configDir: context.session.config.dirs.config,",
+     "    configDir: context.session.dataDir,"),
 
     # --- arms going missing ---------------------------------------------------
     ("missing: `inject_system` is not in the table",
@@ -107,17 +107,17 @@ MUTANTS = [
 
     # --- the characterless split ---------------------------------------------
     ("split: `status` answers without a character",
-     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "list_characters":',
-     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "status":\n      return {};\n    case "list_characters":'),
+     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "list_models":',
+     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "status":\n      return {};\n    case "list_models":'),
     ("split: `list_providers` is refused without a character",
      '    case "list_providers":\n      return listProviders(providersContext(session, deps));\n    case "list_provider_models":\n      return listProviderModels(providersContext(session, deps), args);\n    case "export_character":',
      '    case "list_provider_models":\n      return listProviderModels(providersContext(session, deps), args);\n    case "export_character":'),
     ("split: the predicate and the table disagree about `list_providers`",
      '  "list_providers",\n  "list_provider_models",\n  "export_character",',
      '  "list_provider_models",\n  "export_character",'),
-    ("split: the characterless `list_characters` marks an active character",
-     "        session.config.dirs.config,\n        undefined,\n        session.config.dirs.workspace,",
-     '        session.config.dirs.config,\n        "ada",\n        session.config.dirs.workspace,'),
+    ("split: the characterless `list_characters` marks an active character", "src/commands/registry.ts",
+     "listCharacters(session.config.dirs.config, engine?.characterName, session.config.dirs.workspace)",
+     'listCharacters(session.config.dirs.config, "ada", session.config.dirs.workspace)'),
 
     # --- the envelope ---------------------------------------------------------
     ("envelope: the reply carries the character's name instead of the command's",

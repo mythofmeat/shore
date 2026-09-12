@@ -35,7 +35,9 @@ jobs:
       - run: bun run rerecord:check
       - run: bun run inventory:check
       - run: bun run inventory:generate
-      - run: git diff --exit-code -- ../docs/capabilities/daemon.generated.json
+      - run: |
+          git diff --exit-code -- ../docs/capabilities/daemon.generated.json
+          test -z "$(git ls-files --others --exclude-standard -- ../docs/capabilities/daemon.generated.json)"
       - run: bun run build
 
   client:
@@ -54,5 +56,8 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo test -p shore-common --lib export_bindings --locked
+      - run: cargo test -p shore-common --lib export_operation_schemas --locked
       - run: cargo test -p shore-cli export_capability_inventory --locked -- --ignored
-      - run: git diff --exit-code -- ../daemon/src/protocol ../docs/capabilities/terminal.generated.json
+      - run: |
+          git diff --exit-code -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../docs/capabilities/terminal.generated.json
+          test -z "$(git ls-files --others --exclude-standard -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../docs/capabilities/terminal.generated.json)"

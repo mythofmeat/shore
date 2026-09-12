@@ -1,5 +1,6 @@
 pub mod client_msg;
 pub mod error;
+pub mod operations;
 pub mod server_msg;
 pub mod tool_display;
 pub mod types;

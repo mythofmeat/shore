@@ -15,7 +15,9 @@ import {
 } from "../commands/dispatch.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import { switchCharacter, type Args } from "../commands/navigation.ts";
+import type { Args } from "../commands/navigation.ts";
+import { runRegisteredOperation, isRegisteredOperation } from "../commands/registry.ts";
+import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
@@ -59,6 +61,14 @@ export async function dispatchCommand(
   const selected = meta.session.selectedCharacter ?? undefined;
   const rid = meta.rid ?? undefined;
 
+  if (isRegisteredOperation(cmd.name)) {
+    try {
+      parseOperationInput(cmd.name, cmd.args);
+    } catch (error) {
+      return frameWithRid(commandFrame(cmd.name, { err: error }), rid);
+    }
+  }
+
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
     return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
@@ -101,7 +111,7 @@ export async function dispatchCommand(
       router: deps.router,
       handshake: deps.handshake,
     });
-    frame = commandFrame(cmd.name, { ok: annotated });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }
@@ -129,12 +139,17 @@ async function switchCharacterCommand(
 
   let frame: ServerMessage;
   try {
-    const data = switchCharacter(
-      globalConfig.dirs.config,
-      pinned,
-      (cmd.args ?? {}) as Args,
-      globalConfig.dirs.workspace,
-    );
+    const data = await runRegisteredOperation("switch_character", {
+      session: {
+        config: globalConfig,
+        configPath: deps.configPath,
+        dataDir: deps.dataDir,
+        characterName: pinned,
+        activeModel: undefined,
+        runtime: deps.runtime,
+      },
+      deps: deps.commands,
+    }, cmd.args);
     const annotated = await afterCommand(cmd.name, cmd.args, data, {
       character: data.character,
       config: deps.registry.effectiveConfig(data.character),
@@ -144,7 +159,7 @@ async function switchCharacterCommand(
       router: deps.router,
       handshake: deps.handshake,
     });
-    frame = commandFrame(cmd.name, { ok: annotated });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }

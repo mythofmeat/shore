@@ -46,19 +46,50 @@ Starting revision: `2ab99af0`, clean worktree. Required updates ran before imple
 ## Implementation and completion evidence
 
 The [capability inventory](capabilities/README.md) records actual commands/options, generated wire
-types, local workflows and planned browser equivalents. The current work only establishes the
-inventory and its reproducibility gates. It does not implement a browser or satisfy full parity.
+types, local workflows and planned browser equivalents. The inventory and first contract migration
+are implemented. They do not implement a browser or satisfy full parity.
 
 Inventory foundation validation: all eight required daemon commands passed with 8,116 tests; all
 three Rust workspace commands passed. Actionlint 1.7.12 accepted the new PR workflow. The workflow
 runs baseline and inventory/generation checks, but has not yet been executed on GitHub and does not
 claim to enforce the unimplemented GUI/conformance gates. No branch protection has been changed.
 
+### Character and thread contract migration
+
+`client/shore-common/src/protocol/operations.rs` now owns the inputs and results for twelve operations:
+character listing, creation, selection and inspection, and thread listing, creation, selection,
+archiving, forking, home selection, labeling and model pinning. Its operation pairs generate Rust
+callers, TypeScript discriminated requests/results, and deserialize/serialize JSON Schemas. The
+daemon registry binds those contracts to the existing handlers, with scope, prerequisites, effects,
+confirmation requirements and metadata for every input field. Discovery uses those registrations.
+Input validation runs before engine loading and handler side effects. Result validation runs at the
+handler boundary and after session-selection annotations. Optional null inputs from existing clients
+remain valid; invalid types and undeclared input fields produce correlated request errors.
+
+The CLI's special character creation and character/thread selection runners use typed operation
+calls and deserialize their paired results. The remaining CLI/TUI mappings still use the existing
+wire path. The source inventory explicitly records 43 legacy operation names; they remain migration
+work, not exceptions. The normal suites exercise missing handler/contract bindings, omitted field
+metadata, invalid arguments/results, typed request correlation, empty-install character creation,
+and advanced thread forking over the actual authenticated TCP connection. Existing golden and
+behavioral assertions remain independent of the generated schemas.
+
+Regenerate schemas with `cargo test -p shore-common --lib export_operation_schemas` from `client/`.
+Normal Rust tests also export the schemas and TypeScript bindings. CI checks those generated files
+for changes and untracked additions. GUI field/result renderer coverage and WebSocket conformance
+remain unimplemented.
+
+Migration validation: all eight required daemon checks passed with 8,124 tests. Rust workspace
+tests, formatting and Clippy passed, and Actionlint accepted the updated generation workflow. The
+dispatch and navigation mutation passes killed every applicable mutant after retargeting moved
+handler registrations; all 54 mutation passes have no stale patterns. Local logs remain in
+`out/issue-214/`. GitHub execution and merge-policy enforcement are still unverified.
+
 Remaining work follows the issue's sequence:
 
-1. Finish the contract foundation: canonical typed input/result contracts, runtime validation,
-   executable handler/discovery registration, field/result renderer coverage, narrow exceptions,
-   and independently tested representative operations. Audit special runners and all local flows.
+1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,
+   remaining terminal adapters and all event/result types. Add field/result renderer coverage and
+   narrow platform mappings. Audit remaining special runners and local flows.
 2. Optional web transport: default-off config, loopback default, explicit secured remote setup,
    authentication before attach/history, origin checks, compatibility handshake, independent peers,
    cleanup, connection/message/upload/outbound queue limits, control routing and bounded lag policy.

@@ -129,11 +129,11 @@ MUTANTS = [
      "  return { characters };",
      "  return { characters: [...characters].sort((a, b) => (a.name < b.name ? -1 : 1)) };"),
     ("standalone: prepends the active character after all",
-     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);",
-     '): { characters: CharacterInfo[] } => listCharacters(configDir, "ghost-active", workspaceRoot);'),
+     "): CharacterListing => listCharacters(configDir, undefined, workspaceRoot);",
+     '): CharacterListing => listCharacters(configDir, "ghost-active", workspaceRoot);'),
     ("standalone: the workspace root is dropped, so workspace-only characters vanish",
-     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);",
-     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, undefined);"),
+     "): CharacterListing => listCharacters(configDir, undefined, workspaceRoot);",
+     "): CharacterListing => listCharacters(configDir, undefined, undefined);"),
 
     # --- character_info: which name -------------------------------------------
     ("info: an empty name argument is a name",

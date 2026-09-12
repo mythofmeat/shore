@@ -1,3 +1,8 @@
+import type { ThreadView } from "../protocol/ThreadView.ts";
+import type { ThreadListing } from "../protocol/ThreadListing.ts";
+import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
+import type { ThreadForkResult } from "../protocol/ThreadForkResult.ts";
+export type { ThreadView, ThreadListing, ThreadForkResult };
 import type { Args } from "./navigation.ts";
 import { busy, invalidRequest, notFound } from "./errors.ts";
 import {
@@ -65,27 +70,6 @@ export interface ThreadContext {
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
-export interface ThreadView {
-  id: string;
-  label?: string;
-  created_at: string;
-  last_active?: string;
-  chat_model?: string;
-  compaction: boolean;
-  home: boolean;
-  current: boolean;
-  turns?: number;
-  warm?: boolean;
-  forked_from?: ThreadRecord["forked_from"];
-}
-
-export interface ThreadListing {
-  character: string;
-  threads: ThreadView[];
-  home: string;
-  current: string;
-}
-
 export function threadCommandError(e: unknown): unknown {
   if (e instanceof ForkBusy) return busy(e.message);
   if (!(e instanceof ThreadError)) return e;
@@ -124,11 +108,7 @@ function requiredId(args: Args): string {
   return id;
 }
 
-export interface ThreadSwitch {
-  character: string;
-  thread: string;
-  changed: boolean;
-}
+export type ThreadSwitch = ThreadSelection;
 
 export function switchThread(ctx: ThreadContext, args: Args): ThreadSwitch {
   const id = requiredId(args);
@@ -191,19 +171,6 @@ export async function threadModel(ctx: ThreadContext, args: Args): Promise<Threa
   } catch (e) {
     throw threadCommandError(e);
   }
-}
-
-export interface ThreadForkResult extends ThreadListing {
-  fork: {
-    fork_id: string;
-    thread: string;
-    source: string;
-    created_at: string;
-    messages: number;
-    turns: number;
-    scope: "full" | "last_turns";
-    requested_turns?: number;
-  };
 }
 
 function requestedTurns(value: unknown): number | undefined {

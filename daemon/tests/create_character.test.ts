@@ -11,18 +11,11 @@ import { testTmp } from "./support/tmp.ts";
 
 const tempRoot = () => mkdtemp(testTmp("shore-create-char-"));
 
-interface Created {
-  character: string;
-  workspace_dir: string;
-  config_dir: string;
-  created_files: string[];
-}
-
 describe("where the scaffold lands", () => {
   test("the default layout puts it under the config dir's characters/", async () => {
     const config = await tempRoot();
 
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
 
     expect(out.workspace_dir).toBe(join(config, "characters", "ada", "workspace"));
     expect(out.config_dir).toBe(join(config, "characters", "ada"));
@@ -33,7 +26,7 @@ describe("where the scaffold lands", () => {
     const config = await tempRoot();
     const workspace = await tempRoot();
 
-    const out = (await createCharacter(config, { name: "ada" }, workspace)) as Created;
+    const out = createCharacter(config, { name: "ada" }, workspace);
 
     expect(out.workspace_dir).toBe(join(workspace, "ada"));
     expect(await readdir(config)).toEqual([]);
@@ -57,7 +50,7 @@ describe("what the scaffold contains", () => {
   test("all four prompt files are written, not just SOUL.md", async () => {
     const config = await tempRoot();
 
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
 
     expect(out.created_files).toEqual([SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE]);
     for (const file of out.created_files) {
@@ -67,13 +60,13 @@ describe("what the scaffold contains", () => {
 
   test("SOUL.md names the character", async () => {
     const config = await tempRoot();
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
     expect(await readFile(join(out.workspace_dir, SOUL_FILE), "utf8")).toBe("You are ada.\n");
   });
 
   test("AGENTS.md is a copy of the built-in system prompt, taken at scaffold time", async () => {
     const config = await tempRoot();
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
 
     const written = await readFile(join(out.workspace_dir, AGENTS_FILE), "utf8");
     expect(written).toBe(builtinSystemPrompt());
@@ -83,7 +76,7 @@ describe("what the scaffold contains", () => {
   test("USER.md and TOOLS.md are empty, so an unedited scaffold adds nothing", async () => {
     const config = await tempRoot();
     const dataDir = await tempRoot();
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
 
     for (const file of [USER_FILE, TOOLS_FILE]) {
       expect(await readFile(join(out.workspace_dir, file), "utf8")).toBe("");
@@ -96,7 +89,7 @@ describe("what the scaffold contains", () => {
 describe("refusing to scaffold over someone", () => {
   test("an existing workspace character is not overwritten", async () => {
     const config = await tempRoot();
-    await createCharacter(config, { name: "ada" });
+    createCharacter(config, { name: "ada" });
 
     expect(() => createCharacter(config, { name: "ada" })).toThrow(/already exists/);
   });
@@ -116,7 +109,7 @@ describe("refusing to scaffold over someone", () => {
     await mkdir(workspace, { recursive: true });
     await writeFile(join(workspace, USER_FILE), "Call me Trevor.\n");
 
-    const out = (await createCharacter(config, { name: "ada" })) as Created;
+    const out = createCharacter(config, { name: "ada" });
 
     expect(out.created_files).not.toContain(USER_FILE);
     expect(await readFile(join(workspace, USER_FILE), "utf8")).toBe("Call me Trevor.\n");

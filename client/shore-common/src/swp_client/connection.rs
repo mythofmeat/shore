@@ -318,6 +318,16 @@ impl SWPConnection {
         Ok(rid)
     }
 
+    pub async fn send_operation<O: crate::protocol::operations::Operation>(
+        &mut self,
+        input: O::Input,
+    ) -> Result<Option<String>> {
+        let rid = Some(request_id());
+        let command = O::command(input, rid.clone()).map_err(ClientError::Serialize)?;
+        self.send(&ClientMessage::Command(command)).await?;
+        Ok(rid)
+    }
+
     pub async fn send_command<N: Into<String>>(
         &mut self,
         name: N,
