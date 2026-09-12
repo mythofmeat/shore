@@ -2,7 +2,13 @@ use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 use serde::{Deserialize, Serialize};
 
 use super::client_msg::Command;
-use super::types::CharacterInfo;
+use super::types::{CharacterInfo, ImageRef, Message, Role};
+
+fn deserialize_present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
 
 macro_rules! wire_types {
     ($($item:item)*) => {$ (
@@ -13,6 +19,195 @@ macro_rules! wire_types {
 }
 
 wire_types! {
+    pub enum OperationCategory { Application, Characters, Threads, Conversation }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum OperationPrerequisite { Threads }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum OperationConfirmation { None, Archive, Delete }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum OperationChoices { Characters, Threads, Models }
+
+    pub struct OperationField {
+        pub label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub hint: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub choices: Option<OperationChoices>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub multiline: Option<bool>,
+    }
+
+    pub struct OperationDescriptor {
+        pub name: String,
+        pub label: String,
+        pub category: OperationCategory,
+        pub scope: OperationScope,
+        pub prerequisites: Vec<OperationPrerequisite>,
+        pub effects: Vec<OperationEffect>,
+        pub confirmation: OperationConfirmation,
+        pub fields: std::collections::BTreeMap<String, OperationField>,
+        #[ts(type = "unknown")]
+        pub input: serde_json::Value,
+        #[ts(type = "unknown")]
+        pub output: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub available: Option<bool>,
+    }
+
+    pub struct OperationCatalogue { pub operations: Vec<OperationDescriptor> }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ConversationLogArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub turns: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub count: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "Role")]
+        #[ts(optional)]
+        pub role: Option<Role>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum HistoryBoundary { Active }
+
+    #[serde(untagged)]
+    pub enum HistoryBefore {
+        #[ts(type = "number")]
+        Cursor(u64),
+        Boundary(HistoryBoundary),
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct HistoryPageArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub turns: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub count: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "Role")]
+        #[ts(optional)]
+        pub role: Option<Role>,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "HistoryBefore")]
+        #[ts(optional)]
+        pub before: Option<HistoryBefore>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct GetMessageArgs {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "Role")]
+        #[ts(optional)]
+        pub role: Option<Role>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct EditMessageArgs {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub content: String,
+    }
+
+    #[serde(untagged)]
+    pub enum MessageReferences { One(String), Many(Vec<String>) }
+
+    #[serde(deny_unknown_fields)]
+    pub struct DeleteMessagesArgs { pub refs: MessageReferences }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ListAlternativesArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "ref")]
+        pub reference: Option<String>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum AlternativeDirection { Next, Prev, Previous, First, Last }
+
+    #[serde(deny_unknown_fields)]
+    pub struct SelectAlternativeArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "ref")]
+        pub reference: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub index: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub position: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub direction: Option<AlternativeDirection>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct InjectSystemArgs { pub text: String }
+
+    pub struct ConversationPage {
+        pub messages: Vec<Message>,
+        pub active_start: usize,
+        pub cursor: usize,
+        pub next_before: usize,
+        pub has_more_before: bool,
+        pub global_active_start: usize,
+        pub total_messages: usize,
+        pub total_turns: usize,
+    }
+
+    pub struct MessageEdited {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub edited: bool,
+    }
+
+    pub struct MessagesDeleted { pub deleted: Vec<String> }
+
+    pub struct AlternativeView {
+        pub index: usize,
+        pub position: usize,
+        pub active: bool,
+        pub content: String,
+        pub images: Vec<ImageRef>,
+        pub timestamp: String,
+    }
+
+    pub struct AlternativeListing {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub alt_index: Option<usize>,
+        pub position: Option<usize>,
+        pub alt_count: usize,
+        pub alternatives: Vec<AlternativeView>,
+    }
+
+    pub struct AlternativeSelected {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub alt_index: usize,
+        pub position: usize,
+        pub alt_count: usize,
+        pub content: String,
+    }
+
+    pub struct SystemInjected { pub injected: bool }
+
     #[serde(deny_unknown_fields)]
     pub struct EmptyOperationArgs {}
 
@@ -258,6 +453,15 @@ macro_rules! operations {
 }
 
 operations! {
+    DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,
+    ConversationLog: "log" (ConversationLogArgs) => ConversationPage,
+    HistoryPage: "history_page" (HistoryPageArgs) => ConversationPage,
+    GetMessage: "get" (GetMessageArgs) => Message,
+    EditMessage: "edit" (EditMessageArgs) => MessageEdited,
+    DeleteMessages: "delete" (DeleteMessagesArgs) => MessagesDeleted,
+    ListAlternatives: "list_alternatives" (ListAlternativesArgs) => AlternativeListing,
+    SelectAlternative: "alt" (SelectAlternativeArgs) => AlternativeSelected,
+    InjectSystem: "inject_system" (InjectSystemArgs) => SystemInjected,
     ListCharacters: "list_characters" (EmptyOperationArgs) => CharacterListing,
     CreateCharacter: "create_character" (NamedOperationArgs) => CharacterCreated,
     SwitchCharacter: "switch_character" (NamedOperationArgs) => CharacterSelection,
@@ -275,6 +479,51 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conversation_inputs_distinguish_omitted_and_explicit_null_filters() {
+        assert!(
+            serde_json::from_value::<ConversationLogArgs>(
+                serde_json::json!({"turns":0,"count":null})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<ConversationLogArgs>(serde_json::json!({"role":null}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<GetMessageArgs>(serde_json::json!({"ref":"last","role":null}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<HistoryPageArgs>(
+                serde_json::json!({"before":"active","role":"assistant"})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<HistoryPageArgs>(serde_json::json!({"before":null})).is_err()
+        );
+        assert!(
+            serde_json::from_value::<ConversationLogArgs>(serde_json::json!({"before":1})).is_err()
+        );
+        assert!(
+            serde_json::from_value::<HistoryPageArgs>(serde_json::json!({"before":-1})).is_err()
+        );
+        assert!(
+            serde_json::from_value::<SelectAlternativeArgs>(
+                serde_json::json!({"index":null,"position":2,"direction":"previous"})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<SelectAlternativeArgs>(
+                serde_json::json!({"direction":"backwards"})
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn export_operation_schemas() {

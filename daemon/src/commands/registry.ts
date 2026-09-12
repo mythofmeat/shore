@@ -7,6 +7,7 @@ import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
 import { threadContext, threadListingContext } from "./thread_context.ts";
+import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 
 export interface CommandOperationContext {
   session: CommandSession;
@@ -34,8 +35,40 @@ const threadPresentation = {
   category: "Threads", scope: "character", prerequisites: ["threads"], effects: ["read"], confirmation: "none",
 } as const;
 const threadName = { label: "Thread", choices: "threads" } as const;
+const conversationPresentation = {
+  category: "Conversation", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none",
+} as const;
+const messageRef = { label: "Message reference", hint: "Message ID, 1-based index, negative index from the end, or last" } as const;
+const historyFields = {
+  turns: { label: "Recent turns", hint: "Defaults to 64; takes precedence over message count" },
+  count: { label: "Message count", hint: "Used when recent turns is omitted" },
+  role: { label: "Role filter" },
+} as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  discover_operations: register("discover_operations", {
+    category: "Application", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Browse available actions", fields: {},
+  }, (context) => ({ operations: commandCatalogue(context) })),
+  log: register("log", { ...conversationPresentation, label: "Read conversation history", fields: historyFields },
+    (context, args) => log(engineOf(context), args)),
+  history_page: register("history_page", { ...conversationPresentation, label: "Read earlier history", fields: { ...historyFields, before: { label: "Before cursor", hint: "A message cursor, or active for the start of the active context" } } },
+    (context, args) => historyPage(engineOf(context), args)),
+  get: register("get", { ...conversationPresentation, label: "Inspect message", fields: { ref: messageRef, role: historyFields.role } },
+    (context, args) => get(engineOf(context), args)),
+  edit: register("edit", { ...conversationPresentation, label: "Edit message", effects: ["history_write"], fields: { ref: messageRef, content: { label: "Message text", multiline: true } } },
+    (context, args) => edit(engineOf(context), args)),
+  delete: register("delete", { ...conversationPresentation, label: "Delete messages", effects: ["history_write"], confirmation: "delete", fields: { refs: { label: "Message references", hint: "One reference or a collection; each selected turn includes its tool loop" } } },
+    (context, args) => deleteMessages(engineOf(context), args)),
+  list_alternatives: register("list_alternatives", { ...conversationPresentation, label: "Browse alternative responses", fields: { ref: { ...messageRef, hint: "Omit for the latest assistant message" } } },
+    (context, args) => listAlternatives(engineOf(context), args)),
+  alt: register("alt", { ...conversationPresentation, label: "Select alternative response", effects: ["history_write"], fields: {
+    ref: { ...messageRef, hint: "Omit for the latest assistant message" },
+    index: { label: "Zero-based index", hint: "Takes precedence over position and direction" },
+    position: { label: "One-based position", hint: "Used when index is omitted" },
+    direction: { label: "Direction", hint: "Defaults to next; used when index and position are omitted" },
+  } }, (context, args) => alt(engineOf(context), args)),
+  inject_system: register("inject_system", { ...conversationPresentation, label: "Add system instruction", effects: ["history_write"], fields: { text: { label: "Instruction", multiline: true } } },
+    (context, args) => injectSystem(engineOf(context), args)),
   list_characters: register("list_characters", {
     ...characterPresentation, label: "Browse characters", fields: {},
   }, ({ session, engine }) => listCharacters(session.config.dirs.config, engine?.characterName, session.config.dirs.workspace)),
@@ -131,8 +164,8 @@ export function runRegisteredOperation<N extends OperationName>(
 export function commandCatalogue(context?: CommandOperationContext) {
   return discoverOperations(commandOperations).map((operation) => ({
     ...operation,
-    available: context === undefined ? undefined :
+    ...(context === undefined ? {} : { available:
       (operation.scope !== "character" || context.engine !== undefined) &&
-      (!operation.prerequisites.includes("threads") || context.deps.threads !== undefined),
+      (!operation.prerequisites.includes("threads") || context.deps.threads !== undefined) }),
   }));
 }

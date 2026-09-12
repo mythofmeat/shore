@@ -1837,7 +1837,7 @@ fn blocks_from_content(
                     tool_name: (*name).to_owned(),
                     output,
                     images,
-                    is_error: *is_error,
+                    is_error: is_error.unwrap_or(false),
                 });
             }
             ContentBlock::Text { text } => {
@@ -1897,6 +1897,7 @@ fn restore_unpersisted_user_draft(app: &mut App) -> bool {
 }
 
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
+    let images = msg.display_images();
     if msg.role == Role::System {
         entries.push(ConversationEntry::System {
             msg_id: Some(msg.msg_id),
@@ -1913,7 +1914,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
             msg.role,
             msg_id,
             msg.content,
-            msg.images,
+            images,
             msg.timestamp,
             None,
         )));
@@ -1927,7 +1928,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
         role: msg.role,
         msg_id: Some(msg.msg_id),
         blocks,
-        images: msg.images,
+        images,
         timestamp: msg.timestamp,
         state: TurnState::Complete,
         metadata: None,
@@ -2448,6 +2449,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.tokens = end.metadata.tokens.clone();
 
             let final_phase = end.finish_reason != "tool_use";
+            let image_scope = end
+                .msg_id
+                .as_deref()
+                .or(end.rid.as_deref())
+                .unwrap_or("stream");
+            let terminal = end.terminal_content_blocks.as_deref().unwrap_or_default();
 
             let target_pos = end
                 .msg_id
@@ -2468,12 +2475,17 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
             match target_pos.and_then(|pos| app.entries.get_mut(pos)?.as_turn_mut()) {
                 Some(turn) => {
+                    shore_common::protocol::types::append_inline_images(
+                        &mut turn.images,
+                        image_scope,
+                        terminal,
+                    );
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
                         turn.msg_id.clone_from(&end.msg_id);
                     }
                     if final_phase {
-                        if let Some(terminal) = &end.terminal_content_blocks {
+                        if end.terminal_content_blocks.is_some() {
                             let tool_names = tool_name_map(terminal);
                             let authoritative = blocks_from_content(terminal, &tool_names);
                             let replace_from = turn
@@ -2496,22 +2508,41 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 None if final_phase => {
                     let mut metadata = None;
                     accumulate_metadata(&mut metadata, &end.metadata);
-                    app.entries.push(ConversationEntry::Turn(Turn::text(
+                    let mut images = Vec::new();
+                    shore_common::protocol::types::append_inline_images(
+                        &mut images,
+                        image_scope,
+                        terminal,
+                    );
+                    let mut turn = Turn::text(
                         Role::Assistant,
                         end.msg_id.clone(),
                         end.content.clone(),
-                        vec![],
+                        images,
                         String::new(),
                         metadata,
-                    )));
+                    );
+                    if end.terminal_content_blocks.is_some() {
+                        turn.blocks = blocks_from_content(terminal, &tool_name_map(terminal));
+                    }
+                    app.entries.push(ConversationEntry::Turn(turn));
                 }
                 None => {
                     let turn = app.ensure_streaming_turn();
+                    shore_common::protocol::types::append_inline_images(
+                        &mut turn.images,
+                        image_scope,
+                        terminal,
+                    );
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
                         turn.msg_id.clone_from(&end.msg_id);
                     }
                 }
+            }
+
+            if !shore_common::protocol::types::inline_images(terminal).is_empty() {
+                transmit_entry_images(app);
             }
 
             if final_phase {
@@ -3399,6 +3430,60 @@ mod redraw_tests {
         CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+    #[test]
+    fn structured_history_images_reach_the_existing_tui_viewer() {
+        let ServerMessage::History(history) = serde_json::from_str(include_str!(
+            "../../../../fixtures/protocol/rich-history.json"
+        ))
+        .unwrap() else {
+            panic!("Missing history fixture");
+        };
+        let entries = build_history_entries(history.messages, 0);
+        let turn = entries.first().unwrap().as_turn().unwrap();
+        assert_eq!(turn.images.len(), 1);
+        assert!(
+            turn.images
+                .first()
+                .unwrap()
+                .data
+                .as_ref()
+                .unwrap()
+                .starts_with("iVBOR")
+        );
+        assert!(turn.blocks.iter().any(|block| matches!(block, Block::ToolResult { output, is_error: false, .. } if output == "Image result")));
+    }
+
+    #[test]
+    fn structured_terminal_images_repair_a_missing_stream_in_the_tui() {
+        let ServerMessage::History(history) = serde_json::from_str(include_str!(
+            "../../../../fixtures/protocol/rich-history.json"
+        ))
+        .unwrap() else {
+            panic!("Missing history fixture");
+        };
+        let blocks = &history.messages.first().unwrap().content_blocks;
+        let end = serde_json::from_value(serde_json::json!({
+            "type": "stream_end", "rid": "image-request", "msg_id": "image-answer", "content": "Image result", "terminal_content_blocks": blocks,
+            "is_final": true, "finish_reason": "end_turn", "metadata": { "model": "test", "tokens": { "input": 1, "output": 1, "cache_read": 0, "cache_write": 0 }, "timing": { "total_ms": 1, "ttft_ms": 1 } }
+        })).unwrap();
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some("image-request".into()),
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        let _ = handle_server_message(&mut app, end);
+        let turn = app.entries.last().unwrap().as_turn().unwrap();
+        assert_eq!(turn.images.len(), 1);
+        assert!(turn.blocks.iter().any(
+            |block| matches!(block, Block::ToolResult { output, .. } if output == "Image result")
+        ));
+    }
 
     fn with_isolated_session(name: &str, check: impl FnOnce()) {
         const CHILD_TEST: &str = "SHORE_SESSION_TEST_CHILD";

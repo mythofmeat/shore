@@ -31,6 +31,12 @@ def message(text):
     return {"msg_id": "stable-message-id", "role": "assistant", "content": text, "content_blocks": [{"type": "text", "text": text}], "timestamp": "2026-09-10T00:00:00Z"}
 
 
+def history_page(messages):
+    return {"messages": messages, "active_start": 0, "cursor": 0, "next_before": 0,
+            "has_more_before": False, "global_active_start": 0,
+            "total_messages": len(messages), "total_turns": len(messages)}
+
+
 def terminal_frame(rid, text):
     return {"type": "stream_end", "rid": rid, "content": text, "finish_reason": "end_turn", "is_final": True,
             "metadata": {"tokens": {"input": 0, "output": 1, "cache_read": 0, "cache_write": 0},
@@ -162,15 +168,23 @@ class ReliabilityFlows(unittest.TestCase):
             send({"type": "command_output", "rid": "unrelated", "name": "log", "data": {"wrong": "id"}})
             send({"type": "command_output", "rid": request["rid"], "name": "status", "data": {"wrong": "name"}})
             send({"type": "command_output", "name": "log", "data": {"wrong": "untagged"}})
-            send({"type": "command_output", "rid": request["rid"], "name": "log", "data": {"messages": []}})
+            send({"type": "command_output", "rid": request["rid"], "name": "log", "data": history_page([]) | {"future_metadata": "inspectable"}})
         result, _ = run_cli(["log", "--json"], respond)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), {"messages": []})
+        self.assertEqual(json.loads(result.stdout), history_page([]) | {"future_metadata": "inspectable"})
+
+    def test_log_rejects_a_malformed_typed_result(self):
+        def respond(request, send, _stream, _seen):
+            send({"type": "command_output", "rid": request["rid"], "name": "log", "data": {"messages": []}})
+        result, _ = run_cli(["log", "--json"], respond)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"active_start", result.stderr)
+        self.assertEqual(result.stdout, b"")
 
     @unittest.skipUnless(Path("/dev/full").exists(), "/dev/full is Linux-specific")
     def test_stdout_failure_exits_unsuccessfully(self):
         def respond(request, send, _stream, _seen):
-            send({"type": "command_output", "rid": request["rid"], "name": "log", "data": {"messages": [message("output")]}})
+            send({"type": "command_output", "rid": request["rid"], "name": "log", "data": history_page([message("output")])})
         with open("/dev/full", "wb") as full:
             for args in [["log", "--json"], ["log"]]:
                 result, _ = run_cli(args, respond, stdout=full)

@@ -209,7 +209,7 @@ export function emitNewMessageEvent(
     character,
     thread,
     ...wireMsg,
-  } as unknown as ServerMessage);
+  });
 }
 
 function stampProvenance(message: Message, providerKey: string, model: string): Message {

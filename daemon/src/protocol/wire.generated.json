@@ -766,11 +766,13 @@
                 "type": "string"
               },
               "content": {
-                "type": "string"
+                "$ref": "#/$defs/ToolResultContent"
               },
               "is_error": {
-                "type": "boolean",
-                "default": false
+                "type": [
+                  "boolean",
+                  "null"
+                ]
               },
               "type": {
                 "type": "string",
@@ -780,10 +782,63 @@
             "required": [
               "type",
               "tool_use_id",
-              "content",
-              "is_error"
+              "content"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/InlineImageSource"
+              },
+              "type": {
+                "type": "string",
+                "const": "image"
+              }
+            },
+            "required": [
+              "type",
+              "source"
             ]
           }
+        ]
+      },
+      "ToolResultContent": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContentBlock"
+            }
+          }
+        ]
+      },
+      "InlineImageSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/$defs/InlineImageEncoding"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "media_type",
+          "data"
+        ]
+      },
+      "InlineImageEncoding": {
+        "type": "string",
+        "enum": [
+          "base64"
         ]
       },
       "MessageAlternative": {

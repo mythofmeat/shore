@@ -57,15 +57,15 @@ D = "src/commands/dispatch.ts"
 # (label, find, replace)
 MUTANTS = [
     # --- arms reaching the wrong handler --------------------------------------
-    ("wire: `get` reaches `alt`",
-     '    case "get":\n      return get(engine, args);',
-     '    case "get":\n      return await alt(engine, args);'),
-    ("wire: `log` reaches `history_page`",
-     '    case "log":\n      return await log(engine, args);',
-     '    case "log":\n      return await historyPage(engine, args);'),
-    ("wire: `history_page` reaches `log`",
-     '    case "history_page":\n      return await historyPage(engine, args);',
-     '    case "history_page":\n      return await log(engine, args);'),
+    ("wire: `get` reaches `alt`", "src/commands/registry.ts",
+     '(context, args) => get(engineOf(context), args)',
+     '(context, args) => alt(engineOf(context), args)'),
+    ("wire: `log` drops its role and count filters", "src/commands/registry.ts",
+     '(context, args) => log(engineOf(context), args)',
+     '(context, args) => log(engineOf(context), {})'),
+    ("wire: `history_page` reaches `log`", "src/commands/registry.ts",
+     '(context, args) => historyPage(engineOf(context), args)',
+     '(context, args) => log(engineOf(context), args)'),
     ('wire: `switch_model` reaches `reset_model`',
      '      return switchModel(session, args);',
      '      return resetModel(session);'),
@@ -95,9 +95,9 @@ MUTANTS = [
      "    configDir: context.session.dataDir,"),
 
     # --- arms going missing ---------------------------------------------------
-    ("missing: `inject_system` is not in the table",
-     '    case "inject_system":\n      return await injectSystem(engine, args);\n',
-     ""),
+    ("missing: `inject_system` is not in the table", "src/commands/registry.ts",
+     '  inject_system: register("inject_system",',
+     '  missing_inject_system: register("inject_system",'),
     ("missing: `tools` is not in the table",
      '    case "tools":\n      return tools(session, (deps.runTool?.mcpTools() ?? []).map((t) => t.full_name));\n',
      ""),

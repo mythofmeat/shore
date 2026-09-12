@@ -83,7 +83,7 @@ export async function buildSessionHistorySnapshot(
   const history = engine.historySnapshot({});
   const thread = engine.thread;
   return {
-    messages: history.messages as HistorySnapshot["messages"],
+    messages: history.messages,
     activeStart: history.active_start ?? 0,
     config: historyConfigSnapshot(
       config,

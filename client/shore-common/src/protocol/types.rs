@@ -119,14 +119,14 @@ impl ToolResultContent {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ImageSource {
     Base64 { media_type: String, data: String },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
@@ -158,8 +158,8 @@ pub enum ContentBlock {
     ToolResult {
         tool_use_id: String,
         content: ToolResultContent,
-        #[serde(default)]
-        is_error: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
     },
 }
 
@@ -222,6 +222,12 @@ impl MessageAlternative {
 }
 
 impl Message {
+    pub fn display_images(&self) -> Vec<ImageRef> {
+        let mut images = self.images.clone();
+        append_inline_images(&mut images, &self.msg_id, &self.content_blocks);
+        images
+    }
+
     pub fn normalize(&mut self) {
         self.content = derive_content_from_blocks(&self.content_blocks);
 
@@ -310,6 +316,48 @@ pub fn derive_content_from_blocks_with(
 
 pub fn derive_content_from_blocks(blocks: &[ContentBlock]) -> String {
     derive_content_from_blocks_with(blocks, true)
+}
+
+pub fn inline_images(blocks: &[ContentBlock]) -> Vec<&ImageSource> {
+    let mut images = Vec::new();
+    for block in blocks {
+        match block {
+            ContentBlock::Image { source } => images.push(source),
+            ContentBlock::ToolResult {
+                content: ToolResultContent::Blocks(nested),
+                ..
+            } => images.extend(inline_images(nested)),
+            ContentBlock::ToolResult {
+                content: ToolResultContent::Text(_),
+                ..
+            }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::RedactedThinking { .. }
+            | ContentBlock::Text { .. } => {}
+        }
+    }
+    images
+}
+
+pub fn append_inline_images(images: &mut Vec<ImageRef>, scope: &str, blocks: &[ContentBlock]) {
+    use std::hash::{Hash, Hasher};
+    for source in inline_images(blocks) {
+        let ImageSource::Base64 { media_type, data } = source;
+        if images
+            .iter()
+            .any(|image| image.data.as_deref() == Some(data.as_str()))
+        {
+            continue;
+        }
+        let mut identity = std::hash::DefaultHasher::new();
+        data.hash(&mut identity);
+        images.push(ImageRef {
+            path: format!("embedded/{scope}/{:x}", identity.finish()),
+            caption: Some(format!("Embedded {} image", media_type)),
+            data: Some(data.clone()),
+        });
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS)]
@@ -415,7 +463,7 @@ mod tests {
         let blocks = vec![ContentBlock::ToolResult {
             tool_use_id: "t1".into(),
             content: "2026-03-29T10:00:00Z".into(),
-            is_error: false,
+            is_error: Some(false),
         }];
         assert_eq!(derive_content_from_blocks(&blocks), "2026-03-29T10:00:00Z");
     }
@@ -503,7 +551,7 @@ mod tests {
             ContentBlock::ToolResult {
                 tool_use_id: "t1".into(),
                 content: "result".into(),
-                is_error: false,
+                is_error: Some(false),
             },
         ];
         assert_eq!(derive_content_from_blocks_with(&blocks, false), "hello");
@@ -519,12 +567,12 @@ mod tests {
             ContentBlock::ToolResult {
                 tool_use_id: "t1".into(),
                 content: "tool output".into(),
-                is_error: false,
+                is_error: Some(false),
             },
             ContentBlock::ToolResult {
                 tool_use_id: "t2".into(),
                 content: "more output".into(),
-                is_error: false,
+                is_error: Some(false),
             },
         ];
         assert_eq!(

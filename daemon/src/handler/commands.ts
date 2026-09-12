@@ -16,7 +16,7 @@ import {
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
 import type { Args } from "../commands/navigation.ts";
-import { runRegisteredOperation, isRegisteredOperation } from "../commands/registry.ts";
+import { runRegisteredOperation, isRegisteredOperation, commandOperations } from "../commands/registry.ts";
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
@@ -80,19 +80,23 @@ export async function dispatchCommand(
   }
 
   let character: string;
+  const optionalCharacter = isRegisteredOperation(cmd.name) && commandOperations[cmd.name].presentation.scope === "optional_character";
   try {
     character = deps.registry.resolveCharacter(selected);
   } catch (e) {
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof CharacterError ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: invalidRequest(message) }), rid);
   }
 
-  const config = deps.registry.effectiveConfig(character);
-  const thread = liveThread(deps.registry, character, meta.session.selectedThread);
+  let config: LoadedConfig;
   let engine: ConversationEngine;
   try {
+    config = deps.registry.effectiveConfig(character);
+    const thread = liveThread(deps.registry, character, meta.session.selectedThread);
     engine = await deps.registry.getOrCreate(character, thread);
   } catch (e) {
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof Error ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }

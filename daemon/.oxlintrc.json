@@ -15,7 +15,7 @@
     "dist/**",
     "node_modules/**",
     "src/protocol/**",
-    "src/browser/validators.generated.js"
+    "src/browser/*validators.generated.js"
   ],
   "categories": {
     "correctness": "error"

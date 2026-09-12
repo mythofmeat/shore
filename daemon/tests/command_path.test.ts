@@ -26,6 +26,7 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { existsSync } from "node:fs";
 import { testTmp } from "./support/tmp.ts";
 import { SnapshotGate } from "../src/snapshot_gate.ts";
+import { parseOperationResult } from "../src/operations/contracts.ts";
 
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
 
@@ -208,12 +209,23 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
   };
 }
 
+test("discovery remains available when character configuration cannot load", async () => {
+  const h = await harness(["ada"]);
+  h.deps.registry.effectiveConfig = () => { throw new Error("bad character configuration"); };
+  const frame = await dispatchCommand(h.deps, { name: "discover_operations", args: {} }, meta("ada", "discover"));
+  expect(frame).toMatchObject({ type: "command_output", rid: "discover" });
+  if (frame.type !== "command_output") throw new Error("Missing discovery result");
+  const catalogue = parseOperationResult("discover_operations", frame.data);
+  expect(catalogue.operations.find((operation) => operation.name === "create_character")?.available).toBe(true);
+  expect(catalogue.operations.find((operation) => operation.name === "edit")?.available).toBe(false);
+});
+
 for (const thread of ["main", "side"]) {
   test(`resync restores full ${thread} history after a filtered log loses the delta anchor`, async () => {
     const h = await harness(["ada"]);
     const sent: ServerMessage[] = [];
     const registry = await CharacterRegistry.create(h.dirs.config, h.dirs.data, h.deps.globalConfig(),
-      history => sent.push({ type: "history", ...history } as ServerMessage));
+      history => sent.push({ type: "history", ...history }));
     if (thread !== MAIN_THREAD) await registry.createThread("ada", thread);
     h.deps.registry = registry;
     h.deps.commands.threads = registry;
