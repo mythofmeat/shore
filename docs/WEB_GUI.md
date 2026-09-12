@@ -235,6 +235,13 @@ including replaying an uncertain mutation, accepting stale contracts and deliver
 history. Rust workspace tests, formatting and Clippy passed. Browser validator regeneration and
 the capability inventory check passed; Actionlint accepted the expanded PR generation workflow.
 
+UI tooling preparation: React/React DOM 19.3.0, their matching type packages and Playwright 1.63.0
+were installed at their current stable releases in a separate dependency change. All eight daemon
+checks passed again with 8,197 tests before UI implementation. Playwright's downloaded Chromium
+153.0.8010.12 headless shell successfully launched and rendered a test page in this environment;
+the browser cache is at `/tmp/shore-214-tools/playwright`. No browser application or end-to-end GUI
+coverage is implied by this tooling smoke test.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,

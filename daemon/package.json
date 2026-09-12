@@ -32,11 +32,16 @@
     "ajv-formats": "^3.0.1",
     "matrix-js-sdk": "^42.4.0",
     "openai": "^7.19.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "tar": "^7.5.22",
     "zhipu-ai-provider": "^0.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bun": "^1.4.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "oxlint": "^1.83.0",
     "oxlint-tsgolint": "^7.0.2002",
     "typescript": "^7.0.2"
