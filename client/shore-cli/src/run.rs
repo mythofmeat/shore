@@ -1,3 +1,6 @@
+use shore_common::protocol::operations::{
+    CreateCharacter, NamedOperationArgs, Operation, SwitchCharacter, SwitchThread, SwitchThreadArgs,
+};
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -1095,10 +1098,13 @@ async fn handle_switch_character(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(character = name, "Switching active character");
-    let _ignored = conn
-        .send_command("switch_character", serde_json::json!({ "name": name }))
-        .await?;
-    _ = recv_command_data(conn).await?;
+    let _selection = execute_operation::<SwitchCharacter>(
+        conn,
+        NamedOperationArgs {
+            name: name.to_owned(),
+        },
+    )
+    .await?;
     state::write_active_character(name)?;
     cli_out!("Switched to character: {name}");
     cli_out!("To override per-terminal: export SHORE_CHARACTER={name}");
@@ -1111,10 +1117,14 @@ async fn handle_switch_thread(
     character: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(thread = name, "Switching active thread");
-    let _ignored = conn
-        .send_command("switch_thread", serde_json::json!({ "name": name }))
-        .await?;
-    _ = recv_command_data(conn).await?;
+    let _selection = execute_operation::<SwitchThread>(
+        conn,
+        SwitchThreadArgs {
+            name: name.to_owned(),
+            resync: None,
+        },
+    )
+    .await?;
     state::write_active_thread(character, name)?;
     cli_out!("Talking in thread: {name}");
     cli_out!("To override per-terminal: export SHORE_THREAD={name}");
@@ -1160,22 +1170,19 @@ async fn handle_create_character(
     conn: &mut SWPConnection,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ignored = conn
-        .send_command("create_character", serde_json::json!({ "name": name }))
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let data = execute_operation::<CreateCharacter>(
+        conn,
+        NamedOperationArgs {
+            name: name.to_owned(),
+        },
+    )
+    .await?;
 
-    let workspace = data
-        .get("workspace_dir")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
+    let workspace = data.workspace_dir;
     cli_out!("Created character scaffold: {workspace}");
 
     for (file, purpose) in SCAFFOLD_GUIDE {
-        let created = data
-            .get("created_files")
-            .and_then(serde_json::Value::as_array)
-            .is_some_and(|files| files.iter().any(|f| f.as_str() == Some(file)));
+        let created = data.created_files.iter().any(|created| created == file);
         if created {
             cli_out!("  {file:<10} {purpose}");
         }
@@ -1911,6 +1918,14 @@ async fn recv_streaming_response(
             | ServerMessage::Unknown => {}
         }
     }
+}
+
+async fn execute_operation<O: Operation>(
+    conn: &mut SWPConnection,
+    input: O::Input,
+) -> Result<O::Output, Box<dyn std::error::Error>> {
+    let _request = conn.send_operation::<O>(input).await?;
+    Ok(serde_json::from_value(recv_command_data(conn).await?)?)
 }
 
 async fn recv_command_data(

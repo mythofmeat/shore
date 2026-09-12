@@ -405,6 +405,81 @@ describe("what a client gets", () => {
   });
 });
 
+describe("registered operation socket flows", () => {
+  test("an empty installation validates creation before writing and selects the new character", async () => {
+    const place = await layout("", []);
+    const daemon = await start(place);
+    const client = await Client.open(daemon.port, null);
+    const workspace = join(place.root, "config", "characters", "nova", "workspace");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "command", rid: "bad-create", name: "create_character", args: { name: "nova", unexpected: true } });
+      expect(await client.awaitFrame("error")).toMatchObject({ rid: "bad-create", code: "invalid_request" });
+      expect(existsSync(workspace)).toBe(false);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "create", name: "create_character", data: {
+          character: "nova", workspace_dir: workspace,
+          config_dir: join(place.root, "config", "characters", "nova"),
+          created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"],
+        },
+      });
+      expect(await readFile(join(workspace, "SOUL.md"), "utf8")).toBe("You are nova.\n");
+      expect(await readFile(join(workspace, "USER.md"), "utf8")).toBe("");
+      expect(await readFile(join(workspace, "AGENTS.md"), "utf8")).not.toBe("");
+      expect(await readFile(join(workspace, "TOOLS.md"), "utf8")).toBe("");
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "select", name: "switch_character", data: { character: "nova", selected_character: "nova", changed: true, active_model: null },
+      });
+      expect(await client.awaitFrame("history")).toMatchObject({ rid: "select", messages: [] });
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a fork validates advanced options and selecting it exposes the actual copied turns", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    const engine = await daemon.runtime.registry.getOrCreate("ada");
+    for (const [index, content] of ["first", "first answer", "second", "second answer"].entries()) {
+      await engine.appendMessage({
+        msg_id: `source_${index}`, role: index % 2 === 0 ? "user" : "assistant", content,
+        images: [], content_blocks: [{ type: "text", text: content }], timestamp: new Date().toISOString(),
+      });
+    }
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("history");
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "bad-fork", name: "fork_thread", args: { name: "branch", from: "main", turns: "1" } });
+      expect(await client.awaitFrame("error")).toMatchObject({ rid: "bad-fork", code: "invalid_request" });
+      expect(daemon.runtime.registry.listThreads("ada").map((thread) => thread.id)).toEqual(["main"]);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "fork", name: "fork_thread", args: { name: "branch", from: "main", turns: 1 } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "fork", name: "fork_thread", data: {
+          character: "ada", current: "main", home: "main",
+          fork: { thread: "branch", source: "main", messages: 2, turns: 1, scope: "last_turns", requested_turns: 1 },
+        },
+      });
+      expect(engine.historySnapshot({}).messages.map((message) => message.content)).toEqual(["first", "first answer", "second", "second answer"]);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "select-fork", name: "switch_thread", args: { name: "branch", resync: true } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "select-fork", name: "switch_thread", data: { thread: "branch", selected_thread: "branch", changed: true },
+      });
+      expect(await client.awaitFrame("history")).toMatchObject({
+        rid: "select-fork", messages: [{ content: "second" }, { content: "second answer" }],
+      });
+    } finally {
+      client.close();
+    }
+  });
+});
+
 describe("hot reload", () => {
   async function untilAdopted(check: () => boolean, timeoutMs = 5_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
