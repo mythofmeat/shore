@@ -5,10 +5,11 @@ import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { Server } from "../swp/server.ts";
 import { WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
-import { validWebLogin, validWebProblem, validWebSession } from "./contracts.ts";
-import { readSmallJson, sameOrigin, securityHeaders, webBinding, WEB_LIMITS } from "./policy.ts";
+import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList } from "./contracts.ts";
+import { readSmallJson, sameOrigin, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
+import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
 
 export interface WebServerOptions {
   readonly config: WebConfig;
@@ -17,6 +18,7 @@ export interface WebServerOptions {
   readonly sessionLifetimeMs?: number;
   readonly handshakeTimeoutMs?: number;
   readonly drainTimeoutMs?: number;
+  readonly archiveLimits?: Partial<ArchiveTransferLimits>;
 }
 
 export interface RunningWebServer {
@@ -54,11 +56,12 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   let loginWindow = Date.now();
   let loginAttempts = 0;
   let loginRequests = 0;
+  const archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits);
   const server = Bun.serve({
     hostname: binding.hostname,
     port: binding.port,
     idleTimeout: 10,
-    maxRequestBodySize: WEB_LIMITS.loginBytes,
+    maxRequestBodySize: options.archiveLimits?.uploadBytes ?? ARCHIVE_TRANSFER_LIMITS.uploadBytes,
     ...(config.tls_cert === undefined || config.tls_key === undefined ? {} : {
       tls: { cert: readFileSync(config.tls_cert), key: readFileSync(config.tls_key) },
     }),
@@ -98,7 +101,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           const headers = securityHeaders();
           headers.set("set-cookie", sessions.cookie(session));
           return Response.json(sessionInfo(session), { headers });
-        } catch {
+        } catch (error) {
+          if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
           return problem(400, "invalid_request", "Invalid sign-in request");
         } finally {
           loginRequests -= 1;
@@ -107,6 +111,33 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
 
       const session = sessions.read(request);
       if (session === undefined) return problem(401, "unauthorized", "Sign in to connect to the daemon");
+      if (url.pathname.startsWith("/api/archives") && request.method === "POST") {
+        try {
+          if (url.pathname === "/api/archives/list") {
+            const result = archives.list(session);
+            if (!validWebArchiveList(result)) throw new Error("Invalid archive list");
+            return Response.json(result, { headers: securityHeaders() });
+          }
+          const match = /^\/api\/archives\/([a-f0-9-]{36})\/(status|import|download|remove)$/.exec(url.pathname);
+          if (match?.[1] !== undefined && match[2] === "download") return await archives.download(session, match[1], request);
+          if (match?.[1] !== undefined && match[2] === "remove") { await archives.remove(session, match[1]); return new Response(null, { status: 204, headers: securityHeaders() }); }
+          let result;
+          if (url.pathname === "/api/archives") result = await archives.upload(session, request);
+          else if (url.pathname === "/api/archives/export") {
+            const body = await readSmallJson(request, WEB_LIMITS.loginBytes);
+            if (!validWebArchiveExport(body)) return problem(400, "invalid_request", "Choose a character to export");
+            result = archives.export(session, body.character);
+          } else if (match?.[1] !== undefined && match[2] === "status") result = archives.get(session, match[1]);
+          else if (match?.[1] !== undefined && match[2] === "import") result = archives.import(session, match[1]);
+          else return problem(404, "not_found", "Unknown archive transfer endpoint");
+          if (!validWebArchiveInfo(result)) throw new Error("Invalid archive transfer response");
+          return Response.json(result, { status: result.phase === "importing" || result.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
+        } catch (error) {
+          if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
+          if (error instanceof ArchiveTransferError) return problem(error.status, error.status === 404 ? "not_found" : error.status === 429 ? "too_many_requests" : error.status === 401 ? "unauthorized" : "invalid_request", error.message);
+          return problem(400, "invalid_request", "Archive transfer could not be completed");
+        }
+      }
       if (url.pathname === "/api/logout" && request.method === "POST") {
         sessions.revoke(session);
         const headers = securityHeaders();
@@ -154,7 +185,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     stop() {
       if (stopping !== undefined) return stopping;
       active = false;
-      const drained = peers.stop();
+      const drained = Promise.all([peers.stop(), archives.close()]);
       sessions.close();
       stopping = (async () => {
         await server.stop(true);

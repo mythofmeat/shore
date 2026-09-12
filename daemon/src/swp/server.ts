@@ -74,10 +74,11 @@ class RouteQueue {
 }
 
 export interface LocalClientOptions {
+  readonly archiveLimits?: import("../commands/archive.ts").ArchiveLimits;
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities?: readonly string[];
-  readonly character?: string | undefined;
+  readonly character?: string | null | undefined;
   readonly thread?: string | undefined;
   readonly onLag?: (skipped: number) => void;
   readonly signal?: AbortSignal;
@@ -231,7 +232,7 @@ export class Server {
     const hello = await whileAttached(provider.hello(), signal);
     const requested = options.character ?? null;
     const history = await whileAttached(provider.history(
-      resolveHandshakeCharacter(requested, hello.characters),
+      options.character === null ? null : resolveHandshakeCharacter(requested, hello.characters),
       options.thread ?? null,
     ), signal);
     signal.throwIfAborted();
@@ -241,6 +242,7 @@ export class Server {
     this.#nextId += 1;
     const capabilities = admitCapabilities(options.capabilities ?? []);
     const client: ClientInfo = {
+      ...(options.archiveLimits === undefined ? {} : { archiveLimits: options.archiveLimits }),
       id: clientId,
       clientType: options.clientType,
       clientName: options.clientName,

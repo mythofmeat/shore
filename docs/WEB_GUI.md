@@ -652,17 +652,74 @@ affected mutation passes killed 41/41 mutants, and all 61 staleness passes are c
 legacy recordings remain unchanged. Browser transfers, the remaining acceptance work, GitHub CI
 execution and required merge gates are not complete.
 
+### Browser archive transfers
+
+The Character archives screen now accepts a file from the browser computer and downloads prepared
+exports as attachments. It remains accessible before character selection. Uploads require an explicit
+import review; backing out does not submit an import. Existing-character collisions remain refusals.
+The screen also links to the clearly labelled daemon-path operations and confirmed character deletion.
+Completed operation metadata remains inspectable, including memory rebuild information.
+
+Authenticated same-origin HTTP adapters own private temporary directories and opaque UUID handles.
+The browser filename is display metadata, never a daemon path. Handles belong to the current sign-in:
+tabs using that session can recover transfer status after reload or WebSocket reconnection, while a
+different sign-in cannot enumerate or use them. Imports and exports attach an unselected local peer
+and send the registered command through shared session routing. No HTTP route calls archive handlers
+directly. Explicit null local selection avoids loading a conversation for this global operation;
+ordinary local peers retain their existing automatic selection behavior.
+
+One archive command worker is permitted alongside the configured browser socket capacity. It has
+32-message/1-MiB delivery bounds and a five-minute operation deadline. Transfers accept at most 64 MiB
+compressed data each, reserve at most 256 MiB across stored uploads/exports, allow four records per
+sign-in and 32 overall, expire after 15 minutes, and bound request duration to one minute. These limits
+are enforced on the server, including counted streaming uploads and concurrent reservations.
+The shared archive implementation receives trusted internal processing limits: 256 MiB and 20,000
+entries, with regular files and directories only. Native daemon-path commands retain their existing
+limits and link handling. The database snapshot limit applies to the full shared database before its
+character filter, so browser export can refuse a small character in a larger database. The screen
+shows this processing limit; daemon-path export remains available for larger native workflows.
+
+Successful imports remove their temporary upload; completed downloads remove the temporary export.
+Interrupted downloads release their file and can be retried until expiry. Failed operations remove
+their bytes while retaining their result; sign-out, expiry and shutdown abort work and clean up files
+and peers. Active imports cannot be removed through the public endpoint. A transfer handle is never
+imported twice: confirmed failures remain failures, while interrupted or invalid completion reports
+remain uncertain and direct the user to inspect characters/history. Reloading does not resend a
+mutation. Transfer outcomes currently live in the daemon process; daemon-restart reconciliation and
+crash-orphan cleanup remain part of the broader recovery work.
+
+Adversarial extraction tests exposed an asynchronous error-path bug in the existing tar filter.
+It now uses the installed tar implementation's documented abort API so policy violations reject the
+archive promise instead of escaping it. Resource tests verify expanded size, entry count, links,
+snapshot limits and preservation of other characters. Transfer tests cover authentication and origin,
+ownership, controlled file modes/paths, bounds, interruption, expiry/sign-out/shutdown, malformed
+responses, correlation and prevention of mutation replay. The browser journey downloads a real
+archive, refuses a collision, deletes with confirmation, restores through the picker, reloads the
+tracked outcome, views the restored image at full size, and continues the conversation. Untrusted
+filenames render as text. Removing the uncertain-phase renderer fails generated-contract coverage.
+The packaged-binary journey also downloads and restores a character from an empty working directory,
+alongside its existing disabled-web and TCP checks.
+
+The dependency/toolchain refresh found no further updates from the stable versions recorded above.
+Fresh baselines passed before the missing archive screen was reproduced. Transfer validation passed
+all eight required daemon checks with 8,278 tests, all three Rust workspace checks, all 13 browser
+journeys, and browser-generation/inventory checks. The transfer and archive mutation passes killed
+30/30 mutants, including loss of trusted processing limits in shared dispatch; all 62 staleness passes
+are current. Independent recordings remain unchanged. An unsafe matcher type in one new test was
+corrected before the final lint, typecheck and affected-suite runs. Full issue parity, restart
+recovery, GitHub CI execution and required merge gates remain unfinished.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the capability contracts through core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
-2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
-   Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
+2. Audit all exposed payloads/redaction and extend controlled transfers to large exports.
+   Complete reconciliation of uncertain outcomes, archive restart recovery and media recovery.
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
 4. Close the remaining advanced workflows: expanded diagnostics coverage, large usage exports,
-   expanded memory recovery and cancellation, safe archive transfers, keyboard customization and every known event.
+   expanded memory recovery and cancellation, archive restart recovery, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and
    cancellation. Demonstrate deliberate omission failures for operations, fields, renderers/events.

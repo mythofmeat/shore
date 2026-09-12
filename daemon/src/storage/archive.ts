@@ -8,10 +8,17 @@ import { Ledger } from "../ledger/store.ts";
 import { copyArchiveTables, HISTORY_TABLES } from "./archive_rows.ts";
 import { openStorage, pack, unpack, STORAGE_SCHEMA } from "./store.ts";
 
-export function exportUnifiedDatabase(path: string, character: string, output: string): void {
+export function exportUnifiedDatabase(path: string, character: string, output: string, maxBytes?: number): void {
   if (!existsSync(path)) openStorage(dirname(path)).close();
   const source = new Database(path, { readonly: true });
-  try { writeFileSync(output, source.serialize()); }
+  try {
+    if (maxBytes !== undefined) {
+      const pageCount = source.query("PRAGMA page_count").get() as { page_count: number };
+      const pageSize = source.query("PRAGMA page_size").get() as { page_size: number };
+      if (pageCount.page_count * pageSize.page_size > maxBytes) throw new Error("Database snapshot exceeds the browser archive processing limit");
+    }
+    writeFileSync(output, source.serialize());
+  }
   finally { source.close(); }
   CallStore.open(output).close();
   Ledger.create(output, undefined, false).close();
