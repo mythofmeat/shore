@@ -1,8 +1,9 @@
 use shore_common::protocol::operations::{
-    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, EmptyOperationArgs,
-    GetMessage, GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReadStatus,
-    ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
-    SwitchThread, SwitchThreadArgs, is_registered_operation,
+    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, DeleteCharacter,
+    DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs, NamedOperationArgs,
+    Operation, OperationResponse, ReadStatus, ReloadConfiguration, ResetModel, ResetModelArgs,
+    SwitchCharacter, SwitchModel, SwitchModelArgs, SwitchThread, SwitchThreadArgs,
+    is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -1231,31 +1232,24 @@ async fn handle_delete_character(
     }
 
     info!(character = name, "Deleting character");
-    let args = match archive {
-        Some(path) => serde_json::json!({
-            "character": name,
-            "confirm": name,
-            "archive": crate::cli::absolute_path(path),
-        }),
-        None => serde_json::json!({ "character": name, "confirm": name }),
-    };
-    let _ignored = conn.send_command("delete_character", args).await?;
-    let data = recv_command_data(conn).await?;
+    let (data, raw) = execute_operation_with_raw::<DeleteCharacter>(
+        conn,
+        DeleteCharacterArgs {
+            character: name.to_owned(),
+            confirm: name.to_owned(),
+            archive: archive.map(crate::cli::absolute_path),
+        },
+    )
+    .await?;
 
     if json {
-        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+        cli_out!("{}", serde_json::to_string_pretty(&raw)?);
     } else {
-        if let Some(written) = data.get("archive").and_then(serde_json::Value::as_str) {
+        if let Some(written) = data.archive {
             cli_out!("Backed up to {written}");
         }
         cli_out!("Deleted character: {name}");
-        for path in data
-            .get("removed")
-            .and_then(serde_json::Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(serde_json::Value::as_str)
-        {
+        for path in data.removed {
             cli_out!("  removed {path}");
         }
     }

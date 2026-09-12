@@ -17,6 +17,9 @@ import {
 } from "../config/dirs.ts";
 import { invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
+import type { ExportCharacterResult } from "../protocol/ExportCharacterResult.ts";
+import type { ImportCharacterResult } from "../protocol/ImportCharacterResult.ts";
+import type { DeleteCharacterResult } from "../protocol/DeleteCharacterResult.ts";
 import {
   importHistoryDatabase,
   importLedgerDatabase,
@@ -53,7 +56,7 @@ interface Manifest {
   };
 }
 
-export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<unknown> {
+export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<ExportCharacterResult> {
   const character = requiredCharacter(args["character"]);
   if (!ctx.hasCharacter(character)) throw notFound(`Character not found: ${character}`);
   const output = requiredAbsolutePath(args["output"], "output");
@@ -104,7 +107,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
   }
 }
 
-export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<unknown> {
+export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<ImportCharacterResult> {
   const archive = requiredAbsolutePath(args["archive"], "archive");
   if (!await exists(archive)) throw notFound(`Archive not found: ${archive}`);
   const stage = await mkdtemp(join(tmpdir(), "shore-import-"));
@@ -126,7 +129,7 @@ export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<
   }
 }
 
-export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<unknown> {
+export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<DeleteCharacterResult> {
   const character = requiredCharacter(args["character"]);
   if (args["confirm"] !== character) {
     throw invalidRequest(
@@ -144,9 +147,7 @@ export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<
   const backup = args["archive"];
   let archived: string | undefined;
   if (backup !== undefined) {
-    const written = (await exportCharacter(ctx, { character, output: backup })) as {
-      archive: string;
-    };
+    const written = await exportCharacter(ctx, { character, output: backup });
     archived = written.archive;
   }
 

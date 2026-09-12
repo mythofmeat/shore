@@ -93,7 +93,7 @@ wire_types! {
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction, ToolExecution, Ledger }
+    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction, ToolExecution, Ledger, Archive }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite, RuntimeWrite, ProviderCall }
@@ -185,6 +185,51 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ExportCharacterArgs {
+        pub character: String,
+        pub output: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ImportCharacterArgs {
+        pub archive: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct DeleteCharacterArgs {
+        pub character: String,
+        pub confirm: String,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub archive: Option<String>,
+    }
+
+    pub struct ExportCharacterResult {
+        pub character: String,
+        pub archive: String,
+        pub bytes: usize,
+        pub live: bool,
+        pub call_diagnostics: String,
+        pub external_memory: String,
+    }
+
+    pub struct ImportCharacterResult {
+        pub character: String,
+        pub archive: String,
+        pub imported: bool,
+        pub external_memory: String,
+    }
+
+    pub struct DeleteCharacterResult {
+        pub character: String,
+        pub deleted: bool,
+        pub removed: Vec<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub archive: Option<String>,
     }
 
     #[serde(rename_all = "snake_case")]
@@ -2278,6 +2323,9 @@ macro_rules! operations {
 }
 
 operations! {
+    ExportCharacter: "export_character" (ExportCharacterArgs) => ExportCharacterResult,
+    ImportCharacter: "import_character" (ImportCharacterArgs) => ImportCharacterResult,
+    DeleteCharacter: "delete_character" (DeleteCharacterArgs) => DeleteCharacterResult,
     UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,
@@ -2336,6 +2384,56 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_contracts_preserve_backups_and_require_complete_results() {
+        let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../shore-cli/tests/fixtures/character_archives.json"
+        ))
+        .unwrap();
+        for fixture in fixtures {
+            let name = fixture.get("name").unwrap().as_str().unwrap();
+            assert!(
+                serde_json::from_value::<OperationRequest>(
+                    serde_json::json!({"name":name,"args":fixture.get("input").unwrap()})
+                )
+                .is_ok()
+            );
+            let result = fixture.get("result").unwrap().clone();
+            assert!(
+                serde_json::from_value::<OperationResponse>(
+                    serde_json::json!({"name":name,"data":result})
+                )
+                .is_ok()
+            );
+            for key in result.as_object().unwrap().keys() {
+                let mut incomplete = result.clone();
+                let _removed = incomplete.as_object_mut().unwrap().remove(key);
+                assert!(
+                    serde_json::from_value::<OperationResponse>(
+                        serde_json::json!({"name":name,"data":incomplete})
+                    )
+                    .is_err(),
+                    "{name}.{key}"
+                );
+            }
+        }
+        let no_backup = serde_json::json!({"character":"ada","confirm":"ada"});
+        let args: DeleteCharacterArgs = serde_json::from_value(no_backup.clone()).unwrap();
+        assert_eq!(serde_json::to_value(args).unwrap(), no_backup);
+        assert!(
+            serde_json::from_value::<DeleteCharacterArgs>(
+                serde_json::json!({"character":"ada","confirm":"ada","archive":null})
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<DeleteCharacterResult>(
+                serde_json::json!({"character":"ada","deleted":true,"removed":[],"archive":null})
+            )
+            .is_ok()
+        );
+    }
 
     #[test]
     fn usage_contracts_preserve_explicit_null_filters_and_require_report_fields() {

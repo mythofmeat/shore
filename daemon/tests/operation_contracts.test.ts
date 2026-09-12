@@ -2,16 +2,34 @@ import { describe, expect, test } from "bun:test";
 import { commandCatalogue, commandOperations, type CommandOperationContext } from "../src/commands/registry.ts";
 import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
-import { validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { isOperationName, validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { operationPolicy } from "../src/operations/policy.ts";
 import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
 import memorySegments from "../../client/shore-cli/tests/fixtures/memory_segments.json" with { type: "json" };
 import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
 import usageReports from "../../client/shore-cli/tests/fixtures/usage_reports.json" with { type: "json" };
+import archiveReports from "../../client/shore-cli/tests/fixtures/character_archives.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("archive operations have closed inputs, complete results and daemon-host path controls", () => {
+    for (const { name, input, result } of archiveReports) {
+      if (!isOperationName(name)) throw new Error(`Unregistered archive operation: ${name}`);
+      expect(validOperationInput(name, input)).toBe(true);
+      expect(validOperationInput(name, { ...input, overwrite: true })).toBe(false);
+      for (const key of Object.keys(input)) expect(validOperationInput(name, { ...input, [key]: null })).toBe(false);
+      expect(validOperationResult(name, { ...result, future_detail: "retained" })).toBe(true);
+      for (const key of Object.keys(result)) expect(validOperationResult(name, Object.fromEntries(Object.entries(result).filter(([field]) => field !== key)))).toBe(false);
+      const operation: OperationDescriptor | undefined = commandCatalogue().find((item) => item.name === name);
+      expect(operation).toMatchObject({ scope: "global", prerequisites: ["archive"], confirmation: name === "delete_character" ? "delete" : "none" });
+      expect(Object.values(operation?.fields ?? {}).some((field) => field.label.includes("daemon host"))).toBe(true);
+    }
+    expect(validOperationInput("delete_character", { character: "ada", confirm: "ada" })).toBe(true);
+    expect(validOperationResult("delete_character", { character: "ada", deleted: true, removed: [], archive: null })).toBe(true);
+    expect(validOperationResult("export_character", { ...archiveReports[0]?.result, bytes: -1 })).toBe(false);
+  });
   test("usage filters preserve null and omission while report modes and dimensions stay typed", () => {
     for (const input of [{}, { last: null, character: null, provider: null, api_key: null, model: null, call_type: null, group_by: null, budget: false, anomalies: false, export_csv: false, export_tsv: false }, { last: "all", character: "", provider: "anthropic", api_key: "unknown", model: "fixture", call_type: "heartbeat", group_by: "cost_source", budget: true, anomalies: true, export_csv: true, export_tsv: true }] as const) {
       expect(parseOperationInput("usage", input)).toEqual(input);
@@ -287,5 +305,6 @@ describe("executable operation contracts", () => {
     expect(catalogue.find((operation) => operation.name === "usage")?.available).toBe(false);
     context.deps.ledgerPath = "/fixture/shore.db";
     expect(commandCatalogue(context).find((operation) => operation.name === "usage")?.available).toBe(true);
+    for (const name of ["export_character", "import_character", "delete_character"]) expect(catalogue.find((operation) => operation.name === name)?.available).toBe(false);
   });
 });
