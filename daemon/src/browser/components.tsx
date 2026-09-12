@@ -56,7 +56,7 @@ export function Field({ control, value, change, label, presentation, choices = {
       const options = control.choices;
       const candidates = suggestions ?? (presentation?.choices === undefined ? undefined : choices[presentation.choices]);
       return <div className="field"><label htmlFor={id}>{label}</label>{secret ? <input id={id} type="password" autoComplete="new-password" value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} /> : options !== undefined ? <select id={id} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>
-        : presentation?.multiline === true ? <textarea id={id} rows={5} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />
+        : presentation?.multiline === true || control.multiline === true ? <textarea id={id} rows={5} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />
           : <><input id={id} list={candidates === undefined ? undefined : `${id}-choices`} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />{candidates === undefined ? null : <datalist id={`${id}-choices`}>{candidates.map((candidate) => <option key={candidate} value={candidate} />)}</datalist>}</>}</div>;
     }
     case "integer": case "number": return <label className="field">{label}<input required type="number" step={control.kind === "integer" ? 1 : "any"} min={control.minimum} max={control.maximum ?? Number.MAX_SAFE_INTEGER} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => change(event.target.valueAsNumber)} /></label>;
@@ -75,7 +75,20 @@ export function Field({ control, value, change, label, presentation, choices = {
     }
     case "object": {
       const values = record(value);
-      return <>{Object.entries(control.fields).map(([key, field]) => <Field key={key} label={key} control={field} value={values[key]} change={(next) => change({ ...values, [key]: next })} />)}</>;
+      const extra = Object.entries(values).filter(([key]) => !Object.hasOwn(control.fields, key));
+      const remove = (key: string) => change(Object.fromEntries(Object.entries(values).filter(([name]) => name !== key)));
+      return <fieldset><legend>{label}</legend>{Object.entries(control.fields).map(([key, field]) => <section className="action-field" key={key}>
+        {control.required.includes(key) ? null : <label className="check"><input type="checkbox" checked={Object.hasOwn(values, key)} onChange={(event) => { if (event.target.checked) change({ ...values, [key]: initialValue(field) }); else remove(key); }} />Set {key}</label>}
+        {Object.hasOwn(values, key) ? <Field label={key} control={field} value={values[key]} change={(next) => change({ ...values, [key]: next })} /> : <p className="muted">{key}: omitted</p>}
+        {control.hints?.[key] ? <small>{control.hints[key]}</small> : null}
+      </section>)}{control.additional === undefined ? null : <>{extra.map(([key, item], index) => <fieldset key={index}><label className="field">{label} field {String(index + 1)}<input required value={key} onChange={(event) => {
+        const name = event.target.value;
+        if (name !== key && (Object.hasOwn(values, name) || Object.hasOwn(control.fields, name))) return;
+        change(Object.fromEntries(Object.entries(values).map(([oldKey, oldValue]) => oldKey === key ? [name, oldValue] : [oldKey, oldValue])));
+      }} /></label><Field label={`${label}.${key}`} control={control.additional ?? { kind: "json" }} value={item} change={(next) => change({ ...values, [key]: next })} /><button type="button" aria-label={`Remove ${label}.${key}`} onClick={() => remove(key)}>Remove field</button></fieldset>)}<button type="button" onClick={() => {
+        let name = "field"; while (Object.hasOwn(values, name) || Object.hasOwn(control.fields, name)) name += "_";
+        change({ ...values, [name]: initialValue(control.additional ?? { kind: "json" }) });
+      }}>Add field to {label.toLowerCase()}</button></>}</fieldset>;
     }
   }
 }

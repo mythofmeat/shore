@@ -29,7 +29,8 @@ import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
 import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
 import type { BrowserRequest } from "../src/browser/connection.ts";
 import { segments } from "../src/commands/segments.ts";
-import { characterMemoryDir } from "../src/config/dirs.ts";
+import { characterMemoryDir, characterWorkspaceDir } from "../src/config/dirs.ts";
+import { toolFixture } from "./support/tool_fixture.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
@@ -241,6 +242,60 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("manual tools agree across independent TCP and browser workspaces, schemas and nested results", async () => {
+    const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown>; file: string | null }[] = [
+      { args: { tool: "bash", describe: true }, check: { mode: "tool_definition", enabled: false }, file: null },
+      { args: { tool: "bash", input: { command: "printf 'first\\nold old\\nlast' > tool.txt" } }, check: { ok: true }, file: "first\nold old\nlast" },
+      { args: { tool: "bash", input: { command: "sed -i 's/old/new/g' tool.txt" } }, check: { ok: true }, file: "first\nnew new\nlast" },
+      { args: { tool: "activity_heatmap", input: { days: 9 }, pairs: { days: "2" }, raw: true }, check: { ok: true, input: { days: 2 } }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "cat tool.txt", workdir: 5 } }, check: { rejected: true, ok: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: null }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "activity_heatmap", pairs: { days: 1 } }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "missing_tool", describe: true }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "cat missing.txt" } }, check: { ok: false, rejected: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "ask_worker", describe: true }, check: { mode: "tool_definition", kind: "subagent", enabled: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "ask_worker", input: { query: "Inspect the workspace" }, raw: true }, check: { ok: true, calls: [{ tool: "bash", subagent: "worker", ok: true }] }, file: "first\nnew new\nlast" },
+      { args: { tool: "mcp__tool_fixture__nested", describe: true }, check: { mode: "tool_definition", kind: "mcp" }, file: "first\nnew new\nlast" },
+      { args: { tool: "mcp__tool_fixture__nested", input: { entries: [{ text: "nested\ntext", enabled: null }], mode: "all", metadata: { source: "transport" } } }, check: { ok: true }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "printf 'x%.0s' $(seq 150) > tool.txt" } }, check: { ok: true }, file: "x".repeat(150) },
+      { args: { tool: "bash", input: { command: "cat tool.txt" }, raw: true }, check: { ok: true, truncated: true }, file: "x".repeat(150) },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled_tools = []\nenabled_subagents = []\n[tools.config.bash]\nmax_result_chars = 64\n[subagents.worker]\ndescription = "Inspect the fixture workspace"\nprompt = "Read the workspace"\nmodel = "anthropic:claude-opus-4-8"\ntools = ["bash"]\n[mcp.tool_fixture]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["run", ${JSON.stringify(join(import.meta.dir, "support/mcp_tool_fixture.ts"))}]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], { anthropic: { stream: toolFixture, generate: cacheFixture } }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Tool browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `tool-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: "run_tool", args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} tool step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.error !== true) expect(validOperationResult("run_tool", output?.["data"])).toBe(true);
+          if (step.check !== undefined) expect(output).toMatchObject({ data: step.check });
+          const config = daemon.runtime.registry.globalConfig();
+          const file = await readFile(join(characterWorkspaceDir(config.dirs.config, "ada", config.dirs.workspace), "tool.txt"), "utf8").catch(() => null);
+          expect(file).toBe(step.file);
+          const serialized = JSON.stringify({ observed, file }, (key, value: unknown) => key === "duration_ms" ? 0 : value).replaceAll(place.root, "<root>").replaceAll(rid, `tool-${String(index)}`);
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
   test("memory operations agree across independent TCP and browser histories, files and checkpoints", async () => {
     const command = (name: string, args: Record<string, unknown> = {}): BrowserRequest => ({ type: "command", name, args });
     const message = (text: string): BrowserRequest => ({ type: "message", text, stream: true, images: [], image_data: [] });

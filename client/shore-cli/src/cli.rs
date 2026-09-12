@@ -4,18 +4,19 @@ use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ClearArgs,
     ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
     ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
-    DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, FavoriteModel,
-    FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
-    InspectModel, InspectSegments, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
-    MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs,
-    Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadHeartbeatLog,
-    ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
-    RefreshProviderModels, ResetModel, ResetModelArgs, ScheduleHeartbeat, SegmentAction,
-    SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs,
-    SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs,
-    TranscriptSource,
+    DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
+    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
+    InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs, ListProviderModels,
+    ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings,
+    ModelSettingsArgs, Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
+    ReadHeartbeatLog, ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
+    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
+    SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
+    SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
+    TranscriptArgs, TranscriptSource,
 };
 use shore_common::protocol::types::Role;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 const LEADING_HEADING: &str = "Options — must come before the command";
@@ -1604,7 +1605,7 @@ pub(crate) enum DebugCommand {
         /// Whole argument object as JSON, for nested or array values.
         /// `key=value` pairs win where both set the same key.
         #[arg(long, value_parser = parse_json_object)]
-        input: Option<serde_json::Value>,
+        input: Option<BTreeMap<String, serde_json::Value>>,
 
         /// Print the tool's definition as the character receives it, instead
         /// of running it. Any arguments given are ignored
@@ -1651,23 +1652,14 @@ fn parse_key_value(raw: &str) -> Result<(String, String), String> {
     }
 }
 
-fn parse_json_object(raw: &str) -> Result<serde_json::Value, String> {
+fn parse_json_object(raw: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| format!("not valid JSON: {e}"))?;
     if value.is_object() {
-        Ok(value)
+        serde_json::from_value(value).map_err(|error| error.to_string())
     } else {
         Err("must be a JSON object, e.g. '{\"path\":\"notes.md\"}'".to_owned())
     }
-}
-
-fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
-    serde_json::Value::Object(
-        pairs
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect(),
-    )
 }
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
@@ -1720,7 +1712,7 @@ pub(crate) struct PaletteCatalog {
     pub tools: Vec<PaletteValue>,
     pub subagents: Vec<PaletteValue>,
     pub setting_keys: Vec<PaletteValue>,
-    pub setting_values: std::collections::BTreeMap<String, Vec<PaletteValue>>,
+    pub setting_values: BTreeMap<String, Vec<PaletteValue>>,
     pub message_refs: Vec<PaletteValue>,
     pub config_keys: Vec<PaletteValue>,
     pub config_sections: Vec<PaletteValue>,
@@ -2467,27 +2459,25 @@ pub(crate) fn to_swp_command(
                 raw,
                 describe,
                 ..
-            } => Some((
-                "run_tool",
-                json!({
-                    "tool": name,
-                    "input": input.clone().unwrap_or_else(|| json!({})),
-                    "pairs": pairs_object(args),
-                    "raw": raw,
-                    "describe": describe,
-                }),
-            )),
+            } => operation_to_swp::<ExecuteTool>(RunToolArgs {
+                tool: name.clone(),
+                input: Some(input.clone().unwrap_or_default()),
+                pairs: Some(args.iter().cloned().collect()),
+                raw: Some(*raw),
+                describe: Some(*describe),
+            }),
             DebugCommand::Subagent {
                 name, query, raw, ..
-            } => Some((
-                "run_tool",
-                json!({
-                    "tool": format!("ask_{name}"),
-                    "input": { "query": query.join(" ") },
-                    "pairs": {},
-                    "raw": raw,
-                }),
-            )),
+            } => operation_to_swp::<ExecuteTool>(RunToolArgs {
+                tool: format!("ask_{name}"),
+                input: Some(BTreeMap::from([(
+                    "query".to_owned(),
+                    json!(query.join(" ")),
+                )])),
+                pairs: Some(BTreeMap::new()),
+                raw: Some(*raw),
+                describe: None,
+            }),
         },
 
         CliCommand::Model { .. } => model_to_swp(cmd),
@@ -3046,7 +3036,7 @@ mod tests {
             tools: vec![PaletteValue::plain("read")],
             subagents: vec![PaletteValue::plain("librarian")],
             setting_keys: vec![PaletteValue::plain("temperature")],
-            setting_values: std::collections::BTreeMap::from([(
+            setting_values: BTreeMap::from([(
                 "temperature".into(),
                 vec![PaletteValue::plain("0.125")],
             )]),

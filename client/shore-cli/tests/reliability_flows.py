@@ -88,6 +88,31 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 
 class ReliabilityFlows(unittest.TestCase):
+    def test_cli_manual_tool_arguments_and_result_variants(self):
+        reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
+        for output in reports:
+            describe = "mode" in output
+            args = ["debug", "tool", "fixture", "count=0", '--input={"entries":[{"text":"first\\nsecond","enabled":null}]}', "--raw", "--json"]
+            if describe:
+                args.append("--describe")
+            def respond(request, send, _stream, _seen):
+                self.assertEqual(request["name"], "run_tool")
+                self.assertEqual(request["args"], {"tool": "fixture", "input": {"entries": [{"text": "first\nsecond", "enabled": None}]}, "pairs": {"count": "0"}, "raw": True, "describe": describe})
+                send({"type": "command_output", "name": "run_tool", "rid": request["rid"], "data": output})
+            result, _ = run_cli(args, respond)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), output)
+        def subagent(request, send, _stream, _seen):
+            self.assertEqual(request["args"], {"tool": "ask_worker", "input": {"query": "Find the notes"}, "pairs": {}, "raw": False})
+            send({"type": "command_output", "name": "run_tool", "rid": request["rid"], "data": reports[3]})
+        result, _ = run_cli(["debug", "subagent", "worker", "Find", "the", "notes", "--json"], subagent)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for output in [{"tool": "fixture", "ok": True}, {**reports[1], "raw": 1}]:
+            def malformed(request, send, _stream, _seen):
+                send({"type": "command_output", "name": "run_tool", "rid": request["rid"], "data": output})
+            result, _ = run_cli(["debug", "tool", "fixture", "--json"], malformed)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_cli_memory_arguments_and_all_result_variants(self):
         fixtures = Path(__file__).parent / "fixtures"
         listing = json.loads((fixtures / "memory_segments.json").read_text())
@@ -211,6 +236,7 @@ class ReliabilityFlows(unittest.TestCase):
             models = []
             diagnostic_requests = []
             memory_requests = []
+            tool_requests = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -252,6 +278,11 @@ class ReliabilityFlows(unittest.TestCase):
                             elif name == "call_log":
                                 diagnostic_requests.append(request)
                                 output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                            elif name == "run_tool":
+                                tool_requests.append(request)
+                                reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
+                                output = reports[0 if request["args"].get("describe") else 1]
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
                             elif name in ["compact", "segments", "clear"]:
                                 memory_requests.append(request)
@@ -345,6 +376,31 @@ class ReliabilityFlows(unittest.TestCase):
                     self.assertEqual(len(memory_requests), index + 1, frames.read_text()[-3000:])
                     self.assertEqual(memory_requests[index]["args"], expected)
                     self.assertIn(visible, frames.read_text())
+                for index, (command, expected, visible) in enumerate([
+                    (b":debug tool fixture --describe --json\r", {"tool": "fixture", "input": {}, "pairs": {}, "raw": False, "describe": True}, "Tool definition fixture"),
+                    (b':debug tool fixture count=0 --input=\'{"active":false}\' --raw --json\r', {"tool": "fixture", "input": {"active": False}, "pairs": {"count": "0"}, "raw": True, "describe": False}, "Nested fixture output"),
+                ]):
+                    frame_offset = len(frames.read_text())
+                    confirmed = False
+                    os.write(master, b"\x1b")
+                    time.sleep(.05)
+                    os.write(master, command)
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        if select.select([master], [], [], .01)[0]:
+                            os.read(master, 65536)
+                        if index == 1 and not confirmed and "[CONFIRM]" in frames.read_text()[frame_offset:]:
+                            self.assertEqual(len(tool_requests), index)
+                            os.write(master, b"\r")
+                            confirmed = True
+                        if len(tool_requests) > index:
+                            os.write(master, b"G")
+                        if visible in frames.read_text():
+                            break
+                    self.assertEqual(len(tool_requests), index + 1, frames.read_text()[-3000:])
+                    self.assertEqual(tool_requests[index]["args"], expected)
+                    self.assertIn(visible, frames.read_text())
+                    self.assertEqual(confirmed, index == 1)
                 self.assertEqual(errors, [])
             finally:
                 stop.set()

@@ -40,7 +40,7 @@ export function assertBrowserCoverage(operations: OperationDescriptor[], rendere
     if (!renderers.has(control.kind)) throw new Error(`Missing GUI control renderer: ${control.kind}`);
     if (control.kind === "array") check(control.item);
     if (control.kind === "union") control.options.forEach(check);
-    if (control.kind === "object") Object.values(control.fields).forEach(check);
+    if (control.kind === "object") { Object.values(control.fields).forEach(check); if (control.additional !== undefined) check(control.additional); }
   };
   for (const operation of operations) check(actionControl(operation));
   for (const variant of wire.server.oneOf) {

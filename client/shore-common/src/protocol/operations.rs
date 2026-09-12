@@ -58,22 +58,22 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics, Memory }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics, Memory, Tools }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction }
+    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction, ToolExecution }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite, RuntimeWrite, ProviderCall }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationConfirmation { None, Archive, Delete }
+    pub enum OperationConfirmation { None, Archive, Delete, Execute }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationChoices { Characters, Threads, Models, Providers, ConfigKeys, Subagents, ModelSettings }
+    pub enum OperationChoices { Characters, Threads, Models, Providers, ConfigKeys, Subagents, ModelSettings, Tools }
 
     pub struct OperationField {
         pub label: String,
@@ -157,6 +157,72 @@ wire_types! {
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
     }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct RunToolArgs {
+        #[schemars(length(min = 1))]
+        pub tool: String,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
+        #[ts(optional, type = "{ [key: string]: unknown }")]
+        pub input: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
+        #[schemars(with = "std::collections::BTreeMap<String, String>")]
+        #[ts(optional)]
+        pub pairs: Option<std::collections::BTreeMap<String, String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub raw: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub describe: Option<bool>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ToolKind { Builtin, Subagent, Mcp }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ToolDescriptionMode { ToolDefinition }
+
+    pub struct ToolDescription {
+        pub mode: ToolDescriptionMode,
+        pub tool: String,
+        pub kind: ToolKind,
+        pub enabled: bool,
+        pub description: String,
+        #[ts(type = "{ [key: string]: unknown }")]
+        pub input_schema: std::collections::BTreeMap<String, serde_json::Value>,
+    }
+
+    pub struct NestedToolCall {
+        pub tool: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub subagent: Option<String>,
+        pub ok: bool,
+        pub input: String,
+        pub output: String,
+    }
+
+    pub struct ToolRunReport {
+        pub tool: String,
+        pub character: String,
+        pub kind: ToolKind,
+        pub enabled: bool,
+        #[ts(type = "{ [key: string]: unknown }")]
+        pub input: std::collections::BTreeMap<String, serde_json::Value>,
+        pub ok: bool,
+        pub rejected: bool,
+        #[schemars(range(min = 0.0))]
+        pub duration_ms: f64,
+        pub output: String,
+        pub truncated: bool,
+        pub result_chars: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub raw: Option<String>,
+        pub calls: Vec<NestedToolCall>,
+    }
+
+    #[serde(untagged)]
+    pub enum RunToolResult { Description(ToolDescription), Execution(ToolRunReport) }
 
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
@@ -1880,6 +1946,7 @@ macro_rules! operations {
 }
 
 operations! {
+    ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,
     InspectSegments: "segments" (SegmentsArgs) => SegmentsResult,
     ClearConversation: "clear" (ClearArgs) => ClearResult,
@@ -1936,6 +2003,40 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_tool_contracts_keep_structured_arguments_and_complete_result_variants() {
+        let value = serde_json::json!({"tool":"fixture","input":{"entries":[{"active":false,"number":0,"unset":null,"text":"first\nsecond"}]},"pairs":{"number":"0"},"raw":true,"describe":false});
+        let args: RunToolArgs = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(args).unwrap(), value);
+        assert!(serde_json::from_value::<RunToolArgs>(serde_json::json!({"tool":"read"})).is_ok());
+        for invalid in [
+            serde_json::json!({"tool":"read","input":null}),
+            serde_json::json!({"tool":"read","input":[]}),
+            serde_json::json!({"tool":"read","pairs":null}),
+            serde_json::json!({"tool":"read","pairs":{"limit":1}}),
+            serde_json::json!({"tool":"read","raw":"true"}),
+            serde_json::json!({"tool":"read","extra":true}),
+        ] {
+            assert!(serde_json::from_value::<RunToolArgs>(invalid).is_err());
+        }
+        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../shore-cli/tests/fixtures/tool_results.json"
+        ))
+        .unwrap();
+        for report in reports {
+            let parsed: RunToolResult = serde_json::from_value(report.clone()).unwrap();
+            assert_eq!(serde_json::to_value(parsed).unwrap(), report);
+            for key in report.as_object().unwrap().keys() {
+                let mut incomplete = report.clone();
+                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(
+                    serde_json::from_value::<RunToolResult>(incomplete).is_err(),
+                    "missing {key}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn memory_arguments_preserve_explicit_clears_and_omissions() {

@@ -5,6 +5,7 @@ import { startDaemon } from "../../src/daemon/run.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
+import { toolFixture } from "../support/tool_fixture.ts";
 
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
@@ -21,6 +22,11 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 } });
 await writeFile(configPath, `[defaults]
 model = "anthropic:claude-opus-4-8"
+[tools.config.read]
+max_result_chars = 1024
+[mcp.tool_fixture]
+command = ${JSON.stringify(process.execPath)}
+args = ["run", ${JSON.stringify(join(import.meta.dir, "../support/mcp_tool_fixture.ts"))}]
 [chat.anthropic.fast-fixture]
 model_id = "fast-fixture"
 sdk = "anthropic"
@@ -60,6 +66,7 @@ const memoryStream = compactionFixture();
 const provider: SidecarProvider = {
   async *stream(request, signal) {
     if (request.context?.call_type === "compaction") { yield* memoryStream(request, signal); return; }
+    if (request.context?.call_type === "subagent") { yield* toolFixture(request, signal); return; }
     generation += 1;
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
     yield { type: "start", model: request.model };
