@@ -20,14 +20,12 @@ import type { KeepalivePingContext } from "./keepalive.ts";
 import type { RunToolContext } from "./run_tool.ts";
 import type { Args } from "./navigation.ts";
 
-import { usage } from "./usage.ts";
 import type { ThreadRegistry } from "./threads.ts";
 import { archiveWithSignal } from "./thread_context.ts";
 import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
-import { usageConfigView } from "../ledger/budget.ts";
 import {
   deleteCharacter,
   exportCharacter,
@@ -84,14 +82,7 @@ export async function runCommand(
   if (isRegisteredOperation(cmd.name)) {
     return await runRegisteredOperation(cmd.name, { engine, session, deps }, cmd.args);
   }
-  const args = (cmd.args ?? {}) as Args;
-  switch (cmd.name) {
-    case "usage":
-      return await usage(usageContext(session, deps), args);
-
-    default:
-      throw invalidRequest(`Unknown command: ${cmd.name}`);
-  }
+  throw invalidRequest(`Unknown command: ${cmd.name}`);
 }
 
 export function runCharacterlessCommand(
@@ -140,22 +131,4 @@ export function commandFrame(name: string, outcome: { ok: unknown } | { err: unk
 
 function unwired(name: string): CommandError {
   return internalError(`${name} is not available in this build`);
-}
-
-
-function usageContext(
-  session: CommandSession,
-  deps: CommandDeps,
-): Parameters<typeof usage>[0] {
-  if (deps.ledgerPath === undefined) {
-    throw internalError(
-      "provider error: usage reports need a ledger on disk; this client has none configured",
-    );
-  }
-  return {
-    ledger: deps.ledgerPath,
-    cacheDir: session.config.dirs.cache,
-    usage: usageConfigView(session.config.app.usage),
-    callStore: deps.callStore,
-  };
 }

@@ -24,8 +24,8 @@ import {
   type Naive,
 } from "./zoned.ts";
 
-export type UsageBudgetPeriod = "hour" | "day" | "week" | "month";
-export type UsageBudgetAction = "warn" | "block" | "pause_background" | "pause_heartbeat";
+export type UsageBudgetPeriod = import("../protocol/UsageBudgetPeriod.ts").UsageBudgetPeriod;
+export type UsageBudgetAction = import("../protocol/UsageBudgetAction.ts").UsageBudgetAction;
 export type BudgetWeekday =
   | "monday"
   | "tuesday"
@@ -163,46 +163,9 @@ const WEEKDAY_FROM_MONDAY: Record<BudgetWeekday, number> = {
   sunday: 6,
 };
 
-export interface PaceStatus {
-  period: UsageBudgetPeriod;
-  window_start: string;
-  window_end: string;
-  allowance: number;
-  base_allowance: number;
-  rollover: number;
-  debt_adjustment: number;
-  current_cost: number;
-  remaining: number;
-  percent_used: number;
-  periods_remaining: number;
-  status: string;
-  action: UsageBudgetAction;
-  effective_action: UsageBudgetAction;
-  warning_thresholds: number[];
-  crossed_warn_at: number[];
-  over_limit: boolean;
-}
+export type PaceStatus = import("../protocol/UsagePace.ts").UsagePace;
 
-export interface BudgetStatus {
-  name: string;
-  period: UsageBudgetPeriod;
-  period_start: string;
-  period_end: string;
-  reset_at: string;
-  timezone: string;
-  current_cost: number;
-  cost_limit: number;
-  percent_used: number;
-  status: string;
-  action: UsageBudgetAction;
-  effective_action: UsageBudgetAction;
-  warning_thresholds: number[];
-  crossed_warn_at: number[];
-  over_limit: boolean;
-  compaction_allowed_over_budget: boolean;
-  filters: Record<string, unknown>;
-  pace?: PaceStatus;
-}
+export type BudgetStatus = import("../protocol/UsageBudget.ts").UsageBudget;
 
 export interface UsageBudgetWarningEvent {
   budget: string;
@@ -835,7 +798,7 @@ function effectiveAction(
   return warnAction;
 }
 
-function levelName(overLimit: boolean, crossed: readonly number[]): string {
+function levelName(overLimit: boolean, crossed: readonly number[]): BudgetStatus["status"] {
   if (overLimit) {
     return "over_limit";
   }
@@ -864,7 +827,7 @@ function budgetName(budget: UsageBudgetConfig, idx: number): string {
 
 function budgetFiltersJson(
   budget: UsageBudgetConfig,
-): Record<string, unknown> {
+): BudgetStatus["filters"] {
   return {
     character: budget.character ?? null,
     provider: budget.provider ?? null,

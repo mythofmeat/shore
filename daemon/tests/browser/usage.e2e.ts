@@ -1,0 +1,96 @@
+import { expect, test } from "./fixtures.ts";
+import { readFile } from "node:fs/promises";
+
+test.use({ usageSeed: true });
+
+test("usage reports expose filters, budgets, cache health, rate limits and exports", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByLabel("Daemon token").fill("browser-test-token");
+  await page.getByRole("button", { name: "Open workspace" }).click();
+  await expect(page.getByRole("button", { name: "Usage & budgets", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Usage & budgets", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Usage & budgets", exact: true });
+  const result = dialog.getByRole("region", { name: "Usage result" });
+  const refresh = async () => {
+    await dialog.getByRole("button", { name: "Refresh report", exact: true }).click();
+    await expect(dialog.getByText("Loading usage report…", { exact: true })).toHaveCount(0);
+  };
+  await expect(result).toContainText("Recorded spend · $5.25");
+  await expect(result).toContainText("1 unresolved");
+  await expect(result).toContainText("Nova monthly · over limit");
+  await expect(result.getByRole("region", { name: "Nova monthly pace" })).toContainText("Pace · day");
+  await expect(result).toContainText("prefix changed");
+  await expect(result).toContainText("api.anthropic.com");
+  await expect(result.getByRole("cell", { name: "48,000,000", exact: true })).toBeVisible();
+  await dialog.getByLabel("Period", { exact: true }).fill("all");
+  await refresh();
+  await expect(result).toContainText("Recorded spend · $14.25");
+  for (const [label, value] of [["Character filter", "nova"], ["Provider filter", "anthropic"], ["API key name", "default"], ["Model filter", "usage-model-a"], ["Call type", "message"]] as const) await dialog.getByLabel(label, { exact: true }).fill(value);
+  await refresh();
+  await expect(result).toContainText("Recorded spend · $3.50");
+  await dialog.getByLabel("Period", { exact: true }).fill("invalid-period");
+  await refresh();
+  await expect(dialog.getByRole("alert")).toContainText("unknown usage period");
+  await expect(dialog.getByLabel("API key name", { exact: true })).toHaveValue("default");
+  await expect(result).toContainText("Recorded spend · $3.50");
+  await dialog.getByLabel("Period", { exact: true }).fill("all");
+  for (const label of ["Character filter", "Provider filter", "API key name", "Model filter", "Call type"]) await dialog.getByLabel(label, { exact: true }).fill("");
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("grouped");
+  for (const dimension of ["model", "provider", "call_type", "kind", "api_key", "cost_source"]) {
+    await dialog.getByLabel("Group by", { exact: true }).selectOption(dimension);
+    await refresh();
+    await expect(result.getByRole("heading", { name: `Spend by ${dimension.replaceAll("_", " ")}`, exact: true })).toBeVisible();
+  }
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("anomalies");
+  await refresh();
+  await expect(result.getByRole("region", { name: "Cache anomalies" })).toContainText("unexpected_write");
+  await dialog.getByLabel("Character filter", { exact: true }).fill("nobody");
+  await refresh();
+  await expect(result).toContainText("No anomalies for these filters.");
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("budgets");
+  await refresh();
+  await expect(result).toContainText("Nova monthly");
+  await dialog.getByLabel("Character filter", { exact: true }).fill("");
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("cache");
+  await refresh();
+  await expect(result.getByRole("region", { name: "Cache health" })).toContainText("not_applicable");
+  await expect(result).toContainText("prefix changed");
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("limits");
+  await refresh();
+  await expect(result).toContainText("requests remaining");
+  await expect(result).toContainText("2099-01-01");
+  for (const format of ["CSV", "TSV"] as const) {
+    await dialog.getByRole("button", { name: `Prepare ${format}`, exact: true }).click();
+    await expect(result.getByRole("heading", { name: `${format} export ready`, exact: true })).toBeVisible();
+    const downloaded = page.waitForEvent("download");
+    await result.getByRole("button", { name: `Download ${format}`, exact: true }).click();
+    const download = await downloaded;
+    expect(download.suggestedFilename()).toBe(`shore-usage.${format.toLowerCase()}`);
+    const path = await download.path();
+    if (path === null) throw new Error("Missing usage export");
+    const text = await readFile(path, "utf8");
+    expect(text).toContain(format === "CSV" ? "ts,character,provider" : "ts\tcharacter\tprovider");
+    expect(text).toContain("usage-model-a");
+    expect(text).toContain("usage-model-b");
+    expect(text).toContain("2000-01-01");
+  }
+  await dialog.getByRole("combobox", { name: "Report", exact: true }).selectOption("budgets");
+  await refresh();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await result.scrollIntoViewIfNeeded();
+  await dialog.screenshot({ path: "../out/issue-214/usage-mobile.png" });
+  await expect.poll(() => page.evaluate<boolean>("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
+  await dialog.getByRole("button", { name: "All usage options", exact: true }).click();
+  const advanced = page.getByRole("dialog", { name: "Usage report", exact: true });
+  await advanced.getByLabel("Set export tsv", { exact: true }).check();
+  await advanced.getByLabel("Export TSV", { exact: true }).check();
+  await advanced.getByRole("button", { name: "Run action", exact: true }).click();
+  await expect(advanced.getByRole("heading", { name: "Action completed", exact: true })).toBeVisible();
+  await expect(advanced).toContainText('"mode": "budget"');
+  await advanced.getByLabel("Budgets only", { exact: true }).uncheck();
+  await advanced.getByRole("button", { name: "Run action", exact: true }).click();
+  await expect(advanced).toContainText('"mode": "tsv"');
+  expect(errors).toEqual([]);
+});

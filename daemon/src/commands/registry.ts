@@ -1,4 +1,6 @@
 import { compact } from "./compact.ts";
+import { usage } from "./usage.ts";
+import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
 import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
@@ -27,6 +29,8 @@ export interface CommandOperationContext {
   deps: CommandDeps;
   engine?: ConversationEngine;
 }
+
+const LEDGER_UNAVAILABLE = "provider error: usage reports need a ledger on disk; this client has none configured";
 
 function engineOf(context: CommandOperationContext): ConversationEngine {
   if (context.engine === undefined) throw invalidRequest("This operation requires a character");
@@ -82,6 +86,18 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  usage: register("usage", { category: "Usage", scope: "optional_character", prerequisites: ["ledger"], effects: ["read"], confirmation: "none", label: "Usage report", fields: {
+    last: { label: "Period", hint: "today, week, month, all, or a count such as 4h, 7d, 2w, 1M; omit for the current budget window or today" },
+    character: { label: "Character filter", choices: "characters", hint: "Omit for all characters, including when a conversation is selected" },
+    provider: { label: "Provider filter", choices: "providers" }, api_key: { label: "API key name", hint: "Configured name, not a credential; unknown matches older records" },
+    model: { label: "Model filter", hint: "Ledger model ID" }, call_type: { label: "Call type", hint: "For example message, tool_loop, heartbeat or subagent" },
+    group_by: { label: "Group by" }, budget: { label: "Budgets only", hint: "Reports configured budget scopes independently of the report filters; takes precedence over other modes" },
+    anomalies: { label: "Cache anomalies", hint: "today uses a seven-day lookback; exports and grouping take precedence" },
+    export_csv: { label: "Export CSV", hint: "Full filtered ledger; takes precedence over grouping and anomalies" }, export_tsv: { label: "Export TSV", hint: "Full filtered ledger; takes precedence over CSV" },
+  } }, ({ session, deps }, args) => {
+    if (deps.ledgerPath === undefined) throw internalError(LEDGER_UNAVAILABLE);
+    return usage({ ledger: deps.ledgerPath, cacheDir: session.config.dirs.cache, usage: usageConfigView(session.config.app.usage), callStore: deps.callStore }, args);
+  }),
   run_tool: register("run_tool", { category: "Tools", scope: "character", prerequisites: ["tool_execution"], effects: ["workspace_write", "history_write", "config_write", "provider_call"], confirmation: "execute", label: "Run tool", fields: {
     tool: { label: "Tool", choices: "tools", hint: "Built-in tool, configured ask_<subagent>, or connected MCP tool" },
     input: { label: "Tool input", hint: "Structured arguments; the daemon validates them using the selected tool's schema" },
@@ -309,6 +325,7 @@ export function isRegisteredOperation(name: string): name is OperationName {
 
 const prerequisiteAvailable: Record<OperationPrerequisite, (context: CommandOperationContext) => boolean> = {
   tool_execution: (context) => context.deps.runTool !== undefined,
+  ledger: (context) => context.deps.ledgerPath !== undefined,
   compaction: (context) => context.deps.compaction !== undefined,
   threads: (context) => context.deps.threads !== undefined,
   autonomy: (context) => context.engine !== undefined && context.deps.autonomy.status(context.engine.characterName) !== undefined,
@@ -325,6 +342,7 @@ export function runRegisteredOperation<N extends OperationName>(
   if (registration.presentation.scope === "character") engineOf(context);
   for (const requirement of registration.presentation.prerequisites) {
     if (prerequisiteAvailable[requirement](context)) continue;
+    if (requirement === "ledger") throw internalError(LEDGER_UNAVAILABLE);
     if (requirement === "autonomy") throw invalidRequest(`No autonomy state for character '${engineOf(context).characterName}'`);
     throw internalError(requirement === "threads" ? "thread commands need a character registry, and this one has none" : `${name} is not available in this build`);
   }

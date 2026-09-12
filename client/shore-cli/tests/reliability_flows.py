@@ -88,6 +88,34 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 
 class ReliabilityFlows(unittest.TestCase):
+    def test_cli_usage_filters_views_and_export_bytes(self):
+        reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
+        common = {"last": "all", "character": "ada", "provider": "anthropic", "api_key": "default", "model": "usage-model-a", "call_type": "message", "group_by": None, "budget": False, "anomalies": False, "export_csv": False, "export_tsv": False}
+        cases = [([], {}, reports[0]), (["cache"], {}, reports[0]), (["limits"], {}, reports[0]), (["budgets"], {"budget": True}, reports[2]), (["anomalies"], {"anomalies": True}, reports[3]), (["export"], {"export_csv": True}, reports[4]), (["export", "--tsv"], {"export_tsv": True}, reports[5])]
+        for dimension in ["model", "provider", "call_type", "kind", "api_key", "cost_source"]:
+            cases.append((["by", dimension.replace("_", "-")], {"group_by": dimension}, {**reports[1], "dimension": dimension}))
+        for command, mode, output in cases:
+            def respond(request, send, _stream, _seen):
+                self.assertEqual(request["name"], "usage")
+                self.assertEqual(request["args"], {**common, **mode})
+                send({"type": "command_output", "name": "usage", "rid": request["rid"], "data": output})
+            result, _ = run_cli(["usage", *command, "--last=all", "--provider=anthropic", "--api-key=default", "--model=usage-model-a", "--call-type=message", "--json"], respond)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), output)
+        for tab, output in [(False, reports[4]), (True, reports[5])]:
+            def exported(request, send, _stream, _seen):
+                self.assertEqual(request["args"]["export_tsv"], tab)
+                self.assertEqual(request["args"]["export_csv"], not tab)
+                send({"type": "command_output", "name": "usage", "rid": request["rid"], "data": output})
+            result, _ = run_cli(["usage", "export", *(["--tsv"] if tab else [])], exported)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.decode(), output["data"])
+        for output in [{"mode": "summary", "summary": []}, {**reports[2], "budgets": [{"name": "missing details"}]}]:
+            def malformed(request, send, _stream, _seen):
+                send({"type": "command_output", "name": "usage", "rid": request["rid"], "data": output})
+            result, _ = run_cli(["usage", "--json"], malformed)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_cli_manual_tool_arguments_and_result_variants(self):
         reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
         for output in reports:
@@ -237,6 +265,7 @@ class ReliabilityFlows(unittest.TestCase):
             diagnostic_requests = []
             memory_requests = []
             tool_requests = []
+            usage_requests = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -279,6 +308,13 @@ class ReliabilityFlows(unittest.TestCase):
                                 diagnostic_requests.append(request)
                                 output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                            elif name == "usage":
+                                reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
+                                args = request["args"]
+                                if args != {"budget": True}:
+                                    usage_requests.append(request)
+                                index = 2 if args.get("budget") else 5 if args.get("export_tsv") else 4 if args.get("export_csv") else 1 if args.get("group_by") else 3 if args.get("anomalies") else 0
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": reports[index]})
                             elif name == "run_tool":
                                 tool_requests.append(request)
                                 reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
@@ -401,6 +437,32 @@ class ReliabilityFlows(unittest.TestCase):
                     self.assertEqual(tool_requests[index]["args"], expected)
                     self.assertIn(visible, frames.read_text())
                     self.assertEqual(confirmed, index == 1)
+                usage_defaults = {"last": None, "character": "ada", "provider": None, "api_key": None, "model": None, "call_type": None, "group_by": None, "budget": False, "anomalies": False, "export_csv": False, "export_tsv": False}
+                for index, (command, expected, visible) in enumerate([
+                    (b":usage --last all --provider anthropic --api-key default --model usage-model-a --call-type message --json\r", {"last": "all", "provider": "anthropic", "api_key": "default", "model": "usage-model-a", "call_type": "message"}, '"remaining": -2.75'),
+                    (b":usage by cost-source --json\r", {"group_by": "cost_source"}, '"group": "pricing_catalog"'),
+                    (b":usage budgets --json\r", {"budget": True}, '"remaining": -2.75'),
+                    (b":usage anomalies --json\r", {"anomalies": True}, "unexpected_write"),
+                    (b":usage export --json\r", {"export_csv": True}, '"mode": "csv"'),
+                    (b":usage export --tsv --json\r", {"export_tsv": True}, '"mode": "tsv"'),
+                ]):
+                    frame_offset = len(frames.read_text())
+                    scrolled = False
+                    os.write(master, b"\x1b")
+                    time.sleep(.05)
+                    os.write(master, command)
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        if select.select([master], [], [], .01)[0]:
+                            os.read(master, 65536)
+                        if len(usage_requests) > index:
+                            os.write(master, b"k" if scrolled else b"G")
+                            scrolled = True
+                        if visible in frames.read_text()[frame_offset:]:
+                            break
+                    self.assertEqual(len(usage_requests), index + 1, frames.read_text()[-3000:])
+                    self.assertEqual(usage_requests[index]["args"], {**usage_defaults, **expected})
+                    self.assertTrue(visible in frames.read_text()[frame_offset:], frames.read_text()[-3000:])
                 self.assertEqual(errors, [])
             finally:
                 stop.set()

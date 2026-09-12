@@ -566,16 +566,57 @@ remain unchanged. GitHub CI execution and required merge gates remain unverified
 Live manual-tool progress, targeted cancellation, recovery after closing/reconnecting the workbench,
 and broader dynamic MCP schema coverage remain unfinished acceptance work.
 
+### Usage reports and exports
+
+`usage` now uses a canonical Rust contract and registered handler, with 53 registered operations
+and three legacy names remaining: `delete_character`, `export_character` and `import_character`.
+The normal command dispatcher has no unregistered execution branches. Usage can run before a
+character is selected because its handler reads the shared ledger and effective configuration.
+The missing-ledger error remains unchanged. CLI filters preserve their existing explicit nulls,
+and the TUI's automatic budget refresh also uses the typed operation.
+
+All six result modes have typed fields, including grouped totals, budget and pace scopes, cache
+coverage/anomalies, unsettled attempts, rate-limit readings and cached subscription quotas. The
+existing ledger, budget, cache and provider modules reference generated types rather than maintain
+separate report shapes. The original query, budget and export implementations remain in use.
+
+Usage & budgets provides period/character/provider/key-name/model/call-type filters, all grouping
+dimensions, budget meters, cache and provider-limit views, full inspectors and CSV/TSV downloads.
+Tables expose additional fields and keep full precision in downloadable JSON. Errors preserve the
+entered filters and last report. The generated form exposes all options and preserves the daemon's
+mode precedence. Budgets use their configured scopes; report filters do not redefine those scopes.
+
+A real browser journey covers reports before onboarding, every view/grouping, combined filters,
+empty results, invalid-period recovery, export downloads, mode precedence and mobile layout. A
+22-step independent-world TCP/WebSocket comparison checks results, errors and completion while
+asserting the ledger's calls, attempts and warning records remain unchanged. CLI and pseudo-terminal
+journeys check all report variants, exact filters, CSV/TSV bytes, full-result scrolling and malformed
+results. Removing an export renderer fails the executable coverage check.
+
+Toolchain/dependency refreshes again found no changes; the stable versions recorded for the tool
+increment remain current. The package-managed rustup self-update limitation and sccache bypass
+remain the same. Fresh daemon and CLI baselines passed before reproducing the missing usage screen.
+
+Usage validation passed all eight required daemon checks with 8,244 tests, all three Rust workspace
+checks, all ten browser journeys, and browser-generation/inventory checks. The usage, browser
+operation and dispatch mutation passes killed 45/45 mutants; all 60 staleness passes are current.
+The API key filter probe initially survived and now fails assertions for configured names and
+older unnamed records. Independent legacy recordings remain unchanged. GitHub CI execution and
+required merge gates remain unverified.
+
+Large-export transfer limits, reconnect/restart recovery and complete local usage/budget display
+preferences remain part of the unfinished acceptance work.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the four legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the three legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
-4. Close the remaining advanced workflows: expanded diagnostics coverage, usage exports,
+4. Close the remaining advanced workflows: expanded diagnostics coverage, large usage exports,
    expanded memory recovery and cancellation, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and

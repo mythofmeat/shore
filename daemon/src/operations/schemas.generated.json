@@ -1,5 +1,1010 @@
 [
   {
+    "name": "usage",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "UsageArgs",
+      "type": "object",
+      "properties": {
+        "last": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "character": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "api_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "call_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsageDimension"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "budget": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "anomalies": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "export_csv": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "export_tsv": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "UsageDimension": {
+          "type": "string",
+          "enum": [
+            "model",
+            "provider",
+            "call_type",
+            "kind",
+            "api_key",
+            "cost_source"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "UsageResult",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "summary"
+            }
+          },
+          "$ref": "#/$defs/UsageSummaryReport",
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "summary_by"
+            }
+          },
+          "$ref": "#/$defs/UsageGroupedReport",
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "budget"
+            }
+          },
+          "$ref": "#/$defs/UsageBudgetReport",
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "anomalies"
+            }
+          },
+          "$ref": "#/$defs/UsageAnomaliesReport",
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "csv"
+            }
+          },
+          "$ref": "#/$defs/UsageExportReport",
+          "required": [
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "tsv"
+            }
+          },
+          "$ref": "#/$defs/UsageExportReport",
+          "required": [
+            "mode"
+          ]
+        }
+      ],
+      "$defs": {
+        "UsageSummaryRow": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "call_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_input": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_output": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cache_read": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cache_write": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cost": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "provider",
+            "model",
+            "call_count",
+            "total_input",
+            "total_output",
+            "total_cache_read",
+            "total_cache_write",
+            "total_cost"
+          ]
+        },
+        "UsageCacheHealth": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/$defs/UsageCacheState"
+            },
+            "streak": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "character",
+            "state",
+            "streak"
+          ]
+        },
+        "UsageCacheState": {
+          "type": "string",
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "UsageAnomalyCount": {
+          "type": "object",
+          "properties": {
+            "anomaly": {
+              "type": "string"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "anomaly",
+            "calls",
+            "cache_write_tokens"
+          ]
+        },
+        "UsageCacheCoverage": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "state",
+            "reason",
+            "calls",
+            "cache_read_tokens",
+            "cache_write_tokens"
+          ]
+        },
+        "UsageCostSource": {
+          "type": "object",
+          "properties": {
+            "cost_source": {
+              "type": "string"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "unpriced_calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cost": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "cost_source",
+            "calls",
+            "unpriced_calls",
+            "total_cost"
+          ]
+        },
+        "UsageRateLimitReading": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "observed_at": {
+              "type": "string"
+            },
+            "requests_remaining": {
+              "type": "number",
+              "format": "double"
+            },
+            "requests_limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "input_tokens_remaining": {
+              "type": "number",
+              "format": "double"
+            },
+            "input_tokens_limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "output_tokens_remaining": {
+              "type": "number",
+              "format": "double"
+            },
+            "output_tokens_limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "host",
+            "observed_at"
+          ]
+        },
+        "NanoGptSubscriptionState": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "$ref": "#/$defs/PayloadVersion1"
+            },
+            "fetched_at": {
+              "type": "string"
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "state": {
+              "$ref": "#/$defs/NanoGptAccountState"
+            },
+            "weeklyInputTokens": {
+              "$ref": "#/$defs/NanoGptWeeklyInputTokens"
+            },
+            "routing": {
+              "$ref": "#/$defs/NanoGptRouting"
+            }
+          },
+          "required": [
+            "version",
+            "fetched_at",
+            "active",
+            "state"
+          ]
+        },
+        "PayloadVersion1": {
+          "type": "integer",
+          "const": 1
+        },
+        "NanoGptAccountState": {
+          "type": "string",
+          "enum": [
+            "active",
+            "grace",
+            "inactive"
+          ]
+        },
+        "NanoGptWeeklyInputTokens": {
+          "type": "object",
+          "properties": {
+            "used": {
+              "type": "number",
+              "format": "double"
+            },
+            "remaining": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "resetAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "used",
+            "remaining",
+            "limit",
+            "resetAt"
+          ]
+        },
+        "NanoGptRouting": {
+          "type": "object",
+          "properties": {
+            "recommendedMode": {
+              "type": "string"
+            }
+          }
+        },
+        "UsageCallAttempts": {
+          "type": "object",
+          "properties": {
+            "pending": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "unresolved": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "estimated_cost_at_risk": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "pending",
+            "unresolved",
+            "estimated_cost_at_risk"
+          ]
+        },
+        "UsageBudget": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "period_start": {
+              "type": "string"
+            },
+            "period_end": {
+              "type": "string"
+            },
+            "reset_at": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string"
+            },
+            "current_cost": {
+              "type": "number",
+              "format": "double"
+            },
+            "cost_limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "status": {
+              "$ref": "#/$defs/UsageBudgetLevel"
+            },
+            "action": {
+              "$ref": "#/$defs/UsageBudgetAction"
+            },
+            "effective_action": {
+              "$ref": "#/$defs/UsageBudgetAction"
+            },
+            "warning_thresholds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "crossed_warn_at": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "over_limit": {
+              "type": "boolean"
+            },
+            "compaction_allowed_over_budget": {
+              "type": "boolean"
+            },
+            "filters": {
+              "$ref": "#/$defs/UsageBudgetFilters"
+            },
+            "pace": {
+              "$ref": "#/$defs/UsagePace"
+            }
+          },
+          "required": [
+            "name",
+            "period",
+            "period_start",
+            "period_end",
+            "reset_at",
+            "timezone",
+            "current_cost",
+            "cost_limit",
+            "percent_used",
+            "status",
+            "action",
+            "effective_action",
+            "warning_thresholds",
+            "crossed_warn_at",
+            "over_limit",
+            "compaction_allowed_over_budget",
+            "filters"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "UsageBudgetLevel": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warning",
+            "over_limit"
+          ]
+        },
+        "UsageBudgetAction": {
+          "type": "string",
+          "enum": [
+            "warn",
+            "block",
+            "pause_background",
+            "pause_heartbeat"
+          ]
+        },
+        "UsageBudgetFilters": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "api_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "call_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "usage_kind": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "character",
+            "provider",
+            "api_key",
+            "model",
+            "call_type",
+            "usage_kind"
+          ]
+        },
+        "UsagePace": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "window_start": {
+              "type": "string"
+            },
+            "window_end": {
+              "type": "string"
+            },
+            "allowance": {
+              "type": "number",
+              "format": "double"
+            },
+            "base_allowance": {
+              "type": "number",
+              "format": "double"
+            },
+            "rollover": {
+              "type": "number",
+              "format": "double"
+            },
+            "debt_adjustment": {
+              "type": "number",
+              "format": "double"
+            },
+            "current_cost": {
+              "type": "number",
+              "format": "double"
+            },
+            "remaining": {
+              "type": "number",
+              "format": "double"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "periods_remaining": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "status": {
+              "$ref": "#/$defs/UsageBudgetLevel"
+            },
+            "action": {
+              "$ref": "#/$defs/UsageBudgetAction"
+            },
+            "effective_action": {
+              "$ref": "#/$defs/UsageBudgetAction"
+            },
+            "warning_thresholds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "crossed_warn_at": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "over_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "period",
+            "window_start",
+            "window_end",
+            "allowance",
+            "base_allowance",
+            "rollover",
+            "debt_adjustment",
+            "current_cost",
+            "remaining",
+            "percent_used",
+            "periods_remaining",
+            "status",
+            "action",
+            "effective_action",
+            "warning_thresholds",
+            "crossed_warn_at",
+            "over_limit"
+          ]
+        },
+        "UsageSummaryReport": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string"
+            },
+            "period_since": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageSummaryRow"
+              }
+            },
+            "cache_health": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageCacheHealth"
+              }
+            },
+            "anomaly_count_7d": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "anomaly_counts_7d": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageAnomalyCount"
+              }
+            },
+            "cache_coverage": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageCacheCoverage"
+              }
+            },
+            "cost_sources": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageCostSource"
+              }
+            },
+            "rate_limits": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageRateLimitReading"
+              }
+            },
+            "nanogpt_subscription": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NanoGptSubscriptionState"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "call_attempts": {
+              "$ref": "#/$defs/UsageCallAttempts"
+            },
+            "budgets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageBudget"
+              }
+            }
+          },
+          "required": [
+            "period",
+            "timezone",
+            "summary",
+            "cache_health",
+            "anomaly_count_7d",
+            "anomaly_counts_7d",
+            "cache_coverage",
+            "cost_sources",
+            "rate_limits",
+            "nanogpt_subscription",
+            "call_attempts",
+            "budgets"
+          ]
+        },
+        "UsageDimension": {
+          "type": "string",
+          "enum": [
+            "model",
+            "provider",
+            "call_type",
+            "kind",
+            "api_key",
+            "cost_source"
+          ]
+        },
+        "GroupedUsageRow": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "call_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_input": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_output": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cache_read": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cache_write": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "total_cost": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "group",
+            "call_count",
+            "total_input",
+            "total_output",
+            "total_cache_read",
+            "total_cache_write",
+            "total_cost"
+          ]
+        },
+        "UsageGroupedReport": {
+          "type": "object",
+          "properties": {
+            "dimension": {
+              "$ref": "#/$defs/UsageDimension"
+            },
+            "period": {
+              "type": "string"
+            },
+            "period_since": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/GroupedUsageRow"
+              }
+            }
+          },
+          "required": [
+            "dimension",
+            "period",
+            "summary"
+          ]
+        },
+        "UsageBudgetReport": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string"
+            },
+            "allow_compaction_over_budget": {
+              "type": "boolean"
+            },
+            "budgets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageBudget"
+              }
+            },
+            "call_attempts": {
+              "$ref": "#/$defs/UsageCallAttempts"
+            }
+          },
+          "required": [
+            "timezone",
+            "allow_compaction_over_budget",
+            "budgets",
+            "call_attempts"
+          ]
+        },
+        "UsageAnomaly": {
+          "type": "object",
+          "properties": {
+            "ts": {
+              "type": "string"
+            },
+            "character": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "call_type": {
+              "type": "string"
+            },
+            "anomaly": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "ts",
+            "character",
+            "model",
+            "call_type",
+            "anomaly",
+            "cache_read_tokens",
+            "cache_write_tokens"
+          ]
+        },
+        "UsageAnomaliesReport": {
+          "type": "object",
+          "properties": {
+            "anomalies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UsageAnomaly"
+              }
+            }
+          },
+          "required": [
+            "anomalies"
+          ]
+        },
+        "UsageExportReport": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "run_tool",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3943,7 +4948,8 @@
             "Models",
             "Diagnostics",
             "Memory",
-            "Tools"
+            "Tools",
+            "Usage"
           ]
         },
         "OperationScope": {
@@ -3963,7 +4969,8 @@
             "keepalive",
             "session_activation",
             "compaction",
-            "tool_execution"
+            "tool_execution",
+            "ledger"
           ]
         },
         "OperationEffect": {

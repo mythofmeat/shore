@@ -8,12 +8,21 @@ import { assertSettingsCoverage, configAt, settingControl } from "../src/browser
 import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
 import { settingSchema } from "../src/llm/settings.ts";
 import { SDK_VARIANTS } from "../src/llm/types.ts";
-import { assertBrowserCoverage, assertCompactionResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
+import { assertBrowserCoverage, assertCompactionResultCoverage, assertUsageResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
 import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
 import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
+
+test("every usage report mode has a renderer and omitting an export fails coverage", async () => {
+  const source = await readFile(new URL("../src/browser/usage.tsx", import.meta.url), "utf8");
+  expect(() => assertUsageResultCoverage(new Set())).toThrow("Missing usage result renderer");
+  const cases = await switchCases(source, "UsageReport", "result.mode");
+  expect(() => assertUsageResultCoverage(cases)).not.toThrow();
+  const omitted = await switchCases(source.replace('case "tsv":', ''), "UsageReport", "result.mode");
+  expect(() => assertUsageResultCoverage(omitted)).toThrow("Missing usage result renderer: tsv");
+});
 
 test("built-in, subagent and connected tool schemas reach structured controls and omissions fail", async () => {
   const schemas = [...ALL_TOOLS.map((tool) => ({ name: tool.name, schema: tool.parameters })), { name: "ask_worker", schema: SUBAGENT_INPUT_SCHEMA }, { name: "mcp__fixture__nested", schema: toolResults[0]?.input_schema }];
