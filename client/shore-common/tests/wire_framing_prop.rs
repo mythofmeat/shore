@@ -100,8 +100,8 @@ fn arb_content_block() -> BoxedStrategy<ContentBlock> {
         (arb_ident(), arb_small_string(), any::<bool>()).prop_map(
             |(tool_use_id, content, is_error)| ContentBlock::ToolResult {
                 tool_use_id,
-                content,
-                is_error,
+                content: content.into(),
+                is_error: Some(is_error),
             },
         ),
     ]

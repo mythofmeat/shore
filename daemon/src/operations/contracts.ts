@@ -1,15 +1,10 @@
 import type { ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
 import { contractValidator } from "./validation.ts";
-import type { OperationRequest } from "../protocol/OperationRequest.ts";
-import type { OperationResponse } from "../protocol/OperationResponse.ts";
+import type { OperationInput, OperationName, OperationResult } from "./types.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
-export type OperationName = OperationRequest["name"];
-type Inputs = { [Request in OperationRequest as Request["name"]]: Request["args"] };
-type Results = { [Response in OperationResponse as Response["name"]]: Response["data"] };
-export type OperationInput<N extends OperationName> = Inputs[N];
-export type OperationResult<N extends OperationName> = Results[N];
+export type { OperationInput, OperationName, OperationResult } from "./types.ts";
 
 const validator = contractValidator();
 

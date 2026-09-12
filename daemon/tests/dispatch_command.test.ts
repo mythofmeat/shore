@@ -26,6 +26,12 @@ const UNWIRED: Record<string, string> = {
   keepalive_ping_now: "keepalive_ping_now is not available in this build",
 };
 
+const CLOSED_INPUT_ERRORS: Record<string, string> = {
+  log: "arguments must NOT have additional properties",
+  delete: "Missing required argument: refs; arguments must NOT have additional properties",
+  inject_system: "Missing required argument: text; arguments must NOT have additional properties",
+};
+
 const NOW_RESOLVES: Record<string, { was: string; value: unknown }> = {
   config: {
     was: "Config section not found: behavior.autonomy.enabled",
@@ -242,6 +248,12 @@ describe("runCommand", () => {
       const got = envelope(frame);
       const want = c.output as Record<string, unknown>;
 
+      const closedInputError = CLOSED_INPUT_ERRORS[c.name];
+      if (closedInputError !== undefined) {
+        expect(got).toEqual({ kind: "error", code: "invalid_request", message: closedInputError });
+        return;
+      }
+
       const unwired = UNWIRED[c.name];
       if (unwired !== undefined) {
         expect(got["kind"]).toBe("error");
@@ -271,6 +283,17 @@ describe("runCommand", () => {
       }
     });
   }
+
+  test("valid log arguments preserve the independently captured result shape", async () => {
+    const captured = fixture.dispatch.find((entry) => entry.name === "log");
+    expect(captured).toBeDefined();
+    expect<unknown>(envelope(await run("log", {}))).toEqual(captured?.output);
+  });
+
+  test("registered log retains role and message-count filters", async () => {
+    const frame = await run("log", { count: 2, role: "assistant" });
+    expect(frame).toMatchObject({ type: "command_output", data: { messages: [{ msg_id: "m_2", content: "first answer" }] } });
+  });
 });
 
 describe("runCharacterlessCommand", () => {

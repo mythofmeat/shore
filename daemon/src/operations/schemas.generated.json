@@ -1,5 +1,1738 @@
 [
   {
+    "name": "discover_operations",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "OperationCatalogue",
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OperationDescriptor"
+          }
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "$defs": {
+        "OperationDescriptor": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "category": {
+              "$ref": "#/$defs/OperationCategory"
+            },
+            "scope": {
+              "$ref": "#/$defs/OperationScope"
+            },
+            "prerequisites": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/OperationPrerequisite"
+              }
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/OperationEffect"
+              }
+            },
+            "confirmation": {
+              "$ref": "#/$defs/OperationConfirmation"
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/OperationField"
+              }
+            },
+            "input": true,
+            "output": true,
+            "available": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "label",
+            "category",
+            "scope",
+            "prerequisites",
+            "effects",
+            "confirmation",
+            "fields",
+            "input",
+            "output"
+          ]
+        },
+        "OperationCategory": {
+          "type": "string",
+          "enum": [
+            "Application",
+            "Characters",
+            "Threads",
+            "Conversation"
+          ]
+        },
+        "OperationScope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "selection",
+            "character",
+            "optional_character"
+          ]
+        },
+        "OperationPrerequisite": {
+          "type": "string",
+          "enum": [
+            "threads"
+          ]
+        },
+        "OperationEffect": {
+          "type": "string",
+          "enum": [
+            "read",
+            "workspace_write",
+            "history_write",
+            "selection",
+            "model_selection"
+          ]
+        },
+        "OperationConfirmation": {
+          "type": "string",
+          "enum": [
+            "none",
+            "archive",
+            "delete"
+          ]
+        },
+        "OperationField": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "choices": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/OperationChoices"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "multiline": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "label"
+          ]
+        },
+        "OperationChoices": {
+          "type": "string",
+          "enum": [
+            "characters",
+            "threads",
+            "models"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "log",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConversationLogArgs",
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConversationPage",
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Message"
+          }
+        },
+        "active_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "cursor": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "next_before": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "has_more_before": {
+          "type": "boolean"
+        },
+        "global_active_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total_messages": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total_turns": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "messages",
+        "active_start",
+        "cursor",
+        "next_before",
+        "has_more_before",
+        "global_active_start",
+        "total_messages",
+        "total_turns"
+      ],
+      "$defs": {
+        "Message": {
+          "type": "object",
+          "properties": {
+            "msg_id": {
+              "type": "string"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "alt_index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alt_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alternatives": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageAlternative"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "origin": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MessageOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "msg_id",
+            "role",
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "ContentBlock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "thinking": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                }
+              },
+              "required": [
+                "type",
+                "thinking"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "input": true,
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "input"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "redacted_thinking"
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tool_use_id": {
+                  "type": "string"
+                },
+                "content": {
+                  "$ref": "#/$defs/ToolResultContent"
+                },
+                "is_error": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                }
+              },
+              "required": [
+                "type",
+                "tool_use_id",
+                "content"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/InlineImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            }
+          ]
+        },
+        "ToolResultContent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          ]
+        },
+        "InlineImageSource": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/InlineImageEncoding"
+            },
+            "media_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "media_type",
+            "data"
+          ]
+        },
+        "InlineImageEncoding": {
+          "type": "string",
+          "enum": [
+            "base64"
+          ]
+        },
+        "MessageAlternative": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "timestamp": {
+              "type": "string",
+              "default": ""
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "MessageOrigin": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "assistant_reply",
+            "autonomous"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "history_page",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "HistoryPageArgs",
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "before": {
+          "$ref": "#/$defs/HistoryBefore"
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "HistoryBefore": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            {
+              "$ref": "#/$defs/HistoryBoundary"
+            }
+          ]
+        },
+        "HistoryBoundary": {
+          "type": "string",
+          "enum": [
+            "active"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConversationPage",
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Message"
+          }
+        },
+        "active_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "cursor": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "next_before": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "has_more_before": {
+          "type": "boolean"
+        },
+        "global_active_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total_messages": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total_turns": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "messages",
+        "active_start",
+        "cursor",
+        "next_before",
+        "has_more_before",
+        "global_active_start",
+        "total_messages",
+        "total_turns"
+      ],
+      "$defs": {
+        "Message": {
+          "type": "object",
+          "properties": {
+            "msg_id": {
+              "type": "string"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "alt_index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alt_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alternatives": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageAlternative"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "origin": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MessageOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "msg_id",
+            "role",
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "ContentBlock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "thinking": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                }
+              },
+              "required": [
+                "type",
+                "thinking"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "input": true,
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "input"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "redacted_thinking"
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tool_use_id": {
+                  "type": "string"
+                },
+                "content": {
+                  "$ref": "#/$defs/ToolResultContent"
+                },
+                "is_error": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                }
+              },
+              "required": [
+                "type",
+                "tool_use_id",
+                "content"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/InlineImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            }
+          ]
+        },
+        "ToolResultContent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          ]
+        },
+        "InlineImageSource": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/InlineImageEncoding"
+            },
+            "media_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "media_type",
+            "data"
+          ]
+        },
+        "InlineImageEncoding": {
+          "type": "string",
+          "enum": [
+            "base64"
+          ]
+        },
+        "MessageAlternative": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "timestamp": {
+              "type": "string",
+              "default": ""
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "MessageOrigin": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "assistant_reply",
+            "autonomous"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "get",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "GetMessageArgs",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "$defs": {
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Message",
+      "type": "object",
+      "properties": {
+        "msg_id": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "content": {
+          "type": "string",
+          "default": ""
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImageRef"
+          },
+          "default": []
+        },
+        "content_blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentBlock"
+          },
+          "default": []
+        },
+        "alt_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "alt_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessageAlternative"
+          }
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "provider_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "msg_id",
+        "role",
+        "content",
+        "images",
+        "content_blocks",
+        "timestamp"
+      ],
+      "$defs": {
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "ContentBlock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "thinking": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                }
+              },
+              "required": [
+                "type",
+                "thinking"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "input": true,
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "input"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "redacted_thinking"
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tool_use_id": {
+                  "type": "string"
+                },
+                "content": {
+                  "$ref": "#/$defs/ToolResultContent"
+                },
+                "is_error": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                }
+              },
+              "required": [
+                "type",
+                "tool_use_id",
+                "content"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/InlineImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            }
+          ]
+        },
+        "ToolResultContent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          ]
+        },
+        "InlineImageSource": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/InlineImageEncoding"
+            },
+            "media_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "media_type",
+            "data"
+          ]
+        },
+        "InlineImageEncoding": {
+          "type": "string",
+          "enum": [
+            "base64"
+          ]
+        },
+        "MessageAlternative": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "timestamp": {
+              "type": "string",
+              "default": ""
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "MessageOrigin": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "assistant_reply",
+            "autonomous"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "edit",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EditMessageArgs",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "content"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "MessageEdited",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "edited": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ref",
+        "edited"
+      ]
+    }
+  },
+  {
+    "name": "delete",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DeleteMessagesArgs",
+      "type": "object",
+      "properties": {
+        "refs": {
+          "$ref": "#/$defs/MessageReferences"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "refs"
+      ],
+      "$defs": {
+        "MessageReferences": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "MessagesDeleted",
+      "type": "object",
+      "properties": {
+        "deleted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "deleted"
+      ]
+    }
+  },
+  {
+    "name": "list_alternatives",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ListAlternativesArgs",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AlternativeListing",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "alt_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "position": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "alt_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AlternativeView"
+          }
+        }
+      },
+      "required": [
+        "ref",
+        "alt_index",
+        "position",
+        "alt_count",
+        "alternatives"
+      ],
+      "$defs": {
+        "AlternativeView": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "position": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "content": {
+              "type": "string"
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "index",
+            "position",
+            "active",
+            "content",
+            "images",
+            "timestamp"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "alt",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SelectAlternativeArgs",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "position": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlternativeDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "AlternativeDirection": {
+          "type": "string",
+          "enum": [
+            "next",
+            "prev",
+            "previous",
+            "first",
+            "last"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AlternativeSelected",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "alt_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "alt_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "alt_index",
+        "position",
+        "alt_count",
+        "content"
+      ]
+    }
+  },
+  {
+    "name": "inject_system",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "InjectSystemArgs",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SystemInjected",
+      "type": "object",
+      "properties": {
+        "injected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "injected"
+      ]
+    }
+  },
+  {
     "name": "list_characters",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

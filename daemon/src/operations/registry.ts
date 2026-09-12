@@ -1,20 +1,13 @@
 import type { OperationInput, OperationName, OperationResult } from "./contracts.ts";
 import { assertContractBindings, operationSchema, parseOperationInput, parseOperationResult } from "./contracts.ts";
+import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
+import type { OperationField } from "../protocol/OperationField.ts";
 
-export interface FieldPresentation {
-  label: string;
-  hint?: string;
-  choices?: "characters" | "threads" | "models";
-  multiline?: boolean;
-}
+export type FieldPresentation = OperationField;
 
-export interface OperationPresentation<N extends OperationName> {
-  label: string;
-  category: "Characters" | "Threads";
-  scope: "global" | "selection" | "character";
-  prerequisites: readonly ("threads")[];
-  effects: readonly ("read" | "workspace_write" | "history_write" | "selection" | "model_selection")[];
-  confirmation: "none" | "archive";
+export interface OperationPresentation<N extends OperationName> extends Pick<OperationDescriptor, "label" | "category" | "scope" | "confirmation"> {
+  prerequisites: Readonly<OperationDescriptor["prerequisites"]>;
+  effects: Readonly<OperationDescriptor["effects"]>;
   fields: { [K in keyof OperationInput<N>]-?: FieldPresentation };
 }
 
@@ -52,6 +45,6 @@ export function discoverOperations<C>(registry: OperationRegistry<C>) {
     if (JSON.stringify(fields) !== JSON.stringify(Object.keys(presentation.fields).sort())) {
       throw new Error(`Unaccounted operation fields: ${name}`);
     }
-    return { name, ...presentation, input: schema.input, output: schema.output };
+    return { name, ...presentation, prerequisites: [...presentation.prerequisites], effects: [...presentation.effects], input: schema.input, output: schema.output };
   });
 }

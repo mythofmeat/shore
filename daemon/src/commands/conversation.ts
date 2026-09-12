@@ -1,3 +1,4 @@
+import type { OperationResult } from "../operations/types.ts";
 import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
@@ -113,7 +114,7 @@ function historyPagePayload(
   history: DisplayHistoryPage,
   role: Role | undefined,
   character: string,
-): Json {
+): OperationResult<"history_page"> {
   const page = history.messages
     .filter((msg) => matchesRole(msg, role))
     .map((msg) => structuredClone(msg));
@@ -141,7 +142,7 @@ function historyPagePayload(
   };
 }
 
-export function get(engine: ConversationEngine, args: Args): Json {
+export function get(engine: ConversationEngine, args: Args): OperationResult<"get"> {
   const rawRef = asStr(args["ref"]);
   if (rawRef === undefined) throw invalidRequest("Missing required argument: ref");
 
@@ -155,14 +156,14 @@ export function get(engine: ConversationEngine, args: Args): Json {
   return msg;
 }
 
-export async function log(engine: ConversationEngine, args: Args): Promise<Json> {
+export async function log(engine: ConversationEngine, args: Args): Promise<OperationResult<"log">> {
   const history = await engine.displayHistoryPage(undefined, historyPageLimit(args));
   const role = roleFilter(args);
 
   return historyPagePayload(history, role, engine.characterName);
 }
 
-export async function historyPage(engine: ConversationEngine, args: Args): Promise<Json> {
+export async function historyPage(engine: ConversationEngine, args: Args): Promise<OperationResult<"history_page">> {
   const history = await engine.displayHistoryPage(
     resolveHistoryBefore(args),
     historyPageLimit(args),
@@ -172,7 +173,7 @@ export async function historyPage(engine: ConversationEngine, args: Args): Promi
   return historyPagePayload(history, role, engine.characterName);
 }
 
-export async function edit(engine: ConversationEngine, args: Args): Promise<Json> {
+export async function edit(engine: ConversationEngine, args: Args): Promise<OperationResult<"edit">> {
   const rawRef = asStr(args["ref"]);
   if (rawRef === undefined) throw invalidRequest("Missing required argument: ref");
   const content = asStr(args["content"]);
@@ -189,7 +190,7 @@ export async function edit(engine: ConversationEngine, args: Args): Promise<Json
   return { ref: msgId, edited: true };
 }
 
-export async function deleteMessages(engine: ConversationEngine, args: Args): Promise<Json> {
+export async function deleteMessages(engine: ConversationEngine, args: Args): Promise<OperationResult<"delete">> {
   const refs = args["refs"];
   let rawRefs: string[];
   if (Array.isArray(refs)) {
@@ -232,7 +233,7 @@ export async function deleteMessages(engine: ConversationEngine, args: Args): Pr
   return { deleted };
 }
 
-export function listAlternatives(engine: ConversationEngine, args: Args): Json {
+export function listAlternatives(engine: ConversationEngine, args: Args): OperationResult<"list_alternatives"> {
   const merged = mergeToolLoopMessages([...engine.messages()]);
   const msgId = resolveAssistantRef(merged, asStr(args["ref"]));
   const msg = merged.find((m) => m.msg_id === msgId);
@@ -263,7 +264,7 @@ export function listAlternatives(engine: ConversationEngine, args: Args): Json {
   };
 }
 
-export async function alt(engine: ConversationEngine, args: Args): Promise<Json> {
+export async function alt(engine: ConversationEngine, args: Args): Promise<OperationResult<"alt">> {
   const merged = mergeToolLoopMessages([...engine.messages()]);
   const msgId = resolveAssistantRef(merged, asStr(args["ref"]));
   const msg = merged.find((m) => m.msg_id === msgId);
@@ -331,7 +332,7 @@ export async function injectSystem(
   args: Args,
   newId: () => string = () => `m_${crypto.randomUUID()}`,
   now: () => string = () => localRfc3339(new Date()),
-): Promise<Json> {
+): Promise<OperationResult<"inject_system">> {
   const text = asStr(args["text"]);
   if (text === undefined) throw invalidRequest("Missing required argument: text");
 

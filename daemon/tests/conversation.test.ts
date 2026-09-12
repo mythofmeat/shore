@@ -1014,7 +1014,7 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
 
   test("deleting the last turn takes the whole tool loop, not just the assistant", async () => {
     const engine = await engineOver(wedgeShape);
-    const result = (await deleteMessages(engine, { refs: "last" })) as { deleted: string[] };
+    const result = await deleteMessages(engine, { refs: "last" });
 
     expect(result.deleted.sort()).toEqual(["m_31", "m_32"]);
     expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_29", "m_30"]);
@@ -1023,9 +1023,7 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
 
   test("two refs inside one tool loop delete it once", async () => {
     const engine = await engineOver(wedgeShape);
-    const result = (await deleteMessages(engine, { refs: ["m_31", "m_32"] })) as {
-      deleted: string[];
-    };
+    const result = await deleteMessages(engine, { refs: ["m_31", "m_32"] });
 
     expect(result.deleted.sort()).toEqual(["m_31", "m_32"]);
     expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_29", "m_30"]);

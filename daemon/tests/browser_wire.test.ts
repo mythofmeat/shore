@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { browserValidators } from "../scripts/browser_validators.ts";
 import { parseServerFrame } from "../src/browser/wire.ts";
+import richHistory from "../../fixtures/protocol/rich-history.json" with { type: "json" };
+
+test("Rust and browser share structured image history without flattening or dropping data", () => {
+  expect<unknown>(parseServerFrame(JSON.stringify(richHistory))).toEqual({ kind: "known", message: richHistory });
+});
 
 test("browser validators regenerate exactly from canonical Rust schemas", async () => {
   for (const [name, source] of Object.entries(browserValidators())) {
@@ -29,4 +34,13 @@ test("the browser wire bundle runs with dynamic code generation disabled", async
   const script = await artifact.text();
   const output: unknown = runInNewContext(`${script}; module.exports.parseServerFrame('{"type":"stream_chunk","text":"hello","content_type":"text"}');`, { TextEncoder, module: { exports: {} } }, { contextCodeGeneration: { strings: false, wasm: false }, timeout: 5000 });
   expect(output).toEqual({ kind: "known", message: { type: "stream_chunk", text: "hello", content_type: "text" } });
+});
+
+test("browser operation validators run without dynamic code generation", async () => {
+  const bundle = await Bun.build({ entrypoints: [new URL("../src/browser/operation_validators.generated.js", import.meta.url).pathname], target: "browser", format: "cjs", minify: true });
+  expect(bundle.success).toBe(true);
+  const script = await bundle.outputs.at(0)?.text();
+  expect(script).toBeDefined();
+  const result: unknown = runInNewContext(`${script}; [module.exports.validOperationInput('history_page', {before:'active'}), module.exports.validOperationInput('history_page', {before:null}), module.exports.validOperationResult('edit', {ref:'1', edited:true})];`, { TextEncoder, module: { exports: {} } }, { contextCodeGeneration: { strings: false, wasm: false }, timeout: 5000 });
+  expect(result).toEqual([true, false, true]);
 });

@@ -270,11 +270,11 @@ function terminalBlocksForWire(blocks: readonly ContentBlock[]): WireContentBloc
           content:
             typeof block.content === "string"
               ? block.content
-              : (JSON.stringify(block.content) ?? ""),
+              : terminalBlocksForWire(block.content),
           is_error: block.is_error ?? false,
         }];
       case "image":
-        return [];
+        return [{ type: "image", source: { ...block.source } }];
     }
   });
 }

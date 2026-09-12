@@ -1,5 +1,11 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use shore_common::protocol::operations::{
+    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage,
+    EditMessageArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, MessageReferences,
+    Operation,
+};
+use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
 
 const LEADING_HEADING: &str = "Options — must come before the command";
@@ -987,11 +993,11 @@ pub(crate) enum LogRole {
 }
 
 impl LogRole {
-    pub(crate) fn as_protocol_role(self) -> &'static str {
+    pub(crate) fn as_protocol_role(self) -> Role {
         match self {
-            Self::User => "user",
-            Self::Assistant | Self::Character => "assistant",
-            Self::System => "system",
+            Self::User => Role::User,
+            Self::Assistant | Self::Character => Role::Assistant,
+            Self::System => Role::System,
         }
     }
 }
@@ -2534,29 +2540,33 @@ pub(crate) fn absolute_path(path: &Path) -> String {
 }
 
 fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
     match cmd {
         MsgCommand::Send { system: false, .. } | MsgCommand::Regen { .. } => None,
         MsgCommand::Send {
             system: true,
             message,
             ..
-        } => Some(("inject_system", json!({ "text": message.join(" ") }))),
+        } => operation_to_swp::<InjectSystem>(InjectSystemArgs {
+            text: message.join(" "),
+        }),
         MsgCommand::Alt {
             selector, msg_ref, ..
         } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
         MsgCommand::Edit {
             msg_ref, content, ..
-        } => Some((
-            "edit",
-            json!({ "ref": msg_ref, "content": content.join(" ") }),
-        )),
-        MsgCommand::Delete { msg_refs, .. } => Some(("delete", json!({ "refs": msg_refs }))),
+        } => operation_to_swp::<EditMessage>(EditMessageArgs {
+            reference: msg_ref.clone(),
+            content: content.join(" "),
+        }),
+        MsgCommand::Delete { msg_refs, .. } => {
+            operation_to_swp::<DeleteMessages>(DeleteMessagesArgs {
+                refs: MessageReferences::Many(msg_refs.clone()),
+            })
+        }
     }
 }
 
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Log {
         msg_ref,
         role,
@@ -2567,19 +2577,20 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     if let Some(r) = msg_ref {
-        let mut args = Map::new();
-        let _ignored = args.insert("ref".into(), json!(r));
-        if let Some(role_filter) = role {
-            _ = args.insert("role".into(), json!(role_filter.as_protocol_role()));
-        }
-        return Some(("get", Value::Object(args)));
+        return operation_to_swp::<GetMessage>(GetMessageArgs {
+            reference: r.clone(),
+            role: role.map(LogRole::as_protocol_role),
+        });
     }
-    let mut args = Map::new();
-    let _ignored = args.insert("turns".into(), json!(count));
-    if let Some(role_filter) = role {
-        _ = args.insert("role".into(), json!(role_filter.as_protocol_role()));
-    }
-    Some(("log", Value::Object(args)))
+    operation_to_swp::<ConversationLog>(ConversationLogArgs {
+        turns: Some(u64::from(*count)),
+        count: None,
+        role: role.map(LogRole::as_protocol_role),
+    })
+}
+
+fn operation_to_swp<O: Operation>(input: O::Input) -> Option<(&'static str, serde_json::Value)> {
+    serde_json::to_value(input).ok().map(|args| (O::NAME, args))
 }
 
 fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
@@ -3253,8 +3264,8 @@ mod tests {
             CliCommand::Log { role, .. } => {
                 assert_eq!(*role, Some(LogRole::Character));
                 assert_eq!(
-                    role.map(LogRole::as_protocol_role),
-                    Some("assistant"),
+                    serde_json::to_value(role.map(LogRole::as_protocol_role)).unwrap(),
+                    serde_json::json!("assistant"),
                     "character must reach the daemon as assistant"
                 );
             }

@@ -22,6 +22,7 @@ import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
+import { OperationClient } from "../src/browser/operations.ts";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -487,6 +488,79 @@ describe("registered operation socket flows", () => {
 });
 
 describe("optional browser transport", () => {
+  test("typed browser actions discover an empty installation and edit, page, select alternatives and delete persisted conversation", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+    let generations = 0;
+    const provider: SidecarProvider = {
+      async *stream(request, signal) {
+        generations += 1;
+        yield* scriptedProvider(`answer ${String(generations)}`).stream(request, signal);
+      },
+      generate() { throw new Error("Unexpected non-streaming call"); },
+    };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const b = browserConnection(required(daemon.web).origin, { character: null, thread: null });
+    const actions = new OperationClient(b.client);
+    try {
+      await b.client.signIn(TEST_TOKEN);
+      await until(() => b.client.status === "ready", "Empty browser did not connect");
+      const empty = await actions.run("discover_operations", {});
+      expect(empty.operations.find((operation) => operation.name === "create_character")?.available).toBe(true);
+      expect(empty.operations.find((operation) => operation.name === "edit")?.available).toBe(false);
+      await actions.run("create_character", { name: "nova" });
+      await actions.run("switch_character", { name: "nova" });
+      const available = await actions.run("discover_operations", {});
+      expect(available.operations.find((operation) => operation.name === "edit")?.available).toBe(true);
+      expect((await b.client.submit({ type: "message", text: "original question", stream: true, images: [], image_data: [] }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "regen", stream: true, guidance: "Another answer" }).finished).outcome).toBe("completed");
+      expect((await actions.run("list_alternatives", {})).alternatives.map((alternative) => alternative.content)).toEqual(["answer 1", "answer 2"]);
+      expect(await actions.run("alt", { index: 0, position: 2, direction: "last" })).toMatchObject({ position: 1, content: "answer 1" });
+      expect(await actions.run("edit", { ref: "1", content: "edited question" })).toMatchObject({ edited: true });
+      expect(await actions.run("get", { ref: "-1", role: "user" })).toMatchObject({ content: "edited question" });
+      await actions.run("inject_system", { text: "Keep the context" });
+      const page = await actions.run("log", { count: 1 });
+      expect(page.messages.map((message) => message.content)).toEqual(["Keep the context"]);
+      expect(page.has_more_before).toBe(true);
+      expect((await actions.run("history_page", { before: page.next_before, count: 1 })).messages.map((message) => message.content)).toEqual(["answer 1"]);
+      expect(actions.run("edit", { ref: "missing-message", content: "rejected" })).rejects.toThrow("message not found");
+      const removed = await actions.run("delete", { refs: ["1", "last"] });
+      expect(removed.deleted).toHaveLength(2);
+      const browserHistory = await actions.run("log", {});
+      expect(browserHistory.messages.map((message) => message.content)).toEqual(["answer 1"]);
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "tcp-log", name: "log", args: {} });
+        const result = await tcp.awaitFrame("command_output");
+        expect<unknown>(result["data"]).toEqual(browserHistory);
+      } finally { tcp.close(); }
+      expect((await daemon.runtime.registry.getOrCreate("nova", "main")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["answer 1"]);
+    } finally { b.client.stop(); }
+  });
+
+  test("a browser can reopen persisted history containing structured tool results and inline images", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    const daemon = await start(place, [], {}, false);
+    const engine = await daemon.runtime.registry.getOrCreate("ada", "main");
+    const base = { images: [], timestamp: "2026-09-12T00:00:00Z" };
+    await engine.appendMessage({ ...base, msg_id: "tool-start", role: "assistant", content: "", content_blocks: [{ type: "tool_use", id: "read-image", name: "read_image", input: { path: "example.png" } }] });
+    await engine.appendMessage({ ...base, msg_id: "tool-image", role: "user", content: "", content_blocks: [{ type: "tool_result", tool_use_id: "read-image", content: [{ type: "text", text: "image result" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==" } }] }] });
+    await engine.appendMessage({ ...base, msg_id: "tool-answer", role: "assistant", content: "I can see the image", content_blocks: [{ type: "text", text: "I can see the image" }] });
+    const b = browserConnection(required(daemon.web).origin);
+    try {
+      await b.client.signIn(TEST_TOKEN);
+      await until(() => b.client.status === "ready" || b.client.status === "error", "Browser did not receive persisted history");
+      expect(b.client.status).toBe("ready");
+      const history = b.updates.find((update) => update.kind === "frame" && update.message.type === "history");
+      if (history?.kind !== "frame" || history.message.type !== "history") throw new Error("Missing image history");
+      expect(history.message.messages[0]?.content_blocks).toMatchObject([
+        { type: "tool_use", id: "read-image" },
+        { type: "tool_result", content: [{ type: "text", text: "image result" }, { type: "image", source: { media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==" } }] },
+        { type: "text", text: "I can see the image" },
+      ]);
+    } finally { b.client.stop(); }
+  });
+
   test("the browser connection restores its selected conversation after a daemon restart and sign-in", async () => {
     const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     const daemon = await start(place, [], { anthropic: scriptedProvider("persisted answer") }, false);

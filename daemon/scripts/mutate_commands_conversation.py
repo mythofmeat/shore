@@ -352,10 +352,10 @@ MUTANTS = [
 
     # --- get ----------------------------------------------------------------
     ("get: a missing ref defaults to the last message",
-     'export function get(engine: ConversationEngine, args: Args): Json {\n'
+     'export function get(engine: ConversationEngine, args: Args): OperationResult<"get"> {\n'
      '  const rawRef = asStr(args["ref"]);\n'
      '  if (rawRef === undefined) throw invalidRequest("Missing required argument: ref");',
-     'export function get(engine: ConversationEngine, args: Args): Json {\n'
+     'export function get(engine: ConversationEngine, args: Args): OperationResult<"get"> {\n'
      '  const rawRef = asStr(args["ref"]) ?? "last";'),
     ("get: the ref resolves before the role filter",
      "  const merged = mergeToolLoopMessages([...engine.messages()]).filter((msg) =>\n"

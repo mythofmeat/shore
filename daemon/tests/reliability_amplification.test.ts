@@ -110,7 +110,7 @@ test("archive export and import retain row-backed active messages and SDK transc
 test("delta-capable clients receive suffixes while legacy clients receive full snapshots", async () => {
   const data = await mkdtemp(testTmp("delta-clients-"));
   const server = new Server({ addr: "127.0.0.1:0", serverName: "test", authenticate: () => true });
-  const engine = await ConversationEngine.load("ada", data, history => server.broadcast({ type: "history", ...history } as ServerMessage));
+  const engine = await ConversationEngine.load("ada", data, history => server.broadcast({ type: "history", ...history }));
   await engine.appendMessage(message("one"));
   await engine.appendMessage(message("two"));
   server.setHandshakeProvider({
