@@ -48,7 +48,7 @@ export function localWallClock(instant: number, zone: string = hostZone()): numb
   return instant + (naiveInZone(instant, zone) - wholeSecond);
 }
 
-export type HourClassification = "peak" | "trough" | "normal";
+export type HourClassification = import("../protocol/ActivityHourClass.ts").ActivityHourClass;
 
 interface Recorded {
   readonly at: number;

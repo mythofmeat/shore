@@ -7,6 +7,51 @@ import { validOperationInput, validOperationResult } from "../src/browser/operat
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("diagnostic filters are shared by browser and daemon without string coercion or unsafe IDs", () => {
+    for (const [name, input] of [
+      ["call_log", { id: -1, against: 0, diff: true, wire: true, character: null, call_type: null, count: 0 }],
+      ["transcript", { source: "memory_recall", count: null }],
+      ["subagent_trace", { ids: ["parent-1", "parent-2"], count: 0 }],
+      ["heartbeat_log", { count: 0 }], ["error_log", {}], ["session_activate", {}],
+    ] as const) {
+      expect<unknown>(parseOperationInput(name, input)).toEqual(input);
+      expect(validOperationInput(name, input)).toBe(true);
+    }
+    for (const [name, input] of [
+      ["call_log", { id: Number.MAX_SAFE_INTEGER + 1 }], ["call_log", { against: Number.MIN_SAFE_INTEGER - 1 }],
+      ["call_log", { wire: "true" }], ["call_log", { id: 1.5 }], ["heartbeat_log", { count: -1 }],
+      ["error_log", { count: 4294967296 }], ["transcript", { source: "unknown" }],
+      ["subagent_trace", { ids: [1] }], ["heartbeat_tick_now", { force: true }],
+    ] as const) {
+      expect(() => parseOperationInput(name, input)).toThrow();
+      expect(validOperationInput(name, input)).toBe(false);
+    }
+  });
+
+  test("diagnostic result variants require complete metadata while retaining captured and future fields", () => {
+    const status = { character: "ada", keepalive_halted: null, message_count: 0, turn_count: 0, active_model: null, config_dir: "/config", data_dir: "/data", cache_dir: "/cache", pending_deferred_edit_count: 0, pending_deferred_edits: [], tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, autonomy: null, activity: null, index: null, history_index: null, sections: ["future_section"], future_section: { visible: true } };
+    const summary = { id: 1, call_id: "call-1", ts: "now", call_type: null, character: null, model: null, provider: null, finish_reason: null, duration_ms: null, error: null, usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 }, request_bytes: 0, response_bytes: 0 };
+    for (const [name, result] of [
+      ["status", status], ["call_log", { enabled: false, entries: [] }],
+      ["call_log", { enabled: true, call: { ...summary, request: { future: [null, true, "text"] }, response: "unparsed response" }, wire: [], future: "visible" }],
+      ["transcript", { enabled: true, source: "heartbeat", entries: [] }],
+      ["keepalive_ping_now", { status: "skipped", character: "ada", reason: "no request" }],
+      ["session_activate", { character: "ada", registered: false, heartbeat: null, keepalive: { status: "unavailable", detail: "No cached prefix" } }],
+    ] as const) {
+      expect<unknown>(parseOperationResult(name, result)).toEqual(result);
+      expect(validOperationResult(name, result)).toBe(true);
+    }
+    for (const [name, result] of [
+      ["status", { ...status, tokens: { input: 0 } }], ["status", { ...status, active_model: undefined }],
+      ["call_log", { enabled: true, call: summary, wire: [] }], ["call_log", { enabled: true, entries: [{ ...summary, model: undefined }] }],
+      ["keepalive_ping_now", { status: "warm", character: "ada", reason: "wrong variant" }],
+      ["session_activate", { character: "ada", registered: true, heartbeat: null, keepalive: { status: "primed", detail: "missing usage" } }],
+    ] as const) {
+      expect(() => parseOperationResult(name, result)).toThrow();
+      expect(validOperationResult(name, result)).toBe(false);
+    }
+  });
+
   test("provider contracts preserve nullable filters and require a truthful batch result", () => {
     for (const include_hidden of [true, false, null]) {
       const input = { provider: "fixture", include_hidden };

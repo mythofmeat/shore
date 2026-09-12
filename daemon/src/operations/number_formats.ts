@@ -1,4 +1,5 @@
 export const numberFormats = {
+  int64: { type: "number", validate: (value: number) => Number.isSafeInteger(value) },
   uint64: { type: "number", validate: (value: number) => Number.isSafeInteger(value) && value >= 0 },
   uint: { type: "number", validate: (value: number) => Number.isSafeInteger(value) && value >= 0 },
   uint32: { type: "number", validate: (value: number) => Number.isSafeInteger(value) && value >= 0 && value <= 4294967295 },

@@ -2,7 +2,7 @@ use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 use serde::{Deserialize, Serialize};
 
 use super::client_msg::Command;
-use super::types::{CharacterInfo, ImageRef, Message, Role};
+use super::types::{CharacterInfo, ImageRef, Message, Role, TokenCounts};
 
 fn deserialize_present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,
@@ -58,16 +58,16 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationPrerequisite { Threads }
+    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite }
+    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite, RuntimeWrite, ProviderCall }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationConfirmation { None, Archive, Delete }
@@ -138,6 +138,581 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct DiagnosticCountArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub count: Option<u32>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct CallLogArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64))]
+        pub id: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub count: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub call_type: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub character: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub diff: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64))]
+        pub against: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub wire: Option<bool>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum TranscriptSource { Heartbeat }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct TranscriptArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub source: Option<TranscriptSource>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub count: Option<u32>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct SubagentTraceArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ids: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub count: Option<u32>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum HeartbeatEventKind { TickFired, CallFailed, MessageSent, MessageSkipped, ToolUse, Dormant, Wake, Timeout, DormantPing, BudgetPaused, RecapWritten, RecapMissing }
+
+    pub struct HeartbeatEvent {
+        pub timestamp: String,
+        pub kind: HeartbeatEventKind,
+        pub detail: String,
+    }
+
+    pub struct HeartbeatLogResult {
+        pub events: Vec<HeartbeatEvent>,
+    }
+
+    pub struct DiagnosticErrorEntry {
+        pub timestamp: String,
+        pub error_type: String,
+        pub message: String,
+        pub context: String,
+    }
+
+    pub struct DiagnosticKeyFallbackEntry {
+        pub timestamp: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub rid: Option<String>,
+        pub provider: String,
+        pub model: String,
+        pub character: String,
+        pub from_key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub to_key: Option<String>,
+        pub kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub status: Option<u32>,
+        pub reason: String,
+    }
+
+    pub struct DiagnosticErrorRing {
+        pub count: usize,
+        pub recent: Vec<DiagnosticErrorEntry>,
+    }
+
+    pub struct DiagnosticKeyFallbackRing {
+        pub count: usize,
+        pub recent: Vec<DiagnosticKeyFallbackEntry>,
+    }
+
+    pub struct ErrorLogResult {
+        pub errors: DiagnosticErrorRing,
+        pub key_fallbacks: DiagnosticKeyFallbackRing,
+    }
+
+    pub enum AutonomyHeartbeatState { Active, Dormant }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ActivityHourClass { Peak, Trough, Normal }
+
+    pub struct AutonomyStatusReport {
+        pub heartbeat_state: AutonomyHeartbeatState,
+        #[ts(type = "number")]
+        pub ticks_without_user: u64,
+        #[ts(type = "number")]
+        pub dormant_after_heartbeat_turns: u64,
+        #[ts(type = "number")]
+        pub effective_interval_secs: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub next_wake_at: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "number")]
+        pub seconds_until_wake: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last_user_at: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "number")]
+        pub seconds_since_user: Option<u64>,
+        #[ts(type = "number")]
+        pub minimum_heartbeat_latency_secs: u64,
+        #[ts(type = "number")]
+        pub dormant_after_idle_time_secs: u64,
+        pub recent_events: Vec<HeartbeatEvent>,
+    }
+
+    pub struct ActivityStatusReport {
+        pub hour_histogram: Vec<f64>,
+        pub hour_classifications: Vec<ActivityHourClass>,
+        pub has_sufficient_heatmap: bool,
+        pub engagement_score: f64,
+        pub sessions_per_day: f64,
+        #[ts(type = "number")]
+        pub message_count: u64,
+        #[ts(type = "number")]
+        pub turn_count: u64,
+    }
+
+    pub struct DiagnosticIndexError {
+        pub error: String,
+    }
+
+    pub struct IndexBackgroundStatus {
+        pub registered: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub swept: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub embedder_error: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub failures: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last_error: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "number")]
+        pub retry_in_secs: Option<u64>,
+    }
+
+    pub struct WorkspaceIndexStatus {
+        pub path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub unusable: Option<String>,
+        pub files: usize,
+        pub embedded: usize,
+        pub pending: usize,
+        pub skipped: usize,
+        pub skip_reasons: std::collections::BTreeMap<String, usize>,
+        pub vectors: usize,
+        pub models: Vec<String>,
+        #[ts(type = "number")]
+        pub bytes: u64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub last_indexed_at: Option<String>,
+        pub background: IndexBackgroundStatus,
+    }
+
+    pub struct HistoryIndexStatus {
+        pub path: String,
+        pub messages: usize,
+        pub chunks: usize,
+        pub embedded: usize,
+        pub pending: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        pub background: IndexBackgroundStatus,
+    }
+
+    #[serde(untagged)]
+    pub enum WorkspaceIndexResult { Error(DiagnosticIndexError), Status(Box<WorkspaceIndexStatus>) }
+
+    #[serde(untagged)]
+    pub enum HistoryIndexResult { Error(DiagnosticIndexError), Status(HistoryIndexStatus) }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum McpConnectionState { Connected, Unavailable, Retrying, Invalid }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum McpTransportKind { Stdio, Http }
+
+    pub struct McpStatusEntry {
+        pub name: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub transport: Option<McpTransportKind>,
+        pub state: McpConnectionState,
+        pub connected_tools: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub last_error: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub next_retry_at: Option<String>,
+    }
+
+    pub struct McpStatusReport {
+        pub configured: usize,
+        pub connected: usize,
+        pub unavailable: usize,
+        pub servers: Vec<McpStatusEntry>,
+    }
+
+    pub struct KeepaliveHaltReport {
+        pub character: String,
+        pub reason: String,
+        pub at: String,
+    }
+
+    pub struct DiagnosticUsage {
+        #[ts(type = "number")]
+        pub input_tokens: u64,
+        #[ts(type = "number")]
+        pub output_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_read_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_write_tokens: u64,
+    }
+
+
+
+    #[serde(rename_all = "snake_case")]
+    pub enum StatusSection { Tokens, Autonomy, Activity, Index, HistoryIndex, Mcp }
+
+    pub struct StatusReport {
+        pub character: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub keepalive_halted: Option<KeepaliveHaltReport>,
+        pub message_count: usize,
+        pub turn_count: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "number")]
+        pub context_tokens: Option<u64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub active_model: Option<String>,
+        pub config_dir: String,
+        pub data_dir: String,
+        pub cache_dir: String,
+        pub pending_deferred_edit_count: usize,
+        pub pending_deferred_edits: Vec<String>,
+        pub tokens: TokenCounts,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub autonomy: Option<AutonomyStatusReport>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub activity: Option<ActivityStatusReport>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub index: Option<WorkspaceIndexResult>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub history_index: Option<HistoryIndexResult>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub mcp: Option<McpStatusReport>,
+        pub sections: Vec<String>,
+    }
+
+    pub struct CallSummary {
+        #[ts(type = "number")]
+        pub id: i64,
+        pub call_id: String,
+        pub ts: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub call_type: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub provider: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub finish_reason: Option<String>,
+        pub usage: DiagnosticUsage,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub duration_ms: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub error: Option<String>,
+        #[ts(type = "number")]
+        pub request_bytes: u64,
+        #[ts(type = "number")]
+        pub response_bytes: u64,
+    }
+
+    pub struct CallDetail {
+        #[serde(flatten)]
+        pub summary: CallSummary,
+        #[ts(type = "unknown")]
+        pub request: serde_json::Value,
+        #[ts(type = "unknown")]
+        pub response: serde_json::Value,
+    }
+
+    pub struct HttpExchange {
+        #[ts(type = "number")]
+        pub id: i64,
+        pub call_id: String,
+        pub seq: usize,
+        pub ts: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub call_type: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub rid: Option<String>,
+        pub method: String,
+        pub url: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub status: Option<u32>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub status_text: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub duration_ms: Option<f64>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub error: Option<String>,
+        #[ts(type = "number")]
+        pub request_bytes: u64,
+        #[ts(type = "number")]
+        pub response_bytes: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub request_headers: Option<Vec<(String, String)>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub response_headers: Option<Vec<(String, String)>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "unknown")]
+        pub request_body: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "unknown")]
+        pub response_body: Option<serde_json::Value>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum PayloadDiffOperation { Equal, Added, Removed }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum CallDiffSource { Wire, Internal }
+
+    pub struct PayloadDiffCounts {
+        #[ts(type = "number")]
+        pub equal: u64,
+        #[ts(type = "number")]
+        pub added: u64,
+        #[ts(type = "number")]
+        pub removed: u64,
+    }
+
+    pub struct PayloadDiffEntry {
+        pub op: PayloadDiffOperation,
+        pub hash: String,
+        #[ts(type = "number")]
+        pub bytes: u64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub text: Option<String>,
+    }
+
+    pub struct CallDiff {
+        #[ts(type = "number")]
+        pub from_payload: i64,
+        #[ts(type = "number")]
+        pub to_payload: i64,
+        #[ts(type = "number")]
+        pub from_call: i64,
+        #[ts(type = "number")]
+        pub to_call: i64,
+        pub source: CallDiffSource,
+        pub chunks: PayloadDiffCounts,
+        pub bytes: PayloadDiffCounts,
+        pub entries: Vec<PayloadDiffEntry>,
+    }
+
+    pub struct CallListing {
+        pub enabled: bool,
+        pub entries: Vec<CallSummary>,
+    }
+
+    pub struct CallInspection {
+        pub enabled: bool,
+        pub call: CallDetail,
+        pub wire: Vec<HttpExchange>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub diff: Option<CallDiff>,
+    }
+
+    #[serde(untagged)]
+    pub enum CallLogResult { Listing(CallListing), Inspection(Box<CallInspection>) }
+
+    pub struct TranscriptToolCall {
+        pub name: String,
+        #[ts(type = "unknown")]
+        pub input: serde_json::Value,
+        pub output: String,
+        pub is_error: bool,
+    }
+
+    pub struct HeartbeatTranscriptEntry {
+        pub reasoning: Vec<String>,
+        pub text: String,
+        pub tool_calls: Vec<TranscriptToolCall>,
+    }
+
+    pub struct TranscriptRow {
+        #[ts(type = "number")]
+        pub id: i64,
+        pub ts: String,
+        pub source: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub call_type: Option<String>,
+        pub iteration: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub provider: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub finish_reason: Option<String>,
+        pub usage: DiagnosticUsage,
+        #[ts(type = "unknown")]
+        pub entry: serde_json::Value,
+    }
+
+    pub struct TranscriptResult {
+        pub enabled: bool,
+        pub source: TranscriptSource,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub character: Option<String>,
+        pub entries: Vec<TranscriptRow>,
+    }
+
+    pub struct StoredSubagentTrace {
+        pub ts: String,
+        pub subagent: String,
+        pub parent_tool_use_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub rid: Option<String>,
+        pub model: String,
+        pub messages: Vec<Message>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub messages_expired: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub result: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub error: Option<String>,
+    }
+
+    pub struct SubagentTraceResult {
+        pub character: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub requested_ids: Option<Vec<String>>,
+        pub entries: Vec<StoredSubagentTrace>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum HeartbeatControlStatus { Scheduled, Dormant, Active }
+
+    pub struct HeartbeatControlResult {
+        pub status: HeartbeatControlStatus,
+        pub character: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub warning: Option<String>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum KeepaliveRequestSource { CachedLastRequest, RebuiltFromDisk }
+
+    pub struct KeepalivePingDetail {
+        pub character: String,
+        pub source: KeepaliveRequestSource,
+        #[ts(type = "number")]
+        pub input_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_read_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_creation_tokens: u64,
+        pub note: String,
+    }
+
+    pub struct KeepalivePingSkipped {
+        pub character: String,
+        pub reason: String,
+    }
+
+    #[serde(tag = "status", rename_all = "snake_case")]
+    pub enum KeepalivePingResult { Skipped(KeepalivePingSkipped), Warm(KeepalivePingDetail), Cold(KeepalivePingDetail) }
+
+    pub struct ScheduledKeepalivePing {
+        #[ts(type = "number")]
+        pub interval_secs: u64,
+        pub next_ping_at: String,
+        #[ts(type = "number")]
+        pub seconds_until_ping: i64,
+    }
+
+    pub struct PrimedKeepalivePing {
+        #[serde(flatten)]
+        pub schedule: ScheduledKeepalivePing,
+        #[ts(type = "number")]
+        pub input_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_read_tokens: u64,
+        #[ts(type = "number")]
+        pub cache_creation_tokens: u64,
+        pub wrote_cache: bool,
+    }
+
+    pub struct KeepaliveActivationDetail {
+        pub detail: String,
+    }
+
+    #[serde(tag = "status", rename_all = "snake_case")]
+    pub enum KeepaliveActivation { Unavailable(KeepaliveActivationDetail), Off, Resumed(ScheduledKeepalivePing), Primed(PrimedKeepalivePing), Skipped(KeepaliveActivationDetail), Failed(KeepaliveActivationDetail) }
+
+    pub struct ActivatedHeartbeat {
+        pub state: AutonomyHeartbeatState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub next_wake_at: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        #[ts(type = "number")]
+        pub seconds_until_wake: Option<i64>,
+    }
+
+    pub struct SessionActivated {
+        pub character: String,
+        pub registered: bool,
+        pub keepalive: KeepaliveActivation,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub heartbeat: Option<ActivatedHeartbeat>,
     }
 
     #[serde(rename_all = "snake_case")]
@@ -1114,10 +1689,25 @@ macro_rules! operations {
         pub fn operation_schemas() -> Vec<OperationSchemas> {
             vec![$(schemas::<$marker>()),*]
         }
+
+        pub fn is_registered_operation(name: &str) -> bool {
+            matches!(name, $($name)|*)
+        }
     };
 }
 
 operations! {
+    ReadStatus: "status" (EmptyOperationArgs) => StatusReport,
+    ReadErrorLog: "error_log" (DiagnosticCountArgs) => ErrorLogResult,
+    ReadHeartbeatLog: "heartbeat_log" (DiagnosticCountArgs) => HeartbeatLogResult,
+    InspectCalls: "call_log" (CallLogArgs) => CallLogResult,
+    ReadTranscript: "transcript" (TranscriptArgs) => TranscriptResult,
+    ReadSubagentTraces: "subagent_trace" (SubagentTraceArgs) => SubagentTraceResult,
+    ScheduleHeartbeat: "heartbeat_tick_now" (EmptyOperationArgs) => HeartbeatControlResult,
+    SetHeartbeatDormant: "heartbeat_set_dormant" (EmptyOperationArgs) => HeartbeatControlResult,
+    SetHeartbeatActive: "heartbeat_set_active" (EmptyOperationArgs) => HeartbeatControlResult,
+    PingKeepalive: "keepalive_ping_now" (EmptyOperationArgs) => KeepalivePingResult,
+    ActivateSession: "session_activate" (EmptyOperationArgs) => SessionActivated,
     DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,
     ListModels: "list_models" (ListModelsArgs) => ModelListing,
     FavoriteModel: "favorite_model" (FavoriteModelArgs) => ModelFavorite,
@@ -1160,6 +1750,62 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_requests_preserve_filters_and_reject_invalid_variants() {
+        let value = serde_json::json!({"id":2,"against":1,"wire":true,"diff":true,"count":0});
+        let input: CallLogArgs = serde_json::from_value(value.clone()).unwrap();
+        let command = InspectCalls::command(input, Some("inspect-1".to_owned())).unwrap();
+        assert_eq!(
+            serde_json::to_value(command).unwrap(),
+            serde_json::json!({"name":"call_log","rid":"inspect-1","args":value})
+        );
+        for invalid in [
+            serde_json::json!({"id":1.5}),
+            serde_json::json!({"wire":"true"}),
+            serde_json::json!({"count":-1}),
+            serde_json::json!({"unknown":true}),
+        ] {
+            assert!(serde_json::from_value::<CallLogArgs>(invalid).is_err());
+        }
+        assert!(
+            serde_json::from_value::<TranscriptArgs>(serde_json::json!({"source":"unknown"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<SubagentTraceArgs>(serde_json::json!({"ids":[1]})).is_err()
+        );
+        assert!(is_registered_operation("heartbeat_tick_now"));
+        assert!(is_registered_operation("status"));
+        assert!(!is_registered_operation("unknown_operation"));
+    }
+
+    #[test]
+    fn runtime_results_require_the_fields_of_the_reported_outcome() {
+        assert!(
+            serde_json::from_value::<KeepalivePingResult>(
+                serde_json::json!({"status":"skipped","character":"ada","reason":"No request"})
+            )
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<KeepalivePingResult>(
+                serde_json::json!({"status":"warm","character":"ada","reason":"No request"})
+            )
+            .is_err()
+        );
+        let result = serde_json::json!({"character":"ada","registered":false,"heartbeat":null,"keepalive":{"status":"unavailable","detail":"No prefix"}});
+        assert!(serde_json::from_value::<SessionActivated>(result.clone()).is_ok());
+        let mut incomplete = result;
+        incomplete.as_object_mut().unwrap().remove("heartbeat");
+        assert!(serde_json::from_value::<SessionActivated>(incomplete).is_err());
+        assert!(
+            serde_json::from_value::<KeepaliveActivation>(
+                serde_json::json!({"status":"primed","detail":"missing usage"})
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn model_contracts_require_named_writes_and_complete_targeted_results() {

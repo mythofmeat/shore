@@ -6,7 +6,11 @@ import type {
 } from "../call_store.ts";
 import { invalidRequest, internalError } from "./errors.ts";
 import { decodeBody } from "./decode_body.ts";
-import type { Args, Json } from "./conversation.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { CallDetail } from "../protocol/CallDetail.ts";
+import type { HttpExchange } from "../protocol/HttpExchange.ts";
+
+type Args = OperationInput<"call_log">;
 
 export interface CallLogContext {
   characterName: string;
@@ -28,7 +32,7 @@ function countArg(args: Args, fallback: number): number {
 
 const CALL_STORE_FAILED = "call store query failed";
 
-function presentCall(call: CallPayload): Json {
+function presentCall(call: CallPayload): CallDetail {
   return {
     ...call,
     request: decodeBody(call.request),
@@ -36,7 +40,7 @@ function presentCall(call: CallPayload): Json {
   };
 }
 
-function presentWire(exchanges: readonly HttpExchangeRow[], bodies: boolean): Json {
+function presentWire(exchanges: readonly HttpExchangeRow[], bodies: boolean): HttpExchange[] {
   return exchanges.map((exchange) => {
     const {
       request_headers,
@@ -56,7 +60,7 @@ function presentWire(exchanges: readonly HttpExchangeRow[], bodies: boolean): Js
   });
 }
 
-export function callLog(ctx: CallLogContext, args: Args): Json {
+export function callLog(ctx: CallLogContext, args: Args): OperationResult<"call_log"> {
   const store = ctx.callStore;
   if (store === undefined) return { enabled: false, entries: [] };
 
@@ -88,7 +92,7 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
       enabled: true,
       call: presentCall(payload),
       wire: presentWire(wire, bodies),
-      diff: diff as unknown,
+      diff,
     };
   }
 
@@ -104,8 +108,8 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
 const TRANSCRIPT_SOURCE = "heartbeat";
 const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE];
 
-export function transcript(ctx: CallLogContext, args: Args): Json {
-  const source = asStr(args["source"]) ?? TRANSCRIPT_SOURCE;
+export function transcript(ctx: CallLogContext, args: OperationInput<"transcript">): OperationResult<"transcript"> {
+  const source = args.source ?? TRANSCRIPT_SOURCE;
   if (!TRANSCRIPT_SOURCES.includes(source)) {
     throw invalidRequest(
       `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(", ")})`,

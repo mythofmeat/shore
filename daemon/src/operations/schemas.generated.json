@@ -1,5 +1,2577 @@
 [
   {
+    "name": "status",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "StatusReport",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "keepalive_halted": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeepaliveHaltReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "turn_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "context_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "active_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config_dir": {
+          "type": "string"
+        },
+        "data_dir": {
+          "type": "string"
+        },
+        "cache_dir": {
+          "type": "string"
+        },
+        "pending_deferred_edit_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "pending_deferred_edits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tokens": {
+          "$ref": "#/$defs/TokenCounts"
+        },
+        "autonomy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutonomyStatusReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "activity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActivityStatusReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceIndexResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "history_index": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HistoryIndexResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mcp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpStatusReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "character",
+        "keepalive_halted",
+        "message_count",
+        "turn_count",
+        "active_model",
+        "config_dir",
+        "data_dir",
+        "cache_dir",
+        "pending_deferred_edit_count",
+        "pending_deferred_edits",
+        "tokens",
+        "autonomy",
+        "activity",
+        "index",
+        "history_index",
+        "sections"
+      ],
+      "$defs": {
+        "KeepaliveHaltReport": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "character",
+            "reason",
+            "at"
+          ]
+        },
+        "TokenCounts": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "output": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_read": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_write": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "cache_read",
+            "cache_write"
+          ]
+        },
+        "AutonomyStatusReport": {
+          "type": "object",
+          "properties": {
+            "heartbeat_state": {
+              "$ref": "#/$defs/AutonomyHeartbeatState"
+            },
+            "ticks_without_user": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "dormant_after_heartbeat_turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "effective_interval_secs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "next_wake_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seconds_until_wake": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            },
+            "last_user_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seconds_since_user": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "minimum_heartbeat_latency_secs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "dormant_after_idle_time_secs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "recent_events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/HeartbeatEvent"
+              }
+            }
+          },
+          "required": [
+            "heartbeat_state",
+            "ticks_without_user",
+            "dormant_after_heartbeat_turns",
+            "effective_interval_secs",
+            "minimum_heartbeat_latency_secs",
+            "dormant_after_idle_time_secs",
+            "recent_events"
+          ]
+        },
+        "AutonomyHeartbeatState": {
+          "type": "string",
+          "enum": [
+            "Active",
+            "Dormant"
+          ]
+        },
+        "HeartbeatEvent": {
+          "type": "object",
+          "properties": {
+            "timestamp": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/HeartbeatEventKind"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "timestamp",
+            "kind",
+            "detail"
+          ]
+        },
+        "HeartbeatEventKind": {
+          "type": "string",
+          "enum": [
+            "tick_fired",
+            "call_failed",
+            "message_sent",
+            "message_skipped",
+            "tool_use",
+            "dormant",
+            "wake",
+            "timeout",
+            "dormant_ping",
+            "budget_paused",
+            "recap_written",
+            "recap_missing"
+          ]
+        },
+        "ActivityStatusReport": {
+          "type": "object",
+          "properties": {
+            "hour_histogram": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "hour_classifications": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ActivityHourClass"
+              }
+            },
+            "has_sufficient_heatmap": {
+              "type": "boolean"
+            },
+            "engagement_score": {
+              "type": "number",
+              "format": "double"
+            },
+            "sessions_per_day": {
+              "type": "number",
+              "format": "double"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "hour_histogram",
+            "hour_classifications",
+            "has_sufficient_heatmap",
+            "engagement_score",
+            "sessions_per_day",
+            "message_count",
+            "turn_count"
+          ]
+        },
+        "ActivityHourClass": {
+          "type": "string",
+          "enum": [
+            "peak",
+            "trough",
+            "normal"
+          ]
+        },
+        "WorkspaceIndexResult": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticIndexError"
+            },
+            {
+              "$ref": "#/$defs/WorkspaceIndexStatus"
+            }
+          ]
+        },
+        "DiagnosticIndexError": {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "error"
+          ]
+        },
+        "WorkspaceIndexStatus": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "unusable": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "embedded": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "pending": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "skip_reasons": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            },
+            "vectors": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "last_indexed_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "background": {
+              "$ref": "#/$defs/IndexBackgroundStatus"
+            }
+          },
+          "required": [
+            "path",
+            "files",
+            "embedded",
+            "pending",
+            "skipped",
+            "skip_reasons",
+            "vectors",
+            "models",
+            "bytes",
+            "last_indexed_at",
+            "background"
+          ]
+        },
+        "IndexBackgroundStatus": {
+          "type": "object",
+          "properties": {
+            "registered": {
+              "type": "boolean"
+            },
+            "swept": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "embedder_error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "failures": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "last_error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "retry_in_secs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "registered"
+          ]
+        },
+        "HistoryIndexResult": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticIndexError"
+            },
+            {
+              "$ref": "#/$defs/HistoryIndexStatus"
+            }
+          ]
+        },
+        "HistoryIndexStatus": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "chunks": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "embedded": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "pending": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "background": {
+              "$ref": "#/$defs/IndexBackgroundStatus"
+            }
+          },
+          "required": [
+            "path",
+            "messages",
+            "chunks",
+            "embedded",
+            "pending",
+            "model",
+            "background"
+          ]
+        },
+        "McpStatusReport": {
+          "type": "object",
+          "properties": {
+            "configured": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "connected": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "unavailable": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "servers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/McpStatusEntry"
+              }
+            }
+          },
+          "required": [
+            "configured",
+            "connected",
+            "unavailable",
+            "servers"
+          ]
+        },
+        "McpStatusEntry": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "transport": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpTransportKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "$ref": "#/$defs/McpConnectionState"
+            },
+            "connected_tools": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "last_error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "next_retry_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "transport",
+            "state",
+            "connected_tools",
+            "last_error",
+            "next_retry_at"
+          ]
+        },
+        "McpTransportKind": {
+          "type": "string",
+          "enum": [
+            "stdio",
+            "http"
+          ]
+        },
+        "McpConnectionState": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "unavailable",
+            "retrying",
+            "invalid"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "error_log",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DiagnosticCountArgs",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ErrorLogResult",
+      "type": "object",
+      "properties": {
+        "errors": {
+          "$ref": "#/$defs/DiagnosticErrorRing"
+        },
+        "key_fallbacks": {
+          "$ref": "#/$defs/DiagnosticKeyFallbackRing"
+        }
+      },
+      "required": [
+        "errors",
+        "key_fallbacks"
+      ],
+      "$defs": {
+        "DiagnosticErrorRing": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "recent": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/DiagnosticErrorEntry"
+              }
+            }
+          },
+          "required": [
+            "count",
+            "recent"
+          ]
+        },
+        "DiagnosticErrorEntry": {
+          "type": "object",
+          "properties": {
+            "timestamp": {
+              "type": "string"
+            },
+            "error_type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "context": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "timestamp",
+            "error_type",
+            "message",
+            "context"
+          ]
+        },
+        "DiagnosticKeyFallbackRing": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "recent": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/DiagnosticKeyFallbackEntry"
+              }
+            }
+          },
+          "required": [
+            "count",
+            "recent"
+          ]
+        },
+        "DiagnosticKeyFallbackEntry": {
+          "type": "object",
+          "properties": {
+            "timestamp": {
+              "type": "string"
+            },
+            "rid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "character": {
+              "type": "string"
+            },
+            "from_key": {
+              "type": "string"
+            },
+            "to_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "timestamp",
+            "provider",
+            "model",
+            "character",
+            "from_key",
+            "kind",
+            "reason"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "heartbeat_log",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DiagnosticCountArgs",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "HeartbeatLogResult",
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeartbeatEvent"
+          }
+        }
+      },
+      "required": [
+        "events"
+      ],
+      "$defs": {
+        "HeartbeatEvent": {
+          "type": "object",
+          "properties": {
+            "timestamp": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/HeartbeatEventKind"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "timestamp",
+            "kind",
+            "detail"
+          ]
+        },
+        "HeartbeatEventKind": {
+          "type": "string",
+          "enum": [
+            "tick_fired",
+            "call_failed",
+            "message_sent",
+            "message_skipped",
+            "tool_use",
+            "dormant",
+            "wake",
+            "timeout",
+            "dormant_ping",
+            "budget_paused",
+            "recap_written",
+            "recap_missing"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "call_log",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CallLogArgs",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "call_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "character": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diff": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "against": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "wire": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CallLogResult",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CallListing"
+        },
+        {
+          "$ref": "#/$defs/CallInspection"
+        }
+      ],
+      "$defs": {
+        "CallListing": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CallSummary"
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "entries"
+          ]
+        },
+        "CallSummary": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "call_id": {
+              "type": "string"
+            },
+            "ts": {
+              "type": "string"
+            },
+            "call_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "finish_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "usage": {
+              "$ref": "#/$defs/DiagnosticUsage"
+            },
+            "duration_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "request_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "response_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "call_id",
+            "ts",
+            "call_type",
+            "character",
+            "model",
+            "provider",
+            "finish_reason",
+            "usage",
+            "duration_ms",
+            "error",
+            "request_bytes",
+            "response_bytes"
+          ]
+        },
+        "DiagnosticUsage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens"
+          ]
+        },
+        "CallInspection": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "call": {
+              "$ref": "#/$defs/CallDetail"
+            },
+            "wire": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/HttpExchange"
+              }
+            },
+            "diff": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CallDiff"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "call",
+            "wire"
+          ]
+        },
+        "CallDetail": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "call_id": {
+              "type": "string"
+            },
+            "ts": {
+              "type": "string"
+            },
+            "call_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "finish_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "usage": {
+              "$ref": "#/$defs/DiagnosticUsage"
+            },
+            "duration_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "request_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "response_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": true,
+            "response": true
+          },
+          "required": [
+            "id",
+            "call_id",
+            "ts",
+            "call_type",
+            "character",
+            "model",
+            "provider",
+            "finish_reason",
+            "usage",
+            "duration_ms",
+            "error",
+            "request_bytes",
+            "response_bytes",
+            "request",
+            "response"
+          ]
+        },
+        "HttpExchange": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "call_id": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "ts": {
+              "type": "string"
+            },
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "call_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "method": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "status_text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "duration_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "request_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "response_bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request_headers": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "response_headers": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "request_body": true,
+            "response_body": true
+          },
+          "required": [
+            "id",
+            "call_id",
+            "seq",
+            "ts",
+            "character",
+            "call_type",
+            "rid",
+            "method",
+            "url",
+            "status",
+            "status_text",
+            "duration_ms",
+            "error",
+            "request_bytes",
+            "response_bytes"
+          ]
+        },
+        "CallDiff": {
+          "type": "object",
+          "properties": {
+            "from_payload": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "to_payload": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "from_call": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "to_call": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "source": {
+              "$ref": "#/$defs/CallDiffSource"
+            },
+            "chunks": {
+              "$ref": "#/$defs/PayloadDiffCounts"
+            },
+            "bytes": {
+              "$ref": "#/$defs/PayloadDiffCounts"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PayloadDiffEntry"
+              }
+            }
+          },
+          "required": [
+            "from_payload",
+            "to_payload",
+            "from_call",
+            "to_call",
+            "source",
+            "chunks",
+            "bytes",
+            "entries"
+          ]
+        },
+        "CallDiffSource": {
+          "type": "string",
+          "enum": [
+            "wire",
+            "internal"
+          ]
+        },
+        "PayloadDiffCounts": {
+          "type": "object",
+          "properties": {
+            "equal": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "added": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "removed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "equal",
+            "added",
+            "removed"
+          ]
+        },
+        "PayloadDiffEntry": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "$ref": "#/$defs/PayloadDiffOperation"
+            },
+            "hash": {
+              "type": "string"
+            },
+            "bytes": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "hash",
+            "bytes",
+            "text"
+          ]
+        },
+        "PayloadDiffOperation": {
+          "type": "string",
+          "enum": [
+            "equal",
+            "added",
+            "removed"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "transcript",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TranscriptArgs",
+      "type": "object",
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscriptSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "TranscriptSource": {
+          "type": "string",
+          "enum": [
+            "heartbeat"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TranscriptResult",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/TranscriptSource"
+        },
+        "character": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptRow"
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "source",
+        "entries"
+      ],
+      "$defs": {
+        "TranscriptSource": {
+          "type": "string",
+          "enum": [
+            "heartbeat"
+          ]
+        },
+        "TranscriptRow": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "ts": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "call_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "iteration": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "finish_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "usage": {
+              "$ref": "#/$defs/DiagnosticUsage"
+            },
+            "entry": true
+          },
+          "required": [
+            "id",
+            "ts",
+            "source",
+            "character",
+            "call_type",
+            "iteration",
+            "model",
+            "provider",
+            "finish_reason",
+            "usage",
+            "entry"
+          ]
+        },
+        "DiagnosticUsage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_write_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "subagent_trace",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SubagentTraceArgs",
+      "type": "object",
+      "properties": {
+        "ids": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SubagentTraceResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "requested_ids": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StoredSubagentTrace"
+          }
+        }
+      },
+      "required": [
+        "character",
+        "entries"
+      ],
+      "$defs": {
+        "StoredSubagentTrace": {
+          "type": "object",
+          "properties": {
+            "ts": {
+              "type": "string"
+            },
+            "subagent": {
+              "type": "string"
+            },
+            "parent_tool_use_id": {
+              "type": "string"
+            },
+            "rid": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Message"
+              }
+            },
+            "messages_expired": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "result": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "ts",
+            "subagent",
+            "parent_tool_use_id",
+            "model",
+            "messages"
+          ]
+        },
+        "Message": {
+          "type": "object",
+          "properties": {
+            "msg_id": {
+              "type": "string"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "alt_index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alt_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alternatives": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageAlternative"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "origin": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MessageOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "msg_id",
+            "role",
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "ContentBlock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "thinking": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                }
+              },
+              "required": [
+                "type",
+                "thinking"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "input": true,
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "input"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "redacted_thinking"
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tool_use_id": {
+                  "type": "string"
+                },
+                "content": {
+                  "$ref": "#/$defs/ToolResultContent"
+                },
+                "is_error": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                }
+              },
+              "required": [
+                "type",
+                "tool_use_id",
+                "content"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/InlineImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            }
+          ]
+        },
+        "ToolResultContent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          ]
+        },
+        "InlineImageSource": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/InlineImageEncoding"
+            },
+            "media_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "media_type",
+            "data"
+          ]
+        },
+        "InlineImageEncoding": {
+          "type": "string",
+          "enum": [
+            "base64"
+          ]
+        },
+        "MessageAlternative": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "timestamp": {
+              "type": "string",
+              "default": ""
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "MessageOrigin": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "assistant_reply",
+            "autonomous"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "heartbeat_tick_now",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "HeartbeatControlResult",
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/HeartbeatControlStatus"
+        },
+        "character": {
+          "type": "string"
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "character"
+      ],
+      "$defs": {
+        "HeartbeatControlStatus": {
+          "type": "string",
+          "enum": [
+            "scheduled",
+            "dormant",
+            "active"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "heartbeat_set_dormant",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "HeartbeatControlResult",
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/HeartbeatControlStatus"
+        },
+        "character": {
+          "type": "string"
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "character"
+      ],
+      "$defs": {
+        "HeartbeatControlStatus": {
+          "type": "string",
+          "enum": [
+            "scheduled",
+            "dormant",
+            "active"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "heartbeat_set_active",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "HeartbeatControlResult",
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/HeartbeatControlStatus"
+        },
+        "character": {
+          "type": "string"
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "character"
+      ],
+      "$defs": {
+        "HeartbeatControlStatus": {
+          "type": "string",
+          "enum": [
+            "scheduled",
+            "dormant",
+            "active"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "keepalive_ping_now",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "KeepalivePingResult",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "skipped"
+            }
+          },
+          "$ref": "#/$defs/KeepalivePingSkipped",
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "warm"
+            }
+          },
+          "$ref": "#/$defs/KeepalivePingDetail",
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "cold"
+            }
+          },
+          "$ref": "#/$defs/KeepalivePingDetail",
+          "required": [
+            "status"
+          ]
+        }
+      ],
+      "$defs": {
+        "KeepalivePingSkipped": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "character",
+            "reason"
+          ]
+        },
+        "KeepaliveRequestSource": {
+          "type": "string",
+          "enum": [
+            "cached_last_request",
+            "rebuilt_from_disk"
+          ]
+        },
+        "KeepalivePingDetail": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/KeepaliveRequestSource"
+            },
+            "input_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_creation_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "character",
+            "source",
+            "input_tokens",
+            "cache_read_tokens",
+            "cache_creation_tokens",
+            "note"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "session_activate",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SessionActivated",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "registered": {
+          "type": "boolean"
+        },
+        "keepalive": {
+          "$ref": "#/$defs/KeepaliveActivation"
+        },
+        "heartbeat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActivatedHeartbeat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "registered",
+        "keepalive",
+        "heartbeat"
+      ],
+      "$defs": {
+        "KeepaliveActivation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "unavailable"
+                }
+              },
+              "$ref": "#/$defs/KeepaliveActivationDetail",
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "off"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "resumed"
+                }
+              },
+              "$ref": "#/$defs/ScheduledKeepalivePing",
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "primed"
+                }
+              },
+              "$ref": "#/$defs/PrimedKeepalivePing",
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "skipped"
+                }
+              },
+              "$ref": "#/$defs/KeepaliveActivationDetail",
+              "required": [
+                "status"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "failed"
+                }
+              },
+              "$ref": "#/$defs/KeepaliveActivationDetail",
+              "required": [
+                "status"
+              ]
+            }
+          ]
+        },
+        "KeepaliveActivationDetail": {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "detail"
+          ]
+        },
+        "ScheduledKeepalivePing": {
+          "type": "object",
+          "properties": {
+            "interval_secs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "next_ping_at": {
+              "type": "string"
+            },
+            "seconds_until_ping": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "required": [
+            "interval_secs",
+            "next_ping_at",
+            "seconds_until_ping"
+          ]
+        },
+        "PrimedKeepalivePing": {
+          "type": "object",
+          "properties": {
+            "interval_secs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "next_ping_at": {
+              "type": "string"
+            },
+            "seconds_until_ping": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "input_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "cache_creation_tokens": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "wrote_cache": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "interval_secs",
+            "next_ping_at",
+            "seconds_until_ping",
+            "input_tokens",
+            "cache_read_tokens",
+            "cache_creation_tokens",
+            "wrote_cache"
+          ]
+        },
+        "ActivatedHeartbeat": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/AutonomyHeartbeatState"
+            },
+            "next_wake_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seconds_until_wake": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        "AutonomyHeartbeatState": {
+          "type": "string",
+          "enum": [
+            "Active",
+            "Dormant"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "discover_operations",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -90,7 +2662,8 @@
             "Conversation",
             "Providers",
             "Configuration",
-            "Models"
+            "Models",
+            "Diagnostics"
           ]
         },
         "OperationScope": {
@@ -105,7 +2678,10 @@
         "OperationPrerequisite": {
           "type": "string",
           "enum": [
-            "threads"
+            "threads",
+            "autonomy",
+            "keepalive",
+            "session_activation"
           ]
         },
         "OperationEffect": {
@@ -117,7 +2693,9 @@
             "selection",
             "model_selection",
             "provider_discovery",
-            "config_write"
+            "config_write",
+            "runtime_write",
+            "provider_call"
           ]
         },
         "OperationConfirmation": {

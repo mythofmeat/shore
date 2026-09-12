@@ -451,16 +451,53 @@ preference-key and model preservation, absent versus cleared settings, all scope
 coercion, legacy replay booleans and wire ordering. The existing independent captures were not regenerated.
 Full application parity, GitHub CI execution and required merge gates remain unfinished.
 
+### Diagnostic inspection and runtime controls
+
+Eleven diagnostic operations now use the canonical Rust contracts and executable registry:
+`status`, `error_log`, `heartbeat_log`, `call_log`, `transcript`, `subagent_trace`,
+`heartbeat_tick_now`, `heartbeat_set_dormant`, `heartbeat_set_active`, `keepalive_ping_now`
+and `session_activate`. There are 48 registered operations and eight legacy names remaining.
+Inputs preserve nullable optional filters, signed call IDs and zero-count semantics. Call inspection,
+index health, stored traces, diagnostic rings and runtime outcomes have concrete result types.
+Captured provider/transcript bodies retain their original open payloads. Status sections can name
+future fields, which remain available in the original result. Runtime prerequisites and provider-call
+effects come from the registry. Signed integer validation rejects IDs outside JavaScript's safe range.
+
+The Diagnostics panel provides status sections, call filtering and ID lookup, full wire captures,
+previous/explicit call comparisons, heartbeat and memory-recall transcripts, heartbeat events,
+errors and key fallbacks, and stored subagent runs with parent-ID filtering and retained expiry
+metadata. Readable results keep a complete JSON inspector; every inspector now offers a JSON
+download. Runtime controls activate sessions, schedule heartbeats, change active/dormant state
+and send keepalive pings. Availability follows the live catalogue; failures retain filters and the
+last inspected call. Zero means all matching stored calls/transcripts/subagents, while zero recent
+entries returns none from diagnostic rings and heartbeat logs.
+
+CLI status/trace/debug mappings use canonical inputs. Both terminal renderers now derive registered
+result validation from the canonical catalogue, so adding an operation also enables validation in
+the generic terminal path. Real CLI and pseudo-terminal journeys exercise full wire/diff arguments,
+transcript sources, status JSON, runtime outcomes, malformed results and scrolling through complete
+raw results. An independent-world TCP/WebSocket journey compares all eleven operations, filtered
+captures, errors, correlated completion and resulting heartbeat state. The browser journey covers
+onboarding availability, empty and unlimited filters, safe rendering of HTML-like capture text,
+redacted wire-header downloads, future payload fields, comparison errors and recovery, expired
+subagent messages, all runtime controls and mobile layout. A broader payload/redaction audit and
+reconnect/concurrency/cancellation coverage remain part of the unfinished issue.
+
+Diagnostic validation passed all required daemon checks with 8,229 tests, the three required Rust
+checks, all six browser journeys, and browser-generation/inventory checks. Five affected mutation
+passes killed 133 mutants; all 57 staleness passes are current. Independent legacy captures remain
+unchanged. GitHub CI execution and required merge gates remain unverified.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the 19 legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the eight legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
-4. Close the remaining advanced workflows: diagnostics and raw data, usage exports,
+4. Close the remaining advanced workflows: expanded diagnostics coverage, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and
