@@ -1,0 +1,218 @@
+{
+  "format": 1,
+  "operations": {
+    "alt": [
+      "runCommand"
+    ],
+    "archive_thread": [
+      "runCommand"
+    ],
+    "call_log": [
+      "runCommand"
+    ],
+    "character_info": [
+      "runCommand"
+    ],
+    "clear": [
+      "runCommand"
+    ],
+    "compact": [
+      "runCommand"
+    ],
+    "config": [
+      "runCommand"
+    ],
+    "config_check": [
+      "runCommand"
+    ],
+    "config_reload": [
+      "runCommand"
+    ],
+    "config_schema": [
+      "runCommand"
+    ],
+    "create_character": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "create_thread": [
+      "runCommand"
+    ],
+    "delete": [
+      "runCommand"
+    ],
+    "delete_character": [
+      "runCharacterlessCommand"
+    ],
+    "edit": [
+      "runCommand"
+    ],
+    "error_log": [
+      "runCommand"
+    ],
+    "export_character": [
+      "runCharacterlessCommand"
+    ],
+    "favorite_model": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "fork_thread": [
+      "runCommand"
+    ],
+    "get": [
+      "runCommand"
+    ],
+    "heartbeat_log": [
+      "runCommand"
+    ],
+    "heartbeat_set_active": [
+      "runCommand"
+    ],
+    "heartbeat_set_dormant": [
+      "runCommand"
+    ],
+    "heartbeat_tick_now": [
+      "runCommand"
+    ],
+    "history_page": [
+      "runCommand"
+    ],
+    "import_character": [
+      "runCharacterlessCommand"
+    ],
+    "inject_system": [
+      "runCommand"
+    ],
+    "keepalive_ping_now": [
+      "runCommand"
+    ],
+    "list_alternatives": [
+      "runCommand"
+    ],
+    "list_characters": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "list_models": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "list_provider_models": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "list_providers": [
+      "runCommand",
+      "runCharacterlessCommand"
+    ],
+    "list_threads": [
+      "runCommand"
+    ],
+    "log": [
+      "runCommand"
+    ],
+    "model_info": [
+      "runCommand"
+    ],
+    "model_settings": [
+      "runCommand"
+    ],
+    "refresh_all_provider_models": [
+      "runCommand"
+    ],
+    "refresh_provider_models": [
+      "runCommand"
+    ],
+    "reset_model": [
+      "runCommand"
+    ],
+    "run_tool": [
+      "runCommand"
+    ],
+    "segments": [
+      "runCommand"
+    ],
+    "session_activate": [
+      "runCommand"
+    ],
+    "set_model_setting": [
+      "runCommand"
+    ],
+    "status": [
+      "runCommand"
+    ],
+    "subagent_trace": [
+      "runCommand"
+    ],
+    "switch_character": [
+      "runCommand"
+    ],
+    "switch_model": [
+      "runCommand"
+    ],
+    "switch_thread": [
+      "runCommand"
+    ],
+    "thread_home": [
+      "runCommand"
+    ],
+    "thread_label": [
+      "runCommand"
+    ],
+    "thread_model": [
+      "runCommand"
+    ],
+    "tools": [
+      "runCommand"
+    ],
+    "transcript": [
+      "runCommand"
+    ],
+    "usage": [
+      "runCommand"
+    ]
+  },
+  "protocol": {
+    "CacheWarning": "{ expected_tokens: number, message: string, }",
+    "Cancel": "Record<symbol, never>",
+    "CharacterAvatar": "{ mime_type: string, data: string, }",
+    "CharacterInfo": "{ name: string, avatar?: CharacterAvatar | null, }",
+    "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, token?: string | null, }",
+    "ClientMessage": "{ \"type\": \"hello\" } & ClientHello | { \"type\": \"message\" } & ClientMessageBody | { \"type\": \"regen\" } & Regen | { \"type\": \"command\" } & Command | { \"type\": \"cancel\" } & Cancel",
+    "ClientMessageBody": "{ rid?: string | null, text: string, stream: boolean, images: Array<string>, image_data?: Array<ImageUpload>, absence_seconds?: number, }",
+    "Command": "{ rid?: string | null, name: string, args: unknown, }",
+    "CommandOutput": "{ rid?: string | null, name: string, data: unknown, }",
+    "ConfigWarning": "{ rid?: string | null, path: string, character?: string | null, message: string, }",
+    "ContentBlock": "{ \"type\": \"text\", text: string, } | { \"type\": \"thinking\", thinking: string, signature?: string | null, } | { \"type\": \"tool_use\", id: string, name: string, input: unknown, } | { \"type\": \"redacted_thinking\", data: string, } | { \"type\": \"tool_result\", tool_use_id: string, content: string, is_error: boolean, }",
+    "Error": "{ rid?: string | null, code: ErrorCode, message: string, retry_after_ms?: number | null, }",
+    "ErrorCode": "\"protocol_error\" | \"invalid_request\" | \"not_found\" | \"busy\" | \"provider_error\" | \"timeout\" | \"internal_error\" | \"unauthorized\"",
+    "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, active_start?: number, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
+    "HistoryDelta": "{ base_revision: number, after: string | null, }",
+    "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
+    "ImageUpload": "{ filename: string, data: string, mime_type?: string | null, }",
+    "Message": "{ msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "MessageAlternative": "{ content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, timestamp: string, provider_key?: string | null, model?: string | null, }",
+    "MessageOrigin": "\"user_input\" | \"assistant_reply\" | \"autonomous\"",
+    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
+    "Ping": "Record<symbol, never>",
+    "ProviderFallbackWarning": "{ rid?: string | null, provider: string, from_key: string, to_key: string, kind: string, status?: number | null, message: string, }",
+    "ProviderWarning": "{ rid?: string | null, message: string, }",
+    "Regen": "{ rid?: string | null, stream: boolean, guidance?: string | null, }",
+    "Role": "\"user\" | \"assistant\" | \"system\"",
+    "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
+    "ServerHello": "{ v: number, server_name: string, characters: Array<CharacterInfo>, }",
+    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning",
+    "Shutdown": "Record<symbol, never>",
+    "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
+    "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
+    "StreamMetadata": "{ tokens: TokenCounts, timing: TimingInfo, model: string, }",
+    "StreamStart": "{ rid?: string | null, regen: boolean, subagent?: string | null, task_id?: string | null, }",
+    "TimingInfo": "{ total_ms: number, ttft_ms: number, }",
+    "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",
+    "ToolCall": "{ rid?: string | null, tool_id: string, tool_name: string, input: unknown, subagent?: string | null, task_id?: string | null, }",
+    "ToolResult": "{ rid?: string | null, tool_id: string, tool_name: string, output: string, is_error: boolean, subagent?: string | null, task_id?: string | null, }",
+    "UsageWarning": "{ rid?: string | null, budget: string, message: string, current_cost: number, cost_limit: number, percent_used: number, crossed_warn_at: Array<number>, period: string, period_start: string, reset_at: string, reset_at_display: string, scope?: string | null, }"
+  }
+}

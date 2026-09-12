@@ -1,5 +1,7 @@
 mod ansi;
 mod app;
+#[cfg(test)]
+mod capability_inventory;
 mod clipboard;
 mod command_output;
 mod connection;
