@@ -203,6 +203,155 @@ describe("what the peer sends", () => {
 });
 
 describe("what the peer receives", () => {
+  test("a slow peer is detached on queue overflow without affecting another peer", async () => {
+    const { server, routed } = await fixture(["ada"]);
+    let overflow = 0;
+    const slow = await server.attachLocal({
+      clientType: "browser", clientName: "slow",
+      outboundLimits: { messages: 2, bytes: 4096, onOverflow: () => { overflow += 1; } },
+    });
+    const other = await server.attachLocal({ clientType: "browser", clientName: "other" });
+    for (let i = 0; i < 10; i += 1) {
+      await server.sessionRouter.sendToSession(slow.session.sessionId, {
+        type: "command_output", name: "status", data: { sequence: i },
+      });
+    }
+    await slow.detach();
+    expect(overflow).toBe(1);
+    expect(server.sessionRouter.has(slow.session.sessionId)).toBe(false);
+    expect(server.sessionRouter.has(other.session.sessionId)).toBe(true);
+    expect(await slow.events().next()).toMatchObject({ done: true });
+    expect(slow.send({ type: "command", name: "status", args: {} })).rejects.toThrow("detached");
+    await settle();
+    expect(routed).toEqual([{ kind: "session_disconnected", sessionId: slow.session.sessionId }]);
+    const otherEvents = other.events();
+    await otherEvents.next();
+    await server.sessionRouter.sendToSession(other.session.sessionId, { type: "ping" });
+    expect((await otherEvents.next()).value).toEqual({ type: "ping" });
+  });
+
+  test("the byte limit counts UTF-8 bytes and a drained inbox releases its allowance", async () => {
+    const { server } = await fixture(["ada"]);
+    let overflow = 0;
+    const peer = await server.attachLocal({
+      clientType: "browser", clientName: "bounded",
+      outboundLimits: { messages: 8, bytes: 300, onOverflow: () => { overflow += 1; } },
+    });
+    const events = peer.events();
+    await events.next();
+    const message = { type: "command_output" as const, name: "status", data: "x".repeat(240) };
+    for (let i = 0; i < 3; i += 1) {
+      await server.sessionRouter.sendToSession(peer.session.sessionId, message);
+      expect((await events.next()).value).toEqual(message);
+    }
+    expect(overflow).toBe(0);
+    await server.sessionRouter.sendToSession(peer.session.sessionId, { ...message, data: "🦀".repeat(100) });
+    await peer.detach();
+    expect(overflow).toBe(1);
+    expect(await events.next()).toMatchObject({ done: true });
+  });
+
+  test("an oversized first history cannot leave an attached session", async () => {
+    const { server, routed } = await fixture(["ada"]);
+    let overflow = 0;
+    const peer = await server.attachLocal({
+      clientType: "browser", clientName: "tiny",
+      outboundLimits: { messages: 1, bytes: 1, onOverflow: () => { overflow += 1; } },
+    });
+    await peer.detach();
+    expect(overflow).toBe(1);
+    expect(server.sessionRouter.sessions()).toEqual([]);
+    expect(await peer.events().next()).toMatchObject({ done: true });
+    await settle();
+    expect(routed).toEqual([
+      { kind: "session_disconnected", sessionId: peer.session.sessionId },
+      { kind: "all_clients_disconnected" },
+    ]);
+  });
+
+  test("overflow in the broadcast relay detaches instead of silently skipping state", async () => {
+    const { server } = await fixture(["ada"]);
+    let overflow = 0;
+    const peer = await server.attachLocal({
+      clientType: "browser", clientName: "lagged",
+      outboundLimits: { messages: 2, bytes: 300, onOverflow: () => { overflow += 1; } },
+    });
+    const events = peer.events();
+    await events.next();
+    server.broadcast({ type: "cache_warning", expected_tokens: 100, message: "🦀".repeat(100) });
+    expect(await events.next()).toMatchObject({ done: true });
+    await peer.detach();
+    expect(overflow).toBe(1);
+    expect(server.sessionRouter.sessions()).toEqual([]);
+  });
+
+  test("shutdown does not wait for a stalled history refresh", async () => {
+    const { server } = await fixture(["ada"]);
+    const held = new Promise<void>(() => {});
+    let refreshing: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => { refreshing = resolve; });
+    let calls = 0;
+    server.setHandshakeProvider({
+      hello: async () => ({ characters: [{ name: "ada" }] }),
+      history: async () => {
+        calls += 1;
+        if (calls > 1) {
+          refreshing?.();
+          await held;
+        }
+        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+      },
+    });
+    const peer = await server.attachLocal({ clientType: "bridge", clientName: "refreshing" });
+    const events = peer.events();
+    await events.next();
+    server.broadcast({
+      type: "history", messages: [], active_start: 0, config: {}, revision: 1,
+      selected_character: "ada", selected_thread: "main", delta: { base_revision: 0, after: null },
+    });
+    await started;
+    server.stop();
+    await peer.detach();
+    expect(await events.next()).toMatchObject({ done: true });
+    expect(server.sessionRouter.sessions()).toEqual([]);
+  });
+
+  test("aborting while history loads prevents a late session attachment", async () => {
+    const { server } = await fixture(["ada"]);
+    const controller = new AbortController();
+    const held = new Promise<void>(() => {});
+    let historyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => { historyStarted = resolve; });
+    server.setHandshakeProvider({
+      hello: async () => ({ characters: [{ name: "ada" }] }),
+      history: async () => {
+        historyStarted?.();
+        await held;
+        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+      },
+    });
+    const attaching = server.attachLocal({ clientType: "browser", clientName: "cancelled", signal: controller.signal });
+    await started;
+    controller.abort(new Error("tab closed"));
+    expect(attaching).rejects.toThrow("tab closed");
+    expect(server.sessionRouter.sessions()).toEqual([]);
+  });
+
+  test("abort and shutdown each detach sessions and prevent subsequent routing", async () => {
+    const { server } = await fixture(["ada"]);
+    const controller = new AbortController();
+    const aborted = await server.attachLocal({ clientType: "browser", clientName: "aborted", signal: controller.signal });
+    const stopped = await server.attachLocal({ clientType: "browser", clientName: "stopped" });
+    controller.abort();
+    await aborted.detach();
+    expect(server.sessionRouter.has(aborted.session.sessionId)).toBe(false);
+    server.stop();
+    await settle();
+    expect(server.sessionRouter.sessions()).toEqual([]);
+    expect(await stopped.events().next()).toMatchObject({ done: true });
+    expect(server.attachLocal({ clientType: "browser", clientName: "late" })).rejects.toThrow("stopping");
+  });
+
   test("broadcasts arrive, and so do frames addressed to its session alone", async () => {
     const { server } = await fixture(["ada"]);
     const peer = await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });

@@ -85,6 +85,33 @@ dispatch and navigation mutation passes killed every applicable mutant after ret
 handler registrations; all 54 mutation passes have no stale patterns. Local logs remain in
 `out/issue-214/`. GitHub execution and merge-policy enforcement are still unverified.
 
+### Bounded local peer lifecycle
+
+The existing `Server.attachLocal` path now accepts optional outgoing message/UTF-8 byte budgets and
+an abort signal. Both its broadcast subscription and direct-reply inbox apply those budgets. A
+bounded peer that overflows either stage detaches and reports overflow; it cannot continue after
+silently losing state. Drained frames release their byte allowance, and detachment discards queued
+frames. Other peers remain attached. Existing connectors retain their default queue configuration.
+
+Server shutdown also detaches local peers. Attach and legacy full-history refresh waits observe
+cancellation, so a closed tab cannot create a late session and a stalled history load cannot hold
+shutdown open. Sending after detachment fails. Tests exercise these races through the actual local
+peer/session router, including oversized initial history and stalled refreshes.
+
+This is a prerequisite for the browser adapter; it does not add a web listener or authentication.
+The next transport layer must authenticate before calling `attachLocal`, constrain origins and
+admission, enforce WebSocket buffering separately, and expose an explicit reconnect/reload path.
+The installed Bun 1.4.2 types and matching [WebSocket documentation](https://bun.com/docs/runtime/http/websockets)
+provide native payload, backpressure and connection lifecycle controls; use those controls alongside
+the bounded in-process peer rather than relying on a browser socket to bound upstream queues.
+
+Lifecycle validation: all eight required daemon checks passed with 8,133 tests, including the
+existing TCP and Matrix suites. The server mutation pass kills all eleven mutants, including a
+new real-socket disconnect-during-history test that catches a stale session or handler error.
+All Rust workspace tests, formatting and Clippy passed after a
+checked-JSON-access correction in the new correlation test. The contract commit was amended with
+that correction. No generated contract changes were needed for the local-peer lifecycle work.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,

@@ -1,5 +1,6 @@
 import { contentForClient } from "./content_projection.ts";
 import { HistoryMediaDelivery } from "./history_media.ts";
+import { abortRejection } from "../llm/abort.ts";
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
 import type { CharacterInfo } from "../protocol/CharacterInfo";
@@ -79,6 +80,12 @@ export interface LocalClientOptions {
   readonly character?: string | undefined;
   readonly thread?: string | undefined;
   readonly onLag?: (skipped: number) => void;
+  readonly signal?: AbortSignal;
+  readonly outboundLimits?: {
+    readonly messages: number;
+    readonly bytes: number;
+    readonly onOverflow: () => void;
+  };
 }
 
 export interface LocalPeer {
@@ -90,20 +97,52 @@ export interface LocalPeer {
   detach(): Promise<void>;
 }
 
+async function whileAttached<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  const rejection = abortRejection(signal);
+  try {
+    return await Promise.race([work, rejection.promise]);
+  } catch (error) {
+    signal.throwIfAborted();
+    throw error;
+  } finally {
+    rejection.dispose();
+  }
+}
+
 class Inbox {
-  readonly #queue: ServerMessage[] = [];
+  readonly #queue: { message: ServerMessage; bytes: number }[] = [];
+  readonly #limits: LocalClientOptions["outboundLimits"];
+  #bytes = 0;
   #wake: (() => void) | null = null;
   #closed = false;
 
-  push(msg: ServerMessage): void {
-    this.#queue.push(msg);
+  constructor(limits: LocalClientOptions["outboundLimits"]) {
+    this.#limits = limits;
+  }
+
+  push(msg: ServerMessage): boolean {
+    if (this.#closed) return true;
+    const bytes = this.#limits === undefined ? 0 : Buffer.byteLength(JSON.stringify(msg));
+    if (this.#limits !== undefined &&
+      (this.#queue.length >= this.#limits.messages || this.#bytes + bytes > this.#limits.bytes)) {
+      this.close(true);
+      return false;
+    }
+    this.#queue.push({ message: msg, bytes });
+    this.#bytes += bytes;
     const wake = this.#wake;
     this.#wake = null;
     wake?.();
+    return true;
   }
 
-  close(): void {
+  close(discard = false): void {
     this.#closed = true;
+    if (discard) {
+      this.#queue.length = 0;
+      this.#bytes = 0;
+    }
     const wake = this.#wake;
     this.#wake = null;
     wake?.();
@@ -113,7 +152,8 @@ class Inbox {
     for (;;) {
       const next = this.#queue.shift();
       if (next !== undefined) {
-        yield next;
+        this.#bytes -= next.bytes;
+        yield next.message;
         continue;
       }
       if (this.#closed) return;
@@ -130,6 +170,9 @@ export class Server {
   readonly #events = new Broadcast();
   readonly #routes = new RouteQueue();
   readonly #connections = new Set<Promise<void>>();
+  readonly #localPeers = new Set<() => Promise<void>>();
+  #stopped = false;
+  readonly #stopController = new AbortController();
   #handshake: HandshakeProvider | undefined;
   #controlHandler: ((msg: ControlRoutedMessage) => Promise<void>) | undefined;
   #nextId = 1;
@@ -171,13 +214,27 @@ export class Server {
   }
 
   async attachLocal(options: LocalClientOptions): Promise<LocalPeer> {
+    options.signal?.throwIfAborted();
+    if (this.#stopped) throw new Error("Server is stopping");
+    const limits = options.outboundLimits;
+    if (limits !== undefined && (!Number.isSafeInteger(limits.messages) || limits.messages < 1 ||
+      !Number.isSafeInteger(limits.bytes) || limits.bytes < 1)) {
+      throw new Error("Local outbound limits must be positive safe integers");
+    }
+    const lifecycle = new AbortController();
+    const signal = AbortSignal.any([
+      this.#stopController.signal, lifecycle.signal,
+      ...(options.signal === undefined ? [] : [options.signal]),
+    ]);
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
-    const hello = await provider.hello();
+    const hello = await whileAttached(provider.hello(), signal);
     const requested = options.character ?? null;
-    const history = await provider.history(
+    const history = await whileAttached(provider.history(
       resolveHandshakeCharacter(requested, hello.characters),
       options.thread ?? null,
-    );
+    ), signal);
+    signal.throwIfAborted();
+    if (this.#stopped) throw new Error("Server is stopping");
 
     const clientId = this.#nextId;
     this.#nextId += 1;
@@ -191,25 +248,67 @@ export class Server {
       thread: history.selectedThread,
     };
 
-    const inbox = new Inbox();
+    const inbox = new Inbox(limits);
     const media = new HistoryMediaDelivery();
+    const subscription = this.#events.subscribe(limits);
+    let detached = false;
+    let detachment: Promise<void> | undefined;
+    let relay: Promise<void> = Promise.resolve();
+    const detach = (): Promise<void> => {
+      if (detachment !== undefined) return detachment;
+      detached = true;
+      signal.removeEventListener("abort", aborted);
+      lifecycle.abort();
+      inbox.close(true);
+      subscription.unsubscribe();
+      const { allGone } = this.#router.unregisterSession(clientId);
+      this.#config.log?.info?.("Local client detached", { client_id: clientId });
+      detachment = (async () => {
+        try {
+          await this.#route({ kind: "session_disconnected", sessionId: clientId });
+          if (allGone) await this.#route({ kind: "all_clients_disconnected" });
+          await relay;
+        } finally {
+          this.#localPeers.delete(detach);
+        }
+      })();
+      return detachment;
+    };
+    const aborted = (): void => {
+      void detach().catch((error: unknown) => {
+        this.#config.log?.warn?.("Local client cleanup failed", { client_id: clientId, error: String(error) });
+      });
+    };
+    const deliver = (msg: ServerMessage): void => {
+      if (detached) return;
+      if (!inbox.push(media.prepare(contentForClient(msg, capabilities)))) {
+        aborted();
+        limits?.onOverflow();
+      }
+    };
     this.#router.registerSession(client, (msg) => {
-      inbox.push(media.prepare(contentForClient(msg, capabilities)));
+      deliver(msg);
       return Promise.resolve();
     });
-    inbox.push(media.prepare(contentForClient(historyMessage(history), capabilities)));
+    this.#localPeers.add(detach);
+    signal.addEventListener("abort", aborted, { once: true });
+    deliver(historyMessage(history));
 
-    const subscription = this.#events.subscribe();
-    const relay = (async () => {
+    relay = (async () => {
       for (;;) {
         const result = await subscription.recv();
-        if (result.kind === "closed") break;
+        if (detached || result.kind === "closed") break;
         if (result.kind === "lagged") {
           options.onLag?.(result.skipped);
           this.#config.log?.warn?.("Local client lagged on broadcast", {
             client_id: clientId,
             skipped: result.skipped,
           });
+          if (limits !== undefined) {
+            aborted();
+            limits.onOverflow();
+            break;
+          }
           continue;
         }
         if (
@@ -222,31 +321,34 @@ export class Server {
           )
         ) {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
-            ? historyMessage(await provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
+            ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;
-          inbox.push(media.prepare(contentForClient(message, capabilities)));
+          deliver(message);
         }
       }
       inbox.close();
-    })();
+    })().catch((error: unknown) => {
+      if (!detached) this.#config.log?.warn?.("Local client event relay failed", { client_id: clientId, error: String(error) });
+      aborted();
+    });
 
     this.#config.log?.info?.("Local client attached", {
       client_id: clientId,
       client_name: options.clientName,
     });
 
-    let detached = false;
     return {
       session: sessionMetaOf(client),
       characters: hello.characters,
       history,
       send: async (msg) => {
+        if (detached) throw new Error("Local peer is detached");
         let admitted: ClientMessage;
         try {
           admitted = admitClientMessage(msg);
         } catch (e) {
           if (!(e instanceof AdmissionError)) throw e;
-          inbox.push({ type: "error", code: "invalid_request", message: e.message });
+          deliver({ type: "error", code: "invalid_request", message: e.message });
           return;
         }
         const outcome = routeClientMessage(
@@ -254,20 +356,11 @@ export class Server {
           sessionMetaOf(client),
           this.#router.characterFor(clientId),
         );
-        if (outcome.action === "reply") inbox.push(outcome.reply);
+        if (outcome.action === "reply") deliver(outcome.reply);
         else await this.#route(outcome.routed);
       },
       events: () => inbox.drain(),
-      detach: async () => {
-        if (detached) return;
-        detached = true;
-        subscription.unsubscribe();
-        const { allGone } = this.#router.unregisterSession(clientId);
-        this.#config.log?.info?.("Local client detached", { client_id: clientId });
-        await this.#route({ kind: "session_disconnected", sessionId: clientId });
-        if (allGone) await this.#route({ kind: "all_clients_disconnected" });
-        await relay;
-      },
+      detach,
     };
   }
 
@@ -310,6 +403,7 @@ export class Server {
     await this.#shutdownSignal;
 
     this.#config.log?.info?.("Server shutting down");
+    await Promise.allSettled([...this.#localPeers].map((detach) => detach()));
 
     await new Promise<void>((resolve) => {
       listener.close(() => resolve());
@@ -320,6 +414,8 @@ export class Server {
   }
 
   stop(): void {
+    this.#stopped = true;
+    this.#stopController.abort();
     this.#shutdown();
   }
 

@@ -8,24 +8,36 @@ export type RecvResult =
   | { readonly kind: "closed" };
 
 export class Subscription {
-  readonly #queue: ServerMessage[] = [];
+  readonly #queue: { message: ServerMessage; bytes: number }[] = [];
   readonly #capacity: number;
+  readonly #byteLimit: number | undefined;
+  #bytes = 0;
   #skipped = 0;
   #closed = false;
   #wake: (() => void) | null = null;
   #detach: (() => void) | null = null;
 
-  constructor(capacity: number, detach: () => void) {
+  constructor(capacity: number, detach: () => void, byteLimit?: number) {
     this.#capacity = capacity;
     this.#detach = detach;
+    this.#byteLimit = byteLimit;
   }
 
   push(msg: ServerMessage): void {
-    if (this.#queue.length >= this.#capacity) {
-      this.#queue.shift();
+    if (this.#closed) return;
+    const bytes = this.#byteLimit === undefined ? 0 : Buffer.byteLength(JSON.stringify(msg));
+    while (this.#queue.length > 0 &&
+      (this.#queue.length >= this.#capacity || this.#bytes + bytes > (this.#byteLimit ?? Infinity))) {
+      const removed = this.#queue.shift();
+      this.#bytes -= removed?.bytes ?? 0;
       this.#skipped += 1;
     }
-    this.#queue.push(msg);
+    if (bytes > (this.#byteLimit ?? Infinity)) {
+      this.#skipped += 1;
+    } else {
+      this.#queue.push({ message: msg, bytes });
+      this.#bytes += bytes;
+    }
     this.#signal();
   }
 
@@ -48,7 +60,10 @@ export class Subscription {
         return { kind: "lagged", skipped };
       }
       const next = this.#queue.shift();
-      if (next !== undefined) return { kind: "message", msg: next };
+      if (next !== undefined) {
+        this.#bytes -= next.bytes;
+        return { kind: "message", msg: next.message };
+      }
       if (this.#closed) return { kind: "closed" };
       await new Promise<void>((resolve) => {
         this.#wake = resolve;
@@ -59,6 +74,9 @@ export class Subscription {
   unsubscribe(): void {
     this.#detach?.();
     this.#detach = null;
+    this.#queue.length = 0;
+    this.#bytes = 0;
+    this.#skipped = 0;
     this.close();
   }
 }
@@ -72,10 +90,10 @@ export class Broadcast {
     this.#capacity = capacity;
   }
 
-  subscribe(): Subscription {
-    const sub: Subscription = new Subscription(this.#capacity, () => {
+  subscribe(limits?: { messages: number; bytes: number }): Subscription {
+    const sub: Subscription = new Subscription(Math.min(this.#capacity, limits?.messages ?? this.#capacity), () => {
       this.#subscribers.delete(sub);
-    });
+    }, limits?.bytes);
     this.#subscribers.add(sub);
     if (this.#closed) sub.close();
     return sub;
