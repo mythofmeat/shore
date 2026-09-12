@@ -31,6 +31,8 @@ import type { BrowserRequest } from "../src/browser/connection.ts";
 import { segments } from "../src/commands/segments.ts";
 import { characterMemoryDir, characterWorkspaceDir } from "../src/config/dirs.ts";
 import { toolFixture } from "./support/tool_fixture.ts";
+import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "./support/usage_fixture.ts";
+import { ledgerFor } from "../src/ledger/record.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
@@ -242,6 +244,61 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("usage agrees across independent TCP and browser sessions without changing the ledger", async () => {
+    const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown> }[] = [
+      { args: {}, check: { mode: "summary", period: "budget", summary: [{ total_cost: 3.5, call_count: 2 }, { total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "all" }, check: { mode: "summary", summary: [{ total_cost: 12.5, call_count: 3 }, { total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "all", character: "nova", provider: "anthropic", api_key: "default", model: "usage-model-a", call_type: "message" }, check: { summary: [{ total_cost: 3.5, call_count: 1 }] } },
+      { args: { last: "all", api_key: "unknown" }, check: { summary: [{ provider: "openai", total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "0h" }, check: { summary: [] } },
+      { args: { last: null, character: null, provider: null, api_key: null, model: null, call_type: null, group_by: null, budget: false, anomalies: false, export_csv: false, export_tsv: false }, check: { mode: "summary" } },
+      ...["model", "provider", "call_type", "kind", "api_key", "cost_source"].map((dimension) => ({ args: { last: "all", group_by: dimension }, check: { mode: "summary_by", dimension } })),
+      { args: { budget: true, character: "nobody", export_tsv: true }, check: { mode: "budget", budgets: [{ name: "Nova monthly", over_limit: true }] } },
+      { args: { last: "all", export_csv: true, export_tsv: true, group_by: "model", anomalies: true }, check: { mode: "tsv" } },
+      { args: { last: "all", export_csv: true, group_by: "model", anomalies: true }, check: { mode: "csv" } },
+      { args: { last: "today", anomalies: true }, check: { mode: "anomalies", anomalies: [{ anomaly: "unexpected_write", character: "nova" }] } },
+      { args: { last: "all", anomalies: true, character: "nobody" }, check: { mode: "anomalies", anomalies: [] } },
+      { args: { last: "all", character: "nobody" }, check: { mode: "summary", summary: [] } },
+      ...[{ last: "invalid-period" }, { group_by: "character" }, { budget: "true" }, { last: 3 }].map((args) => ({ args, error: true })),
+    ];
+    const outcomes: unknown[][] = [];
+    const ts = new Date(Date.now() - 1000).toISOString();
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n${USAGE_FIXTURE_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+      const daemon = await start(place, [], {}, false);
+      await seedUsageFixture(daemon.runtime, ts);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, null, ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: null, thread: null }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      const db = required(ledgerFor(join(daemon.runtime.registry.globalConfig().dirs.data, "shore.db"))).database;
+      const snapshot = () => ({ calls: db.query("SELECT * FROM calls ORDER BY id").all(), attempts: db.query("SELECT * FROM call_attempts ORDER BY id").all(), warnings: db.query("SELECT * FROM usage_budget_warnings").all() });
+      const before = snapshot();
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Usage browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `usage-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: "usage", args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} usage step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished")).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.error !== true) expect(validOperationResult("usage", output?.["data"])).toBe(true);
+          if (step.check !== undefined) expect(output, `${transport} ${String(index)}`).toMatchObject({ data: step.check });
+          expect(snapshot()).toEqual(before);
+          results.push(JSON.parse(JSON.stringify(observed).replaceAll(rid, `usage-${String(index)}`)) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
   test("manual tools agree across independent TCP and browser workspaces, schemas and nested results", async () => {
     const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown>; file: string | null }[] = [
       { args: { tool: "bash", describe: true }, check: { mode: "tool_definition", enabled: false }, file: null },

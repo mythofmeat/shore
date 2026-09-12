@@ -4,6 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 
 import { usage, type UsageContext } from "../src/commands/usage.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { parseOperationResult } from "../src/operations/contracts.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
 import { PRICING_TTL_MS } from "../src/ledger/store.ts";
@@ -81,6 +82,21 @@ const TINY: UsageConfig = {
   budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1.0], limit: "warn" }],
 };
 
+test("real usage reports satisfy every canonical result variant and retain mode precedence", async () => {
+  const ledger = ledgerWithOneCall();
+  for (const [args, mode] of [
+    [{ last: "all" }, "summary"],
+    [{ budget: true, export_tsv: true, export_csv: true, group_by: "model", anomalies: true }, "budget"],
+    [{ export_tsv: true, export_csv: true, group_by: "model", anomalies: true }, "tsv"],
+    [{ export_csv: true, group_by: "model", anomalies: true }, "csv"],
+    [{ group_by: "model", anomalies: true }, "summary_by"],
+    [{ anomalies: true }, "anomalies"],
+  ] as const) {
+    const report = parseOperationResult("usage", await usage(ctxFor(ledger, TINY), args));
+    expect(report.mode).toBe(mode);
+  }
+});
+
 test("a price older than the ttl is not served, so the next call refetches it", () => {
   const ledger = ledgerWithOneCall();
   priceInStore(ledger, 0.00001);
@@ -117,6 +133,21 @@ test("the args reach the report unreshaped", async () => {
     summary: unknown[];
   };
   expect(empty.summary, "a filter the command dropped would answer with the row").toEqual([]);
+});
+
+test("API key name filters distinguish configured names, missing names and older records", async () => {
+  const ledger = ledgerWithOneCall();
+  for (const [key, expected] of [["default", 1], ["missing", 0], ["unknown", 0]] as const) {
+    const report = await usage(ctxFor(ledger), { last: "all", api_key: key });
+    if (report.mode !== "summary") throw new Error("Expected usage summary");
+    expect(report.summary.reduce((sum, row) => sum + row.call_count, 0)).toBe(expected);
+  }
+  required(ledgerFor(ledger)).database.run("UPDATE calls SET api_key_name = NULL");
+  for (const [key, expected] of [["default", 0], ["unknown", 1]] as const) {
+    const report = await usage(ctxFor(ledger), { last: "all", api_key: key });
+    if (report.mode !== "summary") throw new Error("Expected usage summary");
+    expect(report.summary.reduce((sum, row) => sum + row.call_count, 0)).toBe(expected);
+  }
 });
 
 test("the session's usage config reaches the report", async () => {
@@ -164,7 +195,7 @@ test("a period the parser does not know is the caller's mistake, not shore's", a
 
 test("the call store's rate-limit readings reach the report", async () => {
   const ledger = ledgerWithOneCall();
-  const reading = { host: "api.anthropic.com", limit: 1000, remaining: 12 };
+  const reading = { host: "api.anthropic.com", observed_at: "2026-09-01T12:00:00Z", requests_limit: 1000, requests_remaining: 12 };
   const store = { latestRateLimits: () => [reading] } as never;
 
   const withStore = (await usage({ ledger, usage: {}, callStore: store }, {})) as {

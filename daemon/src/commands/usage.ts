@@ -2,7 +2,8 @@ import type { CallStore } from "../call_store.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
 import { usageReport, UsageArgumentError } from "../ledger/usage.ts";
 import { internalError, invalidRequest } from "./errors.ts";
-import type { Args, Json } from "./conversation.ts";
+import type { Args } from "./conversation.ts";
+import type { UsageResult } from "../protocol/UsageResult.ts";
 
 export interface UsageContext {
   ledger: string;
@@ -11,7 +12,7 @@ export interface UsageContext {
   callStore?: CallStore | undefined;
 }
 
-export async function usage(ctx: UsageContext, args: Args): Promise<Json> {
+export async function usage(ctx: UsageContext, args: Args): Promise<UsageResult> {
   try {
     const store = ctx.callStore;
     return await usageReport({

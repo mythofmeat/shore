@@ -1026,14 +1026,15 @@ pub(crate) enum UsageDimension {
 }
 
 impl UsageDimension {
-    fn wire(self) -> &'static str {
+    fn wire(self) -> shore_common::protocol::operations::UsageDimension {
+        use shore_common::protocol::operations::UsageDimension as CanonicalDimension;
         match self {
-            Self::Model => "model",
-            Self::Provider => "provider",
-            Self::CallType => "call_type",
-            Self::Kind => "kind",
-            Self::ApiKey => "api_key",
-            Self::CostSource => "cost_source",
+            Self::Model => CanonicalDimension::Model,
+            Self::Provider => CanonicalDimension::Provider,
+            Self::CallType => CanonicalDimension::CallType,
+            Self::Kind => CanonicalDimension::Kind,
+            Self::ApiKey => CanonicalDimension::ApiKey,
+            Self::CostSource => CanonicalDimension::CostSource,
         }
     }
 }
@@ -2806,7 +2807,7 @@ fn usage_to_swp(
     cmd: &CliCommand,
     selected: Option<&str>,
 ) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
+    use shore_common::protocol::operations::{UsageArgs, UsageReport};
     let CliCommand::Usage {
         subcommand,
         last,
@@ -2838,22 +2839,19 @@ fn usage_to_swp(
         Some(UsageCommand::By { dimension }) => Some(dimension.wire()),
         _ => None,
     };
-    Some((
-        "usage",
-        json!({
-            "last": last,
-            "character": selected,
-            "provider": provider,
-            "api_key": api_key,
-            "model": model,
-            "call_type": call_type,
-            "group_by": group_by,
-            "budget": budget,
-            "anomalies": anomalies,
-            "export_csv": tab_separated == Some(false),
-            "export_tsv": tab_separated == Some(true),
-        }),
-    ))
+    operation_to_swp::<UsageReport>(UsageArgs {
+        last: Some(last.clone()),
+        character: Some(selected.map(str::to_owned)),
+        provider: Some(provider.clone()),
+        api_key: Some(api_key.clone()),
+        model: Some(model.clone()),
+        call_type: Some(call_type.clone()),
+        group_by: Some(group_by),
+        budget: Some(budget),
+        anomalies: Some(anomalies),
+        export_csv: Some(tab_separated == Some(false)),
+        export_tsv: Some(tab_separated == Some(true)),
+    })
 }
 
 #[cfg(test)]

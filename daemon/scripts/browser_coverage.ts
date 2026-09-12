@@ -35,6 +35,16 @@ export function assertCompactionResultCoverage(renderers: ReadonlySet<string>): 
   }
 }
 
+export function assertUsageResultCoverage(renderers: ReadonlySet<string>): void {
+  const schema = operationSchemas.find((operation) => operation.name === "usage")?.output;
+  if (schema === undefined || !("oneOf" in schema) || schema.oneOf === undefined) throw new Error("Missing usage result contract");
+  for (const variant of schema.oneOf) {
+    if (!("mode" in variant.properties)) throw new Error("Missing usage mode discriminator");
+    const mode = variant.properties.mode.const;
+    if (!renderers.has(mode)) throw new Error(`Missing usage result renderer: ${mode}`);
+  }
+}
+
 export function assertBrowserCoverage(operations: OperationDescriptor[], renderers: ReadonlySet<string>, events: ReadonlySet<string>, policies: Readonly<Record<string, string>> = EVENT_POLICIES): void {
   const check = (control: Control): void => {
     if (!renderers.has(control.kind)) throw new Error(`Missing GUI control renderer: ${control.kind}`);

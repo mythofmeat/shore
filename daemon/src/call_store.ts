@@ -7,7 +7,7 @@ import { chmodSync } from "node:fs";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import { splitJsonPayload } from "./payload_split.ts";
-import { rateLimitSnapshot, type RateLimitSnapshot } from "./llm/retry_after.ts";
+import { rateLimitSnapshot } from "./llm/retry_after.ts";
 
 const ZSTD_LEVEL = 3;
 
@@ -188,10 +188,7 @@ export interface HttpExchangeRow {
   response_bytes: number;
 }
 
-export interface RateLimitReading extends RateLimitSnapshot {
-  host: string;
-  observed_at: string;
-}
+export type RateLimitReading = import("./protocol/UsageRateLimitReading.ts").UsageRateLimitReading;
 
 export interface PayloadChunk {
   hash: string;

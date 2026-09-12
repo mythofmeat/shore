@@ -1,4 +1,7 @@
 import { shoreLog } from "../log.ts";
+import type { UsageResult } from "../protocol/UsageResult.ts";
+import type { UsageRateLimitReading } from "../protocol/UsageRateLimitReading.ts";
+import type { UsageCallAttempts } from "../protocol/UsageCallAttempts.ts";
 
 import type { Database } from "bun:sqlite";
 
@@ -59,7 +62,7 @@ export interface UsageRequest {
   cacheDir?: string;
   args?: Record<string, unknown> | undefined;
   usage?: UsageConfig | undefined;
-  rateLimits?: () => unknown[];
+  rateLimits?: () => UsageRateLimitReading[];
 }
 
 export interface UsageOptions extends BudgetOptions {
@@ -199,7 +202,7 @@ function buildFilter(
 export async function usageReport(
   request: UsageRequest,
   opts: UsageOptions = {},
-): Promise<unknown> {
+): Promise<UsageResult> {
   const ledger = openOrThrow(request.ledger);
   const db = ledger.database;
   const args = request.args ?? {};
@@ -256,7 +259,7 @@ function budgetPayload(
   config: UsageConfig,
   now: number,
   opts: UsageOptions,
-): unknown {
+): Extract<UsageResult, { mode: "budget" }> {
   return {
     mode: "budget",
     timezone: config.timezone ?? "local",
@@ -287,7 +290,7 @@ function anomaliesPayload(
   timezone: string,
   opts: UsageOptions,
   now: number,
-): unknown {
+): Extract<UsageResult, { mode: "anomalies" }> {
   const anomalyFilter: QueryFilter =
     last === "today"
       ? { ...filter, since: parseLastPeriod(ANOMALY_LOOKBACK, now, timezone, opts) }
@@ -315,9 +318,9 @@ function summaryPayload(
   timezone: string,
   opts: UsageOptions,
   now: number,
-  rateLimits: unknown[],
+  rateLimits: UsageRateLimitReading[],
   nanoGptSubscription: NanoGptSubscriptionState | undefined,
-): unknown {
+): Extract<UsageResult, { mode: "summary" }> {
   const cacheHealth = activeAnthropicCharacters(db, filter).map(([character, lastRow]) => ({
     character,
     state: reconstructState(
@@ -351,11 +354,7 @@ function summaryPayload(
   };
 }
 
-function callAttemptStatus(db: Database): {
-  pending: number;
-  unresolved: number;
-  estimated_cost_at_risk: number;
-} {
+function callAttemptStatus(db: Database): UsageCallAttempts {
   const rows = db.query(
     `SELECT status, COUNT(*) AS count, COALESCE(SUM(estimated_cost), 0) AS estimated
        FROM call_attempts
