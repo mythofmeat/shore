@@ -45,6 +45,10 @@ TESTS = ["tests/swp_server.test.ts"]
 
 # (label, file, find, replace)
 MUTANTS = [
+    ("startup: early TCP clients remain open before the daemon can serve them",
+     S,
+     '      if (!this.#serving || this.#stopped) { socket.destroy(); return; }',
+     '      if (this.#stopped) { socket.destroy(); return; }'),
     # --- the handshake --------------------------------------------------------
     ("handshake: captured at construction, so setting one afterwards does nothing",
      S,

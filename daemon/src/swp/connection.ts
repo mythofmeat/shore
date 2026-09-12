@@ -1,4 +1,5 @@
 import { TOKEN_ENV, TOKEN_FILE } from "../config/token.ts";
+import { setTimeout as timerDelay } from "node:timers/promises";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
@@ -241,6 +242,18 @@ export async function messageLoop(
   session: SessionMeta,
   ctx: ConnectionContext,
 ): Promise<void> {
+  const lifetime = new AbortController();
+  try { await runMessageLoop(reader, sink, session, ctx, lifetime.signal); }
+  finally { lifetime.abort(); }
+}
+
+async function runMessageLoop(
+  reader: WireReader,
+  sink: ByteSink,
+  session: SessionMeta,
+  ctx: ConnectionContext,
+  signal: AbortSignal,
+): Promise<void> {
   const period = ctx.pingIntervalMs ?? PING_INTERVAL_MS;
   const started = Date.now();
   let tick = 1;
@@ -257,7 +270,7 @@ export async function messageLoop(
       (error: unknown) => ({ src: "client_error", error }) as const,
     );
     pendingEvent ??= ctx.events.recv().then((value) => ({ src: "event", value }) as const);
-    pendingPing ??= sleepUntil(nextTick(started, period, tick)).then(() => ({ src: "ping" }) as const);
+    pendingPing ??= sleepUntil(nextTick(started, period, tick), signal).then(() => ({ src: "ping" }) as const);
 
     const wake = await Promise.race([pendingClient, pendingEvent, pendingPing, pendingShutdown]);
 
@@ -353,9 +366,7 @@ function nextTick(started: number, period: number, tick: number): number {
   return started + tick * period;
 }
 
-function sleepUntil(deadline: number): Promise<void> {
+function sleepUntil(deadline: number, signal: AbortSignal): Promise<void> {
   const delay = Math.max(0, deadline - Date.now());
-  return new Promise((resolve) => {
-    setTimeout(resolve, delay);
-  });
+  return timerDelay(delay, undefined, { signal });
 }
