@@ -91,6 +91,7 @@ export interface ProviderOptions {
 export interface CallContext {
   ledger?: string;
   character: string;
+  workspace_dir?: string;
   thread?: string;
   call_type: string;
   api_key_name?: string;

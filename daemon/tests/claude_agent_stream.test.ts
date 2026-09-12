@@ -261,6 +261,7 @@ describe("the options the SDK is run with", () => {
     expect(options?.skills).toEqual([]);
     expect(options?.settings).toEqual({ autoCompactEnabled: false });
     expect(options?.settingSources).toEqual([]);
+    expect(options?.strictMcpConfig).toBe(true);
     expect(options?.disallowedTools).toContain("Task");
     expect(options?.disallowedTools).toContain("Agent");
   });
@@ -450,15 +451,10 @@ describe("sending a picture", () => {
       sent.push(turn.message.content);
     }
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual(expect.arrayContaining([
-      { type: "text", text: "<current_user_turn>\n" },
-      { type: "text", text: "what is this?" },
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
-      { type: "text", text: "\n</current_user_turn>" },
-    ]));
+    expect(sent[0]).toEqual(withImage.messages[0]?.content);
   });
 
-  test("the text still says where the picture was", async () => {
+  test("an upload does not acquire a replay instruction or a synthetic image label", async () => {
     const { agent } = await collect(
       { rounds: [{ blocks: [{ kind: "text", text: "a freezer" }] }] },
       withImage,
@@ -468,7 +464,7 @@ describe("sending a picture", () => {
     }>;
     const sent = [];
     for await (const turn of prompt) sent.push(turn.message.content.map((b) => b.text ?? "").join("\n"));
-    expect(sent[0]).toContain("[image attached: image/png]");
+    expect(sent[0]).toBe("what is this?\n");
   });
 });
 
@@ -582,12 +578,17 @@ test("temporary system instructions do not diverge the conversation on the next 
       { role: "system", content: [{ type: "text", text: instruction }] },
     ] }))) events.push(event);
     expect(kinds(events)).not.toContain("error");
-    expect(agent.calls.at(-1)?.options.systemPrompt).toContain(instruction);
+    const prompt = agent.calls.at(-1)?.options.systemPrompt;
+    expect(prompt).toBeUndefined();
+    const sent = agent.calls.at(-1)?.prompt;
+    if (sent === undefined || typeof sent === "string") throw new Error("Expected structured turn content");
+    const turns = [];
+    for await (const turn of sent) turns.push(turn.message.content);
+    expect(JSON.stringify(turns)).toContain(instruction);
     history.push({ role: "assistant", content: [{ type: "text", text: "reply" }] });
     history.push({ role: "user", content: [{ type: "text", text: "continue" }] });
   }
   expect(agent.calls[1]?.options.resume).toBe("session-fake");
-  expect(agent.calls[1]?.prompt).toBe("continue");
 });
 
 test("a heartbeat between chat turns cannot replace the chat session", async () => {

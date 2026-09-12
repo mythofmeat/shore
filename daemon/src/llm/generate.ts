@@ -26,7 +26,7 @@ import {
 } from "./fallback.ts";
 import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
-import { rustJoin } from "../config/dirs.ts";
+import { characterWorkspaceDir, rustJoin } from "../config/dirs.ts";
 import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
 import { shouldRetryError } from "./retry.ts";
 
@@ -103,6 +103,7 @@ export function resolveModelForRequest(
 }
 
 function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
+  const character = request.context?.character;
   request.context ??= {
     ledger: rustJoin(deps.config.dirs.data, "shore.db"),
     character: "unknown",
@@ -112,6 +113,9 @@ function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
   };
   request.context.ledger ??= rustJoin(deps.config.dirs.data, "shore.db");
   request.context.usage ??= usageConfigView(deps.config.app.usage);
+  if (request.sdk === "claude_agent" && character !== undefined) {
+    request.context.workspace_dir ??= characterWorkspaceDir(deps.config.dirs.config, character, deps.config.dirs.workspace);
+  }
 }
 
 function providerFor(request: SidecarRequest, deps: GenerateDeps): SidecarProvider {

@@ -136,13 +136,15 @@ function unauthorized(): LlmError {
 }
 
 describe("shared generation contract", () => {
-  for (const workflow of ["chat", "heartbeat", "compaction"] as const) {
+  for (const workflow of ["chat", "heartbeat", "compaction", "subagent"] as const) {
     test(`${workflow} uses subscription authentication without an API key`, async () => {
       const keys: string[] = [];
       const provider = recordingProvider(keys);
-      const req = request({ sdk: "claude_agent", provider_key: "claude-code", api_key: "" });
+      const req = request({ sdk: "claude_agent", provider_key: "claude-code", api_key: "", context: {
+        character: "ada", call_type: workflow, thinking_enabled: false,
+      } });
       const dependencies = deps(provider, { providers: { claude_agent: provider }, env: {} });
-      if (workflow === "chat") {
+      if (workflow === "chat" || workflow === "subagent") {
         await runGeneration(req, { providerKey: "claude-code" }, dependencies);
       } else if (workflow === "heartbeat") {
         await generate(req, dependencies);
@@ -150,6 +152,7 @@ describe("shared generation contract", () => {
         await compactionGenerate(dependencies)(req, { provider_key: "claude-code" }, "ada");
       }
       expect(keys).toEqual([""]);
+      expect(req.context?.workspace_dir).toBe(join(ACCOUNTING_ROOT, "characters", "ada", "workspace"));
     });
   }
 

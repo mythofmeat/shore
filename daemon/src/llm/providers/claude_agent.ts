@@ -42,6 +42,7 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
+import { hostZone } from "../../ledger/zoned.ts";
 import {
   REASONING_OFF,
   streamErrorEvent,
@@ -184,6 +185,7 @@ function renderReplay(msgs: readonly WireMessage[]): Replay {
 }
 
 function replayContent(msgs: readonly WireMessage[]): ContentBlock[] {
+  if (msgs.length === 1 && msgs[0]?.role === "user") return msgs[0].content;
   const latestUser = msgs.findLastIndex((m) => m.role === "user" &&
     hashableBlocks(m).some((block) => block.type === "text" || block.type === "image"));
   const content: ContentBlock[] = [{
@@ -307,21 +309,16 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
   };
 }
 
-function withSystemInstructions(req: SidecarRequest): SidecarRequest {
-  const instructions = req.messages.filter((message) => message.role === "system");
-  if (instructions.length === 0 && req.messages.at(-1)?.role !== "assistant") return req;
+function withSystemInstructions(req: SidecarRequest): { request: SidecarRequest; instructions: ContentBlock[] } {
+  const instructions: ContentBlock[] = req.messages
+    .filter((message) => message.role === "system")
+    .map((message) => ({ type: "text", text: replayText(message, []) }));
+  if (instructions.length === 0 && req.messages.at(-1)?.role !== "assistant") return { request: req, instructions };
   const messages = req.messages.filter((message) => message.role !== "system");
   if (messages.at(-1)?.role === "assistant") {
     messages.push({ role: "user", content: [{ type: "text", text: "Continue according to the system instructions." }] });
   }
-  return {
-    ...req,
-    messages,
-    system: [
-      ...(req.system ?? []),
-      ...instructions.map((message) => ({ text: replayText(message, []), label: "turn_instructions" })),
-    ],
-  };
+  return { request: { ...req, messages }, instructions };
 }
 
 export function nextEntries(
@@ -410,7 +407,9 @@ function buildOptions(
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
+    TZ: hostZone(),
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    CLAUDE_CODE_TOTAL_TOKENS_REMINDER: "off",
   };
   if (process.env.CLAUDE_CONFIG_DIR !== undefined) {
     env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
@@ -425,15 +424,16 @@ function buildOptions(
   return {
     model: req.model,
     ...(effort === undefined ? {} : { effort }),
-    ...(system === "" ? {} : { systemPrompt: system }),
+    ...(system === "" ? {} : { systemPrompt: { type: "custom" as const, prompt: system, snapshot: false } }),
     settingSources: [],
+    strictMcpConfig: true,
     tools: [],
     skills: [],
     allowedTools: [],
     disallowedTools: NESTED_LOOP_TOOLS,
     settings: { autoCompactEnabled: false },
     includePartialMessages: true,
-    cwd: tmpdir(),
+    cwd: req.context?.workspace_dir ?? tmpdir(),
     env,
     abortController: abort,
     ...(surface === undefined
@@ -652,7 +652,13 @@ async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessa
   } as SDKUserMessage;
 }
 
-export function agentPrompt(plan: TurnPlan): AgentPrompt {
+export function agentPrompt(plan: TurnPlan, instructions: ContentBlock[] = []): AgentPrompt {
+  if (instructions.length > 0) {
+    const content = plan.nativeContent ?? (plan.images.length === 0
+      ? [{ type: "text" as const, text: plan.prompt }]
+      : plan.replayContent ?? [{ type: "text" as const, text: plan.prompt }, ...plan.images]);
+    return oneUserTurn([...content, ...instructions]);
+  }
   if (plan.nativeContent !== undefined) return oneUserTurn(plan.nativeContent);
   if (plan.images.length === 0) return plan.prompt;
   return oneUserTurn(plan.replayContent ?? [{ type: "text", text: plan.prompt }, ...plan.images]);
@@ -673,7 +679,8 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = withSystemInstructions(await prepareRequestImages(req));
+    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    req = prepared.request;
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
@@ -696,7 +703,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
       yield { type: "start", model: req.model };
       plan = await withNativeHistory(plan, req, path, key, record);
 
-      const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
+      const run = this.#runQuery({ prompt: agentPrompt(plan, prepared.instructions), options: buildOptions(req, plan, abort) });
 
       for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
@@ -966,7 +973,7 @@ export async function* claudeAgentToolLoopEvents(
   deps: ClaudeAgentDeps = {},
   options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
-  req = withSystemInstructions(await prepareRequestImages(req));
+  req = await prepareRequestImages(req);
   const defs = req.tools ?? [];
   if (defs.length === 0) {
     yield* new ClaudeAgentProvider(deps).stream(req, signal);
@@ -1022,11 +1029,12 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
-    Object.assign(req, withSystemInstructions(await prepareRequestImages(req)));
+    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
     plan = await withNativeHistory(plan, req, path, key, record);
     const run = (deps.runQuery ?? query)({
-      prompt: agentPrompt(plan),
+      prompt: agentPrompt(plan, prepared.instructions),
       options: buildOptions(req, plan, abort, {
         instance,
         canUseTool,

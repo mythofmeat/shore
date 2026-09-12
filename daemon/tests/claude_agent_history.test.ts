@@ -169,7 +169,7 @@ test.each([false, true])("the real SDK continues and regenerates after compactio
   }
 }, 120_000);
 
-test.each(["legacy replay", "unmirrored session", "edited reply", "omitted reply", "heartbeat", "subagent", "heartbeat after reply"])("the real SDK preserves history for %s", async (scenario) => {
+test.each(["legacy replay", "legacy prompt context", "unmirrored session", "edited reply", "omitted reply", "heartbeat", "subagent", "heartbeat after reply"])("the real SDK preserves history for %s", async (scenario) => {
   const dir = await mkdtemp(join(tmpdir(), "shore-history-boundaries-"));
   const path = join(dir, "sessions.json");
   const mock = await startMockAnthropic({ fallback: { text: "native reply" } });
@@ -197,13 +197,13 @@ test.each(["legacy replay", "unmirrored session", "edited reply", "omitted reply
   };
   try {
     let expected: WireMessage[];
-    if (scenario === "legacy replay") {
+    if (scenario === "legacy replay" || scenario === "legacy prompt context") {
       await drive([user("old question\n\n<prior_assistant_turn>\nold answer\n</prior_assistant_turn>\n\nprevious question")]);
       const request = { ...req([]), context: { character: "test", call_type: "message", thinking_enabled: false } };
       const key = conversationKey(request);
       const record = required(readBook(path)[key]);
       const prior = [user("old question"), assistant("old answer"), user("previous question")];
-      writeSession(path, key, { ...record, version: 5, entries: nextEntries(planTurn(undefined, prior), undefined) });
+      writeSession(path, key, { ...record, version: scenario === "legacy replay" ? 5 : 6, entries: nextEntries(planTurn(undefined, prior), undefined) });
       expected = [...prior, assistant("native reply"), user("continue")];
       await drive(expected);
     } else if (scenario === "unmirrored session") {
@@ -225,7 +225,8 @@ test.each(["legacy replay", "unmirrored session", "edited reply", "omitted reply
       const messages: WireMessage[] = [...expected.slice(0, -1), { role: "system", content: [{ type: "text", text: "Check outstanding reminders." }] }];
       await drive(messages, "heartbeat");
       await drive(messages, "heartbeat");
-      expect(JSON.stringify(required(mock.requests.at(-1)).body.system)).toContain("Check outstanding reminders.");
+      expect(JSON.stringify(required(mock.requests.at(-1)).body.system)).not.toContain("Check outstanding reminders.");
+      expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).toContain("Check outstanding reminders.");
       expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).not.toContain("native reply");
     } else {
       expected = [user("question"), assistant("answer"), user("run background task")];

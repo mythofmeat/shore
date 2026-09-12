@@ -59,7 +59,7 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
       parentUuid,
       sessionId,
       timestamp,
-      cwd: tmpdir(),
+      cwd: req.context?.workspace_dir ?? tmpdir(),
       isSidechain: false,
       userType: "external",
       message: {

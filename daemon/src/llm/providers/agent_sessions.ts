@@ -16,7 +16,7 @@ export interface DeliveredEntry {
   sessionId?: string;
 }
 
-export const SESSION_BOOK_VERSION = 6;
+export const SESSION_BOOK_VERSION = 7;
 
 export interface SessionRecord {
   version: number;

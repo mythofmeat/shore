@@ -386,7 +386,7 @@ describe("what a message hash is taken over", () => {
 
 describe("the session book version", () => {
   test("a book that may contain flattened history is not trusted", () => {
-    const stale = { ...seed([user1, asst1, user2]), version: 5 };
+    const stale = { ...seed([user1, asst1, user2]), version: 6 };
     expect(planTurn(stale, [user1, asst1, user2, msg("assistant", "reply"), msg("user", "continue")]).resume).toBeUndefined();
   });
 
@@ -590,9 +590,7 @@ describe("image placement when a regeneration rebuilds history", () => {
 
   test("regenerating the image-bearing turn still delivers its image as current", async () => {
     const content = await deliveredBlocks(planTurn(undefined, [oldImage]));
-    const blocks = content as { type: string; text?: string }[];
-    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
-    expect(blocks.findIndex((b) => b.type === "image")).toBeGreaterThan(current);
+    expect<unknown>(content).toEqual(oldImage.content);
   });
 
   test("a session using the old flattened-image replay is rebuilt", () => {

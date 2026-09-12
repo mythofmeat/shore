@@ -2806,10 +2806,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     let changed =
                         co.data.get("changed").and_then(serde_json::Value::as_bool) == Some(true);
                     adopt_conversation(app, None, Some(&name));
-                    if !app.character_name.is_empty() {
-                        let _persisted =
-                            crate::state::write_active_thread(&app.character_name, &name);
-                    }
+                    persist_conversation(app);
                     app.set_status(if changed {
                         format!("thread: {name}")
                     } else {
@@ -2828,7 +2825,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "switch_character" => {
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
                         adopt_conversation(app, Some(name), None);
-                        persist_active_character(name);
+                        persist_conversation(app);
                     }
                     app.subagent_traces.clear();
                     app.pending_subagent_trace_ids.clear();
@@ -3389,16 +3386,31 @@ mod redraw_tests {
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
-    #[expect(unsafe_code, reason = "env::set_var is unsafe as of edition 2024")]
-    fn set_env(key: &str, value: &Path) {
-        // SAFETY: the one test that touches env holds it for its whole body.
-        unsafe { std::env::set_var(key, value) }
-    }
-
-    #[expect(unsafe_code, reason = "env::remove_var is unsafe as of edition 2024")]
-    fn unset_env(key: &str) {
-        // SAFETY: as above.
-        unsafe { std::env::remove_var(key) }
+    fn with_isolated_session(name: &str, check: impl FnOnce()) {
+        const CHILD_TEST: &str = "SHORE_SESSION_TEST_CHILD";
+        if std::env::var(CHILD_TEST).ok().as_deref() == Some(name) {
+            check();
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                &format!("tui::redraw_tests::{name}"),
+                "--nocapture",
+            ])
+            .env(CHILD_TEST, name)
+            .env("SHORE_DATA_DIR", root.path().join("data"))
+            .env("SHORE_RUNTIME_DIR", root.path().join("runtime"))
+            .env_remove("SHORE_CHARACTER")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
     }
 
     #[test]
@@ -3583,11 +3595,11 @@ mod redraw_tests {
 
     #[test]
     fn a_switch_is_persisted_for_the_next_client() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
-        unset_env("SHORE_CHARACTER");
-        let result = std::panic::catch_unwind(|| {
-            let mut app = App::default();
+        with_isolated_session("a_switch_is_persisted_for_the_next_client", || {
+            let mut app = App {
+                persist_session: true,
+                ..App::default()
+            };
 
             let _ = handle_server_message(
                 &mut app,
@@ -3615,8 +3627,6 @@ mod redraw_tests {
                 Some("poppy"),
             );
         });
-        unset_env("SHORE_RUNTIME_DIR");
-        result.unwrap();
     }
 
     fn thread_listing() -> serde_json::Value {
@@ -3703,45 +3713,43 @@ mod redraw_tests {
 
     #[test]
     fn switching_threads_is_persisted_and_refetches_the_roster() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        set_env("SHORE_DATA_DIR", &tmp.path().join("shore"));
-        let result = std::panic::catch_unwind(|| {
-            let mut app = App {
-                character_name: "qifei".into(),
-                thread_name: "main".into(),
-                ..App::default()
-            };
+        with_isolated_session(
+            "switching_threads_is_persisted_and_refetches_the_roster",
+            || {
+                let mut app = App {
+                    character_name: "qifei".into(),
+                    thread_name: "main".into(),
+                    persist_session: true,
+                    ..App::default()
+                };
 
-            let effect = handle_server_message(
-                &mut app,
-                ServerMessage::CommandOutput(CommandOutput {
-                    rid: None,
-                    name: "switch_thread".into(),
-                    data: serde_json::json!({
-                        "character": "qifei",
-                        "thread": "eval",
-                        "changed": true,
+                let effect = handle_server_message(
+                    &mut app,
+                    ServerMessage::CommandOutput(CommandOutput {
+                        rid: None,
+                        name: "switch_thread".into(),
+                        data: serde_json::json!({
+                            "character": "qifei",
+                            "thread": "eval",
+                            "changed": true,
+                        }),
                     }),
-                }),
-            );
+                );
 
-            assert_eq!(app.thread_name, "eval");
-            assert_eq!(
-                shore_common::active_character::read_active_thread("qifei").as_deref(),
-                Some("eval"),
-                "the switch has to reach the file the next client reads",
-            );
-            assert_eq!(effect.cmds.len(), 1, "the roster is refetched");
-        });
-        unset_env("SHORE_DATA_DIR");
-        result.unwrap();
+                assert_eq!(app.thread_name, "eval");
+                assert_eq!(
+                    shore_common::active_character::read_active_thread("qifei").as_deref(),
+                    Some("eval"),
+                    "the switch has to reach the file the next client reads",
+                );
+                assert_eq!(effect.cmds.len(), 1, "the roster is refetched");
+            },
+        );
     }
 
     #[test]
     fn a_switch_that_changed_nothing_asks_for_nothing() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
-        let result = std::panic::catch_unwind(|| {
+        {
             let mut app = App {
                 character_name: "qifei".into(),
                 thread_name: "eval".into(),
@@ -3763,9 +3771,7 @@ mod redraw_tests {
 
             assert_eq!(app.thread_name, "eval");
             assert!(effect.cmds.is_empty());
-        });
-        unset_env("SHORE_RUNTIME_DIR");
-        result.unwrap();
+        }
     }
 
     #[test]
