@@ -1,3 +1,4 @@
+import { changeThreadModel, listModels, favoriteModel, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "./models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { OperationInput, OperationName, OperationResult } from "../operations/contracts.ts";
 import { assertContractBindings } from "../operations/contracts.ts";
@@ -37,6 +38,14 @@ function register<N extends OperationName>(
 const characterPresentation = {
   category: "Characters", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
+const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
+const modelTargetFields = {
+  name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
+  background_task: { label: "Background task", hint: "all, heartbeat or compaction; settings can also affect other roles sharing this model" },
+  subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
+} as const;
+const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
+const modelSettingField = { label: "Setting key", choices: "model_settings" } as const;
 const configPresentation = {
   category: "Configuration", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
@@ -59,6 +68,33 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  list_models: register("list_models", { ...modelPresentation, scope: "global", label: "Browse models", fields: { include_hidden: modelHiddenField, favorites_only: { label: "Favorites only" } } },
+    ({ session }, args) => listModels(session, args)),
+  favorite_model: register("favorite_model", { ...modelPresentation, scope: "global", label: "Favorite model", effects: ["model_selection"], fields: { name: { ...modelTargetFields.name, hint: "The model whose favorite status will change" }, favorite: { label: "Favorite", hint: "Omit to toggle; explicit true/false avoids toggling twice" } } },
+    ({ session }, args) => favoriteModel(session, args)),
+  model_info: register("model_info", { ...modelPresentation, label: "Inspect model", fields: modelTargetFields },
+    ({ session }, args) => modelInfo(session, args)),
+  switch_model: register("switch_model", { ...modelPresentation, label: "Select model", effects: ["model_selection", "config_write"], fields: { ...modelTargetFields, name: { ...modelTargetFields.name, hint: "Model to select. Chat selection pins the current thread; roles write global configuration." }, include_hidden: modelHiddenField } },
+    async ({ session, deps, engine }, args) => {
+      const threads = deps.threads;
+      if (engine !== undefined && threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
+        return await changeThreadModel(session, args, (model) => threads.setThreadModel(engine.characterName, engine.thread, model, session.signal));
+      }
+      return switchModel(session, args);
+    }),
+  reset_model: register("reset_model", { ...modelPresentation, label: "Reset model selection", effects: ["model_selection", "config_write"], fields: { background_task: modelTargetFields.background_task, subagent: modelTargetFields.subagent } },
+    async ({ session, deps, engine }, args) => {
+      const threads = deps.threads;
+      if (engine !== undefined && threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
+        return await changeThreadModel(session, args, (model) => threads.setThreadModel(engine.characterName, engine.thread, model, session.signal), true);
+      }
+      return resetModel(session, args);
+    }),
+  model_settings: register("model_settings", { ...modelPresentation, label: "Inspect model settings", fields: { ...modelTargetFields, key: modelSettingField, overview: { label: "Role overview", hint: "Show saved settings across roles" } } },
+    ({ session }, args) => modelSettings(session, args)),
+  set_model_setting: register("set_model_setting", { ...modelPresentation, label: "Change model setting", effects: ["model_selection"], fields: { ...modelTargetFields, key: modelSettingField, scope: { label: "Preference scope", hint: "character (default), or global to save across characters" }, value: { label: "Setting value", hint: "Omit or explicitly unset to clear the saved setting. Vendor object values have structured fields." } } },
+    ({ session }, args) => setModelSetting(session, args)),
+
   config: register("config", { ...configPresentation, label: "Read or edit configuration", effects: ["read", "config_write"], fields: {
     key: { label: "Configuration key", choices: "config_keys", hint: "Omit to inspect the complete configuration" },
     value: { label: "New value", multiline: true, hint: "Omit to read; setting a value also requires a key. Lists accept bracketed values." },

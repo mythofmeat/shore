@@ -4,6 +4,7 @@ import type { ImageUpload } from "../protocol/ImageUpload.ts";
 import type { Message } from "../protocol/Message.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { Providers } from "./providers.tsx";
+import { Models } from "./models.tsx";
 import { Settings } from "./settings.tsx";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
 import { BrowserConnection } from "./connection.ts";
@@ -32,6 +33,9 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<unknown>();
   const [error, setError] = useState("");
+  const [modelNames, setModelNames] = useState<string[]>([]);
+  const [subagentNames, setSubagentNames] = useState<string[]>([]);
+  const [modelSettingKeys, setModelSettingKeys] = useState<string[]>([]);
   const [providerNames, setProviderNames] = useState<string[]>([]);
   const [configSchema, setConfigSchema] = useState<ConfigSchemaEntry[]>([]);
   useEffect(() => {
@@ -42,9 +46,18 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "config_keys")) {
       void workspace.actions.run("config_schema", {}).then((catalogue) => { if (current) setConfigSchema(catalogue.schema); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     }
+    if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "models")) {
+      void workspace.actions.run("list_models", { include_hidden: true }).then((catalogue) => { if (current) setModelNames(Object.values(catalogue.models).flatMap((models) => models.map((model) => model.qualified_name))); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+    }
+    if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "subagents")) {
+      void workspace.actions.run("tools", {}).then((access) => { if (current) setSubagentNames(["all", ...access.subagents.map((subagent) => subagent.name)]); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+    }
+    if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "model_settings")) {
+      void workspace.actions.run("model_settings", {}).then((settings) => { if (current && "setting_schema" in settings) setModelSettingKeys(settings.setting_schema.map((entry) => entry.key)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+    }
     return () => { current = false; };
   }, [operation, state.status]);
-  const choices = { config_keys: configSchema.map((entry) => entry.key), providers: providerNames, characters: state.characters.map((character) => character.name), threads: state.threads.map((thread) => thread.id) };
+  const choices = { models: modelNames, subagents: subagentNames, model_settings: modelSettingKeys, config_keys: configSchema.map((entry) => entry.key), providers: providerNames, characters: state.characters.map((character) => character.name), threads: state.threads.map((thread) => thread.id) };
   const execute = async () => {
     setBusy(true); setError("");
     try { setResult(await workspace.actions.runDiscovered(operation.name, values)); await workspace.refreshNavigation(); setConfirming(false); }
@@ -143,6 +156,7 @@ function App() {
   const [activity, setActivity] = useState(false);
   const [providers, setProviders] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [models, setModels] = useState(false);
   const [navigation, setNavigation] = useState(false);
   const [reasoning, setReasoning] = useState(() => saved("shore.reasoning") !== "false");
   const [tools, setTools] = useState(() => saved("shore.tools") !== "false");
@@ -171,7 +185,7 @@ function App() {
     <aside className="sidebar"><div className="brand">SHORE <span>WORKSPACE</span></div><div className="section-heading"><h2>Characters</h2><button disabled={!ready} onClick={() => action("create_character")}>New</button></div>
       <nav aria-label="Characters">{state.characters.map((character) => <button key={character.name} aria-current={state.character === character.name ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(character.name))}><span className="avatar">{character.name.slice(0, 1).toUpperCase()}</span>{character.name}</button>)}</nav>
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
-      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
+      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
     <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
@@ -185,6 +199,7 @@ function App() {
       </div><Composer key={JSON.stringify([state.character, state.thread])} state={state} />
     </main>
     {activity ? <aside className="activity"><h2>Activity & details</h2><Inspect label="Conversation configuration" value={state.config} />{state.streams.filter((stream) => stream.subagent !== null).map((stream) => <section key={stream.key}><h3>{stream.subagent}</h3><div className="message-text">{stream.text}</div><Blocks blocks={stream.blocks} reasoning={reasoning} tools={tools} openImage={setImage} /></section>)}{state.activity.slice().reverse().map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}</aside> : null}
+    {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}
     {providers ? <Providers actions={workspace.actions} ready={ready} close={() => setProviders(false)} /> : null}
     {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}

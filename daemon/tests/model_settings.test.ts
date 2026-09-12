@@ -40,6 +40,7 @@ describe("the canonical setting registry", () => {
     expect(SETTING_DEFINITIONS.map((definition) => definition.key)).toEqual([...EXPECTED_KEYS]);
     expect(new Set(SETTING_STORAGE_FIELDS.map(([field]) => field)).size).toBe(15);
     expect(new Set(SETTING_STORAGE_FIELDS.map(([, key]) => key)).size).toBe(15);
+    expect(Object.keys(samplerToWire({}, true))).toEqual([...EXPECTED_KEYS]);
   });
 
   test("emits a complete typed schema for every sdk", () => {
@@ -92,6 +93,10 @@ describe("authoritative coercion", () => {
 
   test("normalizes reasoning and replay aliases", () => {
     const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "replay_prior_thinking", true);
+    expect(sampler.replayPriorThinking).toBe("all");
+    applySamplerValue(sampler, "replay_prior_thinking", false);
+    expect(sampler.replayPriorThinking).toBe("none");
     for (const alias of ["none", "disable", "disabled"]) {
       applySamplerValue(sampler, "reasoning_effort", alias);
       expect(sampler.reasoningEffort).toBe("off");
@@ -139,6 +144,9 @@ describe("authoritative coercion", () => {
     expect(() => applySamplerValue(sampler, "cache_keepalive_pings", "0")).toThrow(/>= 1/);
     expect(() => applySamplerValue(sampler, "cache_keepalive_pings", "1.5")).toThrow(/whole number/);
     expect(() => applySamplerValue(sampler, "cache_keepalive_for", "12h")).toThrow(/unknown setting key/);
+    expect(() => applySamplerValue(sampler, "max_output_tokens", 1.5)).toThrow(CommandError);
+    expect(sampler.maxOutputTokens).toBeUndefined();
+    expect(() => applySamplerValue(sampler, "not_a_setting", 0.5)).toThrow("unknown setting key: not_a_setting");
   });
 });
 

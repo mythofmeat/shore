@@ -1,3 +1,4 @@
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -132,8 +133,8 @@ describe("pinning a background model", () => {
 
   test("an unknown task is an error", async () => {
     const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
-    expect(() => switchModel(ctx, { name: "kimi-id", background_task: "dreaming" })).toThrow(
-      /unknown background task/,
+    expect(() => switchModel(ctx, parseOperationInput("switch_model", { name: "kimi-id", background_task: "dreaming" }))).toThrow(
+      /background_task/,
     );
   });
 });

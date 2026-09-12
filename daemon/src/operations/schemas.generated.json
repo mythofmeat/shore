@@ -89,7 +89,8 @@
             "Threads",
             "Conversation",
             "Providers",
-            "Configuration"
+            "Configuration",
+            "Models"
           ]
         },
         "OperationScope": {
@@ -167,8 +168,1438 @@
             "threads",
             "models",
             "providers",
-            "config_keys"
+            "config_keys",
+            "subagents",
+            "model_settings"
           ]
+        }
+      }
+    }
+  },
+  {
+    "name": "list_models",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ListModelsArgs",
+      "type": "object",
+      "properties": {
+        "include_hidden": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "favorites_only": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelListing",
+      "type": "object",
+      "properties": {
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ModelSummary"
+            }
+          }
+        },
+        "active": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ModelRole"
+          }
+        },
+        "include_hidden": {
+          "type": "boolean"
+        },
+        "favorites_only": {
+          "type": "boolean"
+        },
+        "favorite_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "hidden_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "models",
+        "active",
+        "roles",
+        "include_hidden",
+        "favorites_only",
+        "favorite_count",
+        "hidden_count"
+      ],
+      "$defs": {
+        "ModelSummary": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/ModelSource"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "favorite": {
+              "type": "boolean"
+            },
+            "subscription_included": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "qualified_name",
+            "sdk",
+            "model_id",
+            "source",
+            "hidden",
+            "favorite"
+          ]
+        },
+        "ModelSource": {
+          "type": "string",
+          "enum": [
+            "static",
+            "discovered",
+            "favorite"
+          ]
+        },
+        "ModelRole": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "role",
+            "model",
+            "source"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "favorite_model",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "FavoriteModelArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "favorite": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelFavorite",
+      "type": "object",
+      "properties": {
+        "qualified_name": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "favorites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "qualified_name",
+        "provider",
+        "model_id",
+        "favorite",
+        "changed",
+        "favorites"
+      ]
+    }
+  },
+  {
+    "name": "model_info",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelInfoArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelInfoResult",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "qualified_name": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "provider_key": {
+          "type": "string"
+        },
+        "sdk": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "api_key_env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_context_tokens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "max_output_tokens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "temperature": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "top_p": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "budget_tokens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "gemini_generation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "max_tool_iterations": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "reasoning_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache_ttl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache_keepalive": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache_keepalive_max": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replay_prior_thinking": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zai_clear_thinking": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supports_images": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "openrouter_provider": true,
+        "effective_sampler": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "scopes": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "qualified_name",
+        "category",
+        "provider_key",
+        "sdk",
+        "model_id",
+        "api_key_env",
+        "base_url",
+        "max_context_tokens",
+        "max_output_tokens",
+        "temperature",
+        "top_p",
+        "budget_tokens",
+        "gemini_generation",
+        "max_tool_iterations",
+        "reasoning_effort",
+        "cache_ttl",
+        "cache_keepalive",
+        "cache_keepalive_max",
+        "replay_prior_thinking",
+        "zai_clear_thinking",
+        "supports_images",
+        "openrouter_provider"
+      ]
+    }
+  },
+  {
+    "name": "switch_model",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SwitchModelArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "include_hidden": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelSwitchResult",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "current"
+            }
+          },
+          "$ref": "#/$defs/ModelActive",
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "$ref": "#/$defs/ModelSelected",
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "character"
+            }
+          },
+          "$ref": "#/$defs/CharacterModelSelected",
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "role"
+            }
+          },
+          "$ref": "#/$defs/RoleModelSelected",
+          "required": [
+            "target"
+          ]
+        }
+      ],
+      "$defs": {
+        "ModelActive": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "active"
+          ]
+        },
+        "ModelInvalidated": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "ModelSelected": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "active",
+            "qualified_name",
+            "provider",
+            "model_id",
+            "changed"
+          ]
+        },
+        "CharacterModelSelected": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "shadowed_by_thread": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "active",
+            "qualified_name",
+            "provider",
+            "model_id",
+            "changed"
+          ]
+        },
+        "RoleModelSelected": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": "string"
+            },
+            "qualified_name": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "role": {
+              "type": "string"
+            },
+            "config_key": {
+              "type": "string"
+            },
+            "cleared": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "file": {
+              "type": "string"
+            },
+            "restart_required": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "active",
+            "qualified_name",
+            "provider",
+            "model_id",
+            "changed",
+            "role",
+            "config_key",
+            "cleared",
+            "file",
+            "restart_required"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "reset_model",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ResetModelArgs",
+      "type": "object",
+      "properties": {
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelResetResult",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "$ref": "#/$defs/ThreadModelReset",
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "character"
+            }
+          },
+          "$ref": "#/$defs/CharacterModelReset",
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "role"
+            }
+          },
+          "$ref": "#/$defs/RoleModelReset",
+          "required": [
+            "target"
+          ]
+        }
+      ],
+      "$defs": {
+        "ModelInvalidated": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "ThreadModelReset": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reset_to": {
+              "type": "string"
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "active",
+            "reset_to"
+          ]
+        },
+        "CharacterModelReset": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "previous_provider": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "previous_model_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reset_to": {
+              "type": "string"
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "active",
+            "previous_provider",
+            "previous_model_id",
+            "reset_to"
+          ]
+        },
+        "RoleModelReset": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "role": {
+              "type": "string"
+            },
+            "cleared": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "file": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reset_to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "active",
+            "role",
+            "cleared",
+            "source",
+            "file",
+            "reset_to"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "model_settings",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelSettingsArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overview": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelSettingsResult",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelSettingsOverview"
+        },
+        {
+          "$ref": "#/$defs/ModelSettingsDetail"
+        }
+      ],
+      "$defs": {
+        "ModelSettingsOverview": {
+          "type": "object",
+          "properties": {
+            "overview": {
+              "type": "boolean"
+            },
+            "character": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ModelOverviewRole"
+              }
+            },
+            "inherited_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "overview",
+            "character",
+            "roles",
+            "inherited_count"
+          ]
+        },
+        "ModelOverviewRole": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string"
+            },
+            "flag": {
+              "type": "string"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "inherited": {
+              "type": "boolean"
+            },
+            "settings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SavedModelSetting"
+              }
+            },
+            "same_settings_as": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "role",
+            "flag",
+            "model",
+            "source",
+            "inherited",
+            "settings",
+            "same_settings_as",
+            "error"
+          ]
+        },
+        "SavedModelSetting": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "value": true,
+            "scope": {
+              "$ref": "#/$defs/ModelPreferenceScope"
+            }
+          },
+          "required": [
+            "key",
+            "value",
+            "scope"
+          ]
+        },
+        "ModelPreferenceScope": {
+          "type": "string",
+          "enum": [
+            "character",
+            "global"
+          ]
+        },
+        "ModelSettingsDetail": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "subagent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "applies_to": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "effective_sampler": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "saved_global": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "saved_character": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "setting_schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ModelSettingSchemaEntry"
+              }
+            },
+            "scopes": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "required": [
+            "model",
+            "provider",
+            "model_id",
+            "effective_sampler",
+            "saved_global",
+            "saved_character",
+            "setting_schema",
+            "scopes"
+          ]
+        },
+        "ModelSettingSchemaEntry": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ModelSettingKind"
+            },
+            "applicability": {
+              "$ref": "#/$defs/ModelSettingApplicability"
+            },
+            "suggestions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allow_custom": {
+              "type": "boolean"
+            },
+            "editor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ModelSettingEditor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "kind",
+            "applicability",
+            "suggestions",
+            "allow_custom"
+          ]
+        },
+        "ModelSettingKind": {
+          "type": "string",
+          "enum": [
+            "number",
+            "u32",
+            "boolean",
+            "string",
+            "duration",
+            "duration_or_off",
+            "json_object"
+          ]
+        },
+        "ModelSettingApplicability": {
+          "type": "string",
+          "enum": [
+            "always",
+            "honored",
+            "ignored",
+            "rejected"
+          ]
+        },
+        "ModelSettingEditor": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "max": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "step": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "slider"
+                }
+              },
+              "required": [
+                "kind",
+                "min",
+                "max",
+                "step"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "set_model_setting",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SetModelSettingArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPreferenceScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": true
+      },
+      "additionalProperties": false,
+      "required": [
+        "key"
+      ],
+      "$defs": {
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        },
+        "ModelPreferenceScope": {
+          "type": "string",
+          "enum": [
+            "character",
+            "global"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelSettingChanged",
+      "type": "object",
+      "properties": {
+        "changed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/ModelPreferenceScope"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": true,
+        "subagent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "applies_to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "background_task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundModelTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "also_affects": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelInvalidated"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "changed",
+        "scope",
+        "model",
+        "provider",
+        "model_id",
+        "key",
+        "value"
+      ],
+      "$defs": {
+        "ModelPreferenceScope": {
+          "type": "string",
+          "enum": [
+            "character",
+            "global"
+          ]
+        },
+        "BackgroundModelTarget": {
+          "type": "string",
+          "enum": [
+            "all",
+            "heartbeat",
+            "compaction"
+          ]
+        },
+        "ModelInvalidated": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
         }
       }
     }

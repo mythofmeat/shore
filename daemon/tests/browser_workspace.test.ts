@@ -5,9 +5,26 @@ import { actionControl, controlFor, initialValue } from "../src/browser/forms.ts
 import { mergeHistory, EVENT_POLICIES, inspectableRequest } from "../src/browser/workspace.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { assertSettingsCoverage, configAt, settingControl } from "../src/browser/settings_forms.ts";
+import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
+import { settingSchema } from "../src/llm/settings.ts";
+import { SDK_VARIANTS } from "../src/llm/types.ts";
 import { assertBrowserCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
+
+test("live model settings cover every provider kind, including structured vendor controls", async () => {
+  const entries = SDK_VARIANTS.flatMap((sdk) => settingSchema(sdk));
+  const components = await readFile(new URL("../src/browser/components.tsx", import.meta.url), "utf8");
+  const renderers = await switchCases(components, "Field", "control.kind");
+  expect(entries.some((entry) => entry.kind === "json_object" && entry.applicability === "honored")).toBe(true);
+  expect(() => assertModelSettingsCoverage(entries, renderers)).not.toThrow();
+  const missing = await switchCases(components.replace('case "json": return <JsonValue value={value} change={change} label={label} />;', ''), "Field", "control.kind");
+  expect(() => assertModelSettingsCoverage(entries, missing)).toThrow("Missing model setting renderer: json");
+  expect(await switchCases(components, "JsonValue", "kind")).toEqual(new Set(["string", "number", "boolean", "object", "array", "null"]));
+  expect(controlFor(true)).toEqual({ kind: "json" });
+  expect(controlFor({})).toEqual({ kind: "json" });
+  for (const invalid of [false, null, [], "json"]) expect(() => controlFor(invalid)).toThrow("Invalid action schema");
+});
 
 test("all live settings reach controls, with explicit failure for missing renderers or unknown kinds", async () => {
   const entries = configSchema({ instancesAt: (key) => key === "mcp" ? ["fixture"] : key === "mcp.fixture.env" ? ["TOKEN"] : key === "subagents" ? ["worker"] : [] });

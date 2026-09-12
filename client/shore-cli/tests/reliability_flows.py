@@ -105,7 +105,31 @@ class ReliabilityFlows(unittest.TestCase):
             self.assertIn(text, result.stderr)
         self.assertNotIn(b"UNRELATED_WARNING", result.stderr)
 
-    def test_tui_reload_applies_canonical_preview_without_replaying_it(self):
+    def test_cli_model_selection_and_settings_keep_typed_targets_and_result_details(self):
+        selection = {"target": "role", "active": "fixture", "qualified_name": "fixture", "provider": "test", "model_id": "fixture-id", "changed": True, "role": "heartbeat", "config_key": "defaults.background.heartbeat", "cleared": [], "file": "fixture.toml", "restart_required": [], "future_detail": "visible"}
+        cases = [
+            (["model", "use", "fixture", "--background=heartbeat"], "switch_model", {"name": "fixture", "background_task": "heartbeat"}, selection),
+            (["model", "setting", "--json", "openrouter_provider", '{"order":["a"],"allow_fallbacks":false}', "--global", "--model=fixture"], "set_model_setting", {"name": "fixture", "key": "openrouter_provider", "value": '{"order":["a"],"allow_fallbacks":false}' , "scope": "global"}, {"changed": True, "scope": "global", "model": "fixture", "provider": "test", "model_id": "fixture-id", "key": "openrouter_provider", "value": '{"order":["a"],"allow_fallbacks":false}' }),
+        ]
+        for args, name, expected, output in cases:
+            with self.subTest(args=args):
+                def respond(request, send, _stream, _seen):
+                    self.assertEqual(request["name"], name)
+                    self.assertEqual(request["args"], expected)
+                    send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                result, _ = run_cli(args, respond)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if name == "set_model_setting":
+                    self.assertEqual(json.loads(result.stdout), output)
+                else:
+                    self.assertIn(b"fixture", result.stdout)
+        def malformed(request, send, _stream, _seen):
+            send({"type": "command_output", "name": "switch_model", "rid": request["rid"], "data": {"target": "thread", "active": "fixture"}})
+        result, _ = run_cli(["model", "use", "fixture"], malformed)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"missing field", result.stderr)
+
+    def test_tui_model_target_and_reload_use_canonical_requests(self):
         with tempfile.TemporaryDirectory() as root, socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             listener.listen(1)
@@ -113,6 +137,8 @@ class ReliabilityFlows(unittest.TestCase):
             address = "127.0.0.1:%s" % listener.getsockname()[1]
             ready = threading.Event()
             applied = threading.Event()
+            model_changed = threading.Event()
+            models = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -147,6 +173,10 @@ class ReliabilityFlows(unittest.TestCase):
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": data})
                                 if apply:
                                     applied.set()
+                            elif name == "switch_model":
+                                models.append(request)
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": {"target": "role", "active": "fixture", "qualified_name": "fixture", "provider": "test", "model_id": "fixture-id", "changed": True, "role": "heartbeat", "config_key": "defaults.background.heartbeat", "cleared": [], "file": "fixture.toml", "restart_required": []}})
+                                model_changed.set()
                             else:
                                 send({"type": "command_output", "name": name, "rid": request.get("rid"), "data": {}})
                 except BaseException as error:
@@ -180,6 +210,16 @@ class ReliabilityFlows(unittest.TestCase):
                 self.assertEqual(len(seen), 2)
                 self.assertEqual(seen[1]["args"], {"apply": True, "refresh_prompts": False})
                 self.assertNotEqual(seen[0]["rid"], seen[1]["rid"])
+                os.write(master, b"\x1b")
+                time.sleep(.05)
+                os.write(master, b":model use fixture --background=heartbeat\r")
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not model_changed.is_set():
+                    if select.select([master], [], [], .01)[0]:
+                        os.read(master, 65536)
+                self.assertTrue(model_changed.is_set(), frames.read_text()[-3000:])
+                self.assertEqual(len(models), 1)
+                self.assertEqual(models[0]["args"], {"name": "fixture", "background_task": "heartbeat"})
                 self.assertEqual(errors, [])
             finally:
                 stop.set()
