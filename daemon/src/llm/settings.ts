@@ -13,32 +13,11 @@ import { honorsCacheTtl } from "./cache_capability.ts";
 import type { DiscoveredModelSupport } from "./discovery.ts";
 import { REASONING_OFF, SDK_VARIANTS, sdkFromWire, type Sdk } from "./types.ts";
 
-export type SettingKind =
-  | "number"
-  | "u32"
-  | "boolean"
-  | "string"
-  | "duration"
-  | "duration_or_off"
-  | "json_object";
-
-export type SettingApplicability = "always" | "honored" | "ignored" | "rejected";
-
-export interface SettingEditor {
-  kind: "slider";
-  min: number;
-  max: number;
-  step: number;
-}
-
-export interface SettingSchemaEntry {
-  key: string;
-  kind: SettingKind;
-  applicability: SettingApplicability;
-  suggestions: readonly string[];
-  allow_custom: boolean;
-  editor?: SettingEditor;
-}
+import type { ModelSettingKind as SettingKind } from "../protocol/ModelSettingKind.ts";
+import type { ModelSettingApplicability as SettingApplicability } from "../protocol/ModelSettingApplicability.ts";
+import type { ModelSettingEditor as SettingEditor } from "../protocol/ModelSettingEditor.ts";
+import type { ModelSettingSchemaEntry as SettingSchemaEntry } from "../protocol/ModelSettingSchemaEntry.ts";
+export type { SettingKind, SettingApplicability, SettingEditor, SettingSchemaEntry };
 
 type Parsed = { value: unknown } | { error: string };
 type SamplerField = keyof SamplerSettings;
@@ -381,7 +360,7 @@ export function settingSchema(sdk: Sdk, support?: DiscoveredModelSupport, modelI
     key: canonicalSettingKey(definition.key),
     kind: definition.key === "gemini_generation" ? "string" : definition.kind,
     applicability: settingApplicability(sdk, definition.key, support, modelId),
-    suggestions: definition.key === "gemini_generation" ? ["auto", "budget", "level"] : typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions,
+    suggestions: [...(definition.key === "gemini_generation" ? ["auto", "budget", "level"] : typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions)],
     allow_custom: definition.key === "gemini_generation" ? false : typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
     ...(definition.editor === undefined ? {} : { editor: definition.editor }),
   }));

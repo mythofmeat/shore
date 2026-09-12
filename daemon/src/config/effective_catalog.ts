@@ -49,7 +49,8 @@ export class EffectiveCatalogError extends Error {
   }
 }
 
-export type EffectiveSource = "static" | "discovered" | "favorite";
+export type { ModelSource as EffectiveSource } from "../protocol/ModelSource.ts";
+import type { ModelSource as EffectiveSource } from "../protocol/ModelSource.ts";
 
 export interface EffectiveModel {
   source: EffectiveSource;

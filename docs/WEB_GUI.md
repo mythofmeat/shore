@@ -407,16 +407,60 @@ quota failures were resolved by clearing this task's disposable download cache b
 the full daemon and Rust checks successfully. GitHub execution and merge-policy enforcement remain
 unverified.
 
+### Models, role selection and sampler preferences
+
+The seven model operations now use the canonical Rust catalogue: `list_models`, `favorite_model`,
+`model_info`, `switch_model`, `reset_model`, `model_settings` and `set_model_setting`. This brings
+the registry to 37 operations, with 19 legacy names remaining. Inputs require names for favorites
+and keys for setting writes, reject unknown fields and constrain background targets and preference
+scopes. Selection and reset results add a `target` discriminant while retaining existing result
+fields, so clients validate the required details for current, thread, character and role outcomes.
+The shared model, catalogue and sampler-schema implementations consume generated types.
+
+The Models & roles panel provides model search, hidden-model and favorite filters, explicit favorite
+updates, thread chat selection, all/named background and subagent targets, role reset, named-model
+inspection, and global/character sampler preferences. Effective values, saved layers and sources
+remain visible together. The existing live sampler registry supplies setting kinds, applicability,
+suggestions and slider hints. Vendor objects use recursive named fields and typed arrays, booleans,
+numbers, strings and null controls. No raw JSON entry is required. The action catalogue also exposes
+every model operation with live model, subagent and setting-key suggestions.
+
+The expanded real flows reproduced and corrected shared reporting errors: global preferences were
+invisible before character selection, inherited background/subagent roles incorrectly reported a
+thread-only chat pin, and subagent model information used chat sampler preferences. Model information
+now uses the existing target-aware settings resolver. Background settings can also be inspected
+without an attached character. The independent legacy capture remains unchanged; its former
+characterless-background error is explicitly adapted in the test to the now-supported result.
+
+The CLI mapping and model-selection special runner use canonical inputs and validate model results
+before formatting; the TUI validates those results too. Real command-line and pseudo-terminal
+journeys exercise targeted selection, global vendor settings and malformed-result rejection. An
+independent-world TCP/WebSocket scenario compares all seven operations, correlated results/errors,
+global and character preference files, role configuration and thread pins after every command.
+It covers divergent background roles, shared/named subagents, preference precedence, clears and
+invalid inputs. The browser journey exercises global settings before onboarding, persisted favorites
+and preferences after reload, hidden models, chat/background/subagent selection, role reset,
+structured vendor settings and a narrow mobile viewport. Renderer coverage walks live provider
+settings and fails when a required renderer is removed.
+
+Model validation includes 8,225 daemon tests, the required daemon checks, Rust workspace
+tests/formatting/Clippy, all five browser journeys, and current generated browser validators/assets
+and capability inventories. Five affected mutation passes killed 202 mutants, with one pre-existing,
+documented equivalent mutant retained. They check inherited sources, discovery metadata,
+preference-key and model preservation, absent versus cleared settings, all scope fields, numeric
+coercion, legacy replay booleans and wire ordering. The existing independent captures were not regenerated.
+Full application parity, GitHub CI execution and required merge gates remain unfinished.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the 26 legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the 19 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
-4. Close all advanced workflows: models/roles, diagnostics and raw data, usage exports,
+4. Close the remaining advanced workflows: diagnostics and raw data, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and

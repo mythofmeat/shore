@@ -21,17 +21,7 @@ import { compact, type CompactContext } from "./compact.ts";
 import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
-import {
-  changeThreadModel,
-  effectiveChatModel,
-  favoriteModel,
-  listModels,
-  modelInfo,
-  modelSettings,
-  resetModel,
-  setModelSetting,
-  switchModel,
-} from "./models.ts";
+import { effectiveChatModel } from "./models.ts";
 import type { Args } from "./navigation.ts";
 import {
   errorLog,
@@ -94,8 +84,6 @@ export interface CommandDeps {
 }
 
 const CHARACTERLESS = new Set([
-  "list_models",
-  "favorite_model",
   "export_character",
   "import_character",
   "delete_character",
@@ -112,33 +100,10 @@ export async function runCommand(
   }
   const args = (cmd.args ?? {}) as Args;
   const character = engine.characterName;
-  const threads = deps.threads;
 
   switch (cmd.name) {
     case "status":
       return await status(statusContext(engine, session, deps));
-    case "list_models":
-      return listModels(session, args);
-    case "model_info":
-      return modelInfo(session, args);
-    case "switch_model":
-      if (threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
-        return await changeThreadModel(session, args, (model) =>
-          threads.setThreadModel(character, engine.thread, model, session.signal));
-      }
-      return switchModel(session, args);
-    case "favorite_model":
-      return favoriteModel(session, args);
-    case "reset_model":
-      if (threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
-        return await changeThreadModel(session, args, (model) =>
-          threads.setThreadModel(character, engine.thread, model, session.signal), true);
-      }
-      return resetModel(session, args);
-    case "set_model_setting":
-      return setModelSetting(session, args);
-    case "model_settings":
-      return modelSettings(session, args);
     case "compact":
       if (deps.compaction === undefined) throw unwired("compact");
       return await compact(
@@ -252,10 +217,6 @@ export function runCharacterlessCommand(
   }
   const args = (cmd.args ?? {}) as Args;
   switch (cmd.name) {
-    case "list_models":
-      return listModels(session, args);
-    case "favorite_model":
-      return favoriteModel(session, args);
     case "export_character": {
       if (deps.archive === undefined) throw unwired("export_character");
       return exportCharacter(archiveWithSignal(deps.archive, session.signal), args);

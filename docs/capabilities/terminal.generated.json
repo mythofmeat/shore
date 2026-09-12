@@ -8183,8 +8183,8 @@
         "name": "set_model_setting",
         "args": {
           "key": "temperature",
-          "value": "0.5",
-          "scope": "global"
+          "scope": "global",
+          "value": "0.5"
         }
       }
     },
@@ -8200,10 +8200,10 @@
       "mapping": {
         "name": "set_model_setting",
         "args": {
+          "name": "fixture:model",
           "key": "temperature",
-          "value": null,
           "scope": "character",
-          "name": "fixture:model"
+          "value": null
         }
       }
     },
@@ -8218,10 +8218,10 @@
       "mapping": {
         "name": "set_model_setting",
         "args": {
+          "subagent": "librarian",
           "key": "temperature",
-          "value": "0.5",
           "scope": "character",
-          "subagent": "librarian"
+          "value": "0.5"
         }
       }
     },

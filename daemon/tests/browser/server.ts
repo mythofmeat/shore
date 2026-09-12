@@ -19,6 +19,17 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 } });
 await writeFile(configPath, `[defaults]
 model = "anthropic:claude-opus-4-8"
+[chat.anthropic.fast-fixture]
+model_id = "fast-fixture"
+sdk = "anthropic"
+[chat.openrouter.vendor-fixture]
+model_id = "vendor-fixture"
+sdk = "openrouter"
+[subagents.worker]
+description = "Local browser test worker"
+prompt = "You are a test worker."
+model = "anthropic:fast-fixture"
+tools = ["read"]
 [providers.anthropic]
 api_key_env = "SHORE_BROWSER_KEY"
 [providers.anthropic.discovery]

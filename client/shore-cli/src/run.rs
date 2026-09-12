@@ -1,7 +1,8 @@
 use shore_common::protocol::operations::{
     ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage,
     GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReloadConfiguration,
-    SwitchCharacter, SwitchThread, SwitchThreadArgs,
+    ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs, SwitchThread,
+    SwitchThreadArgs,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -387,7 +388,7 @@ async fn handle_generic_swp_command(
     let data = recv_command_data(conn).await?;
     if matches!(
         other,
-        CliCommand::Provider { .. } | CliCommand::Config { .. }
+        CliCommand::Provider { .. } | CliCommand::Config { .. } | CliCommand::Model { .. }
     ) {
         validate_registered_output(name, &data)?;
     }
@@ -974,27 +975,33 @@ async fn apply_model_change(
         ModelChange::Reset(target) => target,
         ModelChange::SwitchTo(_, target) => Some(target),
     };
-    let with_target = |mut args: serde_json::Map<String, serde_json::Value>| {
-        if let Some(selected) = target {
-            selected.write_into(&mut args);
+    let selected = target.map(ModelTarget::operation_args).unwrap_or_default();
+    let (command, data) = match change {
+        ModelChange::Reset(_) => {
+            let (_, data) = execute_operation_with_raw::<ResetModel>(
+                conn,
+                ResetModelArgs {
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                },
+            )
+            .await?;
+            (ResetModel::NAME, data)
         }
-        args
-    };
-    let (command, args) = match change {
-        ModelChange::Reset(_) => ("reset_model", with_target(serde_json::Map::new())),
         ModelChange::SwitchTo(name, _) => {
-            let mut args = serde_json::Map::new();
-            _ = args.insert("name".into(), serde_json::json!(name));
-            if *all {
-                _ = args.insert("include_hidden".into(), serde_json::json!(true));
-            }
-            ("switch_model", with_target(args))
+            let (_, data) = execute_operation_with_raw::<SwitchModel>(
+                conn,
+                SwitchModelArgs {
+                    name: Some(name.to_owned()),
+                    include_hidden: all.then_some(true),
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                },
+            )
+            .await?;
+            (SwitchModel::NAME, data)
         }
     };
-    _ = conn
-        .send_command(command, serde_json::Value::Object(args))
-        .await?;
-    let data = recv_command_data(conn).await?;
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {

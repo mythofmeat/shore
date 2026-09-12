@@ -300,7 +300,7 @@ pub(crate) fn render(
     }
     if matches!(
         &command,
-        CliCommand::Provider { .. } | CliCommand::Config { .. }
+        CliCommand::Provider { .. } | CliCommand::Config { .. } | CliCommand::Model { .. }
     ) && let Err(error) = crate::run::validate_registered_output(wire_name, data)
     {
         return Some(format!("Invalid operation result: {error}"));

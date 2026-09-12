@@ -1,6 +1,7 @@
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 
 export type Control =
+  | { kind: "json" }
   | { kind: "string"; choices?: string[] }
   | { kind: "integer" | "number"; minimum?: number; maximum?: number }
   | { kind: "boolean" | "null" }
@@ -17,7 +18,10 @@ const keywords = new Set(["$schema", "$defs", "$ref", "title", "description", "t
 
 export function controlFor(schema: unknown, root: unknown = schema, depth = 0): Control {
   if (depth > 24) throw new Error("Recursive action schemas need a dedicated control");
+  if (schema === true) return { kind: "json" };
+  if (schema === null || typeof schema !== "object" || Array.isArray(schema)) throw new Error("Invalid action schema");
   const node = record(schema);
+  if (Object.keys(node).length === 0) return { kind: "json" };
   for (const key of Object.keys(node)) if (!keywords.has(key)) throw new Error(`Unsupported action schema keyword: ${key}`);
   const next = (value: unknown) => controlFor(value, root, depth + 1);
   if (typeof node["$ref"] === "string") {
@@ -61,6 +65,7 @@ export function actionControl(operation: OperationDescriptor): Extract<Control, 
 
 export function initialValue(control: Control): unknown {
   switch (control.kind) {
+    case "json": return "";
     case "string": return control.choices?.at(0) ?? "";
     case "number": case "integer": return control.minimum ?? 0;
     case "boolean": return false;
@@ -81,6 +86,7 @@ export function initialValue(control: Control): unknown {
 
 export function acceptsKind(control: Control, value: unknown): boolean {
   switch (control.kind) {
+    case "json": return true;
     case "string": return typeof value === "string";
     case "number": case "integer": return typeof value === "number";
     case "boolean": return typeof value === "boolean";

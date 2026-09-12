@@ -27,6 +27,8 @@ const UNWIRED: Record<string, string> = {
 };
 
 const CLOSED_INPUT_ERRORS: Record<string, string> = {
+  model_info: "arguments must NOT have additional properties",
+  switch_model: "arguments must NOT have additional properties",
   log: "arguments must NOT have additional properties",
   delete: "Missing required argument: refs; arguments must NOT have additional properties",
   inject_system: "Missing required argument: text; arguments must NOT have additional properties",
@@ -278,8 +280,9 @@ describe("runCommand", () => {
         expect(got["message"]).toBe(want["message"] as string);
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);
+        expect(got["data_keys"]).toEqual(c.name === "reset_model" ? [...want["data_keys"] as string[], "target"].sort() : want["data_keys"] as string[]);
         expect(got["data_shape"]).toMatchObject(want["data_shape"] as object);
+        if (c.name === "reset_model") expect(frame).toMatchObject({ type: "command_output", data: { target: "character" } });
       }
     });
   }
@@ -288,6 +291,16 @@ describe("runCommand", () => {
     const captured = fixture.dispatch.find((entry) => entry.name === "log");
     expect(captured).toBeDefined();
     expect<unknown>(envelope(await run("log", {}))).toEqual(captured?.output);
+  });
+
+  test("valid model inspection retains the captured fields while selection reports its target", async () => {
+    const captured = fixture.dispatch.find((entry) => entry.name === "model_info");
+    expect(captured).toBeDefined();
+    const info = await run("model_info", {});
+    expect(envelope(info)).toMatchObject(captured?.output as object);
+    expect(info).toMatchObject({ type: "command_output", data: { supports_images: null } });
+    expect(await run("switch_model", {})).toMatchObject({ type: "command_output", data: { target: "current", active: "chat.fixture" } });
+    expect(await run("switch_model", { name: "fixture" })).toMatchObject({ type: "command_output", data: { target: "character", qualified_name: "chat.fixture", changed: true } });
   });
 
   test("registered log retains role and message-count filters", async () => {

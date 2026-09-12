@@ -564,7 +564,7 @@ export interface LoadedConfigView {
   };
 }
 
-export type BackgroundTask = "heartbeat" | "compaction";
+export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
 
 export function configView(config: {
   models: ModelCatalog;

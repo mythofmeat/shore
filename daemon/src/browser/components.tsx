@@ -47,6 +47,7 @@ export function Field({ control, value, change, label, presentation, choices = {
 }) {
   const id = useId();
   switch (control.kind) {
+    case "json": return <JsonValue value={value} change={change} label={label} />;
     case "string": {
       const options = control.choices;
       const candidates = suggestions ?? (presentation?.choices === undefined ? undefined : choices[presentation.choices]);
@@ -54,7 +55,7 @@ export function Field({ control, value, change, label, presentation, choices = {
         : presentation?.multiline === true ? <textarea id={id} rows={5} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />
           : <><input id={id} list={candidates === undefined ? undefined : `${id}-choices`} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />{candidates === undefined ? null : <datalist id={`${id}-choices`}>{candidates.map((candidate) => <option key={candidate} value={candidate} />)}</datalist>}</>}</div>;
     }
-    case "integer": case "number": return <label className="field">{label}<input type="number" step={control.kind === "integer" ? 1 : "any"} min={control.minimum} max={control.maximum ?? Number.MAX_SAFE_INTEGER} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => change(event.target.valueAsNumber)} /></label>;
+    case "integer": case "number": return <label className="field">{label}<input required type="number" step={control.kind === "integer" ? 1 : "any"} min={control.minimum} max={control.maximum ?? Number.MAX_SAFE_INTEGER} value={typeof value === "number" && Number.isFinite(value) ? value : ""} onChange={(event) => change(event.target.valueAsNumber)} /></label>;
     case "boolean": return <label className="check"><input type="checkbox" checked={value === true} onChange={(event) => change(event.target.checked)} />{label}</label>;
     case "null": return <p className="muted">{label}: explicitly unset</p>;
     case "array": {
@@ -73,4 +74,32 @@ export function Field({ control, value, change, label, presentation, choices = {
       return <>{Object.entries(control.fields).map(([key, field]) => <Field key={key} label={key} control={field} value={values[key]} change={(next) => change({ ...values, [key]: next })} />)}</>;
     }
   }
+}
+
+export function JsonValue({ value, change, label, objectOnly = false }: { value: unknown; change: (value: unknown) => void; label: string; objectOnly?: boolean }) {
+  const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? "object" : typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string";
+  const content = () => {
+    switch (kind) {
+      case "object": {
+        const entries = Object.entries(record(value));
+        return <>{entries.map(([key, item], index) => <fieldset key={index}><label className="field">{label} field {String(index + 1)}<input required value={key} onChange={(event) => {
+          const name = event.target.value;
+          if (name !== key && entries.some(([existing]) => existing === name)) return;
+          change(Object.fromEntries(entries.map((entry, position) => position === index ? [name, item] : entry)));
+        }} /></label><JsonValue label={`${label}.${key}`} value={item} change={(next) => change(Object.fromEntries(entries.map((entry, position) => position === index ? [key, next] : entry)))} /><button type="button" aria-label={`Remove ${label}.${key}`} onClick={() => change(Object.fromEntries(entries.filter((_, position) => position !== index)))}>Remove field</button></fieldset>)}<button type="button" onClick={() => {
+          let name = "field"; while (Object.hasOwn(record(value), name)) name += "_";
+          change({ ...record(value), [name]: "" });
+        }}>Add field to {label.toLowerCase()}</button></>;
+      }
+      case "array": return <Field control={{ kind: "array", item: { kind: "json" } }} value={value} change={change} label={label} />;
+      case "number": return <Field control={{ kind: "number" }} value={value} change={change} label={label} />;
+      case "boolean": return <Field control={{ kind: "boolean" }} value={value} change={change} label={label} />;
+      case "null": return <p className="muted">{label}: null</p>;
+      case "string": return <Field control={{ kind: "string" }} value={value} change={change} label={label} />;
+    }
+  };
+  return <fieldset className="json-value"><legend>{label}</legend>{objectOnly ? null : <label className="field">{label} type<select value={kind} onChange={(event) => {
+    const selected = event.target.value;
+    change(selected === "object" ? {} : selected === "array" ? [] : selected === "boolean" ? false : selected === "number" ? 0 : selected === "null" ? null : "");
+  }}>{["string", "number", "boolean", "object", "array", "null"].map((option) => <option key={option}>{option}</option>)}</select></label>}{content()}</fieldset>;
 }

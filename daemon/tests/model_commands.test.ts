@@ -10,6 +10,7 @@ import rawFixture from "./command_captures/model_commands.json" with { type: "js
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { CommandError } from "../src/commands/errors.ts";
+import type { SetModelSettingArgs } from "../src/protocol/SetModelSettingArgs.ts";
 import {
   changeThreadModel,
   listModels,
@@ -249,7 +250,7 @@ function runStep(ctx: ModelsContext, step: Step): unknown {
     case "reset_model":
       return resetModel(ctx);
     case "set_model_setting":
-      return setModelSetting(ctx, step.args);
+      return setModelSetting(ctx, step.args as SetModelSettingArgs);
     default:
       throw new Error(`unknown op ${step.op}`);
   }
@@ -384,13 +385,17 @@ describe("model commands", () => {
           thrown = e;
         }
 
-        if (step.err !== undefined) {
+        if (scenario.name === "no character attached" && step.op === "model_settings" && step.args["background_task"] === "all") {
+          expect(thrown, label).toBeUndefined();
+          expect(result).toMatchObject({ model: "chat.anthropic.alpha", effective_sampler: { temperature: 0.7 }, saved_global: { temperature: 0.7 }, saved_character: null });
+        } else if (step.err !== undefined) {
           expect(thrown, label).toBeInstanceOf(CommandError);
           expect((thrown as CommandError).code, label).toBe(step.err.code as never);
           expect((thrown as CommandError).message, label).toBe(step.err.message);
         } else {
           expect(thrown, label).toBeUndefined();
           expectShapeOf(step.op, result, label);
+          if (scenario.name === "no character attached" && step.op === "model_info") expect(result).toMatchObject({ effective_sampler: { temperature: 0.33 }, scopes: { temperature: "global_model" } });
         }
 
         if (step.prefs_changed !== undefined) {
@@ -439,6 +444,9 @@ test("a hidden model stays selected without being advertised", async () => {
     Object.values(withHidden.models).flat().map((m) => m.qualified_name),
     "asking for the hidden ones shows it",
   ).toContain("openrouter:vendor/hidden");
+  expect(Object.values(listModels(ctx, { include_hidden: true }).models).flat()).toContainEqual({
+    name: "vendor/hidden", qualified_name: "openrouter:vendor/hidden", sdk: "anthropic", model_id: "vendor/hidden", source: "discovered", hidden: true, favorite: false,
+  });
 });
 
 test("the active model is the one generation resolves, not the session's", async () => {
@@ -457,6 +465,7 @@ test("the active model is the one generation resolves, not the session's", async
   expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
     "chat.anthropic.beta",
   );
+  expect(modelSettings(ctx, { background_task: "heartbeat" })).toMatchObject({ model: "chat.anthropic.beta" });
 });
 
 test("a thread's pin is the active model, and switching the character's does not unseat it", async () => {
@@ -480,6 +489,8 @@ test("a thread's pin is the active model, and switching the character's does not
     roles: { role: string; model: string | null; source: string | null }[];
   };
   expect(listed.active).toBe("chat.anthropic.alpha");
+  expect(listed.roles.find((role) => role.role === "heartbeat")?.model).toBe("chat.anthropic.beta");
+  expect(listed.roles.find((role) => role.role === "sub-agents")?.model).toBe("chat.anthropic.beta");
   expect(listed.roles.find((r) => r.role === "chat")).toEqual({
     role: "chat",
     model: "chat.anthropic.alpha",
@@ -580,6 +591,50 @@ test("background tasks name the chat model they inherit", async () => {
       source: "inherits chat",
     });
   }
+});
+
+test("background roles distinguish a shared default from a task-specific pin", async () => {
+  const roles = await rolesFor('[defaults.background]\nmodel = "beta"\n');
+  for (const task of ["heartbeat", "compaction"]) expect(roles.get(task)).toEqual({ role: task, model: "chat.anthropic.beta", source: "defaults.background.model" });
+});
+
+describe("model preference readback and preservation", () => {
+  const setup: Setup = {
+    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\nsdk = "anthropic"\n[chat.anthropic.beta]\nmodel_id = "beta-id"\nsdk = "anthropic"\n',
+    defaults: '[defaults]\nmodel = "alpha"\n', discovery: [], character: "ada", global_prefs: null, character_prefs: null, active_model: null,
+  };
+
+  test("selection echoes the alias and reset reports the previous saved identity", async () => {
+    const ctx = await buildContext(setup);
+    expect(switchModel(ctx, { name: "beta" })).toMatchObject({ target: "character", active: "beta", qualified_name: "chat.anthropic.beta" });
+    expect(resetModel(ctx)).toMatchObject({ target: "character", previous_provider: "anthropic", previous_model_id: "beta-id" });
+    expect(loadPreferences(characterPreferencesPath(ctx.dataDir, "ada")).selected).toEqual({});
+  });
+
+  test("updating and clearing one setting preserves other keys and models", async () => {
+    const ctx = await buildContext(setup);
+    setModelSetting(ctx, { name: "alpha", key: "temperature", value: 0.4 });
+    setModelSetting(ctx, { name: "alpha", key: "top_p", value: 0.8 });
+    setModelSetting(ctx, { name: "beta", key: "temperature", value: 0.2 });
+    expect(setModelSetting(ctx, { name: "alpha", key: "temperature" })).toMatchObject({ value: null });
+    expect(modelSettings(ctx, { name: "alpha" })).toMatchObject({ saved_character: { temperature: null, top_p: 0.8 }, saved_global: null });
+    setModelSetting(ctx, { name: "alpha", key: "top_p", value: null });
+    expect(modelSettings(ctx, { name: "alpha" })).toMatchObject({ saved_character: null, saved_global: null });
+    const persisted = loadPreferences(characterPreferencesPath(ctx.dataDir, "ada"));
+    expect(persisted.models.size).toBe(1);
+    expect(persisted.models.get("anthropic:beta-id")?.sampler.temperature).toBe(0.2);
+  });
+
+  test("global settings are visible before onboarding and settings retain every scope key", async () => {
+    const ctx = await buildContext({ ...setup, character: null, global_prefs: '[models."anthropic:alpha-id"]\ntemperature = 0.3\n' });
+    expect(modelSettings(ctx, {})).toMatchObject({ saved_global: { temperature: 0.3 }, saved_character: null, effective_sampler: { temperature: 0.3 } });
+    const detail = modelSettings(ctx, {});
+    if (!("scopes" in detail)) throw new Error("Expected model setting detail");
+    expect(Object.keys(detail.scopes)).toEqual(["temperature", "top_p", "reasoning_effort", "reasoning_budget_tokens", "max_output_tokens", "cache_ttl", "cache_keepalive", "cache_keepalive_for", "sdk", "reasoning_replay", "max_tool_rounds", "openrouter_routing", "gemini_thinking_mode", "zai_clear_reasoning", "supports_images"]);
+    const overview = modelSettings(ctx, { overview: true });
+    if (!("overview" in overview)) throw new Error("Expected role overview");
+    expect(overview.roles.find((role) => role.role === "chat")?.settings).toEqual([{ key: "temperature", value: 0.3, scope: "global" }]);
+  });
 });
 
 test("sub-agents that pin their own model are counted, not hidden", async () => {

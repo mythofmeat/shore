@@ -150,14 +150,12 @@ MUTANTS = [
     ("background: the blanket pin beats the per-task one",
      "  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;",
      "  const pinned = ctx.config.app.defaults.background.model ?? ctx.config.app.defaults.background[task];"),
-    ("background: the inherited model is the config default, not the character's",
-     "  const inherited = resolveChatModelForCharacter(\n"
-     "    configView(ctx.config), character, findEffective,\n"
-     "    task === \"compaction\" ? ctx.threadModel : undefined,\n"
-     "  );",
-     "  void character;\n"
-     "  const fallbackName = ctx.config.app.defaults.model;\n"
-     "  const inherited = fallbackName === undefined ? undefined : resolve(ctx, fallbackName, true);"),
+    ('background: the inherited model ignores the character preference',
+     "    : resolveChatModelForCharacter(\n"
+     "      configView(ctx.config), ctx.characterName, findEffective,\n"
+     "      task === \"compaction\" ? ctx.threadModel : undefined,\n"
+     "    );",
+     '    : resolve(ctx, ctx.config.app.defaults.model ?? "", true);'),
     ('background: "all" accepts differing models',
      "  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
      "  if (true as boolean) return first;\n\n  const mapping = resolved.map(([task, m])"),
@@ -328,55 +326,58 @@ MUTANTS = [
      '  const resolved = resolve(ctx, name, false);\n  const prefs = loadGlobalPreferences(ctx);'),
 
     # --- model_info ---------------------------------------------------------
-    ("info: the sampler view is attached without a character",
-     "  const character = ctx.characterName;\n  if (character !== undefined) {",
-     "  const character = ctx.characterName;\n  if (true as boolean) {"),
-    ("info: the sampler view is never attached",
-     "  if (character !== undefined) {\n    const [global, charPrefs] = loadPreferencesFor(ctx.dataDir, character);",
-     "  if (false as boolean) {\n    const [global, charPrefs] = loadPreferencesFor(ctx.dataDir, character!);"),
-    ("info: the catalog model is not the static default for the sampler",
-     "    data[\"effective_sampler\"] = samplerJson(\n"
-     "      resolveSamplerSettings(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),\n"
-     "    );",
-     "    data[\"effective_sampler\"] = samplerJson(\n"
-     "      resolveSamplerSettings(global, charPrefs, resolved.providerKey, resolved.modelId, undefined),\n"
-     "    );"),
-    ("info: reports all fourteen scopes rather than ten",
-     "    data[\"scopes\"] = scopesJson(\n"
-     "      resolveSamplerScopes(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),\n"
-     "      INFO_SCOPE_FIELDS,\n"
-     "    );",
-     "    data[\"scopes\"] = scopesJson(\n"
-     "      resolveSamplerScopes(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),\n"
-     "      SETTINGS_SCOPE_FIELDS,\n"
-     "    );"),
-    ("info: the character layer is passed as the global one",
-     "      resolveSamplerSettings(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),",
-     "      resolveSamplerSettings(charPrefs, global, resolved.providerKey, resolved.modelId, resolved),"),
+    ('info: global sampler preferences are hidden without a character',
+     '  data["effective_sampler"] = settings.effective_sampler;',
+     '  data["effective_sampler"] = ctx.characterName === undefined ? {} : settings.effective_sampler;'),
+    ('info: the sampler view is never attached',
+     '  data["effective_sampler"] = settings.effective_sampler;',
+     '  data["effective_sampler"] = {};'),
+    ('info: a role is inspected as a plain model',
+     '  const settings = modelSettingsDetail(ctx, args);',
+     '  const settings = modelSettingsDetail(ctx, { name: resolved.qualifiedName });'),
+    ('roles: background and subagent inheritance follows a thread pin',
+     '  const inherited = inheritedChatRole(ctx);',
+     '  const inherited = chatRole(ctx);'),
+    ('info: scope annotations are discarded',
+     '  data["scopes"] = Object.fromEntries(INFO_SCOPE_FIELDS.map(([key]) => [key, settings.scopes[key] ?? null]));',
+     '  data["scopes"] = {};'),
 
     # --- switch_model / reset_model -----------------------------------------
-    ("switch: a missing name is an error rather than a report",
+    ('switch: a missing name is an error rather than a report',
      '  const name = asStr(args["name"]);\n'
-     "  if (name === undefined) {\n"
-     "    return {\n"
-     "      active:\n"
-     "        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,\n"
-     "    };\n"
-     "  }",
+     '  if (name === undefined) {\n'
+     '    return {\n'
+     '      target: "current",\n'
+     '      active:\n'
+     '        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,\n'
+     '    };\n'
+     '  }',
      '  const name = asStr(args["name"]);\n'
      '  if (name === undefined) throw invalidRequest("Missing required argument: name");'),
     ("switch: the qualified name is persisted instead of the pair",
      "  prefs.selected.provider = resolved.providerKey;\n  prefs.selected.modelId = resolved.modelId;",
      "  prefs.selected.provider = resolved.providerKey;\n  prefs.selected.modelId = resolved.qualifiedName;"),
-    ("switch: the report gives the canonical name, not what was typed",
-     "  return {\n    active: name,\n    qualified_name: resolved.qualifiedName,",
-     "  return {\n    active: resolved.qualifiedName,\n    qualified_name: resolved.qualifiedName,"),
+    ('switch: the report gives the canonical name, not what was typed',
+     '  return {\n'
+     '    target: "character",\n'
+     '    active: name,',
+     '  return {\n'
+     '    target: "character",\n'
+     '    active: resolved.qualifiedName,'),
     ("switch: preferences are written before the model resolves",
      "  const resolved = resolve(ctx, name, includeHidden);\n\n  const character = requireCharacter(ctx);",
      "  const character = requireCharacter(ctx);\n  const resolved = resolve(ctx, name, includeHidden);"),
-    ("switch: the write goes to the global file",
-     "  saveCharacter(ctx, character, prefs);\n\n  return {\n    active: name,",
-     "  saveGlobal(ctx, prefs);\n\n  return {\n    active: name,"),
+    ('switch: the write goes to the global file',
+     '  saveCharacter(ctx, character, prefs);\n'
+     '\n'
+     '  return {\n'
+     '    target: "character",\n'
+     '    active: name,',
+     '  saveGlobal(ctx, prefs);\n'
+     '\n'
+     '  return {\n'
+     '    target: "character",\n'
+     '    active: name,'),
     ("reset: the selection is not cleared on disk",
      "  prefs.selected = {};\n  saveCharacter(ctx, character, prefs);",
      "  saveCharacter(ctx, character, prefs);"),
@@ -400,9 +401,13 @@ MUTANTS = [
      "  if (false as boolean) {\n"
      "    throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(\", \")}`);\n"
      "  }"),
+<<<<<<< HEAD
     ("set: a missing value is undefined rather than null",
      '  const rawValue = "value" in args ? args["value"] : null;',
      '  const rawValue = args["value"];'),
+=======
+    ('set: a missing value is undefined rather than null', '  const value = args.value ?? null;', '  const value = args.value;'),
+>>>>>>> 96f59b35 (feat(web): add typed model and role workflows)
     ("set: the default scope is global",
      '  const scope = asStr(args["scope"]) ?? "character";',
      '  const scope = asStr(args["scope"]) ?? "global";'),
@@ -440,21 +445,21 @@ MUTANTS = [
      '      ? prefs.models\n      : target.kind === "subagent_model"'),
 
     # --- model_settings -----------------------------------------------------
-    ("settings: a characterless session still reads the global file",
+    ("settings: global model preferences disappear without a character",
      "      : loadPreferencesFor(ctx.dataDir, character);\n"
      "\n"
      "  const subagentName =",
      "      : loadPreferencesFor(ctx.dataDir, character);\n"
      "\n"
-     "  if (character === undefined) global = loadGlobalPreferences(ctx);\n"
+     "  if (character === undefined) global.models.clear();\n"
      "  const subagentName ="),
-    ("overview: a characterless session still reads the global file",
+    ("overview: global model preferences disappear without a character",
      "      : loadPreferencesFor(ctx.dataDir, character);\n"
      "\n"
      "  const claimed =",
      "      : loadPreferencesFor(ctx.dataDir, character);\n"
      "\n"
-     "  if (character === undefined) global = loadGlobalPreferences(ctx);\n"
+     "  if (character === undefined) global.models.clear();\n"
      "  const claimed ="),
     ("settings: saved_global and saved_character are swapped",
      "    saved_global: saved(global),\n    saved_character: saved(charPrefs),",
