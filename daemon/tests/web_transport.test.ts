@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { tokenMatches } from "../src/config/token.ts";
 import { BrowserSocket } from "./support/browser.ts";
+import { browserConnection } from "./support/browser_connection.ts";
+import { InterruptedRequestError } from "../src/browser/connection.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
 import type { HandshakeProvider } from "../src/swp/connection.ts";
 import { Server } from "../src/swp/server.ts";
@@ -67,6 +70,128 @@ function connectBrowser(origin: string, cookie: string, protocol = WEB_SUBPROTOC
   cleanups.push(async () => { await browser.close(); });
   return browser;
 }
+
+describe("browser connection state", () => {
+  test("advertised pending byte limits apply after socket drain and are released by completion", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie, info } = await f.login();
+    const b = browserConnection(f.web.origin, {
+      fetch: async () => Response.json({ ...info, max_message_bytes: 1024 }),
+      socket: (url, subprotocol) => new WebSocket(url, { protocols: [subprotocol], headers: { origin: f.web.origin, cookie } }),
+    });
+    try {
+      b.client.connect(); await until(() => b.client.status === "ready");
+      const command = { type: "command", name: "status", args: { text: "x".repeat(600) } } as const;
+      const first = b.client.submit(command);
+      await until(() => f.routed.length === 1);
+      expect(() => b.client.submit(command)).toThrow("connection limit");
+      const session = f.swp.sessionRouter.sessions().at(0)?.[0];
+      if (session === undefined) throw new Error("Missing session");
+      await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: first.rid, outcome: "completed" });
+      await first.finished;
+      expect(() => b.client.submit(command)).not.toThrow();
+      await until(() => f.routed.length === 2);
+      expect(b.client.pendingCount).toBe(1);
+    } finally { b.client.stop(); }
+  });
+
+  test("sign-in, completion and cancellation use the same bounded native session", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin);
+    try {
+      b.client.connect(); await until(() => b.client.status === "signed_out");
+      expect(f.histories()).toBe(0);
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      expect(b.client.selection).toMatchObject({ character: "ada", thread: "main", snapshotRevision: 0 });
+      const requests = Array.from({ length: 32 }, () => b.client.submit({ type: "command", name: "status", args: {} }));
+      expect(() => b.client.submit({ type: "command", name: "status", args: {} })).toThrow("Wait for a pending request");
+      b.client.cancel(); await until(() => f.controls.length === 1 && f.routed.length === 32);
+      const session = f.swp.sessionRouter.sessions().at(0)?.[0];
+      const request = requests.at(0);
+      if (session === undefined || request === undefined) throw new Error("Missing request session");
+      await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid: request.rid, name: "status", data: { result: "visible" } });
+      await until(() => b.updates.some((update) => update.kind === "frame" && update.message.type === "command_output"));
+      expect(b.client.pendingCount).toBe(32);
+      await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: request.rid, outcome: "completed" });
+      expect(await request.finished).toMatchObject({ rid: request.rid, outcome: "completed" });
+      expect(b.client.pendingCount).toBe(31);
+      await b.client.signOut(); expect(b.client.status).toBe("signed_out");
+      await until(() => f.swp.sessionRouter.sessions().length === 0);
+    } finally { b.client.stop(); }
+  });
+
+  test("a lost mutation is marked uncertain and never resent after a fresh selected-thread snapshot", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin, { thread: "side" });
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      const request = b.client.submit({ type: "command", name: "create_thread", args: { name: "possibly-created" } });
+      await until(() => f.routed.length === 1);
+      b.sockets.at(0)?.close();
+      expect(request.finished).rejects.toBeInstanceOf(InterruptedRequestError);
+      await until(() => f.histories() === 2 && b.client.status === "ready");
+      const probe = b.client.submit({ type: "command", name: "status", args: {} });
+      await until(() => f.routed.some((route) => route.kind === "command" && route.meta.rid === probe.rid));
+      expect(f.routed.filter((route) => route.kind === "command" && route.cmd.name === "create_thread")).toHaveLength(1);
+      expect(b.client.pendingCount).toBe(1);
+      expect(b.client.selection.thread).toBe("side");
+      expect(b.updates.find((update) => update.kind === "uncertain")).toMatchObject({ rid: request.rid, request: { name: "create_thread" }, selection: { thread: "side" } });
+    } finally { b.client.stop(); }
+  });
+
+  test("a revision gap reconnects for fresh history while stale and foreign updates stay hidden", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin);
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      const session = f.swp.sessionRouter.sessions().at(0)?.[0];
+      if (session === undefined) throw new Error("Missing session");
+      const snapshot = { type: "history", messages: [], config: {}, selected_character: "ada", selected_thread: "main", revision: 1 } as const;
+      await f.swp.sessionRouter.sendToSession(session, { ...snapshot, messages: [] });
+      await until(() => b.client.selection.snapshotRevision === 1);
+      const count = () => b.updates.filter((update) => update.kind === "frame" && update.message.type === "history").length;
+      expect(count()).toBe(2);
+      await f.swp.sessionRouter.sendToSession(session, { ...snapshot, messages: [], revision: 0 });
+      await f.swp.sessionRouter.sendToSession(session, { ...snapshot, messages: [], selected_thread: "side", revision: 100, delta: { base_revision: 1, after: null } });
+      await f.swp.sessionRouter.sendToSession(session, { ...snapshot, messages: [], revision: 3, delta: { base_revision: 2, after: null } });
+      await until(() => f.histories() === 2 && b.client.status === "ready");
+      expect(count()).toBe(3);
+      expect(b.client.selection.snapshotRevision).toBe(0);
+      expect(b.updates.some((update) => update.kind === "status" && update.detail.includes("updates were missed"))).toBe(true);
+    } finally { b.client.stop(); }
+  });
+
+  test("a stale browser contract stops before attaching and session expiry prompts sign-in", async () => {
+    const f = await fixture({ sessionLifetimeMs: 100 }); f.web.activate();
+    const stale = browserConnection(f.web.origin, { contract: "old-contract" });
+    const current = browserConnection(f.web.origin);
+    try {
+      await stale.client.signIn(TOKEN); await until(() => stale.client.status === "reload_required");
+      expect(stale.sockets).toHaveLength(0); expect(f.histories()).toBe(0);
+      await current.client.signIn(TOKEN); await until(() => current.client.status === "ready");
+      await until(() => current.client.status === "signed_out");
+      expect(current.client.detail).toContain("Sign in");
+      expect(current.sockets).toHaveLength(1);
+    } finally { stale.client.stop(); current.client.stop(); }
+  });
+
+  test("future events remain inspectable but invalid known events halt the connection", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin);
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      const session = f.swp.sessionRouter.sessions().at(0)?.[0];
+      if (session === undefined) throw new Error("Missing session");
+      await f.swp.sessionRouter.sendToSession(session, { type: "future_progress", detail: { text: "inspectable" } } as unknown as ServerMessage);
+      await until(() => b.updates.some((update) => update.kind === "future"));
+      expect(b.client.status).toBe("ready");
+      await f.swp.sessionRouter.sendToSession(session, { type: "stream_chunk", text: 123, content_type: "text" } as unknown as ServerMessage);
+      await until(() => b.client.status === "error");
+      expect(b.client.detail).toContain("invalid stream_chunk");
+      expect(b.sockets).toHaveLength(1);
+    } finally { b.client.stop(); }
+  });
+});
 
 describe("browser authentication boundary", () => {
   test("HTTPS serves a verified TLS connection and a host-only secure cookie for WSS", async () => {
@@ -212,6 +337,11 @@ describe("browser session routing", () => {
     if (entry === undefined) throw new Error("No session");
     await f.swp.sessionRouter.sendToSession(entry[0], { type: "command_output", rid: "pending-0", name: "status", data: {} });
     await browser.frame("command_output", "pending-0");
+    browser.send({ type: "command", rid: "not-finished", name: "status", args: {} });
+    expect(await browser.frame("request_finished", "not-finished")).toMatchObject({ outcome: "failed" });
+    expect(f.routed).toHaveLength(32);
+    await f.swp.sessionRouter.sendToSession(entry[0], { type: "request_finished", rid: "pending-0", outcome: "completed" });
+    await browser.frame("request_finished", "pending-0");
     browser.send({ type: "command", rid: "new", name: "status", args: {} });
     await until(() => f.routed.length === 33);
     expect(f.routed.at(-1)).toMatchObject({ meta: { rid: "new" } });
@@ -277,7 +407,7 @@ describe("browser resource limits", () => {
     expect(f.routed).toEqual([]);
   });
 
-  test("pending byte allowance is released by its correlated result", async () => {
+  test("pending byte allowance is released after its correlated request finishes", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_queued_bytes: 1024 } }); f.web.activate();
     const { cookie } = await f.login();
     const browser = connectBrowser(f.web.origin, cookie); await browser.attach();
@@ -289,6 +419,8 @@ describe("browser resource limits", () => {
     if (entry === undefined) throw new Error("No session");
     await f.swp.sessionRouter.sendToSession(entry[0], { type: "command_output", rid: "first", name: "status", data: {} });
     await browser.frame("command_output", "first");
+    await f.swp.sessionRouter.sendToSession(entry[0], { type: "request_finished", rid: "first", outcome: "completed" });
+    await browser.frame("request_finished", "first");
     browser.send(command("after"));
     await until(() => f.routed.length === 2);
     expect(f.routed.at(-1)).toMatchObject({ meta: { rid: "after" } });

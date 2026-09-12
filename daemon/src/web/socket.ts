@@ -5,13 +5,12 @@ import { admitClientMessage, sanitiseRid } from "../swp/admission.ts";
 import { SWP_V1 } from "../swp/connection.ts";
 import { decodeClientMessage, rustTrim } from "../swp/framing.ts";
 import type { LocalPeer, Server } from "../swp/server.ts";
+import { REQUEST_LIFECYCLE_CAPABILITY } from "../swp/session.ts";
 import type { WebSession } from "./auth.ts";
 import { WEB_LIMITS } from "./policy.ts";
 
 interface PendingRequest {
-  type: "message" | "regen" | "command";
   bytes: number;
-  name?: string;
 }
 
 export interface WebSocketState {
@@ -106,23 +105,18 @@ export class WebSocketPeers {
   }
 
   #complete(state: WebSocketState, message: ServerMessage): void {
-    if (!("rid" in message) || message.rid === null || message.rid === undefined) return;
+    if (message.type !== "request_finished") return;
     const pending = state.pending.get(message.rid);
     if (pending === undefined) return;
-    if (message.type === "error" ||
-      (message.type === "command_output" && pending.type === "command" && pending.name === message.name) ||
-      (pending.type !== "command" && (message.type === "history" ||
-        (message.type === "stream_end" && message.is_final && !message.subagent && !message.task_id)))) {
-      state.pending.delete(message.rid);
-      state.pendingBytes -= pending.bytes;
-    }
+    state.pending.delete(message.rid);
+    state.pendingBytes -= pending.bytes;
   }
 
   async #attach(socket: ServerWebSocket<WebSocketState>, hello: Extract<ClientMessage, { type: "hello" }>): Promise<void> {
     const state = socket.data;
     try {
       const peer = await this.#server.attachLocal({
-        clientType: "web", clientName: hello.client_name, capabilities: hello.capabilities,
+        clientType: "web", clientName: hello.client_name, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
         ...(hello.character === null || hello.character === undefined ? {} : { character: hello.character }),
         ...(hello.thread === null || hello.thread === undefined ? {} : { thread: hello.thread }),
         signal: state.abort.signal,
@@ -180,10 +174,12 @@ export class WebSocketPeers {
         this.close(socket, 1008, "Requests need distinct correlation IDs"); return;
       }
       if (state.pending.size >= WEB_LIMITS.pendingRequests || state.pendingBytes + bytes > this.#maxBytes) {
-        this.#send(socket, { type: "error", rid, code: "invalid_request", message: "Too many pending requests; wait for a result" });
+        const error = { rid, code: "invalid_request", message: "Too many pending requests; wait for a result" } as const;
+        this.#send(socket, { type: "error", ...error });
+        this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
         return;
       }
-      state.pending.set(rid, { type: message.type, bytes, ...(message.type === "command" ? { name: message.name } : {}) });
+      state.pending.set(rid, { bytes });
       state.pendingBytes += bytes;
     } else {
       if (state.controls >= WEB_LIMITS.pendingRequests) { this.close(socket, 1008, "Too many control requests"); return; }

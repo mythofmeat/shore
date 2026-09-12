@@ -22,6 +22,7 @@ import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { BrowserSocket } from "./support/browser.ts";
+import { browserConnection } from "./support/browser_connection.ts";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -484,6 +485,56 @@ describe("registered operation socket flows", () => {
 });
 
 describe("optional browser transport", () => {
+  test("the browser connection restores its selected conversation after a daemon restart and sign-in", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("persisted answer") }, false);
+    const web = required(daemon.web);
+    const b = browserConnection(web.origin);
+    try {
+      await b.client.signIn(TEST_TOKEN); await until(() => b.client.status === "ready", "Browser did not connect");
+      expect((await b.client.submit({ type: "command", name: "create_thread", args: { name: "side" } }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "command", name: "switch_thread", args: { name: "side", resync: true } }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "message", text: "persisted question", stream: true, images: [], image_data: [] }).finished).outcome).toBe("completed");
+      daemon.stop(); await daemon.done;
+      await writeFile(place.configPath, `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${new URL(web.origin).port}"\n`);
+      const restarted = await start(place, [], { anthropic: scriptedProvider("should not be called") }, false);
+      expect(required(restarted.web).origin).toBe(web.origin);
+      await until(() => b.client.status === "signed_out", "Restarted daemon must require a new browser session");
+      b.updates.length = 0;
+      await b.client.signIn(TEST_TOKEN); await until(() => b.client.status === "ready", "Browser did not reconnect");
+      expect(b.client.selection).toMatchObject({ character: "ada", thread: "side" });
+      const history = b.updates.find((update) => update.kind === "frame" && update.message.type === "history");
+      if (history?.kind !== "frame" || history.message.type !== "history") throw new Error("Missing restored history");
+      expect(history.message.messages.map((message) => message.content)).toEqual(["persisted question", "persisted answer"]);
+      expect((await restarted.runtime.registry.getOrCreate("ada", "side")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["persisted question", "persisted answer"]);
+      expect(b.client.pendingCount).toBe(0);
+    } finally { b.client.stop(); }
+  });
+
+  test("a browser learns that an earlier thread's request finished without receiving its stream in the selected thread", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "main answer", () => {}) }, false);
+    const web = required(daemon.web);
+    const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) });
+    const browser = new BrowserSocket(web.origin, required(login.headers.get("set-cookie")?.split(";", 1)[0]));
+    try {
+      await browser.attach();
+      browser.send({ type: "command", rid: "create-side", name: "create_thread", args: { name: "side" } });
+      await browser.frame("request_finished", "create-side");
+      browser.send({ type: "message", rid: "main-turn", text: "question on main", stream: true });
+      await browser.frame("stream_start", "main-turn");
+      browser.send({ type: "command", rid: "select-side", name: "switch_thread", args: { name: "side", resync: true } });
+      expect(await browser.frame("history", "select-side")).toMatchObject({ selected_thread: "side", messages: [] });
+      await browser.frame("request_finished", "select-side");
+      release();
+      expect(await browser.frame("request_finished", "main-turn")).toMatchObject({ outcome: "completed" });
+      expect(browser.messages.some((frame) => frame.type === "stream_end" && frame.rid === "main-turn")).toBe(false);
+      expect((await daemon.runtime.registry.getOrCreate("ada", "main")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["question on main", "main answer"]);
+    } finally { release(); await browser.close(); }
+  });
+
   test("disabled serving creates no web listener and TCP commands still work", async () => {
     const place = await layout();
     const daemon = await start(place);
@@ -600,6 +651,7 @@ describe("optional browser transport", () => {
         browser.send({ type: "cancel" });
         expect(await browser.frame("stream_end", rid)).toMatchObject({ finish_reason: "cancelled", is_final: true });
         await until(() => stopped > i, "Provider was not cancelled");
+        expect(await browser.frame("request_finished", rid)).toMatchObject({ outcome: "cancelled" });
       }
       browser.send({ type: "command", rid: "still-live", name: "list_threads", args: {} });
       expect(await browser.frame("command_output", "still-live")).toMatchObject({ name: "list_threads" });
