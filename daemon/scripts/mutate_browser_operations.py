@@ -15,7 +15,15 @@ MUTANTS = [
      ' || update.message.rid !== rid', ''),
     ("wrong names and duplicate results appear successful", SOURCE,
      'if (received || update.message.name !== name) invalid = true;', 'void name;'),
+    ("preview policies are ignored", "src/operations/policy.ts",
+     'return match ?? operation;', 'return operation;'),
+    ("absent policy conditions match explicitly supplied fields", "src/operations/policy.ts",
+     '!Object.hasOwn(input, condition.field)', 'Object.hasOwn(input, condition.field)'),
+    ("argument policy values are coerced", "src/operations/policy.ts",
+     'input[condition.field] === condition.value', 'String(input[condition.field]) === String(condition.value)'),
+    ("policy field misspellings reach discovery", "src/operations/registry.ts",
+     'if (!fields.includes(policy.condition.field)) throw', 'if (false) throw'),
 ]
 
 if __name__ == "__main__":
-    sys.exit(run(MUTANTS, ["tests/web_transport.test.ts"]))
+    sys.exit(run(MUTANTS, ["tests/web_transport.test.ts", "tests/operation_contracts.test.ts"]))

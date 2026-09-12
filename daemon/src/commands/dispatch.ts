@@ -14,7 +14,7 @@ import {
   type ConfigRuntime,
 } from "./config.ts";
 
-import { compact, type CompactContext } from "./compact.ts";
+import type { CompactContext } from "./compact.ts";
 import type { SessionActivateContext } from "./activate.ts";
 import type { KeepalivePingContext } from "./keepalive.ts";
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
@@ -28,7 +28,6 @@ import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { usageConfigView } from "../ledger/budget.ts";
-import { clear, segments } from "./segments.ts";
 import {
   deleteCharacter,
   exportCharacter,
@@ -89,38 +88,6 @@ export async function runCommand(
   const character = engine.characterName;
 
   switch (cmd.name) {
-    case "compact":
-      if (deps.compaction === undefined) throw unwired("compact");
-      return await compact(
-        engine,
-        {
-          ...deps.compaction,
-          config: session.config,
-          autonomy: deps.autonomy,
-          run: {
-            ...deps.compaction.run,
-            ...(session.emit === undefined ? {} : { emit: session.emit }),
-          },
-        },
-        args,
-      );
-    case "segments":
-      return await segments(
-        session.dataDir,
-        character,
-        engine.thread,
-        args,
-        deps.historyIndex,
-      );
-    case "clear":
-      return await clear(engine, {
-        dataDir: session.dataDir,
-        ...(deps.compaction?.repoint === undefined
-          ? {}
-          : { repoint: async (name) => await deps.compaction?.repoint?.(name, session.config) }),
-        onComplete: (name) => deps.autonomy.onCompactionComplete(name, 0),
-      }, args);
-
     case "run_tool":
       if (deps.runTool === undefined) throw unwired("run_tool");
       if (args["describe"] === true) {

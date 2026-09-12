@@ -171,6 +171,7 @@ export function chatToolDeps(
 export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["compaction"] {
   const { runtime } = a;
   return compactionRunner({
+    ...(a.env === undefined ? {} : { env: a.env }),
     generate: compactionGenerate({
       providers: a.providers,
       config: runtime.config,
@@ -327,6 +328,7 @@ function configRuntime(a: CommandAssembly): ConfigRuntime {
       void runtime.cache
         .reprimeFromDisk(character, runtime.config.dirs.data, runtime.registry.effectiveConfig(character), {
           mcpRegistry: runtime.mcp.current,
+          ...(a.env === undefined ? {} : { env: a.env }),
         })
         .catch((e: unknown) => {
           shoreLog.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
@@ -371,6 +373,7 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
           {
             mcpRegistry: runtime.mcp.current,
             ...(thread === undefined ? {} : { thread }),
+            ...(a.env === undefined ? {} : { env: a.env }),
           },
         );
       } catch (e) {
@@ -456,7 +459,7 @@ async function repointCachedRequests(
         character,
         config.dirs.data,
         runtime.registry.effectiveConfig(character),
-        { mcpRegistry: runtime.mcp.current },
+        { mcpRegistry: runtime.mcp.current, ...(a.env === undefined ? {} : { env: a.env }) },
       );
     } catch (e) {
       shoreLog.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
@@ -575,6 +578,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     compaction: {
       run: {
+        ...(a.env === undefined ? {} : { env: a.env }),
         generate: compactionGenerate({
           providers: a.providers,
           config: runtime.config,
@@ -586,13 +590,14 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         runtime.cache.invalidate(character, "compaction");
         await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {
           mcpRegistry: runtime.mcp.current,
+          ...(a.env === undefined ? {} : { env: a.env }),
         });
       },
     },
     keepalive: {
       keepalive: runtime.keepalive,
       lastRequest: runtime.cache,
-      rebuild: { mcpRegistry: runtime.mcp.current },
+      rebuild: { mcpRegistry: runtime.mcp.current, ...(a.env === undefined ? {} : { env: a.env }) },
     },
     activate: {
       register: async (character, config) => {

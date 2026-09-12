@@ -8,9 +8,17 @@ import { assertSettingsCoverage, configAt, settingControl } from "../src/browser
 import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
 import { settingSchema } from "../src/llm/settings.ts";
 import { SDK_VARIANTS } from "../src/llm/types.ts";
-import { assertBrowserCoverage, switchCases } from "../scripts/browser_coverage.ts";
+import { assertBrowserCoverage, assertCompactionResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
+
+test("every canonical compaction outcome has a dedicated renderer and omissions fail", async () => {
+  const source = await readFile(new URL("../src/browser/memory.tsx", import.meta.url), "utf8");
+  const cases = await switchCases(source, "CompactionResult", "result.status");
+  expect(() => assertCompactionResultCoverage(cases)).not.toThrow();
+  const omitted = await switchCases(source.replace('case "paused":', ''), "CompactionResult", "result.status");
+  expect(() => assertCompactionResultCoverage(omitted)).toThrow("Missing compaction result renderer: paused");
+});
 
 test("live model settings cover every provider kind, including structured vendor controls", async () => {
   const entries = SDK_VARIANTS.flatMap((sdk) => settingSchema(sdk));

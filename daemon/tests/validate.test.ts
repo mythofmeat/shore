@@ -91,14 +91,14 @@ describe("auxiliary provider defaults", () => {
 });
 
 describe("a config that shore can act on", () => {
-  test("extracted sections preserve transport defaults and ignore arrays of provider tables", () => {
-    expect(load('[[providers]]\napi_key_env = "KEY"').providers.entries()).toEqual([]);
+  test("extracted sections preserve transport defaults and reject arrays of provider tables", () => {
+    expect(() => load('[[providers]]\napi_key_env = "KEY"')).toThrow("providers must be a table");
     const config = load('[providers.custom]\nsdk = "openai"\nbase_url = "https://example.invalid/v1"\napi_key_env = "CUSTOM_KEY"\n[chat.custom.house]\nmodel_id = "house-7"');
     expect(config.models.chat.get("chat.custom.house")).toMatchObject({ sdk: "openai", baseUrl: "https://example.invalid/v1" });
   });
 
   test.each([
-    ['[providers.claude_code]\napi_key_env = "X"', "provider_registry"],
+    ['[providers.claude_code]\napi_key_env = "X"', "parse_app"],
     ['[chat.anthropic.opus]\nmax_context_tokens = 1000', "catalog"],
   ])("configuration errors preserve their stage for %s", (source, kind) => {
     let failure: unknown;
@@ -118,7 +118,7 @@ describe("a config that shore can act on", () => {
   test("warnings retain setting and provider details and global grants precede subagent grants", () => {
     const warnings: Record<string, string>[] = [];
     load('[defaults.background]\nheartbeat = "disabled:model"\n[providers.disabled]\nenabled = false\nsdk = "openai"\n[tools]\nenabled_tools = ["mcp__global__x"]\n[subagents.helper]\ndescription = "helper"\nprompt = "help"\ntools = ["mcp__sub__y"]',
-      (_message, fields) => { warnings.push(Object.fromEntries(fields)); });
+      (message, fields) => { if (message !== "Deprecated configuration") warnings.push(Object.fromEntries(fields)); });
     expect(warnings).toEqual([
       { field: "defaults.background.heartbeat", name: "disabled:model", provider: "disabled" },
       { pattern: "mcp__global__x", server: "global" },

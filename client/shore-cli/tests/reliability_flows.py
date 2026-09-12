@@ -88,6 +88,40 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 
 class ReliabilityFlows(unittest.TestCase):
+    def test_cli_memory_arguments_and_all_result_variants(self):
+        fixtures = Path(__file__).parent / "fixtures"
+        listing = json.loads((fixtures / "memory_segments.json").read_text())
+        reports = json.loads((fixtures / "memory_compaction.json").read_text())
+        segment = listing["segments"][0]
+        clear = {"status": "clear", "character": "ada", "thread": "main", "message_count": 2, "segment": segment}
+        cases = [
+            (["segments", "--json"], "segments", {"action": "list"}, listing),
+            (["segments", "show", "4", "--json"], "segments", {"action": "show", "index": 4}, {"character": "ada", "thread": "main", "segment": segment, "messages": []}),
+            (["clear", "--json"], "clear", {"exclude": False, "note": None}, clear),
+            (["clear", "--exclude", "--note=manual archive", "--json"], "clear", {"exclude": True, "note": "manual archive"}, clear),
+        ]
+        for action in ["include", "exclude", "label", "note"]:
+            args = {"action": action, "index": 4}
+            if action in ["label", "note"]:
+                args["value"] = None
+            cases.append((["segments", action, "4", "--json"], "segments", args, {"character": "ada", "thread": "main", "action": action, "segment": segment}))
+        for report in reports:
+            cases.append((["compact", "0", "--restart", "--json"], "compact", {"keep_turns": 0, "restart": True}, report))
+        for args, name, expected, output in cases:
+            with self.subTest(args=args, output=output):
+                def respond(request, send, _stream, _seen):
+                    self.assertEqual(request["name"], name)
+                    self.assertEqual(request["args"], expected)
+                    send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                result, _ = run_cli(args, respond)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), output)
+        for name, output in [("compact", {"status": "paused", "character": "ada"}), ("segments", {"segments": []}), ("clear", {"status": "clear"})]:
+            def malformed(request, send, _stream, _seen):
+                send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+            result, _ = run_cli([name, "--json"], malformed)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_request_scoped_warnings_reach_stderr(self):
         def respond(request, send, _stream, _seen):
             for warning in [
@@ -138,9 +172,8 @@ class ReliabilityFlows(unittest.TestCase):
             (["trace", "calls", "2", "--wire", "--diff", "--against=1", "--json"], "call_log", {"id": 2, "wire": True, "diff": True, "against": 1}, call),
             (["trace", "calls", "--count=0", "--call-type=heartbeat", "--json"], "call_log", {"count": 0, "call_type": "heartbeat"}, {"enabled": True, "entries": []}),
             (["trace", "heartbeat", "--count=3", "--json"], "transcript", {"source": "heartbeat", "count": 3}, {"enabled": True, "source": "heartbeat", "entries": []}),
-            (["trace", "recall", "--json"], "transcript", {"source": "memory_recall", "count": 10}, {"enabled": True, "source": "memory_recall", "entries": []}),
             (["trace", "subagent", "parent-1", "--json"], "subagent_trace", {"ids": ["parent-1"]}, {"character": "ada", "requested_ids": ["parent-1"], "entries": []}),
-            (["trace", "errors", "--count=0", "--json"], "error_log", {"count": 0}, {key: {"count": 0, "recent": []} for key in ["errors", "key_fallbacks", "memory_recall"]}),
+            (["trace", "errors", "--count=0", "--json"], "error_log", {"count": 0}, {key: {"count": 0, "recent": []} for key in ["errors", "key_fallbacks"]}),
             (["trace", "events", "--json"], "heartbeat_log", {"count": 20}, {"events": [{"timestamp": "now", "kind": "wake", "detail": "manual wake"}]}),
             (["debug", "heartbeat_tick_now"], "heartbeat_tick_now", {}, {"character": "ada", "status": "scheduled"}),
             (["debug", "heartbeat_status_dormant"], "heartbeat_set_dormant", {}, {"character": "ada", "status": "dormant"}),
@@ -177,6 +210,7 @@ class ReliabilityFlows(unittest.TestCase):
             model_changed = threading.Event()
             models = []
             diagnostic_requests = []
+            memory_requests = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -218,6 +252,16 @@ class ReliabilityFlows(unittest.TestCase):
                             elif name == "call_log":
                                 diagnostic_requests.append(request)
                                 output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                            elif name in ["compact", "segments", "clear"]:
+                                memory_requests.append(request)
+                                fixtures = Path(__file__).parent / "fixtures"
+                                if name == "compact":
+                                    output = json.loads((fixtures / "memory_compaction.json").read_text())[3]
+                                elif name == "segments":
+                                    output = json.loads((fixtures / "memory_segments.json").read_text())
+                                else:
+                                    output = {"status": "clear", "character": "ada", "thread": "main", "message_count": 2, "segment": None}
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
                             else:
                                 send({"type": "command_output", "name": name, "rid": request.get("rid"), "data": {}})
@@ -276,6 +320,31 @@ class ReliabilityFlows(unittest.TestCase):
                 self.assertEqual(len(diagnostic_requests), 1)
                 self.assertEqual(diagnostic_requests[0]["args"], {"id": 2, "wire": True, "diff": True, "against": 1})
                 self.assertIn("still visible", frames.read_text())
+                for index, (command, expected, visible) in enumerate([
+                    (b":compact 0 --restart --json\r", {"keep_turns": 0, "restart": True}, "checkpoint-1"),
+                    (b":segments --json\r", {"action": "list"}, '"index": 4'),
+                    (b":clear --exclude --note=archive --json\r", {"exclude": True, "note": "archive"}, '"status": "clear"'),
+                ]):
+                    frame_offset = len(frames.read_text())
+                    confirmed = False
+                    os.write(master, b"\x1b")
+                    time.sleep(.05)
+                    os.write(master, command)
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        if select.select([master], [], [], .01)[0]:
+                            os.read(master, 65536)
+                        if command.startswith((b":compact", b":clear")) and not confirmed and "[CONFIRM]" in frames.read_text()[frame_offset:]:
+                            self.assertEqual(len(memory_requests), index)
+                            os.write(master, b"\r")
+                            confirmed = True
+                        if len(memory_requests) > index:
+                            os.write(master, b"G")
+                        if visible in frames.read_text():
+                            break
+                    self.assertEqual(len(memory_requests), index + 1, frames.read_text()[-3000:])
+                    self.assertEqual(memory_requests[index]["args"], expected)
+                    self.assertIn(visible, frames.read_text())
                 self.assertEqual(errors, [])
             finally:
                 stop.set()

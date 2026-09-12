@@ -152,6 +152,7 @@ export async function buildChatShapeRequestFromDisk(
     mcpToolDefs?: readonly ToolDefinition[];
     timeZone?: string;
     activeConversation?: boolean;
+    env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<BuiltRequest> {
   const prepared = await prepareChatContext({
@@ -182,5 +183,6 @@ export async function buildChatShapeRequestFromDisk(
         config.app.memory.thinking.replay_prior_thinking,
       ),
     },
+    options.env,
   );
 }

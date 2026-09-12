@@ -1,5 +1,1074 @@
 [
   {
+    "name": "compact",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CompactArgs",
+      "type": "object",
+      "properties": {
+        "dry_run": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "restart": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "keep_turns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CompactionReport",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "memory_files_written": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "new_conversation_id": {
+              "type": "string"
+            },
+            "tool_rounds": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tools_called": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "const": "compacted"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "message_count",
+            "turn_count",
+            "compacted_turns",
+            "retained_count",
+            "retained_turns",
+            "memory_files_written",
+            "new_conversation_id",
+            "tool_rounds",
+            "tools_called"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "dry_run": {
+              "type": "boolean"
+            },
+            "memory_files_written": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "archived_messages": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "status": {
+              "type": "string",
+              "const": "rotated"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "message_count",
+            "turn_count",
+            "compacted_turns",
+            "retained_count",
+            "retained_turns",
+            "dry_run",
+            "memory_files_written",
+            "archived_messages"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "retained_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "would_write_files": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "file_ops_preview": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CompactionPreviewFile"
+              }
+            },
+            "tool_rounds": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tools_called": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "const": "dry_run"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "message_count",
+            "turn_count",
+            "compacted_turns",
+            "retained_count",
+            "retained_turns",
+            "would_write_files",
+            "file_ops_preview",
+            "tool_rounds",
+            "tools_called"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tool_rounds": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tools_called": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "truncated_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "partial_writes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "const": "truncated"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "message_count",
+            "turn_count",
+            "compacted_turns",
+            "tool_rounds",
+            "tools_called",
+            "truncated_turns",
+            "partial_writes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "checkpoint_id": {
+              "type": "string"
+            },
+            "tool_rounds": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tools_called": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reason": {
+              "type": "string"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "resume_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "const": "paused"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "message_count",
+            "compacted_turns",
+            "checkpoint_id",
+            "tool_rounds",
+            "tools_called",
+            "reason",
+            "detail",
+            "resume_at"
+          ]
+        }
+      ],
+      "$defs": {
+        "CompactionPreviewFile": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "content_preview": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "content_preview"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "segments",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SegmentsArgs",
+      "type": "object",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "$defs": {
+        "SegmentAction": {
+          "type": "string",
+          "enum": [
+            "list",
+            "show",
+            "exclude",
+            "include",
+            "label",
+            "note"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SegmentsResult",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SegmentsListing"
+        },
+        {
+          "$ref": "#/$defs/SegmentInspection"
+        },
+        {
+          "$ref": "#/$defs/SegmentChanged"
+        }
+      ],
+      "$defs": {
+        "SegmentsListing": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SegmentSummary"
+              }
+            },
+            "count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "character",
+            "thread",
+            "segments",
+            "count"
+          ]
+        },
+        "SegmentSummary": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compacted_at": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "excluded": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "index",
+            "first_message_at",
+            "last_message_at",
+            "compacted_at",
+            "message_count",
+            "excluded",
+            "label",
+            "note",
+            "memory_before",
+            "memory_after"
+          ]
+        },
+        "SegmentInspection": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "segment": {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            "messages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Message"
+              }
+            }
+          },
+          "required": [
+            "character",
+            "thread",
+            "segment",
+            "messages"
+          ]
+        },
+        "Message": {
+          "type": "object",
+          "properties": {
+            "msg_id": {
+              "type": "string"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "alt_index": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alt_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "alternatives": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageAlternative"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "origin": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MessageOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "msg_id",
+            "role",
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "Role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "system"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "ContentBlock": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "text"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "thinking": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                }
+              },
+              "required": [
+                "type",
+                "thinking"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "input": true,
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "input"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "redacted_thinking"
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tool_use_id": {
+                  "type": "string"
+                },
+                "content": {
+                  "$ref": "#/$defs/ToolResultContent"
+                },
+                "is_error": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                }
+              },
+              "required": [
+                "type",
+                "tool_use_id",
+                "content"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/InlineImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            }
+          ]
+        },
+        "ToolResultContent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              }
+            }
+          ]
+        },
+        "InlineImageSource": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/InlineImageEncoding"
+            },
+            "media_type": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "media_type",
+            "data"
+          ]
+        },
+        "InlineImageEncoding": {
+          "type": "string",
+          "enum": [
+            "base64"
+          ]
+        },
+        "MessageAlternative": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "default": ""
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              },
+              "default": []
+            },
+            "content_blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContentBlock"
+              },
+              "default": []
+            },
+            "timestamp": {
+              "type": "string",
+              "default": ""
+            },
+            "provider_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "images",
+            "content_blocks",
+            "timestamp"
+          ]
+        },
+        "MessageOrigin": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "assistant_reply",
+            "autonomous"
+          ]
+        },
+        "SegmentChanged": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "action": {
+              "$ref": "#/$defs/SegmentMutation"
+            },
+            "segment": {
+              "$ref": "#/$defs/SegmentSummary"
+            }
+          },
+          "required": [
+            "character",
+            "thread",
+            "action",
+            "segment"
+          ]
+        },
+        "SegmentMutation": {
+          "type": "string",
+          "enum": [
+            "exclude",
+            "include",
+            "label",
+            "note"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "clear",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ClearArgs",
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ClearResult",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "segment": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SegmentSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "const": "clear"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "thread",
+            "message_count",
+            "segment"
+          ]
+        }
+      ],
+      "$defs": {
+        "SegmentSummary": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compacted_at": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "excluded": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "index",
+            "first_message_at",
+            "last_message_at",
+            "compacted_at",
+            "message_count",
+            "excluded",
+            "label",
+            "note",
+            "memory_before",
+            "memory_after"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "status",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2625,6 +3694,15 @@
             "confirmation": {
               "$ref": "#/$defs/OperationConfirmation"
             },
+            "policies": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/OperationPolicy"
+              }
+            },
             "fields": {
               "type": "object",
               "additionalProperties": {
@@ -2663,7 +3741,8 @@
             "Providers",
             "Configuration",
             "Models",
-            "Diagnostics"
+            "Diagnostics",
+            "Memory"
           ]
         },
         "OperationScope": {
@@ -2681,7 +3760,8 @@
             "threads",
             "autonomy",
             "keepalive",
-            "session_activation"
+            "session_activation",
+            "compaction"
           ]
         },
         "OperationEffect": {
@@ -2704,6 +3784,85 @@
             "none",
             "archive",
             "delete"
+          ]
+        },
+        "OperationPolicy": {
+          "type": "object",
+          "properties": {
+            "condition": {
+              "$ref": "#/$defs/OperationCondition"
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/OperationEffect"
+              }
+            },
+            "confirmation": {
+              "$ref": "#/$defs/OperationConfirmation"
+            }
+          },
+          "required": [
+            "condition",
+            "effects",
+            "confirmation"
+          ]
+        },
+        "OperationCondition": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "value": {
+                  "$ref": "#/$defs/OperationScalar"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "equals"
+                }
+              },
+              "required": [
+                "kind",
+                "field",
+                "value"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "absent"
+                }
+              },
+              "required": [
+                "kind",
+                "field"
+              ]
+            }
+          ]
+        },
+        "OperationScalar": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number",
+              "format": "double"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "OperationField": {

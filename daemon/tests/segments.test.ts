@@ -295,6 +295,9 @@ describe("segment management", () => {
     const root = testTmp(`segments-clear-thread-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
     await mkdir(join(characterDir, "threads", "eval"), { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+    const homeActive = `${JSON.stringify(message("u-home", "keep home active", 3))}\n`;
+    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), homeActive);
     putUnder(root, "ada", 0, [message("u0", "home talk", 0), message("a0", "home reply", 1)]);
     putUnder(root, "ada/eval", 0, [message("u1", "an earlier eval run", 1)]);
     await writeFile(
@@ -319,6 +322,9 @@ describe("segment management", () => {
       message_count: 1,
       segment: { index: 1 },
     });
+    expect(await segments(root, "ada", "eval", { action: "show", index: 1 })).toMatchObject({ messages: [{ content: "eval talk" }] });
+    expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(homeActive);
+    expect(await readFile(join(characterDir, "threads", "eval", "active.jsonl"), "utf8")).toBe("");
     expect(await segments(root, "ada", MAIN_THREAD, { action: "list" })).toMatchObject({
       count: 1,
       segments: [{ message_count: 2 }],

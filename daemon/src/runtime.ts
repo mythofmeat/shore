@@ -207,7 +207,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   const connectMcp = options.connectMcp ?? McpClient.connect;
   const refreshMcpCaches = async (mcpRegistry: McpRegistry): Promise<void> => {
-    await refreshMcpPromptCaches(cache, registry, config.dirs.data, mcpRegistry);
+    await refreshMcpPromptCaches(cache, registry, config.dirs.data, mcpRegistry, options.env);
   };
   const mcp = new McpHolder(
     await connectMcpRegistry(
@@ -232,6 +232,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(options.env === undefined ? {} : { env: options.env }),
       }),
       rebuild: {
+        ...(options.env === undefined ? {} : { env: options.env }),
         mcpRegistry: {
           toolDefsFiltered: (patterns) => mcp.current.toolDefsFiltered(patterns),
         },
@@ -402,12 +403,14 @@ export async function refreshMcpPromptCaches(
   registry: Pick<CharacterRegistry, "effectiveConfig">,
   dataDir: string,
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">,
+  env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   for (const character of cache.cachedCharacters()) {
     cache.invalidate(character, "mcp_recovery");
     try {
       await cache.reprimeFromDisk(character, dataDir, registry.effectiveConfig(character), {
         mcpRegistry,
+        ...(env === undefined ? {} : { env }),
       });
     } catch (e) {
       shoreLog.warn(`shore: mcp recovery cache refresh failed for ${character}: ${String(e)}`);

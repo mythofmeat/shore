@@ -26,7 +26,14 @@ import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { OperationClient } from "../src/browser/operations.ts";
 import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
-import { validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
+import type { BrowserRequest } from "../src/browser/connection.ts";
+import { segments } from "../src/commands/segments.ts";
+import { characterMemoryDir } from "../src/config/dirs.ts";
+import { MessageStore } from "../src/engine/message_store.ts";
+import { threadFile } from "../src/storage/files.ts";
+import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -234,6 +241,80 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("memory operations agree across independent TCP and browser histories, files and checkpoints", async () => {
+    const command = (name: string, args: Record<string, unknown> = {}): BrowserRequest => ({ type: "command", name, args });
+    const message = (text: string): BrowserRequest => ({ type: "message", text, stream: true, images: [], image_data: [] });
+    const steps: { request: BrowserRequest; error?: boolean; report?: string }[] = [
+      { request: command("segments") }, { request: command("clear"), error: true }, { request: command("compact", { dry_run: "true" }), error: true },
+      { request: message("Archive the older fact") }, { request: message("Retain the newer fact") },
+      { request: command("compact", { dry_run: true, keep_turns: 1 }), report: "dry_run" }, { request: command("compact", { keep_turns: 1 }), report: "compacted" },
+      { request: command("segments", { action: "show", index: 0 }) },
+      { request: command("segments", { action: "label", index: 0, value: "first" }) }, { request: command("segments", { action: "note", index: 0, value: "archive note" }) },
+      { request: command("segments", { action: "exclude", index: 0 }) }, { request: command("segments", { action: "include", index: 0 }) },
+      { request: command("segments", { action: "note", index: 0, value: null }) }, { request: command("segments", { action: "label", index: 0, value: "" }) },
+      { request: command("segments", { action: "note", index: 0 }), error: true },
+      { request: command("segments", { action: "show", index: 9999 }), error: true }, { request: command("clear", { exclude: true, note: "manual archive" }), report: "clear" },
+      { request: message("pause memory once") }, { request: command("compact", { keep_turns: 0 }), report: "paused" }, { request: command("compact"), report: "compacted" },
+      { request: message("truncate memory once") }, { request: command("compact", { keep_turns: 0 }), report: "truncated" }, { request: command("compact", { restart: true, keep_turns: 0 }), report: "compacted" },
+      { request: command("config", { key: "memory.compaction.write_memory", value: "false" }) }, { request: message("archive-only fact") },
+      { request: command("compact", { dry_run: true, keep_turns: 0 }), report: "rotated" }, { request: command("compact", { keep_turns: 0 }), report: "rotated" },
+      { request: command("create_thread", { name: "side" }) }, { request: command("switch_thread", { name: "side", resync: true }) },
+      { request: command("segments") }, { request: message("side thread fact") }, { request: command("clear", { note: null }), report: "clear" }, { request: command("segments", { action: "show", index: 0 }) },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const compactStream = compactionFixture();
+      const chat = scriptedProvider("Stored fixture reply");
+      const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+        if (request.context?.call_type === "compaction") yield* compactStream(request, signal); else yield* chat.stream(request, signal);
+      } };
+      const daemon = await start(place, [], { anthropic: provider }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Memory browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `memory-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ ...step.request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(step.request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} memory step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.request.type === "command" && step.error !== true) {
+            if (!isOperationName(step.request.name)) throw new Error(`Missing contract: ${step.request.name}`);
+            expect(validOperationResult(step.request.name, output?.["data"])).toBe(true);
+          }
+          if (step.report !== undefined) expect(output).toMatchObject({ data: { status: step.report } });
+          const config = daemon.runtime.registry.globalConfig();
+          const history = await segments(config.dirs.data, "ada", "main", {});
+          const side = await segments(config.dirs.data, "ada", "side", {});
+          const active = [...(await MessageStore.load(threadFile(config.dirs.data, "ada", "main", "active.jsonl"))).messages()].map(({ role, content }) => ({ role, content }));
+          const checkpoint = await loadCompactionCheckpoint(config.dirs.data, "ada", "main");
+          const memory = await readFile(join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "fixture.md"), "utf8").catch(() => null);
+          if (index === 5) { expect(active).toHaveLength(4); expect(history).toMatchObject({ count: 0 }); expect(memory).toBeNull(); expect(checkpoint).toBeUndefined(); }
+          if (index === 6) { expect(active).toHaveLength(2); expect(history).toMatchObject({ count: 1 }); expect(memory).toContain("Memory write 2"); }
+          if (step.report === "paused" || step.report === "truncated") { expect(active).toHaveLength(2); expect(memory).not.toBeNull(); }
+          if (step.report === "paused") expect(checkpoint).toMatchObject({ state: "paused" });
+          if (step.report === "compacted" || step.report === "clear") { expect(checkpoint).toBeUndefined(); expect(daemon.runtime.cache.get("ada")).toBeDefined(); }
+          const serialized = JSON.stringify({ observed, history, side, active, memory, checkpoint: checkpoint === undefined ? null : { state: checkpoint.state, reason: checkpoint.pauseReason, writes: checkpoint.loop.writesApplied.length } }, (key, value: unknown) => {
+            if (["memory_before", "memory_after", "new_conversation_id", "checkpoint_id", "msg_id", "turn_id", "parent_turn_id", "version"].includes(key) && typeof value === "string") return `<${key}>`;
+            return value;
+          }).replaceAll(place.root, "<root>").replaceAll(rid, `memory-${String(index)}`).replaceAll(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)/g, "<timestamp>");
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
   test("diagnostics and runtime actions agree across independent TCP and browser sessions", async () => {
     const steps = [
       { name: "status", args: {} }, { name: "error_log", args: { count: 0 } },
@@ -243,7 +324,6 @@ describe("coming up", () => {
       { name: "call_log", args: { id: 9999 }, error: true },
       { name: "call_log", args: { id: 2, diff: true, against: 9999 }, error: true },
       { name: "transcript", args: { source: "heartbeat", count: 1 } },
-      { name: "transcript", args: { source: "memory_recall", count: 1 } },
       { name: "transcript", args: { source: "bad-source" }, error: true },
       { name: "subagent_trace", args: { ids: ["parent-fixture"], count: 1 } },
       { name: "subagent_trace", args: { count: 2 } },
@@ -255,7 +335,7 @@ describe("coming up", () => {
     const outcomes: unknown[][] = [];
     for (const transport of ["tcp", "web"] as const) {
       const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
-      const daemon = await start(place, [], {}, false);
+      const daemon = await start(place, [], { anthropic: { ...scriptedProvider("Diagnostic fixture"), generate: cacheFixture } }, false);
       await seedDiagnosticFixture(daemon.runtime, "ada");
       const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
       const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
@@ -279,7 +359,7 @@ describe("coming up", () => {
           if (expectedError) { expect(output).toBeUndefined(); expect(observed.find((frame) => frame["type"] === "error")).toMatchObject({ code: "invalid_request" }); }
           else { expect(output).toMatchObject({ name: step.name }); expect(validOperationResult(step.name, output?.["data"])).toBe(true); }
           if (index === 5) expect(output).toMatchObject({ data: { call: { id: 2, request: { api_key: "[redacted]" } }, wire: [{ request_headers: [["Authorization", "[redacted]"], ["x-request-id", "diagnostic-call-1"]] }], diff: { from_call: 1, to_call: 2 } } });
-          if (index === 15) expect(output).toMatchObject({ data: { autonomy: { heartbeat_state: "Dormant" } } });
+          if (index === 14) expect(output).toMatchObject({ data: { autonomy: { heartbeat_state: "Dormant" } } });
           const state = daemon.runtime.autonomy.status("ada");
           const serialized = JSON.stringify({ observed, state: state === undefined ? null : { heartbeat: state.heartbeat_state, ticks: state.ticks_without_user } }, (key, value: unknown) => ["seconds_until_wake", "seconds_until_ping", "seconds_since_user"].includes(key) && typeof value === "number" ? "<relative-time>" : value)
             .replaceAll(place.root, "<root>").replaceAll(rid, `diagnostic-${String(index)}`).replaceAll(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)/g, "<timestamp>");
@@ -400,7 +480,7 @@ describe("coming up", () => {
       const invalid = `${changed}\n[unknown_section]\nvalue = true\n`;
       await writeFile(place.configPath, invalid);
       let failure: unknown;
-      try { await actions.run("config", { key: "notifications.ntfy.token", value: "rejected-fixture-secret" }); }
+      try { await actions.run("config", { key: "notifications.topic", value: "rejected-fixture-secret" }); }
       catch (error) { failure = error; }
       expect(String(failure)).toContain("was rejected");
       expect(String(failure)).not.toContain("rejected-fixture-secret");
