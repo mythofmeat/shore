@@ -25,6 +25,7 @@ import type { ServerMessage } from "../protocol/ServerMessage";
 import type { Logger } from "../swp/connection.ts";
 import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
+import type { RunningWebServer } from "../web/server.ts";
 import { localRfc3339 } from "../util/time.ts";
 import { startAutoDiscovery } from "./auto_discovery.ts";
 import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
@@ -96,6 +97,7 @@ export interface RunningDaemon {
   readonly instanceId: string;
   readonly runtime: ShoreRuntime;
   readonly server: Server;
+  readonly web?: RunningWebServer;
   readonly done: Promise<void>;
   stop(): void;
 }
@@ -162,6 +164,23 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   }
   const resolvedAddr = formatAddr(bound.host, bound.port);
 
+  let web: RunningWebServer | undefined;
+  try {
+    if (loaded.app.daemon.web.enabled) {
+      const { startWebServer } = await import("../web/server.ts");
+      web = startWebServer({
+        config: loaded.app.daemon.web,
+        server,
+        authenticate: (presented) => tokenMatches(startup.token.token, presented),
+      });
+    }
+  } catch (error) {
+    server.stop();
+    await server.serve();
+    dataLease.release();
+    throw new StartupError("server_run", `Failed to start browser transport: ${String(error)}`);
+  }
+
   const instances =
     options.instancesPath === undefined ? new Instances() : new Instances(options.instancesPath);
   const info: InstanceInfo = {
@@ -175,6 +194,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   try {
     instances.register(info);
   } catch (e) {
+    await web?.stop();
+    server.stop();
+    await server.serve();
     dataLease.release();
     throw new StartupError(
       "register_instance",
@@ -188,136 +210,164 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     data_dir: loaded.dirs.data,
   });
 
-  if (loaded.dirs.workspace !== undefined) {
-    try {
-      mkdirSync(loaded.dirs.workspace, { recursive: true });
-    } catch (e) {
-      log?.warn?.("Could not create the workspace directory", {
-        workspace_dir: loaded.dirs.workspace,
-        error: String(e),
-      });
+  const rollback: (() => void | Promise<void>)[] = [() => { instances.unregister(instanceId); }];
+  try {
+    if (loaded.dirs.workspace !== undefined) {
+      try {
+        mkdirSync(loaded.dirs.workspace, { recursive: true });
+      } catch (e) {
+        log?.warn?.("Could not create the workspace directory", {
+          workspace_dir: loaded.dirs.workspace,
+          error: String(e),
+        });
+      }
     }
-  }
 
-  const diagnostics = new Diagnostics();
+    const diagnostics = new Diagnostics();
 
-  const runtime = await createRuntime({
-    config: loaded,
-    configPath: startup.configPath,
-    providers: options.providers,
-    env,
-    diagnostics,
-    onHistory: (history) => server.broadcast({ type: "history", ...history } as ServerMessage),
-    emit: (character, revision, msg, thread) =>
-      emitNewMessageEvent(
-        (message) => server.broadcast(message),
-        character,
-        msg.origin ?? "autonomous",
-        revision,
-        msg,
-        thread,
-      ),
-  });
+    const runtime = await createRuntime({
+      config: loaded,
+      configPath: startup.configPath,
+      providers: options.providers,
+      env,
+      diagnostics,
+      onHistory: (history) => server.broadcast({ type: "history", ...history } as ServerMessage),
+      emit: (character, revision, msg, thread) =>
+        emitNewMessageEvent(
+          (message) => server.broadcast(message),
+          character,
+          msg.origin ?? "autonomous",
+          revision,
+          msg,
+          thread,
+        ),
+    });
+    rollback.push(async () => { await runtime.shutdown(); });
+    rollback.push(async () => { await runtime.autonomy.shutdown(); });
 
-  const handshake = buildHandshakeProvider(runtime.registry);
-  server.setHandshakeProvider(handshake);
+    const handshake = buildHandshakeProvider(runtime.registry);
+    server.setHandshakeProvider(handshake);
 
-  const assembly = {
-    runtime,
-    providers: runtime.providers,
-    autonomy: new TurnAutonomyBridge(runtime.autonomy),
-    router: server.sessionRouter,
-    handshake,
-    emitEvent: (message: ServerMessage) => server.broadcast(message),
-    diagnostics,
-    env,
-    ...(log === undefined ? {} : { log }),
-  };
-  await registerKnownCharacters(runtime, assembly.autonomy, log);
-  seedActivityInBackground(runtime, assembly.autonomy, log);
-  const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
+    const assembly = {
+      runtime,
+      providers: runtime.providers,
+      autonomy: new TurnAutonomyBridge(runtime.autonomy),
+      router: server.sessionRouter,
+      handshake,
+      emitEvent: (message: ServerMessage) => server.broadcast(message),
+      diagnostics,
+      env,
+      ...(log === undefined ? {} : { log }),
+    };
+    await registerKnownCharacters(runtime, assembly.autonomy, log);
+    seedActivityInBackground(runtime, assembly.autonomy, log);
+    const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
+    rollback.push(() => { clocks.stop(); });
 
-  const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
-  server.setControlHandler((routed) => handler.handleControl(routed));
+    const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
+    server.setControlHandler((routed) => handler.handleControl(routed));
 
-  const handlerDone = handler.run(server.routes());
-  const reloadConfig = configReloader(assembly);
+    const handlerDone = handler.run(server.routes());
+    rollback.push(async () => { await handlerDone; });
+    web?.activate();
+    if (web !== undefined) log?.info?.("Browser transport listening", { origin: web.origin });
+    const reloadConfig = configReloader(assembly);
 
-  const watcher = options.watchConfig === false
-    ? undefined
-    : startConfigWatcher({
-        configPath: startup.configPath,
-        configDir: loaded.dirs.config,
-        reload: async (changedPaths) =>
-          await runtime.snapshotGate.withActivity(async () => await reloadConfig(changedPaths)),
-        knownCharacter: (name) => runtime.registry.hasCharacter(name),
-        ...(loaded.dirs.workspace === undefined
-          ? {}
-          : { workspaceDir: loaded.dirs.workspace }),
-        ...(log === undefined ? {} : { log }),
-      });
-
-  const discovery =
-    options.autoDiscovery === false
+    const watcher = options.watchConfig === false
       ? undefined
-      : startAutoDiscovery({
-          config: () => runtime.registry.globalConfig(),
+      : startConfigWatcher({
+          configPath: startup.configPath,
+          configDir: loaded.dirs.config,
+          reload: async (changedPaths) =>
+            await runtime.snapshotGate.withActivity(async () => await reloadConfig(changedPaths)),
+          knownCharacter: (name) => runtime.registry.hasCharacter(name),
+          ...(loaded.dirs.workspace === undefined
+            ? {}
+            : { workspaceDir: loaded.dirs.workspace }),
           ...(log === undefined ? {} : { log }),
         });
+    rollback.push(async () => { await watcher?.stop(); });
 
-  const matrixBridge = superviseMatrixBridge({
-    config: loaded,
-    server,
-    env,
-    ...(log === undefined ? {} : { log }),
-  });
-  matrixBridge.done.catch((e: unknown) => {
-    log?.warn?.("Matrix bridge supervisor stopped", { error: String(e) });
-  });
+    const discovery =
+      options.autoDiscovery === false
+        ? undefined
+        : startAutoDiscovery({
+            config: () => runtime.registry.globalConfig(),
+            ...(log === undefined ? {} : { log }),
+          });
+    rollback.push(() => { discovery?.stop(); });
 
-  const served = server.serve();
+    const matrixBridge = superviseMatrixBridge({
+      config: loaded,
+      server,
+      env,
+      ...(log === undefined ? {} : { log }),
+    });
+    rollback.push(async () => { await matrixBridge.stop(); });
+    matrixBridge.done.catch((e: unknown) => {
+      log?.warn?.("Matrix bridge supervisor stopped", { error: String(e) });
+    });
 
-  const done = (async () => {
-    await served;
-    await watcher?.stop();
-    discovery?.stop();
-    await bounded(matrixBridge.stop(), "matrix bridge", log);
-    await bounded(handlerDone, "message handler", log);
-    clocks.stop();
-    await bounded(runtime.autonomy.shutdown(), "autonomy", log);
-    await bounded(runtime.shutdown(), "runtime", log);
-    try {
-      instances.unregister(instanceId);
-      log?.info?.("Unregistered daemon instance", {
-        instance_id: instanceId,
-        registry_path: instances.path,
-      });
-    } catch (e) {
-      log?.warn?.("Failed to unregister daemon instance", {
-        instance_id: instanceId,
-        registry_path: instances.path,
-        error: String(e),
-      });
+    const served = server.serve();
+
+    const done = (async () => {
+      await served;
+      if (web !== undefined) await bounded(web.stop(), "browser transport", log);
+      await watcher?.stop();
+      discovery?.stop();
+      await bounded(matrixBridge.stop(), "matrix bridge", log);
+      await bounded(handlerDone, "message handler", log);
+      clocks.stop();
+      await bounded(runtime.autonomy.shutdown(), "autonomy", log);
+      await bounded(runtime.shutdown(), "runtime", log);
+      try {
+        instances.unregister(instanceId);
+        log?.info?.("Unregistered daemon instance", {
+          instance_id: instanceId,
+          registry_path: instances.path,
+        });
+      } catch (e) {
+        log?.warn?.("Failed to unregister daemon instance", {
+          instance_id: instanceId,
+          registry_path: instances.path,
+          error: String(e),
+        });
+      }
+      if (!dataLease.release()) {
+        log?.warn?.("Could not release Shore data-directory ownership", {
+          instance_id: instanceId,
+          data_dir: dataLease.dataDir,
+          ownership_path: dataLease.path,
+        });
+      }
+      log?.info?.("Daemon shut down cleanly");
+    })();
+
+    return {
+      host: bound.host,
+      port: bound.port,
+      instanceId,
+      runtime,
+      server,
+      ...(web === undefined ? {} : { web }),
+      done,
+      stop: () => {
+        void web?.stop().catch((error: unknown) => {
+          log?.warn?.("Browser transport shutdown failed", { error: String(error) });
+        });
+        server.stop();
+      },
+    };
+  } catch (error) {
+    server.stop();
+    await Promise.allSettled([web?.stop(), server.serve()]);
+    for (const cleanup of rollback.reverse()) {
+      try { await cleanup(); }
+      catch (failure) { log?.warn?.("Startup cleanup failed", { error: String(failure) }); }
     }
-    if (!dataLease.release()) {
-      log?.warn?.("Could not release Shore data-directory ownership", {
-        instance_id: instanceId,
-        data_dir: dataLease.dataDir,
-        ownership_path: dataLease.path,
-      });
-    }
-    log?.info?.("Daemon shut down cleanly");
-  })();
-
-  return {
-    host: bound.host,
-    port: bound.port,
-    instanceId,
-    runtime,
-    server,
-    done,
-    stop: () => server.stop(),
-  };
+    dataLease.release();
+    throw new StartupError("server_run", `Failed to initialize shore-daemon: ${String(error)}`);
+  }
 }
 
 export function describeRejection(reason: unknown): string {

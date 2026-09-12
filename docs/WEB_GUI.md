@@ -98,9 +98,7 @@ cancellation, so a closed tab cannot create a late session and a stalled history
 shutdown open. Sending after detachment fails. Tests exercise these races through the actual local
 peer/session router, including oversized initial history and stalled refreshes.
 
-This is a prerequisite for the browser adapter; it does not add a web listener or authentication.
-The next transport layer must authenticate before calling `attachLocal`, constrain origins and
-admission, enforce WebSocket buffering separately, and expose an explicit reconnect/reload path.
+This local-peer change is a prerequisite for the browser adapter described below.
 The installed Bun 1.4.2 types and matching [WebSocket documentation](https://bun.com/docs/runtime/http/websockets)
 provide native payload, backpressure and connection lifecycle controls; use those controls alongside
 the bounded in-process peer rather than relying on a browser socket to bound upstream queues.
@@ -112,14 +110,98 @@ All Rust workspace tests, formatting and Clippy passed after a
 checked-JSON-access correction in the new correlation test. The contract commit was amended with
 that correction. No generated contract changes were needed for the local-peer lifecycle work.
 
+### Optional authenticated browser transport
+
+The daemon now supports a default-off web listener using Bun's native HTTP, TLS and WebSocket
+implementation. It binds before opening runtime stores, accepts API requests only after the shared
+handler starts, and closes on initialization failure or daemon shutdown. Disabled serving does not
+create a listener, authentication timers or web sessions. TCP remains available in either mode.
+
+```toml
+[daemon.web]
+enabled = true
+bind_addr = "127.0.0.1:7340"
+```
+
+All web settings are visible through the existing configuration schema and require restart. Bind
+addresses must use an IP literal or `localhost`. A non-loopback listener additionally requires
+`tls_cert`, `tls_key` and an exact HTTPS `public_origin`. For example, a listener on `0.0.0.0:7340`
+can use `public_origin = "https://shore.example:7340"` with certificate/key paths on the daemon host.
+A loopback listener can instead sit behind a same-origin HTTPS reverse proxy: configure the public
+HTTPS origin and preserve the public Host header and WebSocket upgrades. Direct remote plaintext
+listeners and remote HTTP origins are rejected. Provider credentials are never part of this setup.
+
+The browser signs in by posting `{ "token": "…" }` to `/api/login` with the existing daemon client
+token. The response sets an opaque, host-only, HttpOnly, SameSite=Strict session cookie; HTTPS also
+sets Secure and uses the `__Host-` prefix. Tokens and cookies do not appear in returned JSON or URLs.
+Sessions expire after eight hours, including open sockets; logout immediately revokes the cookie
+and every socket using it. In-memory authentication sessions are bounded to twice the connection
+limit. Restarting the daemon invalidates them. All API routes require the exact browser Origin and
+Host, reject cross-site/same-site fetches and query parameters, and return no-store security headers.
+
+`POST /api/session` reports the authenticated session and contract fingerprint. `GET /api/swp`
+upgrades only after authentication, origin checks and an exact `shore-web-1.<fingerprint>` subprotocol
+match. A stale contract receives HTTP 409 with `reload_required` before any peer/history access.
+The fingerprint includes generated wire inventory and Rust-owned operation/web schemas. HTTP login,
+session and problem payloads also derive from Rust definitions; CI checks their generated artifacts.
+No browser UI or static assets are served by this transport milestone.
+
+Each WebSocket sends a normal SWP hello with `client_type: "web"`, then waits for server hello/history.
+The adapter applies the same wire decoder and admission rules as TCP, then forwards messages through
+`attachLocal`. Each tab has independent character/thread selection. Commands and generation requests
+require a distinct pending ASCII request ID of 1–128 bytes without NUL. Results/errors/final generation
+frames release pending allowance. Cancel uses the existing immediate control route. Creation now
+refreshes the shared runtime, indexes and autonomy before acknowledgement, and shared routing preserves the original
+request ID when a generation is cancelled or superseded.
+
+Default limits are 16 sockets, 32 pending requests per socket, 32 MiB incoming frame size, 32 MiB
+aggregate pending request bytes, 128 incoming messages per second (32 MiB total), and 32 MiB queued
+bytes at each outgoing stage. `max_connections` accepts 1–256 and `max_queued_bytes` accepts 1 KiB–128
+MiB. Local queues also cap at 128 frames. Login bodies cap at 4 KiB, sign-in attempts at 60 per minute,
+and hello messages at 64 KiB. Hello/attachment and network drain each have a ten-second deadline.
+Binary messages are rejected. Overflow closes the affected peer with an explicit reconnect/resync
+reason; a partially buffered native send is never resent. Logout/expiry, stalled attachment, socket
+failure and daemon shutdown all detach the local peer. Existing shared image limits still apply.
+
+Transport tests use real HTTP(S) and WebSocket connections, with a locally trusted test certificate
+and certificate verification enabled. They cover authentication-before-history, origin/Host/token
+URL rejection, cookie revocation/expiry, native HTTP limits, malformed frames, session/request/byte
+limits, distinct tabs, stale contracts, a paused network reader and shutdown. Full-daemon journeys
+create/select a character from an empty installation, send, fork with advanced options, and compare
+persisted history with TCP; a held provider is cancelled 33 times without exhausting request slots.
+Creation and cancellation failures were reproduced before their shared-path fixes. Startup failures
+are checked for released listeners, instance registration and data-directory ownership. These tests
+exercise transport clients, not a browser DOM or the still-unimplemented GUI.
+
+An executable smoke test copied the compiled daemon into a temporary directory and ran it from
+otherwise empty working directories. Disabled web left TCP commands available and no HTTP listener;
+enabled web authenticated and returned history over WebSocket. Both exited cleanly on SIGTERM.
+This exposed and fixed two shared TCP lifecycle defects: connections arriving between bind and serve
+were left unmanaged, and a disconnected client's pending 30-second ping timer delayed process exit.
+The listener now closes early connections and the message loop cancels its timer on every exit using
+the [standard abortable timer API](https://nodejs.org/api/timers.html#cancelling-timers).
+A real-socket test and a child-process test exercise these paths;
+deliberately removing either cleanup is detected. Frontend assets/deep links and the full packaged
+browser workflow remain part of the later release milestone.
+
+Transport validation: all eight required daemon commands passed with 8,175 tests; all 55 mutation
+passes have current source patterns. The browser mutation pass killed all ten mutants, the TCP
+server pass all twelve, the daemon startup pass all twenty-five, and routing killed thirty-one
+with one previously documented equivalent retained. Tightening configuration assertions recovered
+all thirteen uncovered cases in the broader validation mutation run, which now kills all eighty-five
+mutants. A separate ping-timer cleanup mutation is also detected by the child-process regression.
+Rust workspace tests, formatting and Clippy also pass for the final transport changes.
+Actionlint accepts the generation workflow. Logs remain in `out/issue-214/`; GitHub execution and
+merge-policy enforcement remain unverified.
+
 Remaining work follows the issue's sequence:
 
 1. Continue the contract migration through the 43 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
-2. Optional web transport: default-off config, loopback default, explicit secured remote setup,
-   authentication before attach/history, origin checks, compatibility handshake, independent peers,
-   cleanup, connection/message/upload/outbound queue limits, control routing and bounded lag policy.
+2. Complete request lifecycle tracking across thread changes and reconnects, audit all exposed
+   payloads/redaction, and add authenticated controlled upload/download adapters. The initial web
+   transport is implemented; file transfer and browser recovery are still outstanding.
 3. Browser state layer and designed screens: shared revision-sequence fixtures with Rust, pending
    request correlation and uncertain mutation recovery, drafts/preferences, navigation/composer,
    streaming/alternatives/editing/media, generated action forms and schema-backed settings.
