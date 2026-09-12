@@ -16,6 +16,7 @@ import type { ToolPhase } from "../src/tools/execute.ts";
 import { required } from "../src/util/required.ts";
 import { appendCompactionTail } from "../src/memory/compaction/llm.ts";
 import type { CallRecord } from "../src/call_store.ts";
+import type { ContentBlock } from "../src/engine/types.ts";
 
 const dateIn = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
@@ -102,7 +103,7 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
   }
 }, 90_000);
 
-test("compaction keeps the chat system prompt and sends its instructions after the history", async () => {
+test.each([false, true])("compaction keeps the chat system prompt and MCP tools while using tools (tools: %s)", async (withTools) => {
   const dir = await mkdtemp(join(tmpdir(), "shore-sdk-compaction-prefix-"));
   const mock = await startMockAnthropic({ fallback: { text: "reply" } });
   const provider = new ClaudeAgentProvider({
@@ -118,18 +119,51 @@ test("compaction keeps the chat system prompt and sends its instructions after t
     messages: [{ role: "user", content: [{ type: "text", text: "The original conversation." }] }],
     context: { character: "test", call_type: "message", thinking_enabled: false },
     max_tokens: 256, replay_prior_thinking: "all",
+    ...(withTools ? { tools: [
+      { name: "read", description: "Read a workspace file.", input_schema: { type: "object", properties: { path: { type: "string" } } } },
+      { name: "edit", description: "Edit a workspace file.", input_schema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } } } },
+    ] } : {}),
+  };
+  let toolCalls = 0;
+  const phase: ToolPhase = {
+    messages: [], recordTurn: () => {},
+    runTool: call => {
+      toolCalls += 1;
+      return Promise.resolve({ type: "tool_result", tool_use_id: call.id, content: `Tool result ${toolCalls}.` });
+    },
+  };
+  const run = async (): Promise<ContentBlock[]> => {
+    const signal = AbortSignal.timeout(25_000);
+    if (!withTools) return (await provider.generate(request, signal)).content_blocks;
+    for await (const event of provider.streamWithTools(request, phase, signal)) {
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") return required(event.content_blocks) as ContentBlock[];
+    }
+    throw new Error("SDK tool loop did not finish");
   };
   try {
-    const reply = await provider.generate(request, AbortSignal.timeout(25_000));
-    request.messages.push({ role: "assistant", content: reply.content_blocks });
+    const reply = await run();
+    request.messages.push({ role: "assistant", content: reply });
     appendCompactionTail(request,
       { role: "user", content: [{ type: "text", text: "Compact this conversation now." }] },
       "Write durable memory before archiving the conversation.");
     request.context = { character: "test", thinking_enabled: false, call_type: "compaction" };
-    await provider.generate(request, AbortSignal.timeout(25_000));
+    if (withTools) mock.push(
+      { toolUses: [{ id: "toolu_read", name: "mcp__shore__read", input: { path: "memory.md" } }] },
+      { toolUses: [{ id: "toolu_edit", name: "mcp__shore__edit", input: { path: "memory.md", content: "Durable memory." } }] },
+    );
+    await run();
     const first = required(mock.requests[0]).body;
-    const compact = required(mock.requests.at(-1)).body;
-    expect(compact.system).toEqual(first.system);
+    const compact = required(mock.requests[1]).body;
+    for (const sent of mock.requests.slice(1)) {
+      expect(JSON.stringify(sent.body.system)).toBe(JSON.stringify(first.system));
+      expect(JSON.stringify(sent.body["tools"])).toBe(JSON.stringify(first["tools"]));
+    }
+    expect(toolCalls).toBe(withTools ? 2 : 0);
+    if (withTools) {
+      expect((first["tools"] as { name: string }[]).map(tool => tool.name)).toEqual(["mcp__shore__edit", "mcp__shore__read"]);
+      expect(mock.requests).toHaveLength(4);
+    }
     const messages = compact.messages as WireMessage[];
     expect(messages.map(message => message.role)).toEqual(["user", "assistant", "user"]);
     expect(JSON.stringify(messages[0])).toContain("The original conversation.");

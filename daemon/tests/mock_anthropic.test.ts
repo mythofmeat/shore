@@ -121,6 +121,25 @@ describe("PrefixCache", () => {
 });
 
 describe("the adapter's schedule, against the modelled cache", () => {
+  test.each(["name", "description", "schema", "removed"])("changing tool definitions invalidates the downstream cache (%s)", async (change) => {
+    const m = await mock();
+    const req = request(m.url, [user("hello")]);
+    req.tools = [{ name: "read", description: "Read a file.", input_schema: { type: "object", properties: { path: { type: "string" } } } }];
+    const provider = new AnthropicProvider();
+    await provider.generate(req);
+    await provider.generate(req);
+    expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThan(0);
+
+    const tool = required(req.tools[0]);
+    if (change === "name") tool.name = "read_file";
+    else if (change === "description") tool.description = "Read a workspace file.";
+    else if (change === "schema") tool.input_schema = { type: "object", properties: { path: { type: "string" }, limit: { type: "integer" } } };
+    else req.tools = [];
+    await provider.generate(req);
+    expect(m.lastUsage.cache_read_input_tokens).toBe(0);
+    expect(m.lastUsage.cache_creation_input_tokens).toBeGreaterThan(0);
+  });
+
   test("a second turn on the same prefix reads it", async () => {
     const m = await mock();
     const history = [user("first question"), assistant("first answer")];

@@ -30,7 +30,7 @@ export interface AnthropicReply {
 }
 
 export interface SeenBreakpoint {
-  where: "system" | "messages";
+  where: "tools" | "system" | "messages";
   index: number;
   prefixTokens: number;
   hit: boolean;
@@ -123,13 +123,14 @@ export class PrefixCache {
   account(
     system: unknown,
     messages: unknown[],
+    tools?: unknown,
   ): { usage: Omit<AnthropicUsage, "output_tokens">; breakpoints: SeenBreakpoint[] } {
     const now = this.now();
     const breakpoints: SeenBreakpoint[] = [];
     const parts: unknown[] = [];
     let cumulative = 0;
 
-    const walk = (where: "system" | "messages", blocks: unknown[]) => {
+    const walk = (where: SeenBreakpoint["where"], blocks: unknown[]) => {
       blocks.forEach((block, index) => {
         parts.push(block);
         cumulative += estimateTokens(block);
@@ -150,6 +151,7 @@ export class PrefixCache {
       });
     };
 
+    walk("tools", Array.isArray(tools) ? tools : []);
     walk("system", Array.isArray(system) ? system : system ? [system] : []);
     walk("messages", messages);
 
@@ -213,7 +215,7 @@ export async function startMockAnthropic(
         messages: Array.isArray(rawBody["messages"]) ? rawBody["messages"] : [],
       };
       const streaming = body.stream === true;
-      const { usage: inputUsage, breakpoints } = cache.account(body.system, body.messages);
+      const { usage: inputUsage, breakpoints } = cache.account(body.system, body.messages, body["tools"]);
 
       const record: AnthropicRequestRecord = {
         body,
