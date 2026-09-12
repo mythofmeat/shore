@@ -57,14 +57,43 @@ macro_rules! wire_types {
     )*};
 }
 
+#[derive(Debug, Clone)]
+pub struct PayloadVersion<const VERSION: u32>;
+
+impl<const VERSION: u32> Serialize for PayloadVersion<VERSION> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u32(VERSION)
+    }
+}
+
+impl<'de, const VERSION: u32> Deserialize<'de> for PayloadVersion<VERSION> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if u32::deserialize(deserializer)? == VERSION {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::custom("unsupported payload version"))
+        }
+    }
+}
+
+impl<const VERSION: u32> JsonSchema for PayloadVersion<VERSION> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        format!("PayloadVersion{VERSION}").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> Schema {
+        schemars::json_schema!({ "type": "integer", "const": VERSION })
+    }
+}
+
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics, Memory, Tools }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics, Memory, Tools, Usage }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction, ToolExecution }
+    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction, ToolExecution, Ledger }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite, RuntimeWrite, ProviderCall }
@@ -156,6 +185,309 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum UsageDimension { Model, Provider, CallType, Kind, ApiKey, CostSource }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum UsageBudgetPeriod { Hour, Day, Week, Month }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum UsageBudgetAction { Warn, Block, PauseBackground, PauseHeartbeat }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum UsageBudgetLevel { Ok, Warning, OverLimit }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum UsageCacheState { Cold, Warm }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum NanoGptAccountState { Active, Grace, Inactive }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct UsageArgs {
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub character: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub provider: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub api_key: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub model: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub call_type: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub group_by: Option<Option<UsageDimension>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub budget: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub anomalies: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub export_csv: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub export_tsv: Option<bool>,
+    }
+
+    pub struct UsageTotals {
+        pub call_count: usize,
+        pub total_input: usize,
+        pub total_output: usize,
+        pub total_cache_read: usize,
+        pub total_cache_write: usize,
+        pub total_cost: f64,
+    }
+
+    pub struct UsageSummaryRow {
+        pub provider: String,
+        pub model: String,
+        #[serde(flatten)]
+        pub totals: UsageTotals,
+    }
+
+    pub struct GroupedUsageRow {
+        pub group: String,
+        #[serde(flatten)]
+        pub totals: UsageTotals,
+    }
+
+    pub struct UsageCostSource {
+        pub cost_source: String,
+        pub calls: usize,
+        pub unpriced_calls: usize,
+        pub total_cost: f64,
+    }
+
+    pub struct UsageAnomalyCount {
+        pub anomaly: String,
+        pub calls: usize,
+        pub cache_write_tokens: usize,
+    }
+
+    pub struct UsageCacheCoverage {
+        pub state: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub reason: Option<String>,
+        pub calls: usize,
+        pub cache_read_tokens: usize,
+        pub cache_write_tokens: usize,
+    }
+
+    pub struct UsageCacheHealth {
+        pub character: String,
+        pub state: UsageCacheState,
+        pub streak: usize,
+    }
+
+    pub struct UsageCallAttempts {
+        pub pending: usize,
+        pub unresolved: usize,
+        pub estimated_cost_at_risk: f64,
+    }
+
+    pub struct UsageAnomaly {
+        pub ts: String,
+        pub character: String,
+        pub model: String,
+        pub call_type: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub anomaly: Option<String>,
+        pub cache_read_tokens: usize,
+        pub cache_write_tokens: usize,
+    }
+
+    pub struct UsageBudgetFilters {
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub provider: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub api_key: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub call_type: Option<String>,
+        pub usage_kind: Vec<String>,
+    }
+
+    pub struct UsagePace {
+        pub period: UsageBudgetPeriod,
+        pub window_start: String,
+        pub window_end: String,
+        pub allowance: f64,
+        pub base_allowance: f64,
+        pub rollover: f64,
+        pub debt_adjustment: f64,
+        pub current_cost: f64,
+        pub remaining: f64,
+        pub percent_used: f64,
+        pub periods_remaining: usize,
+        pub status: UsageBudgetLevel,
+        pub action: UsageBudgetAction,
+        pub effective_action: UsageBudgetAction,
+        pub warning_thresholds: Vec<f64>,
+        pub crossed_warn_at: Vec<f64>,
+        pub over_limit: bool,
+    }
+
+    pub struct UsageBudget {
+        pub name: String,
+        pub period: UsageBudgetPeriod,
+        pub period_start: String,
+        pub period_end: String,
+        pub reset_at: String,
+        pub timezone: String,
+        pub current_cost: f64,
+        pub cost_limit: f64,
+        pub percent_used: f64,
+        pub status: UsageBudgetLevel,
+        pub action: UsageBudgetAction,
+        pub effective_action: UsageBudgetAction,
+        pub warning_thresholds: Vec<f64>,
+        pub crossed_warn_at: Vec<f64>,
+        pub over_limit: bool,
+        pub compaction_allowed_over_budget: bool,
+        pub filters: UsageBudgetFilters,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "UsagePace")]
+        #[ts(optional)]
+        pub pace: Option<UsagePace>,
+    }
+
+    pub struct RateLimitSnapshot {
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub requests_remaining: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub requests_limit: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub input_tokens_remaining: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub input_tokens_limit: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub output_tokens_remaining: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "f64")]
+        #[ts(optional)]
+        pub output_tokens_limit: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub resets_at: Option<String>,
+    }
+
+    pub struct UsageRateLimitReading {
+        pub host: String,
+        pub observed_at: String,
+        #[serde(flatten)]
+        pub limits: RateLimitSnapshot,
+    }
+
+    #[serde(rename_all = "camelCase")]
+    pub struct NanoGptWeeklyInputTokens {
+        pub used: f64,
+        pub remaining: f64,
+        pub limit: f64,
+        pub reset_at: String,
+    }
+
+    pub struct NanoGptRouting {
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        #[serde(rename = "recommendedMode")]
+        pub recommended_mode: Option<String>,
+    }
+
+    pub struct NanoGptSubscriptionState {
+        #[ts(type = "1")]
+        pub version: PayloadVersion<1>,
+        pub fetched_at: String,
+        pub active: bool,
+        pub state: NanoGptAccountState,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "NanoGptWeeklyInputTokens")]
+        #[ts(optional)]
+        #[serde(rename = "weeklyInputTokens")]
+        pub weekly_input_tokens: Option<NanoGptWeeklyInputTokens>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "NanoGptRouting")]
+        #[ts(optional)]
+        pub routing: Option<NanoGptRouting>,
+    }
+
+    pub struct UsageSummaryReport {
+        pub period: String,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub period_since: Option<String>,
+        pub timezone: String,
+        pub summary: Vec<UsageSummaryRow>,
+        pub cache_health: Vec<UsageCacheHealth>,
+        pub anomaly_count_7d: usize,
+        pub anomaly_counts_7d: Vec<UsageAnomalyCount>,
+        pub cache_coverage: Vec<UsageCacheCoverage>,
+        pub cost_sources: Vec<UsageCostSource>,
+        pub rate_limits: Vec<UsageRateLimitReading>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub nanogpt_subscription: Option<NanoGptSubscriptionState>,
+        pub call_attempts: UsageCallAttempts,
+        pub budgets: Vec<UsageBudget>,
+    }
+
+    pub struct UsageGroupedReport {
+        pub dimension: UsageDimension,
+        pub period: String,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub period_since: Option<String>,
+        pub summary: Vec<GroupedUsageRow>,
+    }
+
+    pub struct UsageBudgetReport {
+        pub timezone: String,
+        pub allow_compaction_over_budget: bool,
+        pub budgets: Vec<UsageBudget>,
+        pub call_attempts: UsageCallAttempts,
+    }
+
+    pub struct UsageAnomaliesReport {
+        pub anomalies: Vec<UsageAnomaly>,
+    }
+
+    pub struct UsageExportReport {
+        pub data: String,
+    }
+
+    #[serde(tag = "mode", rename_all = "snake_case")]
+    pub enum UsageResult {
+        Summary(UsageSummaryReport),
+        SummaryBy(UsageGroupedReport),
+        Budget(UsageBudgetReport),
+        Anomalies(UsageAnomaliesReport),
+        Csv(UsageExportReport),
+        Tsv(UsageExportReport),
     }
 
     #[serde(deny_unknown_fields)]
@@ -1946,6 +2278,7 @@ macro_rules! operations {
 }
 
 operations! {
+    UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,
     InspectSegments: "segments" (SegmentsArgs) => SegmentsResult,
@@ -2003,6 +2336,48 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_contracts_preserve_explicit_null_filters_and_require_report_fields() {
+        let input = serde_json::json!({"last":null,"character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"group_by":null,"budget":false,"anomalies":false,"export_csv":false,"export_tsv":false});
+        let parsed: UsageArgs = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), input);
+        assert_eq!(
+            serde_json::to_value(UsageArgs::default()).unwrap(),
+            serde_json::json!({})
+        );
+        assert!(
+            serde_json::from_value::<UsageArgs>(serde_json::json!({"group_by":"character"}))
+                .is_err()
+        );
+        assert!(serde_json::from_value::<UsageArgs>(serde_json::json!({"budget":"true"})).is_err());
+        assert!(
+            serde_json::from_value::<NanoGptSubscriptionState>(
+                serde_json::json!({"version":2,"fetched_at":"now","active":true,"state":"active"})
+            )
+            .is_err()
+        );
+        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../shore-cli/tests/fixtures/usage_reports.json"
+        ))
+        .unwrap();
+        for report in reports {
+            assert!(serde_json::from_value::<UsageResult>(report.clone()).is_ok());
+            for key in report
+                .as_object()
+                .unwrap()
+                .keys()
+                .filter(|key| key.as_str() != "period_since")
+            {
+                let mut incomplete = report.clone();
+                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(
+                    serde_json::from_value::<UsageResult>(incomplete).is_err(),
+                    "missing {key}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn manual_tool_contracts_keep_structured_arguments_and_complete_result_variants() {

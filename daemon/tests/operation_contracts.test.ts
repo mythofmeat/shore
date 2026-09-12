@@ -7,10 +7,41 @@ import { operationPolicy } from "../src/operations/policy.ts";
 import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
 import memorySegments from "../../client/shore-cli/tests/fixtures/memory_segments.json" with { type: "json" };
 import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
+import usageReports from "../../client/shore-cli/tests/fixtures/usage_reports.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("usage filters preserve null and omission while report modes and dimensions stay typed", () => {
+    for (const input of [{}, { last: null, character: null, provider: null, api_key: null, model: null, call_type: null, group_by: null, budget: false, anomalies: false, export_csv: false, export_tsv: false }, { last: "all", character: "", provider: "anthropic", api_key: "unknown", model: "fixture", call_type: "heartbeat", group_by: "cost_source", budget: true, anomalies: true, export_csv: true, export_tsv: true }] as const) {
+      expect(parseOperationInput("usage", input)).toEqual(input);
+      expect(validOperationInput("usage", input)).toBe(true);
+    }
+    for (const input of [{ group_by: "character" }, { last: 3 }, { character: [] }, { provider: false }, { api_key: 0 }, { model: {} }, { call_type: true }, { budget: "true" }, { anomalies: 1 }, { export_csv: "false" }, { export_tsv: [] }, { refresh_pricing: true }]) {
+      expect(() => parseOperationInput("usage", input)).toThrow();
+      expect(validOperationInput("usage", input)).toBe(false);
+    }
+  });
+
+  test("all usage report variants require complete fields and retain new information", () => {
+    for (const result of usageReports) {
+      const future = { ...result, future_detail: { retained: true } };
+      expect<unknown>(parseOperationResult("usage", future)).toEqual(future);
+      expect(validOperationResult("usage", future)).toBe(true);
+      for (const key of Object.keys(result).filter((field) => field !== "period_since")) {
+        const incomplete = Object.fromEntries(Object.entries(result).filter(([field]) => field !== key));
+        expect(() => parseOperationResult("usage", incomplete), `${result.mode}.${key}`).toThrow();
+        expect(validOperationResult("usage", incomplete), `${result.mode}.${key}`).toBe(false);
+      }
+    }
+    const summary = usageReports[0];
+    for (const changed of [{ cache_health: [{ character: "nova", state: "hot", streak: 1 }] }, { budgets: [{ name: "missing fields" }] }, { rate_limits: [{ host: "fixture" }] }, { nanogpt_subscription: { version: 2, fetched_at: "now", active: true, state: "active" } }, { call_attempts: { pending: 0, unresolved: 1 } }, { period_since: null }, { summary: [{ provider: "fixture", model: "fixture", call_count: 1 }] }]) {
+      expect(validOperationResult("usage", { ...summary, ...changed })).toBe(false);
+    }
+    const operation = commandCatalogue().find((item) => item.name === "usage");
+    expect(operation).toMatchObject({ scope: "optional_character", prerequisites: ["ledger"], confirmation: "none", effects: ["read"] });
+  });
+
   test("tool inputs retain structured values and string overrides while rejecting malformed envelopes", () => {
     for (const input of [
       { tool: "read" }, { tool: "edit", input: { path: "notes.md", entries: [{ enabled: false, number: 0, text: "", unset: null }] }, pairs: { limit: "0", path: "override.md" }, raw: true, describe: false },
@@ -253,5 +284,8 @@ describe("executable operation contracts", () => {
     expect(catalogue.find((operation) => operation.name === "fork_thread")?.available).toBe(false);
     expect(catalogue.find((operation) => operation.name === "character_info")?.available).toBe(false);
     expect(catalogue.find((operation) => operation.name === "archive_thread")?.confirmation).toBe("archive");
+    expect(catalogue.find((operation) => operation.name === "usage")?.available).toBe(false);
+    context.deps.ledgerPath = "/fixture/shore.db";
+    expect(commandCatalogue(context).find((operation) => operation.name === "usage")?.available).toBe(true);
   });
 });

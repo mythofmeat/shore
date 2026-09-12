@@ -124,25 +124,9 @@ function rows(db: Database, sql: string, values: Bindable[]) {
   return db.query(sql).all(...values) as Record<string, unknown>[];
 }
 
-export interface UsageSummary {
-  provider: string;
-  model: string;
-  call_count: number;
-  total_input: number;
-  total_output: number;
-  total_cache_read: number;
-  total_cache_write: number;
-  total_cost: number;
-}
+export type UsageSummary = import("../protocol/UsageSummaryRow.ts").UsageSummaryRow;
 
-export interface UsageTotals {
-  call_count: number;
-  total_input: number;
-  total_output: number;
-  total_cache_read: number;
-  total_cache_write: number;
-  total_cost: number;
-}
+export type UsageTotals = import("../protocol/UsageTotals.ts").UsageTotals;
 
 const SUM_COLUMNS = `COUNT(*) as call_count,
                   SUM(input_tokens) as total_input,
@@ -223,12 +207,7 @@ export function usageSummary(
   }));
 }
 
-export interface CostSourceTotals {
-  cost_source: string;
-  calls: number;
-  unpriced_calls: number;
-  total_cost: number;
-}
+export type CostSourceTotals = import("../protocol/UsageCostSource.ts").UsageCostSource;
 
 export function costSourceTotals(db: Database, filter: QueryFilter): CostSourceTotals[] {
   const { where, values } = buildWhere(filter);
@@ -248,11 +227,7 @@ export function costSourceTotals(db: Database, filter: QueryFilter): CostSourceT
   }));
 }
 
-export interface AnomalyCount {
-  anomaly: string;
-  calls: number;
-  cache_write_tokens: number;
-}
+export type AnomalyCount = import("../protocol/UsageAnomalyCount.ts").UsageAnomalyCount;
 
 export function anomalyCounts(db: Database, filter: QueryFilter): AnomalyCount[] {
   const { where, values } = buildWhere(filter);
@@ -268,13 +243,7 @@ export function anomalyCounts(db: Database, filter: QueryFilter): AnomalyCount[]
   }));
 }
 
-export interface CacheCoverage {
-  state: string;
-  reason: string | null;
-  calls: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-}
+export type CacheCoverage = import("../protocol/UsageCacheCoverage.ts").UsageCacheCoverage;
 
 export function cacheCoverage(db: Database, filter: QueryFilter): CacheCoverage[] {
   const { where, values } = buildWhere(filter);
@@ -296,17 +265,9 @@ export function cacheCoverage(db: Database, filter: QueryFilter): CacheCoverage[
   }));
 }
 
-export type UsageDimension =
-  | "model"
-  | "provider"
-  | "call_type"
-  | "kind"
-  | "api_key"
-  | "cost_source";
+export type UsageDimension = import("../protocol/UsageDimension.ts").UsageDimension;
 
-export interface GroupedUsage extends UsageTotals {
-  group: string;
-}
+export type GroupedUsage = import("../protocol/GroupedUsageRow.ts").GroupedUsageRow;
 
 const DIMENSION_EXPR: Record<UsageDimension, string> = {
   model: "provider || ' ' || model",

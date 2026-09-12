@@ -135,8 +135,8 @@ MUTANTS = [
      "  return { type: \"error\", rid: null, code: error.code, message: error.message };",
      "  return { type: \"error\", rid: null, code: \"invalid_request\", message: error.message };"),
     ("envelope: an unknown name is reported as not_found",
-     "      throw invalidRequest(`Unknown command: ${cmd.name}`);",
-     "      throw notFound(`Unknown command: ${cmd.name}`);"),
+     "  throw invalidRequest(`Unknown command: ${cmd.name}`);",
+     "  throw notFound(`Unknown command: ${cmd.name}`);"),
 ]
 
 

@@ -6,6 +6,7 @@ import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
 import { toolFixture } from "../support/tool_fixture.ts";
+import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
 
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
@@ -60,6 +61,7 @@ enabled = false
 [daemon.web]
 enabled = true
 bind_addr = "127.0.0.1:0"
+${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""}
 `);
 let generation = 0;
 const memoryStream = compactionFixture();
@@ -88,6 +90,7 @@ try {
     SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
   await seedDiagnosticFixture(daemon.runtime, "nova");
+  if (process.env["SHORE_BROWSER_USAGE_SEED"] === "true") await seedUsageFixture(daemon.runtime);
   seedArchivedSegment(daemon.runtime, "recovery");
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });

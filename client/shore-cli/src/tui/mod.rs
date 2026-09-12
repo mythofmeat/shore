@@ -32,7 +32,7 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
 use shore_common::protocol::operations::{
-    ConfigReloadArgs, ConfigReloadResult, Operation, ReloadConfiguration,
+    ConfigReloadArgs, ConfigReloadResult, Operation, ReloadConfiguration, UsageArgs, UsageReport,
 };
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
@@ -1057,12 +1057,20 @@ fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
     app.history_version = app.history_version.wrapping_add(1);
 }
 
-fn usage_budget_conn_command() -> ConnCommand {
-    ConnCommand::Send(ClientMessage::Command(Command {
-        rid: None,
-        name: "usage".into(),
-        args: serde_json::json!({ "budget": true }),
-    }))
+fn usage_budget_conn_commands(app: &mut App) -> Vec<ConnCommand> {
+    match UsageReport::command(
+        UsageArgs {
+            budget: Some(true),
+            ..UsageArgs::default()
+        },
+        None,
+    ) {
+        Ok(command) => vec![ConnCommand::Send(ClientMessage::Command(command))],
+        Err(error) => {
+            app.set_error(error.to_string());
+            vec![]
+        }
+    }
 }
 
 async fn handle_conn_event_and_send(
@@ -1542,7 +1550,9 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.set_status("connected");
             let mut cmds = if has_selected_character {
-                vec![usage_budget_conn_command(), thread_refresh_command(app)]
+                let mut commands = usage_budget_conn_commands(app);
+                commands.push(thread_refresh_command(app));
+                commands
             } else {
                 vec![]
             };
@@ -2557,7 +2567,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.scroll_to_bottom();
                 }
                 return UiEffect {
-                    cmds: vec![usage_budget_conn_command()],
+                    cmds: usage_budget_conn_commands(app),
                     redraw: RedrawEffect::ImmediateFull,
                 };
             }

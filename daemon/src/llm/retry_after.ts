@@ -60,15 +60,7 @@ export function retryAfterMsFromError(err: unknown, now: () => number = Date.now
   return undefined;
 }
 
-export interface RateLimitSnapshot {
-  requests_remaining?: number;
-  requests_limit?: number;
-  input_tokens_remaining?: number;
-  input_tokens_limit?: number;
-  output_tokens_remaining?: number;
-  output_tokens_limit?: number;
-  resets_at?: string;
-}
+export type RateLimitSnapshot = import("../protocol/RateLimitSnapshot.ts").RateLimitSnapshot;
 
 type NumericRateLimitField = Exclude<keyof RateLimitSnapshot, "resets_at">;
 
