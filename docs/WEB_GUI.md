@@ -10,9 +10,10 @@ navigation, settings, model, diagnostics, usage and memory workflows.
 Rust remains canonical for SWP envelopes, events and existing wire value types, as specified in
 `daemon/src/protocol/README.md`. Extend that path for operation payloads: define typed inputs and
 results in `client/shore-common`, generate TypeScript with ts-rs, and derive runtime JSON Schemas from
-the same Rust definitions. Use those schemas for server validation and GUI controls. The intended
-schema derivation tool is Schemars; verify its current release and installed implementation before
-adding it. Do not hand-edit generated protocol files or duplicate validators/UI schemas.
+the same Rust definitions. Use those schemas for server validation and GUI controls. Schemars 1.2.2
+has been added in a separate dependency change; its installed implementation supports explicit
+2020-12 schemas and distinct deserialize/input and serialize/result contracts. All Rust workspace
+checks pass with the addition. Do not hand-edit generated protocol files or duplicate validators/UI schemas.
 
 Pair an operation's input and result in the canonical catalogue so Rust and TypeScript callers keep
 the association. Handler registration, scope/prerequisites, effects, confirmation and presentation
