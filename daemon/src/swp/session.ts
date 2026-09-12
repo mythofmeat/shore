@@ -5,6 +5,7 @@ import type { ServerMessage } from "../protocol/ServerMessage";
 export type RequestKind = "message" | "regen" | "command" | "cancel";
 
 export const ALL_CHARACTERS_CAPABILITY = "all_characters";
+export const REQUEST_LIFECYCLE_CAPABILITY = "request-lifecycle";
 
 export interface ClientInfo {
   readonly id: number;

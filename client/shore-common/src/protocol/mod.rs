@@ -1,6 +1,8 @@
 pub mod client_msg;
 pub mod error;
 pub mod operations;
+#[cfg(test)]
+mod schemas;
 pub mod server_msg;
 pub mod tool_display;
 pub mod types;

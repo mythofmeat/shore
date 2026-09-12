@@ -30,6 +30,11 @@ jobs:
       - run: bun run lint:comments
       - run: bun run lint:citations
       - run: bun run typecheck
+      - run: bun run browser:check
+      - run: bun run browser:generate
+      - run: |
+          git diff --exit-code -- src/browser/validators.generated.js src/browser/validators.generated.d.ts
+          test -z "$(git ls-files --others --exclude-standard -- src/browser/validators.generated.js src/browser/validators.generated.d.ts)"
       - run: bun test
       - run: bun run mutate --stale
       - run: bun run rerecord:check
@@ -58,6 +63,7 @@ jobs:
       - run: cargo test -p shore-common --lib export_bindings --locked
       - run: cargo test -p shore-common --lib export_operation_schemas --locked
       - run: cargo test -p shore-common --lib export_web_schemas --locked
+      - run: cargo test -p shore-common --lib export_wire_schemas --locked
       - run: cargo test -p shore-cli export_capability_inventory --locked -- --ignored
       - run: |
           git diff --exit-code -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../daemon/src/web/schemas.generated.json ../docs/capabilities/terminal.generated.json

@@ -724,6 +724,7 @@ async fn follow_log_stream(
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -1923,6 +1924,7 @@ async fn recv_streaming_response(
             | ServerMessage::CommandOutput(_)
             | ServerMessage::NewMessage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -1976,6 +1978,7 @@ async fn recv_command_data(
             | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }

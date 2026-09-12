@@ -464,6 +464,51 @@ describe("what a generation is handed", () => {
 });
 
 describe("session state lifecycle", () => {
+  test.each(["cancelled", "superseded"] as const)("%s requests finish only after the provider actually settles", async (outcome) => {
+    const finishes: (() => void)[] = [];
+    const h = harness(["Alice"], 1, () => new Promise<void>((resolve) => { finishes.push(resolve); }));
+    h.router.setSelectedCharacter(1, "Alice");
+    const request = (rid: string): RequestMeta => {
+      const base = meta("Alice", 1, rid, "message");
+      return { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } };
+    };
+    await h.handler.handleRouted({ kind: "engine", msg: message("first", "hello", true), meta: request("first") });
+    if (outcome === "cancelled") await h.handler.cancelGeneration(1, null, "user cancelled");
+    else await h.handler.handleRouted({ kind: "engine", msg: message("second", "again", true), meta: request("second") });
+    expect(h.started[0]?.signal.aborted).toBe(true);
+    expect(h.frames.get(1)?.map((frame) => frame.type)).toEqual(["stream_end"]);
+    for (const finish of finishes) finish();
+    await h.handler.drain();
+    expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished" && frame.rid === "first")).toMatchObject({ outcome });
+    if (outcome === "superseded") expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished" && frame.rid === "second")).toMatchObject({ outcome: "completed" });
+  });
+
+  test("a synchronous provider failure also finishes its request and releases session state", async () => {
+    const h = harness(["Alice"], 1, () => { throw new Error("synchronous provider failure"); });
+    const request = meta("Alice", 1, "failure", "message");
+    await h.handler.handleRouted({ kind: "engine", msg: message("failure", "hello", true), meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } } });
+    await h.handler.drain();
+    expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished")).toMatchObject({ outcome: "failed", error: { message: "synchronous provider failure" } });
+    expect(h.handler.sessionStateCount).toBe(0);
+  });
+
+  test("opted-in clients receive failure details after moving away from the request's thread", async () => {
+    let fail = (_error: Error) => {};
+    const h = harness(["Alice"], 1, () => new Promise<void>((_resolve, reject) => { fail = reject; }));
+    const request = meta("Alice", 1, "background", "message");
+    h.router.setSelectedCharacter(1, "Alice");
+    await h.handler.handleRouted({
+      kind: "engine", msg: message("background", "hello", true),
+      meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } },
+    });
+    h.router.setSelectedThread(1, "other");
+    fail(new Error("background request failed"));
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([
+      { type: "request_finished", rid: "background", outcome: "failed", error: { code: "internal_error", message: "background request failed" } },
+    ]);
+  });
+
   test("a completed generation releases its session state", async () => {
     let finish: (() => void) | undefined;
     const h = harness(

@@ -65,7 +65,7 @@ const UNCONDITIONAL_EVENTS = new Set([
   "config_warning",
 ]);
 
-const UNROUTABLE_EVENTS = new Set(["unknown"]);
+const UNROUTABLE_EVENTS = new Set(["unknown", "request_finished"]);
 
 export function eventMatchesSession(
   msg: ServerMessage,

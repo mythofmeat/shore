@@ -108,6 +108,7 @@ impl SyncState {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => SyncDecision::Deliver,
         }
     }
@@ -118,6 +119,65 @@ mod tests {
     use super::*;
     use crate::protocol::server_msg::{History, NewMessage};
     use crate::protocol::types::{Message, Role};
+
+    #[test]
+    fn shared_browser_sync_sequences() {
+        #[derive(serde::Deserialize)]
+        struct Initial {
+            revision: u64,
+            character: Option<String>,
+            thread: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Step {
+            event: ServerMessage,
+            decision: String,
+            latest_revision: u64,
+            character: Option<String>,
+            thread: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Sequence {
+            name: String,
+            initial: Initial,
+            steps: Vec<Step>,
+        }
+        let sequences: Vec<Sequence> =
+            serde_json::from_str(include_str!("../../../../fixtures/protocol/sync.json")).unwrap();
+        for sequence in sequences {
+            let mut sync = SyncState::new(
+                sequence.initial.revision,
+                sequence.initial.character.as_deref(),
+                sequence.initial.thread.as_deref(),
+            );
+            for (index, step) in sequence.steps.into_iter().enumerate() {
+                let observed = match sync.observe(&step.event) {
+                    SyncDecision::Deliver => "deliver",
+                    SyncDecision::DropStale => "drop_stale",
+                    SyncDecision::Resync => "resync",
+                };
+                assert_eq!(observed, step.decision, "{} step {index}", sequence.name);
+                assert_eq!(
+                    sync.latest_revision(),
+                    step.latest_revision,
+                    "{} step {index}",
+                    sequence.name
+                );
+                assert_eq!(
+                    sync.selected_character(),
+                    step.character.as_deref(),
+                    "{} step {index}",
+                    sequence.name
+                );
+                assert_eq!(
+                    sync.selected_thread(),
+                    step.thread.as_deref(),
+                    "{} step {index}",
+                    sequence.name
+                );
+            }
+        }
+    }
 
     fn message(id: &str) -> Message {
         Message {

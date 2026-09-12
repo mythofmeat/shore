@@ -50,6 +50,25 @@ const SERVER_HELLO_FIXTURE: &str = r#"{
 }"#;
 
 #[test]
+fn request_finished_preserves_correlation_and_failure() {
+    let frame: ServerMessage = assert_golden(
+        r#"{
+        "type": "request_finished", "rid": "background-request", "outcome": "failed",
+        "error": {"code": "provider_error", "message": "Provider unavailable", "retry_after_ms": 500}
+    }"#,
+    );
+    assert_eq!(frame.request_id(), Some("background-request"));
+    assert_variant!(frame, ServerMessage::RequestFinished(done) => {
+        assert_eq!(done.outcome, RequestOutcome::Failed);
+        assert_eq!(done.error.unwrap().retry_after_ms, Some(500));
+    });
+    for outcome in ["completed", "cancelled", "superseded"] {
+        let json = format!(r#"{{"type":"request_finished","rid":"r","outcome":"{outcome}"}}"#);
+        let _: ServerMessage = assert_golden(&json);
+    }
+}
+
+#[test]
 fn server_hello_golden() {
     let msg: ServerMessage = assert_golden(SERVER_HELLO_FIXTURE);
     assert_variant!(
@@ -1053,6 +1072,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {
                 panic!("unexpected message for missing rid test");
             }
