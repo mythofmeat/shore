@@ -14,7 +14,9 @@
     "mutate": "bun run scripts/mutate.ts",
     "rerecord": "bun run scripts/rerecord.ts",
     "rerecord:check": "bun run scripts/rerecord.ts --check",
-    "build:patch": "bun run scripts/build_patch.ts"
+    "build:patch": "bun run scripts/build_patch.ts",
+    "inventory:generate": "bun run scripts/capability_inventory.ts --write",
+    "inventory:check": "bun run scripts/capability_inventory.ts"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.51",
