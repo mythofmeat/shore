@@ -76,6 +76,7 @@ export function idleAnchorMessage(
 }
 
 export interface RebuildDeps {
+  env?: NodeJS.ProcessEnv;
   mcpRegistry?: Pick<McpRegistry, "toolDefsFiltered">;
   newId?: () => string;
   now?: () => string;
@@ -132,6 +133,7 @@ export async function rebuildRequestFromDisk(
         mcpToolDefs,
         thread,
         activeConversation: store.messageCount() > 0,
+        ...(deps.env === undefined ? {} : { env: deps.env }),
         ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }),
       },
     );

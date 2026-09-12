@@ -58,13 +58,13 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration, Models, Diagnostics, Memory }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation }
+    pub enum OperationPrerequisite { Threads, Autonomy, Keepalive, SessionActivation, Compaction }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite, RuntimeWrite, ProviderCall }
@@ -88,6 +88,21 @@ wire_types! {
         pub multiline: Option<bool>,
     }
 
+    #[serde(untagged)]
+    pub enum OperationScalar { Boolean(bool), Text(String), Number(f64), Null(()) }
+
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    pub enum OperationCondition {
+        Equals { field: String, value: OperationScalar },
+        Absent { field: String },
+    }
+
+    pub struct OperationPolicy {
+        pub condition: OperationCondition,
+        pub effects: Vec<OperationEffect>,
+        pub confirmation: OperationConfirmation,
+    }
+
     pub struct OperationDescriptor {
         pub name: String,
         pub label: String,
@@ -96,6 +111,9 @@ wire_types! {
         pub prerequisites: Vec<OperationPrerequisite>,
         pub effects: Vec<OperationEffect>,
         pub confirmation: OperationConfirmation,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub policies: Option<Vec<OperationPolicy>>,
         pub fields: std::collections::BTreeMap<String, OperationField>,
         #[ts(type = "unknown")]
         pub input: serde_json::Value,
@@ -138,6 +156,171 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub key_source: Option<ConfigSource>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct CompactArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub dry_run: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub restart: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub keep_turns: Option<u64>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct ClearArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub exclude: Option<bool>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub note: Option<Option<String>>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum SegmentAction { List, Show, Exclude, Include, Label, Note }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum SegmentMutation { Exclude, Include, Label, Note }
+
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct SegmentsArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub action: Option<SegmentAction>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub index: Option<u64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub value: Option<Option<String>>,
+    }
+
+    pub struct SegmentSummary {
+        #[ts(type = "number")]
+        pub index: u64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub first_message_at: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub last_message_at: Option<String>,
+        pub compacted_at: String,
+        pub message_count: usize,
+        pub excluded: bool,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub label: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub note: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub memory_before: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub memory_after: Option<String>,
+    }
+
+    pub struct SegmentsListing {
+        pub character: String,
+        pub thread: String,
+        pub segments: Vec<SegmentSummary>,
+        pub count: usize,
+    }
+
+    pub struct SegmentInspection {
+        pub character: String,
+        pub thread: String,
+        pub segment: SegmentSummary,
+        pub messages: Vec<Message>,
+    }
+
+    pub struct SegmentChanged {
+        pub character: String,
+        pub thread: String,
+        pub action: SegmentMutation,
+        pub segment: SegmentSummary,
+    }
+
+    #[serde(untagged)]
+    pub enum SegmentsResult { Listing(SegmentsListing), Inspection(Box<SegmentInspection>), Changed(Box<SegmentChanged>) }
+
+    #[serde(tag = "status", rename_all = "snake_case")]
+    pub enum ClearResult {
+        Clear {
+            character: String,
+            thread: String,
+            message_count: usize,
+            #[serde(deserialize_with = "deserialize_nullable")]
+            segment: Option<SegmentSummary>,
+        },
+    }
+
+    pub struct CompactionPreviewFile {
+        pub path: String,
+        pub content_preview: String,
+    }
+
+    #[serde(tag = "status", rename_all = "snake_case")]
+    pub enum CompactionReport {
+        Compacted {
+            character: String,
+            message_count: usize,
+            turn_count: usize,
+            compacted_turns: usize,
+            retained_count: usize,
+            retained_turns: usize,
+            memory_files_written: Vec<String>,
+            new_conversation_id: String,
+            tool_rounds: usize,
+            tools_called: Vec<String>,
+        },
+        Rotated {
+            character: String,
+            message_count: usize,
+            turn_count: usize,
+            compacted_turns: usize,
+            retained_count: usize,
+            retained_turns: usize,
+            dry_run: bool,
+            memory_files_written: Vec<String>,
+            archived_messages: usize,
+        },
+        DryRun {
+            character: String,
+            message_count: usize,
+            turn_count: usize,
+            compacted_turns: usize,
+            retained_count: usize,
+            retained_turns: usize,
+            would_write_files: usize,
+            file_ops_preview: Vec<CompactionPreviewFile>,
+            tool_rounds: usize,
+            tools_called: Vec<String>,
+        },
+        Truncated {
+            character: String,
+            message_count: usize,
+            turn_count: usize,
+            compacted_turns: usize,
+            tool_rounds: usize,
+            tools_called: Vec<String>,
+            truncated_turns: usize,
+            partial_writes: Vec<String>,
+        },
+        Paused {
+            character: String,
+            message_count: usize,
+            compacted_turns: usize,
+            checkpoint_id: String,
+            tool_rounds: usize,
+            tools_called: Vec<String>,
+            reason: String,
+            #[serde(deserialize_with = "deserialize_nullable")]
+            detail: Option<String>,
+            #[serde(deserialize_with = "deserialize_nullable")]
+            resume_at: Option<String>,
+        },
     }
 
     #[serde(deny_unknown_fields)]
@@ -1697,6 +1880,9 @@ macro_rules! operations {
 }
 
 operations! {
+    CompactConversation: "compact" (CompactArgs) => CompactionReport,
+    InspectSegments: "segments" (SegmentsArgs) => SegmentsResult,
+    ClearConversation: "clear" (ClearArgs) => ClearResult,
     ReadStatus: "status" (EmptyOperationArgs) => StatusReport,
     ReadErrorLog: "error_log" (DiagnosticCountArgs) => ErrorLogResult,
     ReadHeartbeatLog: "heartbeat_log" (DiagnosticCountArgs) => HeartbeatLogResult,
@@ -1750,6 +1936,75 @@ operations! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memory_arguments_preserve_explicit_clears_and_omissions() {
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({"value":null}),
+            serde_json::json!({"action":"note","index":0,"value":""}),
+        ] {
+            let input: SegmentsArgs = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(input).unwrap(), value);
+        }
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({"note":null}),
+            serde_json::json!({"exclude":false,"note":"archive"}),
+        ] {
+            let input: ClearArgs = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(input).unwrap(), value);
+        }
+        let args = serde_json::json!({"dry_run":true,"restart":false,"keep_turns":0});
+        let input: CompactArgs = serde_json::from_value(args.clone()).unwrap();
+        let command = CompactConversation::command(input, Some("compact-1".to_owned())).unwrap();
+        assert_eq!(
+            serde_json::to_value(command).unwrap(),
+            serde_json::json!({"name":"compact","rid":"compact-1","args":args})
+        );
+        for invalid in [
+            serde_json::json!({"dry_run":"true"}),
+            serde_json::json!({"keep_turns":-1}),
+            serde_json::json!({"keep_turns":1.5}),
+            serde_json::json!({"restart":1}),
+            serde_json::json!({"unknown":null}),
+        ] {
+            assert!(serde_json::from_value::<CompactArgs>(invalid).is_err());
+        }
+        assert!(
+            serde_json::from_value::<SegmentsArgs>(serde_json::json!({"action":"remove"})).is_err()
+        );
+    }
+
+    #[test]
+    fn memory_result_variants_require_complete_payloads() {
+        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../shore-cli/tests/fixtures/memory_compaction.json"
+        ))
+        .unwrap();
+        for report in reports {
+            let parsed: CompactionReport = serde_json::from_value(report.clone()).unwrap();
+            assert_eq!(serde_json::to_value(parsed).unwrap(), report);
+            for key in report.as_object().unwrap().keys() {
+                let mut incomplete = report.clone();
+                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(
+                    serde_json::from_value::<CompactionReport>(incomplete).is_err(),
+                    "{key}"
+                );
+            }
+        }
+        let listing: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../shore-cli/tests/fixtures/memory_segments.json"
+        ))
+        .unwrap();
+        let parsed: SegmentsResult = serde_json::from_value(listing.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), listing);
+        assert!(
+            serde_json::from_value::<SegmentsResult>(serde_json::json!({"segments":[]})).is_err()
+        );
+        assert!(serde_json::from_value::<ClearResult>(serde_json::json!({"status":"clear","character":"ada","thread":"main","message_count":0})).is_err());
+    }
 
     #[test]
     fn diagnostic_requests_preserve_filters_and_reject_invalid_variants() {

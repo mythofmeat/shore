@@ -3,7 +3,8 @@ import type { OperationCategory } from "./OperationCategory";
 import type { OperationConfirmation } from "./OperationConfirmation";
 import type { OperationEffect } from "./OperationEffect";
 import type { OperationField } from "./OperationField";
+import type { OperationPolicy } from "./OperationPolicy";
 import type { OperationPrerequisite } from "./OperationPrerequisite";
 import type { OperationScope } from "./OperationScope";
 
-export type OperationDescriptor = { name: string, label: string, category: OperationCategory, scope: OperationScope, prerequisites: Array<OperationPrerequisite>, effects: Array<OperationEffect>, confirmation: OperationConfirmation, fields: { [key in string]: OperationField }, input: unknown, output: unknown, available?: boolean, };
+export type OperationDescriptor = { name: string, label: string, category: OperationCategory, scope: OperationScope, prerequisites: Array<OperationPrerequisite>, effects: Array<OperationEffect>, confirmation: OperationConfirmation, policies?: Array<OperationPolicy>, fields: { [key in string]: OperationField }, input: unknown, output: unknown, available?: boolean, };

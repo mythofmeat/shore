@@ -488,9 +488,47 @@ checks, all six browser journeys, and browser-generation/inventory checks. Five 
 passes killed 133 mutants; all 57 staleness passes are current. Independent legacy captures remain
 unchanged. GitHub CI execution and required merge gates remain unverified.
 
+### Memory and segment workflows
+
+`compact`, `segments` and `clear` now use canonical Rust input/result contracts, registered daemon
+handlers and generated browser validators. There are 51 registered operations and five legacy names
+remaining: `run_tool`, `usage`, `delete_character`, `export_character` and `import_character`.
+Segment label/note arguments preserve omission, explicit null and empty text. All five compaction
+outcomes retain their distinct fields, including paused checkpoints and partial writes. Shared
+argument policies control preview effects and confirmations in both the dedicated panel and the
+generated action form. Unknown policy fields fail discovery.
+
+Memory & segments provides retained-turn controls, previews, resume/restart, archive-only clearing,
+segment inspection, include/exclude, label/note edits and failed memory retry. Archived messages,
+memory revisions and complete downloadable JSON stay inspectable. Errors preserve the last selected
+segment and unsaved metadata. An executable renderer gate checks every canonical compaction status
+and demonstrates failure when the paused renderer is removed.
+
+The real browser preview exposed a shared credential propagation bug: chat could use the daemon's
+configured environment while compaction's rebuilt requests fell back to the process environment.
+Compaction, autonomous compaction and cache rebuild assembly now pass the configured environment
+through the existing credential resolver. Tests supply the provider key only through daemon options.
+The cache fixture now exercises successful keepalive requests after rebuilding instead of depending
+on that missing-key failure to skip the request.
+
+Two browser journeys cover all compaction outcomes, confirmations, retained history, failed-memory
+retry, metadata clearing, failed lookup recovery, downloads, reload persistence and mobile layout.
+A 34-step independent-world TCP/WebSocket journey compares results, errors, request completion,
+active history, archived segments, memory file contents and checkpoint state, including side-thread
+isolation. Real CLI and pseudo-terminal tests cover the three commands, explicit argument forms,
+all compaction result variants, malformed results, scrolling and archive confirmations.
+
+Memory validation passed all eight required daemon checks with 8,234 tests, all three Rust workspace
+checks, all eight browser journeys, and generation/inventory checks. The five affected mutation
+passes killed 85/85 mutants, and all 58 staleness passes are current. One old segment probe addressed
+a directory argument superseded by durable storage; it now mutates the actual active-message read,
+with explicit assertions that clearing a side thread preserves home's active messages. The Rust
+checks bypassed an unavailable sccache service using `RUSTC_WRAPPER=`. GitHub CI execution, required
+merge gates and the remaining acceptance criteria are still unverified or unfinished.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the eight legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the five legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
@@ -498,7 +536,7 @@ Remaining work follows the issue's sequence:
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
 4. Close the remaining advanced workflows: expanded diagnostics coverage, usage exports,
-   segments/memory recovery, safe archive transfers, keyboard customization and every known event.
+   expanded memory recovery and cancellation, safe archive transfers, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and
    cancellation. Demonstrate deliberate omission failures for operations, fields, renderers/events.

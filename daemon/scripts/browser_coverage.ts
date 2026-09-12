@@ -4,6 +4,7 @@ import { actionControl } from "../src/browser/forms.ts";
 import { EVENT_POLICIES } from "../src/browser/workspace.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import wire from "../src/protocol/wire.generated.json" with { type: "json" };
+import operationSchemas from "../src/operations/schemas.generated.json" with { type: "json" };
 import { parseInventorySources } from "./capability_inventory.ts";
 
 export async function switchCases(text: string, functionName: string, expression: string): Promise<Set<string>> {
@@ -22,6 +23,16 @@ export async function switchCases(text: string, functionName: string, expression
   };
   visit(source);
   return cases;
+}
+
+export function assertCompactionResultCoverage(renderers: ReadonlySet<string>): void {
+  const schema = operationSchemas.find((operation) => operation.name === "compact")?.output;
+  if (schema === undefined || !("oneOf" in schema) || schema.oneOf === undefined) throw new Error("Missing compaction result contract");
+  for (const variant of schema.oneOf) {
+    if (!("status" in variant.properties)) throw new Error("Missing compaction status discriminator");
+    const status = variant.properties.status.const;
+    if (!renderers.has(status)) throw new Error(`Missing compaction result renderer: ${status}`);
+  }
 }
 
 export function assertBrowserCoverage(operations: OperationDescriptor[], renderers: ReadonlySet<string>, events: ReadonlySet<string>, policies: Readonly<Record<string, string>> = EVENT_POLICIES): void {

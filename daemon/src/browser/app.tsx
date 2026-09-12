@@ -5,11 +5,13 @@ import type { Message } from "../protocol/Message.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { Providers } from "./providers.tsx";
 import { Diagnostics } from "./diagnostics.tsx";
+import { Memory } from "./memory.tsx";
 import { Models } from "./models.tsx";
 import { Settings } from "./settings.tsx";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
 import { BrowserConnection } from "./connection.ts";
 import { Blocks, Field, ImageView, Inspect, Modal } from "./components.tsx";
+import { operationPolicy } from "../operations/policy.ts";
 import { actionControl, initialValue, record } from "./forms.ts";
 import { Workspace, type WorkspaceSnapshot } from "./workspace.ts";
 
@@ -30,6 +32,7 @@ function save(key: string, value: string): void {
 function Action({ operation, state, close, preset = {} }: { operation: OperationDescriptor; state: WorkspaceSnapshot; close: () => void; preset?: Record<string, unknown> }) {
   const control = actionControl(operation);
   const [values, setValues] = useState<Record<string, unknown>>(() => ({ ...record(initialValue(control)), ...preset }));
+  const policy = operationPolicy(operation, values);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<unknown>();
@@ -66,7 +69,7 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
     finally { setBusy(false); }
   };
   return <Modal title={operation.label} close={close}><p className="muted">{operation.category} · {operation.scope.replaceAll("_", " ")}</p>
-    <form onSubmit={(event) => { event.preventDefault(); if (operation.confirmation !== "none" && !confirming) setConfirming(true); else void execute(); }}>
+    <form onSubmit={(event) => { event.preventDefault(); if (policy.confirmation !== "none" && !confirming) setConfirming(true); else void execute(); }}>
       <fieldset disabled={busy || confirming || state.status !== "ready"} className="action-fields">
         {Object.entries(control.fields).map(([key, field]) => {
           const presentation = operation.fields[key];
@@ -83,10 +86,10 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
       </fieldset>
       {error === "" ? null : <p role="alert" className="error">{error}</p>}
       {operation.available === false ? <p>This action is unavailable in the selected conversation.</p> : null}
-      {confirming ? <div className="confirmation"><strong>Confirm {operation.confirmation}</strong><p>Review the selected values before continuing.</p><pre>{JSON.stringify(values, null, 2)}</pre><button type="button" onClick={() => setConfirming(false)}>Go back</button></div> : null}
-      <div className="actions"><button className={confirming ? "danger" : "primary"} disabled={busy || operation.available === false || state.status !== "ready"} type="submit">{busy ? "Working…" : confirming ? `Confirm ${operation.confirmation}` : "Run action"}</button></div>
+      {confirming ? <div className="confirmation"><strong>Confirm {policy.confirmation}</strong><p>Review the selected values before continuing.</p><pre>{JSON.stringify(values, null, 2)}</pre><button type="button" onClick={() => setConfirming(false)}>Go back</button></div> : null}
+      <div className="actions"><button className={confirming ? "danger" : "primary"} disabled={busy || operation.available === false || state.status !== "ready"} type="submit">{busy ? "Working…" : confirming ? `Confirm ${policy.confirmation}` : "Run action"}</button></div>
     </form>
-    {result === undefined ? null : <div className="result"><h3>Action completed</h3><pre>{JSON.stringify(result, null, 2)}</pre></div>}
+    {result === undefined ? null : <div className="result"><h3>Action completed</h3><Inspect value={result} label="Complete action result" /></div>}
   </Modal>;
 }
 
@@ -159,6 +162,7 @@ function App() {
   const [settings, setSettings] = useState(false);
   const [models, setModels] = useState(false);
   const [diagnostics, setDiagnostics] = useState(false);
+  const [memory, setMemory] = useState(false);
   const [navigation, setNavigation] = useState(false);
   const [reasoning, setReasoning] = useState(() => saved("shore.reasoning") !== "false");
   const [tools, setTools] = useState(() => saved("shore.tools") !== "false");
@@ -187,7 +191,7 @@ function App() {
     <aside className="sidebar"><div className="brand">SHORE <span>WORKSPACE</span></div><div className="section-heading"><h2>Characters</h2><button disabled={!ready} onClick={() => action("create_character")}>New</button></div>
       <nav aria-label="Characters">{state.characters.map((character) => <button key={character.name} aria-current={state.character === character.name ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(character.name))}><span className="avatar">{character.name.slice(0, 1).toUpperCase()}</span>{character.name}</button>)}</nav>
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
-      <div className="sidebar-footer"><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
+      <div className="sidebar-footer"><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
     <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
@@ -201,6 +205,7 @@ function App() {
       </div><Composer key={JSON.stringify([state.character, state.thread])} state={state} />
     </main>
     {activity ? <aside className="activity"><h2>Activity & details</h2><Inspect label="Conversation configuration" value={state.config} />{state.streams.filter((stream) => stream.subagent !== null).map((stream) => <section key={stream.key}><h3>{stream.subagent}</h3><div className="message-text">{stream.text}</div><Blocks blocks={stream.blocks} reasoning={reasoning} tools={tools} openImage={setImage} /></section>)}{state.activity.slice().reverse().map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}</aside> : null}
+    {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
     {diagnostics && state.character !== null ? <Diagnostics key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} characters={state.characters.map((item) => item.name)} changed={() => workspace.refreshNavigation()} advanced={(name) => { setDiagnostics(false); action(name); }} close={() => setDiagnostics(false)} openImage={setImage} /> : null}
     {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}

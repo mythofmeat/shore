@@ -16,7 +16,10 @@ import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
-import type { Args } from "./navigation.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { SegmentAction } from "../protocol/SegmentAction.ts";
+import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
+type Args = OperationInput<"segments">;
 
 
 export interface SegmentEngine {
@@ -44,8 +47,8 @@ export async function segments(
   thread: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
-): Promise<unknown> {
-  const action = typeof args["action"] === "string" ? args["action"] : "list";
+): Promise<OperationResult<"segments">> {
+  const action = args.action ?? "list";
   const mutate = () =>
     runSegments(dataDir, character, thread, action, args, historyIndex);
   const indexPath =
@@ -61,10 +64,10 @@ function runSegments(
   dataDir: string,
   character: string,
   thread: string,
-  action: string,
+  action: SegmentAction,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
-): unknown {
+): OperationResult<"segments"> {
   const key = archiveKey(character, thread);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
@@ -100,7 +103,7 @@ function runSegments(
         changed = store.setNote(key, idx, nullableText(args["value"], "note"));
         break;
       default:
-        throw invalidRequest(`unknown segment action: ${action}`);
+        throw invalidRequest(`unknown segment action: ${String(action)}`);
     }
     if (!changed) throw notFound(missing(idx, character, thread));
     if (action === "exclude" || action === "include") {
@@ -117,8 +120,8 @@ function runSegments(
 export async function clear(
   engine: SegmentEngine,
   ctx: ClearContext,
-  args: Args,
-): Promise<unknown> {
+  args: OperationInput<"clear">,
+): Promise<OperationResult<"clear">> {
   return await withConversation(threadDataDir(ctx.dataDir, engine.characterName, engine.thread), "rewrite", async () => {
     const character = engine.characterName;
     const guard = tryBeginCompaction(ctx.dataDir, character);
@@ -190,7 +193,7 @@ function missing(idx: number, character: string, thread: string): string {
   return `segment ${String(idx)} not found for ${where}`;
 }
 
-function presentSegment(record: SegmentRecord): Record<string, unknown> {
+function presentSegment(record: SegmentRecord): SegmentSummary {
   return {
     index: record.idx,
     first_message_at: record.first_message_at,

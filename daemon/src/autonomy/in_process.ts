@@ -202,11 +202,13 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   }
 
   #compactionDeps(config: LoadedConfig): {
+    env?: NodeJS.ProcessEnv;
     generate: CompactionGenerate;
     tools?: ToolContextDeps;
   } {
     return {
       generate: compactionGenerate(this.#generateDeps(config)),
+      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
       ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
   }

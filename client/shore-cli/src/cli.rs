@@ -1,17 +1,19 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ConfigArgs,
-    Configuration, ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages,
-    DeleteMessagesArgs, DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs,
-    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
-    InspectCalls, InspectModel, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
+    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ClearArgs,
+    ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
+    ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
+    DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, FavoriteModel,
+    FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
+    InspectModel, InspectSegments, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
     MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs,
     Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadHeartbeatLog,
     ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
-    RefreshProviderModels, ResetModel, ResetModelArgs, ScheduleHeartbeat, SetHeartbeatActive,
-    SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel,
-    SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource,
+    RefreshProviderModels, ResetModel, ResetModelArgs, ScheduleHeartbeat, SegmentAction,
+    SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs,
+    SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs,
+    TranscriptSource,
 };
 use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
@@ -2381,28 +2383,33 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Segments { subcommand, .. } => {
             let (action, segment_index, field_value) = match subcommand {
-                None => ("list", None, None),
-                Some(SegmentsCommand::Show { index }) => ("show", Some(index), None),
-                Some(SegmentsCommand::Exclude { index }) => ("exclude", Some(index), None),
-                Some(SegmentsCommand::Include { index }) => ("include", Some(index), None),
-                Some(SegmentsCommand::Label { index, label }) => {
-                    ("label", Some(index), Some(label))
+                None => (SegmentAction::List, None, None),
+                Some(SegmentsCommand::Show { index }) => (SegmentAction::Show, Some(index), None),
+                Some(SegmentsCommand::Exclude { index }) => {
+                    (SegmentAction::Exclude, Some(index), None)
                 }
-                Some(SegmentsCommand::Note { index, note }) => ("note", Some(index), Some(note)),
+                Some(SegmentsCommand::Include { index }) => {
+                    (SegmentAction::Include, Some(index), None)
+                }
+                Some(SegmentsCommand::Label { index, label }) => {
+                    (SegmentAction::Label, Some(index), Some(label))
+                }
+                Some(SegmentsCommand::Note { index, note }) => {
+                    (SegmentAction::Note, Some(index), Some(note))
+                }
             };
-            let mut args = serde_json::Map::new();
-            _ = args.insert("action".into(), json!(action));
-            if let Some(selected_index) = segment_index {
-                _ = args.insert("index".into(), json!(selected_index));
-            }
-            if let Some(selected_value) = field_value {
-                _ = args.insert("value".into(), json!(selected_value));
-            }
-            Some(("segments", serde_json::Value::Object(args)))
+            operation_to_swp::<InspectSegments>(SegmentsArgs {
+                action: Some(action),
+                index: segment_index.map(|index| u64::from(*index)),
+                value: field_value.cloned(),
+            })
         }
 
         CliCommand::Clear { exclude, note, .. } => {
-            Some(("clear", json!({ "exclude": exclude, "note": note })))
+            operation_to_swp::<ClearConversation>(ClearArgs {
+                exclude: Some(*exclude),
+                note: Some(note.clone()),
+            })
         }
 
         CliCommand::Config {
@@ -2675,7 +2682,6 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 }
 
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Compact {
         keep_turns,
         restart,
@@ -2684,14 +2690,11 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     else {
         return None;
     };
-    let mut args = Map::new();
-    if let Some(n) = keep_turns {
-        let _ignored = args.insert("keep_turns".into(), json!(n));
-    }
-    if *restart {
-        let _ignored = args.insert("restart".into(), json!(true));
-    }
-    Some(("compact", Value::Object(args)))
+    operation_to_swp::<CompactConversation>(CompactArgs {
+        dry_run: None,
+        keep_turns: keep_turns.map(u64::from),
+        restart: restart.then_some(true),
+    })
 }
 
 fn usage_to_swp(

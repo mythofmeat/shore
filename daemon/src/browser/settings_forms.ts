@@ -47,6 +47,7 @@ export function assertSettingsCoverage(entries: ConfigSchemaEntry[], renderers: 
   };
   for (const entry of entries) {
     if (entry.settable) visit(settingControl(entry));
+    else if (entry.key.includes("<index>")) continue;
     else if (!["map", "table", "list"].includes(entry.kind)) throw new Error(`Unaccounted read-only setting: ${entry.key}`);
   }
 }

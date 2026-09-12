@@ -81,7 +81,7 @@ test("diagnostic journeys inspect full captures, diffs, transcripts and stored m
   await controls.getByRole("button", { name: /Activate heartbeat/ }).click();
   await expect(controls).toContainText("Heartbeat: Active");
   await controls.getByRole("button", { name: /Send cache keepalive ping/ }).click();
-  await expect(controls.getByRole("status")).toContainText("skipped");
+  await expect(controls.getByRole("status")).toContainText('"status": "warm"');
   await controls.getByRole("button", { name: /Schedule heartbeat/ }).click();
   await expect(controls.getByRole("status")).toContainText("scheduled");
   await view.selectOption("events");
