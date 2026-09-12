@@ -73,6 +73,24 @@ function providerNaming(names: readonly string[]): HandshakeProvider {
 }
 
 describe("binding", () => {
+  test("clients arriving before serving begins are closed without holding startup rollback open", async () => {
+    const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN });
+    const { port } = await server.bind();
+    const socket = connect({ host: "127.0.0.1", port });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("An early TCP client was left open")), 500);
+        socket.on("error", () => {});
+        socket.once("close", () => { clearTimeout(timer); resolve(); });
+      });
+      expect(server.sessionRouter.sessions()).toEqual([]);
+    } finally {
+      socket.destroy();
+      server.stop();
+      await server.serve();
+    }
+  });
+
   test("port zero resolves to a real port before anything is served", async () => {
     const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN });
     const { host, port } = await server.bind();
