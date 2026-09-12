@@ -51,11 +51,15 @@ export function makeDispatchCommand(
 }
 
 export async function dispatchCommand(
-  deps: CommandPathDeps,
+  originalDeps: CommandPathDeps,
   cmd: Command,
   meta: RequestMeta,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<ServerMessage> {
+  const archive = originalDeps.commands.archive;
+  const deps = archive === undefined || meta.session.archiveLimits === undefined ? originalDeps : {
+    ...originalDeps, commands: { ...originalDeps.commands, archive: { ...archive, limits: meta.session.archiveLimits } },
+  };
   const sessionId = meta.session.sessionId;
   const selected = meta.session.selectedCharacter ?? undefined;
   const rid = meta.rid ?? undefined;

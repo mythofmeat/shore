@@ -5,3 +5,7 @@ import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 export declare function validWebSessionInfo(value: unknown): value is WebSessionInfo;
 import type { WebProblem } from "../protocol/WebProblem.ts";
 export declare function validWebProblem(value: unknown): value is WebProblem;
+import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
+export declare function validWebArchiveInfo(value: unknown): value is WebArchiveInfo;
+import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
+export declare function validWebArchiveList(value: unknown): value is WebArchiveList;

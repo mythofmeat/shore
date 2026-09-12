@@ -1,10 +1,10 @@
 import { exportUnifiedDatabase, importUnifiedDatabase, removeStoredCharacter } from "../storage/archive.ts";
 import { databasePath } from "../storage/store.ts";
 import { characterMediaDir } from "../storage/media.ts";
-import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { create, extract } from "tar";
+import { create, extract, type Unpack } from "tar";
 
 import type { ShoreDirs } from "../config/dirs.ts";
 import {
@@ -33,11 +33,14 @@ const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "hist
 
 export interface ArchiveContext {
   readonly dirs: ShoreDirs;
+  readonly limits?: ArchiveLimits;
   hasCharacter(name: string): boolean;
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
   refreshDiscovery(): Promise<void>;
   releaseCharacter(name: string): Promise<void>;
 }
+
+export interface ArchiveLimits { readonly bytes: number; readonly entries: number }
 
 interface Manifest {
   format: typeof FORMAT;
@@ -70,7 +73,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
   );
   try {
     await ctx.withSnapshot(async () => {
-      await stageCharacter(ctx.dirs, character, stage);
+      await stageCharacter(ctx.dirs, character, stage, ctx.limits);
     });
     await create(
       {
@@ -112,7 +115,7 @@ export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<
   if (!await exists(archive)) throw notFound(`Archive not found: ${archive}`);
   const stage = await mkdtemp(join(tmpdir(), "shore-import-"));
   try {
-    await extractArchive(archive, stage);
+    await extractArchive(archive, stage, ctx.limits);
     const manifest = await readManifest(stage);
     const character = manifest.character;
     await ctx.withSnapshot(async () => {
@@ -191,7 +194,18 @@ function contains(parent: string, child: string): boolean {
   return child.startsWith(`${parent}/`);
 }
 
-async function stageCharacter(dirs: ShoreDirs, character: string, stage: string): Promise<void> {
+async function stageCharacter(dirs: ShoreDirs, character: string, stage: string, limits?: ArchiveLimits): Promise<void> {
+  let bytes = 0;
+  let entries = 0;
+  const admit = async (path: string): Promise<boolean> => {
+    if (limits === undefined) return true;
+    const entry = await lstat(path);
+    if (!entry.isFile() && !entry.isDirectory()) throw invalidRequest("Browser archives support regular files and directories only");
+    bytes += entry.isFile() ? entry.size : 0;
+    entries += 1;
+    if (bytes > limits.bytes || entries > limits.entries) throw invalidRequest("Character exceeds browser archive processing limits");
+    return true;
+  };
   const configSource = characterConfigDir(dirs.config, character);
   const workspaceSource = characterWorkspaceDir(dirs.config, character, dirs.workspace);
   const dataSource = characterDataDir(dirs.data, character);
@@ -206,18 +220,20 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string)
       recursive: true,
       preserveTimestamps: true,
       verbatimSymlinks: true,
-      filter: (source) => !workspaceInConfig || resolve(source) !== excluded,
+      filter: async (source) => (!workspaceInConfig || resolve(source) !== excluded) && await admit(source),
     });
   } else {
     await mkdir(join(stage, "config"));
   }
   await cp(workspaceSource, join(stage, "workspace"), {
+    filter: admit,
     recursive: true,
     preserveTimestamps: true,
     verbatimSymlinks: true,
   });
   if (await exists(dataSource)) {
     await cp(dataSource, join(stage, "data"), {
+      filter: admit,
       recursive: true,
       preserveTimestamps: true,
       verbatimSymlinks: true,
@@ -227,9 +243,9 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string)
   }
 
   const media = characterMediaDir(dirs.data, character);
-  if (await exists(media)) await cp(media, join(stage, "media"), copyOptions());
+  if (await exists(media)) await cp(media, join(stage, "media"), { ...copyOptions(), filter: admit });
   else await mkdir(join(stage, "media"));
-  exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"));
+  exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
   const manifest: Manifest = {
     format: FORMAT,
     version: VERSION,
@@ -249,22 +265,26 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string)
   await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
-async function extractArchive(archive: string, stage: string): Promise<void> {
+async function extractArchive(archive: string, stage: string, limits?: ArchiveLimits): Promise<void> {
   let total = 0;
+  let entries = 0;
   await extract({
     cwd: stage,
     file: archive,
     gzip: true,
     preservePaths: false,
     strict: true,
-    filter: (path, entry) => {
+    filter: function (this: Unpack, path, entry) {
+      const reject = (message: string): false => { this.abort(invalidRequest(message)); return false; };
       const normalized = path.replaceAll("\\", "/").replace(/^\.\//, "");
       const top = normalized.split("/")[0] ?? "";
       if (!TOP_LEVEL.has(top) || isAbsolute(path) || normalized.split("/").includes("..")) {
-        throw invalidRequest(`Archive contains an unexpected path: ${path}`);
+        return reject(`Archive contains an unexpected path: ${path}`);
       }
       total += entry.size;
-      if (total > MAX_EXTRACTED_BYTES) throw invalidRequest("Archive expands beyond 4 TiB");
+      entries += 1;
+      if (limits !== undefined && (!("type" in entry) || !["File", "OldFile", "Directory"].includes(entry.type) || entries > limits.entries)) return reject("Browser archive contains unsupported entries or too many files");
+      if (total > (limits?.bytes ?? MAX_EXTRACTED_BYTES)) return reject(limits === undefined ? "Archive expands beyond 4 TiB" : "Archive expands beyond the browser processing limit");
       return true;
     },
   });

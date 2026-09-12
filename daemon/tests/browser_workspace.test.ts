@@ -8,12 +8,20 @@ import { assertSettingsCoverage, configAt, settingControl } from "../src/browser
 import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
 import { settingSchema } from "../src/llm/settings.ts";
 import { SDK_VARIANTS } from "../src/llm/types.ts";
-import { assertBrowserCoverage, assertCompactionResultCoverage, assertUsageResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
+import { assertArchivePhaseCoverage, assertBrowserCoverage, assertCompactionResultCoverage, assertUsageResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
 import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
 import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
+
+test("every archive transfer phase has a renderer and omitting uncertain outcomes fails coverage", async () => {
+  const source = await readFile(new URL("../src/browser/archives.tsx", import.meta.url), "utf8");
+  const cases = await switchCases(source, "ArchiveStatus", "archive.phase");
+  expect(() => assertArchivePhaseCoverage(cases)).not.toThrow();
+  const omitted = await switchCases(source.replace('case "uncertain":', ''), "ArchiveStatus", "archive.phase");
+  expect(() => assertArchivePhaseCoverage(omitted)).toThrow("Missing archive phase renderer: uncertain");
+});
 
 test("every usage report mode has a renderer and omitting an export fails coverage", async () => {
   const source = await readFile(new URL("../src/browser/usage.tsx", import.meta.url), "utf8");

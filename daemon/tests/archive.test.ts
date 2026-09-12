@@ -3,10 +3,12 @@ import { writeSession, readBook, bookPathIn, sessionKey, SESSION_BOOK_VERSION } 
 import { writeDurable, readDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Header } from "tar";
 
 import { exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
@@ -21,6 +23,55 @@ afterEach(async () => {
 });
 
 describe("character archives", () => {
+  test.each(["../outside", "workspace/../../outside", "unexpected/file", "/absolute/path"])("unsafe archive path %s rejects asynchronously without installing a character", async (path) => {
+    const target = await root("unsafe-path");
+    const output = join(target.runtime, "unsafe.tar.gz");
+    const block = Buffer.alloc(512);
+    new Header({ path, size: 1, mode: 0o600, type: "File" }).encode(block);
+    await writeFile(output, Bun.gzipSync(Buffer.concat([block, Buffer.from("x"), Buffer.alloc(511 + 1024)])));
+    expect(importCharacter(context(target, new Set()), { archive: output })).rejects.toThrow("unexpected path");
+    expect(existsSync(join(target.workspace as string, "outside"))).toBe(false);
+  });
+
+  test.each([
+    { bytes: 8, entries: 100, message: "processing limits" },
+    { bytes: 1024 * 1024, entries: 1, message: "processing limits" },
+    { bytes: 4096, entries: 100, message: "Database snapshot" },
+  ])("browser export budget $bytes bytes/$entries entries rejects before publishing an archive", async (limits) => {
+    const source = await root("limited-export"); await seedCharacter(source, "ada", "preserve source");
+    const output = join(source.runtime, "limited.tar.gz");
+    expect(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output })).rejects.toThrow(limits.message);
+    expect(access(output)).rejects.toThrow();
+    expect(await readFile(join(source.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
+  });
+
+  test.each([
+    { bytes: 128, entries: 100, message: "browser processing limit" },
+    { bytes: 1024 * 1024, entries: 1, message: "too many files" },
+  ])("browser import budget $bytes bytes/$entries entries rejects before installing data", async (limits) => {
+    const source = await root("limited-source"); await seedCharacter(source, "ada", "archive history");
+    const output = join(source.runtime, "ada.tar.gz");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("limited-target"); await seedCharacter(target, "bea", "preserve other character");
+    expect(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output })).rejects.toThrow(limits.message);
+    expect(access(join(target.workspace as string, "ada"))).rejects.toThrow();
+    const history = HistoryStore.open(join(target.data, "shore.db"));
+    try { expect(history.archiveKeys("ada")).toEqual([]); expect(history.readSegment("bea", 0)[0]?.content).toBe("preserve other character"); }
+    finally { history.close(); }
+  });
+
+  test("browser transfers reject links while native archives preserve their existing link support", async () => {
+    const source = await root("link-source"); await seedCharacter(source, "ada", "archive history");
+    await symlink("SOUL.md", join(source.workspace as string, "ada", "linked.md"));
+    const output = join(source.runtime, "ada.tar.gz");
+    const limits = { bytes: 1024 * 1024, entries: 100 };
+    expect(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output })).rejects.toThrow("regular files and directories");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("link-target");
+    expect(importCharacter({ ...context(target, new Set()), limits }, { archive: output })).rejects.toThrow("unsupported entries");
+    expect(access(join(target.workspace as string, "ada"))).rejects.toThrow();
+  });
+
   test("a compressed export restores one character without carrying another", async () => {
     const source = await root("source");
     await seedCharacter(source, "ada", "hello from ada");

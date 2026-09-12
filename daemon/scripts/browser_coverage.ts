@@ -5,6 +5,7 @@ import { EVENT_POLICIES } from "../src/browser/workspace.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import wire from "../src/protocol/wire.generated.json" with { type: "json" };
 import operationSchemas from "../src/operations/schemas.generated.json" with { type: "json" };
+import webSchemas from "../src/web/schemas.generated.json" with { type: "json" };
 import { parseInventorySources } from "./capability_inventory.ts";
 
 export async function switchCases(text: string, functionName: string, expression: string): Promise<Set<string>> {
@@ -42,6 +43,12 @@ export function assertUsageResultCoverage(renderers: ReadonlySet<string>): void 
     if (!("mode" in variant.properties)) throw new Error("Missing usage mode discriminator");
     const mode = variant.properties.mode.const;
     if (!renderers.has(mode)) throw new Error(`Missing usage result renderer: ${mode}`);
+  }
+}
+
+export function assertArchivePhaseCoverage(renderers: ReadonlySet<string>): void {
+  for (const phase of webSchemas.archive_info.$defs.WebArchivePhase.enum) {
+    if (!renderers.has(phase)) throw new Error(`Missing archive phase renderer: ${phase}`);
   }
 }
 
