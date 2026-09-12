@@ -141,6 +141,51 @@ describe("the handshake provider", () => {
 });
 
 describe("stopping", () => {
+  test("a peer closing during history load leaves no session or handler error", async () => {
+    const warnings: string[] = [];
+    const server = new Server({
+      addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN,
+      log: { warn: (message) => { warnings.push(message); } },
+    });
+    let releaseHistory = (): void => undefined;
+    const held = new Promise<void>((resolve) => { releaseHistory = resolve; });
+    let beganHistory = (): void => undefined;
+    const started = new Promise<void>((resolve) => { beganHistory = resolve; });
+    server.setHandshakeProvider({
+      hello: async () => ({ characters: [{ name: "ada" }] }),
+      history: async () => {
+        beganHistory();
+        await held;
+        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+      },
+    });
+    const { port } = await server.bind();
+    const running = server.serve();
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("connect", resolve);
+        socket.once("error", reject);
+      });
+      socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "closing", capabilities: [] })}\n`);
+      await started;
+      const closed = new Promise<void>((resolve) => { socket.once("close", () => resolve()); });
+      socket.destroy();
+      await closed;
+      await new Promise<void>((resolve) => { setTimeout(resolve, 20); });
+      releaseHistory();
+      server.stop();
+      await running;
+      expect(server.sessionRouter.sessions()).toEqual([]);
+      expect(warnings).toEqual([]);
+    } finally {
+      releaseHistory();
+      socket.destroy();
+      server.stop();
+      await running;
+    }
+  });
+
   test("a connected client is told, rather than seeing a bare EOF", async () => {
     const { server, port, stop } = await serving();
     server.setHandshakeProvider(providerNaming(["ada"]));

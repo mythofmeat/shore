@@ -126,6 +126,23 @@ describe("broadcast — tokio broadcast(256) semantics", () => {
     expect(() => bus.send(PING)).not.toThrow();
     expect(bus.subscriberCount).toBe(0);
   });
+
+  test("a byte-limited subscriber drops enough old frames and releases bytes on receive", async () => {
+    const bus = new Broadcast(10);
+    const sub = bus.subscribe({ messages: 10, bytes: 160 });
+    const frame = (text: string): ServerMessage => ({ type: "cache_warning", expected_tokens: 0, message: text });
+    const first = frame("a".repeat(30));
+    const second = frame("b".repeat(30));
+    bus.send(first);
+    bus.send(second);
+    expect(await sub.recv()).toEqual({ kind: "lagged", skipped: 1 });
+    expect(await sub.recv()).toEqual({ kind: "message", msg: second });
+    bus.send(first);
+    expect(await sub.recv()).toEqual({ kind: "message", msg: first });
+    sub.unsubscribe();
+    expect(bus.subscriberCount).toBe(0);
+    expect(await sub.recv()).toEqual({ kind: "closed" });
+  });
 });
 
 describe("session router", () => {
