@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 
 test("provider discovery is usable before character selection and preserves hidden models and partial failures", async ({ page }) => {
   const errors: string[] = [];

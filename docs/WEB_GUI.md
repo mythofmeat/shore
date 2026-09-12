@@ -354,14 +354,67 @@ checked. All three browser journeys passed, including the compiled daemon, and t
 command-path and dispatch mutation passes killed 90/90 probes. Evidence remains under
 `out/issue-214/` and the task's temporary verification logs.
 
+### Settings and configuration parity
+
+The canonical catalogue now includes `config`, `config_schema`, `config_check`, `config_reload`
+and `tools`: 30 registered operations, with 26 legacy names remaining. Configuration kinds,
+sources, schema entries, mutation/reload results, invalidation details and tool access all have
+Rust-owned bindings. The actual TypeScript configuration readers use those generated kind/source
+types, and `config_schema` derives its live entries from the existing parser metadata.
+
+The Settings panel provides searchable keys, effective values and defaults, typed booleans,
+numbers, enums, durations and collection editors, live value suggestions, writable/optional status,
+restart notices, configuration checks, reload preview/apply, prompt-snapshot choice and tool access.
+Non-writable sections remain inspectable and link to their individual fields. The generated action
+forms include configuration-key suggestions and hide secret values in password inputs. Secret
+metadata comes from the daemon's existing redaction paths. Successful secret writes clear the input,
+rejected writes retain the draft, and uncertain configuration requests hide submitted values in the
+activity/reconciliation view. Settings drafts remain in memory while their dialog stays open.
+
+Configuration operations use the selected character when available and also work globally before
+character creation. Reload without a character can preview/apply global configuration; prompt
+snapshot activation still requires a selected character. Both routes use the same configuration
+handlers and post-processing. Null reload flags remain false; malformed flags and keys are rejected
+before mutation. The original independent captures remain intact, with formerly coerced invalid
+examples now explicitly rejected at the canonical boundary.
+
+The shared list parser now accepts quoted collections without splitting commas inside arguments,
+while retaining the existing simple comma-separated syntax. Rejected secret edits no longer echo
+the submitted secret in the error prefix. Reload retains restart requirements computed before
+configuration adoption. A native daemon journey verifies these reload effects, persisted rollback
+of a rejected secret edit, and matching TCP/browser reads.
+
+CLI configuration adapters and the reload special runner use canonical inputs and validate results
+before formatting. The TUI did not apply reload previews because it waited for a missing `applied`
+field while the daemon sends `applied: false`. A real pseudo-terminal/local-socket regression first
+reproduced the missing apply request, then passed with the canonical preview/apply flow. Prompt
+activation remains opt-in, with separate correlated requests and no preview replay.
+
+The browser journey edits every supported scalar family, preserves an embedded comma in a list,
+retains rejected input, confirms persisted values after reload, exercises global reload/check/tool
+access, verifies secret redaction and reviews the mobile layout. Coverage checks walk live settings
+and actual field renderers, and demonstrably fail on a missing numeric renderer or unsupported kind.
+Each browser journey now owns a fresh daemon fixture and configuration directory through
+[Playwright test fixtures](https://playwright.dev/docs/test-fixtures), after the combined suite
+exposed a settings change leaking into the subsequent conversation journey.
+
+Settings validation: all eight required daemon checks passed, including 8,217 tests and all 57
+mutation-staleness passes. Rust workspace tests, formatting and Clippy passed, including the actual
+terminal reload regression. All four browser journeys passed, and generated browser assets,
+validators and operation inventories are current. The three affected mutation passes killed 101
+mutants and retained one pre-existing, explicitly documented equivalent mutant. Temporary-storage
+quota failures were resolved by clearing this task's disposable download cache before rerunning
+the full daemon and Rust checks successfully. GitHub execution and merge-policy enforcement remain
+unverified.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the 31 legacy names, core message/regen/cancel requests,
+1. Continue the contract migration through the 26 legacy names, core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.
    Implement the visible reconciliation workflow for uncertain outcomes and media recovery.
-3. Extend the initial workspace with schema-backed settings and the remaining dedicated screens,
+3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
 4. Close all advanced workflows: models/roles, diagnostics and raw data, usage exports,
    segments/memory recovery, safe archive transfers, keyboard customization and every known event.

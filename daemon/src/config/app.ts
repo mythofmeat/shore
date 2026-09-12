@@ -31,26 +31,10 @@ function unknownField(key: string, known: readonly string[]): string {
 
 type Reader<T> = (value: TomlValue) => ParseResult<T>;
 
-export type ConfigTypeKind =
-  | "boolean"
-  | "string"
-  | "integer"
-  | "float"
-  | "duration"
-  | "enum"
-  | "list"
-  | "map"
-  | "table"
-  | "unknown";
-
-export type ConfigValueSource =
-  | "chat_models"
-  | "embedding_models"
-  | "image_models"
-  | "tools"
-  | "subagents"
-  | "characters"
-  | "providers";
+export type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
+export type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";
+import type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
+import type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";
 
 export interface ConfigTypeInfo {
   kind: ConfigTypeKind;

@@ -1,3 +1,4 @@
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import { recordedValue, recording } from "./support/rerecord.ts";
 import { writePromptSnapshotFile } from "./support/storage.ts";
 import { required } from "../src/util/required.ts";
@@ -278,7 +279,7 @@ describe("config read", () => {
     for (const key of ["tools", "subagents"]) {
       expect(config(w.ctx, { key })).toEqual({ key, config: result.config[key], defaults: reportedDefaults()[key] });
     }
-    expect(config(w.ctx, { key: 7 })).toEqual(result);
+    expect(() => parseOperationInput("config", { key: 7 })).toThrow();
     expect(config(w.ctx, { value: "true" })).toEqual(result);
     expect(() => config(w.ctx, { key: "nosuchsection" })).toThrow("Config section not found");
   });
@@ -390,11 +391,9 @@ describe("configReload", () => {
     expect(w.calls).toEqual([]);
   });
 
-  test("a truthy non-boolean apply is not an apply", async () => {
+  test("a truthy non-boolean apply is rejected before configuration effects", async () => {
     const w = await build("mid", FURNISHED);
-    await check(row("config_reload", "a truthy non-boolean apply is not an apply"), w, () =>
-      configReload(w.ctx, { apply: 1, refresh_prompts: 1 }),
-    );
+    expect(() => parseOperationInput("config_reload", { apply: 1, refresh_prompts: 1 })).toThrow();
     expect(w.calls).toEqual([]);
   });
 
@@ -431,11 +430,15 @@ describe("configReload", () => {
     expect(w.calls).toEqual([]);
   });
 
-  test("reload with no character context", async () => {
+  test("reload with no character context previews and applies global configuration", async () => {
     const w = await build(undefined, FURNISHED);
-    await check(row("config_reload", "reload with no character context"), w, () =>
-      configReload(w.ctx, {}),
-    );
+    expect(await configReload(w.ctx, {})).toMatchObject({ applied: false, character: null, changed_prompt_files: [] });
+    expect(w.calls).toEqual([]);
+    expect(await configReload(w.ctx, { apply: null, refresh_prompts: null })).toMatchObject({ applied: false, character: null });
+    expect(w.calls).toEqual([]);
+    expect(await configReload(w.ctx, { apply: true })).toMatchObject({ applied: true, character: null, prompts_refreshed: false });
+    expect(w.calls).toEqual(["adoptGlobalConfig", "reloadRuntimeConfig"]);
+    expect(configReload(w.ctx, { apply: true, refresh_prompts: true })).rejects.toThrow("requires a character context");
   });
 
   test("check mode lists the prompt files that differ", async () => {

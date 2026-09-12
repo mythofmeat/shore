@@ -38,12 +38,12 @@ function matches(pattern: string[], path: string[]): boolean {
   return pattern.every((part, i) => part === "*" || part === path[i]);
 }
 
-function isSecretPath(path: string[]): boolean {
+export function isSecretConfigPath(path: string[]): boolean {
   return SECRET_CONFIG_PATHS.some((p) => matches(p.split("."), path));
 }
 
 export function redactSecrets(value: unknown, path: string[] = []): unknown {
-  if (isSecretPath(path)) {
+  if (isSecretConfigPath(path)) {
     if (typeof value === "string") return value === "" ? value : REDACTED;
     return value === null || value === undefined ? value : REDACTED;
   }

@@ -8,6 +8,11 @@ import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
 
+export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "uncertain" }>["request"]): Extract<ConnectionUpdate, { kind: "uncertain" }>["request"] {
+  if (request.type !== "command" || request.name !== "config" || typeof request.args !== "object" || request.args === null || Array.isArray(request.args)) return request;
+  return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, "value") ? { value: "<redacted>" } : {}) } };
+}
+
 export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null }
 export interface Activity { id: number; type: string; data: unknown }
 export interface WorkspaceSnapshot {
@@ -122,7 +127,7 @@ export class Workspace {
       return;
     }
     if (update.kind === "future") { this.#activity(`Future event: ${update.message.type}`, update.message); return; }
-    if (update.kind === "uncertain") { this.#patch({ uncertain: [...this.#state.uncertain, update] }); return; }
+    if (update.kind === "uncertain") { this.#patch({ uncertain: [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request) }] }); return; }
     const message = update.message;
     switch (message.type) {
       case "hello": this.#patch({ characters: message.characters }); return;

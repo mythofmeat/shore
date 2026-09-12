@@ -1,7 +1,7 @@
 use shore_common::protocol::operations::{
-    ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage, GetMessageArgs,
-    NamedOperationArgs, Operation, OperationResponse, SwitchCharacter, SwitchThread,
-    SwitchThreadArgs,
+    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage,
+    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReloadConfiguration,
+    SwitchCharacter, SwitchThread, SwitchThreadArgs,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -388,8 +388,11 @@ async fn handle_generic_swp_command(
     };
     _ = conn.send_command(name, args).await?;
     let data = recv_command_data(conn).await?;
-    if matches!(other, CliCommand::Provider { .. }) {
-        validate_provider_output(name, &data)?;
+    if matches!(
+        other,
+        CliCommand::Provider { .. } | CliCommand::Config { .. }
+    ) {
+        validate_registered_output(name, &data)?;
     }
     if toml_mode {
         print_config_toml(&data, show_all)?;
@@ -413,7 +416,7 @@ async fn handle_generic_swp_command(
     Ok(())
 }
 
-pub(crate) fn validate_provider_output(
+pub(crate) fn validate_registered_output(
     name: &str,
     data: &serde_json::Value,
 ) -> Result<(), serde_json::Error> {
@@ -474,21 +477,16 @@ async fn handle_config_reload(
     };
     let (auto_yes, json_mode) = (*yes, *json);
 
-    _ = conn
-        .send_command("config_reload", serde_json::json!({}))
-        .await?;
-    let check = recv_command_data(conn).await?;
+    let check = execute_operation::<ReloadConfiguration>(
+        conn,
+        ConfigReloadArgs {
+            apply: None,
+            refresh_prompts: None,
+        },
+    )
+    .await?;
 
-    let changed: Vec<String> = check
-        .get("changed_prompt_files")
-        .and_then(serde_json::Value::as_array)
-        .map(|files| {
-            files
-                .iter()
-                .filter_map(|f| f.as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default();
+    let changed = check.changed_prompt_files;
 
     let refresh_prompts = if changed.is_empty() {
         false
@@ -514,13 +512,14 @@ async fn handle_config_reload(
         false
     };
 
-    _ = conn
-        .send_command(
-            "config_reload",
-            serde_json::json!({ "apply": true, "refresh_prompts": refresh_prompts }),
-        )
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ReloadConfiguration>(
+        conn,
+        ConfigReloadArgs {
+            apply: Some(true),
+            refresh_prompts: Some(refresh_prompts),
+        },
+    )
+    .await?;
 
     if json_mode {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);

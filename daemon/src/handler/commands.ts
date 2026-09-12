@@ -18,7 +18,7 @@ import type { ConfigRuntime } from "../commands/config.ts";
 import { runRegisteredOperation, isRegisteredOperation, commandOperations } from "../commands/registry.ts";
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
-import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
+import { afterConfigurationCommand, afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import type { FrameSink } from "../llm/stream.ts";
@@ -189,7 +189,8 @@ async function characterlessCommand(
   let frame: ServerMessage;
   try {
     const data = await runCharacterlessCommand(session, deps.commands, cmd);
-    frame = commandFrame(cmd.name, { ok: data });
+    const annotated = await afterConfigurationCommand(cmd.name, cmd.args, data, { config: session.config, runtime: deps.dispatchRuntime });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }

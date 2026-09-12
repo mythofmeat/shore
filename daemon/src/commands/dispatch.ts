@@ -14,11 +14,6 @@ import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
 import {
-  config,
-  configCheck,
-  configReload,
-  configSchemaCommand,
-  tools,
   type ConfigRuntime,
 } from "./config.ts";
 
@@ -175,16 +170,7 @@ export async function runCommand(
           : { repoint: async (name) => await deps.compaction?.repoint?.(name, session.config) }),
         onComplete: (name) => deps.autonomy.onCompactionComplete(name, 0),
       }, args);
-    case "config":
-      return config(session, args);
-    case "tools":
-      return tools(session, (deps.runTool?.mcpTools() ?? []).map((t) => t.full_name));
-    case "config_check":
-      return configCheck(session, session.env ?? process.env);
-    case "config_schema":
-      return configSchemaCommand(session);
-    case "config_reload":
-      return await configReload(session, args);
+
     case "error_log":
       return errorLog(statusContext(engine, session, deps), args);
     case "heartbeat_log":

@@ -27,7 +27,8 @@ else is broken:
 A mutant is KILLED if `bun test tests/config_commands.test.ts` fails
 with it applied.
 
-This stands at **45/45**, from 36/41 on the first pass. One survivor was an
+The original pass reached **45/45**, from 36/41 on the first pass. The current
+typed configuration boundary has 42 applicable mutants. One original survivor was an
 equivalent mutant and is gone: removing the sort from the sub-agent roster
 changes nothing, because the loader already stores the map sorted. The source
 says why the sort stays anyway.
@@ -46,8 +47,9 @@ recorded cases could not tell the pairs apart:
 - **`active_resolved_model` was `None` in every case**, so dropping it on a
   model change was invisible. One case now seeds the pre-resolved selection the
   dispatcher would have supplied.
-- **`apply` was only ever `true` or absent**, so `as_bool` semantics went
-  unpinned: a `1` is *absent*, not truthy.
+- **`apply` was only ever `true` or absent**, so boolean coercion semantics went
+  unpinned. The canonical input now rejects non-boolean values; explicit null
+  remains false and has its own mutation probe.
 
 Two rules are pinned structurally rather than by the fixture, and both are noted
 at the assertion. The Rust harness had no observer on `CommandContext`, so it
@@ -137,9 +139,9 @@ MUTANTS = [
     ("read: a value with no key is treated as a set",
      "  if (key !== undefined && value !== undefined) return configSet(ctx, key, value);",
      '  if (value !== undefined) return configSet(ctx, key ?? "model", value);'),
-    ("read: a non-string key is coerced rather than ignored",
-     '  const key = asStr(args["key"]);',
-     '  const key = args["key"] === undefined ? undefined : String(args["key"]);'),
+    ("read: the selected setting is ignored",
+     '  const key = args.key ?? undefined;',
+     '  const key = undefined;'),
     ('read: an unknown key returns null instead of failing',
      '  const found = walkConfigKey(app, canonical);\n  if (found === undefined) throw notFound(`Config section not found: ${key}`);',
      '  const found = walkConfigKey(app, canonical) ?? { value: null };'),
@@ -180,11 +182,11 @@ MUTANTS = [
 
     # --- config_reload --------------------------------------------------------
     ("reload: apply defaults to true rather than false",
-     '  const apply = asBool(args["apply"]);',
+     '  const apply = args.apply === true;',
      '  const apply = args["apply"] !== false;'),
-    ("reload: any truthy apply opts in",
-     "const asBool = (v: unknown): boolean => v === true;",
-     "const asBool = (v: unknown): boolean => Boolean(v);"),
+    ("reload: explicit null applies configuration",
+     "  const apply = args.apply === true;",
+     "  const apply = args.apply === null || args.apply === true;"),
     ("reload: the character overlays are not validated",
      "  for (const name of discoverCharacters(fresh.dirs.config, fresh.dirs.workspace)) {",
      "  for (const name of [] as string[]) {"),
