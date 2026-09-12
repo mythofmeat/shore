@@ -1,4 +1,5 @@
 import { prepareRequestImages } from "../prepare_images.ts";
+import { recordProviderEvent } from "../provider_events.ts";
 import { retryToolStream } from "../tool_loop.ts";
 import { ToolLoopStop } from "../tool_loop_control.ts";
 import { createHash } from "node:crypto";
@@ -507,6 +508,36 @@ function endsATurn(event: RawMessageStreamEvent): boolean {
   return event.type === "message_delta" && event.delta.stop_reason !== null;
 }
 
+function captureAgentEvent(msg: SDKMessage): void {
+  if (msg.type === "rate_limit_event") {
+    recordProviderEvent("claude_agent", msg);
+  } else if (msg.type === "result") {
+    recordProviderEvent("claude_agent", {
+      type: msg.type,
+      subtype: msg.subtype,
+      session_id: msg.session_id,
+      uuid: msg.uuid,
+      result_index: msg.result_index,
+      usage: msg.usage,
+      modelUsage: msg.modelUsage,
+      total_cost_usd: msg.total_cost_usd,
+      num_turns: msg.num_turns,
+      duration_ms: msg.duration_ms,
+      duration_api_ms: msg.duration_api_ms,
+      fast_mode_state: msg.fast_mode_state,
+    });
+  } else if (msg.type === "system" && msg.subtype === "init") {
+    recordProviderEvent("claude_agent", {
+      type: msg.type,
+      subtype: msg.subtype,
+      session_id: msg.session_id,
+      model: msg.model,
+      claude_code_version: msg.claude_code_version,
+      apiKeySource: msg.apiKeySource,
+    });
+  }
+}
+
 async function* rawEventsOf(
   run: AsyncIterable<SDKMessage>,
   seen: SdkTurnFacts,
@@ -514,6 +545,7 @@ async function* rawEventsOf(
   onRoundEnd?: () => Promise<void>,
 ): AsyncIterable<RawMessageStreamEvent> {
   for await (const msg of run) {
+    captureAgentEvent(msg);
     const sid = (msg as { session_id?: string }).session_id;
     if (sid !== undefined) seen.sessionId = sid;
 

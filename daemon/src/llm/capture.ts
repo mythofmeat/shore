@@ -2,6 +2,7 @@ import { toolLoopEvents } from "./tool_loop.ts";
 import { ZERO_USAGE, type CallRecord, type CallStore, type Usage as StoreUsage } from "../call_store.ts";
 import { redactRequest } from "./redact.ts";
 import { newWireScope, withWireScope, wireScopedIteration } from "./wire_capture.ts";
+import { providerEventIteration, withProviderEvents, type ProviderEvent } from "./provider_events.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -86,7 +87,11 @@ async function* recordEvents(
   });
 
   try {
-    for await (const event of wireScopedIteration(scope, start)) {
+    const source = providerEventIteration(
+      (event) => lines.push(JSON.stringify(event)),
+      () => wireScopedIteration(scope, start),
+    );
+    for await (const event of source) {
       try {
         lines.push(JSON.stringify(event));
       } catch {
@@ -151,15 +156,22 @@ export function withCallCapture(
         call_type: base.call_type,
         rid: base.rid,
       });
+      const providerEvents: ProviderEvent[] = [];
       try {
-        const response = await withWireScope(scope, () => provider.generate(req, signal));
+        const response = await withProviderEvents(
+          (event) => providerEvents.push(event),
+          () => withWireScope(scope, () => provider.generate(req, signal)),
+        );
         write({
           ...base,
           finish_reason: response.finish_reason,
           usage: storeUsage(response.usage),
           duration_ms: now() - startedAt,
           error: null,
-          response_body: JSON.stringify(response),
+          response_body: JSON.stringify({
+            ...response,
+            ...(providerEvents.length === 0 ? {} : { provider_events: providerEvents }),
+          }),
         });
         return response;
       } catch (e) {
@@ -169,7 +181,7 @@ export function withCallCapture(
           usage: ZERO_USAGE,
           duration_ms: now() - startedAt,
           error: e instanceof Error ? e.message : String(e),
-          response_body: null,
+          response_body: providerEvents.length === 0 ? null : JSON.stringify({ provider_events: providerEvents }),
         });
         throw e;
       }

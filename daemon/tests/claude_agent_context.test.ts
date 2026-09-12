@@ -15,6 +15,7 @@ import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import { required } from "../src/util/required.ts";
 import { appendCompactionTail } from "../src/memory/compaction/llm.ts";
+import type { CallRecord } from "../src/call_store.ts";
 
 const dateIn = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
@@ -36,6 +37,7 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
   });
   const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" } } as const;
   const messages: WireMessage[] = [];
+  const captures: CallRecord[] = [];
   const previousTimezone = process.env.TZ;
   const originalDate = dateIn(hostZone());
   let toolCalls = 0;
@@ -66,8 +68,13 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
       const signal = AbortSignal.timeout(25_000);
       const { result } = await runGeneration(request, { providerKey: "claude-code" }, {
         config, providers: { claude_agent: provider }, env: {},
+        callStore: { recordCall: call => captures.push(call) },
       }, { signal, ...(withTools ? { tools: phase } : {}) });
       expect(result.content).toBe("reply");
+      const captured = required(required(captures.at(-1)).response_body).split("\n").map(line => JSON.parse(line) as { type: string; event?: { type: string; subtype?: string; claude_code_version?: string; modelUsage?: Record<string, { outputTokens: number }> } });
+      const diagnostics = captured.filter(event => event.type === "provider_event").map(event => required(event.event));
+      expect(diagnostics.find(event => event.subtype === "init")?.claude_code_version).toMatch(/^2\.1\./);
+      expect(required(diagnostics.find(event => event.type === "result")?.modelUsage)["claude-sonnet-4-6"]?.outputTokens).toBeGreaterThan(0);
       expect(request.context?.workspace_dir).toBe(workspace);
       const sent = required(mock.requests[firstRequest]).body;
       expect(JSON.stringify(sent.messages)).not.toContain("Conversation replay follows");
