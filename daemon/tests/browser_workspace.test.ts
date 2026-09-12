@@ -2,10 +2,34 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, controlFor, initialValue } from "../src/browser/forms.ts";
-import { mergeHistory, EVENT_POLICIES } from "../src/browser/workspace.ts";
+import { mergeHistory, EVENT_POLICIES, inspectableRequest } from "../src/browser/workspace.ts";
+import { configSchema } from "../src/config/schema.ts";
+import { assertSettingsCoverage, configAt, settingControl } from "../src/browser/settings_forms.ts";
 import { assertBrowserCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
+
+test("all live settings reach controls, with explicit failure for missing renderers or unknown kinds", async () => {
+  const entries = configSchema({ instancesAt: (key) => key === "mcp" ? ["fixture"] : key === "mcp.fixture.env" ? ["TOKEN"] : key === "subagents" ? ["worker"] : [] });
+  const components = await readFile(new URL("../src/browser/components.tsx", import.meta.url), "utf8");
+  const renderers = await switchCases(components, "Field", "control.kind");
+  expect(entries.length).toBeGreaterThan(100);
+  expect(() => assertSettingsCoverage(entries, renderers)).not.toThrow();
+  const missing = await switchCases(components.replace('case "integer": case "number":', 'case "number":'), "Field", "control.kind");
+  expect(() => assertSettingsCoverage(entries, missing)).toThrow("Missing settings renderer: integer");
+  const secret = entries.find((entry) => entry.key === "mcp.fixture.env.TOKEN");
+  if (secret === undefined) throw new Error("Missing secret field");
+  expect(secret.secret).toBe(true);
+  expect(() => settingControl({ ...secret, kind: "unknown" })).toThrow("Unsupported editable setting");
+  expect(configAt({ tools: { enabled_tools: ["read"] } }, "tools.enabled_tools")).toEqual(["read"]);
+  expect(configAt({}, "__proto__.polluted")).toBeNull();
+});
+
+test("uncertain configuration requests retain their key and hide submitted values", () => {
+  const request = { type: "command", name: "config", args: { key: "notifications.ntfy.token", value: "private-secret" } } as const;
+  expect(inspectableRequest(request)).toEqual({ ...request, args: { key: "notifications.ntfy.token", value: "<redacted>" } });
+  expect(request.args.value).toBe("private-secret");
+});
 
 test("every registered action field reaches an implemented control, and every known event has a handler", async () => {
   const [components, workspace] = await Promise.all([

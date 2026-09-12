@@ -40,7 +40,7 @@ enabled = true
 enabled = false
 [daemon.web]
 enabled = true
-bind_addr = "127.0.0.1:${process.env["SHORE_BROWSER_TEST_PORT"] ?? "17349"}"
+bind_addr = "127.0.0.1:0"
 `);
 let generation = 0;
 const provider: SidecarProvider = {
@@ -67,6 +67,8 @@ try {
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
+  if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
+  console.log(`SHORE_BROWSER_READY ${daemon.web.origin}`);
   await daemon.done;
 } finally {
   await discovery.stop(true);

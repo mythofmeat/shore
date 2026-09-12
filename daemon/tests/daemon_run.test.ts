@@ -231,6 +231,40 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("global configuration reload retains restart requirements and redacts rejected secret edits", async () => {
+    const original = `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
+    const place = await layout(original, []);
+    const daemon = await start(place, [], {}, false);
+    const browser = browserConnection(required(daemon.web).origin, { character: null, thread: null });
+    const actions = new OperationClient(browser.client);
+    try {
+      await browser.client.signIn(TEST_TOKEN);
+      await until(() => browser.client.status === "ready", "Empty settings session did not connect");
+      const changed = `${original}\n[notifications]\ntopic = "external-fixture-secret"\n`;
+      await writeFile(place.configPath, changed);
+      expect(await actions.run("config_reload", {})).toMatchObject({ applied: false, character: null, restart_required: ["[notifications]"] });
+      expect(daemon.runtime.registry.globalConfig().app.notifications.ntfy.topic).toBe("");
+      expect(await actions.run("config_reload", { apply: true })).toMatchObject({ applied: true, character: null, restart_required: ["[notifications]"], invalidated: { merged_character_configs: true } });
+      expect(daemon.runtime.registry.globalConfig().app.notifications.ntfy.topic).toBe("external-fixture-secret");
+      const redacted = await actions.run("config", { key: "notifications.topic" });
+      expect(redacted).toMatchObject({ config: "<redacted>", defaults: "" });
+      await actions.run("create_character", { name: "nova" });
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "config-read", name: "config", args: { key: "notifications.topic" } });
+        expect<unknown>((await tcp.awaitFrame("command_output"))["data"]).toEqual(redacted);
+      } finally { tcp.close(); }
+      const invalid = `${changed}\n[unknown_section]\nvalue = true\n`;
+      await writeFile(place.configPath, invalid);
+      let failure: unknown;
+      try { await actions.run("config", { key: "notifications.topic", value: "rejected-fixture-secret" }); }
+      catch (error) { failure = error; }
+      expect(String(failure)).toContain("was rejected");
+      expect(String(failure)).not.toContain("rejected-fixture-secret");
+      expect(await readFile(place.configPath, "utf8")).toBe(invalid);
+    } finally { browser.client.stop(); }
+  });
   test("the registry records the port the kernel chose, not the one asked for", async () => {
     const place = await layout();
     const daemon = await start(place);

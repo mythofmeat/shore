@@ -2,7 +2,8 @@
 
 This directory tracks the implementation of [issue #214](https://github.com/mythofmeat/shore/issues/214).
 The browser must provide every application capability in this inventory. The inventory is a migration
-input, **not evidence that a browser workflow exists**. There is currently no browser implementation.
+input, **not evidence that a browser workflow exists**. Implemented browser workflows and their
+verification are recorded in [WEB_GUI.md](../WEB_GUI.md); full parity remains unfinished.
 
 ## Reproducible source inventory
 
@@ -15,7 +16,7 @@ input, **not evidence that a browser workflow exists**. There is currently no br
   paths and every generated wire type. It includes characterless dispatch, core message/regen/cancel
   requests, results, images, tools, warnings, and all known server-event variants. Its
   `legacy_operations` list makes unmigrated contracts explicit. Registered operation schemas validate
-  the twelve migrated character/thread payloads; the inventory itself is not a runtime validator.
+  the 30 migrated operation payloads; 26 legacy names remain. The inventory itself is not a runtime validator.
 
 Regenerate from `client/`, then from `daemon/`:
 
@@ -32,14 +33,15 @@ bun run inventory:generate
 The normal Rust and daemon test suites compare the inventories against the running source. Review
 regenerated differences together with the corresponding browser controls and conformance fixtures.
 These gates detect source drift. The migrated registry also enforces handler/contract bindings and
-input-field metadata. GUI renderers, field accessibility, known event handling and transport
-conformance remain required gates; metadata alone does not establish a usable browser control.
+input-field metadata. Browser checks cover generated controls, live settings types and current
+browser journeys. Complete field/result/event accessibility and transport conformance remain
+required gates; metadata alone does not establish a usable browser control.
 
 ## Capability mappings
 
 The generated terminal inventory is the exhaustive list of command paths and declared options. The
 table below records the browser destination and semantics required by each family. A destination in
-this table is planned work, not an implemented GUI registration. No application operation is excluded.
+this table is a required destination, not proof of an implemented GUI registration. No application operation is excluded.
 
 | Terminal capability | Shared operation or browser equivalent | Required options and observable behavior |
 | --- | --- | --- |

@@ -2,6 +2,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use shore_common::protocol::client_msg::{
     Cancel, ClientMessage, ClientMessageBody, Command, Regen,
 };
+use shore_common::protocol::operations::{ConfigReloadArgs, Operation, ReloadConfiguration};
 use tracing::debug;
 
 use crate::cli::{
@@ -1552,7 +1553,21 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Reload { .. }),
             ..
-        } => palette_swp_command(app, input, "config_reload", serde_json::json!({})),
+        } => match ReloadConfiguration::command(
+            ConfigReloadArgs {
+                apply: None,
+                refresh_prompts: None,
+            },
+            None,
+        ) {
+            Ok(reload_command) => {
+                palette_swp_command(app, input, &reload_command.name, reload_command.args)
+            }
+            Err(error) => {
+                app.set_error(error.to_string());
+                Action::Redraw
+            }
+        },
         CliCommand::Trace { subcommand: None } => {
             app.set_status("usage: :trace [calls|heartbeat|events|errors|subagent]");
             Action::Redraw

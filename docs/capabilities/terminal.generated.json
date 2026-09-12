@@ -8342,10 +8342,7 @@
       ],
       "mapping": {
         "name": "config",
-        "args": {
-          "key": null,
-          "value": null
-        }
+        "args": {}
       }
     },
     {
@@ -8373,10 +8370,7 @@
       ],
       "mapping": {
         "name": "config",
-        "args": {
-          "key": null,
-          "value": null
-        }
+        "args": {}
       }
     },
     {
