@@ -18,20 +18,13 @@ import type { CompactContext } from "./compact.ts";
 import type { SessionActivateContext } from "./activate.ts";
 import type { KeepalivePingContext } from "./keepalive.ts";
 import type { RunToolContext } from "./run_tool.ts";
-import type { Args } from "./navigation.ts";
 
 import type { ThreadRegistry } from "./threads.ts";
-import { archiveWithSignal } from "./thread_context.ts";
 import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
-import {
-  deleteCharacter,
-  exportCharacter,
-  importCharacter,
-  type ArchiveContext,
-} from "./archive.ts";
+import type { ArchiveContext } from "./archive.ts";
 
 export interface CommandSession {
   config: LoadedConfig;
@@ -67,12 +60,6 @@ export interface CommandDeps {
   onCharacterCreated?: (character: string) => Promise<void>;
 }
 
-const CHARACTERLESS = new Set([
-  "export_character",
-  "import_character",
-  "delete_character",
-]);
-
 export async function runCommand(
   engine: ConversationEngine,
   session: CommandSession,
@@ -96,27 +83,11 @@ export function runCharacterlessCommand(
     }
     return runRegisteredOperation(cmd.name, { session, deps }, cmd.args);
   }
-  const args = (cmd.args ?? {}) as Args;
-  switch (cmd.name) {
-    case "export_character": {
-      if (deps.archive === undefined) throw unwired("export_character");
-      return exportCharacter(archiveWithSignal(deps.archive, session.signal), args);
-    }
-    case "import_character": {
-      if (deps.archive === undefined) throw unwired("import_character");
-      return importCharacter(archiveWithSignal(deps.archive, session.signal), args);
-    }
-    case "delete_character": {
-      if (deps.archive === undefined) throw unwired("delete_character");
-      return deleteCharacter(archiveWithSignal(deps.archive, session.signal), args);
-    }
-    default:
-      throw invalidRequest(`Command '${cmd.name}' requires a character`);
-  }
+  throw invalidRequest(`Command '${cmd.name}' requires a character`);
 }
 
 export function isCharacterless(name: string): boolean {
-  return isRegisteredOperation(name) ? commandOperations[name].presentation.scope === "global" : CHARACTERLESS.has(name);
+  return isRegisteredOperation(name) && commandOperations[name].presentation.scope === "global";
 }
 
 export function commandFrame(name: string, outcome: { ok: unknown } | { err: unknown }): ServerMessage {
@@ -127,8 +98,4 @@ export function commandFrame(name: string, outcome: { ok: unknown } | { err: unk
   const error = e instanceof CommandError ? e : internalError(describeError(e));
   shoreLog.warn(`shore: command ${name} failed: ${error.message}`);
   return { type: "error", rid: null, code: error.code, message: error.message };
-}
-
-function unwired(name: string): CommandError {
-  return internalError(`${name} is not available in this build`);
 }

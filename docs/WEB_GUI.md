@@ -607,9 +607,54 @@ required merge gates remain unverified.
 Large-export transfer limits, reconnect/restart recovery and complete local usage/budget display
 preferences remain part of the unfinished acceptance work.
 
+### Character archive contracts
+
+`export_character`, `import_character` and `delete_character` now have canonical Rust inputs and
+results, generated validators and registered daemon handlers. All 56 named operations are registered;
+both dispatch entry points now use the registry exclusively. The inventory rejects legacy switch
+branches even when regenerating its output, and checks registration keys against canonical names.
+Representative omissions and reintroduced legacy branches fail executable tests.
+
+The existing archive implementation still owns snapshots, extraction rules, collision refusal,
+backup-before-delete ordering, storage restoration and cleanup. Its result types now reference the
+generated contracts. CLI exports/imports use typed arguments, while the special deletion runner
+uses typed input and validates the complete result before reporting success or clearing saved
+selection. JSON output retains additional result fields. Optional backup paths remain omitted when
+unused; explicit null backup arguments remain invalid. Missing archive support is reflected in
+discovery and enforced by dispatch.
+
+The generated browser actions expose every existing option, with character choices, clearly labelled
+daemon-host paths and full results. Deletion requires the repeated name and an explicit review;
+backing out makes no change. A browser journey covers missing files, relative-path refusal, export,
+collision refusal, deletion with a backup, restoration and chatting with the restored character.
+This is coverage of intentionally supported server paths. Browser-local file picking and controlled
+downloadable artifacts still require the transfer adapter and designed archive workflow.
+
+A 12-step comparison runs independently through TCP and WebSocket, checking correlated results and
+errors, byte-for-byte preservation of an existing export, backup creation, and restored workspace,
+media, messages and usage rows while preserving another character. Its comparison normalizes fixture
+root paths and request IDs; export byte counts are checked against the actual file and excluded from
+cross-world equality because archive timestamps and root paths affect compression. Real CLI journeys
+cover normal/JSON output, backups and omission, refusal without confirmation, extra result metadata
+and malformed-result rejection. A real TUI journey covers both archive commands and complete JSON
+metadata. The existing TUI restriction on character deletion remains visible in its inventory.
+
+The required dependency refresh found no project dependency changes. Bun 1.4.2, Rust/Cargo 1.98.1,
+rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0 and the installed sccache 0.17.0 remain current.
+A redundant Cargo reinstall of sccache failed when its temporary compilation reached the disk quota;
+the failed build directory was removed, and the existing current binary remains installed. Rust
+checks continue to bypass the unavailable cache service. Fresh baselines passed 76 daemon tests and
+968 CLI unit tests before the missing archive action was reproduced in the browser.
+
+Archive validation passed all eight required daemon checks with 8,246 tests, all three Rust
+workspace checks, all eleven browser journeys, and browser-generation/inventory checks. The three
+affected mutation passes killed 41/41 mutants, and all 61 staleness passes are current. Independent
+legacy recordings remain unchanged. Browser transfers, the remaining acceptance work, GitHub CI
+execution and required merge gates are not complete.
+
 Remaining work follows the issue's sequence:
 
-1. Continue the contract migration through the three legacy names, core message/regen/cancel requests,
+1. Continue the capability contracts through core message/regen/cancel requests,
    remaining terminal adapters and all event/result types. Add field/result renderer coverage and
    narrow platform mappings. Audit remaining special runners and local flows.
 2. Audit all exposed payloads/redaction and add authenticated controlled upload/download adapters.

@@ -1,4 +1,5 @@
 import { compact } from "./compact.ts";
+import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "./archive.ts";
 import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
@@ -19,7 +20,7 @@ import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
-import { threadContext, threadListingContext } from "./thread_context.ts";
+import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
@@ -35,6 +36,11 @@ const LEDGER_UNAVAILABLE = "provider error: usage reports need a ledger on disk;
 function engineOf(context: CommandOperationContext): ConversationEngine {
   if (context.engine === undefined) throw invalidRequest("This operation requires a character");
   return context.engine;
+}
+
+function archiveContext({ session, deps }: CommandOperationContext): ArchiveContext {
+  if (deps.archive === undefined) throw internalError("Character archives are unavailable");
+  return archiveWithSignal(deps.archive, session.signal);
 }
 
 function providersContext({ session, deps }: CommandOperationContext): ProvidersContext {
@@ -86,6 +92,17 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  export_character: register("export_character", { ...characterPresentation, prerequisites: ["archive"], effects: ["read", "workspace_write"], label: "Export character", fields: {
+    character: { label: "Character", choices: "characters" },
+    output: { label: "Archive output on daemon host", hint: "Absolute server path to a new archive; its parent directory must exist. Existing files are never overwritten." },
+  } }, (context, args) => exportCharacter(archiveContext(context), args)),
+  import_character: register("import_character", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], label: "Import character", fields: {
+    archive: { label: "Archive on daemon host", hint: "Absolute server path to a Shore character archive. Existing characters are never overwritten." },
+  } }, (context, args) => importCharacter(archiveContext(context), args)),
+  delete_character: register("delete_character", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], confirmation: "delete", label: "Delete character", fields: {
+    character: { label: "Character", choices: "characters" }, confirm: { label: "Repeat character name", hint: "Deletion permanently removes the character's workspace, configuration, history, usage records and cached data." },
+    archive: { label: "Backup archive on daemon host", hint: "Optional absolute server path to a new backup. If the backup fails, deletion does not proceed." },
+  } }, (context, args) => deleteCharacter(archiveContext(context), args)),
   usage: register("usage", { category: "Usage", scope: "optional_character", prerequisites: ["ledger"], effects: ["read"], confirmation: "none", label: "Usage report", fields: {
     last: { label: "Period", hint: "today, week, month, all, or a count such as 4h, 7d, 2w, 1M; omit for the current budget window or today" },
     character: { label: "Character filter", choices: "characters", hint: "Omit for all characters, including when a conversation is selected" },
@@ -324,6 +341,7 @@ export function isRegisteredOperation(name: string): name is OperationName {
 }
 
 const prerequisiteAvailable: Record<OperationPrerequisite, (context: CommandOperationContext) => boolean> = {
+  archive: (context) => context.deps.archive !== undefined,
   tool_execution: (context) => context.deps.runTool !== undefined,
   ledger: (context) => context.deps.ledgerPath !== undefined,
   compaction: (context) => context.deps.compaction !== undefined,

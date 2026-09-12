@@ -2,4 +2,4 @@
 import type { UsageBudget } from "./UsageBudget";
 import type { UsageCallAttempts } from "./UsageCallAttempts";
 
-export type UsageBudgetReport = { timezone: string, allow_compaction_over_budget: boolean, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, };
+export type UsageBudgetReport = { timezone: string, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, };
