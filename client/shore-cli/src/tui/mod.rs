@@ -4677,7 +4677,10 @@ mod redraw_tests {
             ServerMessage::CommandOutput(CommandOutput {
                 rid: Some(rid.clone()),
                 name: "status".into(),
-                data: serde_json::json!({ "daemon": { "state": "running" } }),
+                data: serde_json::from_str(include_str!(
+                    "../../tests/fixtures/diagnostic_status.json"
+                ))
+                .unwrap(),
             }),
         );
 

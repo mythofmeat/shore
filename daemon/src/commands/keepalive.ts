@@ -71,7 +71,7 @@ export function classify(
 export async function keepalivePingNowCommand(
   character: string,
   ctx: KeepalivePingContext,
-): Promise<unknown> {
+): Promise<import("../operations/types.ts").OperationResult<"keepalive_ping_now">> {
   const ping = await pingNow(character, ctx);
 
   if (ping.kind === "failed") {

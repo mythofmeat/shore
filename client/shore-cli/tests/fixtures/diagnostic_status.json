@@ -1,0 +1,37 @@
+{
+  "character": "ada",
+  "keepalive_halted": null,
+  "message_count": 4,
+  "turn_count": 4,
+  "context_tokens": 12,
+  "active_model": "fixture:model",
+  "config_dir": "/fixture/config",
+  "data_dir": "/fixture/data",
+  "cache_dir": "/fixture/cache",
+  "pending_deferred_edit_count": 0,
+  "pending_deferred_edits": [],
+  "tokens": {
+    "input": 4,
+    "output": 2,
+    "cache_read": 1,
+    "cache_write": 0
+  },
+  "autonomy": null,
+  "activity": null,
+  "index": null,
+  "history_index": null,
+  "sections": [
+    "tokens",
+    "autonomy",
+    "activity",
+    "index",
+    "history_index",
+    "daemon"
+  ],
+  "daemon": {
+    "state": "running"
+  },
+  "session": {
+    "turns": 4
+  }
+}

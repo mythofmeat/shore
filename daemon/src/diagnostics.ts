@@ -28,37 +28,18 @@ export class RingBuffer<T> {
   }
 }
 
-export interface ErrorEntry {
-  timestamp: string;
-  error_type: string;
-  message: string;
-  context: string;
-}
+export type ErrorEntry = import("./protocol/DiagnosticErrorEntry.ts").DiagnosticErrorEntry;
 
-export interface KeyFallbackEntry {
-  timestamp: string;
-  rid?: string | undefined;
-  provider: string;
-  model: string;
-  character: string;
-  from_key: string;
-  to_key?: string | undefined;
-  kind: string;
-  status?: number | undefined;
-  reason: string;
-}
+export type KeyFallbackEntry = import("./protocol/DiagnosticKeyFallbackEntry.ts").DiagnosticKeyFallbackEntry;
 
 const DEFAULT_CAPACITY = 100;
 
-interface Ring {
+interface Ring<T> {
   count: number;
-  recent: unknown[];
+  recent: T[];
 }
 
-export interface DiagnosticsJson {
-  errors: Ring;
-  key_fallbacks: Ring;
-}
+export type DiagnosticsJson = import("./protocol/ErrorLogResult.ts").ErrorLogResult;
 
 export class Diagnostics {
   readonly errors = new RingBuffer<ErrorEntry>(DEFAULT_CAPACITY);
@@ -72,12 +53,12 @@ export class Diagnostics {
   }
 }
 
-function ring<T extends object>(buffer: RingBuffer<T>, lastN: number): Ring {
+function ring<T extends object>(buffer: RingBuffer<T>, lastN: number): Ring<T> {
   return { count: buffer.length, recent: buffer.lastN(lastN).map(omitAbsent) };
 }
 
-function omitAbsent<T extends object>(entry: T): Record<string, unknown> {
+function omitAbsent<T extends object>(entry: T): T {
   return Object.fromEntries(
     Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),
-  );
+  ) as T;
 }

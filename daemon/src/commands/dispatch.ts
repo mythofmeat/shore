@@ -9,34 +9,21 @@ import type { ConversationEngine } from "../engine/conversation.ts";
 import type { CallStore } from "../call_store.ts";
 import type { Diagnostics } from "../diagnostics.ts";
 import type { AutonomyService } from "../autonomy/service.ts";
-import { localWallClock } from "../autonomy/activity.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
-import { callLog, transcript } from "./call_log.ts";
-import { subagentTrace } from "./subagent_trace.ts";
 import {
   type ConfigRuntime,
 } from "./config.ts";
 
 import { compact, type CompactContext } from "./compact.ts";
-import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
-import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
+import type { SessionActivateContext } from "./activate.ts";
+import type { KeepalivePingContext } from "./keepalive.ts";
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
-import { effectiveChatModel } from "./models.ts";
 import type { Args } from "./navigation.ts";
-import {
-  errorLog,
-  heartbeatLog,
-  heartbeatSetActive,
-  heartbeatSetDormant,
-  heartbeatTickNow,
-  status,
-} from "./status.ts";
+
 import { usage } from "./usage.ts";
 import type { ThreadRegistry } from "./threads.ts";
 import { archiveWithSignal } from "./thread_context.ts";
 import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
-import { conversationTokens } from "../ledger/conversation_spend.ts";
-import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
@@ -102,8 +89,6 @@ export async function runCommand(
   const character = engine.characterName;
 
   switch (cmd.name) {
-    case "status":
-      return await status(statusContext(engine, session, deps));
     case "compact":
       if (deps.compaction === undefined) throw unwired("compact");
       return await compact(
@@ -136,30 +121,6 @@ export async function runCommand(
         onComplete: (name) => deps.autonomy.onCompactionComplete(name, 0),
       }, args);
 
-    case "error_log":
-      return errorLog(statusContext(engine, session, deps), args);
-    case "heartbeat_log":
-      return await heartbeatLog(statusContext(engine, session, deps), args);
-    case "call_log":
-      return callLog({ characterName: character, callStore: deps.callStore }, args);
-    case "transcript":
-      return transcript({ characterName: character, callStore: deps.callStore }, args);
-    case "subagent_trace":
-      return await subagentTrace({ dataDir: session.dataDir, characterName: character }, args);
-    case "heartbeat_tick_now":
-      return heartbeatTickNow(statusContext(engine, session, deps));
-    case "session_activate":
-      if (deps.keepalive === undefined || deps.activate === undefined) {
-        throw unwired("session_activate");
-      }
-      return await sessionActivateCommand(character, {
-        ...deps.keepalive,
-        ...deps.activate,
-        autonomy: deps.autonomy,
-        config: session.config,
-        dataDir: session.dataDir,
-        ...(deps.now === undefined ? {} : { now: deps.now }),
-      });
     case "run_tool":
       if (deps.runTool === undefined) throw unwired("run_tool");
       if (args["describe"] === true) {
@@ -185,17 +146,6 @@ export async function runCommand(
         },
         args,
       );
-    case "keepalive_ping_now":
-      if (deps.keepalive === undefined) throw unwired("keepalive_ping_now");
-      return await keepalivePingNowCommand(character, {
-        ...deps.keepalive,
-        config: session.config,
-        dataDir: session.dataDir,
-      });
-    case "heartbeat_set_dormant":
-      return heartbeatSetDormant(statusContext(engine, session, deps));
-    case "heartbeat_set_active":
-      return heartbeatSetActive(statusContext(engine, session, deps));
     case "usage":
       return await usage(usageContext(session, deps), args);
 
@@ -252,39 +202,6 @@ function unwired(name: string): CommandError {
   return internalError(`${name} is not available in this build`);
 }
 
-function statusContext(
-  engine: ConversationEngine,
-  session: CommandSession,
-  deps: CommandDeps,
-): Parameters<typeof status>[0] {
-  return {
-    thread: engine.thread,
-    characterName: engine.characterName,
-    turnCount: engine.turnCount(),
-    activeModel: effectiveChatModel(session.config, engine.characterName, session.threadModel)
-      ?.qualifiedName,
-    config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
-    conversationTokens: conversationTokens(
-      deps.ledgerPath,
-      engine.characterName,
-      engine.startedAt(),
-    ),
-    contextTokens: estimateHistoryTokens(engine.messages()),
-    autonomy: deps.autonomy,
-    diagnostics: deps.diagnostics,
-    now: deps.now ?? Date.now,
-    localNow: deps.localNow ?? (() => localWallClock(Date.now())),
-    workspaceIndex:
-      deps.workspaceIndex === undefined
-        ? undefined
-        : { ...deps.workspaceIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
-    historyIndex:
-      deps.historyIndex === undefined
-        ? undefined
-        : { ...deps.historyIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
-    ...(deps.mcpStatus === undefined ? {} : { mcpServers: deps.mcpStatus() }),
-  };
-}
 
 function usageContext(
   session: CommandSession,

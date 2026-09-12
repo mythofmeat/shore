@@ -1,6 +1,7 @@
 import { workspaceIndexStats } from "../memory/workspace_index.ts";
 import type { WorkspaceIndexProgress } from "../memory/workspace_index_service.ts";
-import type { Json } from "./conversation.ts";
+import type { WorkspaceIndexResult } from "../protocol/WorkspaceIndexResult.ts";
+import type { IndexBackgroundStatus } from "../protocol/IndexBackgroundStatus.ts";
 
 export interface WorkspaceIndexSource {
   indexPathFor: (character: string) => string | undefined;
@@ -11,7 +12,7 @@ export interface WorkspaceIndexSource {
 export async function workspaceIndexSection(
   source: WorkspaceIndexSource | undefined,
   character: string,
-): Promise<Json> {
+): Promise<WorkspaceIndexResult | null> {
   if (source === undefined) return null;
 
   const indexPath = source.indexPathFor(character);
@@ -43,7 +44,7 @@ export async function workspaceIndexSection(
   };
 }
 
-function backgroundView(progress: WorkspaceIndexProgress | undefined, now: number): Json {
+function backgroundView(progress: WorkspaceIndexProgress | undefined, now: number): IndexBackgroundStatus {
   if (progress === undefined) return { registered: false };
   return {
     registered: true,

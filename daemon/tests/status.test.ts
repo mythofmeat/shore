@@ -483,7 +483,7 @@ describe("the clock arithmetic", () => {
         recent_events: [],
       },
       at,
-    ) as Record<string, unknown>;
+    );
   }
 
   test("an overdue wake truncates towards zero rather than flooring", () => {

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
 import { callLog, transcript, type CallLogContext } from "../src/commands/call_log.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 
 import rawFixture from "./command_captures/call_log.json" with { type: "json" };
@@ -16,6 +17,10 @@ const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const root = mkdtempSync(join(tmpdir(), "call-log-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+test("an explicitly null transcript source uses the heartbeat default", () => {
+  expect(transcript({ characterName: "poppy", callStore: undefined }, { source: null })).toEqual({ enabled: false, source: "heartbeat", entries: [] });
+});
 
 function at(secs: number): Date {
   return new Date(Date.parse("2026-01-15T12:00:00Z") + secs * 1000);
@@ -183,6 +188,10 @@ describe.each(["call_log", "transcript"])("%s", (command) => {
   for (const row of fixture.cases as Case[]) {
     if (row.command !== command) continue;
     test(row.case, () => {
+      if (row.case === "source_number") {
+        expect(() => parseOperationInput("transcript", row.args)).toThrow("source");
+        return;
+      }
       const ctx = contextFor(row.case, CHARACTER_FOR(row.case));
       const run = () =>
         row.command === "call_log" ? callLog(ctx, row.args) : transcript(ctx, row.args);

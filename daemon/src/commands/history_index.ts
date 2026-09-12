@@ -1,6 +1,7 @@
 import { HistorySearchIndex, withHistoryIndexLock } from "../memory/history_index.ts";
 import type { HistoryIndexProgress } from "../memory/history_index_service.ts";
-import type { Json } from "./conversation.ts";
+import type { HistoryIndexResult } from "../protocol/HistoryIndexResult.ts";
+import type { IndexBackgroundStatus } from "../protocol/IndexBackgroundStatus.ts";
 
 export interface HistoryIndexSource {
   progressFor: (character: string) => HistoryIndexProgress | undefined;
@@ -11,7 +12,7 @@ export interface HistoryIndexSource {
 export async function historyIndexSection(
   source: HistoryIndexSource | undefined,
   character: string,
-): Promise<Json> {
+): Promise<HistoryIndexResult | null> {
   if (source === undefined) return null;
 
   const progress = source.progressFor(character);
@@ -51,7 +52,7 @@ export async function historyIndexSection(
   };
 }
 
-function backgroundView(progress: HistoryIndexProgress, now: number): Json {
+function backgroundView(progress: HistoryIndexProgress, now: number): IndexBackgroundStatus {
   return {
     registered: progress.embedder !== undefined,
     failures: progress.failures,

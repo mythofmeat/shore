@@ -26,6 +26,8 @@ import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { OperationClient } from "../src/browser/operations.ts";
+import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
+import { validOperationResult } from "../src/browser/operation_validators.generated.js";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -233,6 +235,63 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("diagnostics and runtime actions agree across independent TCP and browser sessions", async () => {
+    const steps = [
+      { name: "status", args: {} }, { name: "error_log", args: { count: 0 } },
+      { name: "heartbeat_log", args: { count: 0 } }, { name: "call_log", args: { count: 0 } },
+      { name: "call_log", args: { call_type: "diagnostic_fixture", character: "ada", count: 2 } },
+      { name: "call_log", args: { id: 2, wire: true, diff: true, against: 1 } },
+      { name: "call_log", args: { id: 9999 }, error: true },
+      { name: "call_log", args: { id: 2, diff: true, against: 9999 }, error: true },
+      { name: "transcript", args: { source: "heartbeat", count: 1 } },
+      { name: "transcript", args: { source: "memory_recall", count: 1 } },
+      { name: "transcript", args: { source: "bad-source" }, error: true },
+      { name: "subagent_trace", args: { ids: ["parent-fixture"], count: 1 } },
+      { name: "subagent_trace", args: { count: 2 } },
+      { name: "session_activate", args: {} },
+      { name: "heartbeat_set_dormant", args: {} }, { name: "status", args: {} },
+      { name: "heartbeat_set_active", args: {} }, { name: "heartbeat_log", args: { count: 20 } },
+      { name: "keepalive_ping_now", args: {} }, { name: "heartbeat_tick_now", args: {} },
+    ] as const;
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], {}, false);
+      await seedDiagnosticFixture(daemon.runtime, "ada");
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Diagnostic browser did not connect"); }
+        const results: unknown[] = [];
+        for (const [index, step] of steps.entries()) {
+          let rid = `diagnostic-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ type: "command", rid, ...step });
+          else if (browser !== undefined) { const ticket = browser.client.submit({ type: "command", name: step.name, args: step.args }); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} ${step.name} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          const expectedError = "error" in step;
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)}: ${JSON.stringify(observed)}`).toMatchObject({ outcome: expectedError ? "failed" : "completed" });
+          if (expectedError) { expect(output).toBeUndefined(); expect(observed.find((frame) => frame["type"] === "error")).toMatchObject({ code: "invalid_request" }); }
+          else { expect(output).toMatchObject({ name: step.name }); expect(validOperationResult(step.name, output?.["data"])).toBe(true); }
+          if (index === 5) expect(output).toMatchObject({ data: { call: { id: 2, request: { api_key: "[redacted]" } }, wire: [{ request_headers: [["Authorization", "[redacted]"], ["x-request-id", "diagnostic-call-1"]] }], diff: { from_call: 1, to_call: 2 } } });
+          if (index === 15) expect(output).toMatchObject({ data: { autonomy: { heartbeat_state: "Dormant" } } });
+          const state = daemon.runtime.autonomy.status("ada");
+          const serialized = JSON.stringify({ observed, state: state === undefined ? null : { heartbeat: state.heartbeat_state, ticks: state.ticks_without_user } }, (key, value: unknown) => ["seconds_until_wake", "seconds_until_ping", "seconds_since_user"].includes(key) && typeof value === "number" ? "<relative-time>" : value)
+            .replaceAll(place.root, "<root>").replaceAll(rid, `diagnostic-${String(index)}`).replaceAll(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)/g, "<timestamp>");
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+
   test("model operations agree over TCP and WebSocket on results, errors and persisted preferences", async () => {
     const config = `${MODEL_CONFIG}\n[chat."anthropic:fast"]\nsdk = "anthropic"\n[chat."openrouter:vendor"]\nsdk = "openrouter"\n[subagents.worker]\ndescription = "test"\nprompt = "test"\nmodel = "anthropic:fast"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
     const steps = [

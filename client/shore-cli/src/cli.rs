@@ -1,14 +1,17 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    BackgroundModelTarget, CheckConfiguration, ConfigArgs, Configuration, ConfigurationSchema,
-    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage,
-    EditMessageArgs, EmptyOperationArgs, FavoriteModel, FavoriteModelArgs, GetMessage,
-    GetMessageArgs, InjectSystem, InjectSystemArgs, InspectModel, ListModels, ListModelsArgs,
-    ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope,
-    ModelSettings, ModelSettingsArgs, Operation, ProviderArgs, ProviderModelsArgs,
-    RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, SetModelSetting,
-    SetModelSettingArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
+    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ConfigArgs,
+    Configuration, ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages,
+    DeleteMessagesArgs, DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs,
+    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
+    InspectCalls, InspectModel, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
+    MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs,
+    Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadHeartbeatLog,
+    ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
+    RefreshProviderModels, ResetModel, ResetModelArgs, ScheduleHeartbeat, SetHeartbeatActive,
+    SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel,
+    SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource,
 };
 use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
@@ -2321,17 +2324,25 @@ pub(crate) fn to_swp_command(
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
-        CliCommand::Status { .. } => Some(("status", json!({}))),
+        CliCommand::Status { .. } => operation_to_swp::<ReadStatus>(EmptyOperationArgs {}),
 
         CliCommand::Debug { subcommand: None } => None,
         CliCommand::Debug {
             subcommand: Some(subcommand),
         } => match subcommand {
-            DebugCommand::TickNow => Some(("heartbeat_tick_now", json!({}))),
-            DebugCommand::StatusDormant => Some(("heartbeat_set_dormant", json!({}))),
-            DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
-            DebugCommand::KeepalivePingNow => Some(("keepalive_ping_now", json!({}))),
-            DebugCommand::SessionActivate => Some(("session_activate", json!({}))),
+            DebugCommand::TickNow => operation_to_swp::<ScheduleHeartbeat>(EmptyOperationArgs {}),
+            DebugCommand::StatusDormant => {
+                operation_to_swp::<SetHeartbeatDormant>(EmptyOperationArgs {})
+            }
+            DebugCommand::StatusActive => {
+                operation_to_swp::<SetHeartbeatActive>(EmptyOperationArgs {})
+            }
+            DebugCommand::KeepalivePingNow => {
+                operation_to_swp::<PingKeepalive>(EmptyOperationArgs {})
+            }
+            DebugCommand::SessionActivate => {
+                operation_to_swp::<ActivateSession>(EmptyOperationArgs {})
+            }
             DebugCommand::Tool {
                 name,
                 args,
@@ -2493,7 +2504,6 @@ fn operation_to_swp<O: Operation>(input: O::Input) -> Option<(&'static str, serd
 }
 
 fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Trace {
         subcommand: Some(subcommand),
     } = cmd
@@ -2501,19 +2511,27 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     match subcommand {
-        TraceCommand::Heartbeat { count, .. } => Some((
-            "transcript",
-            json!({ "source": "heartbeat", "count": count }),
-        )),
-        TraceCommand::Errors { count, .. } => Some(("error_log", json!({ "count": count }))),
-        TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
+        TraceCommand::Heartbeat { count, .. } => {
+            operation_to_swp::<ReadTranscript>(TranscriptArgs {
+                source: Some(TranscriptSource::Heartbeat),
+                count: Some(*count),
+            })
+        }
+        TraceCommand::Errors { count, .. } => {
+            operation_to_swp::<ReadErrorLog>(DiagnosticCountArgs {
+                count: Some(*count),
+            })
+        }
+        TraceCommand::Events { count, .. } => {
+            operation_to_swp::<ReadHeartbeatLog>(DiagnosticCountArgs {
+                count: Some(*count),
+            })
+        }
         TraceCommand::Subagent { id, count, .. } => {
-            let mut args = Map::new();
-            match id {
-                Some(one) => _ = args.insert("ids".into(), json!([one])),
-                None => _ = args.insert("count".into(), json!(count)),
-            }
-            Some(("subagent_trace", Value::Object(args)))
+            operation_to_swp::<ReadSubagentTraces>(SubagentTraceArgs {
+                ids: id.as_ref().map(|one| vec![one.clone()]),
+                count: id.is_none().then_some(*count),
+            })
         }
         TraceCommand::Calls {
             id,
@@ -2523,27 +2541,19 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             against,
             wire,
             ..
-        } => {
-            let mut args = Map::new();
-            if let Some(one) = id {
-                _ = args.insert("id".into(), json!(one));
-                if *wire {
-                    _ = args.insert("wire".into(), json!(true));
-                }
-                if *diff {
-                    _ = args.insert("diff".into(), json!(true));
-                    if let Some(other) = against {
-                        _ = args.insert("against".into(), json!(other));
-                    }
-                }
+        } => operation_to_swp::<InspectCalls>(CallLogArgs {
+            id: *id,
+            count: id.is_none().then_some(*count),
+            call_type: call_type.clone(),
+            character: None,
+            diff: (id.is_some() && *diff).then_some(true),
+            against: if id.is_some() && *diff {
+                *against
             } else {
-                _ = args.insert("count".into(), json!(count));
-            }
-            if let Some(ct) = call_type {
-                _ = args.insert("call_type".into(), json!(ct));
-            }
-            Some(("call_log", Value::Object(args)))
-        }
+                None
+            },
+            wire: (id.is_some() && *wire).then_some(true),
+        }),
     }
 }
 

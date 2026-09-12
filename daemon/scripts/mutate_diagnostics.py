@@ -113,15 +113,18 @@ MUTANTS = [
      "      key_fallbacks: ring(this.api_calls, lastN),"),
 
     # --- serde's skip_serializing_if -----------------------------------------
-    ("omitAbsent: absent optional fields are written as null",
-     "  return Object.fromEntries(\n"
-     "    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),\n  );",
-     "  return Object.fromEntries(\n"
-     "    Object.entries(entry).map(([k, v]) => [k, v === undefined ? null : v]),\n  );"),
-    ("omitAbsent: nothing is elided",
-     "  return Object.fromEntries(\n"
-     "    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),\n  );",
-     "  return { ...entry } as Record<string, unknown>;"),
+    ('omitAbsent: absent optional fields are written as null',
+     '  return Object.fromEntries(\n'
+     '    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),\n'
+     '  ) as T;',
+     '  return Object.fromEntries(\n'
+     '    Object.entries(entry).map(([k, v]) => [k, v === undefined ? null : v]),\n'
+     '  ) as T;'),
+    ('omitAbsent: nothing is elided',
+     '  return Object.fromEntries(\n'
+     '    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),\n'
+     '  ) as T;',
+     '  return { ...entry };'),
     ("omitAbsent: falsy values are elided too",
      "    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null),",
      "    Object.entries(entry).filter(([, v]) => Boolean(v)),"),

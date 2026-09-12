@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startDaemon } from "../../src/daemon/run.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
+import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
@@ -76,6 +77,7 @@ try {
     XDG_CONFIG_HOME: join(root, "config-home"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"),
     SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
+  await seedDiagnosticFixture(daemon.runtime, "nova");
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
