@@ -20,7 +20,7 @@ import {
 } from "../src/config/app.ts";
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
-import type { LoadedConfig } from "../src/config/loader.ts";
+import { parseConfigTable, type LoadedConfig, type TomlTable } from "../src/config/loader.ts";
 import type { ResolvedModel } from "../src/config/models.ts";
 import type {
   SidecarProvider,
@@ -38,6 +38,7 @@ import {
   type GenerationDeps,
 } from "../src/handler/generation.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
+import { handleGenerateImage } from "../src/tools/images.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedValue } from "./support/rerecord.ts";
@@ -261,6 +262,57 @@ describe("applyIntermediateMessages", () => {
 });
 
 describe("buildToolContext", () => {
+  test("an OpenRouter image default works without a provider section or config warning", async () => {
+    const root = await tempRoot("image-default");
+    const warnings: string[] = [];
+    const config = parseConfigTable(Bun.TOML.parse(`
+      [defaults]
+      image_generation = "openrouter:fixture/image-model"
+      [image_generation."openrouter:fixture/image-model"]
+      aspect_ratio = "16:9"
+      image_size = "2K"
+    `) as TomlTable, {
+      config: join(root, "config"),
+      data: join(root, "data"),
+      cache: join(root, "cache"),
+      runtime: join(root, "run"),
+    }, (message) => warnings.push(message));
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = "fixture-image-key";
+    let generated = false;
+    try {
+      const ctx = await buildToolContext(config, config.dirs.data, "ada", {
+        imageGenerator: async (request) => {
+          expect(request).toMatchObject({
+            provider_key: "openrouter",
+            model: "fixture/image-model",
+            api_key: "fixture-image-key",
+            base_url: "https://openrouter.ai/api/v1",
+            prompt: "Draw a tree",
+            aspect_ratio: "16:9",
+            image_size: "2K",
+          });
+          generated = true;
+          return {
+            url: "data:image/png;base64,aGVsbG8=",
+            revised_prompt: "A tree",
+            timing: { total_ms: 1 },
+          };
+        },
+      });
+      const result = await handleGenerateImage(
+        { prompt: "Draw a tree" }, ctx.imageDir, ctx.imageGenConfig, ctx.imageGenerator,
+      );
+      expect(generated).toBe(true);
+      expect(result.sent).toBe(true);
+      expect(await readFile(result.path, "utf8")).toBe("hello");
+      expect(warnings).toEqual([]);
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = savedKey;
+    }
+  });
+
   for (const c of fixture.build_tool_context) {
     test(c.name, async () => {
       const caseInput = c.input as Knobs;

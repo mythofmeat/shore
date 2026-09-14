@@ -1,4 +1,5 @@
 import { shoreLog } from "../log.ts";
+import { hardcodedProviderBaseUrl } from "../llm/request.ts";
 
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
@@ -609,10 +610,11 @@ function validateAuxProvider(
 ): void {
   const entry = providers.get(providerKey);
   if (entry === undefined) {
+    if (providerKey === "openai" || hardcodedProviderBaseUrl(providerKey) !== undefined) return;
     onWarn(
       `${field} references provider "${providerKey}" not configured under ` +
-        `[providers.${providerKey}]; built-in transport defaults are used for ` +
-        "well-known providers, otherwise set base_url/api_key_env there",
+        `[providers.${providerKey}] and has no built-in endpoint; set base_url ` +
+        "there and api_key_env if using a custom API key environment variable",
       [
         ["field", field],
         ["provider", providerKey],

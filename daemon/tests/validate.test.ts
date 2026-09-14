@@ -69,6 +69,27 @@ function warningsOf(src: string): string[] {
   return out;
 }
 
+describe("auxiliary provider defaults", () => {
+  for (const field of ["embedding", "image_generation"]) {
+    test.each(["openai", "openrouter"])(`${field} accepts built-in %s transport without a provider section`, (provider) => {
+      expect(warningsOf(`[defaults]\n${field} = "${provider}:model"`)).toEqual([]);
+    });
+
+    test(`${field} identifies missing transport for an unknown provider`, () => {
+      const warnings = warningsOf(`[defaults]\n${field} = "custom:model"`);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(`defaults.${field}`);
+      expect(warnings[0]).toContain("[providers.custom]");
+      expect(warnings[0]).toContain("no built-in endpoint");
+      expect(warnings[0]).toContain("base_url");
+    });
+
+    test(`${field} still rejects an explicitly disabled built-in provider`, () => {
+      expect(refused(`[defaults]\n${field} = "openrouter:model"\n[providers.openrouter]\nenabled = false`)).toContain("disabled");
+    });
+  }
+});
+
 describe("a config that shore can act on", () => {
   test("empty config", () => {
     expect(accepted("")).toBeDefined();
@@ -244,9 +265,9 @@ describe("a config that shore can act on", () => {
     const digest = accepted("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n");
     expect(digest.providers).toEqual([{"key": "openai", "enabled": true}]);
   });
-  test("embedding default on an unregistered provider only warns", () => {
+  test("embedding default on built-in OpenAI needs no provider section", () => {
     expect(accepted("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n")).toBeDefined();
-    expect(warningsOf("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n").join(" ")).toContain("defaults.embedding references provider \"openai\" no");
+    expect(warningsOf("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n")).toEqual([]);
   });
   test("all valid defaults", () => {
     const digest = accepted("\n[defaults]\nmodel = \"opus\"\nembedding = \"openai:text-embedding-3-large\"\nimage_generation = \"gemini:gemini-3.1-flash-image-preview\"\n\n[defaults.background]\nheartbeat = \"opus\"\n\n[chat.anthropic.opus]\nmodel_id = \"claude-opus-4-6\"\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[providers.gemini]\napi_key_env = \"GEMINI_API_KEY\"\n\n[embedding.\"openai:text-embedding-3-large\"]\ndimensions = 1024\n\n[image_generation.\"gemini:gemini-3.1-flash-image-preview\"]\nsize = \"1024x1024\"\n");

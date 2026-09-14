@@ -52,7 +52,14 @@ export async function buildToolContext(
     ...(config.app.defaults.image_generation === undefined
       ? {}
       : { defaultRef: config.app.defaults.image_generation }),
-    imageGen: Object.fromEntries(config.models.imageGeneration),
+    imageGen: Object.fromEntries([...config.models.imageGeneration].map(([name, settings]) => {
+      const { aspectRatio, imageSize, ...rest } = settings;
+      return [name, {
+        ...rest,
+        ...(aspectRatio === undefined ? {} : { aspect_ratio: aspectRatio }),
+        ...(imageSize === undefined ? {} : { image_size: imageSize }),
+      }];
+    })),
     providers,
   });
 
