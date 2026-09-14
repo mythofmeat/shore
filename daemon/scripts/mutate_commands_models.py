@@ -151,7 +151,10 @@ MUTANTS = [
      "  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;",
      "  const pinned = ctx.config.app.defaults.background.model ?? ctx.config.app.defaults.background[task];"),
     ("background: the inherited model is the config default, not the character's",
-     "  const inherited = resolveChatModelForCharacter(configView(ctx.config), character, findEffective);",
+     "  const inherited = resolveChatModelForCharacter(\n"
+     "    configView(ctx.config), character, findEffective,\n"
+     "    task === \"compaction\" ? ctx.threadModel : undefined,\n"
+     "  );",
      "  void character;\n"
      "  const fallbackName = ctx.config.app.defaults.model;\n"
      "  const inherited = fallbackName === undefined ? undefined : resolve(ctx, fallbackName, true);"),

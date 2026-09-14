@@ -133,7 +133,10 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
   if (pinned !== undefined) return resolve(ctx, pinned, true);
 
   const character = requireCharacter(ctx);
-  const inherited = resolveChatModelForCharacter(configView(ctx.config), character, findEffective);
+  const inherited = resolveChatModelForCharacter(
+    configView(ctx.config), character, findEffective,
+    task === "compaction" ? ctx.threadModel : undefined,
+  );
   if (inherited === undefined) {
     throw notFound(
       `${task} has no configured model and the catalog has no chat model to inherit`,

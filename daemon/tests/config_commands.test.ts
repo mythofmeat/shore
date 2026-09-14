@@ -20,6 +20,7 @@ import {
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const REMOVED = [
@@ -136,6 +137,16 @@ async function build(
     },
   };
 }
+
+test("the background model command accepts an explicit SDK model absent from discovery", async () => {
+  const w = await build("ada", "[providers.claude_agent]\nsdk = \"claude_agent\"\n");
+  const selected = switchModel({ ...w.ctx, dataDir: w.ctx.config.dirs.data }, {
+    name: "claude_agent:claude-opus-4-8", background_task: "compaction",
+  });
+  expect(selected).toMatchObject({ active: "claude_agent:claude-opus-4-8", role: "compaction" });
+  expect(loadConfig(w.ctx.configPath, { env: required(w.ctx.env) }).app.defaults.background.compaction)
+    .toBe("claude_agent:claude-opus-4-8");
+});
 
 const scrub = (value: unknown, root: string): unknown =>
   JSON.parse(JSON.stringify(value ?? null).split(root).join("<root>"));

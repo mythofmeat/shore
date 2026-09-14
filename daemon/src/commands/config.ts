@@ -12,7 +12,9 @@ import {
   modelRefResolves,
   type LoadedConfig,
 } from "../config/loader.ts";
-import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
+import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
+import { findEffectiveModel } from "../config/effective_catalog.ts";
+import { configView } from "../config/preferences.ts";
 import { redactSecrets, serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
@@ -267,7 +269,7 @@ function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: strin
 
   if (entry.source === "chat_models") {
     try {
-      findModel(ctx.config.models, trimmed);
+      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);
     } catch (e) {
       throw notFound(message(e));
     }

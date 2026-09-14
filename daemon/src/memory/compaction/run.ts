@@ -57,7 +57,7 @@ import {
   coverageIsRedundant,
   withCoverageStore,
 } from "../coverage.ts";
-import { removeCompactionCheckpoint } from "./checkpoint.ts";
+import { loadCompactionCheckpoint, removeCompactionCheckpoint } from "./checkpoint.ts";
 import {
   openArchivalCommit,
   readLiveSource,
@@ -169,6 +169,7 @@ export async function runCompactionPass(
     const guard = tryBeginCompaction(dataDir, character);
     if (guard === undefined) throw CompactionError.busy(character);
 
+    let coverage: CompactionCoverage | undefined;
     try {
       const loaded = await loadMessagesForCompaction(dataDir, character, thread);
       if (loaded.messages.length === 0) return undefined;
@@ -200,13 +201,13 @@ export async function runCompactionPass(
 
       const planned = planCompactionCoverage(character, effective, plan, options);
       if (planned.blocked === true) {
-        shoreLog.warn(
-          `shore: skipping compaction for ${character}/${thread}: another pass holds the memory ` +
-            `claim on everything it would archive. The conversation is kept as it is; this retries ` +
-            `once that claim finishes or its lease runs out`,
+        throw new CompactionError(
+          "busy",
+          `Compaction for ${character}/${thread} is waiting for another pass's memory claim ` +
+            `to finish or expire; conversation kept`,
         );
-        return undefined;
       }
+      coverage = planned.coverage;
       if (planned.redundant) {
         if (plan.checkpoint !== undefined) {
           const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);
@@ -275,21 +276,24 @@ export async function runCompactionPass(
         },
       );
 
-      if (
-        planned.coverage !== undefined &&
-        outcome.kind !== "compacted" &&
-        outcome.kind !== "paused"
-      ) {
-        releaseCompactionCoverage(dataDir, character, planned.coverage.claim);
-      }
-
       await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
         await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
       });
 
       return outcome;
     } finally {
-      guard.release();
+      try {
+        if (coverage !== undefined) {
+          const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread);
+          if (checkpoint?.coverageClaim !== coverage.claim) {
+            releaseCompactionCoverage(dataDir, character, coverage.claim);
+          }
+        }
+      } catch (e) {
+        shoreLog.warn(`shore: failed to release uncheckpointed compaction claim for ${character}/${thread}: ${String(e)}`);
+      } finally {
+        guard.release();
+      }
     }
   });
 }
@@ -406,8 +410,11 @@ async function resolveDeps(
   const promptTemplate =
     resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT;
 
-  const model = resolveBackgroundModel(configView(effective), "compaction", character, (v, c, n, h) =>
-    findEffectiveModel(v, c, n, h),
+  const threadModel = await threadChatModel(effective.dirs.data, character, thread);
+  const model = resolveBackgroundModel(
+    configView(effective), "compaction", character,
+    (v, c, n, h) => findEffectiveModel(v, c, n, h),
+    threadModel,
   );
   if (model === undefined) {
     throw CompactionError.llm("No model configured for background compaction");

@@ -84,8 +84,8 @@ MUTANTS = [
     # --- the guards -----------------------------------------------------------
     ("guards: the conversation is read before the slot is claimed",
      R,
-     '\n    const guard = tryBeginCompaction(dataDir, character);\n    if (guard === undefined) throw CompactionError.busy(character);\n\n    try {\n      const loaded = await loadMessagesForCompaction(dataDir, character, thread);\n      if (loaded.messages.length === 0) return undefined;',
-     '  const preloaded = await loadMessagesForCompaction(dataDir, character, thread);\n    if (preloaded.messages.length === 0) return undefined;\n    const guard = tryBeginCompaction(dataDir, character);\n    if (guard === undefined) throw CompactionError.busy(character);\n\n    try {\n      const loaded = preloaded;'),
+     '\n    const guard = tryBeginCompaction(dataDir, character);\n    if (guard === undefined) throw CompactionError.busy(character);\n\n    let coverage: CompactionCoverage | undefined;\n    try {\n      const loaded = await loadMessagesForCompaction(dataDir, character, thread);\n      if (loaded.messages.length === 0) return undefined;',
+     '  const preloaded = await loadMessagesForCompaction(dataDir, character, thread);\n    if (preloaded.messages.length === 0) return undefined;\n    const guard = tryBeginCompaction(dataDir, character);\n    if (guard === undefined) throw CompactionError.busy(character);\n\n    let coverage: CompactionCoverage | undefined;\n    try {\n      const loaded = preloaded;'),
     ("guards: the busy refusal is an internal error again",
      C,
      '    if (e.kind === "busy") return new CommandError("busy", e.message);',
@@ -100,8 +100,8 @@ MUTANTS = [
      '  if (outcome === undefined) throw internalError("No messages to compact");'),
     ("guards: the slot is never given back",
      R,
-     '\n\n      return outcome;\n    } finally {\n      guard.release();\n    }',
-     '    return outcome;\n  } finally {\n    void guard;\n  }'),
+     '        guard.release();',
+     '        void guard;'),
 
     ("prefix: the rebuilt prefix ignores the thread's pinned model",
      R,

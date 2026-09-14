@@ -168,8 +168,8 @@ MUTANTS = [
 
     # --- config set -----------------------------------------------------------
     ("set: the model is not validated against the catalog",
-     "  if (entry.source === \"chat_models\") {\n    try {\n      findModel(ctx.config.models, trimmed);",
-     "  if (false as boolean) {\n    try {\n      findModel(ctx.config.models, trimmed);"),
+     "  if (entry.source === \"chat_models\") {\n    try {\n      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);",
+     "  if (false as boolean) {\n    try {\n      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);"),
     ("set: nothing is checked against its source at all",
      "  checkAgainstSource(ctx, entry, value);",
      "  void checkAgainstSource;"),
@@ -177,8 +177,8 @@ MUTANTS = [
      '  if (entry.source === undefined || entry.kind === "list") return;',
      "  if (entry.source === undefined) return;"),
     ("set: a bad model reports invalid_request rather than not_found",
-     "      findModel(ctx.config.models, trimmed);\n    } catch (e) {\n      throw notFound(message(e));",
-     "      findModel(ctx.config.models, trimmed);\n    } catch (e) {\n      throw invalidRequest(message(e));"),
+     "      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);\n    } catch (e) {\n      throw notFound(message(e));",
+     "      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);\n    } catch (e) {\n      throw invalidRequest(message(e));"),
     ("set: a value the schema rejects is a not_found rather than a bad request",
      "    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);",
      "    if (e instanceof SchemaValueError) throw notFound(`${key}: ${e.message}`);"),

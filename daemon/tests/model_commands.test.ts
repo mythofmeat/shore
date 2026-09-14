@@ -488,6 +488,12 @@ test("a thread's pin is the active model, and switching the character's does not
   expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
     "chat.anthropic.alpha",
   );
+  expect(modelInfo(ctx, { background_task: "compaction" })).toMatchObject({
+    qualified_name: "chat.anthropic.alpha",
+  });
+  expect(modelSettings(ctx, { background_task: "compaction" })).toMatchObject({
+    model: "chat.anthropic.alpha", model_id: "alpha-id",
+  });
 
   const switched = switchModel(ctx, { name: "chat.anthropic.beta" }) as Record<string, unknown>;
   expect(switched["shadowed_by_thread"]).toBe("eval");

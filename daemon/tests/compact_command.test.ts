@@ -12,6 +12,10 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { queueDeferredEdit } from "../src/memory/deferred_edits.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 import { createThread, setThreadModel } from "../src/engine/threads.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
+import { newMessageVersion } from "../src/engine/versions.ts";
+import { claimUncovered } from "../src/memory/coverage.ts";
+import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import {
   CompactionError,
   type CompactionErrorKind,
@@ -154,6 +158,127 @@ describe("the refusals compact makes before the assembly", () => {
       expect(got).toEqual(c.output as never);
     });
   }
+});
+
+describe("compaction model selection and claim ownership", () => {
+  async function configuredChat(): Promise<World> {
+    const w = await world(SEEDED.map((message) => ({ ...message, version: newMessageVersion() })));
+    w.config.providers = ProviderRegistry.fromSection({ claude_agent: { sdk: "claude_agent" } });
+    await setThreadModel(w.config.dirs.data, "ada", "main", "claude_agent:claude-opus-4-8", "2026-09-15T00:00:00Z");
+    return w;
+  }
+
+  test("missing model errors stay actionable on every retry and fixing the model allows immediate compaction", async () => {
+    const w = await world(SEEDED.map((message) => ({ ...message, version: newMessageVersion() })));
+    const before = structuredClone(w.engine.messages());
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      expect(await refusal(() => compact(w.engine, w.ctx, { keep_turns: 0 }))).toEqual({
+        kind: "err", code: "internal_error", message: "llm: No chat model configured for compaction prefix rebuild",
+      });
+      expect(w.engine.turnCount()).toBe(1);
+      expect(w.engine.messages()).toEqual(before);
+    }
+
+    w.config.providers = ProviderRegistry.fromSection({ claude_agent: { sdk: "claude_agent" } });
+    await setThreadModel(w.config.dirs.data, "ada", "main", "claude_agent:claude-opus-4-8", "2026-09-15T00:00:00Z");
+    w.config.app.memory.git_push = false;
+    w.ctx.run.generate = async () => ({
+      content: "Summary complete", content_blocks: [{ type: "text", text: "Summary complete" }],
+      finish_reason: "end_turn", model: "claude-opus-4-8",
+      usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+      timing: { total_ms: 1, time_to_first_token_ms: 1 },
+    });
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({
+      status: "compacted", compacted_turns: 1, retained_turns: 0,
+    });
+    expect(w.engine.turnCount()).toBe(0);
+    const store = HistoryStore.open(join(w.config.dirs.data, HISTORY_DB_FILE));
+    try {
+      expect(store.readSegment("ada", 0).map((message) => message.msg_id)).toEqual(before.map((message) => message.msg_id));
+    } finally {
+      store.close();
+    }
+  });
+
+  test.each([
+    ["main", undefined, "claude-opus-4-8"],
+    ["side", undefined, "claude-sonnet-4-6"],
+    ["main", "missing-model", "claude-opus-4-8"],
+    ["main", "claude_agent:claude-sonnet-4-6", "claude-sonnet-4-6"],
+  ] as const)("compact uses its thread's chat model unless overridden (%s, %s)", async (thread, override, expectedModel) => {
+    const w = await configuredChat();
+    let engine = w.engine;
+    if (thread === "side") {
+      await createThread(w.config.dirs.data, "ada", thread, "2026-09-15T00:00:00Z", {
+        chat_model: "claude_agent:claude-sonnet-4-6",
+      });
+      engine = await ConversationEngine.load("ada", w.config.dirs.data, undefined, thread);
+      for (const message of w.engine.messages()) await engine.appendMessage(structuredClone(message));
+    }
+    w.config.app.defaults.background.compaction = override;
+    w.config.app.memory.git_push = false;
+    const seen: string[] = [];
+    w.ctx.run.generate = async (request) => {
+      seen.push(request.model);
+      return {
+        content: "Summary complete", content_blocks: [{ type: "text", text: "Summary complete" }],
+        finish_reason: "end_turn", model: request.model,
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    };
+    expect(await compact(engine, w.ctx, { keep_turns: 0 })).toMatchObject({
+      status: "compacted", compacted_turns: 1, retained_turns: 0,
+    });
+    expect(seen).toEqual([expectedModel]);
+    expect(engine.turnCount()).toBe(0);
+    if (thread === "side") expect(w.engine.turnCount()).toBe(1);
+  });
+
+  test("a claim held by another pass reports busy and preserves the conversation and its claim", async () => {
+    const w = await configuredChat();
+    const store = HistoryStore.open(join(w.config.dirs.data, HISTORY_DB_FILE));
+    try {
+      const held = claimUncovered(store, "ada", "compaction", w.engine.messages());
+      expect(await refusal(() => compact(w.engine, w.ctx, { keep_turns: 0 }))).toEqual({
+        kind: "err", code: "busy",
+        message: "Compaction for ada/main is waiting for another pass's memory claim to finish or expire; conversation kept",
+      });
+      expect(w.engine.turnCount()).toBe(1);
+      expect(store.commitMemoryCoverage("ada", "compaction", held.claim)).toBe(2);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a paused checkpoint keeps its claim even when the next attempt fails during setup", async () => {
+    const w = await configuredChat();
+    w.config.app.defaults.background.compaction = "claude_agent:claude-opus-4-8";
+    w.ctx.run.generate = async () => { throw new Error("provider offline"); };
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "paused" });
+    const checkpoint = await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main");
+    expect(checkpoint?.coverageClaim).toBeString();
+
+    w.ctx.run.tools = { mcpToolDefs: () => { throw new Error("tools unavailable"); } };
+    expect(await refusal(() => compact(w.engine, w.ctx, { keep_turns: 0 }))).toEqual({
+      kind: "err", code: "internal_error", message: "tools unavailable",
+    });
+    const store = HistoryStore.open(join(w.config.dirs.data, HISTORY_DB_FILE));
+    try {
+      for (const message of w.engine.messages()) {
+        expect(store.memoryCoverageState("ada", "compaction", message.version ?? "")).toMatchObject({
+          state: "claimed", claim: checkpoint?.coverageClaim,
+        });
+      }
+    } finally {
+      store.close();
+    }
+    delete w.ctx.run.tools;
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({
+      status: "paused", checkpoint_id: checkpoint?.id,
+    });
+    expect(w.engine.turnCount()).toBe(1);
+  });
 });
 
 const CONSTRUCTORS: Record<string, ((detail: string) => CompactionError) | undefined> = {

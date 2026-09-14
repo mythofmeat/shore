@@ -796,10 +796,11 @@ export function resolveBackgroundModel(
   task: BackgroundTask,
   character: string,
   findEffective: FindEffectiveModel,
+  threadModel?: string,
 ): ResolvedModel | undefined {
   const name = config.app.defaults.backgroundModelName(task);
   if (name === undefined) {
-    return resolveChatModelForCharacter(config, character, findEffective);
+    return resolveChatModelForCharacter(config, character, findEffective, threadModel);
   }
 
   let base: ResolvedModel;
@@ -810,7 +811,7 @@ export function resolveBackgroundModel(
       `shore: configured ${task} model "${name}" not found in catalog for ${character}; ` +
         `falling back to active chat model: ${(e as Error).message}`,
     );
-    return resolveChatModelForCharacter(config, character, findEffective);
+    return resolveChatModelForCharacter(config, character, findEffective, threadModel);
   }
   return overlayForCharacter(config.dirs.data, character, base, task);
 }
