@@ -69,6 +69,7 @@ describe("creating a ledger", () => {
 
     expect(tables(path).has("calls")).toBe(true);
     expect(tables(path).has("pricing")).toBe(true);
+    expect(tables(path).has("pricing_catalog_checks")).toBe(true);
     expect(tables(path).has("usage_budget_warnings")).toBe(true);
   });
 
@@ -97,6 +98,16 @@ describe("creating a ledger", () => {
     Ledger.create(path).close();
 
     expect(tables(path).has("calls")).toBe(true);
+  });
+
+  test("an existing ledger gains persistent catalog checks on open", () => {
+    const path = tempPath();
+    Ledger.create(path).close();
+    const db = new Database(path);
+    db.run("DROP TABLE pricing_catalog_checks");
+    db.close();
+    Ledger.open(path).close();
+    expect(tables(path).has("pricing_catalog_checks")).toBe(true);
   });
 
   test("a reader still refuses a ledger that does not exist", () => {

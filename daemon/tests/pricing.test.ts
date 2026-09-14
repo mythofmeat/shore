@@ -1,11 +1,12 @@
 import { required } from "../src/util/required.ts";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import {
   calculateCost,
   isAnthropicPricing,
   PricingEngine,
+  PRICING_TTL_MS,
   catalogId,
   type ModelPricing,
   type PricingStore,
@@ -208,6 +209,80 @@ describe("the engine", () => {
       engine.getOrFetch("openai", "gpt-4o"),
     ]);
     expect(calls).toBe(1);
+  });
+
+  test("a missing model is checked again when the catalog cache expires", async () => {
+    let now = 1_800_000_000_000;
+    let calls = 0;
+    const engine = new PricingEngine(memoryStore(), async () => {
+      calls++;
+      return Response.json({ data: calls === 1 ? [] : [
+        { id: "openai/later", pricing: { prompt: "0.00001" } },
+      ] });
+    }, () => now);
+    expect(await engine.getOrFetch("openai", "later")).toBeUndefined();
+    now += PRICING_TTL_MS - 1;
+    expect(await engine.getOrFetch("openai", "later")).toBeUndefined();
+    expect(calls).toBe(1);
+    now++;
+    expect((await engine.getOrFetch("openai", "later"))?.input_per_token).toBe(0.00001);
+    expect(calls).toBe(2);
+  });
+
+  test("catalog misses are shared by source and do not suppress another source", async () => {
+    const urls: string[] = [];
+    const engine = new PricingEngine(memoryStore(), async url => {
+      urls.push(url);
+      return Response.json({ data: [] });
+    });
+    await engine.getOrFetch("deepseek", "retired");
+    await engine.getOrFetch("zai", "retired");
+    await engine.getOrFetch("nanogpt", "retired");
+    await engine.getOrFetch("nanogpt", "another");
+    expect(urls).toEqual([
+      "https://openrouter.ai/api/v1/models",
+      "https://nano-gpt.com/api/v1/models?detailed=true",
+    ]);
+  });
+
+  test("a persisted catalog check in the future does not suppress discovery", async () => {
+    let fetched = false;
+    const engine = new PricingEngine({
+      ...memoryStore(), catalogFetchedAt: () => 2_000,
+    }, async () => {
+      fetched = true;
+      return Response.json({ data: [] });
+    }, () => 1_000);
+    await engine.getOrFetch("openai", "later");
+    expect(fetched).toBe(true);
+  });
+
+  test.each(["network", "http", "json", "shape"])("a %s failure remains retryable and is reported", async failure => {
+    let fetched = 0;
+    const checks: string[] = [];
+    const warnings = spyOn(console, "warn").mockImplementation(() => {});
+    const engine = new PricingEngine({
+      ...memoryStore(), putCatalogFetchedAt: url => { checks.push(url); },
+    }, async () => {
+      fetched++;
+      if (fetched > 1) return Response.json({ data: [{ id: "openai/later", pricing: { prompt: "0.00001" } }] });
+      switch (failure) {
+        case "network": throw new Error("unreachable");
+        case "http": return new Response("unavailable", { status: 503 });
+        case "json": return new Response("invalid JSON");
+        default: return Response.json({ error: "no catalog" });
+      }
+    });
+    try {
+      expect(await engine.getOrFetch("openai", "later")).toBeUndefined();
+      expect(checks).toEqual([]);
+      expect(warnings.mock.calls.flat().some(value => String(value).includes("could not be read"))).toBe(true);
+      expect(await engine.getOrFetch("openai", "later")).toBeDefined();
+      expect(fetched).toBe(2);
+      expect(checks).toEqual(["https://openrouter.ai/api/v1/models"]);
+    } finally {
+      warnings.mockRestore();
+    }
   });
 
   test("nano-gpt is priced from its own catalog, not by guessing an OpenRouter id", async () => {

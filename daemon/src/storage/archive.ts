@@ -28,7 +28,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
     for (const table of ["calls", "call_attempts", "capture_calls", "capture_http_calls", "capture_transcripts", "state_files", "events"]) {
       copy.query(`DELETE FROM ${table} WHERE character IS NOT ?1`).run(character);
     }
-    copy.run(`DELETE FROM pricing; DELETE FROM usage_budget_warnings;
+    copy.run(`DELETE FROM pricing; DELETE FROM pricing_catalog_checks; DELETE FROM usage_budget_warnings;
       DELETE FROM storage_imports; DELETE FROM storage_import_rows;
       DELETE FROM history_metadata;
       DELETE FROM history_blobs WHERE hash NOT IN

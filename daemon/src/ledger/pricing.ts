@@ -8,6 +8,7 @@ const ANTHROPIC_5M_CACHE_WRITE_RATIO = 1.25;
 
 const OPENROUTER_CATALOG_URL = "https://openrouter.ai/api/v1/models";
 
+export const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface ModelPricing {
   input_per_token: number;
@@ -108,6 +109,8 @@ export type CatalogFetch = (url: string) => Promise<Response>;
 export interface PricingStore {
   get(modelId: string): ModelPricing | undefined;
   put(modelId: string, pricing: ModelPricing): void;
+  catalogFetchedAt?(url: string): number | undefined;
+  putCatalogFetchedAt?(url: string, at: number): void;
 }
 
 const PER_MILLION = 1e-6;
@@ -180,10 +183,17 @@ export class PricingEngine {
   readonly #fetch: CatalogFetch;
   readonly #inflight = new Map<string, Promise<void>>();
   readonly #warnedUnusable = new Set<string>();
+  readonly #catalogFetchedAt = new Map<string, number>();
+  readonly #now: () => number;
 
-  constructor(store: PricingStore, fetchImpl: CatalogFetch = (url) => globalThis.fetch(url)) {
+  constructor(
+    store: PricingStore,
+    fetchImpl: CatalogFetch = (url) => globalThis.fetch(url),
+    now: () => number = Date.now,
+  ) {
     this.#store = store;
     this.#fetch = fetchImpl;
+    this.#now = now;
   }
 
   cached(provider: string, model: string): ModelPricing | undefined {
@@ -215,6 +225,11 @@ export class PricingEngine {
   }
 
   async #refreshCatalog(source: CatalogSource): Promise<void> {
+    const fetchedAt = this.#store.catalogFetchedAt?.(source.url) ?? this.#catalogFetchedAt.get(source.url);
+    if (fetchedAt !== undefined) {
+      const age = this.#now() - fetchedAt;
+      if (age >= 0 && age < PRICING_TTL_MS) return;
+    }
     let pending = this.#inflight.get(source.url);
     if (pending === undefined) {
       pending = this.#fetchCatalog(source).finally(() => {
@@ -250,6 +265,9 @@ export class PricingEngine {
       if (typeof model.id !== "string" || !model.pricing) continue;
       this.#store.put(source.key(model.id), source.read(model.id, model.pricing));
     }
+    const fetchedAt = this.#now();
+    this.#store.putCatalogFetchedAt?.(source.url, fetchedAt);
+    this.#catalogFetchedAt.set(source.url, fetchedAt);
   }
 
   #catalogUnavailable(source: CatalogSource, detail: string): void {

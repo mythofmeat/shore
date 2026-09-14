@@ -11,7 +11,7 @@ import {
   parseLastPeriod,
   usageReport,
 } from "../src/ledger/usage.ts";
-import { setSubscriptionProviders } from "../src/ledger/store.ts";
+import { PRICING_TTL_MS, setSubscriptionProviders } from "../src/ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
@@ -138,6 +138,20 @@ test("the backfill reports a model the catalog has no price for", async () => {
   expect(costOf(ledger, 1), "an unpriceable row keeps its NULL cost").toBeNull();
 });
 
+test("a persisted catalog miss expires and a later backfill prices the original call", async () => {
+  const ledger = ledgerWith([{ provider: "openai", model: "later" }]);
+  stubCatalog();
+  expect((await backfillLedgerCosts(ledger)).updated).toBe(0);
+  closeLedgers();
+  const db = openLedger(ledger);
+  db.query("UPDATE pricing_catalog_checks SET fetched_at = ?1").run(Date.now() - PRICING_TTL_MS);
+  db.close();
+  const fetched = stubCatalog("openai/later");
+  expect((await backfillLedgerCosts(ledger)).updated).toBe(1);
+  expect(fetched.calls).toBe(1);
+  expect(costOf(ledger, 1)).toBeCloseTo(0.03);
+});
+
 test("the backfill fetches each model once, not each row", async () => {
   const ledger = ledgerWith([{}, {}, {}]);
   const fetched = stubCatalog("anthropic/claude-opus-4.6");
@@ -189,7 +203,7 @@ test("backfill does not reclassify historical calls using today's subscription s
       result.failures.map((f) => f.model),
       "current subscription settings do not supply historical prices",
     ).toEqual(["zai-sub/glm-5.1", "openai/gpt-nonexistent"]);
-    expect(fetched.calls, "both historical calls still need prices").toBe(2);
+    expect(fetched.calls, "one catalog lookup covers both historical calls").toBe(1);
   } finally {
     setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
   }

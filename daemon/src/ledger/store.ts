@@ -8,16 +8,22 @@ import {
   type CacheState,
   type Observation,
 } from "../cache/tracker.ts";
-import { isAnthropicPricing, PricingEngine, type ModelPricing, type PricingStore } from "./pricing.ts";
+import { isAnthropicPricing, PricingEngine, PRICING_TTL_MS, type ModelPricing, type PricingStore } from "./pricing.ts";
 import { NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
 import {
   nanoGptSubscriptionFresh,
   type NanoGptSubscriptionState,
 } from "../llm/nanogpt_subscription.ts";
 
-export const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
+export { PRICING_TTL_MS } from "./pricing.ts";
+
+const PRICING_CATALOG_SCHEMA = `CREATE TABLE IF NOT EXISTS pricing_catalog_checks (
+    url        TEXT PRIMARY KEY,
+    fetched_at INTEGER NOT NULL
+);`;
 
 const SCHEMA = `
+${PRICING_CATALOG_SCHEMA}
 CREATE TABLE IF NOT EXISTS calls (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                  TEXT    NOT NULL,
@@ -358,6 +364,7 @@ export class Ledger {
       throw new Error(`${path} has no 'calls' table — the daemon owns the schema and creates it`);
     }
     migrateCallAttempts(db);
+    db.run(PRICING_CATALOG_SCHEMA);
     return new Ledger(db, pricing);
   }
 
@@ -613,6 +620,15 @@ export class Ledger {
 
 function sqlitePricingStore(db: Database, now: () => number = () => Date.now()): PricingStore {
   return {
+    catalogFetchedAt(url) {
+      const row = db.query("SELECT fetched_at FROM pricing_catalog_checks WHERE url = ?1")
+        .get(url) as { fetched_at: number } | null;
+      return row?.fetched_at;
+    },
+    putCatalogFetchedAt(url, at) {
+      db.query("INSERT OR REPLACE INTO pricing_catalog_checks (url, fetched_at) VALUES (?1, ?2)")
+        .run(url, at);
+    },
     get(modelId) {
       const row = db
         .query(

@@ -589,9 +589,6 @@ function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () 
           `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
         );
       }
-      for (const failure of result.failures) {
-        shoreLog.warn(`shore: still no pricing for ${failure.model}: ${failure.reason}`);
-      }
     } catch (e) {
       shoreLog.warn(`shore: ledger cost backfill failed: ${String(e)}`);
     } finally {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +20,7 @@ import { buildToolContext } from "../src/handler/tool_context.ts";
 import { HistoryIndexService } from "../src/memory/history_index_service.ts";
 import type { McpClient } from "../src/mcp/client.ts";
 import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
+import { required } from "../src/util/required.ts";
 
 async function dirsUnder(prefix: string): Promise<{ root: string; config: LoadedConfig }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -54,6 +55,55 @@ function recordingProvider(seen: string[]): SidecarProvider {
 }
 
 const NO_MCP = () => Promise.reject(new Error("no MCP server should be connected"));
+
+test("restarts keep obsolete calls unpriced without repeating catalog lookups or warnings", async () => {
+  const { root, config } = await dirsUnder("shore-runtime-old-pricing-");
+  const urls: string[] = [];
+  const fetch = spyOn(globalThis, "fetch").mockImplementation((async (input: Parameters<typeof globalThis.fetch>[0]) => {
+    urls.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    return Response.json({ data: [{ id: "openai/current", pricing: { prompt: "0.00001" } }] });
+  }) as typeof globalThis.fetch);
+  const warnings = spyOn(console, "warn").mockImplementation(() => {});
+  let rows: Array<{ provider: string; model: string; total_cost: number | null }> = [];
+  const oldModels: [string, string][] = [
+    ["zai", "glm-5.1"],
+    ["deepseek", "deepseek-reasoner"],
+    ["electronhub-anthropic", "claude-opus-4-6-thinking"],
+  ];
+  try {
+    for (let boot = 0; boot < 3; boot++) {
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      let clocks: ReturnType<typeof startRuntimeClocks> | undefined;
+      try {
+        const db = required(runtime.callStore).database;
+        if (boot === 0) {
+          for (const [provider, model] of [...oldModels, ["openai", "current"]]) {
+            db.query(`INSERT INTO calls (
+              ts, character, provider, model, call_type, input_tokens, output_tokens,
+              cache_read_tokens, cache_write_tokens, total_ms, ttft_ms,
+              finish_reason, thinking_enabled, cost_source
+            ) VALUES ('2026-05-01T00:00:00Z', 'test', ?1, ?2, 'message', 1000, 0,
+              0, 0, 1, 1, 'end_turn', 0, 'pricing_catalog')`).run(required(provider), required(model));
+          }
+        }
+        clocks = startRuntimeClocks(runtime);
+        await runtime.snapshotGate.withSnapshot(async () => {});
+        rows = db.query("SELECT provider, model, total_cost FROM calls ORDER BY id").all() as typeof rows;
+      } finally {
+        clocks?.stop();
+        await runtime.shutdown();
+      }
+    }
+    expect(rows.slice(0, 3)).toEqual(oldModels.map(([provider, model]) => ({ provider, model, total_cost: null })));
+    expect(rows[3]?.total_cost).toBeCloseTo(0.01);
+    expect(urls).toEqual(["https://openrouter.ai/api/v1/models"]);
+    expect(warnings.mock.calls.flat().filter(value => String(value).includes("pricing"))).toEqual([]);
+  } finally {
+    warnings.mockRestore();
+    fetch.mockRestore();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 describe("what assembly creates", () => {
   test("the four runtime directories exist afterwards, plugins included", async () => {

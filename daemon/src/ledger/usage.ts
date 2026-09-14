@@ -398,7 +398,6 @@ export async function backfillMissingCosts(
     const found = await pricing.getOrFetch(row.provider, row.model);
     if (found === undefined) {
       const modelId = catalogId(row.provider, row.model);
-      shoreLog.warn(`shore: pricing fetch returned no data for ${modelId}`);
       fetched.set(key, `no pricing data for ${modelId}`);
     } else {
       fetched.set(key, undefined);

@@ -10,7 +10,7 @@ import { Ledger } from "../ledger/store.ts";
 import { databasePath, openStorage, pack } from "./store.ts";
 
 export const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_calls", "capture_transcripts", "capture_http_calls"];
-export const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "usage_budget_warnings"];
+export const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
 export const HISTORY_TABLES = [
   "history_blobs", "history_segments", "history_messages", "history_alternatives", "history_pending",
   "history_thread_forks", "memory_coverage", "memory_documents", "history_metadata",

@@ -23,6 +23,15 @@ subagent diagnostics use indexed `events` rows. State and diagnostic event
 contents are Zstandard compressed; captured payloads use compressed,
 content-addressed chunks to share repeated data.
 
+Usage records whose model has no catalog price retain an unknown cost. They
+remain visible as unpriced calls even after the provider is removed from the
+configuration. Automatic cost backfill runs at startup and every six hours.
+Successful pricing catalog checks are recorded in `pricing_catalog_checks` and
+reused for 24 hours, so missing or retired models share one lookup across daemon
+restarts. Missing entries do not produce repeated startup warnings. Failed
+catalog requests still warn and remain retryable; a later successful lookup
+can price the original records without deleting or reclassifying them.
+
 The daemon expires diagnostics older than 30 days at startup and once every
 24 hours. This removes raw API/HTTP captures, diagnostic transcripts, and
 heartbeat log events. Subagent intermediate messages expire on the same

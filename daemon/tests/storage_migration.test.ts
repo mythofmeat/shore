@@ -250,8 +250,15 @@ test("unified exports include a character's diagnostics and state, never another
     await appendSubagentTrace(join(source.data, character), { subagent: "helper", parent_tool_use_id: character, model: "model", messages: [] });
   }
   capture(databasePath(source.data), "ada-call");
+  withStorage(source.data, db => {
+    db.query("INSERT INTO pricing_catalog_checks (url, fetched_at) VALUES (?1, ?2)")
+      .run("https://openrouter.ai/api/v1/models", Date.now());
+  });
   const archive = join(source.root, "export.db");
   exportUnifiedDatabase(databasePath(source.data), "ada", archive);
+  const exported = new Database(archive, { readonly: true });
+  expect(exported.query("SELECT * FROM pricing_catalog_checks").all()).toEqual([]);
+  exported.close();
   const target = dirs();
   importUnifiedDatabase(databasePath(target.data), archive, "ada", source.data, target.data);
   expect(await readSubagentTraces(join(target.data, "ada"))).toHaveLength(1);
