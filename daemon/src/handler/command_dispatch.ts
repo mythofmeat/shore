@@ -92,7 +92,7 @@ async function afterChatModelChange(
   ) return undefined;
 
   await ctx.runtime.refreshCachedRequest(
-    ctx.character, "model_change",
+    ctx.character, name === "set_model_setting" ? "model_setting_change" : "model_change",
     ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character),
   );
   return invalidated(data, { cached_request: true });

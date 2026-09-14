@@ -271,7 +271,9 @@ describe("a chat model change", () => {
       f.ctx,
     );
 
-    expect(f.log.refreshed).toEqual([CHARACTER]);
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_setting_change", thread: "main" },
+    ]);
   });
 });
 

@@ -40,7 +40,7 @@ export function heartbeatRebuildMessages(
   if (hasUserTurn) {
     if (!historyIsBetweenTurns(messages)) {
       shoreLog.info(
-        `shore: heartbeat rebuild for ${character} skipped — the conversation is mid-turn`,
+        `shore: request rebuild for ${character} skipped — the conversation is mid-turn`,
       );
       return undefined;
     }
@@ -49,13 +49,13 @@ export function heartbeatRebuildMessages(
 
   if (messages.length > 0 && !historyIsBetweenTurns(messages)) {
     shoreLog.info(
-      `shore: heartbeat rebuild for ${character} skipped — the conversation is mid-turn`,
+      `shore: request rebuild for ${character} skipped — the conversation is mid-turn`,
     );
     return undefined;
   }
 
   shoreLog.info(
-    `shore: heartbeat rebuild for ${character} — no live user turn, rebuilding from memory`,
+    `shore: request rebuild for ${character} — no live user turn, rebuilding from memory`,
   );
   return [anchor(), ...messages];
 }
@@ -97,7 +97,7 @@ export async function rebuildRequestFromDisk(
   try {
     store = await MessageStore.load(activeJsonlIn(conversationDir));
   } catch (e) {
-    shoreLog.warn(`shore: heartbeat rebuild for ${character} could not load messages: ${String(e)}`);
+    shoreLog.warn(`shore: request rebuild for ${character} could not load messages: ${String(e)}`);
     return undefined;
   }
 
@@ -135,10 +135,10 @@ export async function rebuildRequestFromDisk(
         ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }),
       },
     );
-    shoreLog.info(`shore: heartbeat rebuilt the request for ${character} from disk`);
+    shoreLog.info(`shore: rebuilt the request for ${character} from disk (thread=${thread})`);
     return { ...built, thread, conversation: [...store.messages()] };
   } catch (e) {
-    shoreLog.warn(`shore: heartbeat rebuild for ${character} failed: ${String(e)}`);
+    shoreLog.warn(`shore: request rebuild for ${character} failed: ${String(e)}`);
     return undefined;
   }
 }

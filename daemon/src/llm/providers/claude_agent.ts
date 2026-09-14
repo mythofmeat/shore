@@ -604,8 +604,8 @@ function noteAssistant(seen: SdkTurnFacts, messageId: string, uuid: string): voi
 }
 
 function isNestedFrame(msg: SDKMessage): msg is SDKMessage & { parent_tool_use_id: string } {
-  const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;
-  return typeof parent === "string";
+  return (msg.type === "assistant" || msg.type === "user" || msg.type === "stream_event") &&
+    typeof msg.parent_tool_use_id === "string";
 }
 
 export class BlockAssembler {

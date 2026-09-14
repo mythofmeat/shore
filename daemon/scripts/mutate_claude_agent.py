@@ -149,7 +149,8 @@ MUTANTS = [
      "      if (event.type === \"message_start\" && onRoundStart !== undefined) await onRoundStart();\n"),
     ("stream: an agent the SDK ran on its own is read as part of the reply",
      AGENT,
-     "  const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;\n  return typeof parent === \"string\";",
+     "  return (msg.type === \"assistant\" || msg.type === \"user\" || msg.type === \"stream_event\") &&\n"
+     "    typeof msg.parent_tool_use_id === \"string\";",
      "  return false;"),
     ("stream: the SDK compacting mid-turn is absorbed rather than raised",
      AGENT,
