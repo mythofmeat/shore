@@ -23,7 +23,7 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import { defaultToolsConfig, type SubagentConfig } from "../src/config/app.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
-import { requestBody, requestUrl } from "./support/fetch.ts";
+import { requestBody } from "./support/fetch.ts";
 
 afterAll(restoreTestEnv);
 
@@ -141,8 +141,8 @@ describe("routing, wired", () => {
   });
 
   test("a null input reads as an empty object, the way Value::Null did", async () => {
-    expect(await route("roll_dice", null)).toEqual(
-      (fixture.routing as Record<string, unknown>)["roll_dice"],
+    expect(await route("bash", null)).toEqual(
+      (fixture.routing as Record<string, unknown>)["bash"],
     );
     expect(await route("web_search", undefined)).toEqual(
       (fixture.routing as Record<string, unknown>)["web_search"],
@@ -272,21 +272,6 @@ describe("context fields reach their handler argument", () => {
     expect(seen).toEqual(["juniper"]);
   });
 
-  test("delete trashes under the context's character data directory", async () => {
-    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const workspaceDir = `/tmp/claude-0/dispatch-del-ws-${stamp}`;
-    const characterDataDir = `/tmp/claude-0/dispatch-del-char-${stamp}/juniper`;
-    await Bun.write(`${workspaceDir}/doomed.md`, "bye\n");
-
-    const ctx = bareContext({ workspaceDir, characterDataDir });
-    const result = (await dispatchTool("delete", { path: "doomed.md" }, ctx)) as Record<
-      string,
-      unknown
-    >;
-    expect(result["deleted"]).toBe(true);
-    expect(String(result["trashed_to"])).toStartWith("juniper/trash/");
-  });
-
   test("generate_image writes into the context's image directory", async () => {
     const imageDir = `/tmp/claude-0/dispatch-img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const ctx = bareContext({
@@ -345,34 +330,16 @@ describe("context fields reach their handler argument", () => {
     ]);
   });
 
-  test("fetch_url uses the context's fetch", async () => {
-    const seen: string[] = [];
-    const ctx = bareContext({
-      fetchImpl: async (input) => {
-        seen.push(requestUrl(input));
-        return new Response("<p>hi</p>", { headers: { "content-type": "text/html" } });
-      },
-      lookupImpl: async () => ["93.184.216.34"],
-    });
-    const result = (await dispatchTool(
-      "fetch_url",
-      { url: "https://example.invalid/x" },
-      ctx,
-    )) as Record<string, unknown>;
-    expect(seen).toEqual(["https://example.invalid/x"]);
-    expect(result["content"]).toBe("hi");
-  });
-
   test("git commits as the context's character", async () => {
     const dir = `/tmp/claude-0/dispatch-git-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await Bun.write(`${dir}/a.md`, "hello\n");
     const ctx = bareContext({ workspaceDir: dir, characterName: "Juniper Vale" });
 
-    await dispatchTool("git", { subcommand: "add", args: ["a.md"] }, ctx);
-    await dispatchTool("git", { subcommand: "commit", args: ["-m", "first"] }, ctx);
+    await dispatchTool("bash", { command: "git init -q && git add a.md" }, ctx);
+    await dispatchTool("bash", { command: "git commit -qm first" }, ctx);
     const log = (await dispatchTool(
-      "git",
-      { subcommand: "log", args: ["--format=%an <%ae>", "-1"] },
+      'bash',
+      { command: "git log --format='%an <%ae>' -1" },
       ctx,
     )) as Record<string, unknown>;
 
@@ -456,17 +423,16 @@ describe("deferred edit annotation", () => {
     expect(called).toBe(false);
   });
 
-  test("the edit arm annotates through dispatch", async () => {
+  test("bash reports prompt edits through dispatch", async () => {
     const dir = `/tmp/claude-0/dispatch-edit-${Date.now()}`;
     await Bun.write(`${dir}/MEMORY.md`, "before\n");
     const ctx = bareContext({ workspaceDir: dir });
     const result = (await dispatchTool(
-      "edit",
-      { path: "MEMORY.md", content: "after\n" },
+      "bash",
+      { command: "printf 'after\\n' > MEMORY.md" },
       ctx,
     )) as Record<string, unknown>;
-    expect(result["prompt_visible_file"]).toBe(true);
-    expect(result["deferred_path"]).toBe("MEMORY.md");
+    expect(result["prompt_files_changed"]).toEqual(["MEMORY.md"]);
     expect(await Bun.file(`${dir}/MEMORY.md`).text()).toBe("after\n");
   });
 
@@ -475,11 +441,11 @@ describe("deferred edit annotation", () => {
     await Bun.write(`${dir}/notes.md`, "before\n");
     const ctx = bareContext({ workspaceDir: dir });
     const result = (await dispatchTool(
-      "edit",
-      { path: "notes.md", content: "after\n" },
+      "bash",
+      { command: "printf 'after\\n' > notes.md" },
       ctx,
     )) as Record<string, unknown>;
-    expect("prompt_visible_file" in result).toBe(false);
+    expect(result["prompt_files_changed"]).toEqual([]);
   });
 });
 

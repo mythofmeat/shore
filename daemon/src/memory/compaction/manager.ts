@@ -1,9 +1,10 @@
+import { restoreWorkspaceEntry, sameWorkspaceEntry, snapshotWorkspace, workspaceEntry } from "../../tools/workspace_snapshot.ts";
 import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { shoreLog } from "../../log.ts";
 
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import { characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
 import { lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
@@ -19,7 +20,7 @@ import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
 import { conversationRef } from "../../engine/segments.ts";
-import { PathError, resolvePath } from "../../tools/workspace_path";
+import { PathError, resolvePath, normalizePromptVisiblePath } from "../../tools/workspace_path";
 import type { FrameSink } from "../../llm/stream.ts";
 import {
   COMPACTION_SUBAGENT,
@@ -139,6 +140,14 @@ interface ToolLoopState extends CheckpointLoopState {
   truncatedTurns?: number;
 }
 
+function changedFilePaths(writes: readonly AppliedCompactionWrite[]): string[] {
+  return writes.filter((write) => {
+    if (write.previousState === undefined && write.resultingState === undefined) return true;
+    return write.previousState?.kind === "file" || write.previousState?.kind === "symlink" ||
+      write.resultingState?.kind === "file" || write.resultingState?.kind === "symlink";
+  }).map((write) => write.displayPath);
+}
+
 function extractMemoryWriteIntent(
   input: unknown,
 ): { path: string; content?: string } | undefined {
@@ -157,6 +166,26 @@ async function dispatchCompactionTool(
   workspaceDir: string,
   state: ToolLoopState,
 ): Promise<{ output: string; isError: boolean }> {
+  if (name === "bash") {
+    if (state.dryRun) return { output: "bash blocked: dry-run compaction does not run commands", isError: true };
+    const before = await snapshotWorkspace(workspaceDir);
+    try {
+      return await tools.dispatch(name, input);
+    } finally {
+      const after = await snapshotWorkspace(workspaceDir);
+      for (const path of new Set([...before.keys(), ...after.keys()])) {
+        const previousState = before.get(path) ?? null;
+        const resultingState = after.get(path) ?? null;
+        if (sameWorkspaceEntry(previousState, resultingState)) continue;
+        state.writesApplied.push({
+          displayPath: path, resolvedPath: join(workspaceDir, path), previousState, resultingState,
+          ...(resultingState === null ? { deleted: true } : {}),
+        });
+        if (normalizePromptVisiblePath(path) !== undefined) await tools.deferEdit?.(path);
+      }
+    }
+  }
+
   if (name === "git" && state.dryRun) {
     return {
       output: "git blocked: dry-run compaction does not run commands",
@@ -402,6 +431,14 @@ async function writeWorkspaceFile(path: string, content: string | Uint8Array): P
 async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
     const write = required(writes[i]);
+    if (write.previousState !== undefined) {
+      try {
+        await restoreWorkspaceEntry(write.resolvedPath, write.previousState);
+      } catch (error) {
+        shoreLog.warn(`shore: rollback failed to restore ${write.resolvedPath}: ${String(error)}`);
+      }
+      continue;
+    }
     if (write.previousSymlink !== undefined) {
       try {
         await mkdir(dirname(write.resolvedPath), { recursive: true });
@@ -648,7 +685,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       toolRounds: state.toolRounds,
       toolsCalled: state.toolsCalled,
       truncatedTurns,
-      partialWrites: state.writesApplied.map((write) => write.displayPath),
+      partialWrites: changedFilePaths(state.writesApplied),
     };
   }
 
@@ -680,7 +717,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   );
   await clearCheckpoint(opts);
 
-  const markdownPaths = state.writesApplied.map((w) => w.displayPath);
+  const markdownPaths = changedFilePaths(state.writesApplied);
 
   return {
     kind: "compacted",
@@ -779,7 +816,7 @@ async function recoverArchivedPass(
   if (checkpointSourceIsCompatible(prior, liveContent)) return undefined;
 
   const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
-  const markdownPaths = prior.loop.writesApplied.map((write) => write.displayPath);
+  const markdownPaths = changedFilePaths(prior.loop.writesApplied);
   await clearCheckpoint(opts);
   return {
     kind: "compacted",
@@ -885,6 +922,12 @@ async function checkpointConflict(
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
   for (const write of latest.values()) {
+    if (write.resultingState !== undefined) {
+      if (!sameWorkspaceEntry(await workspaceEntry(write.resolvedPath), write.resultingState)) {
+        return { reason: "workspace_conflict", detail: write.displayPath };
+      }
+      continue;
+    }
     if (write.deleted === true) {
       try {
         await lstat(write.resolvedPath);

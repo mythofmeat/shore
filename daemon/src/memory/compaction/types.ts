@@ -1,3 +1,4 @@
+import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
 import type { FrameSink } from "../../llm/stream";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
 
@@ -213,6 +214,8 @@ export interface CompactionTools {
 export interface AppliedCompactionWrite {
   displayPath: string;
   resolvedPath: string;
+  previousState?: WorkspaceEntry | null;
+  resultingState?: WorkspaceEntry | null;
   previousContent?: string;
   previousEncoding?: "base64";
   previousSymlink?: string;

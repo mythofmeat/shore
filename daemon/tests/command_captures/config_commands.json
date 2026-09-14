@@ -15,7 +15,7 @@
         "subagents.idle.prompt": "You are idle.",
         "subagents.idle.timeout": null,
         "subagents.idle.tools": [
-          "fetch_url",
+          "bash",
           "idle_not_real"
         ],
         "subagents.researcher.description": "Looks things up",
@@ -52,6 +52,11 @@
       "ok": {
         "tools": [
           {
+            "tool": "bash",
+            "main": false,
+            "subagents": []
+          },
+          {
             "tool": "generate_image",
             "main": false,
             "subagents": []
@@ -64,42 +69,12 @@
             ]
           },
           {
-            "tool": "fetch_url",
-            "main": false,
-            "subagents": []
-          },
-          {
             "tool": "activity_heatmap",
             "main": false,
             "subagents": []
           },
           {
-            "tool": "roll_dice",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "read",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "edit",
-            "main": false,
-            "subagents": []
-          },
-          {
             "tool": "search",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "delete",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "git",
             "main": false,
             "subagents": []
           },
@@ -119,7 +94,7 @@
             "name": "idle",
             "enabled": false,
             "tools": [
-              "fetch_url",
+              "bash",
               "idle_not_real"
             ],
             "model": null
@@ -156,6 +131,11 @@
       "ok": {
         "tools": [
           {
+            "tool": "bash",
+            "main": false,
+            "subagents": []
+          },
+          {
             "tool": "generate_image",
             "main": false,
             "subagents": []
@@ -166,42 +146,12 @@
             "subagents": []
           },
           {
-            "tool": "fetch_url",
-            "main": false,
-            "subagents": []
-          },
-          {
             "tool": "activity_heatmap",
             "main": false,
             "subagents": []
           },
           {
-            "tool": "roll_dice",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "read",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "edit",
-            "main": false,
-            "subagents": []
-          },
-          {
             "tool": "search",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "delete",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "git",
             "main": false,
             "subagents": []
           },
@@ -407,7 +357,7 @@
           "idle.prompt": "You are idle.",
           "idle.timeout": null,
           "idle.tools": [
-            "fetch_url",
+            "bash",
             "idle_not_real"
           ],
           "researcher.description": "Looks things up",

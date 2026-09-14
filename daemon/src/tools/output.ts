@@ -1,3 +1,4 @@
+import type { BashResult } from "./bash.ts";
 import { historyText } from "./history_output.ts";
 import type { SearchHistoryResult } from "./history.ts";
 import type { FetchUrlResult } from "./web.ts";
@@ -72,6 +73,16 @@ export function formatToolOutput(name: string, value: unknown): string {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return payloadText(value);
   const record = value as Record<string, unknown>;
   switch (name) {
+    case "bash": {
+      const result = value as BashResult;
+      const lines = [`bash: exit ${result.exit_code ?? "terminated by signal"}`, `workdir: ${oneLine(result.workdir)}`];
+      if (result.stdout) lines.push(result.stdout.replace(/\n$/, ""));
+      if (result.stderr) lines.push(`stderr:\n${result.stderr.replace(/\n$/, "")}`);
+      if (result.prompt_files_changed.length > 0) {
+        lines.push(`Prompt reload queued: ${result.prompt_files_changed.join(", ")}.`);
+      }
+      return lines.join("\n");
+    }
     case "search_chat_logs":
       return historyText(value as SearchHistoryResult);
     case "fetch_url": {

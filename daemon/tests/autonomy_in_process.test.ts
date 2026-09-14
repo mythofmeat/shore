@@ -226,7 +226,7 @@ describe("running a heartbeat", () => {
         anthropic: scriptedProvider(
           [
             response(
-              [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } }],
+              [{ type: "tool_use", id: "t1", name: "bash", input: { command: "cat a.md" } }],
               "tool_use",
             ),
             response([{ type: "text", text: "done" }]),
@@ -571,7 +571,7 @@ describe("running a heartbeat", () => {
       providers: {
         anthropic: scriptedProvider([
           response(
-            [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } }],
+            [{ type: "tool_use", id: "t1", name: "bash", input: { command: "cat a.md" } }],
             "tool_use",
           ),
           response([{ type: "text", text: "done" }]),
@@ -681,13 +681,13 @@ test("Claude SDK heartbeats execute workspace tools, schedule a wake, and delive
   if (model === undefined) throw new Error("missing fixture model");
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
-  config.app.tools.enabled_tools = ["read", "edit"];
+  config.app.tools.enabled_tools = ["bash"];
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await writeFile(join(workspace, "HEARTBEAT.md"), "Before");
   const agent = fakeAgent({
     rounds: [
-      { blocks: [], toolCalls: [{ name: "read", input: { path: "HEARTBEAT.md" } }] },
-      { blocks: [], toolCalls: [{ name: "edit", input: { path: "HEARTBEAT.md", content: "After" } }] },
+      { blocks: [], toolCalls: [{ name: "bash", input: { command: "cat HEARTBEAT.md" } }] },
+      { blocks: [], toolCalls: [{ name: "bash", input: { command: "mkdir -p . && printf %s After > HEARTBEAT.md" } }] },
       { blocks: [], toolCalls: [
         { name: "set_next_wake", input: { hours_from_now: 2, reason: "follow up" } },
         { name: "send_message", input: { message: "I updated my notes." } },
@@ -727,12 +727,12 @@ test.each([false, true])("SDK heartbeat preserves completed work on SDK failure 
   if (model === undefined) throw new Error("missing fixture model");
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
-  config.app.tools.enabled_tools = ["read"];
+  config.app.tools.enabled_tools = ["bash"];
   const agent = fakeAgent({
     rounds: [
       {
         blocks: [{ kind: "text", text: "<sendMessage>Still here.</sendMessage>" }],
-        toolCalls: [{ name: "read", input: { path: "missing-file.md" } }],
+        toolCalls: [{ name: "bash", input: { command: "cat missing-file.md" } }],
       },
       ...(streamThrows ? [] : [{ blocks: [{ kind: "text" as const, text: "HEARTBEAT_OK" }] }]),
     ],
@@ -803,7 +803,7 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
   if (model === undefined) throw new Error("missing fixture model");
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
-  config.app.tools.enabled_tools = ["read", "edit", "git"];
+  config.app.tools.enabled_tools = ["bash"];
   config.app.memory.retain.enabled = true;
   config.app.memory.compaction.write_memory = true;
   config.app.memory.git_push = false;
@@ -811,8 +811,8 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
   await writeFile(join(workspace, "MEMORY.md"), "Old context");
   const agent = fakeAgent({
     rounds: [
-      { blocks: [], toolCalls: [{ name: "read", input: { path: "MEMORY.md" } }] },
-      { blocks: [], toolCalls: [{ name: "edit", input: { path: "MEMORY.md", content: "Ready for the next conversation." } }] },
+      { blocks: [], toolCalls: [{ name: "bash", input: { command: "cat MEMORY.md" } }] },
+      { blocks: [], toolCalls: [{ name: "bash", input: { command: "mkdir -p . && printf %s 'Ready for the next conversation.' > MEMORY.md" } }] },
       { blocks: [{ kind: "text", text: "Updated the active context." }] },
     ],
   });
@@ -859,18 +859,18 @@ test("compaction edits files throughout the workspace through the normal tools",
   config.app.memory.git_push = false;
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   const paths = [
-    "notes.md", "projects/work.md", "workspace/journal/today.md", "DREAMS.md",
+    "notes.md", "projects/work.md", "journal/today.md", "DREAMS.md",
     "memory/dreams.md", "memory/.dreams/entry.md", "memory/dreaming/entry.md",
-    "workspace/memory/fact.md",
+    "memory/fact.md",
   ];
   await writeFile(join(workspace, "notes.md"), "old context");
   const seen: SidecarRequest[] = [];
   const provider = scriptedProvider([
     response(paths.map((path, i) => ({
-      type: "tool_use", id: `edit-${String(i)}`, name: "edit",
-      input: path === "notes.md"
-        ? { path, edits: [{ old_string: "old context", new_string: "current context" }] }
-        : { path, content: "current context" },
+      type: "tool_use", id: `edit-${String(i)}`, name: "bash",
+      input: { command: path === "notes.md"
+        ? "sed -i 's/old context/current context/' notes.md"
+        : `mkdir -p "$(dirname '${path}')" && printf 'current context' > '${path}'` },
     })), "tool_use"),
     response([{ type: "text", text: "Updated the workspace." }]),
   ], seen);
@@ -889,7 +889,7 @@ test("compaction edits files throughout the workspace through the normal tools",
   }
 });
 
-test.each([false, true])("compaction uses normal trash deletion and keeps dry runs inert (%s)", async (dryRun) => {
+test.each([false, true])("compaction uses Bash deletion and keeps dry runs inert (%s)", async (dryRun) => {
   const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
   const config = await world();
   config.app.memory.git_push = false;
@@ -900,9 +900,9 @@ test.each([false, true])("compaction uses normal trash deletion and keeps dry ru
   const seen: SidecarRequest[] = [];
   const provider = scriptedProvider([
     response([
-      { type: "tool_use", id: "delete", name: "delete", input: { path: "workspace/projects/obsolete.md" } },
-      { type: "tool_use", id: "edit", name: "edit", input: { path: "projects/current.md", content: "current context" } },
-      { type: "tool_use", id: "git", name: "git", input: { subcommand: "status", args: [] } },
+      { type: "tool_use", id: "delete", name: "bash", input: { command: "rm projects/obsolete.md" } },
+      { type: "tool_use", id: "edit", name: "bash", input: { command: "mkdir -p projects && printf %s 'current context' > projects/current.md" } },
+      { type: "tool_use", id: "git", name: "bash", input: { command: "git status --short" } },
     ], "tool_use"),
     response([{ type: "text", text: "Finished." }]),
   ], seen);
@@ -915,10 +915,7 @@ test.each([false, true])("compaction uses normal trash deletion and keeps dry ru
     .filter((b) => b.type === "tool_result") ?? [];
   expect(results.map((b) => b.is_error ?? false)).toEqual([dryRun, dryRun, dryRun]);
   if (outcome?.kind === "dry_run") {
-    expect(outcome.fileOpsPreview).toEqual([
-      { path: "workspace/projects/obsolete.md", content: "<delete: move to trash>" },
-      { path: "projects/current.md", content: "current context" },
-    ]);
+    expect(outcome.fileOpsPreview).toEqual([]);
     expect(await readFile(join(workspace, "projects/obsolete.md"), "utf8")).toBe("old context");
     expect(readFile(join(workspace, "projects/current.md"))).rejects.toThrow();
     expect(readdir(trash)).rejects.toThrow();
@@ -926,13 +923,11 @@ test.each([false, true])("compaction uses normal trash deletion and keeps dry ru
   } else {
     expect(readFile(join(workspace, "projects/obsolete.md"))).rejects.toThrow();
     expect(await readFile(join(workspace, "projects/current.md"), "utf8")).toBe("current context");
-    const [stamp] = await readdir(trash);
-    expect(typeof stamp).toBe("string");
-    expect(await readFile(join(trash, stamp ?? "", "projects/obsolete.md"), "utf8")).toBe("old context");
+    expect(readdir(trash)).rejects.toThrow();
   }
 });
 
-test("compaction retains the normal workspace escape and protected-file restrictions", async () => {
+test("compaction rejects retired workspace tools without executing them", async () => {
   const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
   const config = await world();
   config.app.memory.git_push = false;
@@ -973,15 +968,15 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
   const path = join(workspace, "notes.md");
   await writeFile(path, "old context");
   const firstProvider = scriptedProvider([
-    response([{ type: "tool_use", id: "delete", name: "delete", input: { path: "notes.md" } }], "tool_use"),
+    response([{ type: "tool_use", id: "delete", name: "bash", input: { command: "rm notes.md && printf deleted >> operations" } }], "tool_use"),
   ]);
   const first = await runCompactionPass("ada", {
     config, generate: compactionGenerate({ config, providers: { anthropic: firstProvider } }),
   }, { keepTurnsOverride: 0 });
   expect(first?.kind).toBe("paused");
   expect(readFile(path)).rejects.toThrow();
-  const trash = join(config.dirs.data, "ada", "trash");
-  const before = await readdir(trash, { recursive: true });
+  const operations = join(workspace, "operations");
+  const before = await readFile(operations, "utf8");
   if (recreate) await writeFile(path, "new user context");
   model.maxToolIterations = 3;
   const seen: SidecarRequest[] = [];
@@ -991,7 +986,7 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
   }, { keepTurnsOverride: 0 });
   expect(second?.kind).toBe(recreate ? "paused" : "compacted");
   expect(seen).toHaveLength(recreate ? 0 : 1);
-  expect(await readdir(trash, { recursive: true })).toEqual(before);
+  expect(await readFile(operations, "utf8")).toEqual(before);
   if (recreate) {
     expect(second).toMatchObject({ reason: "workspace_conflict", detail: "notes.md" });
     expect(await readFile(path, "utf8")).toBe("new user context");

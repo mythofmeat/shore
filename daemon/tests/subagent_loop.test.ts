@@ -687,7 +687,7 @@ describe("settings shared across sub-agents reach the wire", () => {
 test("a captured SDK subagent executes workspace tools through shared generation", async () => {
   const { ClaudeAgentProvider } = await import("../src/llm/providers/claude_agent.ts");
   const { fakeAgent } = await import("../src/testing/fake_agent_query.ts");
-  const { config, root } = await configWith({ researcher: spec({ tools: ["read"] }) });
+  const { config, root } = await configWith({ researcher: spec({ tools: ["bash"] }) });
   const model = config.models.chat.get("cheap");
   if (model === undefined) throw new Error("missing fixture model");
   model.sdk = "claude_agent";
@@ -696,7 +696,7 @@ test("a captured SDK subagent executes workspace tools through shared generation
   await mkdir(ctx.workspaceDir, { recursive: true });
   await writeFile(join(ctx.workspaceDir, "MEMORY.md"), "Continuity matters.");
   const agent = fakeAgent({ rounds: [
-    { blocks: [], toolCalls: [{ name: "read", input: { path: "MEMORY.md" } }] },
+    { blocks: [], toolCalls: [{ name: "bash", input: { command: "cat MEMORY.md" } }] },
     { blocks: [{ kind: "text", text: "Continuity matters." }] },
   ] });
   const records: unknown[] = [];

@@ -66,12 +66,12 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
   app.advanced.max_retries = 0;
   app.memory.git_push = false;
   app.memory.compaction.keep_recent_turns = 0;
-  app.tools.enabled_tools = ["read", "edit", ARCHIVE_TOOL.name];
+  app.tools.enabled_tools = ["bash", ARCHIVE_TOOL.name];
   app.tools.enabled_subagents = ["research"];
   app.behavior.autonomy.enabled = true;
   app.behavior.autonomy.heartbeat.enabled = true;
   app.subagents.set("research", {
-    description: "Consult a researcher", tools: ["edit", "read"], model: undefined,
+    description: "Consult a researcher", tools: ["bash"], model: undefined,
     max_iterations: undefined, timeout: undefined,
     prompt: "History:\n{{active_history:10}}\n" + PROMPT_FILES.map((file) => `{{file:${file}}}`).join("\n"),
   });
@@ -92,7 +92,7 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
     const blocks: GenerateResponse["content_blocks"] = completed || (child && !options.nestedWrite)
       ? [{ type: "text", text: child ? "Research complete." : "HEARTBEAT_OK" }]
       : child
-      ? [{ type: "tool_use", id: "nested_edit", name: "edit", input: { path: "projects/notes.md", content: "delegated write" } }]
+      ? [{ type: "tool_use", id: "nested_edit", name: "bash", input: { command: "mkdir -p projects && printf 'delegated write' > projects/notes.md" } }]
       : [
           { type: "tool_use", id: "recall", name: ARCHIVE_TOOL.name, input: { query: options.invalidMcp ? 7 : "Review the archive" } },
           { type: "tool_use", id: "research", name: "ask_research", input: { query: "Review our current context" } },
@@ -215,7 +215,8 @@ test("compaction checkpoints delegated writes with their original content", asyn
     const checkpoint = required(await loadCompactionCheckpoint(w.config.dirs.data, "ada", "diary"));
     expect(checkpoint.loop.writesApplied).toEqual([{
       displayPath: "projects/notes.md", resolvedPath: join(w.workspace, "projects/notes.md"),
-      previousContent: "original note", resultingContent: "delegated write",
+      previousState: { kind: "file", content: Buffer.from("original note").toString("base64"), mode: 0o644 },
+      resultingState: { kind: "file", content: Buffer.from("delegated write").toString("base64"), mode: 0o644 },
     }]);
   } finally { await w.close(); }
 });

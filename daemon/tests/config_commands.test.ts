@@ -221,7 +221,7 @@ model = "primary"
 [subagents.idle]
 description = "Never enabled"
 prompt = "You are idle."
-tools = ["fetch_url", "idle_not_real"]
+tools = ["bash", "idle_not_real"]
 `;
 
 const BARE = "";

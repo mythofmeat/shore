@@ -1,5 +1,7 @@
 # Claude Code authentication in Docker
 
+For the daemon's Bash tool and container execution boundary, see [tools](TOOLS.md).
+
 Configure models with `[providers.claude_agent]`; see [SDK model setup](MODELS.md).
 
 Share the host's Claude Code credential directory with the daemon using a

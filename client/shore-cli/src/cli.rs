@@ -1486,7 +1486,7 @@ pub(crate) enum ConfigCommand {
     ///
     /// `shore config set defaults.model anthropic:claude-opus-4-5`
     /// `shore config set memory.compaction.idle_trigger 2h`
-    /// `shore config set tools.enabled_tools read,edit,search`
+    /// `shore config set tools.enabled_tools bash,search`
     #[command(verbatim_doc_comment)]
     Set {
         /// Dotted key, e.g. defaults.stream, cache.keepalive_max
@@ -1560,10 +1560,10 @@ pub(crate) enum DebugCommand {
     ///
     /// The call runs through the same path a real turn uses: arguments are
     /// schema-checked, the per-tool timeout applies, and the result is
-    /// truncated to the configured window. Side effects are real — `edit`
-    /// writes to the workspace, `ask_<agent>` spends tokens.
+    /// truncated to the configured window. Side effects are real — `bash`
+    /// runs commands on the daemon host, `ask_<agent>` spends tokens.
     ///
-    /// `shore debug tool read path=notes.md`
+    /// `shore debug tool bash "command=cat notes.md"`
     /// `shore debug tool search query=cache mode=hybrid`
     /// `shore debug tool ask_librarian query="what did we decide about TTLs"`
     #[command(name = "tool", verbatim_doc_comment)]

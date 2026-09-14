@@ -149,15 +149,15 @@ describe("resolveTool", () => {
   test("an unknown name lists what does exist", async () => {
     const { config } = await world();
     expect(() => resolveTool("reed", config, [])).toThrow("no tool named 'reed'");
-    expect(() => resolveTool("reed", config, [])).toThrow("read");
+    expect(() => resolveTool("reed", config, [])).toThrow("bash");
   });
 
   test("a built-in resolves with its schema and its enabled state", async () => {
-    const { config } = await world({ enabledTools: ["read"] });
-    const resolved = resolveTool("read", config, []);
+    const { config } = await world({ enabledTools: ["bash"] });
+    const resolved = resolveTool("bash", config, []);
     expect(resolved.kind).toBe("builtin");
     expect(resolved.enabled).toBe(true);
-    expect(resolveTool("git", config, []).enabled).toBe(false);
+    expect(resolveTool("web_search", config, []).enabled).toBe(false);
   });
 
   test("ask_<name> resolves only for a configured sub-agent", async () => {
@@ -183,16 +183,16 @@ describe("resolveTool", () => {
 
 describe("describeTool", () => {
   test("a built-in comes back with the description the character is sent", async () => {
-    const { ctx } = await world({ enabledTools: ["roll_dice"] });
-    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as DescribedTool;
+    const { ctx } = await world({ enabledTools: ["bash"] });
+    const out = describeTool("ada", ctx, { tool: "bash" }) as DescribedTool;
 
     expect(out["mode"]).toBe("tool_definition");
-    expect(out["tool"]).toBe("roll_dice");
+    expect(out["tool"]).toBe("bash");
     expect(out["kind"]).toBe("builtin");
     expect(out["enabled"]).toBe(true);
     expect(typeof out["description"]).toBe("string");
     expect(String(out["description"]).length).toBeGreaterThan(0);
-    expect(out["input_schema"]?.properties?.notation).toBeDefined();
+    expect(out["input_schema"]?.properties?.command).toBeDefined();
   });
 
   test("template variables are rendered, so it is what the model reads", async () => {
@@ -205,7 +205,7 @@ describe("describeTool", () => {
 
   test("a tool off the surface is described and flagged, not hidden", async () => {
     const { ctx } = await world({ enabledTools: [] });
-    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as DescribedTool;
+    const out = describeTool("ada", ctx, { tool: "bash" }) as DescribedTool;
 
     expect(out["enabled"]).toBe(false);
     expect(String(out["description"]).length).toBeGreaterThan(0);
@@ -234,7 +234,7 @@ interface DescribedTool extends Record<string, unknown> {
   description?: string;
   enabled?: boolean;
   input_schema?: {
-    properties?: { notation?: unknown };
+    properties?: { command?: unknown };
     required?: string[];
   };
   kind?: string;
@@ -276,11 +276,11 @@ describe("coercePairs", () => {
 });
 
 describe("runTool", () => {
-  test("a read returns what the model would have seen, and records a diagnostic", async () => {
-    const { ctx } = await world({ enabledTools: ["read"] });
+  test("a bash command returns what the model would have seen, and records a diagnostic", async () => {
+    const { ctx } = await world({ enabledTools: ["bash"] });
     const result = (await runTool("ada", ctx, {
-      tool: "read",
-      pairs: { path: "notes.md" },
+      tool: "bash",
+      pairs: { command: "cat notes.md" },
     })) as Record<string, unknown>;
 
     expect(result["ok"]).toBe(true);
@@ -294,8 +294,8 @@ describe("runTool", () => {
   test("a tool the model cannot reach still runs, and says it is off the surface", async () => {
     const { ctx } = await world({ enabledTools: [] });
     const result = (await runTool("ada", ctx, {
-      tool: "read",
-      pairs: { path: "notes.md" },
+      tool: "bash",
+      pairs: { command: "cat notes.md" },
     })) as Record<string, unknown>;
 
     expect(result["ok"]).toBe(true);
@@ -303,35 +303,35 @@ describe("runTool", () => {
   });
 
   test("a missing required argument is refused before the tool runs", async () => {
-    const { ctx } = await world({ enabledTools: ["roll_dice"] });
-    const result = (await runTool("ada", ctx, { tool: "roll_dice" })) as Record<string, unknown>;
+    const { ctx } = await world({ enabledTools: ["bash"] });
+    const result = (await runTool("ada", ctx, { tool: "bash" })) as Record<string, unknown>;
 
     expect(result["ok"]).toBe(false);
     expect(result["rejected"]).toBe(true);
-    expect(String(result["output"])).toContain("`notation`");
+    expect(String(result["output"])).toContain("`command`");
     expect(String(result["output"])).toContain("Nothing was executed");
   });
 
   test("an explicit value with the wrong type is refused by the shared schema", async () => {
-    const { ctx } = await world({ enabledTools: ["read"] });
+    const { ctx } = await world({ enabledTools: ["bash"] });
     const result = (await runTool("ada", ctx, {
-      tool: "read",
-      input: { path: 42 },
+      tool: "bash",
+      input: { command: 42 },
     })) as Record<string, unknown>;
 
     expect(result["ok"]).toBe(false);
     expect(result["rejected"]).toBe(true);
-    expect(String(result["output"])).toContain("`path`");
+    expect(String(result["output"])).toContain("`command`");
     expect(String(result["output"])).toContain("string");
   });
 
   test("a result past the window is truncated like a real turn, and --raw keeps the rest", async () => {
-    const { ctx, workspace } = await world({ enabledTools: ["read"], maxResultChars: 120 });
+    const { ctx, workspace } = await world({ enabledTools: ["bash"], maxResultChars: 120 });
     await writeFile(join(workspace, "long.md"), "tide ".repeat(200));
 
     const windowed = (await runTool("ada", ctx, {
-      tool: "read",
-      pairs: { path: "long.md" },
+      tool: "bash",
+      pairs: { command: "cat long.md" },
     })) as Record<string, unknown>;
     expect(windowed["truncated"]).toBe(true);
     expect(String(windowed["output"])).toContain("tool_result truncated");
@@ -341,8 +341,8 @@ describe("runTool", () => {
     expect(windowed["raw"]).toBeNull();
 
     const raw = (await runTool("ada", ctx, {
-      tool: "read",
-      pairs: { path: "long.md" },
+      tool: "bash",
+      pairs: { command: "cat long.md" },
       raw: true,
     })) as Record<string, unknown>;
     expect(Array.from(String(raw["raw"])).length).toBe(raw["result_chars"] as number);

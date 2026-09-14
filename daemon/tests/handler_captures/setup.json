@@ -3,7 +3,7 @@
   "resolve_generation_model": [
     {
       "name": "the pre-resolved model passes straight through",
-      "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
+      "note": "an empty overlay must not rebuild the model \u2014 the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
           "$ref": "s1"
@@ -163,7 +163,7 @@
     },
     {
       "name": "a misspelled default surfaces as an error",
-      "note": "not silently swapped for the first model — a typo in user config should say so",
+      "note": "not silently swapped for the first model \u2014 a typo in user config should say so",
       "input": {
         "active_model": null,
         "default_model": "nope",
@@ -179,7 +179,7 @@
     },
     {
       "name": "no default falls back to the first static chat model",
-      "note": "first, not any — catalog order is the tiebreak",
+      "note": "first, not any \u2014 catalog order is the tiebreak",
       "input": {
         "active_model": null,
         "default_model": null,
@@ -455,7 +455,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nfirst"
+                "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nfirst"
               }
             ]
           },
@@ -532,7 +532,7 @@
     },
     {
       "name": "the mcp surface is filtered by enabled_tools",
-      "note": "one server, two tools, one allowlisted — and the static tools come first, which is the cache prefix",
+      "note": "one server, two tools, one allowlisted \u2014 and the static tools come first, which is the cache prefix",
       "input": {
         "history": {
           "$ref": "s0"
@@ -540,7 +540,7 @@
         "with_segments": false,
         "regen": false,
         "enabled_tools": [
-          "read",
+          "bash",
           "mcp__fs__list"
         ],
         "mcp_tools": [
@@ -572,31 +572,25 @@
         },
         "tools": [
           {
-            "name": "read",
-            "description": "Read a file as text with line numbers, or browse a directory as a compact tree. Omit path to browse the workspace root. Trees show two levels by default, directories first, with / for directories and @ for symlinks (never followed). A directory marked … has contents beyond the requested depth; read that directory or increase depth (1–8). Empty directories within the expanded depth have no children. Directory listings omit dotted entries and contain no sizes. Use offset and limit to page through file lines or tree entries (1-based); trees default to 200 entries per page, capped at 1000. Keep path and depth the same when paging. Reach for this for exact paths and folder navigation; use search for fuzzy content matching.",
+            "name": "bash",
+            "description": "Run a Bash command on the daemon host. Use this for reading, writing, editing, listing, searching, moving and deleting files; Git; fetching URLs with curl; calculations; and other command-line work. Commands run in your workspace by default. Set workdir to a directory (relative to your workspace or absolute) when needed. Each call starts a fresh, non-interactive Bash shell with pipefail enabled; cd and exported variables do not persist between calls. Files do persist. Standard input is closed; use pipes or heredocs for input. Run commands in the foreground and wait for them to finish.\n\nUse familiar commands such as cat, sed, rg, find, mkdir, mv, rm, git, curl, jq and python3. Read files before editing them and quote paths and text carefully. Git commits use your character identity. Use `search` for semantic workspace search and `search_chat_logs` for conversation retrieval.\n\nThe result includes the exit status, stdout and stderr. Output is bounded; narrow large results with paths, patterns, head, tail or sed, or redirect output to a file and read it in parts. Shore's configured tool timeout applies and cancellation stops the command's process group. Changes made before an error or timeout remain on disk. Changes to SOUL.md, USER.md, AGENTS.md, TOOLS.md and MEMORY.md are queued for prompt reload.\n\nThis is unrestricted command execution as the daemon user. The working directory is a convenience, not a sandbox: commands can access the daemon's environment, network and any files its user can access. In Docker, the container and its mounts define that access.",
             "input_schema": {
               "type": "object",
               "properties": {
-                "path": {
+                "command": {
                   "type": "string",
-                  "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
+                  "minLength": 1,
+                  "description": "Bash command or script to execute."
                 },
-                "depth": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "maximum": 8,
-                  "description": "Directory tree depth (default 2, maximum 8). Use 1 for immediate children. Ignored for files."
-                },
-                "offset": {
-                  "type": "number",
-                  "description": "Starting file line or directory tree entry (1-based). Optional."
-                },
-                "limit": {
-                  "type": "number",
-                  "description": "Maximum file lines or tree entries. Directories default to 200 entries, capped at 1000."
+                "workdir": {
+                  "type": "string",
+                  "description": "Working directory, relative to the workspace or absolute. Defaults to the workspace root."
                 }
               },
-              "required": []
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
             }
           },
           {

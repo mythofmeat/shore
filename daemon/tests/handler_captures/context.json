@@ -1852,8 +1852,7 @@
         ],
         "canonical_files": [],
         "enabled_tools": [
-          "read",
-          "edit"
+          "bash"
         ],
         "enabled_subagents": [],
         "subagents": [],
@@ -1908,8 +1907,7 @@
         "$ref": "s4"
       },
       "tool_defs": [
-        "read",
-        "edit"
+        "bash"
       ],
       "prompt_messages": [
         {
@@ -1947,7 +1945,7 @@
         ],
         "canonical_files": [],
         "enabled_tools": [
-          "read"
+          "bash"
         ],
         "enabled_subagents": [
           "librarian"
@@ -2010,7 +2008,7 @@
         "$ref": "s4"
       },
       "tool_defs": [
-        "read",
+        "bash",
         "ask_librarian",
         "mcp__fs__list",
         "mcp__fs__stat"
@@ -2118,7 +2116,7 @@
         ],
         "canonical_files": [],
         "enabled_tools": [
-          "read"
+          "bash"
         ],
         "enabled_subagents": [],
         "subagents": [],
@@ -2156,7 +2154,7 @@
         "$ref": "s4"
       },
       "tool_defs": [
-        "read"
+        "bash"
       ],
       "prompt_messages": [
         {
@@ -2329,7 +2327,7 @@
         ],
         "canonical_files": [],
         "enabled_tools": [
-          "read"
+          "bash"
         ],
         "enabled_subagents": [],
         "subagents": [],
@@ -2400,7 +2398,7 @@
         "$ref": "s4"
       },
       "tool_defs": [
-        "read"
+        "bash"
       ],
       "prompt_messages": {
         "$ref": "s7"

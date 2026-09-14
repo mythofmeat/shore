@@ -470,7 +470,7 @@
           "warnings"
         ],
         "data_shape": {
-          "tools": "array[12]",
+          "tools": "array[7]",
           "subagents": "array[0]",
           "warnings": "array[0]"
         }

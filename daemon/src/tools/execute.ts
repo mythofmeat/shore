@@ -1,3 +1,4 @@
+import type { BashResult } from "./bash.ts";
 import { formatToolOutput } from "./output.ts";
 import { shoreLog } from "../log.ts";
 
@@ -101,7 +102,7 @@ export async function runToolUse(
     payload = toolMediaOf(value);
     okValue = payload === undefined ? value : payload.value;
     rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);
-    isError = false;
+    isError = toolUse.name === "bash" && (okValue as BashResult).exit_code !== 0;
   } catch (e) {
     rawOutput = e instanceof Error ? e.message : String(e);
     isError = true;
@@ -328,6 +329,7 @@ export interface ToolPhase {
 export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {
   return {
     messages,
+    ...(exec.ctx.trackWorkspaceWrite === undefined ? {} : { parallel: false }),
     runTool: (toolUse) => executeToolUse(toolUse, exec, messages),
     recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec),
   };

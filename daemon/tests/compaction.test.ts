@@ -1,3 +1,6 @@
+import { handleBash } from "../src/tools/bash.ts";
+import { formatToolOutput } from "../src/tools/output.ts";
+import { snapshotWorkspace } from "../src/tools/workspace_snapshot.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
@@ -447,6 +450,63 @@ describe("reporting an outcome", () => {
 });
 
 const coverage = { dispatched: 0, rolledBack: 0, blocked: 0, dryRun: 0 };
+
+test.each([0, 7])("archive failure restores Bash changes, even after command exit %s", async (exitCode) => {
+  const root = await mkdtemp(join(tmpdir(), "shore-bash-rollback-"));
+  const workspace = join(root, "workspace");
+  try {
+    await mkdir(join(workspace, "directory"), { recursive: true });
+    await writeFile(join(root, "outside"), "outside remains untouched");
+    await writeFile(join(workspace, "directory/note"), "original nested file");
+    await writeFile(join(workspace, "file"), "original flat file");
+    await writeFile(join(workspace, "MEMORY.md"), "original memory");
+    await writeFile(join(workspace, "binary"), Buffer.from([0, 255, 128, 42]));
+    await symlink("../outside", join(workspace, "link"));
+    const markdownStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+    const before = await snapshotWorkspace(workspace);
+    const bashTurn: GenerateResponse = {
+      ...responseFor("blocks"),
+      content_blocks: [{ type: "tool_use", id: "shell", name: "bash", input: { command: `
+printf changed > MEMORY.md
+printf changed > binary
+chmod 700 binary
+rm -r directory
+printf replacement > directory
+rm file link
+mkdir file new-directory
+printf new > file/child
+printf new > new-directory/child
+ln -s MEMORY.md link
+exit ${exitCode}` } }],
+    };
+    const llm = new ScriptedLlm([bashTurn, responseFor("text_only")]);
+    const messages = twoMessages();
+    const tools: CompactionTools = {
+      workspaceDir: workspace,
+      ensureWorkspaceGitRepo: async () => {},
+      gitCommitAll: async () => false,
+      dispatch: async (name, input) => {
+        const value = await handleBash(input as Record<string, unknown>, workspace, "Aria");
+        return { output: formatToolOutput(name, value), isError: value.exit_code !== 0 };
+      },
+    };
+    const plan = required(maybePlanOf(messages.map((message, index) => toPlanMessage({
+      ...message, is_tool_result_only: false, is_autonomous: false,
+    }, index)), { keepRecentTurns: 0 }));
+    let failure: unknown;
+    try {
+      await compact({
+        conversationId: "bash-archive", plan, charName: "Aria", userName: "Tom",
+        systemTemplate: "Maintain memory", promptTemplate: "Compact", llm,
+        conversationMgr: new RecordingMgr("next", true), dryRun: false,
+        chatRequest: chatRequest(messages), tools, markdownStore,
+      }, { keepRecentTurns: 0 });
+    } catch (error) { failure = error; }
+    expect(String(failure)).toContain("simulated archive failure");
+    expect(await snapshotWorkspace(workspace)).toEqual(before);
+    expect(await readFile(join(root, "outside"), "utf8")).toBe("outside remains untouched");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 describe("compaction passes", () => {
   for (const pass of section("passes")) {

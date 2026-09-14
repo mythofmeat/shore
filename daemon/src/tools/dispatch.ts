@@ -1,17 +1,13 @@
 import { shoreLog } from "../log.ts";
 
 import { handleActivityHeatmap, type ActivityStatsLookup } from "./activity.ts";
-import { handleRollDice } from "./basic.ts";
+import { handleBash } from "./bash.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleSearchHistory } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
-import { handleFetchUrl, handleWebSearch, type FetchLike, type SearchConfigView } from "./web.ts";
+import { handleWebSearch, type FetchLike, type SearchConfigView } from "./web.ts";
 import {
-  handleDelete,
-  handleEdit,
-  handleGit,
-  handleRead,
   handleSearch,
   type MemoryFileLimits,
   type ToolInput,
@@ -143,12 +139,20 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["edit", "delete", "git", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
 
   switch (name) {
+    case "read":
+    case "edit":
+    case "delete":
+    case "git":
+    case "fetch_url":
+    case "roll_dice":
+      throw new InvalidArgs(`${name} has been replaced by bash; use a Bash command instead`);
+
     case "search_chat_logs":
       return await handleSearchHistory(args, ctx.conversationDir, {
         character: ctx.characterName,
@@ -174,33 +178,16 @@ export async function dispatchTool(
     case "web_search":
       return await handleWebSearch(args, ctx.searchConfig, process.env, ctx.fetchImpl ?? fetch, ctx.signal);
 
-    case "fetch_url":
-      return await handleFetchUrl(
-        args,
-        ctx.fetchImpl ?? fetch,
-        ctx.signal,
-        ctx.lookupImpl === undefined ? {} : { lookup: ctx.lookupImpl },
-      );
-
-    case "roll_dice":
-      return handleRollDice(args);
-
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {
         throw new ToolIoError("activity history is not available in this context");
       }
       return handleActivityHeatmap(args, ctx.activityStats);
 
-    case "read":
-      return await handleRead(args, ctx.workspaceDir);
-
-    case "edit": {
-      const path = typeof args["path"] === "string" ? args["path"] : "";
-      const write = () => handleEdit(args, ctx.workspaceDir, ctx.memoryFileLimits);
-      const result = ctx.trackWorkspaceWrite === undefined ? await write()
+    case "bash": {
+      const write = () => handleBash(args, ctx.workspaceDir, ctx.characterName, ctx.signal, ctx.deferEdit);
+      return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
-      await annotateDeferredEdit(path, result, ctx);
-      return result;
     }
 
     case "search": {
@@ -216,15 +203,6 @@ export async function dispatchTool(
           : undefined;
       return await handleSearch(args, ctx.workspaceDir, ctx.retrievalConfig, semantics);
     }
-
-    case "delete": {
-      const write = () => handleDelete(args, ctx.workspaceDir, ctx.characterDataDir);
-      return ctx.trackWorkspaceWrite === undefined ? await write()
-        : await ctx.trackWorkspaceWrite(name, input, write);
-    }
-
-    case "git":
-      return await handleGit(args, ctx.workspaceDir, ctx.characterName, ctx.signal);
 
     case "set_next_wake": {
       if (ctx.scheduleNextWake === undefined) {

@@ -3,17 +3,12 @@ import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { schemasFrom } from "./validate.ts";
 
+import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
-import rollDiceDesc from "../../prompts/tools/basic/roll_dice.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import searchHistoryDesc from "../../prompts/tools/history/search_history.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
-import fetchUrlDesc from "../../prompts/tools/web/fetch_url.md" with { type: "text" };
 import webSearchDesc from "../../prompts/tools/web/web_search.md" with { type: "text" };
-import deleteDesc from "../../prompts/tools/workspace/delete.md" with { type: "text" };
-import editDesc from "../../prompts/tools/workspace/edit.md" with { type: "text" };
-import gitDesc from "../../prompts/tools/workspace/git.md" with { type: "text" };
-import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
 
 export type ToolCategory = "web" | "other";
@@ -35,6 +30,20 @@ export interface SubagentConfigView {
 }
 
 export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
+  {
+    name: "bash",
+    description: stripOneTrailingNewline(bashDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", minLength: 1, description: "Bash command or script to execute." },
+        workdir: { type: "string", description: "Working directory, relative to the workspace or absolute. Defaults to the workspace root." },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+    category: "other",
+  },
   {
     name: "generate_image",
     description: stripOneTrailingNewline(generateImageDesc),
@@ -74,20 +83,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     category: "web",
   },
   {
-    name: "fetch_url",
-    description: stripOneTrailingNewline(fetchUrlDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        url: { type: "string", description: "The URL to fetch." },
-        offset: { type: "integer", minimum: 1, description: "Starting character (1-based). Use the continuation offset from the previous result." },
-        limit: { type: "integer", minimum: 1, maximum: 50000, description: "Maximum characters to return (default 12000)." },
-      },
-      required: ["url"],
-    },
-    category: "web",
-  },
-  {
     name: "activity_heatmap",
     description: stripOneTrailingNewline(activityHeatmapDesc),
     parameters: {
@@ -99,95 +94,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           default: 30,
         },
       },
-    },
-    category: "other",
-  },
-  {
-    name: "roll_dice",
-    description: stripOneTrailingNewline(rollDiceDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        notation: {
-          type: "string",
-          description: "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'.",
-        },
-      },
-      required: ["notation"],
-    },
-    category: "other",
-  },
-  {
-    name: "read",
-    description: stripOneTrailingNewline(readDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        path: {
-          type: "string",
-          description:
-            "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root.",
-        },
-        depth: {
-          type: "integer",
-          minimum: 1,
-          maximum: 8,
-          description: "Directory tree depth (default 2, maximum 8). Use 1 for immediate children. Ignored for files.",
-        },
-        offset: {
-          type: "number",
-          description:
-            "Starting file line or directory tree entry (1-based). Optional.",
-        },
-        limit: {
-          type: "number",
-          description:
-            "Maximum file lines or tree entries. Directories default to 200 entries, capped at 1000.",
-        },
-      },
-      required: [],
-    },
-    category: "other",
-  },
-  {
-    name: "edit",
-    description: stripOneTrailingNewline(editDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative path within your workspace." },
-        content: {
-          type: "string",
-          description:
-            "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`.",
-        },
-        edits: {
-          type: "array",
-          description:
-            "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-          items: {
-            type: "object",
-            properties: {
-              old_string: {
-                type: "string",
-                description:
-                  "Exact text to find and replace. Must match whitespace and newlines precisely.",
-              },
-              new_string: {
-                type: "string",
-                description: "Text to replace old_string with.",
-              },
-              replace_all: {
-                type: "boolean",
-                description:
-                  "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once.",
-              },
-            },
-            required: ["old_string", "new_string"],
-          },
-        },
-      },
-      required: ["path"],
     },
     category: "other",
   },
@@ -225,48 +131,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
       required: ["query"],
-    },
-    category: "other",
-  },
-  {
-    name: "delete",
-    description: stripOneTrailingNewline(deleteDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        path: {
-          type: "string",
-          description: "Relative path to the file to remove, within your workspace.",
-        },
-      },
-      required: ["path"],
-    },
-    category: "other",
-  },
-  {
-    name: "git",
-    description: stripOneTrailingNewline(gitDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        subcommand: {
-          type: "string",
-          description:
-            'The git subcommand to run, e.g. "status", "add", "commit", "log", "diff".',
-        },
-        args: {
-          type: "array",
-          description:
-            'Arguments for the subcommand, one array element per argument. For example ["-m", "note why this matters"]. Optional.',
-          items: { type: "string" },
-        },
-        workdir: {
-          type: "string",
-          description:
-            "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root.",
-        },
-      },
-      required: ["subcommand"],
     },
     category: "other",
   },

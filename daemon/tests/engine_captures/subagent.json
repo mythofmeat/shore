@@ -1996,108 +1996,108 @@
     },
     {
       "allowed": [
-        "read"
+        "bash"
       ],
       "mcp": false,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
-        "read"
+        "bash"
       ],
       "mcp": true,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
-        "read",
+        "bash",
         "not_a_real_tool",
         "search"
       ],
       "mcp": false,
       "names": [
-        "read",
+        "bash",
         "search"
       ]
     },
     {
       "allowed": [
-        "read",
+        "bash",
         "not_a_real_tool",
         "search"
       ],
       "mcp": true,
       "names": [
-        "read",
+        "bash",
         "search"
       ]
     },
     {
       "allowed": [
         "ask_music",
-        "read"
+        "bash"
       ],
       "mcp": false,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
         "ask_music",
-        "read"
+        "bash"
       ],
       "mcp": true,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
         "search",
-        "read"
+        "bash"
       ],
       "mcp": false,
       "names": [
         "search",
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
         "search",
-        "read"
+        "bash"
       ],
       "mcp": true,
       "names": [
         "search",
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
-        "read",
-        "read"
+        "bash",
+        "bash"
       ],
       "mcp": false,
       "names": [
-        "read",
-        "read"
+        "bash",
+        "bash"
       ]
     },
     {
       "allowed": [
-        "read",
-        "read"
+        "bash",
+        "bash"
       ],
       "mcp": true,
       "names": [
-        "read",
-        "read"
+        "bash",
+        "bash"
       ]
     },
     {
@@ -2119,22 +2119,22 @@
     },
     {
       "allowed": [
-        "read",
+        "bash",
         "mcp__hue__*"
       ],
       "mcp": false,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
-        "read",
+        "bash",
         "mcp__hue__*"
       ],
       "mcp": true,
       "names": [
-        "read",
+        "bash",
         "mcp__hue__off",
         "mcp__hue__on"
       ]
@@ -2172,21 +2172,21 @@
     {
       "allowed": [
         "mcp__hue__*",
-        "read"
+        "bash"
       ],
       "mcp": false,
       "names": [
-        "read"
+        "bash"
       ]
     },
     {
       "allowed": [
         "mcp__hue__*",
-        "read"
+        "bash"
       ],
       "mcp": true,
       "names": [
-        "read",
+        "bash",
         "mcp__hue__off",
         "mcp__hue__on"
       ]

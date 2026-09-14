@@ -490,6 +490,12 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     ...[...app.subagents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
+    if (["read", "edit", "delete", "git", "fetch_url", "roll_dice"].includes(pattern)) {
+      onWarn(
+        `tool '${pattern}' has been replaced by bash; explicitly enable bash in tools.enabled_tools or the subagent's tools list`,
+        [["pattern", pattern]],
+      );
+    }
     if (!pattern.startsWith("mcp__")) continue;
     const server = pattern.slice("mcp__".length).split("__")[0] ?? "";
     if (server !== "" && server !== "*" && !app.mcp.has(server)) {

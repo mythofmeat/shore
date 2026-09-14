@@ -8,4 +8,4 @@ This conversation with {{user}} is about to leave your active context. Your goal
 
 Always use simple, precise, natural sentences that avoid ambiguity. Do not overwhelm with details that won't matter, but include the ones that do. **Avoid mannered prose.**
 
-Use `read` and `search` as needed, then `edit` to make your changes. Please try to keep this workspace well-maintained and easy-to-navigate for both you and {{user}}. After completing any edits, stage the files you changed with `git add`, then make a local git commit with a message that will help you and {{user}} keep track of what changed and why.
+Use `bash` to read and edit files, and `search` when semantic retrieval would help. Please try to keep this workspace well-maintained and easy-to-navigate for both you and {{user}}. After completing any edits, stage the files you changed with `git add`, then make a local git commit with a message that will help you and {{user}} keep track of what changed and why.
