@@ -15,7 +15,7 @@ import { createThread, setThreadModel } from "../src/engine/threads.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { newMessageVersion } from "../src/engine/versions.ts";
 import { claimUncovered } from "../src/memory/coverage.ts";
-import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import {
   CompactionError,
   type CompactionErrorKind,
@@ -248,6 +248,52 @@ describe("compaction model selection and claim ownership", () => {
       expect(store.commitMemoryCoverage("ada", "compaction", held.claim)).toBe(2);
     } finally {
       store.close();
+    }
+  });
+
+  test.each([
+    [true, "claude_agent:claude-opus-4-8", "claude_agent", "claude-opus-4-8"],
+    [false, "claude_agent:claude-sonnet-4-6", "claude_agent", "claude-sonnet-4-6"],
+    [false, "zai-sub:glm-5.3", "zai", "glm-5.3"],
+    [true, "zai-sub:glm-5.3", "zai", "glm-5.3"],
+  ] as const)("paused compaction honors restart=%s and current model %s", async (restart, selected, sdk, model) => {
+    const w = await configuredChat();
+    w.config.app.memory.git_push = false;
+    w.ctx.run.generate = async () => { throw new Error("session limit"); };
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "paused" });
+    const checkpoint = await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main");
+    if (checkpoint === undefined) throw new Error("missing paused checkpoint");
+    checkpoint.resumeAt = "2099-01-01T00:00:00Z";
+    await saveCompactionCheckpoint(w.config.dirs.data, checkpoint, "main");
+
+    const keyName = "SHORE_TEST_COMPACTION_MODEL_SWITCH_KEY";
+    const previousKey = process.env[keyName];
+    process.env[keyName] = "test-key";
+    try {
+      w.config.providers = ProviderRegistry.fromSection({
+        claude_agent: { sdk: "claude_agent" },
+        "zai-sub": { sdk: "zai", api_key_env: keyName },
+      });
+      await setThreadModel(w.config.dirs.data, "ada", "main", selected, "2026-09-15T01:00:00Z");
+      const seen: { sdk: string; model: string }[] = [];
+      w.ctx.run.generate = async (request) => {
+        seen.push({ sdk: request.sdk, model: request.model });
+        return {
+          content: "Summary complete", content_blocks: [{ type: "text", text: "Summary complete" }],
+          finish_reason: "end_turn", model: request.model,
+          usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        };
+      };
+      expect(await compact(w.engine, w.ctx, { keep_turns: 0, restart })).toMatchObject({
+        status: "compacted", compacted_turns: 1, retained_turns: 0,
+      });
+      expect(seen).toEqual([{ sdk, model }]);
+      expect(w.engine.turnCount()).toBe(0);
+      expect(await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main")).toBeUndefined();
+    } finally {
+      if (previousKey === undefined) delete process.env[keyName];
+      else process.env[keyName] = previousKey;
     }
   });
 

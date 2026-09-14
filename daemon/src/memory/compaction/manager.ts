@@ -841,13 +841,20 @@ async function resolveCheckpoint(
 ): Promise<CompactionCheckpoint> {
   const { plan } = opts;
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    if (plan.resumed && plan.checkpoint !== undefined) return plan.checkpoint;
     const abandoned = plan.checkpoint;
+    const sameModel = abandoned !== undefined &&
+      abandoned.request.sdk === request.sdk &&
+      abandoned.request.model === request.model &&
+      abandoned.request.provider_key === request.provider_key &&
+      abandoned.request.base_url === request.base_url;
+    if (plan.resumed && abandoned !== undefined && sameModel) return abandoned;
     if (abandoned !== undefined) {
+      const reason = sameModel
+        ? `the pass was restarted or its archival range changed (${String(abandoned.splitAt)} -> ${String(plan.splitAt)})`
+        : `the model changed (${abandoned.request.sdk}:${abandoned.request.model} -> ${request.sdk}:${request.model})`;
       shoreLog.warn(
-        `shore: starting a fresh compaction for ${opts.charName} rather than resuming ` +
-          `checkpoint ${abandoned.id}, which splits at ${String(abandoned.splitAt)} against a ` +
-          `conversation this pass splits at ${String(plan.splitAt)}. The memory it already wrote ` +
+        `shore: starting a fresh compaction for ${opts.charName}: ${reason}. ` +
+          `The memory checkpoint ${abandoned.id} already wrote ` +
           `(${JSON.stringify(abandoned.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
       );
     }

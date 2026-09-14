@@ -325,12 +325,15 @@ export function planCompactionCoverage(
 
   const dbPath = join(effective.dirs.data, HISTORY_DB_FILE);
   const resumeClaim = plan.resumed ? plan.checkpoint?.coverageClaim : undefined;
-  const claimed = withCoverageStore(dbPath, (store) =>
-    claimUncovered(store, character, "compaction", plan.archival, {
+  const claimed = withCoverageStore(dbPath, (store) => {
+    if (!plan.resumed && plan.checkpoint?.coverageClaim !== undefined) {
+      store.releaseMemoryCoverage(character, "compaction", plan.checkpoint.coverageClaim);
+    }
+    return claimUncovered(store, character, "compaction", plan.archival, {
       contiguous: true,
       ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),
-    }),
-  );
+    });
+  });
 
   if (coverageIsRedundant(claimed)) return { redundant: true };
   if (coverageIsPartial(claimed) || (claimed.pending === 0 && claimed.unversioned === 0)) {

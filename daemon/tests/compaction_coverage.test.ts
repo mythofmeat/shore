@@ -355,7 +355,9 @@ describe("deciding whether a compaction has anything new to write", () => {
     await writeCheckpoint(w.dataDir, required(first.coverage).claim, "not this conversation\n");
 
     const replanned = await plan(w, 1);
-    expect(replanned.blocked).toBe(true);
+    expect(replanned.blocked).toBeUndefined();
+    expect(required(replanned.coverage).claimed).toBe(4);
+    expect(required(replanned.coverage).claim).not.toBe(required(first.coverage).claim);
   });
 
   test("an edit inside the inherited range keeps that message out of the background", async () => {

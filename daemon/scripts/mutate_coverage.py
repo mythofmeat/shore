@@ -348,8 +348,8 @@ MUTANTS = [
      "  if (false as boolean) {"),
     ("plan: coverage is claimed over something other than the resolved range",
      RUN,
-     '    claimUncovered(store, character, "compaction", plan.archival, {',
-     '    claimUncovered(store, character, "compaction", plan.messages, {'),
+     '    return claimUncovered(store, character, "compaction", plan.archival, {',
+     '    return claimUncovered(store, character, "compaction", plan.messages, {'),
     ("plan: a resumed pass mints a new claim instead of reusing its checkpoint's",
      RUN,
      "  const resumeClaim = plan.resumed ? plan.checkpoint?.coverageClaim : undefined;",
@@ -409,7 +409,7 @@ MUTANTS = [
      "      abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,"),
     ("manager: a resumed plan still re-resolves its own checkpoint",
      MANAGER,
-     "    if (plan.resumed && plan.checkpoint !== undefined) return plan.checkpoint;",
+     "    if (plan.resumed && abandoned !== undefined && sameModel) return abandoned;",
      "    if (false as boolean) return required(plan.checkpoint);"),
 
     # --- the archive commit is where compaction coverage lands ---------------
