@@ -24,9 +24,12 @@ ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 EXPOSE 7320
 
+USER root
+ARG USERNAME=bun
 RUN if [ "$USERNAME" != "bun" ]; then \
     usermod -l "$USERNAME" bun && \
     groupmod -n "$USERNAME" bun; \
     fi
+USER 1000:1000
 
 CMD ["bun", "run", "start"]
