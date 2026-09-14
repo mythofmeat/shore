@@ -411,6 +411,8 @@ function buildOptions(
     TZ: hostZone(),
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     CLAUDE_CODE_TOTAL_TOKENS_REMINDER: "off",
+    CLAUDE_SECURESTORAGE_CONFIG_DIR:
+      process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
   };
   if (process.env.CLAUDE_CONFIG_DIR !== undefined) {
     env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;

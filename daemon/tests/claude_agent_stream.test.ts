@@ -306,6 +306,33 @@ describe("the environment the subprocess is given", () => {
     );
   });
 
+  test.each(["/shared/claude", ""])("the credential-store override is preserved exactly: %j", async (directory) => {
+    const previous = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+    process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = directory;
+    try {
+      expect((await envOf(request())).CLAUDE_SECURESTORAGE_CONFIG_DIR).toBe(directory);
+    } finally {
+      if (previous === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+      else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previous;
+    }
+  });
+
+  test.each(["/shared/claude", undefined])("session restore keeps the original credential store: %j", async (directory) => {
+    const previousConfig = process.env.CLAUDE_CONFIG_DIR;
+    const previousAuth = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+    if (directory === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = directory;
+    delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+    try {
+      expect((await envOf(request())).CLAUDE_SECURESTORAGE_CONFIG_DIR).toBe(directory ?? "");
+    } finally {
+      if (previousConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previousConfig;
+      if (previousAuth === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+      else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previousAuth;
+    }
+  });
+
   test("nothing else of the daemon's environment leaks in", async () => {
     const had = process.env.SHORE_SECRET_FIXTURE;
     process.env.SHORE_SECRET_FIXTURE = "do-not-forward";
