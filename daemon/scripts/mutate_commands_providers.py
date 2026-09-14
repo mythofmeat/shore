@@ -156,15 +156,15 @@ MUTANTS = [
 
     # --- the sdk branch -------------------------------------------------------
     ("refresh: every sdk takes the openai-compatible path",
-     '    sdk === "anthropic"\n'
-     "      ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)\n"
-     "      : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);",
-     "    await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);"),
+     '  return sdk === "anthropic"\n'
+     "    ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)\n"
+     "    : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);",
+     "  return await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);"),
     ("refresh: every sdk takes the anthropic path",
-     '    sdk === "anthropic"\n'
-     "      ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)\n"
-     "      : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);",
-     "    await discoverAnthropic(provider, baseUrl, key, fetchImpl);"),
+     '  return sdk === "anthropic"\n'
+     "    ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)\n"
+     "    : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);",
+     "  return await discoverAnthropic(provider, baseUrl, key, fetchImpl);"),
     ("refresh: the sdk default is not consulted",
      "  const sdk = entry.sdk ?? defaultSdk(provider);",
      '  const sdk = entry.sdk ?? "openai";'),
@@ -185,7 +185,7 @@ MUTANTS = [
      "    throw internalError(describeDiscoveryError(discovered.err));",
      '    throw internalError("discovery failed");'),
     ("refresh: the base url is not recorded in the cache",
-     "    base_url: baseUrl,\n    models: discovered.ok,",
+     "    ...(baseUrl === undefined ? {} : { base_url: baseUrl }),\n    models: discovered.ok,",
      "    base_url: undefined,\n    models: discovered.ok,"),
     ("refresh: the cache version is not stamped",
      "    version: CACHE_VERSION,",

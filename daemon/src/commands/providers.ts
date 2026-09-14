@@ -7,6 +7,7 @@ import {
   writeCache,
   CACHE_VERSION,
   type DiscoveredModel,
+  type DiscoveryResult,
   type ProviderModelsCache,
 } from "../llm/discovery.ts";
 import {
@@ -24,12 +25,14 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { enabledKeys, isVisible, type ProviderEntry } from "../config/providers.ts";
 import { internalError, invalidRequest, notFound, providerError } from "./errors.ts";
 import { setNanoGptSubscription } from "../ledger/store.ts";
+import { discoverClaudeAgent, type ClaudeAgentModelQuery } from "../llm/providers/claude_agent_models.ts";
 
 export type Args = Record<string, unknown>;
 
 export interface ProvidersContext {
   config: LoadedConfig;
   fetchImpl?: typeof fetch;
+  runClaudeAgentQuery?: ClaudeAgentModelQuery;
 }
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -90,6 +93,7 @@ export async function refreshOne(
   cacheDir: string,
   provider: string,
   fetchImpl: typeof fetch = fetch,
+  runClaudeAgentQuery?: ClaudeAgentModelQuery,
 ): Promise<RefreshOutcome> {
   const entry = config.providers.get(provider);
   if (entry === undefined) throw notFound(`provider ${JSON.stringify(provider)} is not configured`);
@@ -99,31 +103,14 @@ export async function refreshOne(
   }
 
   const baseUrl = entry.baseUrl ?? defaultBaseUrl(provider);
-  if (baseUrl === undefined) {
-    throw invalidRequest(
-      `provider ${JSON.stringify(provider)} has no base_url; required for provider discovery`,
-    );
-  }
-
   const key = firstUsableKey(entry);
-  if (key === undefined) {
-    throw providerError(
-      `provider ${JSON.stringify(provider)} has no API key configured ` +
-        `(no enabled key's env var is set)`,
-    );
-  }
-
-  const sdk = entry.sdk ?? defaultSdk(provider);
-  const discovered =
-    sdk === "anthropic"
-      ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)
-      : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);
+  const discovered = await discoverProviderModels(provider, entry, baseUrl, key, fetchImpl, runClaudeAgentQuery);
   if ("err" in discovered) {
     throw internalError(describeDiscoveryError(discovered.err));
   }
 
   let subscription: NanoGptSubscriptionState | undefined;
-  if (isNanoGptProvider(provider)) {
+  if (isNanoGptProvider(provider) && baseUrl !== undefined && key !== undefined && (entry.sdk ?? defaultSdk(provider)) !== "claude_agent") {
     const result = await fetchNanoGptSubscription(baseUrl, key, fetchImpl);
     if ("err" in result) throw internalError(describeDiscoveryError(result.err));
     subscription = result.ok;
@@ -133,7 +120,7 @@ export async function refreshOne(
     version: CACHE_VERSION,
     provider_key: provider,
     fetched_at: toRfc3339(Date.now()),
-    base_url: baseUrl,
+    ...(baseUrl === undefined ? {} : { base_url: baseUrl }),
     models: discovered.ok,
   };
 
@@ -153,6 +140,32 @@ export async function refreshOne(
   return { cache, cachePath: path };
 }
 
+async function discoverProviderModels(
+  provider: string,
+  entry: ProviderEntry,
+  baseUrl: string | undefined,
+  key: string | undefined,
+  fetchImpl: typeof fetch,
+  runClaudeAgentQuery?: ClaudeAgentModelQuery,
+): Promise<DiscoveryResult<DiscoveredModel[]>> {
+  const sdk = entry.sdk ?? defaultSdk(provider);
+  if (sdk === "claude_agent") return await discoverClaudeAgent(provider, baseUrl, runClaudeAgentQuery);
+  if (baseUrl === undefined) {
+    throw invalidRequest(
+      `provider ${JSON.stringify(provider)} has no base_url; required for provider discovery`,
+    );
+  }
+  if (key === undefined) {
+    throw providerError(
+      `provider ${JSON.stringify(provider)} has no API key configured ` +
+        `(no enabled key's env var is set)`,
+    );
+  }
+  return sdk === "anthropic"
+    ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)
+    : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);
+}
+
 function firstUsableKey(entry: ProviderEntry): string | undefined {
   for (const k of enabledKeys(entry)) {
     const value = process.env[k.env];
@@ -163,7 +176,7 @@ function firstUsableKey(entry: ProviderEntry): string | undefined {
 
 export async function refreshProviderModels(ctx: ProvidersContext, args: Args): Promise<unknown> {
   const provider = requireProvider(args);
-  const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, provider, ctx.fetchImpl);
+  const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, provider, ctx.fetchImpl, ctx.runClaudeAgentQuery);
   return {
     provider,
     model_count: outcome.cache.models.length,
@@ -187,7 +200,7 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<u
     }
 
     try {
-      const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, name, ctx.fetchImpl);
+      const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, name, ctx.fetchImpl, ctx.runClaudeAgentQuery);
       results.push({
         provider: name,
         ok: true,

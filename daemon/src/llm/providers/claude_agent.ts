@@ -399,12 +399,7 @@ export interface AgentToolSurface {
   timeoutMs: number;
 }
 
-function buildOptions(
-  req: SidecarRequest,
-  plan: TurnPlan,
-  abort: AbortController,
-  surface?: AgentToolSurface,
-): Options {
+export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<string, string> {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
@@ -417,9 +412,19 @@ function buildOptions(
   if (process.env.CLAUDE_CONFIG_DIR !== undefined) {
     env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
   }
+  if (baseUrl !== undefined) env.ANTHROPIC_BASE_URL = baseUrl;
+  if (apiKey !== "") env.ANTHROPIC_API_KEY = apiKey;
+  return env;
+}
+
+function buildOptions(
+  req: SidecarRequest,
+  plan: TurnPlan,
+  abort: AbortController,
+  surface?: AgentToolSurface,
+): Options {
+  const env = claudeAgentEnvironment(req.base_url, req.api_key);
   if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
-  if (req.base_url !== undefined) env.ANTHROPIC_BASE_URL = req.base_url;
-  if (req.api_key !== "") env.ANTHROPIC_API_KEY = req.api_key;
 
   const system = systemToText(req.system);
   const effort = agentEffort(req.provider_options?.reasoning_effort);

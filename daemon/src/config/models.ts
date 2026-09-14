@@ -606,6 +606,8 @@ function baseProviderDefaults(): ModelConfigFields {
 export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
   const base = baseProviderDefaults();
   switch (providerKey) {
+    case "claude_agent":
+      return { fields: { sdk: "claude_agent" } };
     case "anthropic":
       return { fields: { ...base, sdk: "anthropic", apiKeyEnv: "ANTHROPIC_API_KEY" } };
     case "openrouter":
@@ -691,6 +693,8 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
 
 export function defaultSdk(providerKey: string): Sdk {
   switch (providerKey) {
+    case "claude_agent":
+      return "claude_agent";
     case "anthropic":
       return "anthropic";
     case "openrouter":

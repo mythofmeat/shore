@@ -1,5 +1,7 @@
 # Claude Code authentication in Docker
 
+Configure models with `[providers.claude_agent]`; see [SDK model setup](MODELS.md).
+
 Share the host's Claude Code credential directory with the daemon using a
 read-write directory mount. For example, if the host CLI uses
 `CLAUDE_CONFIG_DIR=/srv/shore/claude-agent`:

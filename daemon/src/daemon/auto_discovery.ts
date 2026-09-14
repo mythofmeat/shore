@@ -1,11 +1,13 @@
 import type { LoadedConfig } from "../config/loader.ts";
 import { refreshOne } from "../commands/providers.ts";
 import { cachePath, isStale, readCache, REFRESH_INTERVAL_MS } from "../llm/discovery.ts";
+import type { ClaudeAgentModelQuery } from "../llm/providers/claude_agent_models.ts";
 
 export interface AutoDiscoveryOptions {
   readonly config: () => LoadedConfig;
   readonly intervalMs?: number | undefined;
   readonly fetchImpl?: typeof fetch | undefined;
+  readonly runClaudeAgentQuery?: ClaudeAgentModelQuery;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     warn?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -56,7 +58,8 @@ export async function refreshPass(options: AutoDiscoveryOptions): Promise<void> 
         config,
         cacheDir,
         name,
-        ...(options.fetchImpl === undefined ? [] : [options.fetchImpl]),
+        options.fetchImpl,
+        options.runClaudeAgentQuery,
       );
       options.log?.info?.("Auto-refreshed provider models", {
         provider: name,
