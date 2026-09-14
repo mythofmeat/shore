@@ -16,15 +16,17 @@ WORKDIR /src
 COPY ./daemon .
 RUN bun install 
 RUN install -m 0755 bin/shore-patch.sh /usr/local/bin/shore-patch
-RUN install -m 0755 bin/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh 
 
 ENV SHORE_ADDR=shore-daemon:7320
-EXPOSE 7320
-
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
+EXPOSE 7320
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+RUN if [ "$USERNAME" != "bun" ]; then \
+    usermod -l "$USERNAME" bun && \
+    groupmod -n "$USERNAME" bun; \
+    fi
+
 CMD ["bun", "run", "start"]
