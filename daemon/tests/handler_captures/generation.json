@@ -184,7 +184,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -451,7 +451,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -579,7 +579,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -721,7 +721,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -918,7 +918,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1210,7 +1210,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1442,7 +1442,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",

@@ -29,6 +29,7 @@ import {
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
 import { localRfc3339 } from "../util/time.ts";
+import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { type: "text" };
 
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
 
@@ -40,15 +41,6 @@ const snapshotDir = (characterDir: string, thread: string): string => activeProm
 
 
 const LEGACY_SNAPSHOTS = ["RECENT_MEMORY.md", "HEARTBEAT.md"];
-
-const DEFAULT_TOOLS_GUIDANCE = `# TOOLS
-
-Use tools when they materially help.
-
-- Read files before editing them.
-- Search memory files before guessing facts about the user or past events.
-- Prefer concise, direct tool use over busywork.
-`;
 
 export const memoryIndexPath = (
   configDir: string,
@@ -256,7 +248,7 @@ export async function ensureCharacterWorkspace(
   }
 
   if (!(await exists(join(workspaceDir, "TOOLS.md")))) {
-    await writeFile(join(workspaceDir, "TOOLS.md"), DEFAULT_TOOLS_GUIDANCE, "utf8");
+    await writeFile(join(workspaceDir, "TOOLS.md"), defaultToolsGuidance, "utf8");
   }
 
   const legacyMemories = join(characterDataDir, "memories");

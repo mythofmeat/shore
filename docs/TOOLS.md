@@ -57,6 +57,35 @@ their access to Shore's stored history. `web_search` and `generate_image` retain
 their configured providers. MCP tools, subagents, and heartbeat controls remain
 available as configured.
 
+## Prompts and Git syncing
+
+Update personal workspace `TOOLS.md` files and subagent prompts alongside their
+tool grants. File reads now use Bash commands such as `cat` or `sed`; exact text
+search uses `rg`, Git commands go through Bash, and URL fetching uses `curl`.
+Curl returns the response body, often HTML, without rendering JavaScript or
+extracting an article. Keep semantic and conversation retrieval on `search`
+and `search_chat_logs`.
+
+New workspaces receive the guidance in
+[`default_tools.md`](../daemon/prompts/engine/default_tools.md). Existing personal
+files are preserved. Custom compaction templates in
+`characters/<name>/prompts/compact_system.md` and `compact.md`, or the global
+`prompts/` directory, override the bundled defaults and also need updating.
+
+The compaction model is responsible for saving its edits and making a local
+commit. After a successful memory-writing pass, `[memory] git_push = true`
+makes the daemon run `git push` in that workspace, using Git's configured push
+destination and the daemon's credentials. It does not create the commit, set up
+a remote, or retry a failed push in the background. Currently push errors are
+swallowed, so a compaction success notification does not confirm remote sync.
+An archive-only rotation does not trigger a push.
+
+Compaction prompts should leave pushing to this post-pass step so unfinished
+memory work is not published mid-pass. Prompt instructions to preserve history
+are behavioral guidance. Protect branches on the receiving Git server to
+enforce restrictions on force pushes; local shell commands cannot provide that
+boundary while the repository is writable.
+
 ## Execution boundary
 
 Bash runs with the daemon user's filesystem access, environment, and network

@@ -8,4 +8,8 @@ This conversation with {{user}} is about to leave your active context. Your goal
 
 Always use simple, precise, natural sentences that avoid ambiguity. Do not overwhelm with details that won't matter, but include the ones that do. **Avoid mannered prose.**
 
-Use `bash` to read and edit files, and `search` when semantic retrieval would help. Please try to keep this workspace well-maintained and easy-to-navigate for both you and {{user}}. After completing any edits, stage the files you changed with `git add`, then make a local git commit with a message that will help you and {{user}} keep track of what changed and why.
+Use `bash` to inspect and update files, `search` for semantic workspace retrieval, and `search_chat_logs` when older conversations would resolve a specific uncertainty. Read relevant files before changing them. Keep this workspace well-maintained and easy to navigate for both you and {{user}}.
+
+When the edits are finished, inspect `git status --short` and the diff. Stage only the intended files with `git add -- <paths>`, inspect the staged diff, and make an ordinary local commit with a message that explains what changed and why. Preserve existing history and unrelated work. If there are no changes, no commit is needed. Check command results and report anything you could not save or commit.
+
+Keep this pass local: do not push or change remotes during compaction. Shore attempts the push after a successful pass when `[memory] git_push` is enabled. Your final response should briefly describe the changes and any unresolved problem; it should not claim that a push has happened.

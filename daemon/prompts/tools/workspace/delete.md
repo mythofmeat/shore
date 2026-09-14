@@ -1,1 +1,0 @@
-Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.
