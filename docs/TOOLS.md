@@ -57,6 +57,49 @@ their access to Shore's stored history. `web_search` and `generate_image` retain
 their configured providers. MCP tools, subagents, and heartbeat controls remain
 available as configured.
 
+## Targeted file edits
+
+`shore-patch` is a bundled command available through Bash, including when the
+daemon runs from source or as a compiled executable. The Docker image also
+installs it in `/usr/local/bin`. It requires Bash and Git on the daemon host;
+the daemon provides its own command directory on `PATH`.
+
+Read the file, then submit a standard unified diff in a quoted heredoc:
+
+```sh
+shore-patch <<'PATCH'
+diff --git a/notes.md b/notes.md
+--- a/notes.md
++++ b/notes.md
+@@ -1,3 +1,3 @@
+ before
+-old wording
++new wording
+ after
+PATCH
+```
+
+Paths are relative to the Bash call's working directory, even inside a Git
+repository. Start each file with a `diff --git a/path b/path` header, including
+in multi-file patches. Use `a/` and `b/` prefixes, with `/dev/null` as the old path for
+new files or the new path for deletions. Add a `new file mode 100644` or
+`deleted file mode 100644` line after the `diff --git` header for these operations
+(`100755` for executables). Include unchanged context around edits.
+This is unified diff syntax, not the `*** Begin Patch` format. Run
+`shore-patch --help` for usage, or `shore-patch --check` with the same input to
+validate without changing files.
+
+The command uses Git's existing `apply` engine with recalculated hunk line
+counts and whitespace-preserving edits. If any hunk fails validation, the whole
+patch is rejected without changing files. This is not a transaction against
+disk errors or process interruption; inspect files after an interrupted write.
+Git preserves the executable bit but recreates files using the current umask;
+reapply any special permissions or other filesystem metadata after patching.
+The command does not require a Git repository and does not stage, commit, or
+push. It only accepts `--check` and `--help`; partial-application and index
+options are not exposed. Successful edits follow Bash's normal prompt reload
+and compaction recovery behavior.
+
 ## Prompts and Git syncing
 
 Update personal workspace `TOOLS.md` files and subagent prompts alongside their

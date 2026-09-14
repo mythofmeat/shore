@@ -1,5 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
+import { bashCommandsDir } from "./bash_commands.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { characterGitIdentity, envWithoutInheritedGitRepo, runProcess, type ToolInput } from "./workspace.ts";
 
@@ -51,10 +52,12 @@ export async function handleBash(
   delete env["BASH_ENV"];
   const execute = async () => {
     try {
+      const commandsDir = await bashCommandsDir();
       return await runProcess("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", command], {
         cwd: workdir,
         env: {
           ...env, PWD: workdir, SHORE_WORKSPACE_DIR: root,
+          PATH: `${commandsDir}${delimiter}${env["PATH"] ?? "/usr/local/bin:/usr/bin:/bin"}`,
           GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
           GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
         },

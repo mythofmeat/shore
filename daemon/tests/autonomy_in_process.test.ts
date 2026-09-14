@@ -869,7 +869,7 @@ test("compaction edits files throughout the workspace through the normal tools",
     response(paths.map((path, i) => ({
       type: "tool_use", id: `edit-${String(i)}`, name: "bash",
       input: { command: path === "notes.md"
-        ? "sed -i 's/old context/current context/' notes.md"
+        ? "shore-patch <<'PATCH'\n--- a/notes.md\n+++ b/notes.md\n@@ -1 +1 @@\n-old context\n\\ No newline at end of file\n+current context\n\\ No newline at end of file\nPATCH"
         : `mkdir -p "$(dirname '${path}')" && printf 'current context' > '${path}'` },
     })), "tool_use"),
     response([{ type: "text", text: "Updated the workspace." }]),

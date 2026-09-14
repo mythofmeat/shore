@@ -2,7 +2,7 @@ FROM oven/bun:latest
 RUN apt-get update && apt-get --yes install --no-install-recommends bash ca-certificates coreutils curl findutils git jq python3 ripgrep sed && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY ./daemon .
-RUN bun install
+RUN bun install && install -m 0755 bin/shore-patch.sh /usr/local/bin/shore-patch
 
 ENV SHORE_ADDR=shore-daemon:7320
 EXPOSE 7320

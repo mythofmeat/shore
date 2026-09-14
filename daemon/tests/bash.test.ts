@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handleBash } from "../src/tools/bash.ts";
@@ -117,6 +117,121 @@ printf 'diagnostic' >&2`);
     const result = await run("git init -q && printf note > note.md && git add note.md && git commit -qm initial && git log -1 --format='%an <%ae>'");
     expect(result.isError).toBe(false);
     expect(result.raw).toContain("Juniper Vale <juniper-vale@shore.local>");
+  });
+
+  test("shore-patch previews and applies literal edits without a repository, then queues prompt reload", async () => {
+    const { run, ctx } = await world();
+    const queued: string[] = [];
+    ctx.deferEdit = (path) => { queued.push(path); };
+    await run("printf 'before\\nold\\nafter\\n' > MEMORY.md && chmod 755 MEMORY.md");
+    queued.length = 0;
+    const patch = "<<'PATCH'\n--- a/MEMORY.md\n+++ b/MEMORY.md\n@@ -1 +1 @@\n before\n-old\n+$HOME, `pwd`, it's 七\n after\nPATCH";
+    const preview = await run(`shore-patch --check ${patch}`);
+    expect(preview.isError).toBe(false);
+    expect(preview.raw).toContain("Patch checks passed; no files changed.");
+    expect(await readFile(join(ctx.workspaceDir, "MEMORY.md"), "utf8")).toBe("before\nold\nafter\n");
+    expect(queued).toEqual([]);
+    const result = await run(`shore-patch ${patch}`);
+    expect(result.isError).toBe(false);
+    expect(result.raw).toContain("Patch applied.");
+    expect(result.value).toMatchObject({ prompt_files_changed: ["MEMORY.md"] });
+    expect(queued).toEqual(["MEMORY.md"]);
+    expect(await readFile(join(ctx.workspaceDir, "MEMORY.md"), "utf8")).toBe("before\n$HOME, `pwd`, it's 七\nafter\n");
+    expect((await stat(join(ctx.workspaceDir, "MEMORY.md"))).mode & 0o111).toBe(0o111);
+    expect(await Bun.file(join(ctx.workspaceDir, ".git")).exists()).toBe(false);
+  });
+
+  test("shore-patch adds and deletes files and preserves a missing final newline", async () => {
+    const { run, ctx } = await world();
+    await run("printf obsolete > old.md");
+    const result = await run(`shore-patch <<'PATCH'
+diff --git a/a folder/new.md b/a folder/new.md
+new file mode 100644
+--- /dev/null
++++ b/a folder/new.md
+@@ -0,0 +1 @@
++new note
+diff --git a/old.md b/old.md
+deleted file mode 100644
+--- a/old.md
++++ /dev/null
+@@ -1 +0,0 @@
+-obsolete
+\\ No newline at end of file
+PATCH`);
+    expect(result.isError).toBe(false);
+    expect(await readFile(join(ctx.workspaceDir, "a folder/new.md"), "utf8")).toBe("new note\n");
+    expect(await Bun.file(join(ctx.workspaceDir, "old.md")).exists()).toBe(false);
+    expect((await run(`shore-patch <<'PATCH'
+diff --git a/a folder/new.md b/a folder/new.md
+new file mode 100644
+--- /dev/null
++++ b/a folder/new.md
+@@ -0,0 +1 @@
++overwrite
+PATCH`)).isError).toBe(true);
+    expect(await readFile(join(ctx.workspaceDir, "a folder/new.md"), "utf8")).toBe("new note\n");
+  });
+
+  test("shore-patch rejects the whole patch when a later file's context does not match", async () => {
+    const { run, ctx } = await world();
+    await run("printf 'one\\ntwo\\nthree\\n' > first.md && cp first.md second.md");
+    const result = await run(`shore-patch <<'PATCH'
+diff --git a/first.md b/first.md
+--- a/first.md
++++ b/first.md
+@@ -1,3 +1,3 @@
+ one
+-two
++updated
+ three
+diff --git a/second.md b/second.md
+--- a/second.md
++++ b/second.md
+@@ -1,3 +1,3 @@
+ one
+-stale context
++updated
+ three
+PATCH`);
+    expect(result.isError).toBe(true);
+    expect(result.raw).toContain("patch does not apply");
+    for (const path of ["first.md", "second.md"]) {
+      expect(await readFile(join(ctx.workspaceDir, path), "utf8")).toBe("one\ntwo\nthree\n");
+    }
+  });
+
+  test("shore-patch resolves paths from workdir inside a repository without modifying its index or HEAD", async () => {
+    const { run, ctx } = await world();
+    expect((await run("git init -q && mkdir child && printf 'one\\ntwo\\nthree\\n' > child/note.md && git add child/note.md && git commit -qm initial")).isError).toBe(false);
+    const index = await readFile(join(ctx.workspaceDir, ".git/index"));
+    const head = (await run("git rev-parse HEAD")).raw;
+    const result = await run(`shore-patch <<'PATCH'
+--- a/note.md
++++ b/note.md
+@@ -1,3 +1,3 @@
+ one
+-two
++updated
+ three
+PATCH`, "child");
+    expect(result.isError).toBe(false);
+    expect(await readFile(join(ctx.workspaceDir, "child/note.md"), "utf8")).toBe("one\nupdated\nthree\n");
+    expect(await readFile(join(ctx.workspaceDir, ".git/index"))).toEqual(index);
+    expect((await run("git rev-parse HEAD")).raw).toBe(head);
+  });
+
+  test("shore-patch explains its format and rejects empty input and unsupported flags", async () => {
+    const { run } = await world();
+    const help = await run("shore-patch --help");
+    expect(help.isError).toBe(false);
+    expect(help.raw).toContain("standard unified diff");
+    expect((await run("shore-patch")).isError).toBe(true);
+    for (const flags of ["--reject", "--cached", "--3way", "--check --reject", "patch.diff"]) {
+      const result = await run(`shore-patch ${flags}`);
+      expect(result.isError).toBe(true);
+      expect(result.raw).toContain("Usage: shore-patch");
+    }
   });
 
   test("curl fetches URLs from the daemon's network", async () => {
