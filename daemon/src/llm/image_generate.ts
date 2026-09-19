@@ -183,13 +183,13 @@ export function resolveImageGenConfig(
     } else if (keys.length > 1) {
       return {
         err:
-          'multiple [image_generation."provider:model_id"] entries are configured but ' +
-          "defaults.image_generation is unset; set defaults.image_generation to choose one",
+          'multiple [image."provider:model_id"] entries are configured but ' +
+          "image.model is unset; set image.model to choose one",
       };
     } else {
       return {
         err:
-          "no image generation model configured; set defaults.image_generation = " +
+          "no image generation model configured; set image.model = " +
           '"provider:model_id" and configure [providers.<provider>].',
       };
     }

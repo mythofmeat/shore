@@ -1,4 +1,6 @@
+import { settingsDeprecations } from "./surface.ts";
 import { shoreLog } from "../log.ts";
+import { geminiMode, internalSettingKey, normalizeSettings } from "./surface.ts";
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -278,6 +280,7 @@ export function loadPreferences(path: string): ModelPreferences {
   }
 
   const parsed = readPreferences(table);
+  for (const warning of settingsDeprecations(table, path, true)) shoreLog.warn(`Deprecated configuration ${warning.source}: ${warning.path} -> ${warning.replacement} (${warning.boundary})`);
   if ("err" in parsed) throw PreferenceError.parse(path, parsed.err);
   return parsed.ok;
 }
@@ -966,10 +969,12 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
 }
 
 function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings> {
+  try { table = normalizeSettings(table, "preferences"); }
+  catch (error) { return { err: error instanceof Error ? error.message : String(error) }; }
   if (Object.hasOwn(table, "zai_subscription")) {
     return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
   }
-  const unknown = unknownField(table, SAMPLER_KEYS);
+  const unknown = unknownField(table, SAMPLER_KEYS.map(internalSettingKey));
   if (unknown !== undefined) return { err: unknown };
 
   const out: SamplerSettings = {};
@@ -1062,7 +1067,7 @@ function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
   };
 }
 
-function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
+export function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
   const unknown = unknownField(table, [
     "selected",
     "favorites",
@@ -1184,7 +1189,7 @@ export function serializePreferences(prefs: ModelPreferences): string {
 function samplerLines(sampler: SamplerSettings): string[] {
   const out: string[] = [];
   for (const [field, key] of SAMPLER_FIELDS) {
-    const value = sampler[field];
+    const value = field === "geminiGeneration" ? geminiMode(sampler[field]) : sampler[field];
     if (value === undefined) continue;
     if (field === "cacheKeepalive") {
       out.push(`${key} = ${tomlString(keepaliveToString(value as CacheKeepaliveSetting))}`);

@@ -141,8 +141,8 @@ MUTANTS = [
      '  const key = asStr(args["key"]);',
      '  const key = args["key"] === undefined ? undefined : String(args["key"]);'),
     ("read: an unknown key returns null instead of failing",
-     "  const found = walkConfigKey(app, key);\n  if (found === undefined) throw notFound(notFoundMessage(key));",
-     "  const found = walkConfigKey(app, key) ?? { value: null };"),
+     "  const found = walkConfigKey(app, canonical);\n  if (found === undefined) throw notFound(notFoundMessage(key));",
+     "  const found = walkConfigKey(app, canonical) ?? { value: null };"),
     ("read: a settable-only alias is reported as a plain miss",
      "  const readable = KEY_ALIASES.get(key);\n"
      "  if (readable === undefined || readable === key) return `Config section not found: ${key}`;",
@@ -153,10 +153,10 @@ MUTANTS = [
      "  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;\n"
      "  return out;"),
     ("read: the key read returns the whole default baseline",
-     "  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };",
+     "  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null, ...(canonical === key ? {} : { deprecated_key: key }) };",
      "  return { key, config: found.value, defaults };"),
     ("read: the key read returns the default in place of the effective value",
-     "  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };",
+     "  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null, ...(canonical === key ? {} : { deprecated_key: key }) };",
      "  return {\n"
      "    key,\n"
      "    config: walkConfigKey(defaults, key)?.value ?? null,\n"

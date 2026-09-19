@@ -63,7 +63,7 @@ const RETIRED_FLAGS: [(&str, &str); 6] = [
     ),
     (
         "--thinking",
-        "set it on the model: shore model setting budget_tokens <tokens>",
+        "set it on the model: shore model setting reasoning_budget_tokens <tokens>",
     ),
 ];
 
@@ -215,6 +215,13 @@ where
             continue;
         }
         let spelled = token.split('=').next().unwrap_or(token);
+        if words.first().is_some_and(|word| word == "config")
+            && words.get(1).is_some_and(|word| word == "migrate")
+            && matches!(spelled, "--config" | "--data-dir" | "--daemon")
+        {
+            expecting_value = !token.contains('=');
+            continue;
+        }
         if let Some(problem) = retired_flag_named(spelled) {
             return Some(problem);
         }
@@ -1181,10 +1188,9 @@ pub(crate) enum ModelCommand {
     ///
     /// Bare, this pins the chat model for the current thread until changed or reset.
     /// Every other target writes the config file,
-    /// which is global: --background=<task> writes defaults.background.<task>,
-    /// bare --background writes defaults.background.model (the value both
-    /// tasks fall back to), --subagent=<name> writes subagents.<name>.model,
-    /// and bare --subagent writes defaults.subagent_model.
+    /// which is global: --background=<task> writes <task>.model,
+    /// bare --background writes both heartbeat.model and compaction.model; --subagent=<name> writes subagents.<name>.model,
+    /// and bare --subagent writes subagents.model.
     Use {
         /// Model name or provider:model_id
         name: String,
@@ -1221,19 +1227,19 @@ pub(crate) enum ModelCommand {
     /// Bare --subagent writes once against the model your sub-agents share,
     /// covering all of them; it errors if they are not all on one model. A
     /// named sub-agent overrides that shared value. Because the shared value
-    /// belongs to the model, changing subagent_model picks up that model's
+    /// belongs to the model, changing subagents.model picks up that model's
     /// settings rather than carrying the old ones over.
     ///
-    /// The keys are temperature, top_p, reasoning_effort, budget_tokens,
+    /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, sdk,
-    /// replay_prior_thinking and max_tool_iterations.
+    /// reasoning_replay and max_tool_rounds.
     ///
     /// sdk takes anthropic, openai, openrouter, gemini, zai, deepseek or
     /// moonshot, which forces a wire shape on a discovered model whose
     /// provider catalog labelled it wrong.
     ///
-    /// The vendor knobs openrouter_provider, gemini_generation and
-    /// zai_clear_thinking are settable per model too. A
+    /// The vendor knobs openrouter_routing, gemini_thinking_mode and
+    /// zai_clear_reasoning are settable per model too. A
     /// model only lists the knobs its own sdk honors.
     Setting {
         /// Setting key (temperature, top_p, reasoning_effort, sdk, ...)
@@ -1283,8 +1289,8 @@ pub(crate) enum ModelCommand {
     ///
     /// Bare, this clears the thread's pin to inherit the character default. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
-    /// way it did before anything was pinned. Bare --background clears all
-    /// three background keys; bare --subagent clears defaults.subagent_model
+    /// way it did before anything was pinned. Bare --background clears both
+    /// task model keys; bare --subagent clears subagents.model
     /// and every per-sub-agent override.
     Reset {
         #[command(flatten)]
@@ -1440,13 +1446,34 @@ pub(crate) enum ProviderCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ConfigCommand {
+    #[command(about = "Plan a local, offline configuration migration; use --write to apply it")]
+    Migrate {
+        #[arg(long, help = "Local main config.toml path")]
+        config: PathBuf,
+        #[arg(
+            long,
+            help = "Local daemon data directory, including saved model preferences"
+        )]
+        data_dir: Option<PathBuf>,
+        #[arg(
+            long,
+            help = "Apply the validated migration while the daemon is stopped"
+        )]
+        write: bool,
+        #[arg(
+            long,
+            env = "SHORE_DAEMON",
+            help = "Local shore-daemon executable for semantic validation"
+        )]
+        daemon: Option<PathBuf>,
+    },
     /// Read one setting, or a whole section, by dotted key.
     ///
-    /// `shore config get defaults.model`
-    /// `shore config get memory.compaction`
+    /// `shore config get chat.model`
+    /// `shore config get compaction`
     #[command(verbatim_doc_comment)]
     Get {
-        /// Dotted key, e.g. defaults.stream, daemon.addr, mcp.beets.command
+        /// Dotted key, e.g. heartbeat.enabled, daemon.listen_addr, mcp.beets.command
         key: String,
 
         /// Output raw JSON
@@ -1466,15 +1493,15 @@ pub(crate) enum ConfigCommand {
     ///
     /// The value is checked against the setting's type before anything is
     /// written, and the file is restored if the result would not load. Keys
-    /// under [daemon], [notifications] and [connections] need a daemon
+    /// under [daemon], [notifications] and [matrix] need a daemon
     /// restart to take effect; `set` says so when you touch one.
     ///
-    /// `shore config set defaults.model anthropic:claude-opus-4-5`
-    /// `shore config set memory.compaction.idle_trigger 2h`
-    /// `shore config set tools.enabled_tools bash,search`
+    /// `shore config set chat.model anthropic:claude-opus-4-5`
+    /// `shore config set compaction.idle_after 2h`
+    /// `shore config set tools.enabled bash,search`
     #[command(verbatim_doc_comment)]
     Set {
-        /// Dotted key, e.g. defaults.stream, cache.keepalive_max
+        /// Dotted key, e.g. heartbeat.enabled, cache.keepalive_for
         key: String,
 
         /// New value. Lists take a comma-separated string
@@ -1512,7 +1539,7 @@ pub(crate) enum ConfigCommand {
 
     /// Show the resolved tool surface: which tools are enabled, sub-agent
     /// ownership, and any dangling config references. Read the raw values
-    /// with `config get tools.enabled_tools`.
+    /// with `config get tools.enabled`.
     Tools {
         /// Output raw JSON
         #[arg(long)]
@@ -2321,6 +2348,10 @@ pub(crate) fn to_swp_command(
         | CliCommand::Config {
             subcommand: Some(ConfigCommand::Reload { .. }),
             ..
+        }
+        | CliCommand::Config {
+            subcommand: Some(ConfigCommand::Migrate { .. }),
+            ..
         } => None,
 
         CliCommand::Msg { command } => msg_to_swp(command),
@@ -2984,11 +3015,11 @@ mod tests {
                 "temperature".into(),
                 vec![PaletteValue::plain("0.125")],
             )]),
-            config_keys: vec![PaletteValue::plain("defaults.stream")],
+            config_keys: vec![PaletteValue::plain("heartbeat.enabled")],
             config_sections: vec![PaletteValue::plain("defaults")],
             config_schema: Some(serde_json::json!({
                 "schema": [{
-                    "key": "defaults.stream",
+                    "key": "heartbeat.enabled",
                     "settable": true,
                     "values": ["true", "false"]
                 }]
@@ -3007,8 +3038,8 @@ mod tests {
                 .contains(&"status --section daemon".into())
         );
         assert!(
-            palette_replacements("config set defaults.stream ", &catalog)
-                .contains(&"config set defaults.stream true".into())
+            palette_replacements("config set heartbeat.enabled ", &catalog)
+                .contains(&"config set heartbeat.enabled true".into())
         );
         assert!(
             palette_replacements("model setting temperature ", &catalog)
@@ -4114,14 +4145,14 @@ mod tests {
 
     #[test]
     fn parse_config_get() {
-        let cli = parse(&["config", "get", "defaults.model"]);
+        let cli = parse(&["config", "get", "chat.model"]);
         assert_variant!(
             parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Get { key, toml, all, .. }),
                 ..
             } => {
-                assert_eq!(key, "defaults.model");
+                assert_eq!(key, "chat.model");
                 assert!(!toml);
                 assert!(!all);
             }
@@ -4130,19 +4161,14 @@ mod tests {
 
     #[test]
     fn parse_config_set() {
-        let cli = parse(&[
-            "config",
-            "set",
-            "defaults.model",
-            "claude-haiku-4-5-20251001",
-        ]);
+        let cli = parse(&["config", "set", "chat.model", "claude-haiku-4-5-20251001"]);
         assert_variant!(
             parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Set { key, value, .. }),
                 ..
             } => {
-                assert_eq!(key, "defaults.model");
+                assert_eq!(key, "chat.model");
                 assert_eq!(value, "claude-haiku-4-5-20251001");
             }
         );
@@ -4164,7 +4190,7 @@ mod tests {
 
     #[test]
     fn config_set_needs_both_a_key_and_a_value() {
-        assert!(Cli::try_parse_from(["shore", "config", "set", "defaults.model"]).is_err());
+        assert!(Cli::try_parse_from(["shore", "config", "set", "chat.model"]).is_err());
         assert!(Cli::try_parse_from(["shore", "config", "get"]).is_err());
     }
 
@@ -4228,14 +4254,14 @@ mod tests {
 
     #[test]
     fn a_dotted_key_under_tools_is_still_a_key_read() {
-        let cli = parse(&["config", "get", "tools.enabled_tools"]);
+        let cli = parse(&["config", "get", "tools.enabled"]);
         assert_variant!(
             parsed_command(&cli),
             CliCommand::Config { subcommand, .. } => {
                 assert_variant!(
                     subcommand,
                     Some(ConfigCommand::Get { key, .. }) => {
-                        assert_eq!(key, "tools.enabled_tools");
+                        assert_eq!(key, "tools.enabled");
                     }
                 );
             }
@@ -4245,7 +4271,7 @@ mod tests {
         assert_eq!(name, "config");
         assert_eq!(
             args.get("key").and_then(|v| v.as_str()),
-            Some("tools.enabled_tools")
+            Some("tools.enabled")
         );
     }
 
@@ -4364,7 +4390,7 @@ mod tests {
             ),
             (
                 "--thinking",
-                "set it on the model: shore model setting budget_tokens <tokens>",
+                "set it on the model: shore model setting reasoning_budget_tokens <tokens>",
             ),
         ] {
             assert_eq!(
@@ -4793,7 +4819,7 @@ mod tests {
     fn model_setting_reset_clears_with_null_value() {
         let cmd = CliCommand::Model {
             subcommand: Some(ModelCommand::Setting {
-                key: Some("budget_tokens".into()),
+                key: Some("reasoning_budget_tokens".into()),
                 value: None,
                 global: false,
                 reset: true,
@@ -5122,16 +5148,16 @@ mod tests {
     fn parse_setting_value_leaves_all_coercion_to_the_daemon() {
         use serde_json::json;
         assert_eq!(
-            parse_setting_value("zai_clear_thinking", "false"),
+            parse_setting_value("zai_clear_reasoning", "false"),
             json!("false")
         );
-        assert_eq!(parse_setting_value("gemini_generation", "3"), json!("3"));
+        assert_eq!(parse_setting_value("gemini_thinking_mode", "3"), json!("3"));
         assert_eq!(
-            parse_setting_value("openrouter_provider", r#"{"order":["Anthropic"]}"#),
+            parse_setting_value("openrouter_routing", r#"{"order":["Anthropic"]}"#),
             json!(r#"{"order":["Anthropic"]}"#)
         );
         assert_eq!(
-            parse_setting_value("openrouter_provider", "Anthropic"),
+            parse_setting_value("openrouter_routing", "Anthropic"),
             json!("Anthropic")
         );
     }
@@ -5426,12 +5452,12 @@ mod tests {
 
     #[test]
     fn config_value_completion_takes_the_key_as_an_argument() {
-        let cli = parse(&["complete", "config-values", "defaults.stream"]);
+        let cli = parse(&["complete", "config-values", "heartbeat.enabled"]);
         assert_variant!(
             parsed_command(&cli),
             CliCommand::Complete { kind, arg } => {
                 assert_eq!(*kind, CompleteKind::ConfigValues);
-                assert_eq!(arg.as_deref(), Some("defaults.stream"));
+                assert_eq!(arg.as_deref(), Some("heartbeat.enabled"));
             }
         );
     }

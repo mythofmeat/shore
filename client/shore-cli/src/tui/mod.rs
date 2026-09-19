@@ -2205,6 +2205,9 @@ fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
                 let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
                     continue;
                 };
+                if key.contains('<') {
+                    continue;
+                }
                 let setting_kind = entry
                     .get("type")
                     .and_then(serde_json::Value::as_str)

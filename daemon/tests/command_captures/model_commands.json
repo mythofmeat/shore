@@ -151,7 +151,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "`zai_clear_thinking` is not applicable to the `anthropic` sdk for this model"
+            "message": "`zai_clear_reasoning` is not applicable to the `anthropic` sdk for this model"
           }
         },
         {
@@ -995,7 +995,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_max, sdk, replay_prior_thinking, max_tool_iterations, openrouter_provider, gemini_generation, zai_clear_thinking, supports_images"
+            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_for, sdk, reasoning_replay, max_tool_rounds, openrouter_routing, gemini_thinking_mode, zai_clear_reasoning, supports_images"
           }
         },
         {
@@ -1028,7 +1028,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "`gemini_generation` is not applicable to the `anthropic` sdk for this model"
+            "message": "`gemini_thinking_mode` is not applicable to the `anthropic` sdk for this model"
           }
         },
         {

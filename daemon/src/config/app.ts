@@ -2,6 +2,7 @@ import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_KEEPALIVE_MAX_SECS } from "./keepalive.ts";
+import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
 type TomlValue = unknown;
 
@@ -321,7 +322,7 @@ const defaultDefaultsConfig = (): DefaultsConfig => ({
 const DEFAULTS: StructSpec<DefaultsConfig> = {
   name: "DefaultsConfig",
   noDefault: ["model", "embedding", "image_generation", "subagent_model", "display_name"],
-  removed: { heartbeat: "set it under `[defaults.background]` as `heartbeat`" },
+  removed: { heartbeat: "set `heartbeat.model`" },
   make: defaultDefaultsConfig,
   fields: {
     model: optional(readChatModelName),
@@ -874,6 +875,7 @@ const NOTIFICATION_EVENTS: StructSpec<NotificationEventsConfig> = {
 };
 
 export interface NotificationsConfig {
+  token_env?: string;
   enabled: boolean;
   backend: NotificationBackend;
   ntfy: NtfyConfig;
@@ -895,6 +897,7 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
   name: "NotificationsConfig",
   make: defaultNotificationsConfig,
   fields: {
+    token_env: optional(readString),
     enabled: readBool,
     backend: readEnum(NOTIFICATION_BACKENDS),
     ntfy: struct(NTFY),
@@ -1181,12 +1184,42 @@ export function parseAppConfig(table: TomlValue): ParseResult<AppConfig> {
   return readStruct(APP, table);
 }
 
+export function validateAppConfigLayer(table: Table): ParseResult<AppConfig> {
+  const problem = layerShapeProblem(table, { kind: "table", table: appConfigShape }, []);
+  if (problem !== undefined) return { err: problem };
+  const complete = structuredClone(table);
+  if (isTable(complete.subagents)) for (const value of Object.values(complete.subagents)) {
+    if (isTable(value)) { value.description ??= ""; value.prompt ??= ""; }
+  }
+  return parseAppConfig(complete);
+}
+
+function layerShapeProblem(value: unknown, info: ConfigTypeInfo, path: string[]): string | undefined {
+  if (info.kind === "table") {
+    if (Array.isArray(value)) return `${formatConfigPath(canonicalConfigPath(path))}: must be a table; convert the legacy array encoding to named fields`;
+    if (!isTable(value)) return undefined;
+    const fields = info.table?.().fields ?? {};
+    for (const [key, child] of Object.entries(value)) {
+      const type = fields[key];
+      if (type === undefined) continue;
+      const problem = layerShapeProblem(child, type, [...path, key]);
+      if (problem !== undefined) return problem;
+    }
+  } else if (info.item !== undefined && (info.kind === "map" && isTable(value) || info.kind === "list" && Array.isArray(value))) {
+    for (const [key, child] of Object.entries(value)) {
+      const problem = layerShapeProblem(child, info.item, [...path, key]);
+      if (problem !== undefined) return problem;
+    }
+  }
+  return undefined;
+}
+
 export function appConfigShape(): TableShape {
   return shapeOf(APP);
 }
 
 export function acceptedTopLevelSections(): string[] {
-  return [...Object.keys(APP.fields), ...CATALOG_SECTIONS];
+  return [...CONFIG_SECTIONS];
 }
 
 export function mapKeysInOrder(map: ReadonlyMap<string, unknown>): string[] {

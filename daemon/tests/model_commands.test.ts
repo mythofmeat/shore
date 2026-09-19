@@ -548,7 +548,7 @@ test("every model role reports where it came from", async () => {
   expect(roles.get("sub-agents")).toEqual({
     role: "sub-agents",
     model: "chat.anthropic.beta",
-    source: "defaults.subagent_model",
+    source: "subagents.model",
   });
   expect(roles.get("embedding")).toEqual({
     role: "embedding",
@@ -589,7 +589,7 @@ test("sub-agents that pin their own model are counted, not hidden", async () => 
       '[subagents.picky]\ndescription = "d"\nprompt = "p"\ntools = []\n' +
       'model = "chat.anthropic.alpha"\n',
   );
-  expect(roles.get("sub-agents")?.source).toBe("defaults.subagent_model · 1 override");
+  expect(roles.get("sub-agents")?.source).toBe("subagents.model · 1 override");
 });
 
 describe("targeting a sub-agent's own settings", () => {

@@ -20,17 +20,17 @@ const EXPECTED_KEYS = [
   "temperature",
   "top_p",
   "reasoning_effort",
-  "budget_tokens",
+  "reasoning_budget_tokens",
   "max_output_tokens",
   "cache_ttl",
   "cache_keepalive",
-  "cache_keepalive_max",
+  "cache_keepalive_for",
   "sdk",
-  "replay_prior_thinking",
-  "max_tool_iterations",
-  "openrouter_provider",
-  "gemini_generation",
-  "zai_clear_thinking",
+  "reasoning_replay",
+  "max_tool_rounds",
+  "openrouter_routing",
+  "gemini_thinking_mode",
+  "zai_clear_reasoning",
   "supports_images",
 ] as const;
 
@@ -70,22 +70,22 @@ describe("authoritative coercion", () => {
     for (const [key, value] of [
       ["temperature", "0.7"],
       ["top_p", 0.9],
-      ["budget_tokens", "2048"],
+      ["reasoning_budget_tokens", "2048"],
       ["max_output_tokens", 4096],
-      ["gemini_generation", "3"],
-      ["max_tool_iterations", "8"],
-      ["zai_clear_thinking", "YES"],
+      ["gemini_thinking_mode", "level"],
+      ["max_tool_rounds", "8"],
+      ["zai_clear_reasoning", "YES"],
       ["supports_images", "off"],
     ] as const) applySamplerValue(sampler, key, value);
 
     expect(samplerToWire(sampler)).toMatchObject({
       temperature: 0.7,
       top_p: 0.9,
-      budget_tokens: 2048,
+      reasoning_budget_tokens: 2048,
       max_output_tokens: 4096,
-      gemini_generation: 3,
-      max_tool_iterations: 8,
-      zai_clear_thinking: true,
+      gemini_thinking_mode: "level",
+      max_tool_rounds: 8,
+      zai_clear_reasoning: true,
       supports_images: false,
     });
   });
@@ -96,26 +96,26 @@ describe("authoritative coercion", () => {
       applySamplerValue(sampler, "reasoning_effort", alias);
       expect(sampler.reasoningEffort).toBe("off");
     }
-    applySamplerValue(sampler, "replay_prior_thinking", "yes");
+    applySamplerValue(sampler, "reasoning_replay", "yes");
     expect(sampler.replayPriorThinking).toBe("all");
-    applySamplerValue(sampler, "replay_prior_thinking", "off");
+    applySamplerValue(sampler, "reasoning_replay", "off");
     expect(sampler.replayPriorThinking).toBe("none");
   });
 
   test("parses durations and JSON-object strings into persisted types", () => {
     const sampler: SamplerSettings = {};
     applySamplerValue(sampler, "cache_keepalive", "55m");
-    applySamplerValue(sampler, "cache_keepalive_max", "12h");
-    applySamplerValue(sampler, "openrouter_provider", '{"order":["Anthropic"]}');
+    applySamplerValue(sampler, "cache_keepalive_for", "12h");
+    applySamplerValue(sampler, "openrouter_routing", '{"order":["Anthropic"]}');
     expect(samplerToWire(sampler)).toMatchObject({
       cache_keepalive: "55m",
-      cache_keepalive_max: "12h",
-      openrouter_provider: { order: ["Anthropic"] },
+      cache_keepalive_for: "12h",
+      openrouter_routing: { order: ["Anthropic"] },
     });
   });
 
   test("retains TOML representability checks", () => {
-    expect(() => applySamplerValue({}, "openrouter_provider", '{"order":[null]}'))
+    expect(() => applySamplerValue({}, "openrouter_routing", '{"order":[null]}'))
       .toThrow(/TOML-compatible/);
   });
 
@@ -134,7 +134,7 @@ describe("authoritative coercion", () => {
     expect(() => applySamplerValue(sampler, "temperature", "warm")).toThrow(CommandError);
     expect(() => applySamplerValue(sampler, "temperature", " ")).toThrow(/number/);
     expect(sampler.temperature).toBe(0.7);
-    expect(() => applySamplerValue(sampler, "max_tool_iterations", "0")).toThrow(/>= 1/);
+    expect(() => applySamplerValue(sampler, "max_tool_rounds", "0")).toThrow(/>= 1/);
     expect(() => applySamplerValue(sampler, "reasoning_effort", " ")).toThrow(/non-empty/);
   });
 });
@@ -142,9 +142,9 @@ describe("authoritative coercion", () => {
 describe("applicability", () => {
   test("vendor settings belong only to their adapters", () => {
     for (const [key, owner] of [
-      ["openrouter_provider", "openrouter"],
-      ["gemini_generation", "gemini"],
-      ["zai_clear_thinking", "zai"],
+      ["openrouter_routing", "openrouter"],
+      ["gemini_thinking_mode", "gemini"],
+      ["zai_clear_reasoning", "zai"],
     ] as const) {
       for (const sdk of SDK_VARIANTS) {
         const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
@@ -153,7 +153,7 @@ describe("applicability", () => {
     }
   });
 
-  test.each(["cache_ttl", "cache_keepalive", "cache_keepalive_max"])("%s is offered only on adapters that carry explicit cache controls", (key) => {
+  test.each(["cache_ttl", "cache_keepalive", "cache_keepalive_for"])("%s is offered only on adapters that carry explicit cache controls", (key) => {
     const carriers = new Set(["anthropic", "nanogpt"]);
     for (const sdk of SDK_VARIANTS) {
       const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
@@ -166,7 +166,7 @@ describe("applicability", () => {
   test("local settings and both advanced settings are always applicable", () => {
     for (const sdk of SDK_VARIANTS) {
       const schema = settingSchema(sdk);
-      for (const key of ["max_output_tokens", "sdk", "replay_prior_thinking", "max_tool_iterations", "supports_images"]) {
+      for (const key of ["max_output_tokens", "sdk", "reasoning_replay", "max_tool_rounds", "supports_images"]) {
         expect(schema.find((entry) => entry.key === key)?.applicability, `${key}/${sdk}`).toBe("always");
       }
     }
@@ -187,12 +187,12 @@ describe("applicability", () => {
 
   test("budget support is limited by sdk and explicit model claims", () => {
     for (const sdk of ["anthropic", "gemini", "moonshot"] as const) {
-      expect(settingSchema(sdk).find((entry) => entry.key === "budget_tokens")?.applicability)
+      expect(settingSchema(sdk).find((entry) => entry.key === "reasoning_budget_tokens")?.applicability)
         .toBe("honored");
-      expect(settingSchema(sdk, { thinking: { enabled: false } }).find((entry) => entry.key === "budget_tokens")?.applicability)
+      expect(settingSchema(sdk, { thinking: { enabled: false } }).find((entry) => entry.key === "reasoning_budget_tokens")?.applicability)
         .toBe("rejected");
     }
-    expect(settingSchema("openai").find((entry) => entry.key === "budget_tokens")?.applicability)
+    expect(settingSchema("openai").find((entry) => entry.key === "reasoning_budget_tokens")?.applicability)
       .toBe("ignored");
   });
 

@@ -9,11 +9,9 @@ Configure the SDK as a provider in `config.toml` or an included TOML file:
 
 ```toml
 [providers.claude_agent]
+discover = true
 
-[providers.claude_agent.discovery]
-enabled = true
-
-[defaults]
+[chat]
 model = "claude_agent:sonnet"
 ```
 
@@ -42,21 +40,21 @@ shore model fav claude_agent:claude-opus-4-8
 shore model setting reasoning_effort high --model claude_agent:claude-opus-4-8 --global
 ```
 
-To migrate `[chat.*]` entries, replace each old model reference with
-`claude_agent:<model_id>`, using that entry's `model_id` value. Move settings
-shared by all models to `[providers.claude_agent.defaults]`, and save settings
-for individual models with `shore model setting --global` to retain their
-scope across characters. Remove the old `[chat.*]` entries once their
-references have been updated.
+Use `shore config migrate --config /path/config.toml --data-dir /path/data`
+to review conversion of legacy catalog aliases and their references. Add
+`--write` to apply the validated plan while the daemon is stopped. Shared
+settings live directly under `[providers.claude_agent]`; model-specific
+settings use `[chat."claude_agent:model_id"]` or `shore model setting --global`.
+Saved preferences retain their scope and precedence.
 
 For example:
 
 ```toml
-[providers.claude_agent.defaults]
+[providers.claude_agent]
 reasoning_effort = "high"
 ```
 
 Provider names are customizable. For `[providers.my_claude]`, add
 `sdk = "claude_agent"` and select `my_claude:<model_id>` instead. Discovery is
-optional when selecting an explicit ID; set `[defaults].model` to that
+optional when selecting an explicit ID; set `[chat].model` to that
 qualified name and optionally favorite it.

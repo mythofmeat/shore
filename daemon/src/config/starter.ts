@@ -1,40 +1,9 @@
 import { defaultAppConfig } from "./app.ts";
 import { serializeConfigValue } from "./serialize.ts";
+import { formatConfigPath, publicConfig } from "./surface.ts";
 
 export const UNSET = "<unset>";
 
-const PREAMBLE = `Shore configuration
-
-Every line below is commented out, and every value shown is the built-in
-default rendered from this binary. Uncomment a line to override it; a line
-you leave alone keeps following the default, including after an upgrade
-that changes what the default is.
-
-\`${UNSET}\` marks an option with no default at all. Uncommenting one without
-replacing the marker is a parse error, which is the intent — there is no
-value to fall back to.
-
-Characters are discovered from the characters/ directory. Create
-characters/<name>/workspace/SOUL.md to define a character.
-
-Models are referenced as \`provider:model_id\` against a [providers.*] entry.
-You can also use \`include = ["extra.toml"]\` or conf.d/*.toml for modular
-config.
-
-Providers are not part of the generated block below — they are yours to
-name, so there is no default to show.
-
-  include = ["models.toml"]
-
-  [providers.anthropic]
-  api_key_env = "ANTHROPIC_API_KEY"
-
-  [providers.anthropic.defaults]
-  cache_ttl = "1h"
-
-Every client authenticates with a shared token. The daemon writes one to
-<config>/token on first start; SHORE_TOKEN overrides it, which is how a
-client on another host or in another container is given the value.`;
 
 function isTable(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63,14 +32,14 @@ function renderTable(
 
   if (path.length > 0) {
     if (out.length > 0) out.push("");
-    out.push(`[${path.join(".")}]`);
-    for (const [key, value] of scalars) out.push(`${key} = ${tomlValue(value)}`);
+    out.push(`[${formatConfigPath(path)}]`);
   }
+  for (const [key, value] of scalars) out.push(`${formatConfigPath([key])} = ${tomlValue(value)}`);
   for (const [key, value] of tables) renderTable([...path, key], value, includeUnset, out);
 }
 
 export function renderDefaultsToml(includeUnset = false): string {
-  const tree = serializeConfigValue(defaultAppConfig());
+  const tree = publicConfig(serializeConfigValue(defaultAppConfig()) as Record<string, unknown>);
   if (!isTable(tree)) throw new Error("defaultAppConfig did not serialize to a table");
 
   const lines: string[] = [];
@@ -78,13 +47,20 @@ export function renderDefaultsToml(includeUnset = false): string {
   return `${lines.join("\n")}\n`;
 }
 
-function commented(body: string): string {
-  return body
-    .split("\n")
-    .map((line) => (line === "" ? "#" : `# ${line}`))
-    .join("\n");
-}
-
 export function renderStarterConfig(): string {
-  return `${commented(PREAMBLE)}\n\n${commented(renderDefaultsToml(true).trimEnd())}\n`;
+  return `# Shore configuration. Set ANTHROPIC_API_KEY in the environment or .env.
+# See docs/CONFIG_REFERENCE.md for optional settings and defaults.
+# Add characters/<name>/workspace/SOUL.md to define a character.
+# Additional TOML files in conf.d/ load automatically, in filename order.
+# The daemon creates a client authentication token beside this file.
+
+[providers.anthropic]
+api_key_env = "ANTHROPIC_API_KEY"
+
+[chat]
+model = "anthropic:claude-opus-4-8"
+
+[tools]
+enabled = ["bash", "search", "search_chat_logs"]
+`;
 }

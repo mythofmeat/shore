@@ -813,7 +813,7 @@
         "openrouter:anthropic/claude-sonnet-4.5"
       ],
       "selected_key": null,
-      "serialized": "[selected]\n\n[defaults.sampler]\n\n[models.\"openrouter:anthropic/claude-sonnet-4.5\"]\ntemperature = 0.8\ntop_p = 0.95\nreasoning_effort = \"medium\"\ncache_keepalive = \"30m\"\nmax_tool_iterations = 4\nzai_clear_thinking = false\n",
+      "serialized": "[selected]\n\n[defaults.sampler]\n\n[models.\"openrouter:anthropic/claude-sonnet-4.5\"]\ntemperature = 0.8\ntop_p = 0.95\nreasoning_effort = \"medium\"\ncache_keepalive = \"30m\"\nmax_tool_rounds = 4\nzai_clear_reasoning = false\n",
       "round_trips": true
     },
     {
@@ -831,7 +831,7 @@
       "is_empty": false,
       "model_keys": [],
       "selected_key": null,
-      "serialized": "[selected]\n\n[defaults.sampler]\nreplay_prior_thinking = \"all\"\n\n[models]\n",
+      "serialized": "[selected]\n\n[defaults.sampler]\nreasoning_replay = \"all\"\n\n[models]\n",
       "round_trips": true
     },
     {
@@ -849,7 +849,7 @@
       "is_empty": false,
       "model_keys": [],
       "selected_key": null,
-      "serialized": "[selected]\n\n[defaults.sampler]\nreplay_prior_thinking = \"none\"\n\n[models]\n",
+      "serialized": "[selected]\n\n[defaults.sampler]\nreasoning_replay = \"none\"\n\n[models]\n",
       "round_trips": true
     },
     {

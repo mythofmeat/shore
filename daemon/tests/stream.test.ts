@@ -201,6 +201,25 @@ describe("notification gating", () => {
     expect(sent).toEqual(["ntfy:title:body"]);
   });
 
+  test("ntfy credentials come from token_env when configured", async () => {
+    const name = "SHORE_TEST_NTFY_FLAT_CONFIG";
+    const before = process.env[name];
+    const received: string[] = [];
+    try {
+      process.env[name] = "test-only-env-token";
+      const service = new NotificationService(configWith({ enabled: true, backend: "ntfy", token_env: name }), {
+        notifySend: async () => {}, command: async () => {},
+        ntfy: async (config) => { received.push(config.token); },
+      });
+      service.notify("message_complete", "Test", "Test");
+      await Promise.resolve();
+      expect(received).toEqual(["test-only-env-token"]);
+    } finally {
+      if (before === undefined) delete process.env[name];
+      else process.env[name] = before;
+    }
+  });
+
   test("the body is truncated to 200 bytes, the title is not", async () => {
     const sent: string[] = [];
     const svc = new NotificationService(

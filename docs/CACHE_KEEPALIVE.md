@@ -24,11 +24,11 @@ not start automatic pings.
 | --- | --- | --- |
 | `cache_ttl` | Provider cache lifetime hint; not a ping cadence | Anthropic SDK: `1h`; otherwise unset |
 | `cache_keepalive` | `off`, or an interval such as `55m` | Off |
-| `cache_keepalive_max` | Model's maximum idle time for automatic pings | Unset; inherits global ceiling |
-| `[cache].keepalive_max` | Global idle ceiling | `12h` |
+| `cache_keepalive_for` | Model's maximum idle time for automatic pings | Unset; inherits global ceiling |
+| `cache.keepalive_for` | Global idle ceiling | `12h` |
 
-The idle ceiling is **effective model `cache_keepalive_max` > global
-`[cache].keepalive_max` > built-in `12h`**. The global default and fallback
+The idle ceiling is **effective model `cache_keepalive_for` > global
+`cache.keepalive_for` > built-in `12h`**. The global default and fallback
 share the same constant. Changing the ceiling does not enable keepalive.
 Pings and heartbeat calls do not extend the idle window. Non-heartbeat,
 non-keepalive generation calls establish activity; an explicit activation
@@ -57,7 +57,7 @@ Set the TTL before the cadence, for example:
 ```sh
 shore model setting cache_ttl 1h --model nanogpt:anthropic/claude-haiku-4.5 --global
 shore model setting cache_keepalive 55m --model nanogpt:anthropic/claude-haiku-4.5 --global
-shore model setting cache_keepalive_max 90m --model nanogpt:anthropic/claude-haiku-4.5 --global
+shore model setting cache_keepalive_for 90m --model nanogpt:anthropic/claude-haiku-4.5 --global
 ```
 
 Supported wire TTLs are `5m` and `1h`. The adapters normalize other nonempty
@@ -79,7 +79,7 @@ and exposes inherited settings, so it does not necessarily turn keepalive
 off. To remove provider-wide opt-in, remove its cadence or set:
 
 ```toml
-[providers.nanogpt.defaults]
+[providers.nanogpt]
 cache_keepalive = "off"
 ```
 

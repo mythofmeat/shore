@@ -1,7 +1,34 @@
 # Configuration redesign: disposition and migration
 
-This is the implementation appendix to the [flat configuration proposal](CONFIG_REDESIGN.md).
-The proposal and all commands described here remain unimplemented.
+This is the implementation and compatibility guide for the [flat configuration design](CONFIG_REDESIGN.md).
+The reader and offline migration command are implemented; the first stable release
+and its removal boundary have not been scheduled.
+
+## Running a migration
+
+Use the new client and a matching local daemon executable on the machine that
+owns the configuration. An explicit data directory includes global and character
+preferences and thread model pins in the same validated transaction:
+
+```sh
+shore config migrate --config /path/to/config.toml --data-dir /path/to/data
+shore config migrate --config /path/to/config.toml --data-dir /path/to/data --write
+```
+
+The first command prints source files and key changes with all values omitted.
+Stop the daemon before `--write`; the writer acquires its data-directory lease.
+Use `--daemon /path/to/shore-daemon` when the matching binary is not beside the
+client or on PATH. Files retain their permissions and comments. Backups remain
+beside each changed file; the recovery journal identifies them if rollback fails.
+Dotted-key ordering and final newlines can change with `toml_edit` formatting.
+A second run reports that the files are already current.
+
+Nonempty literal ntfy tokens require manual relocation to an environment variable.
+Reserved legacy names, conflicting catalog aliases, per-model transport overrides,
+and inheritance that cannot be preserved across characters require the manual
+actions shown in the plan. If catalog conversion changes the implicit first chat
+model, select the intended `chat.model` explicitly before migrating. No files are
+written when any manual action or semantic difference remains.
 
 ## Resolution invariants
 
@@ -205,7 +232,7 @@ not automatic removal on a calendar timer.
 
 | Stage | Behavior |
 | --- | --- |
-| Proposal (this document) | No parser, default, or generated-reference changes. Review the whole taxonomy first. |
+| Development (current) | Flat reader, canonical schema/starter, and explicit offline migration are available. Existing deployments are never rewritten at startup. |
 | R and the compatibility window | Accept currently valid legacy configuration with deprecation warnings. Canonical keys are the only generated examples and normal completions. Legacy-only controls retain their old behavior in the compatibility reader. |
 | Removal release | Legacy keys/values fail with the old path, canonical replacement or removal reason, and `shore config migrate` guidance. The offline migration reader continues to understand the previous format. |
 
@@ -319,12 +346,12 @@ table conversion. No migration may silently discard an unrecognized field.
 
 ### Migration command and editing boundary
 
-Add `shore config migrate --config <path>` as a **local, offline** command that
+`shore config migrate --config <path>` is a **local, offline** command that
 prints a redacted plan/diff by default. `--write` applies a reviewed plan. This
 command operates on the machine where those files live; it does not interpret a
 remote daemon's paths as local files. It must work when an old configuration
-prevents daemon startup. The daemon's check command can report a migration plan
-without writing it, using the same registry.
+prevents daemon startup. The daemon's check command reports source-specific deprecations using the same registry.
+The complete migration plan is generated locally by the offline command.
 
 The existing [toml_edit.ts](../daemon/src/config/toml_edit.ts) is a small
 line-oriented setter/remover, not the Rust `toml_edit` crate. It refuses edits
@@ -404,46 +431,32 @@ Matrix, and cache forensics currently require restart. Do not make every
 external-service setting restart-only just because another service requires it.
 Audit each existing consumer and keep live-reload behavior stable.
 
-Implementation is complete only when all of the following land together after
-this proposal:
+Implementation verification covers the canonical boundary and compatibility
+reader (`config_surface.test.ts`), source ownership and live commands
+(`config_commands.test.ts`, `config_liveness.test.ts`), and semantic migration
+across includes, characters, budgets, preferences, favorites, and thread pins
+(`config_migration.test.ts`). Rust writer tests cover comments, quoted identities,
+inline/dotted keys, arrays of tables, permissions, backups, concurrent edits,
+and rollback after a later write fails. The generated reference and examples
+have a regeneration/parse check.
 
-- [ ] Canonical schema, parser, resolver, and migration registry cover every row
-      above, with unknown-field and removal diagnostics at the full source path.
-- [ ] Legacy/canonical equivalent configs resolve identically except for the
-      explicitly diagnosed removals; aliases, quoted IDs, inline tables, dotted
-      keys, multiline strings, budget arrays, and mixed include/character layers
-      are exercised. Cover notification delivery/events, background model
-      inheritance, both heartbeat gates, reserved names, and global budget
-      inheritance. Include a sanitized deployment-shaped fixture with all the
-      explicitly used settings shown in the proposal and saved SDK overrides.
-- [ ] Offline migration proves idempotence, preserves comments and permissions,
-      rejects alias/transport conflicts, redacts literal secrets, detects races,
-      and recovers from failed multi-file writes. Include a config that cannot
-      boot the new daemon and a remote-client/local-path distinction.
-- [ ] Model selection, settings, favorites, preferences, thread pins, discovery,
-      and historical budget matching survive catalog conversion. Test all three
-      capabilities and their actual adapter requests with fake providers.
-- [ ] Through a real daemon and CLI, exercise `config --check`, `config keys`,
-      `config get/set`, reload, completion, `model use/setting`, tool execution,
-      heartbeat, compaction, and budget enforcement with old and new files.
-      Test the documented removal errors as user-visible failures.
-- [ ] Update CLI/TUI help and completion, SWP command response consumers,
-      starter generation, generated config reference, and examples in
-      [MODELS](MODELS.md), [TOOLS](TOOLS.md), [NANOGPT](NANOGPT.md),
-      [CACHE_KEEPALIVE](CACHE_KEEPALIVE.md), and any deployment docs containing
-      old keys. Generated examples parse under the canonical reader, and a
-      regeneration check detects drift. Keep historical migration examples
-      clearly labeled.
-- [ ] R's release notes publish the actual warning/removal boundary and
-      migration commands. The removal release keeps actionable tombstones.
-- [ ] Run every daemon and Rust verification command from `AGENTS.md`, including
-      capture replay and stale-mutation checks, before each implementation commit.
+An isolated real daemon/CLI run also exercises check/schema/completion, quoted
+config get/set, edits to the owning include, background model selection, saved
+model settings, tool execution, offline planning, refusal to write while a daemon
+owns the data directory, successful migration, and an unchanged second run.
+The existing daemon and Rust suites continue to cover provider adapters,
+heartbeat, compaction, budget enforcement, and command consumers.
 
-Land the reviewed [proposal](CONFIG_REDESIGN.md) first. Then keep
-dependency/tooling changes separate from the parser/migration work; ship the
-public rename, compatibility reader,
-writer, and docs as one coherent release rather than exposing half the new
-taxonomy across releases.
+Before publishing the first stable release, fill in its actual release identifier
+and the earliest removal date in the release notes. Keep the minimum 180-day and
+two-subsequent-stable-release window above; development does not start that clock.
+The later removal release must retain actionable tombstones and the offline legacy
+reader. These are release follow-ups, not startup rewrites of existing deployments.
+
+The reviewed design and dependency changes landed in separate commits. Keep the
+public rename, compatibility reader, offline writer, and documentation together
+in the first release. Run every verification command in `AGENTS.md` before the
+implementation commit.
 
 ## Baseline for this proposal
 

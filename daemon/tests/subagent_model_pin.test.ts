@@ -128,11 +128,11 @@ describe("pinning a sub-agent's model", () => {
     const result = record(switchModel(ctx, { name: "kimi", subagent: "all" }));
 
     expect(result["role"]).toBe("sub-agents");
-    expect(result["config_key"]).toBe("defaults.subagent_model");
+    expect(result["config_key"]).toBe("subagents.model");
     expect(result["cleared"]).toEqual(["subagents.music.model"]);
 
     const written = await readToml(configPath);
-    expect(written).toContain('subagent_model = "chat.openrouter.kimi"');
+    expect(Bun.TOML.parse(written)).toHaveProperty('subagents.model', 'chat.openrouter.kimi');
     expect(ctx.config.app.subagents.get("music")?.model).toBeUndefined();
     expect(roleOf(ctx, "sub-agents")?.model).toBe("chat.openrouter.kimi");
   });
@@ -196,7 +196,7 @@ describe("unpinning a sub-agent's model", () => {
 
     const result = record(resetModel(ctx, { subagent: "all" }));
 
-    expect(result["cleared"]).toEqual(["defaults.subagent_model", "subagents.music.model"]);
+    expect(result["cleared"]).toEqual(["subagents.model", "subagents.music.model"]);
     expect(await readToml(configPath)).not.toContain("subagent_model");
     expect(roleOf(ctx, "sub-agents")?.source).toBe("inherits chat");
   });
@@ -248,7 +248,7 @@ describe("the settings overview", () => {
     const compaction = roleNamed(ctx, "compaction");
     expect(compaction?.model).toBe("chat.openrouter.kimi");
     expect(compaction?.flag).toBe("--background=compaction");
-    expect(compaction?.source).toBe("defaults.background.compaction");
+    expect(compaction?.source).toBe("compaction.model");
     expect(roleNamed(ctx, "heartbeat")).toBeUndefined();
   });
 

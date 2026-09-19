@@ -4631,7 +4631,7 @@
         "embedding": [],
         "env": [],
         "outcome": {
-          "error": "no embedding model configured; semantic search disabled. Set defaults.embedding = \"provider:model_id\" pointing at an OpenAI-compatible embeddings endpoint and configure [providers.<provider>] (see CONFIGURATION.md)."
+          "error": "no embedding model configured; semantic search disabled. Set embedding.model = \"provider:model_id\" pointing at an OpenAI-compatible embeddings endpoint and configure [providers.<provider>] (see CONFIGURATION.md)."
         }
       },
       {
@@ -4684,7 +4684,7 @@
         ],
         "env": [],
         "outcome": {
-          "error": "multiple [embedding.\"provider:model_id\"] entries are configured but defaults.embedding is unset; set defaults.embedding to choose one"
+          "error": "multiple [embedding.\"provider:model_id\"] entries are configured but embedding.model is unset; set embedding.model to choose one"
         }
       },
       {

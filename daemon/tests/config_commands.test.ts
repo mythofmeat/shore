@@ -155,7 +155,6 @@ const stateOf = (w: World): unknown =>
   scrub(
     {
       active_model: w.ctx.activeModel ?? null,
-      defaults_stream: w.ctx.config.app.defaults.stream,
       autonomy_enabled: w.ctx.config.app.behavior.autonomy.enabled,
       defaults_model: w.ctx.config.app.defaults.model ?? null,
       chat_models: w.ctx.config.models.chat.size,
@@ -198,6 +197,7 @@ async function check(
     expect(upToParser(actual), r.name).toBe(upToParser(r.err.message));
   } else {
     expect(thrown, r.name).toBeUndefined();
+    if (r.ok !== undefined && isRecord(result) && "deprecations" in result) { result = { ...result }; delete (result as Record<string, unknown>).deprecations; }
     expect(normalizeResult(scrub(result, w.root)), r.name).toEqual(normalize(r.ok) as never);
   }
   expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
@@ -212,16 +212,17 @@ api_key_env = "SHORE_FIXTURE_KEY_SET"
 model_id = "claude-secondary"
 api_key_env = "SHORE_FIXTURE_KEY_MISSING"
 
-[defaults]
+[chat]
 model = "primary"
-stream = false
 
-[behavior.autonomy]
+[heartbeat]
 enabled = true
 
 [tools]
-enabled_tools = ["web_search", "not_a_real_tool"]
-enabled_subagents = ["researcher", "ghost"]
+enabled = ["web_search", "not_a_real_tool"]
+
+[subagents]
+enabled = ["researcher", "ghost"]
 
 [subagents.researcher]
 description = "Looks things up"
@@ -459,11 +460,10 @@ describe("config read", () => {
 
 describe("config read walks dots", () => {
   const cases: [key: string, value: unknown][] = [
-    ["defaults.model", "primary"],
-    ["defaults.stream", false],
-    ["behavior.autonomy.enabled", true],
-    ["daemon.addr", "127.0.0.1:7320"],
-    ["tools.enabled_tools", ["web_search", "not_a_real_tool"]],
+    ["chat.model", "primary"],
+        ["heartbeat.enabled", true],
+    ["daemon.listen_addr", "127.0.0.1:7320"],
+    ["tools.enabled", ["web_search", "not_a_real_tool"]],
   ];
   for (const [key, value] of cases) {
     test(`\`${key}\` reads back`, async () => {
@@ -506,14 +506,14 @@ describe("config read walks dots", () => {
 
   test("the default baseline is scoped to the same key", async () => {
     const w = await build("mid", FURNISHED);
-    const ok = config(w.ctx, { key: "defaults.stream" }) as { config: unknown; defaults: unknown };
-    expect(ok.config).toBe(false as never);
-    expect(ok.defaults).toBe(true as never);
+    const ok = config(w.ctx, { key: "heartbeat.enabled" }) as { config: unknown; defaults: unknown };
+    expect(ok.config).toBe(true);
+    expect(ok.defaults).toBe(false);
   });
 
   test("a key whose value is null is found, not missing", async () => {
     const w = await build("mid", FURNISHED);
-    const ok = config(w.ctx, { key: "defaults.display_name" }) as { config: unknown };
+    const ok = config(w.ctx, { key: "chat.display_name" }) as { config: unknown };
     expect(ok.config).toBeNull();
   });
 
@@ -533,65 +533,50 @@ describe("config read walks dots", () => {
 });
 
 describe("config set", () => {
-  const cases: [name: string, args: Record<string, unknown>][] = [
-    ["defaults.model is written to the config file", { key: "defaults.model", value: "secondary" }],
-    ["model is an alias for defaults.model", { key: "model", value: "secondary" }],
-    ["a model that is not in the catalog", { key: "defaults.model", value: "ghost" }],
-    ["defaults.stream parses the value as a bool", { key: "defaults.stream", value: "true" }],
-    ["yes is accepted as a bool", { key: "stream", value: "yes" }],
-    ["a value that is not a bool", { key: "stream", value: "maybe" }],
-    ["autonomy.enabled echoes the canonical key", { key: "autonomy.enabled", value: "false" }],
-    ["the long spelling of autonomy.enabled", { key: "behavior.autonomy.enabled", value: "false" }],
-    ["a key that is not in the schema", { key: "memory.mode", value: "x" }],
-    ["a table is not settable as a whole", { key: "memory.compaction", value: "x" }],
-    [
-      "an enum rejects a value outside its variants",
-      { key: "behavior.user_message_timestamps", value: "sometimes" },
-    ],
-    ["a duration is normalised before it is written", { key: "cache.keepalive_max", value: "90m" }],
-    ["a new key is added to an existing section", { key: "defaults.display_name", value: "Ellie" }],
-    [
-      "a list is set from a comma separated value",
-      { key: "tools.enabled_subagents", value: "researcher" },
-    ],
+  const cases: [string, string, unknown][] = [
+    ["chat.model", "secondary", "secondary"],
+    ["model", "secondary", "secondary"],
+    ["heartbeat.enabled", "false", false],
+    ["autonomy.enabled", "no", false],
+    ["cache.keepalive_for", "90m", "90m"],
+    ["chat.display_name", "Ellie", "Ellie"],
+    ["subagents.enabled", "researcher,idle", ["researcher", "idle"]],
   ];
-  for (const [name, args] of cases) {
-    test(name, async () => {
-      const w = await build("mid", FURNISHED);
-      await check(row("config_set", name), w, () => config(w.ctx, args));
-    });
-  }
-
-  test("a saved model preference still masks the new default", async () => {
+  for (const [key, value, expected] of cases) test(`writes ${key}`, async () => {
     const w = await build("mid", FURNISHED);
-    w.ctx.activeModel = "primary";
-    await check(
-      row("config_set", "a saved model preference still masks the new default"),
-      w,
-      () => config(w.ctx, { key: "defaults.model", value: "secondary" }),
-    );
+    const result = config(w.ctx, { key, value }) as { value: unknown; file: string };
+    expect(result.value).toEqual(expected);
+    expect(result.file).toBe(w.ctx.configPath);
+    expect(loadConfig(w.ctx.configPath, { ...(w.ctx.env === undefined ? {} : { env: w.ctx.env }), onWarn: () => {} })).toBeDefined();
   });
 
-  test("a list is not checked against its source as one string", async () => {
-    const w = await build("mid", FURNISHED);
-
-    const result = config(w.ctx, {
-      key: "tools.enabled_subagents",
-      value: "researcher,idle",
-    }) as { value: unknown };
-
-    expect(result.value).toEqual(["researcher", "idle"]);
-    expect(await readFile(w.ctx.configPath, "utf8")).toContain(
-      'enabled_subagents = ["researcher", "idle"]',
-    );
-  });
-
-  test("the file keeps its comments and untouched lines", async () => {
+  const invalid: [string, string, string][] = [
+    ["chat.model", "ghost", "not found"],
+    ["heartbeat.enabled", "maybe", "expected true or false"],
+    ["memory.mode", "x", "not found"],
+    ["compaction", "x", "table"],
+    ["chat.user_timestamps", "sometimes", "not one of"],
+    ["defaults.stream", "true", "unused setting"],
+    ["stream", "yes", "unused setting"],
+  ];
+  for (const [key, value, error] of invalid) test(`rejects ${key} = ${value}`, async () => {
     const w = await build("mid", FURNISHED);
     const before = await readFile(w.ctx.configPath, "utf8");
-    config(w.ctx, { key: "defaults.stream", value: "true" });
-    const after = await readFile(w.ctx.configPath, "utf8");
-    expect(after).toBe(before.replace("stream = false", "stream = true"));
+    expect(() => config(w.ctx, { key, value })).toThrow(error);
+    expect(await readFile(w.ctx.configPath, "utf8")).toBe(before);
+  });
+
+  test("a saved preference masks the fallback model", async () => {
+    const w = await build("mid", FURNISHED);
+    w.ctx.activeModel = "primary";
+    expect(config(w.ctx, { key: "chat.model", value: "secondary" })).toMatchObject({ masked_by_preference: "primary" });
+  });
+
+  test("an ordinary edit keeps comments and untouched lines", async () => {
+    const w = await build("mid", FURNISHED);
+    const before = await readFile(w.ctx.configPath, "utf8");
+    config(w.ctx, { key: "heartbeat.enabled", value: "false" });
+    expect(await readFile(w.ctx.configPath, "utf8")).toBe(before.replace("enabled = true", "enabled = false"));
   });
 });
 

@@ -184,13 +184,13 @@ describe("restartRequiredChanges", () => {
 
   test("the advanced switch that has a reader, named individually", () => {
     expect(changes((c) => (c.app.cache.forensics = true))).toEqual([
-      "[cache].forensics",
+      "[daemon].cache_forensics",
     ]);
   });
 
   test("a connection the daemon opens at startup", () => {
     expect(changes((c) => (c.app.connections.matrix = defaultMatrixConfig()))).toEqual([
-      "[connections]",
+      "[matrix]",
     ]);
   });
 
@@ -218,7 +218,7 @@ describe("restartRequiredChanges", () => {
         c.app.notifications.enabled = true;
         c.app.cache.forensics = true;
       }),
-    ).toEqual(["[daemon]", "[notifications]", "[cache].forensics"]);
+    ).toEqual(["[daemon]", "[notifications]", "[daemon].cache_forensics"]);
   });
 });
 
@@ -399,7 +399,7 @@ describe("a config_reload", () => {
     const out = await afterCommand("config_reload", { apply: true }, apply, f.ctx);
 
     expect((out as { restart_required: string[] }).restart_required).toEqual([
-      "[cache].forensics",
+      "[daemon].cache_forensics",
     ]);
   });
 

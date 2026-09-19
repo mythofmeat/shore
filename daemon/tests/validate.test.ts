@@ -65,7 +65,7 @@ function refused(src: string): string {
 
 function warningsOf(src: string): string[] {
   const out: string[] = [];
-  load(src, (message) => out.push(message));
+  load(src, (message) => { if (message !== "Deprecated configuration") out.push(message); });
   return out;
 }
 
@@ -78,7 +78,7 @@ describe("auxiliary provider defaults", () => {
     test(`${field} identifies missing transport for an unknown provider`, () => {
       const warnings = warningsOf(`[defaults]\n${field} = "custom:model"`);
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain(`defaults.${field}`);
+      expect(warnings[0]).toContain(field === "embedding" ? "embedding.model" : "image.model");
       expect(warnings[0]).toContain("[providers.custom]");
       expect(warnings[0]).toContain("no built-in endpoint");
       expect(warnings[0]).toContain("base_url");
@@ -109,17 +109,17 @@ describe("a config that shore can act on", () => {
     expect(digest.chat).toEqual(["chat.anthropic.opus"]);
     expect(digest.enabled_tools).toEqual(["read", "write"]);
   });
-  test("non-table chat is removed and ignored", () => {
-    expect(accepted("chat = \"nope\"")).toBeDefined();
+  test("non-table chat is rejected", () => {
+    expect(refused("chat = \"nope\"")).toContain("must be a table");
   });
-  test("non-table providers is removed and ignored", () => {
-    expect(accepted("providers = 1")).toBeDefined();
+  test("non-table providers is rejected", () => {
+    expect(refused("providers = 1")).toContain("must be a table");
   });
-  test("non-table embedding is removed and ignored", () => {
-    expect(accepted("embedding = []")).toBeDefined();
+  test("non-table embedding is rejected", () => {
+    expect(refused("embedding = []")).toContain("must be a table");
   });
-  test("array-of-tables providers silently yields an empty registry", () => {
-    expect(accepted("\n[[providers]]\napi_key_env = \"OPENAI_API_KEY\"\n")).toBeDefined();
+  test("array-of-tables providers is rejected", () => {
+    expect(refused("\n[[providers]]\napi_key_env = \"OPENAI_API_KEY\"\n")).toContain("must be a table");
   });
   test("registry transport cascades into a static chat entry", () => {
     const digest = accepted("\n[providers.custom]\nsdk = \"openai\"\nbase_url = \"https://example.invalid/v1\"\napi_key_env = \"CUSTOM_KEY\"\n\n[chat.custom.house]\nmodel_id = \"house-7\"\n");
@@ -333,7 +333,7 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[completely_unknown]\nkey = \"value\"\n")).toContain("unknown field `completely_unknown`, expected one of `daemon`");
   });
   test("models section is neither extracted nor a field", () => {
-    expect(refused("\n[models.\"anthropic:claude-opus-4-6\"]\ntemperature = 0.5\n")).toContain("unknown field `models`, expected one of `daemon`, `defaults`");
+    expect(refused("\n[models.\"anthropic:claude-opus-4-6\"]\ntemperature = 0.5\n")).toContain("unknown field `models`, expected one of `daemon`, `chat`");
   });
   test("app parse error precedes provider registry error", () => {
     expect(refused("\n[completely_unknown]\nkey = \"value\"\n\n[providers.claude_code]\napi_key_env = \"X\"\n")).toContain("unknown field `completely_unknown`, expected one of `daemon`");
@@ -345,7 +345,7 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[chat.anthropic.opus]\nmax_context_tokens = 1000\n")).toContain("model \"opus\" in [chat.anthropic] is missing required field `");
   });
   test("the retired defaults.heartbeat is refused with a pointer", () => {
-    expect(refused("\n[defaults]\nheartbeat = \"ghost-haiku\"\n\n[chat.anthropic.opus]\nmodel_id = \"claude-opus-4-6\"\n")).toContain("`heartbeat` was removed — set it under `[defaults.background");
+    expect(refused("\n[defaults]\nheartbeat = \"ghost-haiku\"\n\n[chat.anthropic.opus]\nmodel_id = \"claude-opus-4-6\"\n")).toContain("`heartbeat` was removed — set `heartbeat.model`");
   });
   test("enabled subagent with unresolvable model is rejected", () => {
     expect(refused("\n[tools]\nenabled_subagents = [\"researcher\"]\n\n[subagents.researcher]\ndescription = \"Research helper\"\nprompt = \"You research things.\"\nmodel = \"ghost-model\"\n")).toContain("subagents.researcher resolves to model \"ghost-model\", which ");
@@ -396,31 +396,31 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[tools]\nenabled_tools = [\"mcp__ghost__search\"]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n")).toContain("mcp.hue sets both `command` and `url`; set exactly one trans");
   });
   test("bare alias embedding default is rejected", () => {
-    expect(refused("\n[defaults]\nembedding = \"missing-profile\"\n")).toContain("defaults.embedding \"missing-profile\" must be a `provider:mod");
+    expect(refused("\n[defaults]\nembedding = \"missing-profile\"\n")).toContain("embedding.model \"missing-profile\" must be a `provider:mod");
   });
   test("bundled local embedding id is rejected", () => {
-    expect(refused("\n[defaults]\nembedding = \"bge-large-en-v1.5\"\n")).toContain("defaults.embedding \"bge-large-en-v1.5\" must be a `provider:m");
+    expect(refused("\n[defaults]\nembedding = \"bge-large-en-v1.5\"\n")).toContain("embedding.model \"bge-large-en-v1.5\" must be a `provider:m");
   });
   test("embedding default on a disabled provider is rejected", () => {
-    expect(refused("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n\n[providers.openai]\nenabled = false\napi_key_env = \"OPENAI_API_KEY\"\n")).toContain("defaults.embedding references provider \"openai\" which is dis");
+    expect(refused("\n[defaults]\nembedding = \"openai:text-embedding-3-large\"\n\n[providers.openai]\nenabled = false\napi_key_env = \"OPENAI_API_KEY\"\n")).toContain("embedding.model references provider \"openai\" which is dis");
   });
   test("embedding default with an empty provider half", () => {
-    expect(refused("\n[defaults]\nembedding = \":text-embedding-3-large\"\n")).toContain("defaults.embedding \":text-embedding-3-large\" is not a valid ");
+    expect(refused("\n[defaults]\nembedding = \":text-embedding-3-large\"\n")).toContain("embedding.model \":text-embedding-3-large\" is not a valid ");
   });
   test("embedding default with an empty model half", () => {
-    expect(refused("\n[defaults]\nembedding = \"openai:\"\n")).toContain("defaults.embedding \"openai:\" is not a valid `provider:model_");
+    expect(refused("\n[defaults]\nembedding = \"openai:\"\n")).toContain("embedding.model \"openai:\" is not a valid `provider:model_");
   });
   test("bare alias image_generation default is rejected", () => {
-    expect(refused("\n[defaults]\nimage_generation = \"missing-profile\"\n")).toContain("defaults.image_generation \"missing-profile\" must be a `provi");
+    expect(refused("\n[defaults]\nimage_generation = \"missing-profile\"\n")).toContain("image.model \"missing-profile\" must be a `provi");
   });
   test("image_generation default on a disabled provider is rejected", () => {
-    expect(refused("\n[defaults]\nimage_generation = \"gemini:gemini-3.1-flash-image-preview\"\n\n[providers.gemini]\nenabled = false\napi_key_env = \"GEMINI_API_KEY\"\n")).toContain("defaults.image_generation references provider \"gemini\" which");
+    expect(refused("\n[defaults]\nimage_generation = \"gemini:gemini-3.1-flash-image-preview\"\n\n[providers.gemini]\nenabled = false\napi_key_env = \"GEMINI_API_KEY\"\n")).toContain("image.model references provider \"gemini\" which");
   });
   test("image_generation default with an empty model half", () => {
-    expect(refused("\n[defaults]\nimage_generation = \"gemini:\"\n")).toContain("defaults.image_generation \"gemini:\" is not a valid `provider");
+    expect(refused("\n[defaults]\nimage_generation = \"gemini:\"\n")).toContain("image.model \"gemini:\" is not a valid `provider");
   });
   test("both aux defaults bad reports embedding", () => {
-    expect(refused("\n[defaults]\nembedding = \"bad-a\"\nimage_generation = \"bad-b\"\n")).toContain("defaults.embedding \"bad-a\" must be a `provider:model_id` ide");
+    expect(refused("\n[defaults]\nembedding = \"bad-a\"\nimage_generation = \"bad-b\"\n")).toContain("embedding.model \"bad-a\" must be a `provider:model_id` ide");
   });
   test("usage timezone is case sensitive", () => {
     expect(refused("\n[usage]\ntimezone = \"UTC\"\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"UTC\"");
@@ -516,7 +516,7 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[defaults]\nembedding = \"bad-embed\"\nimage_generation = \"bad-image\"\n\n[usage]\ntimezone = \"nope\"\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("mcp.hue sets both `command` and `url`; set exactly one trans");
   });
   test("embedding is next after mcp", () => {
-    expect(refused("\n[defaults]\nembedding = \"bad-embed\"\nimage_generation = \"bad-image\"\n\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("defaults.embedding \"bad-embed\" must be a `provider:model_id`");
+    expect(refused("\n[defaults]\nembedding = \"bad-embed\"\nimage_generation = \"bad-image\"\n\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("embedding.model \"bad-embed\" must be a `provider:model_id`");
   });
   test("usage is next after the aux defaults", () => {
     expect(refused("\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");

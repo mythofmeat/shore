@@ -1,4 +1,5 @@
 import { shoreLog } from "../log.ts";
+import { MODEL_FIELDS } from "./surface.ts";
 
 import { settingApplicability, validateSetting } from "../llm/settings.ts";
 import { keepalivePolicyError } from "../llm/cache_capability.ts";
@@ -59,6 +60,8 @@ export function sdkUsesAnthropicPromptCache(sdk: Sdk): boolean {
 }
 
 export interface ModelConfigFields {
+  replayPriorThinking?: ThinkingReplay;
+  maxToolIterations?: number;
   sdk?: Sdk;
   apiKeyEnv?: string;
   baseUrl?: string;
@@ -78,6 +81,8 @@ export interface ModelConfigFields {
 }
 
 const FIELD_KEYS = [
+  "replayPriorThinking",
+  "maxToolIterations",
   "sdk",
   "apiKeyEnv",
   "baseUrl",
@@ -255,6 +260,8 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
+  assignIfPresent(resolved, "replayPriorThinking", merged.replayPriorThinking);
+  assignIfPresent(resolved, "maxToolIterations", merged.maxToolIterations);
   applyKeepalivePolicy(resolved);
   return resolved;
 }
@@ -476,7 +483,7 @@ export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
 
 export const NO_CHAT_MODELS_MESSAGE =
   "No chat models configured. Add a [providers.*] entry and set " +
-  "[defaults].model to a provider:model_id.";
+  "chat.model to a provider:model_id.";
 
 export function firstChatModel(catalog: ModelCatalog): ResolvedModel | undefined {
   for (const model of catalog.chat.values()) return model;
@@ -495,6 +502,25 @@ function parseCategory(
   const models: [string, ResolvedModel][] = [];
 
   for (const providerKey of sortedKeys(section)) {
+    if (providerKey.includes(":")) {
+      const colon = providerKey.indexOf(":");
+      const provider = providerKey.slice(0, colon);
+      const modelId = providerKey.slice(colon + 1);
+      const value = section[providerKey];
+      if (provider === "" || modelId === "" || !isTable(value)) throw CatalogError.parseEntry(category, provider, modelId, "expected a provider:model_id settings table");
+      if (value.model_id !== undefined || value.api_key_env !== undefined || value.base_url !== undefined) throw CatalogError.parseEntry(category, provider, modelId, "model identity belongs in the table key; credentials and base_url belong in providers");
+      const parsed = readModelConfigFields(value);
+      if ("err" in parsed) throw CatalogError.parseEntry(category, provider, modelId, parsed.err);
+      const defaults = hardcodedProviderDefaults(provider).fields;
+      const entry = providers?.get(provider);
+      if (entry !== undefined) {
+        if (entry.sdk !== undefined) defaults.sdk = entry.sdk;
+        if (entry.baseUrl !== undefined) defaults.baseUrl = entry.baseUrl;
+        mergeFrom(defaults, entry.defaults);
+      }
+      models.push([providerKey, resolvedModelFromParts(modelId, providerKey, category, provider, modelId, defaultSdk(provider), orFallback(parsed.ok, defaults))]);
+      continue;
+    }
     if (providerKey === "claude_code") throw CatalogError.removedProvider(category);
 
     const providerValue = section[providerKey];
@@ -551,16 +577,6 @@ function parseCategory(
         ),
       ]);
     }
-  }
-
-  if (models.length > 0) {
-    shoreLog.warn(
-      `shore: \`[${category}.*]\` is deprecated and will be removed: define models via ` +
-        `\`[providers.<provider>]\` and select them as \`provider:model_id\`; set ` +
-        `per-provider overrides under \`[providers.<provider>.defaults]\` and per-model ` +
-        `ones with \`shore model setting\`. The static entries are still honored this ` +
-        `release.`,
-    );
   }
 
   return new Map(models.sort((a, b) => compareByCodePoint(a[0], b[0])));
@@ -786,6 +802,8 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   if (Object.hasOwn(table, "zai_subscription")) {
     return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
   }
+  const unknown = denyUnknown(table, [...MODEL_FIELDS, "sdk", "api_key_env", "base_url", "model_id"]);
+  if (unknown !== undefined) return { err: unknown };
   const out: ModelConfigFields = {};
 
   const sdkRaw = readString(table, "sdk");
@@ -813,6 +831,7 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
     ["maxOutputTokens", "max_output_tokens"],
     ["budgetTokens", "budget_tokens"],
     ["geminiGeneration", "gemini_generation"],
+    ["maxToolIterations", "max_tool_iterations"],
   ];
   for (const [field, key] of u32s) {
     const read = readU32(table, key);
@@ -858,6 +877,13 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
 
   if (table["openrouter_provider"] !== undefined) {
     out.openrouterProvider = table["openrouter_provider"];
+  }
+  if (out.maxToolIterations === 0) return { err: "max_tool_rounds must be positive" };
+  if (table.replay_prior_thinking !== undefined) {
+    const replay = table.replay_prior_thinking;
+    if (replay === "all" || replay === true || replay === "last_turn") out.replayPriorThinking = "all";
+    else if (replay === "none" || replay === false) out.replayPriorThinking = "none";
+    else return { err: "reasoning_replay must be all or none" };
   }
 
   return { ok: out };

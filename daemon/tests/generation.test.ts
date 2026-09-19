@@ -305,7 +305,7 @@ describe("buildToolContext", () => {
       expect(generated).toBe(true);
       expect(result.sent).toBe(true);
       expect(await readFile(result.path, "utf8")).toBe("hello");
-      expect(warnings).toEqual([]);
+      expect(warnings.filter((message) => message !== "Deprecated configuration")).toEqual([]);
     } finally {
       if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = savedKey;

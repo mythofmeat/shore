@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { acceptedTopLevelSections, CATALOG_SECTIONS, defaultAppConfig } from "../src/config/app.ts";
+import { acceptedTopLevelSections, defaultAppConfig } from "../src/config/app.ts";
 import { configSchema, type SchemaEntry } from "../src/config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../src/config/schema_value.ts";
 import { setTomlValue, TomlEditError } from "../src/config/toml_edit.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
 import { config, schemaOf, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { publicConfig, parseConfigPath } from "../src/config/surface.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const NO_INSTANCES = { instancesAt: () => [] };
@@ -71,7 +72,7 @@ describe("configSchema", () => {
   });
 
   test("every leaf of the default config has a schema entry", () => {
-    const defaults = serializeConfigValue(defaultAppConfig());
+    const defaults = publicConfig(serializeConfigValue(defaultAppConfig()) as Record<string, unknown>);
     const paths: string[] = [];
     leafPaths(defaults, "", paths);
     const missing = paths.filter((p) => !byKey.has(p));
@@ -84,40 +85,40 @@ describe("configSchema", () => {
   });
 
   test("booleans and enums carry their candidate values", () => {
-    expect(byKey.get("defaults.stream")?.values).toEqual(["true", "false"]);
-    expect(byKey.get("behavior.user_message_timestamps")?.values).toEqual([
+    expect(byKey.get("heartbeat.enabled")?.values).toEqual(["true", "false"]);
+    expect(byKey.get("chat.user_timestamps")?.values).toEqual([
       "auto",
       "always",
       "never",
     ]);
-    expect(byKey.get("notifications.backend")?.values).toEqual(["notify_send", "ntfy", "command"]);
+    expect(byKey.get("notifications.via")?.values).toEqual(["off", "notify_send", "ntfy", "command"]);
   });
 
   test("model valued keys point at the catalog", () => {
-    expect(byKey.get("defaults.model")?.source).toBe("chat_models");
-    expect(byKey.get("defaults.background.heartbeat")?.source).toBe("chat_models");
-    expect(byKey.get("defaults.embedding")?.source).toBe("embedding_models");
-    expect(byKey.get("tools.enabled_tools")?.source).toBe("tools");
-    expect(byKey.get("tools.enabled_subagents")?.source).toBe("subagents");
+    expect(byKey.get("chat.model")?.source).toBe("chat_models");
+    expect(byKey.get("heartbeat.model")?.source).toBe("chat_models");
+    expect(byKey.get("embedding.model")?.source).toBe("embedding_models");
+    expect(byKey.get("tools.enabled")?.source).toBe("tools");
+    expect(byKey.get("subagents.enabled")?.source).toBe("subagents");
   });
 
   test("map keys say what their names are drawn from", () => {
-    expect(byKey.get("tools.config")?.key_source).toBe("tools");
+    expect(byKey.get("tools")?.key_source).toBe("tools");
     expect(byKey.get("mcp")?.key_source).toBeUndefined();
   });
 
   test("the keys that need a daemon restart say so", () => {
-    expect(byKey.get("daemon.addr")?.restart_required).toBe(true);
-    expect(byKey.get("cache.forensics")?.restart_required).toBe(true);
-    expect(byKey.get("cache.keepalive_max")?.restart_required).toBe(false);
-    expect(byKey.get("defaults.stream")?.restart_required).toBe(false);
+    expect(byKey.get("daemon.listen_addr")?.restart_required).toBe(true);
+    expect(byKey.get("daemon.cache_forensics")?.restart_required).toBe(true);
+    expect(byKey.get("cache.keepalive_for")?.restart_required).toBe(false);
+    expect(byKey.get("heartbeat.enabled")?.restart_required).toBe(false);
   });
 
   test("tables and maps are readable but not settable", () => {
-    expect(byKey.get("memory.compaction")?.settable).toBe(false);
+    expect(byKey.get("compaction")?.settable).toBe(false);
     expect(byKey.get("mcp")?.settable).toBe(false);
-    expect(byKey.get("usage.budgets")?.settable).toBe(false);
-    for (const section of CATALOG_SECTIONS) {
+    expect(byKey.get("budgets")?.settable).toBe(false);
+    for (const section of ["chat", "embedding", "image", "providers"]) {
       expect(byKey.get(section)?.settable, `${section} must not be settable`).toBe(false);
     }
   });
@@ -143,34 +144,34 @@ describe("schemaValueLiteral", () => {
 
   test("booleans accept the friendly spellings", () => {
     for (const yes of ["true", "yes", "on", "1", "TRUE"]) {
-      expect(schemaValueLiteral(at("defaults.stream"), yes)).toBe("true");
+      expect(schemaValueLiteral(at("heartbeat.enabled"), yes)).toBe("true");
     }
     for (const no of ["false", "no", "off", "0"]) {
-      expect(schemaValueLiteral(at("defaults.stream"), no)).toBe("false");
+      expect(schemaValueLiteral(at("heartbeat.enabled"), no)).toBe("false");
     }
   });
 
   test("durations are normalised to their largest whole unit", () => {
-    expect(schemaValueLiteral(at("cache.keepalive_max"), "90m")).toBe('"90m"');
-    expect(schemaValueLiteral(at("cache.keepalive_max"), "120m")).toBe('"2h"');
-    expect(schemaValueLiteral(at("cache.keepalive_max"), "3600s")).toBe('"1h"');
-    expect(() => schemaValueLiteral(at("cache.keepalive_max"), "soon")).toThrow(SchemaValueError);
+    expect(schemaValueLiteral(at("cache.keepalive_for"), "90m")).toBe('"90m"');
+    expect(schemaValueLiteral(at("cache.keepalive_for"), "120m")).toBe('"2h"');
+    expect(schemaValueLiteral(at("cache.keepalive_for"), "3600s")).toBe('"1h"');
+    expect(() => schemaValueLiteral(at("cache.keepalive_for"), "soon")).toThrow(SchemaValueError);
   });
 
   test("integers reject overflow and junk", () => {
-    expect(() => schemaValueLiteral(at("memory.compaction.min_turns"), "-1")).toThrow(
+    expect(() => schemaValueLiteral(at("compaction.min_turns"), "-1")).toThrow(
       SchemaValueError,
     );
-    expect(() => schemaValueLiteral(at("memory.compaction.min_turns"), "lots")).toThrow(
+    expect(() => schemaValueLiteral(at("compaction.min_turns"), "lots")).toThrow(
       SchemaValueError,
     );
-    expect(schemaValueLiteral(at("memory.compaction.min_turns"), "20")).toBe("20");
+    expect(schemaValueLiteral(at("compaction.min_turns"), "20")).toBe("20");
   });
 
   test("lists split on commas and quote their items", () => {
-    expect(schemaValueLiteral(at("tools.enabled_tools"), "read, edit")).toBe('["read", "edit"]');
-    expect(schemaValueLiteral(at("tools.enabled_tools"), "")).toBe("[]");
-    expect(schemaValueLiteral(at("tools.enabled_tools"), "[read, edit]")).toBe('["read", "edit"]');
+    expect(schemaValueLiteral(at("tools.enabled"), "read, edit")).toBe('["read", "edit"]');
+    expect(schemaValueLiteral(at("tools.enabled"), "")).toBe("[]");
+    expect(schemaValueLiteral(at("tools.enabled"), "[read, edit]")).toBe('["read", "edit"]');
   });
 
   test("every settable key produces a literal the parser accepts", async () => {
@@ -180,7 +181,7 @@ describe("schemaValueLiteral", () => {
     for (const entry of settable) {
       const sample = sampleFor(entry);
       const literal = schemaValueLiteral(entry, sample);
-      const text = setTomlValue("", entry.key.split("."), literal).text;
+      const text = setTomlValue("", parseConfigPath(entry.key), literal).text;
       expect(() => Bun.TOML.parse(text), `${entry.key} = ${literal}`).not.toThrow();
     }
   });
@@ -251,10 +252,10 @@ enabled_tools = [
   });
 
   test("honours a dotted key already written at the top level", () => {
-    const dotted = 'defaults.model = "one"\n';
-    const out = setTomlValue(dotted, ["defaults", "model"], '"two"');
+    const dotted = 'chat.model = "one"\n';
+    const out = setTomlValue(dotted, ["chat", "model"], '"two"');
     expect(out.action).toBe("replaced");
-    expect(out.text).toBe('defaults.model = "two"\n');
+    expect(out.text).toBe('chat.model = "two"\n');
   });
 
   test("refuses to reach inside an inline table", () => {
@@ -276,33 +277,33 @@ enabled_tools = [
 
 describe("config set on disk", () => {
   test("rolls the file back when the result would not load", async () => {
-    const ctx = await world('[memory.compaction]\nkeep_recent_turns = 2\nmin_turns = 12\n');
+    const ctx = await world('[compaction]\nkeep_recent_turns = 2\nmin_turns = 12\n');
     const before = await readFile(ctx.configPath, "utf8");
-    expect(() => config(ctx, { key: "memory.compaction.min_turns", value: "1" })).toThrow(
+    expect(() => config(ctx, { key: "compaction.min_turns", value: "1" })).toThrow(
       /was rejected/,
     );
     expect(await readFile(ctx.configPath, "utf8")).toBe(before);
   });
 
   test("writes to the conf.d file that already owns the key", async () => {
-    const ctx = await world("[defaults]\nstream = true\n", [
-      ["conf.d/10-local.toml", "# local\n[defaults]\nstream = false\n"],
+    const ctx = await world("[heartbeat]\nenabled = true\n", [
+      ["conf.d/10-local.toml", "# local\n[heartbeat]\nenabled = false\n"],
     ]);
     const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
 
-    const result = config(ctx, { key: "defaults.stream", value: "true" }) as { file: string };
+    const result = config(ctx, { key: "heartbeat.enabled", value: "true" }) as { file: string };
 
     expect(result.file, "conf.d wins the merge, so that is the file worth editing").toBe(confd);
-    expect(await readFile(confd, "utf8")).toBe("# local\n[defaults]\nstream = true\n");
-    expect(await readFile(ctx.configPath, "utf8")).toBe("[defaults]\nstream = true\n");
+    expect(await readFile(confd, "utf8")).toBe("# local\n[heartbeat]\nenabled = true\n");
+    expect(await readFile(ctx.configPath, "utf8")).toBe("[heartbeat]\nenabled = true\n");
   });
 
   test("a key no file defines yet lands in the main config", async () => {
-    const ctx = await world("[defaults]\nstream = true\n", [
+    const ctx = await world("[heartbeat]\nenabled = true\n", [
       ["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"],
     ]);
-    const result = config(ctx, { key: "cache.keepalive_max", value: "6h" }) as { file: string };
+    const result = config(ctx, { key: "cache.keepalive_for", value: "6h" }) as { file: string };
     expect(result.file).toBe(ctx.configPath);
-    expect(await readFile(ctx.configPath, "utf8")).toContain('keepalive_max = "6h"');
+    expect(await readFile(ctx.configPath, "utf8")).toContain('keepalive_for = "6h"');
   });
 });

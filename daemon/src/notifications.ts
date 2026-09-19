@@ -119,7 +119,10 @@ export class NotificationService {
       case "notify_send":
         return this.#sink.notifySend(title, body);
       case "ntfy":
-        return this.#sink.ntfy(this.#config.ntfy, title, body);
+        return this.#sink.ntfy({
+          ...this.#config.ntfy,
+          token: this.#config.token_env === undefined ? this.#config.ntfy.token : process.env[this.#config.token_env] ?? "",
+        }, title, body);
       case "command":
         return this.#sink.command(this.#config.command, title, body);
     }

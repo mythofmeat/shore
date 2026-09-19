@@ -1,3 +1,4 @@
+import { canonicalSettingKey, geminiMode } from "../config/surface.ts";
 import { required } from "../util/required.ts";
 import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 import { keepalivePolicyError } from "../llm/cache_capability.ts";
@@ -278,7 +279,7 @@ function chatRole(ctx: ModelsContext): ModelRole {
   }
   const fallback = ctx.config.app.defaults.model;
   if (fallback !== undefined && fallback !== "") {
-    return { role: "chat", model: qualify(ctx, fallback), source: "defaults.model" };
+    return { role: "chat", model: qualify(ctx, fallback), source: "chat.model" };
   }
   const first = firstChatModel(ctx.config.models);
   if (first !== undefined) {
@@ -291,7 +292,7 @@ function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRol
   const bg = ctx.config.app.defaults.background;
   const perTask = bg[task];
   if (perTask !== undefined) {
-    return { role: task, model: qualify(ctx, perTask), source: `defaults.background.${task}` };
+    return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
   if (bg.model !== undefined) {
     return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };
@@ -310,7 +311,7 @@ function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
     return {
       role: "sub-agents",
       model: qualify(ctx, subagentModel),
-      source: `defaults.subagent_model${suffix}`,
+      source: `subagents.model${suffix}`,
     };
   }
   if (chat.model === null) {
@@ -458,14 +459,14 @@ const INFO_SCOPE_FIELDS = [
   ["temperature", "temperature"],
   ["top_p", "topP"],
   ["reasoning_effort", "reasoningEffort"],
-  ["budget_tokens", "budgetTokens"],
+  ["reasoning_budget_tokens", "budgetTokens"],
   ["max_output_tokens", "maxOutputTokens"],
   ["cache_ttl", "cacheTtl"],
   ["cache_keepalive", "cacheKeepalive"],
-  ["cache_keepalive_max", "cacheKeepaliveMax"],
+  ["cache_keepalive_for", "cacheKeepaliveMax"],
   ["sdk", "sdk"],
-  ["replay_prior_thinking", "replayPriorThinking"],
-  ["max_tool_iterations", "maxToolIterations"],
+  ["reasoning_replay", "replayPriorThinking"],
+  ["max_tool_rounds", "maxToolIterations"],
 ] as const satisfies readonly (readonly [string, keyof SamplerSettings])[];
 
 function scopesJson(
@@ -524,12 +525,10 @@ function loadPreferencesFor(
   }
 }
 
-const BACKGROUND_KEY = "defaults.background";
-
 const backgroundKeys = (selector: string): string[] =>
   selector === "all"
-    ? [`${BACKGROUND_KEY}.model`]
-    : [`${BACKGROUND_KEY}.${backgroundTask(selector)}`];
+    ? BACKGROUND_TASKS.map((task) => `${task}.model`)
+    : [`${backgroundTask(selector)}.model`];
 
 function configContext(ctx: ModelsContext): ConfigContext {
   if (ctx.configPath === undefined || ctx.runtime === undefined) {
@@ -546,18 +545,10 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
   const resolved = resolve(ctx, name, includeHidden);
   const config = configContext(ctx);
 
-  const key = backgroundKeys(selector)[0] as string;
+  const keys = backgroundKeys(selector);
+  const key = keys[0] as string;
   const written = setConfigKey(config, key, resolved.qualifiedName);
-
-  const cleared =
-    selector === "all"
-      ? BACKGROUND_TASKS.filter(
-          (task) => ctx.config.app.defaults.background[task] !== undefined,
-        ).map((task) => {
-          const removed = clearConfigKey(config, `${BACKGROUND_KEY}.${task}`);
-          return removed.set;
-        })
-      : [];
+  for (const other of keys.slice(1)) setConfigKey(config, other, resolved.qualifiedName);
 
   return {
     active: resolved.qualifiedName,
@@ -567,7 +558,8 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
     changed: true,
     role: selector === "all" ? "background" : selector,
     config_key: key,
-    cleared,
+    config_keys: keys,
+    cleared: [],
     file: written.file,
     restart_required: written.restart_required,
   };
@@ -575,10 +567,8 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
 
 function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
   const config = configContext(ctx);
-  const keys =
-    selector === "all"
-      ? [`${BACKGROUND_KEY}.model`, ...BACKGROUND_TASKS.map((t) => `${BACKGROUND_KEY}.${t}`)]
-      : backgroundKeys(selector);
+  const keys = backgroundKeys(selector);
+  if (ctx.config.app.defaults.background.model !== undefined) throw invalidRequest("a legacy shared background model is configured; run shore config migrate before resetting task models");
 
   const cleared: string[] = [];
   let file: string | undefined;
@@ -602,7 +592,7 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
   };
 }
 
-const SUBAGENT_MODEL_KEY = "defaults.subagent_model";
+const SUBAGENT_MODEL_KEY = "subagents.model";
 
 const subagentModelKey = (name: string): string => `subagents.${name}.model`;
 
@@ -773,13 +763,14 @@ function saveCharacter(ctx: ModelsContext, character: string, prefs: ModelPrefer
 export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
-  const key = rawKey.trim();
+  const key = canonicalSettingKey(rawKey.trim());
   if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (!SAMPLER_KEYS.includes(key)) {
     throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
   }
 
-  const value = "value" in args ? args["value"] : null;
+  const rawValue = "value" in args ? args["value"] : null;
+  const value = rawKey.trim() === "gemini_generation" ? geminiMode(typeof rawValue === "string" && /^\d+$/.test(rawValue) ? Number(rawValue) : rawValue) : rawValue;
   const scope = asStr(args["scope"]) ?? "character";
   if (scope !== "character" && scope !== "global") {
     throw invalidRequest(`scope must be "character" or "global", got ${JSON.stringify(scope)}`);
@@ -1068,7 +1059,7 @@ export function modelSettingsOverview(ctx: ModelsContext): unknown {
 function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
   const raw = asName(args["key"]);
   if (raw === undefined) return undefined;
-  const key = raw.trim();
+  const key = canonicalSettingKey(raw.trim());
   if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (SAMPLER_KEYS.includes(key)) return key;
   if (ctx.config.app.subagents.has(key)) {

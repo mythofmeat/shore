@@ -5,9 +5,7 @@ Configure the provider and select a model from its discovery results:
 ```toml
 [providers.nanogpt]
 api_key_env = "NANOGPT_API_KEY"
-
-[providers.nanogpt.discovery]
-enabled = true
+discover = true
 ```
 
 ```sh

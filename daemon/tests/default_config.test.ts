@@ -5,10 +5,11 @@ import { existsSync, chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { defaultAppConfig, parseAppConfig } from "../src/config/app.ts";
-import { createDefaultConfig, DEFAULT_CONFIG_TOML, loadConfig } from "../src/config/loader.ts";
+import { defaultAppConfig } from "../src/config/app.ts";
+import { createDefaultConfig, DEFAULT_CONFIG_TOML, loadConfig, parseConfigTable } from "../src/config/loader.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
 import { renderDefaultsToml, renderStarterConfig, UNSET } from "../src/config/starter.ts";
+import { resolveShoreDirs } from "../src/config/dirs.ts";
 import { resolveStartup } from "../src/daemon/startup.ts";
 
 const roots: string[] = [];
@@ -40,7 +41,7 @@ describe("createDefaultConfig", () => {
 
     const content = readFileSync(join(dir, "config.toml"), "utf8");
     expect(content).toContain("Shore configuration");
-    expect(content).toContain("[defaults]");
+    expect(content).toContain("[chat]");
     expect(content).toContain("[providers.anthropic]");
     expect(content).not.toContain("[chat.");
   });
@@ -53,7 +54,8 @@ describe("createDefaultConfig", () => {
       env: { SHORE_CONFIG_DIR: root },
       onWarn: () => {},
     });
-    expect(loaded.rawTable).toEqual({});
+    expect(loaded.app.defaults.model).toBe("anthropic:claude-opus-4-8");
+    expect(loaded.deprecations).toEqual([]);
   });
 
   test("a directory it cannot write warns and returns undefined", () => {
@@ -69,31 +71,24 @@ describe("createDefaultConfig", () => {
 
 describe("renderStarterConfig", () => {
   test("uncommenting the generated block yields exactly the defaults", () => {
-    const parsed = parseAppConfig(Bun.TOML.parse(renderDefaultsToml()));
-    if ("err" in parsed) throw new Error(parsed.err);
+    const parsed = parseConfigTable(Bun.TOML.parse(renderDefaultsToml()) as Record<string, unknown>, resolveShoreDirs({}), () => {});
 
-    expect(serializeConfigValue(parsed.ok)).toEqual(serializeConfigValue(defaultAppConfig()));
+    expect(serializeConfigValue(parsed.app)).toEqual(serializeConfigValue(defaultAppConfig()));
   });
 
-  test("every section of the schema reaches the file", () => {
+  test("the starter includes only a small working setup", () => {
     const rendered = renderStarterConfig();
-    for (const section of Object.keys(serializeConfigValue(defaultAppConfig()) as object)) {
-      expect(rendered).toContain(`# [${section}]`);
-    }
+    expect(rendered.split("\n").length).toBeLessThan(25);
+    expect(Object.keys(Bun.TOML.parse(rendered))).toEqual(["providers", "chat", "tools"]);
+    expect(rendered).toContain("CONFIG_REFERENCE.md");
   });
 
-  test("options with no default are marked, not invented", () => {
-    const rendered = renderStarterConfig();
-    expect(rendered).toContain(`# model = ${UNSET}`);
+  test("the full reference renderer distinguishes unset options", () => {
+    expect(renderDefaultsToml(true)).toContain(`model = ${UNSET}`);
     expect(renderDefaultsToml()).not.toContain(UNSET);
+    expect(renderStarterConfig()).not.toContain("[defaults");
   });
 
-  test("it does not advertise the deprecated heartbeat alias", () => {
-    const defaults = renderStarterConfig().split("# [defaults]\n")[1]?.split("#\n")[0];
-    expect(defaults).toBeDefined();
-    expect(defaults).not.toContain("heartbeat");
-    expect(renderStarterConfig()).toContain("# [defaults.background]");
-  });
 });
 
 describe("loadConfig", () => {
@@ -108,7 +103,7 @@ describe("loadConfig", () => {
       onWarn: () => {},
     });
 
-    expect(loaded.app.defaults.model).toBeUndefined();
+    expect(loaded.app.defaults.model).toBe("anthropic:claude-opus-4-8");
     expect(existsSync(configPath)).toBe(true);
   });
 

@@ -84,12 +84,12 @@ describe("pinning a background model", () => {
     >;
 
     expect(result["role"]).toBe("heartbeat");
-    expect(result["config_key"]).toBe("defaults.background.heartbeat");
+    expect(result["config_key"]).toBe("heartbeat.model");
     expect(result["qualified_name"]).toBe("chat.openrouter.kimi");
-    expect(await readToml(configPath)).toContain("heartbeat = \"chat.openrouter.kimi\"");
+    expect(Bun.TOML.parse(await readToml(configPath))).toHaveProperty("heartbeat.model", "chat.openrouter.kimi");
 
     expect(roleOf(ctx, "heartbeat")?.model).toBe("chat.openrouter.kimi");
-    expect(roleOf(ctx, "heartbeat")?.source).toBe("defaults.background.heartbeat");
+    expect(roleOf(ctx, "heartbeat")?.source).toBe("heartbeat.model");
     expect(roleOf(ctx, "compaction")?.source).toBe("inherits chat");
     expect(roleOf(ctx, "chat")?.model).toBe("chat.anthropic.opus");
   });
@@ -103,7 +103,7 @@ describe("pinning a background model", () => {
     expect(ctx.activeModel).toBeUndefined();
   });
 
-  test("`all` writes the shared key and drops per-task pins", async () => {
+  test("`all` writes both task models and replaces legacy per-task pins", async () => {
     const { ctx, configPath } = await build(
       `[defaults]\nmodel = "opus"\n\n[defaults.background]\nheartbeat = "haiku"\n`,
     );
@@ -114,8 +114,9 @@ describe("pinning a background model", () => {
     >;
 
     expect(result["role"]).toBe("background");
-    expect(result["config_key"]).toBe("defaults.background.model");
-    expect(result["cleared"]).toEqual(["defaults.background.heartbeat"]);
+    expect(result["config_key"]).toBe("heartbeat.model");
+    expect(result["config_keys"]).toEqual(["heartbeat.model", "compaction.model"]);
+    expect(result["cleared"]).toEqual([]);
 
     const written = await readToml(configPath);
     expect(written).toContain("model = \"chat.openrouter.kimi\"");
@@ -123,7 +124,7 @@ describe("pinning a background model", () => {
 
     expect(roleOf(ctx, "heartbeat")?.model).toBe("chat.openrouter.kimi");
     expect(roleOf(ctx, "compaction")?.model).toBe("chat.openrouter.kimi");
-    expect(roleOf(ctx, "heartbeat")?.source).toBe("defaults.background.model");
+    expect(roleOf(ctx, "heartbeat")?.source).toBe("heartbeat.model");
   });
 
   test("an unknown name is an error and writes nothing", async () => {
@@ -150,30 +151,25 @@ describe("pinning a background model", () => {
 });
 
 describe("unpinning a background model", () => {
-  test("removes the per-task key and falls back to the shared one", async () => {
+  test("requires migration before clearing a legacy shared fallback", async () => {
     const { ctx, configPath } = await build(
       `[defaults]\nmodel = "opus"\n\n[defaults.background]\nmodel = "haiku"\nheartbeat = "kimi"\n`,
     );
-
-    const result = resetModel(ctx, { background_task: "heartbeat" }) as Record<string, unknown>;
-
-    expect(result["cleared"]).toEqual(["defaults.background.heartbeat"]);
-    expect(result["source"]).toBe("defaults.background.model");
-    expect(result["active"]).toBe("chat.anthropic.haiku");
-    expect(await readToml(configPath)).not.toContain("heartbeat =");
-    expect(roleOf(ctx, "heartbeat")?.model).toBe("chat.anthropic.haiku");
+    const before = await readToml(configPath);
+    expect(() => resetModel(ctx, { background_task: "heartbeat" })).toThrow(/migrate/);
+    expect(await readToml(configPath)).toBe(before);
   });
 
   test("`all` clears every background key and the tasks inherit chat", async () => {
     const { ctx, configPath } = await build(
-      `[defaults]\nmodel = "opus"\n\n[defaults.background]\nmodel = "haiku"\ncompaction = "kimi"\n`,
+      `[chat]\nmodel = "opus"\n\n[heartbeat]\nmodel = "haiku"\n[compaction]\nmodel = "kimi"\n`,
     );
 
     const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
 
     expect(result["cleared"]).toEqual([
-      "defaults.background.model",
-      "defaults.background.compaction",
+      "heartbeat.model",
+      "compaction.model",
     ]);
     const written = await readToml(configPath);
     expect(written).not.toContain("compaction =");

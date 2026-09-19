@@ -491,7 +491,7 @@ test("an invalid character overlay fails closed with the rejected field", async 
 
   expect(() => registry.effectiveConfig("Alice")).toThrow(CharacterConfigError);
   expect(() => registry.effectiveConfig("Alice")).toThrow(
-    'invalid config for character "Alice": failed to parse config.toml: unknown field `cache_keepalive_max`, expected `enabled` or `heartbeat`',
+    `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`cache_keepalive_max\`, expected \`enabled\` or \`heartbeat\``,
   );
 });
 

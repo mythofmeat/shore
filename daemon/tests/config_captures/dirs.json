@@ -207,15 +207,19 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "a = 1\n[t]\nb = 2"
+          "content": "tools.max_result_chars = 1\n[memory.retrieval]\nmax_indexed_files = 2"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "a": 1,
-          "t": {
-            "b": 2
+          "tools": {
+            "max_result_chars": 1
+          },
+          "memory": {
+            "retrieval": {
+              "max_indexed_files": 2
+            }
           }
         },
         "config_dir_rel": ""
@@ -235,19 +239,27 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"extra.toml\"]\na = 1\nb = 1"
+          "content": "include = [\"extra.toml\"]\ntools.max_result_chars = 1\nadvanced.max_retries = 1"
         },
         {
           "path": "extra.toml",
-          "content": "b = 2\nc = 3"
+          "content": "advanced.max_retries = 2\nmemory.compaction.max_context_tokens = 3"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "a": 1,
-          "b": 2,
-          "c": 3
+          "tools": {
+            "max_result_chars": 1
+          },
+          "advanced": {
+            "max_retries": 2
+          },
+          "memory": {
+            "compaction": {
+              "max_context_tokens": 3
+            }
+          }
         },
         "config_dir_rel": ""
       }
@@ -257,21 +269,23 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"one.toml\", \"two.toml\"]\nv = 0"
+          "content": "include = [\"one.toml\", \"two.toml\"]\ncache.keepalive_max = 0"
         },
         {
           "path": "one.toml",
-          "content": "v = 1"
+          "content": "cache.keepalive_max = 1"
         },
         {
           "path": "two.toml",
-          "content": "v = 2"
+          "content": "cache.keepalive_max = 2"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "v": 2
+          "cache": {
+            "keepalive_max": 2
+          }
         },
         "config_dir_rel": ""
       }
@@ -281,13 +295,15 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"nope.toml\"]\na = 1"
+          "content": "include = [\"nope.toml\"]\ntools.max_result_chars = 1"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "a": 1
+          "tools": {
+            "max_result_chars": 1
+          }
         },
         "config_dir_rel": ""
       }
@@ -308,45 +324,42 @@
       "error_kind": "parse_include"
     },
     {
-      "name": "a non-string include entry is skipped",
+      "name": "a non-string include entry is rejected",
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [42]\na = 1"
+          "content": "include = [42]\ntools.max_result_chars = 1"
         }
       ],
       "config_path": null,
-      "ok": {
-        "table": {
-          "a": 1
-        },
-        "config_dir_rel": ""
-      }
+      "error_kind": "parse_app"
     },
     {
       "name": "conf.d merges in sorted filename order and beats include",
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"inc.toml\"]\nv = 0"
+          "content": "include = [\"inc.toml\"]\ncache.keepalive_max = 0"
         },
         {
           "path": "inc.toml",
-          "content": "v = 1"
+          "content": "cache.keepalive_max = 1"
         },
         {
           "path": "conf.d/20-b.toml",
-          "content": "v = 3"
+          "content": "cache.keepalive_max = 3"
         },
         {
           "path": "conf.d/10-a.toml",
-          "content": "v = 2"
+          "content": "cache.keepalive_max = 2"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "v": 3
+          "cache": {
+            "keepalive_max": 3
+          }
         },
         "config_dir_rel": ""
       }
@@ -356,11 +369,11 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "v = 0"
+          "content": "cache.keepalive_max = 0"
         },
         {
           "path": "conf.d/a.toml",
-          "content": "v = 1"
+          "content": "cache.keepalive_max = 1"
         },
         {
           "path": "conf.d/b.txt",
@@ -384,14 +397,18 @@
         },
         {
           "path": "conf.d/d.b.toml",
-          "content": "w = 5"
+          "content": "tools.timeout = 5"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "v": 1,
-          "w": 5
+          "cache": {
+            "keepalive_max": 1
+          },
+          "tools": {
+            "timeout": 5
+          }
         },
         "config_dir_rel": ""
       }
@@ -401,30 +418,36 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "v = 0"
+          "content": "cache.keepalive_max = 0"
         },
         {
           "path": "conf.d/z.toml",
-          "content": "v = 1"
+          "content": "cache.keepalive_max = 1"
         },
         {
           "path": "conf.d/a.toml",
-          "content": "v = 2"
+          "content": "cache.keepalive_max = 2"
         },
         {
-          "path": "conf.d/\ud83c\udfb5.toml",
-          "content": "u = 1\nv = 9"
+          "path": "conf.d/🎵.toml",
+          "content": "memory.compaction.max_turns = 1\ncache.keepalive_max = 9"
         },
         {
-          "path": "conf.d/\ufb00.toml",
-          "content": "u = 2"
+          "path": "conf.d/ﬀ.toml",
+          "content": "memory.compaction.max_turns = 2"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "u": 1,
-          "v": 9
+          "memory": {
+            "compaction": {
+              "max_turns": 1
+            }
+          },
+          "cache": {
+            "keepalive_max": 9
+          }
         },
         "config_dir_rel": ""
       }
@@ -434,7 +457,7 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "v = 0"
+          "content": "cache.keepalive_max = 0"
         },
         {
           "path": "conf.d",
@@ -449,7 +472,7 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "v = 0"
+          "content": "cache.keepalive_max = 0"
         },
         {
           "path": "conf.d/bad.toml",
@@ -464,20 +487,22 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "[t]\na = 1\nb = 2"
+          "content": "[memory.retrieval]\nmax_file_bytes = 1\nmax_indexed_files = 2"
         },
         {
           "path": "conf.d/z.toml",
-          "content": "[t]\nb = 9\nc = 3"
+          "content": "[memory.retrieval]\nmax_indexed_files = 9\nmax_total_indexed_bytes = 3"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "t": {
-            "a": 1,
-            "b": 9,
-            "c": 3
+          "memory": {
+            "retrieval": {
+              "max_file_bytes": 1,
+              "max_indexed_files": 9,
+              "max_total_indexed_bytes": 3
+            }
           }
         },
         "config_dir_rel": ""
@@ -488,27 +513,35 @@
       "files": [
         {
           "path": "nested/other.toml",
-          "content": "include = [\"sib.toml\"]\na = 1"
+          "content": "include = [\"sib.toml\"]\ntools.max_result_chars = 1"
         },
         {
           "path": "nested/sib.toml",
-          "content": "b = 2"
+          "content": "advanced.max_retries = 2"
         },
         {
           "path": "nested/conf.d/x.toml",
-          "content": "c = 3"
+          "content": "memory.compaction.max_context_tokens = 3"
         },
         {
           "path": "conf.d/should-not-load.toml",
-          "content": "d = 4"
+          "content": "memory.compaction.min_turns = 4"
         }
       ],
       "config_path": "nested/other.toml",
       "ok": {
         "table": {
-          "a": 1,
-          "b": 2,
-          "c": 3
+          "tools": {
+            "max_result_chars": 1
+          },
+          "advanced": {
+            "max_retries": 2
+          },
+          "memory": {
+            "compaction": {
+              "max_context_tokens": 3
+            }
+          }
         },
         "config_dir_rel": "nested"
       }
@@ -558,11 +591,11 @@
       "name": "names sort by code point, not UTF-16 order",
       "files": [
         {
-          "path": "characters/\ud83c\udfb5drum/workspace/SOUL.md",
+          "path": "characters/🎵drum/workspace/SOUL.md",
           "content": "a"
         },
         {
-          "path": "characters/\ufb00ute/workspace/SOUL.md",
+          "path": "characters/ﬀute/workspace/SOUL.md",
           "content": "b"
         },
         {
@@ -574,8 +607,8 @@
       "probe": "zed",
       "discovered": [
         "zed",
-        "\ufb00ute",
-        "\ud83c\udfb5drum"
+        "ﬀute",
+        "🎵drum"
       ],
       "definition": "c",
       "user": null,
@@ -817,15 +850,15 @@
     },
     {
       "base": "/base",
-      "name": "\ud83c\udfb5",
-      "character_config_dir": "/base/characters/\ud83c\udfb5",
-      "character_workspace_dir": "/base/characters/\ud83c\udfb5/workspace",
-      "character_workspace_file": "/base/characters/\ud83c\udfb5/workspace/SOUL.md",
-      "character_memory_dir": "/base/characters/\ud83c\udfb5/workspace/memory",
-      "character_data_dir": "/base/\ud83c\udfb5",
-      "character_active_jsonl": "/base/\ud83c\udfb5/threads/main/active.jsonl",
-      "character_segments_dir": "/base/\ud83c\udfb5/threads/main/segments",
-      "character_compaction_manifest": "/base/\ud83c\udfb5/threads/main/compaction.json",
+      "name": "🎵",
+      "character_config_dir": "/base/characters/🎵",
+      "character_workspace_dir": "/base/characters/🎵/workspace",
+      "character_workspace_file": "/base/characters/🎵/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/🎵/workspace/memory",
+      "character_data_dir": "/base/🎵",
+      "character_active_jsonl": "/base/🎵/threads/main/active.jsonl",
+      "character_segments_dir": "/base/🎵/threads/main/segments",
+      "character_compaction_manifest": "/base/🎵/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {

@@ -1,3 +1,4 @@
+import { BUDGET_ALIASES, SETTING_ALIASES, internalSettingKey } from "../config/surface.ts";
 import { required } from "../util/required.ts";
 
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -30,6 +31,7 @@ import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
+import { canonicalConfigPath, CONFIG_ALIASES, DEPRECATION_BOUNDARY, formatConfigPath, parseConfigPath, publicConfig, REMOVED_CONFIG, translatePath } from "../config/surface.ts";
 
 export interface ConfigRuntime {
   reloadRuntimeConfig(fresh: LoadedConfig): void;
@@ -150,6 +152,7 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
   return {
     valid: warnings.length === 0,
     warnings,
+    deprecations: ctx.config.deprecations ?? [],
     info,
     config_dir: ctx.config.dirs.config,
     data_dir: ctx.config.dirs.data,
@@ -168,32 +171,37 @@ export function config(ctx: ConfigContext, args: Args): unknown {
   const defaults = reportedDefaults();
 
   if (key === undefined) return { config: app, defaults };
+  if (key === "notifications.ntfy.token") return {
+    key, config: ctx.config.app.notifications.ntfy.token === "" ? "" : "<redacted>", defaults: "",
+    replacement: "notifications.token_env",
+  };
 
-  const found = walkConfigKey(app, key);
+  const canonical = canonicalKey(key);
+  const found = walkConfigKey(app, canonical);
   if (found === undefined) throw notFound(notFoundMessage(key));
-  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };
+  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null, ...(canonical === key ? {} : { deprecated_key: key }) };
 }
 
 function catalogSections(ctx: ConfigContext): Record<string, unknown> {
   const raw = ctx.config.rawTable;
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = { providers: {} };
   for (const section of CATALOG_SECTIONS) {
-    out[section] = serializeConfigValue(raw?.[section] ?? null);
+    if (raw?.[section] !== undefined) out[section] = serializeConfigValue(raw[section]);
   }
   return out;
 }
 
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
-  return redactSecrets({
+  return redactSecrets(publicConfig({
     ...(serializeConfigValue(ctx.config.app) as Record<string, unknown>),
     ...catalogSections(ctx),
-  }) as Record<string, unknown>;
+  })) as Record<string, unknown>;
 }
 
 export function reportedDefaults(): Record<string, unknown> {
   const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;
-  for (const section of CATALOG_SECTIONS) out[section] = null;
-  return out;
+  out.providers = {};
+  return publicConfig(out);
 }
 
 export function reportedSections(ctx: ConfigContext): string[] {
@@ -201,15 +209,19 @@ export function reportedSections(ctx: ConfigContext): string[] {
 }
 
 const KEY_ALIASES: ReadonlyMap<string, string> = new Map([
-  ["model", "defaults.model"],
+  ["model", "chat.model"],
   ["stream", "defaults.stream"],
   ["autonomy.enabled", "behavior.autonomy.enabled"],
 ]);
 
-export const settableKeySpellings = (): string[] => [...KEY_ALIASES.keys()];
+export const settableKeySpellings = (): string[] => ["model", "autonomy.enabled"];
 
 export function canonicalKey(key: string): string {
-  return KEY_ALIASES.get(key) ?? key;
+  const expanded = KEY_ALIASES.get(key) ?? key;
+  const removed = REMOVED_CONFIG.find((rule) => formatConfigPath(rule.path) === expanded);
+  if (removed !== undefined) throw invalidRequest(`${key}: ${removed.reason}; run shore config migrate`);
+  try { return formatConfigPath(canonicalConfigPath(parseConfigPath(expanded))); }
+  catch { throw notFound(`Config section not found: ${key}`); }
 }
 
 function notFoundMessage(key: string): string {
@@ -220,7 +232,7 @@ function notFoundMessage(key: string): string {
 
 function walkConfigKey(root: Record<string, unknown>, key: string): { value: unknown } | undefined {
   let current: unknown = root;
-  for (const segment of key.split(".")) {
+  for (const segment of parseConfigPath(key)) {
     if (current === null || typeof current !== "object" || Array.isArray(current)) return undefined;
     const table = current as Record<string, unknown>;
     if (!(segment in table)) return undefined;
@@ -259,7 +271,14 @@ function valueSources(ctx: ConfigContext): Record<string, string[]> {
 }
 
 export function configSchemaCommand(ctx: ConfigContext): unknown {
-  return { schema: schemaOf(ctx), sources: valueSources(ctx) };
+  return {
+    schema: schemaOf(ctx), sources: valueSources(ctx),
+    deprecations: CONFIG_ALIASES.map((rule) => ({ legacy: formatConfigPath(rule.legacy), canonical: formatConfigPath(rule.canonical), boundary: DEPRECATION_BOUNDARY })),
+    setting_aliases: SETTING_ALIASES,
+    budget_aliases: BUDGET_ALIASES,
+    removals: REMOVED_CONFIG,
+    warnings: ctx.config.deprecations ?? [],
+  };
 }
 
 function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: string): void {
@@ -281,8 +300,19 @@ function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: strin
   throw notFound(`${entry.key}: no ${entry.source} named "${trimmed}". Known: ${known.join(", ")}`);
 }
 
-function targetFile(ctx: ConfigContext, path: readonly string[]): string {
-  const files = ctx.config.files ?? [];
+function targetFile(ctx: ConfigContext, path: readonly string[]): { file: string; path: readonly string[] } {
+  const files = [...new Set([ctx.configPath, ...(ctx.config.files ?? [])])];
+  const aliases = CONFIG_ALIASES.flatMap((rule) => {
+    const old = translatePath(path, rule.canonical, rule.legacy);
+    return old === undefined ? [] : [old];
+  });
+  if (path[0] === "providers" && path.length >= 3) {
+    const leaf = path[2] as string;
+    const old = internalSettingKey(leaf);
+    aliases.push(["providers", path[1] as string, "defaults", old], ["providers", path[1] as string, "defaults", leaf], ["providers", path[1] as string, old]);
+  }
+  if (path[0] === "chat" && path.length >= 3) aliases.push([...path.slice(0, -1), internalSettingKey(path.at(-1) as string)]);
+  if (path.join(".") === "heartbeat.enabled") aliases.push(["behavior", "autonomy", "enabled"], ["behavior", "autonomy", "heartbeat", "enabled"]);
   for (const file of [...files].reverse()) {
     let text: string;
     try {
@@ -290,9 +320,13 @@ function targetFile(ctx: ConfigContext, path: readonly string[]): string {
     } catch {
       continue;
     }
-    if (tomlKeyDefined(text, path)) return file;
+    if (tomlKeyDefined(text, path)) return { file, path };
+    for (const old of aliases) if (tomlKeyDefined(text, old)) {
+      if (path.join(".") === "heartbeat.enabled") throw invalidRequest("heartbeat.enabled inherits two legacy gates; run shore config migrate before changing it");
+      return { file, path: old };
+    }
   }
-  return ctx.configPath;
+  return { file: ctx.configPath, path };
 }
 
 function restoreConfigFile(file: string, before: string, existed: boolean): void {
@@ -323,17 +357,18 @@ interface ConfigWrite {
 function commitConfigKey(
   ctx: ConfigContext,
   key: string,
-  edit: (before: string) => ConfigWrite,
+  edit: (before: string, path: readonly string[]) => ConfigWrite,
   rejection: string,
 ): ConfigSetResult {
-  const path = key.split(".");
-  const file = targetFile(ctx, path);
+  const path = parseConfigPath(key);
+  const target = targetFile(ctx, path);
+  const file = target.file;
   const before = readOrEmpty(file);
 
   let written: string;
   let action: string;
   try {
-    const result = edit(before);
+    const result = edit(before, target.path);
     written = result.text;
     action = result.action;
   } catch (e) {
@@ -404,17 +439,22 @@ export function setConfigKey(
   return commitConfigKey(
     ctx,
     key,
-    (before) => setTomlValue(before, key.split("."), literal),
+    (before, owned) => {
+      const path = parseConfigPath(key);
+      const source = formatConfigPath(owned) === key ? before : unsetTomlValue(before, owned).text;
+      return setTomlValue(source, path, literal);
+    },
     `${key} = ${literal}`,
   );
 }
 
 export function clearConfigKey(ctx: ConfigContext, key: string): ConfigSetResult {
+  key = canonicalKey(key);
   return commitConfigKey(
     ctx,
     key,
-    (before) => {
-      const removal = unsetTomlValue(before, key.split("."));
+    (before, owned) => {
+      const removal = unsetTomlValue(before, owned);
       return { text: removal.text, action: removal.removed ? "removed" : "absent" };
     },
     `clearing ${key}`,
@@ -425,7 +465,7 @@ const configSet = (ctx: ConfigContext, rawKey: string, value: string): unknown =
   setConfigKey(ctx, rawKey, value);
 
 function preferredModelMask(ctx: ConfigContext, key: string): string | null {
-  if (key !== "defaults.model") return null;
+  if (key !== "chat.model") return null;
   const active = ctx.activeModel;
   return active === undefined || active === ctx.config.app.defaults.model ? null : active;
 }

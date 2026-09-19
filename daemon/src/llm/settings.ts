@@ -6,6 +6,7 @@ import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/
 import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
 import type { SamplerSettings } from "../config/preferences.ts";
+import { canonicalSettingKey, geminiMode, internalSettingKey } from "../config/surface.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import { parseCacheKeepalive, parseCacheKeepaliveMax } from "../config/keepalive.ts";
 import { honorsCacheTtl } from "./cache_capability.ts";
@@ -282,7 +283,7 @@ const serializeKeepalive = (value: unknown): unknown => {
 const serializeDuration = (value: unknown): unknown =>
   value instanceof ConfigDuration ? value.toString() : value;
 
-export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
+const INTERNAL_SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "temperature", field: "temperature", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 2, step: 0.1 }, applicability: (_sdk, support) => wireParameter(support, "temperature"), parse: parseNumber("temperature") },
   { key: "top_p", field: "topP", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 1, step: 0.05 }, applicability: (_sdk, support) => wireParameter(support, "top_p"), parse: parseNumber("top_p") },
   { key: "reasoning_effort", field: "reasoningEffort", kind: "string", suggestions: reasoningSuggestions, allowCustom: reasoningAllowsCustom, applicability: reasoningApplicability, parse: parseReasoning },
@@ -300,35 +301,50 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "supports_images", field: "supportsImages", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: always, parse: parseBoolean("supports_images") },
 ];
 
-const BY_KEY = new Map(SETTING_DEFINITIONS.map((definition) => [definition.key, definition]));
+export const SETTING_DEFINITIONS: readonly SettingDefinition[] = INTERNAL_SETTING_DEFINITIONS.map((definition) => ({
+  ...definition,
+  key: canonicalSettingKey(definition.key),
+  ...(definition.key === "gemini_generation" ? {
+    kind: "string" as const,
+    suggestions: ["auto", "budget", "level"],
+    allowCustom: false,
+    serialize: geminiMode,
+  } : {}),
+}));
 
-export const SAMPLER_KEYS: readonly string[] = SETTING_DEFINITIONS.map(({ key }) => key);
+const BY_KEY = new Map([...INTERNAL_SETTING_DEFINITIONS, ...SETTING_DEFINITIONS].map((definition) => [definition.key, definition]));
+
+export const SAMPLER_KEYS: readonly string[] = SETTING_DEFINITIONS.map(({ key }) => canonicalSettingKey(key));
 export const SETTING_STORAGE_FIELDS: readonly (readonly [SamplerField, string])[] =
-  SETTING_DEFINITIONS.map(({ field, key }) => [field, key]);
+  SETTING_DEFINITIONS.map(({ field, key }) => [field, canonicalSettingKey(key)]);
 
 export function settingDefinition(key: string): SettingDefinition | undefined {
-  return BY_KEY.get(key);
+  return BY_KEY.get(internalSettingKey(key));
 }
 
 export function applySamplerValue(sampler: SamplerSettings, key: string, value: unknown): void {
-  const definition = BY_KEY.get(key);
+  const definition = BY_KEY.get(internalSettingKey(key));
   if (definition === undefined) throw new Error(`unknown setting key: ${key}`);
   const target = sampler as Record<string, unknown>;
   if (value === null || value === undefined) {
     target[definition.field] = undefined;
     return;
   }
-  const parsed = definition.parse(value);
+  const parsed = parsedSettingValue(key, value);
   if ("error" in parsed) throw new Error(parsed.error);
   target[definition.field] = parsed.value;
 }
 
 export function parsedSettingValue(key: string, value: unknown): Parsed {
-  const definition = BY_KEY.get(key);
+  if (key === "gemini_thinking_mode") {
+    return value === "auto" ? { value: 0 } : value === "budget" ? { value: 2 } : value === "level" ? { value: 3 } : { error: "gemini_thinking_mode must be auto, budget, or level" };
+  }
+  const definition = BY_KEY.get(internalSettingKey(key));
   return definition === undefined ? { error: `unknown setting key: ${key}` } : definition.parse(value);
 }
 
 export function settingApplicability(sdk: Sdk, key: string, support?: DiscoveredModelSupport, modelId?: string): SettingApplicability {
+  key = internalSettingKey(key);
   if (key === "cache_ttl" || key === "cache_keepalive" || key === "cache_keepalive_max") {
     return honorsCacheTtl(sdk, modelId) ? "honored" : "ignored";
   }
@@ -337,7 +353,7 @@ export function settingApplicability(sdk: Sdk, key: string, support?: Discovered
 
 export function validateSetting(sdk: Sdk, key: string, value: unknown, support?: DiscoveredModelSupport, modelId?: string): string | undefined {
   if (value === null || value === undefined) return undefined;
-  const definition = BY_KEY.get(key);
+  const definition = BY_KEY.get(internalSettingKey(key));
   if (definition === undefined) return undefined;
   if (key === "cache_keepalive" && typeof value === "string") {
     const keepalive = parseCacheKeepalive(value);
@@ -347,7 +363,7 @@ export function validateSetting(sdk: Sdk, key: string, value: unknown, support?:
   if (applicability === "ignored" || applicability === "rejected") {
     return `\`${key}\` is not applicable to the \`${sdk}\` sdk for this model`;
   }
-  const parsed = definition.parse(value);
+  const parsed = parsedSettingValue(key, value);
   if ("error" in parsed) return parsed.error;
   if (key === "reasoning_effort") {
     const effort = parsed.value as string;
@@ -362,11 +378,11 @@ export function validateSetting(sdk: Sdk, key: string, value: unknown, support?:
 
 export function settingSchema(sdk: Sdk, support?: DiscoveredModelSupport, modelId?: string): SettingSchemaEntry[] {
   return SETTING_DEFINITIONS.map((definition) => ({
-    key: definition.key,
-    kind: definition.kind,
+    key: canonicalSettingKey(definition.key),
+    kind: definition.key === "gemini_generation" ? "string" : definition.kind,
     applicability: settingApplicability(sdk, definition.key, support, modelId),
-    suggestions: typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions,
-    allow_custom: typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
+    suggestions: definition.key === "gemini_generation" ? ["auto", "budget", "level"] : typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions,
+    allow_custom: definition.key === "gemini_generation" ? false : typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
     ...(definition.editor === undefined ? {} : { editor: definition.editor }),
   }));
 }
@@ -375,8 +391,8 @@ export function samplerToWire(sampler: SamplerSettings, nulls = false): Record<s
   const out: Record<string, unknown> = {};
   for (const definition of SETTING_DEFINITIONS) {
     const value = sampler[definition.field];
-    const wire = value === undefined ? undefined : (definition.serialize?.(value) ?? value);
-    if (wire !== undefined || nulls) out[definition.key] = wire ?? null;
+    const wire = value === undefined ? undefined : definition.key === "gemini_generation" ? geminiMode(value) : (definition.serialize?.(value) ?? value);
+    if (wire !== undefined || nulls) out[canonicalSettingKey(definition.key)] = wire ?? null;
   }
   return out;
 }

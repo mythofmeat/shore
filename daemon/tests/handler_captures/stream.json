@@ -557,17 +557,17 @@
     {
       "name": "unknown_order_desc",
       "toml": "zzz = 1\naaa = 2\n",
-      "err": "unknown field `zzz`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+      "err": "unknown field `zzz`, expected one of `token_env`, `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
     },
     {
       "name": "unknown_order_asc",
       "toml": "aaa = 1\nzzz = 2\n",
-      "err": "unknown field `aaa`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+      "err": "unknown field `aaa`, expected one of `token_env`, `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
     },
     {
       "name": "unknown_after_known",
       "toml": "enabled = true\nzzz = 1\naaa = 2\n",
-      "err": "unknown field `zzz`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+      "err": "unknown field `zzz`, expected one of `token_env`, `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
     },
     {
       "name": "ntfy_unknown_order_asc",
@@ -734,12 +734,12 @@
     {
       "name": "unknown_two_keys",
       "toml": "zebra = 1\napple = 2\n",
-      "err": "unknown field `zebra`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+      "err": "unknown field `zebra`, expected one of `token_env`, `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
     },
     {
       "name": "unknown_top_level",
       "toml": "verbosity = 3\n",
-      "err": "unknown field `verbosity`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+      "err": "unknown field `verbosity`, expected one of `token_env`, `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
     },
     {
       "name": "enabled_wrong_type",

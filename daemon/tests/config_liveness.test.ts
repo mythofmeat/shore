@@ -5,10 +5,10 @@ import { join } from "node:path";
 import {
   acceptedTopLevelSections,
   defaultAppConfig,
-  parseAppConfig,
 } from "../src/config/app.ts";
 import { config, reportedSections, type ConfigContext } from "../src/commands/config.ts";
-import type { LoadedConfig } from "../src/config/loader.ts";
+import { parseConfigTable, type LoadedConfig } from "../src/config/loader.ts";
+import { resolveShoreDirs } from "../src/config/dirs.ts";
 
 function contextWithRawTable(rawTable: Record<string, unknown>): ConfigContext {
   return {
@@ -116,13 +116,13 @@ describe("every section the daemon accepts is one shore config reports", () => {
 
   test("an unset extracted section reads as unset, not as absent", () => {
     const read = config(emptyConfigContext(), { key: "providers" }) as { config: unknown };
-    expect(read.config).toBeNull();
+    expect(read.config).toEqual({});
   });
 
   test("the parser names every accepted section when it rejects one", () => {
-    const parsed = parseAppConfig({ definitely_not_a_section: {} });
-    expect("err" in parsed).toBe(true);
-    const err = (parsed as { err: string }).err;
+    let err = "";
+    try { parseConfigTable({ definitely_not_a_section: {} }, resolveShoreDirs({}), () => {}); }
+    catch (error) { err = String(error); }
     for (const section of accepted) {
       expect(err, `the rejection does not mention \`${section}\``).toContain(`\`${section}\``);
     }

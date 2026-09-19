@@ -9,6 +9,7 @@ export const RESTART_REQUIRED_PATHS = [
 ] as const;
 
 export function requiresRestart(key: string): boolean {
+  if (key === "matrix" || key.startsWith("matrix.")) return true;
   return RESTART_REQUIRED_PATHS.some((path) => key === path || key.startsWith(`${path}.`));
 }
 
@@ -22,6 +23,7 @@ function at(config: LoadedConfig, path: string): unknown {
 }
 
 function displayPath(path: string): string {
+  path = path === "connections" ? "matrix" : path === "cache.forensics" ? "daemon.cache_forensics" : path;
   const dot = path.indexOf(".");
   if (dot < 0) return `[${path}]`;
   return `[${path.slice(0, dot)}].${path.slice(dot + 1)}`;

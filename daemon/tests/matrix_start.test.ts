@@ -198,16 +198,16 @@ describe("reloading the section", () => {
 
   test("a changed [connections] needs a restart, because the daemon owns the bridge", () => {
     expect(restartRequiredChanges(configWith(undefined), configWith(usable()))).toContain(
-      "[connections]",
+      "[matrix]",
     );
     expect(
       restartRequiredChanges(configWith(usable()), configWith({ ...usable(), mirror_all: false })),
-    ).toContain("[connections]");
+    ).toContain("[matrix]");
   });
 
   test("an unchanged one does not", () => {
     expect(restartRequiredChanges(configWith(usable()), configWith(usable()))).not.toContain(
-      "[connections]",
+      "[matrix]",
     );
   });
 });

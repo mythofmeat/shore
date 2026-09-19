@@ -8,7 +8,7 @@ Enable it in your configuration, retaining any other tools you use:
 
 ```toml
 [tools]
-enabled_tools = ["bash", "search", "search_chat_logs", "web_search"]
+enabled = ["bash", "search", "search_chat_logs", "web_search"]
 
 [tools.config.bash]
 timeout = "5m"
@@ -133,7 +133,7 @@ Existing customizations split across `compact.md` and `compact_system.md` or
 are no longer loaded.
 
 The compaction model is responsible for saving its edits and making a local
-commit. After a successful memory-writing pass, `[memory] git_push = true`
+commit. After a successful memory-writing pass, `[compaction] git_push = true`
 makes the daemon run `git push` in that workspace, using Git's configured push
 destination and the daemon's credentials. It does not create the commit, set up
 a remote, or retry a failed push in the background. Currently push errors are

@@ -1,9 +1,10 @@
-# Configuration redesign proposal
+# Flat configuration design
 
-Status: proposed, for review before implementation. Tracks
-[#227](https://github.com/mythofmeat/shore/issues/227). These examples describe a
-new format and are **not accepted by the current binary**. No deployed config
-was changed while preparing this proposal.
+Status: implemented for [#227](https://github.com/mythofmeat/shore/issues/227),
+awaiting its first stable release. The reader accepts these examples, and the
+offline migration command converts legacy files after checking all scopes.
+No deployed config was changed. See the [generated reference](CONFIG_REFERENCE.md)
+and [migration guide](CONFIG_REDESIGN_MIGRATION.md).
 
 Use flat feature sections: `[chat]`, `[heartbeat]`, `[compaction]`, `[tools]`,
 `[subagents]`, `[cache]`, and `[notifications]`. A section names the thing being
@@ -42,7 +43,7 @@ Two subagent include files contain no active declarations. Environment variable
 names alone do not establish feature use: old integration credentials remain in
 the deployment even when there is no corresponding active config section.
 
-## The main file, in the proposed format
+## The main file
 
 This is the shape of the inspected main file, with personal names and the
 notification destination replaced. Its explicit controls and numeric values are

@@ -255,7 +255,7 @@ describe("runCommand", () => {
         expect(want["message"]).toBe(resolves.was);
         expect(got["kind"]).toBe("command_output");
         const data = frame.type === "command_output" ? (frame.data as Record<string, unknown>) : {};
-        expect(data["key"]).toBe(c.args?.["key"] as never);
+        expect(data["key"]).toBe(c.args?.["key"] === "behavior.autonomy.enabled" ? "heartbeat.enabled" : c.args?.["key"]);
         expect(data["config"]).toEqual(resolves.value as never);
         return;
       }

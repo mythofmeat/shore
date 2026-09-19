@@ -30,12 +30,12 @@ function resolveTarget(
   if (keys.length > 1) {
     throw new Error(
       'multiple [embedding."provider:model_id"] entries are configured but ' +
-        "defaults.embedding is unset; set defaults.embedding to choose one",
+        "embedding.model is unset; set embedding.model to choose one",
     );
   }
   throw new Error(
     "no embedding model configured; semantic search disabled. Set " +
-      'defaults.embedding = "provider:model_id" pointing at an ' +
+      'embedding.model = "provider:model_id" pointing at an ' +
       "OpenAI-compatible embeddings endpoint and configure " +
       "[providers.<provider>].",
   );

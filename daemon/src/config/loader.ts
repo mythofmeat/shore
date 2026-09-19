@@ -8,6 +8,7 @@ import {
   budgetPeriodRank,
   parseAppConfig,
   validateCompaction,
+  validateAppConfigLayer,
   type AppConfig,
   type UsageBudgetConfig,
   type UsageConfig,
@@ -21,9 +22,10 @@ import {
 } from "./dirs.ts";
 import { prepareDotenv } from "./dotenv.ts";
 import { rustTrim } from "./duration.ts";
-import { catalogFromSections, findModel, CatalogError, type ModelCatalog } from "./models.ts";
+import { catalogFromSections, findModel, readModelConfigFields, CatalogError, type ModelCatalog } from "./models.ts";
 import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
 import { renderStarterConfig } from "./starter.ts";
+import { formatConfigPath, normalizeConfigSource, type ConfigDeprecation } from "./surface.ts";
 
 export type TomlTable = Record<string, unknown>;
 
@@ -31,6 +33,7 @@ export interface RawConfigTable {
   table: TomlTable;
   dirs: ShoreDirs;
   files: string[];
+  deprecations?: ConfigDeprecation[];
   adoptEnvironment?: () => void;
 }
 
@@ -136,7 +139,7 @@ function parseToml(content: string, kind: ConfigErrorKind, path?: string): TomlT
   }
 }
 
-function loadConfD(dir: string, table: TomlTable, files: string[]): void {
+function loadConfD(dir: string, table: TomlTable, files: string[], read: (content: string, kind: ConfigErrorKind, path: string) => TomlTable): void {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -152,7 +155,7 @@ function loadConfD(dir: string, table: TomlTable, files: string[]): void {
 
   for (const path of paths) {
     const content = readFileOrThrow(path);
-    deepMerge(table, parseToml(content, "conf_d", path));
+    deepMerge(table, read(content, "conf_d", path));
     files.push(path);
   }
 }
@@ -185,30 +188,45 @@ export function loadRawConfigTable(
 
   let table: TomlTable;
   const files: string[] = [];
+  const deprecations: ConfigDeprecation[] = [];
+  const read = (content: string, kind: ConfigErrorKind, path: string): TomlTable => {
+    const parsed = parseToml(content, kind, path);
+    const includes = parsed.include;
+    delete parsed.include;
+    const normalized = normalizeSource(parsed, path, options.onWarn, deprecations);
+    if (includes !== undefined) normalized.include = includes;
+    return normalized;
+  };
   if (exists(configFile)) {
-    table = parseToml(readFileOrThrow(configFile), "parse_app");
+    table = read(readFileOrThrow(configFile), "parse_app", configFile);
     files.push(configFile);
   } else {
     options.createDefault?.(configDirectory);
-    table = {};
+    if (exists(configFile)) {
+      table = read(readFileOrThrow(configFile), "parse_app", configFile);
+      files.push(configFile);
+    } else table = {};
   }
 
   const includes = table.include;
   delete table.include;
+  if (includes !== undefined && (!Array.isArray(includes) || includes.some((item) => typeof item !== "string"))) {
+    throw new ConfigError("parse_app", `${configFile}: include must be a list of file paths`);
+  }
   if (Array.isArray(includes)) {
     for (const item of includes) {
       if (typeof item !== "string") continue;
       const includePath = rustJoin(configDirectory, item);
       if (!exists(includePath)) continue;
-      deepMerge(table, parseToml(readFileOrThrow(includePath), "parse_include", includePath));
+      deepMerge(table, read(readFileOrThrow(includePath), "parse_include", includePath));
       files.push(includePath);
     }
   }
 
-  loadConfD(rustJoin(configDirectory, "conf.d"), table, files);
+  loadConfD(rustJoin(configDirectory, "conf.d"), table, files, read);
 
   if (options.deferEnvironment !== true) adoptEnvironment?.();
-  return { table, dirs, files, ...(adoptEnvironment === undefined ? {} : { adoptEnvironment }) };
+  return { table, dirs, files, deprecations, ...(adoptEnvironment === undefined ? {} : { adoptEnvironment }) };
 }
 
 export function parentOf(path: string): string {
@@ -231,7 +249,7 @@ export function loadCharacterConfigTable(
   const path = rustJoin(global.dirs.config, "characters", characterName, "config.toml");
   if (!exists(path)) return undefined;
 
-  const overlay = parseToml(readFileOrThrow(path), "parse_include", path);
+  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path);
   const merged = structuredClone(global.table);
   deepMerge(merged, overlay);
   return merged;
@@ -277,7 +295,42 @@ export interface LoadedConfig {
   dirs: ShoreDirs;
   rawTable: TomlTable | undefined;
   files?: string[];
+  deprecations?: ConfigDeprecation[];
   adoptEnvironment?: () => void;
+}
+
+export function normalizeSource(
+  input: TomlTable,
+  source: string,
+  onWarn: ConfigWarn = consoleConfigWarn,
+  warnings: ConfigDeprecation[] = [],
+): TomlTable {
+  try {
+    const normalized = normalizeConfigSource(input, source);
+    const valid = validateAppConfigLayer(normalized.table);
+    if ("err" in valid) throw new Error(`${source}: ${valid.err}`);
+    const table = normalized.table;
+    if (table.providers !== undefined && !isTable(table.providers)) throw new Error(`${source}: providers must be a table`);
+    ProviderRegistry.fromSection(sectionTable(table.providers));
+    catalogFromSections(undefined, sectionTable(table.embedding), sectionTable(table.image_generation));
+    for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
+      if (!isTable(entries)) continue;
+      const profiles = name.includes(":") ? [[name, entries] as const] : Object.entries(entries);
+      for (const [profile, fields] of profiles) {
+        if (!isTable(fields)) continue;
+        const parsed = readModelConfigFields(fields);
+        if ("err" in parsed) throw new Error(`${source}: ${formatConfigPath(name.includes(":") ? ["chat", name] : ["chat", name, profile])}: ${parsed.err}`);
+      }
+    }
+    for (const warning of normalized.deprecations) {
+      warnings.push(warning);
+      onWarn("Deprecated configuration", [["source", source], ["key", warning.path], ["replacement", warning.replacement], ["removal", warning.boundary]]);
+    }
+    return normalized.table;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new ConfigError("parse_app", message.startsWith(`${source}:`) ? message : `${source}: ${message}`, source);
+  }
 }
 
 function sectionTable(value: unknown): TomlTable | undefined {
@@ -289,7 +342,10 @@ export function parseConfigTable(
   dirs: ShoreDirs,
   onWarn: ConfigWarn = consoleConfigWarn,
   files: string[] = [],
+  normalized = false,
 ): LoadedConfig {
+  const deprecations: ConfigDeprecation[] = [];
+  if (!normalized) table = normalizeSource(table, files[0] ?? "config", onWarn, deprecations);
   const rawTable = structuredClone(table);
 
   const remainder = { ...table };
@@ -325,7 +381,7 @@ export function parseConfigTable(
 
   validateConfig(app, models, providers, onWarn);
 
-  return { app, models, providers, dirs, rawTable, files };
+  return { app, models, providers, dirs, rawTable, files, deprecations };
 }
 
 export function loadConfig(
@@ -339,7 +395,8 @@ export function loadConfig(
   } = {},
 ): LoadedConfig {
   const raw = loadRawConfigTable(configPath, { ...options, deferEnvironment: true });
-  const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files);
+  const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files, true);
+  config.deprecations = raw.deprecations ?? [];
   if (options.deferEnvironment === true) {
     if (raw.adoptEnvironment !== undefined) config.adoptEnvironment = raw.adoptEnvironment;
   } else raw.adoptEnvironment?.();
@@ -354,10 +411,12 @@ export function loadCharacterConfig(
   const path = rustJoin(global.dirs.config, "characters", characterName, "config.toml");
   if (!exists(path)) return undefined;
 
-  const overlay = parseToml(readFileOrThrow(path), "parse_include", path);
+  const deprecations = [...(global.deprecations ?? [])];
+  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path, onWarn, deprecations);
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
-  const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path]);
+  const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path], true);
+  loaded.deprecations = deprecations;
   scopeOverlayBudgetsToCharacter(loaded.app.usage, overlay, characterName);
   return loaded;
 }
@@ -483,7 +542,7 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
   for (const pattern of referenced) {
     if (["read", "edit", "delete", "git", "fetch_url", "roll_dice"].includes(pattern)) {
       onWarn(
-        `tool '${pattern}' has been replaced by bash; explicitly enable bash in tools.enabled_tools or the subagent's tools list`,
+        `tool '${pattern}' has been replaced by bash; explicitly enable bash in tools.enabled or the subagent's tools list`,
         [["pattern", pattern]],
       );
     }
@@ -637,7 +696,7 @@ function validateDefaultEmbedding(
   const split = splitOnce(name, ":");
   if (split === undefined) {
     throw validationError(
-      `defaults.embedding "${name}" must be a \`provider:model_id\` identity ` +
+      `embedding.model "${name}" must be a \`provider:model_id\` identity ` +
         "(transport lives on [providers.<provider>]); Shore ships only a hosted " +
         "OpenAI-compatible embedder, so bundled local ids are not served",
     );
@@ -645,10 +704,10 @@ function validateDefaultEmbedding(
   const [providerKey, modelId] = split;
   if (providerKey === "" || modelId === "") {
     throw validationError(
-      `defaults.embedding "${name}" is not a valid \`provider:model_id\` identity`,
+      `embedding.model "${name}" is not a valid \`provider:model_id\` identity`,
     );
   }
-  validateAuxProvider(providers, "defaults.embedding", providerKey, onWarn);
+  validateAuxProvider(providers, "embedding.model", providerKey, onWarn);
 }
 
 function validateDefaultImageGeneration(
@@ -660,17 +719,17 @@ function validateDefaultImageGeneration(
   const split = splitOnce(name, ":");
   if (split === undefined) {
     throw validationError(
-      `defaults.image_generation "${name}" must be a \`provider:model_id\` identity ` +
+      `image.model "${name}" must be a \`provider:model_id\` identity ` +
         "(transport lives on [providers.<provider>])",
     );
   }
   const [providerKey, modelId] = split;
   if (providerKey === "" || modelId === "") {
     throw validationError(
-      `defaults.image_generation "${name}" is not a valid \`provider:model_id\` identity`,
+      `image.model "${name}" is not a valid \`provider:model_id\` identity`,
     );
   }
-  validateAuxProvider(providers, "defaults.image_generation", providerKey, onWarn);
+  validateAuxProvider(providers, "image.model", providerKey, onWarn);
 }
 
 function splitOnce(s: string, sep: string): [string, string] | undefined {

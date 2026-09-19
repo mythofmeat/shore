@@ -198,7 +198,7 @@ MUTANTS = [
      "  } catch {\n    return name;\n  }\n}",
      "  } catch (e) {\n    throw catalogError(e);\n  }\n}"),
     ("rows: the source always says blanket",
-     '    return { role: task, model: qualify(ctx, perTask), source: `defaults.background.${task}` };',
+     '    return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };',
      '    return { role: task, model: qualify(ctx, perTask), source: "defaults.background.model" };'),
     ("rows: the chat row hides the pin, so a side thread reads as the character's",
      "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
@@ -222,7 +222,7 @@ MUTANTS = [
      "    ...{},"),
     ("rows: the source always says per-task",
      '    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };',
-     '    return { role: task, model: qualify(ctx, bg.model), source: `defaults.background.${task}` };'),
+     '    return { role: task, model: qualify(ctx, bg.model), source: `${task}.model` };'),
     ("rows: an unresolved inherit still claims to inherit",
      '  return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };',
      '  return { role: task, model: chat.model, source: "inherits chat" };'),
@@ -391,8 +391,8 @@ MUTANTS = [
 
     # --- set_model_setting --------------------------------------------------
     ("set: the key is not trimmed",
-     "  const key = rawKey.trim();",
-     "  const key = rawKey;"),
+     "  const key = canonicalSettingKey(rawKey.trim());",
+     "  const key = canonicalSettingKey(rawKey);"),
     ("set: an unknown key reaches the parser",
      "  if (!SAMPLER_KEYS.includes(key)) {\n"
      "    throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(\", \")}`);\n"
@@ -401,8 +401,8 @@ MUTANTS = [
      "    throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(\", \")}`);\n"
      "  }"),
     ("set: a missing value is undefined rather than null",
-     '  const value = "value" in args ? args["value"] : null;',
-     '  const value = args["value"];'),
+     '  const rawValue = "value" in args ? args["value"] : null;',
+     '  const rawValue = args["value"];'),
     ("set: the default scope is global",
      '  const scope = asStr(args["scope"]) ?? "character";',
      '  const scope = asStr(args["scope"]) ?? "global";'),

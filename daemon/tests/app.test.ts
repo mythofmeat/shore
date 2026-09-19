@@ -784,17 +784,17 @@ const REMOVED_KEYS = [
   {
     "name": "the retired alias is refused, not forwarded",
     "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
-    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+    "err": "`heartbeat` was removed — set `heartbeat.model`"
   },
   {
     "name": "setting both spellings is still refused",
     "toml": "[defaults]\nheartbeat = \"hb-old\"\n\n[defaults.background]\nheartbeat = \"hb-new\"\n",
-    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+    "err": "`heartbeat` was removed — set `heartbeat.model`"
   },
   {
     "name": "an empty string is a value, not an absence",
     "toml": "[defaults]\nheartbeat = \"\"\n",
-    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+    "err": "`heartbeat` was removed — set `heartbeat.model`"
   },
   {
     "name": "the key that replaced it still parses",
@@ -1529,7 +1529,7 @@ describe("removed config keys", () => {
     expect(refused.length).toBeGreaterThan(0);
     for (const c of refused) {
       expect(c.err).toContain("was removed");
-      expect(c.err).toContain("[defaults.background]");
+      expect(c.err).toContain("heartbeat.model");
       expect(c.err).not.toContain("unknown field");
     }
   });

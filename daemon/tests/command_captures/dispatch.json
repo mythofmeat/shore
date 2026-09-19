@@ -487,6 +487,7 @@
           "chat_models",
           "config_dir",
           "data_dir",
+          "deprecations",
           "info",
           "providers",
           "valid",
