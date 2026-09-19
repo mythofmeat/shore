@@ -238,9 +238,50 @@ describe("shore's own StreamEvent JSONL", () => {
     expect(out.error).toBe("overloaded");
   });
 
-  test("JSONL whose types are not StreamEvents is left alone", () => {
-    const body = [JSON.stringify({ type: "mystery" }), JSON.stringify({ type: "other" })].join("\n");
-    expect(decodeBody(body)).toBe(body);
+  test("provider diagnostics preserve the normalized response and remain inspectable", () => {
+    const diagnostic = { type: "provider_event", provider: "claude_agent", event: { type: "system", subtype: "init", session_id: "session" } };
+    const events = [
+      { type: "start", model: "claude-x" },
+      diagnostic,
+      { type: "thinking", text: "" },
+      { type: "thinking", text: "weigh it" },
+      { type: "thinking_signature", signature: "opaque" },
+      { type: "text", text: "reply" },
+      { type: "tool_use", id: "tool_1", name: "read", input: { path: "a.ts" } },
+      { type: "done", content: "reply", finish_reason: "end_turn", usage: { input_tokens: 10 }, timing: { total_ms: 42 } },
+    ];
+    expect(decodeBody(events.map((event) => JSON.stringify(event)).join("\n"))).toEqual({
+      stream: "events", model: "claude-x", content: "reply", thinking: "weigh it",
+      tool_calls: [{ id: "tool_1", name: "read", arguments: { path: "a.ts" } }],
+      finish_reason: "end_turn", usage: { input_tokens: 10 }, timing: { total_ms: 42 },
+      provider_events: [diagnostic], chunk_count: events.length,
+    });
+  });
+
+  test("future event types cannot veto a normalized response or lose their payloads", () => {
+    const future = { type: "future_event", nested: { value: 7 } };
+    const events = [{ type: "start", model: "claude-x" }, future, { type: "text", text: "reply" }];
+    expect(decodeBody(events.map((event) => JSON.stringify(event)).join("\n"))).toEqual({
+      stream: "events", model: "claude-x", content: "reply", unrecognized_events: [future], chunk_count: 3,
+    });
+  });
+
+  test("a diagnostic-only stream keeps each provider wrapper", () => {
+    const events = ["init", "status"].map((subtype) => ({
+      type: "provider_event", provider: "claude_agent", event: { type: "system", subtype },
+    }));
+    expect(decodeBody(events.map((event) => JSON.stringify(event)).join("\n"))).toEqual({
+      stream: "events", content: "", provider_events: events, chunk_count: 2,
+    });
+  });
+
+  test.each([
+    { name: "unknown event types", values: [{ type: "mystery" }, { type: "other" }] },
+    { name: "objects without event types", values: [{ key: "a" }, { key: "b" }] },
+    { name: "mixed JSON values", values: [{ type: "start" }, null, 3, false, "text", [1, 2]] },
+  ])("JSONL with $name stays structured", ({ values }) => {
+    const body = values.map((value) => JSON.stringify(value)).join("\r\n") + "\r\n\r\n";
+    expect(decodeBody(body)).toEqual({ stream: "events", events: values, chunk_count: values.length });
   });
 
   test("lines that are not all JSON are left alone", () => {

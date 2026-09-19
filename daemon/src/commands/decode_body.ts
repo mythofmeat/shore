@@ -15,6 +15,8 @@ export interface CoalescedStream {
   usage?: unknown;
   timing?: unknown;
   error?: unknown;
+  provider_events?: Obj[];
+  unrecognized_events?: Obj[];
   chunk_count: number;
 }
 
@@ -64,10 +66,10 @@ function sseFrames(body: string): Obj[] | undefined {
   return sawData ? frames : undefined;
 }
 
-function jsonLines(body: string): Obj[] | undefined {
+function jsonLines(body: string): unknown[] | undefined {
   const lines = body.split("\n").filter((l) => l.trim().length > 0);
   if (lines.length < 2) return undefined;
-  const out: Obj[] = [];
+  const out: unknown[] = [];
   for (const line of lines) {
     let parsed: unknown;
     try {
@@ -75,7 +77,6 @@ function jsonLines(body: string): Obj[] | undefined {
     } catch {
       return undefined;
     }
-    if (!isObj(parsed) || typeof parsed["type"] !== "string") return undefined;
     out.push(parsed);
   }
   return out;
@@ -226,8 +227,9 @@ function coalesceStreamEvents(events: readonly Obj[]): CoalescedStream | undefin
     "call_complete",
     "ping",
     "error",
+    "provider_event",
   ]);
-  if (!events.every((e) => known.has(e["type"] as string))) return undefined;
+  if (!events.some((e) => known.has(e["type"] as string))) return undefined;
 
   let content = "";
   let thinking = "";
@@ -237,6 +239,8 @@ function coalesceStreamEvents(events: readonly Obj[]): CoalescedStream | undefin
   let usage: unknown;
   let timing: unknown;
   let error: unknown;
+  const providerEvents: Obj[] = [];
+  const unrecognizedEvents: Obj[] = [];
 
   for (const event of events) {
     switch (event["type"]) {
@@ -278,7 +282,11 @@ function coalesceStreamEvents(events: readonly Obj[]): CoalescedStream | undefin
         usage = event["usage"] ?? usage;
         timing = event["timing"] ?? timing;
         break;
+      case "provider_event":
+        providerEvents.push(event);
+        break;
       default:
+        if (!known.has(event["type"] as string)) unrecognizedEvents.push(event);
         break;
     }
   }
@@ -293,6 +301,8 @@ function coalesceStreamEvents(events: readonly Obj[]): CoalescedStream | undefin
     ...(usage === undefined ? {} : { usage }),
     ...(timing === undefined ? {} : { timing }),
     ...(error === undefined ? {} : { error }),
+    ...(providerEvents.length === 0 ? {} : { provider_events: providerEvents }),
+    ...(unrecognizedEvents.length === 0 ? {} : { unrecognized_events: unrecognizedEvents }),
     chunk_count: events.length,
   };
 }
@@ -312,8 +322,8 @@ export function decodeBody(body: string | null): unknown {
 
   const events = jsonLines(body);
   if (events !== undefined) {
-    const coalesced = coalesceStreamEvents(events);
-    if (coalesced !== undefined) return coalesced;
+    const coalesced = events.every(isObj) ? coalesceStreamEvents(events) : undefined;
+    return coalesced ?? { stream: "events", events, chunk_count: events.length };
   }
 
   return body;
