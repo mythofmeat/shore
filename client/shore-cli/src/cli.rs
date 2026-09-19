@@ -1058,8 +1058,8 @@ pub(crate) enum TraceCommand {
         #[arg(short = 'n', long = "count", default_value = "20")]
         count: u32,
 
-        /// Filter the listing by ledger call type (message, heartbeat, ...)
-        #[arg(long, conflicts_with = "id")]
+        /// Filter by ledger call type, or require that type when dumping an id
+        #[arg(long)]
         call_type: Option<String>,
 
         /// Also show what changed since the previous call
@@ -2617,9 +2617,9 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
                 }
             } else {
                 _ = args.insert("count".into(), json!(count));
-                if let Some(ct) = call_type {
-                    _ = args.insert("call_type".into(), json!(ct));
-                }
+            }
+            if let Some(ct) = call_type {
+                _ = args.insert("call_type".into(), json!(ct));
             }
             Some(("call_log", Value::Object(args)))
         }
@@ -5662,6 +5662,52 @@ mod tests {
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "count"), 5);
         assert_eq!(arg(&args, "call_type"), "heartbeat");
+    }
+
+    #[test]
+    fn trace_calls_id_can_require_a_call_type() {
+        for argv in [
+            vec!["trace", "calls", "--call-type", "compaction", "2536"],
+            vec![
+                "trace",
+                "calls",
+                "--call-type",
+                "compaction",
+                "2536",
+                "--json",
+            ],
+            vec![
+                "trace",
+                "calls",
+                "--call-type",
+                "compaction",
+                "--json",
+                "2536",
+            ],
+            vec![
+                "trace",
+                "calls",
+                "2536",
+                "--wire",
+                "--diff",
+                "--against",
+                "2535",
+                "--call-type",
+                "compaction",
+            ],
+        ] {
+            let cli = parse(&argv);
+            let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
+            assert_eq!(name, "call_log");
+            assert_eq!(arg(&args, "id"), 2536);
+            assert_eq!(arg(&args, "call_type"), "compaction");
+            assert!(args.get("count").is_none());
+            if argv.contains(&"--diff") {
+                assert_eq!(arg(&args, "diff"), true);
+                assert_eq!(arg(&args, "against"), 2535);
+                assert_eq!(arg(&args, "wire"), true);
+            }
+        }
     }
 
     #[test]

@@ -551,6 +551,8 @@ async function* rawEventsOf(
   onRoundStart?: () => Promise<void>,
   onRoundEnd?: () => Promise<void>,
 ): AsyncIterable<RawMessageStreamEvent> {
+  const toolStarts = new Map<string, Extract<RawMessageStreamEvent, { type: "content_block_start" }>>();
+  const streamedToolIndexes = new Set<number>();
   for await (const msg of run) {
     captureAgentEvent(msg);
     const sid = (msg as { session_id?: string }).session_id;
@@ -566,11 +568,32 @@ async function* rawEventsOf(
 
     if (msg.type === "assistant") {
       noteAssistant(seen, msg.message.id, msg.uuid);
+      for (const block of msg.message.content) {
+        if (block.type !== "tool_use") continue;
+        const start = toolStarts.get(block.id);
+        if (start === undefined) continue;
+        toolStarts.delete(block.id);
+        yield start;
+        yield {
+          type: "content_block_delta", index: start.index,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input) },
+        };
+        yield { type: "content_block_stop", index: start.index };
+      }
       continue;
     }
 
     if (msg.type === "stream_event") {
       const event = msg.event as RawMessageStreamEvent;
+      if (event.type === "message_start") {
+        toolStarts.clear();
+        streamedToolIndexes.clear();
+      }
+      if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
+        toolStarts.set(event.content_block.id, event);
+        streamedToolIndexes.add(event.index);
+      }
+      if ("index" in event && streamedToolIndexes.has(event.index)) continue;
       if (endsATurn(event)) seen.sawStopReason = true;
       if (event.type === "message_start" && onRoundStart !== undefined) await onRoundStart();
       yield event;

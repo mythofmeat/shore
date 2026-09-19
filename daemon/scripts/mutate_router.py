@@ -15,7 +15,7 @@ Four things the mutants attack:
   fail silently in the *quiet* direction — the turn still happens, a frontend
   just never sees it.
 - **The cancel frame.** That it is sent only when something was running, that
-  it carries the cancel's rid rather than the generation's, and that it is
+  it carries the active generation's rid, and that it is
   `is_final` with `finish_reason: "cancelled"`. A client waits forever on a
   missing one and renders two endings on a spurious one.
 - **The rid filter.** Both halves of `is_ascii() && !contains('\\0')`, and that
@@ -47,7 +47,9 @@ The other five were ordinary fixture holes: no case sent a `hello` down the
 engine path, none came from a session that had already gone, none had a second
 session holding the lease (so the fanout and the issuer's own sender were
 indistinguishable), none carried a rid that sanitisation would reject, and the
-cancel case used the same rid as the message it cancelled.
+cancel case incorrectly used a request id on the cancel frame. Issue #226
+corrects that fixture: a wire cancel has no rid, so its acknowledgement must
+carry the active generation's rid.
 
 One survivor remains, equivalent, kept in the list so a later reader does not
 "fix" it: **a `Cancel` falling through its early return.** The next guard —
@@ -74,11 +76,11 @@ MUTANTS = [
     ("a cancel falls through (EQUIVALENT — the next guard catches it, and "
      "keeping both is what makes the intent readable)",
      '    if (msg.type === "cancel") {\n'
-     "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
+     "      await this.cancelGeneration(meta.session.sessionId, \"user cancelled\");\n"
      "      return;\n"
      "    }",
      '    if (msg.type === "cancel") {\n'
-     "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
+     "      await this.cancelGeneration(meta.session.sessionId, \"user cancelled\");\n"
      "    }"),
     ("a regen is dropped instead of launched",
      '    if (msg.type !== "message" && msg.type !== "regen") return;',
@@ -122,29 +124,29 @@ MUTANTS = [
      "    void 0;"),
     ("the disconnect sweep cancels nothing",
      "    for (const sessionId of this.#sessions.keys()) {\n"
-     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");\n'
+     '      await this.cancelGeneration(sessionId, "all clients disconnected");\n'
      "    }",
      "    void 0;"),
-    ("the disconnect sweep answers with the last request's rid",
-     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");',
-     '      await this.cancelGeneration(sessionId, "r1", "all clients disconnected");'),
+    ("cancellation uses an unsanitised generation rid",
+     '    const generation: ActiveGeneration = { abort: () => controller.abort(), rid };',
+     '    const generation: ActiveGeneration = { abort: () => controller.abort(), rid: body.rid };'),
 
     # ── the cancel frame ────────────────────────────────────────────────
     ("a cancel with nothing running still sends a frame",
      '    if (generations === undefined) return;',
-     '    if (generations === undefined) {\n      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n      return;\n    }'),
+     '    if (generations === undefined) {\n      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(null));\n      return;\n    }'),
     ("a cancel sends no frame at all",
-     "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));",
-     "    void rid;"),
+     "      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(generation.rid));",
+     "      void generation;"),
     ("a cancel does not abort what it announces",
-     '      abort();\n      generations.delete(key);',
+     '      generation.abort();\n      generations.delete(key);',
      '      generations.delete(key);'),
     ("a finished generation clears a later launch's abort handle",
-     '        if (generations.get(scope) === abort) {',
+     '        if (generations.get(scope) === generation) {',
      '        if (true) {'),
     ("a completed generation retains its session state",
-     '        if (generations.get(scope) === abort) {\n          generations.delete(scope);\n          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);\n        }',
-     '        void abort;'),
+     '        if (generations.get(scope) === generation) {\n          generations.delete(scope);\n          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);\n        }',
+     '        void generation;'),
     ("a cancelled generation retains its session state",
      '    if (generations.size === 0) this.#sessions.delete(sessionId);',
      '    void generations;'),
@@ -163,14 +165,14 @@ MUTANTS = [
 
     # ── superseding ─────────────────────────────────────────────────────
     ("a second request does not abort the first",
-     "    if (previousAbort !== undefined) {\n"
+     "    if (previous !== undefined) {\n"
      '      this.#deps.log?.info?.("aborting previous generation (superseded by new request)");\n'
-     "      previousAbort();\n"
+     "      previous.abort();\n"
      "    }",
-     "    void previousAbort;"),
+     "    void previous;"),
     ("superseding also sends a cancelled stream_end",
-     '    const abort = () => controller.abort();\n    generations.set(scope, abort);\n    this.#sessions.set(meta.session.sessionId, generations);',
-     '    const abort = () => controller.abort();\n    generations.set(scope, abort);\n    this.#sessions.set(meta.session.sessionId, generations);\n    void this.#deps.router.sendToSession(meta.session.sessionId, cancelledStreamEnd(rid));'),
+     '    const generation: ActiveGeneration = { abort: () => controller.abort(), rid };\n    generations.set(scope, generation);\n    this.#sessions.set(meta.session.sessionId, generations);',
+     '    const generation: ActiveGeneration = { abort: () => controller.abort(), rid };\n    generations.set(scope, generation);\n    this.#sessions.set(meta.session.sessionId, generations);\n    void this.#deps.router.sendToSession(meta.session.sessionId, cancelledStreamEnd(rid));'),
 
     # ── the rid filter ──────────────────────────────────────────────────
     ("the rid filter accepts anything",

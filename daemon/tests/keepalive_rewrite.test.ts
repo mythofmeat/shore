@@ -346,6 +346,22 @@ describe("two misses in a row halt everything", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
+  test.each(["heartbeat", "heartbeat_tool_loop"])("a %s cache read does not clear chat keepalive misses", async (callType) => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.service.halted).toBeUndefined();
+
+    h.service.observe("Rhia", "claude-opus-5", callType, undefined, "heartbeat-prefix", { cache_read_tokens: 40_000 });
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted).toBeDefined();
+    expect(h.events.map((event) => event.outcome)).toEqual(["cold", "halted"]);
+  });
+
   test("a real call that read cached tokens between the two misses is not a double miss", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);

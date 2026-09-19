@@ -6,7 +6,8 @@ import type { SDKRateLimitEvent } from "@anthropic-ai/claude-agent-sdk";
 import { withCallCapture } from "../src/llm/capture.ts";
 import { ClaudeAgentProvider, type AgentQuery } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent } from "../src/testing/fake_agent_query.ts";
-import type { CallRecord } from "../src/call_store.ts";
+import { CallStore, type CallRecord } from "../src/call_store.ts";
+import { callLog } from "../src/commands/call_log.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import type { ProviderEvent } from "../src/llm/provider_events.ts";
 import { required } from "../src/util/required.ts";
@@ -33,8 +34,14 @@ test.each(["stream", "generate", "failed generation"])("SDK diagnostics survive 
     if (mode === "failed generation") throw new Error("SDK connection lost after result");
   };
   const captures: CallRecord[] = [];
+  const store = CallStore.openInMemory();
+  let callId: number | undefined;
   const provider = withCallCapture(new ClaudeAgentProvider({ runQuery, bookPath: () => join(dir, "sessions.json") }), {
-    recordCall: call => captures.push(call),
+    recordCall: call => {
+      captures.push(call);
+      callId = store.recordCall(call);
+      return callId;
+    },
   });
   const request: SidecarRequest = {
     sdk: "claude_agent", model: "claude-opus-5", api_key: "",
@@ -60,10 +67,16 @@ test.each(["stream", "generate", "failed generation"])("SDK diagnostics survive 
     expect(diagnostics).toHaveLength(2);
     expect(diagnostics[0]).toEqual({ type: "provider_event", provider: "claude_agent", event: limit });
     expect(diagnostics[1]).toMatchObject({ type: "provider_event", provider: "claude_agent", event: { type: "result", modelUsage, total_cost_usd: 1.1 } });
+    const presented = callLog({ characterName: "fixture", callStore: store }, { id: required(callId) }) as {
+      call: { response: { provider_events: ProviderEvent[]; content?: string } };
+    };
+    expect(presented.call.response.provider_events).toEqual(diagnostics);
     if (mode !== "failed generation") {
+      expect(presented.call.response.content).toBe("reply");
       expect(captured.usage).toEqual({ input_tokens: 2, output_tokens: 50, cache_read_tokens: 100, cache_write_tokens: 20 });
     }
   } finally {
+    store.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

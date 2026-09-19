@@ -233,6 +233,36 @@ function withoutWire(value: unknown): unknown {
   return rest;
 }
 
+test.each([{}, { wire: true }, { diff: true, against: 1 }, { wire: true, diff: true }])(
+  "a call type checks the selected call with options %j",
+  (options) => {
+    const ctx = { characterName: "poppy", callStore: stocked };
+    expect(callLog(ctx, { id: 2, call_type: "heartbeat", ...options }))
+      .toEqual(callLog(ctx, { id: 2, ...options }));
+    expect(() => callLog(ctx, { id: 2, call_type: "compaction", ...options }))
+      .toThrow(new CommandError("invalid_request", 'call 2 has type "heartbeat"; expected "compaction"'));
+  },
+);
+
+test("a call without a recorded type cannot satisfy a requested type", () => {
+  const store = CallStore.openInMemory();
+  try {
+    const id = store.recordCall({
+      call_id: "untyped", ts: at(0), call_type: null, character: "poppy",
+      model: "claude-x", provider: "anthropic", usage: ZERO_USAGE,
+      request_body: "{}", response_body: null,
+    });
+    const ctx = { characterName: "poppy", callStore: store };
+    expect(() => callLog(ctx, { id })).not.toThrow();
+    expect(() => callLog(ctx, { id, call_type: "compaction" }))
+      .toThrow(new CommandError("invalid_request", `call ${id} has type null; expected "compaction"`));
+    expect(() => callLog(ctx, { id: id + 1, call_type: "compaction" }))
+      .toThrow(`no call with id ${id + 1}`);
+  } finally {
+    store.close();
+  }
+});
+
 const SSE = [
   { type: "message_start", message: { model: "claude-x", usage: { input_tokens: 10 } } },
   { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
