@@ -38,6 +38,7 @@ export interface WireMessage {
   content: ContentBlock[];
   provider_key?: string;
   model?: string;
+  transient_tail?: number;
 }
 
 export type ThinkingReplay = "all" | "none";

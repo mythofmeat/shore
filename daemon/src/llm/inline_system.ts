@@ -8,7 +8,7 @@ export interface FoldedTurns {
 
 export function foldInlineSystemMessagesWithTail(turns: readonly WireMessage[]): FoldedTurns {
   if (!turns.some((t) => t.role === "system")) {
-    return { turns: [...turns], transientTail: turns.map(() => 0) };
+    return { turns: [...turns], transientTail: turns.map((turn) => turn.transient_tail ?? 0) };
   }
 
   const out: WireMessage[] = [];
@@ -17,7 +17,7 @@ export function foldInlineSystemMessagesWithTail(turns: readonly WireMessage[]):
   for (const turn of turns) {
     if (turn.role !== "system") {
       out.push(turn);
-      transientTail.push(0);
+      transientTail.push(turn.transient_tail ?? 0);
       continue;
     }
     const text = turn.content

@@ -108,7 +108,7 @@ export async function beginCompaction(
   return guardFor(key);
 }
 
-export function buildSystem(template: string, charName: string, userName: string): string {
+export function buildRules(template: string, charName: string, userName: string): string {
   return template.replaceAll("{{char}}", charName).replaceAll("{{user}}", userName);
 }
 
@@ -485,7 +485,7 @@ export function compactThread(opts: Pick<CompactOptions, "thread">): string {
 export interface CompactOptions {
   conversationId: string;
   plan: ArchivalPlan;
-  systemTemplate: string;
+  rulesTemplate: string;
   promptTemplate: string;
   charName: string;
   thread?: string;
@@ -745,7 +745,7 @@ export function backgroundCoverageNotice(coverage: CompactionCoverage): string |
 }
 
 function buildCompactLlmRequest(opts: CompactOptions): SidecarRequest {
-  const system = buildSystem(opts.systemTemplate, opts.charName, opts.userName);
+  const rules = buildRules(opts.rulesTemplate, opts.charName, opts.userName);
   const notice =
     opts.coverage === undefined ? undefined : backgroundCoverageNotice(opts.coverage);
   const finalMsg =
@@ -754,7 +754,7 @@ function buildCompactLlmRequest(opts: CompactOptions): SidecarRequest {
     role: "user",
     content: [{ type: "text", text: finalMsg }],
   };
-  return opts.llm.buildInitialRequest(system, compactNowUser, opts.chatRequest);
+  return opts.llm.buildInitialRequest(rules, compactNowUser, opts.chatRequest);
 }
 
 async function archiveCompactPrefix(

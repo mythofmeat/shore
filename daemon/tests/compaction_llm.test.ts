@@ -198,7 +198,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
       let error: string | undefined;
       try {
         built = llm.buildInitialRequest(
-          "SYSTEM INSTRUCTION",
+          "COMPACTION RULES",
           { role: "user", content: [{ type: "text", text: "compact now please" }] },
           chatFrom(rec.chat_request as Json),
         );
@@ -217,7 +217,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     });
   }
 
-  test("the tail is two entries and the instruction sits at a fixed index", () => {
+  test("the compaction turn stays in place throughout the tool loop", () => {
     const rec = required(section("build_initial_request").find(
       (r) => r.name === "chat prefix carried, model rebuilt",
     ));
@@ -225,8 +225,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     const built = (rec.result as { ok: Json }).ok.messages as Array<{ role: string }>;
 
     expect(built.length).toBe(chatPrefix.length + COMPACTION_TAIL_ENTRY_COUNT);
-    expect(required(built.at(-2)).role).toBe("user");
-    expect(required(built.at(-1)).role).toBe("system");
+    expect(required(built.at(-1)).role).toBe("user");
 
     const before = JSON.stringify(built);
     const request = { messages: [...built] } as unknown as SidecarRequest;
@@ -238,17 +237,18 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     expect(JSON.stringify(request.messages.slice(0, built.length))).toBe(before);
   });
 
-  test("appendCompactionTail is the two pushes, in that order", () => {
+  test("the task and rules share a user turn without modifying the task", () => {
     const request = { messages: [] } as unknown as SidecarRequest;
+    const task = { role: "user" as const, content: [{ type: "text" as const, text: "now" }] };
     appendCompactionTail(
       request,
-      { role: "user", content: [{ type: "text", text: "now" }] },
+      task,
       "instruction",
     );
     expect(request.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "now" }] },
-      { role: "system", content: [{ type: "text", text: "instruction" }] },
+      { role: "user", content: [{ type: "text", text: "now" }, { type: "text", text: "instruction" }], transient_tail: 1 },
     ]);
+    expect(task.content).toEqual([{ type: "text", text: "now" }]);
     expect(request.messages.length).toBe(COMPACTION_TAIL_ENTRY_COUNT);
   });
 
@@ -283,7 +283,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
       chat,
     );
 
-    expect(built.messages.length).toBe(3);
+    expect(built.messages.length).toBe(2);
     expect(chat).toEqual(before);
   });
 });

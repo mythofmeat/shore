@@ -71,15 +71,22 @@ export function replayableMessagesWithDrops(req: SidecarRequest): {
       activeModel,
     });
 
-    const kept = msg.content.filter((block) => {
+    let transientTail = 0;
+    const kept = msg.content.filter((block, index) => {
       if (block.type === "text" && block.text.trim() === "") return false;
-      if (!isThinking(block)) return true;
-      if (reason === undefined) return true;
-      drops[reason] += 1;
-      return false;
+      if (isThinking(block) && reason !== undefined) {
+        drops[reason] += 1;
+        return false;
+      }
+      if (index >= msg.content.length - (msg.transient_tail ?? 0)) transientTail += 1;
+      return true;
     });
     if (kept.length === 0) continue;
-    out.push({ ...msg, content: kept });
+    out.push({
+      ...msg,
+      content: kept,
+      ...(msg.transient_tail === undefined ? {} : { transient_tail: transientTail }),
+    });
   }
   return { messages: out, drops };
 }

@@ -30,6 +30,7 @@ import {
 } from "../src/commands/compact.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
+import type { SidecarRequest } from "../src/llm/types.ts";
 
 const SEEDED = [
   ["m_1", "user", "first question"],
@@ -167,6 +168,74 @@ describe("compaction model selection and claim ownership", () => {
     await setThreadModel(w.config.dirs.data, "ada", "main", "claude_agent:claude-opus-4-8", "2026-09-15T00:00:00Z");
     return w;
   }
+
+  test.each([
+    { name: "legacy character rules", files: { "characters/ada/prompts/compact_system.md": "Preserve {{char}}'s durable memories." } },
+    { name: "character rules", files: { "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories." } },
+    { name: "legacy global rules", files: { "prompts/compact_system.md": "Preserve {{char}}'s durable memories." } },
+    { name: "global rules", files: { "prompts/compact_rules.md": "Preserve {{char}}'s durable memories." } },
+    { name: "character rules before the legacy name", files: {
+      "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
+      "characters/ada/prompts/compact_system.md": "Old rules.",
+    } },
+    { name: "global rules before the legacy name", files: {
+      "prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
+      "prompts/compact_system.md": "Old rules.",
+    } },
+    { name: "legacy character rules before global rules", files: {
+      "characters/ada/prompts/compact_system.md": "Preserve {{char}}'s durable memories.",
+      "prompts/compact_rules.md": "Global rules.",
+    } },
+    { name: "character rules before legacy global rules", files: {
+      "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
+      "prompts/compact_system.md": "Global rules.",
+    } },
+    { name: "empty rules before the legacy name", files: {
+      "characters/ada/prompts/compact_rules.md": "",
+      "characters/ada/prompts/compact_system.md": "Old rules.",
+      "prompts/compact_rules.md": "Global rules.",
+    }, expected: "" },
+  ])("compact sends and resumes its task and rules as one user turn: $name", async ({ files, expected }) => {
+    const w = await configuredChat();
+    w.config.app.memory.git_push = false;
+    const prompts = join(w.config.dirs.config, "characters", "ada", "prompts");
+    await mkdir(prompts, { recursive: true });
+    await writeFile(join(prompts, "compact.md"), "Compact {{char}}'s conversation.");
+    for (const [file, text] of Object.entries(files)) {
+      const path = join(w.config.dirs.config, file);
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(path, text);
+    }
+    const requests: SidecarRequest[] = [];
+    w.ctx.run.generate = async (request) => {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) throw new Error("provider unavailable");
+      return {
+        content: "Summary complete", content_blocks: [{ type: "text", text: "Summary complete" }],
+        finish_reason: "end_turn", model: request.model,
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    };
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "paused" });
+    expect(requests).toHaveLength(1);
+    const request = requests[0];
+    expect(request?.messages.map(message => message.role)).toEqual(["user", "assistant", "user"]);
+    expect(request?.messages.at(-1)?.content).toEqual([
+      { type: "text", text: "Compact ada's conversation." },
+      { type: "text", text: expected ?? "Preserve ada's durable memories." },
+    ]);
+    expect(request?.messages.at(-1)?.transient_tail).toBe(1);
+    expect(JSON.stringify(request?.system)).not.toContain("Preserve ada's durable memories.");
+    const checkpoint = await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main");
+    expect(checkpoint?.request.messages).toEqual(request?.messages);
+    expect(w.engine.turnCount()).toBe(1);
+    await writeFile(join(prompts, "compact_rules.md"), "Changed rules for the next pass.");
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "compacted" });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.messages).toEqual(request?.messages);
+    expect(w.engine.turnCount()).toBe(0);
+  });
 
   test("missing model errors stay actionable on every retry and fixing the model allows immediate compaction", async () => {
     const w = await world(SEEDED.map((message) => ({ ...message, version: newMessageVersion() })));

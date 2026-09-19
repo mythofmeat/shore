@@ -14,6 +14,7 @@ import { dirname, join, relative } from "node:path";
 import fixture from "./memory_captures/compaction.json";
 
 import { pushAssistantTurn, pushInlineSystem } from "../src/llm/request";
+import { appendCompactionTail } from "../src/memory/compaction/llm.ts";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types";
 import { MarkdownMemoryStore } from "../src/memory/markdown_store";
 import {
@@ -23,13 +24,13 @@ import {
 } from "../src/memory/compaction/background";
 import {
   DEFAULT_COMPACT_PROMPT,
-  DEFAULT_COMPACT_SYSTEM,
+  DEFAULT_COMPACT_RULES,
   stripOneTrailingNewline,
 } from "../src/memory/compaction/prompts";
 import {
   archiveSplitIndex,
   buildFinalMessage,
-  buildSystem,
+  buildRules,
   compact,
   countTurns,
   findTurnSplit,
@@ -202,10 +203,10 @@ describe("resolving a path against the workspace root", () => {
 });
 
 describe("prompt rendering", () => {
-  test("buildSystem", () => {
+  test("buildRules", () => {
     for (const rec of section("build_system")) {
       expect(
-        buildSystem(rec.template as string, rec.char as string, rec.user as string),
+        buildRules(rec.template as string, rec.char as string, rec.user as string),
       ).toBe(rec.out as string);
     }
   });
@@ -379,9 +380,9 @@ describe("appending turns", () => {
 
 describe("the prompt templates", () => {
   test("import as text with exactly one trailing newline removed", () => {
-    expect(DEFAULT_COMPACT_SYSTEM.length).toBeGreaterThan(0);
+    expect(DEFAULT_COMPACT_RULES.length).toBeGreaterThan(0);
     expect(DEFAULT_COMPACT_PROMPT.length).toBeGreaterThan(0);
-    expect(DEFAULT_COMPACT_SYSTEM.endsWith("\n")).toBe(false);
+    expect(DEFAULT_COMPACT_RULES.endsWith("\n")).toBe(false);
     expect(DEFAULT_COMPACT_PROMPT.endsWith("\n")).toBe(false);
   });
 
@@ -497,7 +498,7 @@ exit ${exitCode}` } }],
     try {
       await compact({
         conversationId: "bash-archive", plan, charName: "Aria", userName: "Tom",
-        systemTemplate: "Maintain memory", promptTemplate: "Compact", llm,
+        rulesTemplate: "Maintain memory", promptTemplate: "Compact", llm,
         conversationMgr: new RecordingMgr("next", true), dryRun: false,
         chatRequest: chatRequest(messages), tools, markdownStore,
       }, { keepRecentTurns: 0 });
@@ -652,22 +653,22 @@ class ScriptedLlm implements CompactionLlm {
   }
 
   buildInitialRequest(
-    system: string,
+    rules: string,
     compactNowUser: WireMessage,
     chatRequest_: SidecarRequest,
   ): SidecarRequest {
     const first = compactNowUser.content[0];
     this.built = {
-      system,
+      rules,
       chat_prefix_len: chatRequest_.messages.length,
       built_message_count: chatRequest_.messages.length + 1,
       compact_now_text: first?.type === "text" ? first.text : null,
     };
     const request: SidecarRequest = {
       ...chatRequest_,
-      messages: [...chatRequest_.messages, compactNowUser],
+      messages: [...chatRequest_.messages],
     };
-    pushInlineSystem(request, system);
+    appendCompactionTail(request, compactNowUser, rules);
     this.request = request;
     return request;
   }
@@ -784,21 +785,21 @@ function expectFinalRequestShape(
   if (outcome !== null) {
     expect(
       messages.length,
-      `${where}: the built request, one inline system, then two messages per round`,
-    ).toBe(builtCount + 1 + 2 * rounds + (closed ? 1 : 0));
+      `${where}: the built request, then two messages per round`,
+    ).toBe(builtCount + 2 * rounds + (closed ? 1 : 0));
   } else {
     expect(
       messages.length,
       `${where}: a pass that failed still left whole rounds behind it`,
-    ).toBeGreaterThanOrEqual(builtCount + 1);
+    ).toBeGreaterThanOrEqual(builtCount);
   }
 
   expect(
-    messages[builtCount]?.role,
-    `${where}: the compaction system prompt sits right after what was built`,
-  ).toBe("system");
+    messages[builtCount - 1]?.content.at(-1),
+    `${where}: the compaction rules end the task's user turn`,
+  ).toEqual({ type: "text", text: built?.["rules"] as string });
 
-  const tail = messages.slice(builtCount + 1);
+  const tail = messages.slice(builtCount);
   for (const [i, m] of tail.entries()) {
     expect(m.role, `${where}: round ${Math.floor(i / 2)} alternates model then tool results`).toBe(
       i % 2 === 0 ? "assistant" : "user",
@@ -829,8 +830,8 @@ function expectFinalRequestShape(
   if (tail.length === 0) {
     expect(
       last?.role,
-      `${where}: a pass that never reached the model ends at its system prompt`,
-    ).toBe("system");
+      `${where}: a pass that never reached the model ends at its compaction user turn`,
+    ).toBe("user");
   }
 }
 
@@ -1018,7 +1019,7 @@ async function runPass(pass: Json): Promise<void> {
         {
           conversationId: "conv-1",
           plan,
-          systemTemplate: "System for {{char}} and {{user}}.",
+          rulesTemplate: "Rules for {{char}} and {{user}}.",
           promptTemplate: "Compact now, {{char}}.",
           charName: "Aria",
           userName: "Tom",
@@ -1100,7 +1101,7 @@ async function runPass(pass: Json): Promise<void> {
       llm.built === undefined
         ? null
         : {
-            system: "System for Aria and Tom.",
+            rules: "Rules for Aria and Tom.",
             chat_prefix_len: messages.length,
             built_message_count: messages.length + 1,
             compact_now_text: "Compact now, Aria.",

@@ -22,13 +22,17 @@ export function sanitizeToolPairs(messages: WireMessage[]): WireMessage[] | unde
 
   const out: WireMessage[] = [];
   for (const msg of messages) {
-    const kept = msg.content.filter((block) => keep(msg.role, block, orphanUses, orphanResults));
+    let transientTail = 0;
+    const kept = msg.content.filter((block, index) => {
+      if (!keep(msg.role, block, orphanUses, orphanResults)) return false;
+      if (index >= msg.content.length - (msg.transient_tail ?? 0)) transientTail += 1;
+      return true;
+    });
     if (kept.length === 0) continue;
     out.push({
-      role: msg.role,
+      ...msg,
       content: kept,
-      ...(msg.provider_key !== undefined ? { provider_key: msg.provider_key } : {}),
-      ...(msg.model !== undefined ? { model: msg.model } : {}),
+      ...(msg.transient_tail === undefined ? {} : { transient_tail: transientTail }),
     });
   }
   return out;

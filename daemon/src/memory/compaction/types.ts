@@ -159,7 +159,7 @@ export class CompactionPaused extends Error {
 
 export interface CompactionLlm {
   buildInitialRequest(
-    system: string,
+    rules: string,
     compactNowUser: WireMessage,
     chatRequest: SidecarRequest,
   ): SidecarRequest;

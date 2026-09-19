@@ -554,7 +554,7 @@ function options(
   return {
     conversationId: "ada",
     plan,
-    systemTemplate: "system",
+    rulesTemplate: "system",
     promptTemplate: "compact",
     charName: "ada",
     userName: "user",

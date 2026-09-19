@@ -147,6 +147,7 @@ test.each([false, true])("compaction keeps the chat system prompt and MCP tools 
     appendCompactionTail(request,
       { role: "user", content: [{ type: "text", text: "Compact this conversation now." }] },
       "Write durable memory before archiving the conversation.");
+    expect(request.messages.map(message => message.role)).toEqual(["user", "assistant", "user"]);
     request.context = { character: "test", thinking_enabled: false, call_type: "compaction" };
     if (withTools) mock.push(
       { toolUses: [{ id: "toolu_read", name: "mcp__shore__read", input: { path: "memory.md" } }] },
@@ -158,6 +159,7 @@ test.each([false, true])("compaction keeps the chat system prompt and MCP tools 
     for (const sent of mock.requests.slice(1)) {
       expect(JSON.stringify(sent.body.system)).toBe(JSON.stringify(first.system));
       expect(JSON.stringify(sent.body["tools"])).toBe(JSON.stringify(first["tools"]));
+      expect(JSON.stringify(sent.body)).not.toContain("transient_tail");
     }
     expect(toolCalls).toBe(withTools ? 2 : 0);
     if (withTools) {
@@ -169,6 +171,8 @@ test.each([false, true])("compaction keeps the chat system prompt and MCP tools 
     expect(JSON.stringify(messages[0])).toContain("The original conversation.");
     expect(JSON.stringify(messages.slice(0, -1))).not.toContain("Write durable memory");
     expect(JSON.stringify(messages.at(-1))).toContain("Write durable memory");
+    const lastContent = JSON.stringify(messages.at(-1)?.content);
+    expect(lastContent.indexOf("Compact this conversation now.")).toBeLessThan(lastContent.indexOf("Write durable memory"));
   } finally {
     await mock.stop();
     await rm(dir, { recursive: true, force: true });

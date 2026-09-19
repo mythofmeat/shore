@@ -197,7 +197,7 @@ export function buildOpenAIMessagesWithTail(req: SidecarRequest): OpenAIMessages
   const replayable = replayableMessages(req);
   const folded = translatesToAnthropic(req.model)
     ? foldInlineSystemMessagesWithTail(replayable)
-    : { turns: replayable, transientTail: replayable.map(() => 0) };
+    : { turns: replayable, transientTail: replayable.map((turn) => turn.transient_tail ?? 0) };
 
   folded.turns.forEach((turn, i) => {
     const emitted = turnToOpenAI(toTurn(turn));

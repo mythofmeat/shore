@@ -112,8 +112,21 @@ and `search_chat_logs`.
 New workspaces receive the guidance in
 [`default_tools.md`](../daemon/prompts/engine/default_tools.md). Existing personal
 files are preserved. Custom compaction templates in
-`characters/<name>/prompts/compact_system.md` and `compact.md`, or the global
+`characters/<name>/prompts/compact_rules.md` and `compact.md`, or the global
 `prompts/` directory, override the bundled defaults and also need updating.
+
+Compaction appends one user message after the conversation: the rendered
+`compact.md` task followed by the rendered `compact_rules.md` rules as separate
+text blocks. Both templates support `{{char}}` and `{{user}}`. These are user-turn
+instructions; the character's top-level system prompt stays in place. The rules
+block is excluded from explicit cache breakpoint placement using the message's
+`transient_tail` count of trailing blocks, independently of its role.
+
+The legacy filename `compact_system.md` is still accepted for custom overrides
+with the same user-turn semantics. Within each directory, `compact_rules.md`
+takes precedence over the legacy name, including an empty override. Character
+overrides take precedence over global overrides under either name. Rename custom
+`compact_system.md` files to `compact_rules.md` when convenient.
 
 The compaction model is responsible for saving its edits and making a local
 commit. After a successful memory-writing pass, `[memory] git_push = true`

@@ -107,7 +107,7 @@ async function collectFrames(): Promise<ServerMessage[]> {
       {
         conversationId: "conv-1",
         plan: planOf(MESSAGES, { keepRecentTurns: 0 }),
-        systemTemplate: "System for {{char}}.",
+        rulesTemplate: "System for {{char}}.",
         promptTemplate: "Compact now, {{char}}.",
         charName: "Aria",
         userName: "Tom",
@@ -179,7 +179,7 @@ describe("a compaction pass reports what it is doing", () => {
         {
           conversationId: "conv-1",
           plan: planOf(MESSAGES, { keepRecentTurns: 0 }),
-          systemTemplate: "System for {{char}}.",
+          rulesTemplate: "System for {{char}}.",
           promptTemplate: "Compact now, {{char}}.",
           charName: "Aria",
           userName: "Tom",

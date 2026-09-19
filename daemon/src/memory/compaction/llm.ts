@@ -2,7 +2,7 @@ import type { ToolPhase } from "../../tools/execute.ts";
 import type { ToolLoopOptions } from "../../llm/types.ts";
 import { shoreLog } from "../../log";
 
-import { buildRequestWithProviderKeys, pushInlineSystem, type ResolvedModel } from "../../llm/request";
+import { buildRequestWithProviderKeys, type ResolvedModel } from "../../llm/request";
 import type { ProviderEntry } from "../../llm/credentials";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
 import { describeError } from "../../llm/errors";
@@ -17,15 +17,19 @@ import {
 import type { FrameSink } from "../../llm/stream";
 import { CompactionError, type CompactionLlm } from "./types";
 
-export const COMPACTION_TAIL_ENTRY_COUNT = 2;
+export const COMPACTION_TAIL_ENTRY_COUNT = 1;
 
 export function appendCompactionTail(
   request: SidecarRequest,
   userPrompt: WireMessage,
-  systemPrompt: string,
+  rules: string,
 ): void {
-  request.messages.push(userPrompt);
-  pushInlineSystem(request, systemPrompt);
+  request.messages.push({
+    ...userPrompt,
+    role: "user",
+    content: [...userPrompt.content, { type: "text", text: rules }],
+    transient_tail: (userPrompt.transient_tail ?? 0) + 1,
+  });
 }
 
 export type LedgerGenerate = (
@@ -55,7 +59,7 @@ export class RealCompactionLlm implements CompactionLlm {
   }
 
   buildInitialRequest(
-    system: string,
+    rules: string,
     compactNowUser: WireMessage,
     chatRequest: SidecarRequest,
   ): SidecarRequest {
@@ -77,7 +81,7 @@ export class RealCompactionLlm implements CompactionLlm {
     }
 
     const request = built.request;
-    appendCompactionTail(request, compactNowUser, system);
+    appendCompactionTail(request, compactNowUser, rules);
     return request;
   }
 

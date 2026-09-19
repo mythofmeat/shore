@@ -968,17 +968,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "system": [
@@ -1071,17 +1067,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "max_tokens": 2048,
@@ -1180,17 +1172,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "system": [
@@ -1290,17 +1278,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "tools": [],
@@ -1381,17 +1365,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "max_tokens": 2048,
@@ -1488,17 +1468,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "max_tokens": 2048,
@@ -1717,17 +1693,13 @@
                 {
                   "type": "text",
                   "text": "compact now please"
-                }
-              ]
-            },
-            {
-              "role": "system",
-              "content": [
+                },
                 {
                   "type": "text",
-                  "text": "SYSTEM INSTRUCTION"
+                  "text": "COMPACTION RULES"
                 }
-              ]
+              ],
+              "transient_tail": 1
             }
           ],
           "max_tokens": 2048,
