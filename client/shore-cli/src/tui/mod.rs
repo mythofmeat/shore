@@ -1213,13 +1213,8 @@ async fn handle_action(
             Ok(true)
         }
         Action::PasteImage => {
-            let result = tokio::time::timeout(
-                Duration::from_millis(1500),
-                tokio::task::spawn_blocking(clipboard::read_image_to_temp),
-            )
-            .await;
-            match result {
-                Ok(Ok(Ok(path))) => {
+            match clipboard::read_image_to_temp().await {
+                Ok(path) => {
                     let path_str = path.to_string_lossy().into_owned();
                     app.pending_images.push(path_str);
                     app.paste_temp_paths.push(path);
@@ -1228,9 +1223,7 @@ async fn handle_action(
                         app.pending_images.len()
                     ));
                 }
-                Ok(Ok(Err(e))) => app.set_error(e.to_string()),
-                Ok(Err(_join)) => app.set_error("paste task panicked"),
-                Err(_elapsed) => app.set_error("clipboard read timed out"),
+                Err(e) => app.set_error(e.to_string()),
             }
             Ok(true)
         }
