@@ -1,6 +1,6 @@
 import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
 import type { FrameSink } from "../../llm/stream";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
+import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 
 export const COMPACTION_SUBAGENT = "compaction";
 
@@ -159,8 +159,7 @@ export class CompactionPaused extends Error {
 
 export interface CompactionLlm {
   buildInitialRequest(
-    rules: string,
-    compactNowUser: WireMessage,
+    prompt: string,
     chatRequest: SidecarRequest,
   ): SidecarRequest;
 

@@ -15,7 +15,7 @@ import type {
   CompactionTools,
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types.ts";
+import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -122,7 +122,6 @@ function options(
   return {
     conversationId: "ada",
     plan,
-    rulesTemplate: "system",
     promptTemplate: "compact",
     charName: "ada",
     userName: "user",
@@ -200,8 +199,8 @@ function scripted(turns: GenerateResponse[]): CompactionLlm {
     run(callRequest, phase, loopOptions) {
       return toolGeneration(async (call) => this.generate(call))(callRequest, phase, undefined, loopOptions);
     },
-    buildInitialRequest(_system: string, compactNowUser: WireMessage, chat: SidecarRequest) {
-      return { ...chat, messages: [compactNowUser] };
+    buildInitialRequest(prompt: string, chat: SidecarRequest) {
+      return { ...chat, messages: [{ role: "user", content: [{ type: "text", text: prompt }], transient_tail: 1 }] };
     },
     async generate() {
       const turn = turns[next++];

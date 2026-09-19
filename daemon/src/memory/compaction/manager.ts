@@ -10,7 +10,7 @@ import { characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
 import { lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
+import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 import type { ToolUseEvent } from "../../engine/tool_loop";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
@@ -106,10 +106,6 @@ export async function beginCompaction(
     else queue.push(resolve);
   });
   return guardFor(key);
-}
-
-export function buildRules(template: string, charName: string, userName: string): string {
-  return template.replaceAll("{{char}}", charName).replaceAll("{{user}}", userName);
 }
 
 const IF_RECAP = "{{#if recap}}";
@@ -485,7 +481,6 @@ export function compactThread(opts: Pick<CompactOptions, "thread">): string {
 export interface CompactOptions {
   conversationId: string;
   plan: ArchivalPlan;
-  rulesTemplate: string;
   promptTemplate: string;
   charName: string;
   thread?: string;
@@ -745,16 +740,11 @@ export function backgroundCoverageNotice(coverage: CompactionCoverage): string |
 }
 
 function buildCompactLlmRequest(opts: CompactOptions): SidecarRequest {
-  const rules = buildRules(opts.rulesTemplate, opts.charName, opts.userName);
   const notice =
     opts.coverage === undefined ? undefined : backgroundCoverageNotice(opts.coverage);
   const finalMsg =
     buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) + (notice ?? "");
-  const compactNowUser: WireMessage = {
-    role: "user",
-    content: [{ type: "text", text: finalMsg }],
-  };
-  return opts.llm.buildInitialRequest(rules, compactNowUser, opts.chatRequest);
+  return opts.llm.buildInitialRequest(finalMsg, opts.chatRequest);
 }
 
 async function archiveCompactPrefix(

@@ -166,13 +166,7 @@ describe("resolveCompactionDeps", () => {
         const name = global ? file.slice("global:".length) : file;
         const body = global
           ? "# the global prompt"
-          : name === "compact_system.md"
-            ? "# ada's system template"
-            : file === "compact.md" && (input["templates_on_disk"] as string[]).includes("global:compact.md")
-              ? "# ada's prompt"
-              : (input["templates_on_disk"] as string[]).length === 1
-                ? "# just the prompt"
-                : "# ada's prompt template";
+          : "# ada's prompt";
         await writeFile(join(global ? globalPrompts : charPrompts, name), body);
       }
 
@@ -190,9 +184,6 @@ describe("resolveCompactionDeps", () => {
         rawTable: undefined,
       };
 
-      expect(resolvePromptTemplate(dirs.config, "ada", "compact_system.md") ?? null).toBe(
-        out["system_template_override"] as string | null,
-      );
       expect(resolvePromptTemplate(dirs.config, "ada", "compact.md") ?? null).toBe(
         out["prompt_template_override"] as string | null,
       );

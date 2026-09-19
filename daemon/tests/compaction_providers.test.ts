@@ -10,7 +10,9 @@ import { preprocessRequest } from "../src/llm/request.ts";
 import { appendCompactionTail } from "../src/memory/compaction/llm.ts";
 import { required } from "../src/util/required.ts";
 
-function request(sdk: Sdk, rules = "Compaction rules."): SidecarRequest {
+const COMPACTION_PROMPT = "Compaction task.\n\nCompaction rules.";
+
+function request(sdk: Sdk, prompt = COMPACTION_PROMPT): SidecarRequest {
   const req: SidecarRequest = {
     sdk, provider_key: sdk, model: "anthropic/claude-sonnet-5", api_key: "test-key",
     system: [{ label: "prompt", text: "Stable character instructions." }],
@@ -20,7 +22,7 @@ function request(sdk: Sdk, rules = "Compaction rules."): SidecarRequest {
     ],
     max_tokens: 100, replay_prior_thinking: "all",
   };
-  appendCompactionTail(req, { role: "user", content: [{ type: "text", text: "Compaction task." }] }, rules);
+  appendCompactionTail(req, prompt);
   return req;
 }
 
@@ -36,7 +38,7 @@ const providers: Array<{ sdk: Sdk; messages: (req: SidecarRequest) => unknown }>
 ];
 
 describe("compaction user instructions at provider boundaries", () => {
-  test.each(providers)("$sdk receives the task followed by rules in one user message", ({ sdk, messages }) => {
+  test.each(providers)("$sdk receives the complete prompt in one user message", ({ sdk, messages }) => {
     const req = request(sdk);
     if (sdk !== "nanogpt") req.model = "fixture-model";
     const before = structuredClone(req);
@@ -56,13 +58,13 @@ describe("compaction user instructions at provider boundaries", () => {
 describe("compaction cache boundaries", () => {
   for (const sdk of ["anthropic", "nanogpt"] as const) {
     test.each([
-      { rules: "Compaction rules.", orphan: false, guidance: false },
-      { rules: "", orphan: false, guidance: false },
-      { rules: " \n ", orphan: false, guidance: false },
-      { rules: "Compaction rules.", orphan: true, guidance: false },
-      { rules: "Compaction rules.", orphan: false, guidance: true },
-    ])(`${sdk} keeps the cache boundary before rules: %j`, ({ rules, orphan, guidance }) => {
-      let req = request(sdk, rules);
+      { prompt: COMPACTION_PROMPT, orphan: false, guidance: false },
+      { prompt: "", orphan: false, guidance: false },
+      { prompt: " \n ", orphan: false, guidance: false },
+      { prompt: COMPACTION_PROMPT, orphan: true, guidance: false },
+      { prompt: COMPACTION_PROMPT, orphan: false, guidance: true },
+    ])(`${sdk} keeps the cache boundary before the compaction prompt: %j`, ({ prompt, orphan, guidance }) => {
+      let req = request(sdk, prompt);
       if (orphan) required(req.messages[1]).content.push({ type: "tool_use", id: "orphan", name: "read", input: {} });
       if (guidance) req.messages.splice(1, 0, { role: "system", content: [{ type: "text", text: "Earlier guidance." }] });
       req = preprocessRequest(req);
@@ -82,8 +84,8 @@ describe("compaction cache boundaries", () => {
           Array.isArray(message.content)
             ? (message.content as Array<{ text?: string; cache_control?: unknown }>).filter(block => block.cache_control !== undefined)
             : []);
-        expect(marked.map(block => block.text)).toContain("Compaction task.");
-        expect(marked.map(block => block.text)).not.toContain(rules);
+        expect(marked.map(block => block.text)).toContain(prompt.trim() === "" ? "Hello." : "Hi.");
+        expect(marked.map(block => block.text)).not.toContain(prompt);
         expect(JSON.stringify(messages)).not.toContain("transient_tail");
         expect(req).toEqual(before);
         req.messages.push(

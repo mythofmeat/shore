@@ -111,22 +111,21 @@ and `search_chat_logs`.
 
 New workspaces receive the guidance in
 [`default_tools.md`](../daemon/prompts/engine/default_tools.md). Existing personal
-files are preserved. Custom compaction templates in
-`characters/<name>/prompts/compact_rules.md` and `compact.md`, or the global
-`prompts/` directory, override the bundled defaults and also need updating.
+files are preserved. Compaction uses one template,
+[`compact.md`](../daemon/prompts/memory/compaction/compact.md), containing the
+complete task and rules. Customize it at `characters/<name>/prompts/compact.md`
+or globally at `prompts/compact.md`. A character override takes precedence over
+the global one, including an empty override.
 
-Compaction appends one user message after the conversation: the rendered
-`compact.md` task followed by the rendered `compact_rules.md` rules as separate
-text blocks. Both templates support `{{char}}` and `{{user}}`. These are user-turn
-instructions; the character's top-level system prompt stays in place. The rules
-block is excluded from explicit cache breakpoint placement using the message's
-`transient_tail` count of trailing blocks, independently of its role.
+The template supports `{{char}}` and `{{user}}` and is rendered as one text block
+in a user message appended after the conversation. The character's top-level
+system prompt stays in place. The entire compaction prompt is excluded from
+explicit cache breakpoint placement using the message's `transient_tail` count
+of trailing blocks, independently of its role.
 
-The legacy filename `compact_system.md` is still accepted for custom overrides
-with the same user-turn semantics. Within each directory, `compact_rules.md`
-takes precedence over the legacy name, including an empty override. Character
-overrides take precedence over global overrides under either name. Rename custom
-`compact_system.md` files to `compact_rules.md` when convenient.
+Existing customizations split across `compact.md` and `compact_system.md` or
+`compact_rules.md` should be combined into `compact.md`; the separate rules files
+are no longer loaded.
 
 The compaction model is responsible for saving its edits and making a local
 commit. After a successful memory-writing pass, `[memory] git_push = true`

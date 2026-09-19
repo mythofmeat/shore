@@ -145,8 +145,7 @@ test.each([false, true])("compaction keeps the chat system prompt and MCP tools 
     const reply = await run();
     request.messages.push({ role: "assistant", content: reply });
     appendCompactionTail(request,
-      { role: "user", content: [{ type: "text", text: "Compact this conversation now." }] },
-      "Write durable memory before archiving the conversation.");
+      "Compact this conversation now.\n\nWrite durable memory before archiving the conversation.");
     expect(request.messages.map(message => message.role)).toEqual(["user", "assistant", "user"]);
     request.context = { character: "test", thinking_enabled: false, call_type: "compaction" };
     if (withTools) mock.push(

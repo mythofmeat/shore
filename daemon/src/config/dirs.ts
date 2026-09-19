@@ -294,15 +294,11 @@ export function resolveUserDefinition(
 export function resolvePromptTemplate(
   config: string,
   characterName: string,
-  templateName: string | readonly string[],
+  templateName: string,
 ): string | undefined {
-  const names = typeof templateName === "string" ? [templateName] : templateName;
-  const roots = [characterConfigDir(config, characterName), config];
-  for (const root of roots) {
-    for (const name of names) {
-      const template = readOrUndefined(rustJoin(root, "prompts", name));
-      if (template !== undefined) return template;
-    }
-  }
-  return undefined;
+  return (
+    readOrUndefined(
+      rustJoin(characterConfigDir(config, characterName), "prompts", templateName),
+    ) ?? readOrUndefined(rustJoin(config, "prompts", templateName))
+  );
 }

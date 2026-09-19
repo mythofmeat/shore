@@ -24,13 +24,11 @@ import {
 } from "../src/memory/compaction/background";
 import {
   DEFAULT_COMPACT_PROMPT,
-  DEFAULT_COMPACT_RULES,
   stripOneTrailingNewline,
 } from "../src/memory/compaction/prompts";
 import {
   archiveSplitIndex,
   buildFinalMessage,
-  buildRules,
   compact,
   countTurns,
   findTurnSplit,
@@ -203,14 +201,6 @@ describe("resolving a path against the workspace root", () => {
 });
 
 describe("prompt rendering", () => {
-  test("buildRules", () => {
-    for (const rec of section("build_system")) {
-      expect(
-        buildRules(rec.template as string, rec.char as string, rec.user as string),
-      ).toBe(rec.out as string);
-    }
-  });
-
   test("buildFinalMessage", () => {
     for (const rec of section("build_final_message")) {
       expect(
@@ -380,9 +370,7 @@ describe("appending turns", () => {
 
 describe("the prompt templates", () => {
   test("import as text with exactly one trailing newline removed", () => {
-    expect(DEFAULT_COMPACT_RULES.length).toBeGreaterThan(0);
     expect(DEFAULT_COMPACT_PROMPT.length).toBeGreaterThan(0);
-    expect(DEFAULT_COMPACT_RULES.endsWith("\n")).toBe(false);
     expect(DEFAULT_COMPACT_PROMPT.endsWith("\n")).toBe(false);
   });
 
@@ -498,7 +486,7 @@ exit ${exitCode}` } }],
     try {
       await compact({
         conversationId: "bash-archive", plan, charName: "Aria", userName: "Tom",
-        rulesTemplate: "Maintain memory", promptTemplate: "Compact", llm,
+        promptTemplate: "Compact", llm,
         conversationMgr: new RecordingMgr("next", true), dryRun: false,
         chatRequest: chatRequest(messages), tools, markdownStore,
       }, { keepRecentTurns: 0 });
@@ -653,22 +641,19 @@ class ScriptedLlm implements CompactionLlm {
   }
 
   buildInitialRequest(
-    rules: string,
-    compactNowUser: WireMessage,
+    prompt: string,
     chatRequest_: SidecarRequest,
   ): SidecarRequest {
-    const first = compactNowUser.content[0];
     this.built = {
-      rules,
       chat_prefix_len: chatRequest_.messages.length,
       built_message_count: chatRequest_.messages.length + 1,
-      compact_now_text: first?.type === "text" ? first.text : null,
+      compact_now_text: prompt,
     };
     const request: SidecarRequest = {
       ...chatRequest_,
       messages: [...chatRequest_.messages],
     };
-    appendCompactionTail(request, compactNowUser, rules);
+    appendCompactionTail(request, prompt);
     this.request = request;
     return request;
   }
@@ -796,8 +781,8 @@ function expectFinalRequestShape(
 
   expect(
     messages[builtCount - 1]?.content.at(-1),
-    `${where}: the compaction rules end the task's user turn`,
-  ).toEqual({ type: "text", text: built?.["rules"] as string });
+    `${where}: the compaction prompt is one user text block`,
+  ).toEqual({ type: "text", text: built?.["compact_now_text"] as string });
 
   const tail = messages.slice(builtCount);
   for (const [i, m] of tail.entries()) {
@@ -1019,7 +1004,6 @@ async function runPass(pass: Json): Promise<void> {
         {
           conversationId: "conv-1",
           plan,
-          rulesTemplate: "Rules for {{char}} and {{user}}.",
           promptTemplate: "Compact now, {{char}}.",
           charName: "Aria",
           userName: "Tom",
@@ -1101,7 +1085,6 @@ async function runPass(pass: Json): Promise<void> {
       llm.built === undefined
         ? null
         : {
-            rules: "Rules for Aria and Tom.",
             chat_prefix_len: messages.length,
             built_message_count: messages.length + 1,
             compact_now_text: "Compact now, Aria.",

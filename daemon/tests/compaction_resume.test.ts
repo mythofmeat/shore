@@ -19,7 +19,7 @@ import type {
   CompactionTools,
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types.ts";
+import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { handleDelete, handleEdit } from "../src/tools/workspace.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 
@@ -554,7 +554,6 @@ function options(
   return {
     conversationId: "ada",
     plan,
-    rulesTemplate: "system",
     promptTemplate: "compact",
     charName: "ada",
     userName: "user",
@@ -638,8 +637,8 @@ function scripted(
     },
     calls: 0,
     apiKeys: [],
-    buildInitialRequest(_system: string, compactNowUser: WireMessage, chat: SidecarRequest) {
-      return { ...chat, api_key: "secret-that-must-not-land-on-disk", messages: [compactNowUser] };
+    buildInitialRequest(prompt: string, chat: SidecarRequest) {
+      return { ...chat, api_key: "secret-that-must-not-land-on-disk", messages: [{ role: "user", content: [{ type: "text", text: prompt }], transient_tail: 1 }] };
     },
     async generate(request) {
       this.calls += 1;

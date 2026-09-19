@@ -41,7 +41,7 @@ import { conversationManager, hasCompactionOperation, segmentCount } from "./arc
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, countTurns, tryBeginCompaction } from "./manager.ts";
-import { DEFAULT_COMPACT_PROMPT, DEFAULT_COMPACT_RULES } from "./prompts.ts";
+import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
 import {
   CompactionError,
@@ -238,7 +238,6 @@ export async function runCompactionPass(
         {
           conversationId: character,
           plan,
-          rulesTemplate: resolved.rulesTemplate,
           promptTemplate: resolved.promptTemplate,
           charName: character,
           thread,
@@ -300,7 +299,6 @@ export async function runCompactionPass(
 
 interface ResolvedDeps {
   effective: LoadedConfig;
-  rulesTemplate: string;
   promptTemplate: string;
   displayName: string;
   llm: RealCompactionLlm;
@@ -408,8 +406,6 @@ async function resolveDeps(
   dryRun: boolean,
 ): Promise<ResolvedDeps> {
   const configDir = effective.dirs.config;
-  const rulesTemplate =
-    resolvePromptTemplate(configDir, character, ["compact_rules.md", "compact_system.md"]) ?? DEFAULT_COMPACT_RULES;
   const promptTemplate =
     resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT;
 
@@ -440,7 +436,6 @@ async function resolveDeps(
 
   return {
     effective,
-    rulesTemplate,
     promptTemplate,
     displayName: resolveDisplayName(effective.app.defaults),
     llm: new RealCompactionLlm({

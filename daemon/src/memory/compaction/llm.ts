@@ -4,7 +4,7 @@ import { shoreLog } from "../../log";
 
 import { buildRequestWithProviderKeys, type ResolvedModel } from "../../llm/request";
 import type { ProviderEntry } from "../../llm/credentials";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
+import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 import { describeError } from "../../llm/errors";
 import {
   countImageBlocks,
@@ -21,14 +21,12 @@ export const COMPACTION_TAIL_ENTRY_COUNT = 1;
 
 export function appendCompactionTail(
   request: SidecarRequest,
-  userPrompt: WireMessage,
-  rules: string,
+  prompt: string,
 ): void {
   request.messages.push({
-    ...userPrompt,
     role: "user",
-    content: [...userPrompt.content, { type: "text", text: rules }],
-    transient_tail: (userPrompt.transient_tail ?? 0) + 1,
+    content: [{ type: "text", text: prompt }],
+    transient_tail: 1,
   });
 }
 
@@ -59,8 +57,7 @@ export class RealCompactionLlm implements CompactionLlm {
   }
 
   buildInitialRequest(
-    rules: string,
-    compactNowUser: WireMessage,
+    prompt: string,
     chatRequest: SidecarRequest,
   ): SidecarRequest {
     let built;
@@ -81,7 +78,7 @@ export class RealCompactionLlm implements CompactionLlm {
     }
 
     const request = built.request;
-    appendCompactionTail(request, compactNowUser, rules);
+    appendCompactionTail(request, prompt);
     return request;
   }
 

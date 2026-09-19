@@ -30,6 +30,7 @@ import {
 } from "../src/commands/compact.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
+import { DEFAULT_COMPACT_PROMPT } from "../src/memory/compaction/prompts.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 
 const SEEDED = [
@@ -170,37 +171,30 @@ describe("compaction model selection and claim ownership", () => {
   }
 
   test.each([
-    { name: "legacy character rules", files: { "characters/ada/prompts/compact_system.md": "Preserve {{char}}'s durable memories." } },
-    { name: "character rules", files: { "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories." } },
-    { name: "legacy global rules", files: { "prompts/compact_system.md": "Preserve {{char}}'s durable memories." } },
-    { name: "global rules", files: { "prompts/compact_rules.md": "Preserve {{char}}'s durable memories." } },
-    { name: "character rules before the legacy name", files: {
-      "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
-      "characters/ada/prompts/compact_system.md": "Old rules.",
+    { name: "character prompt", files: { "characters/ada/prompts/compact.md": "Preserve {{char}}'s memories for {{user}}." } },
+    { name: "global prompt", files: { "prompts/compact.md": "Preserve {{char}}'s memories for {{user}}." } },
+    { name: "character prompt before global prompt", files: {
+      "characters/ada/prompts/compact.md": "Preserve {{char}}'s memories for {{user}}.",
+      "prompts/compact.md": "Global prompt.",
     } },
-    { name: "global rules before the legacy name", files: {
-      "prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
-      "prompts/compact_system.md": "Old rules.",
+    { name: "old split files are ignored", files: {
+      "characters/ada/prompts/compact.md": "Preserve {{char}}'s memories for {{user}}.",
+      "characters/ada/prompts/compact_rules.md": "Old character rules.",
+      "characters/ada/prompts/compact_system.md": "Old character system.",
+      "prompts/compact_rules.md": "Old global rules.",
+      "prompts/compact_system.md": "Old global system.",
     } },
-    { name: "legacy character rules before global rules", files: {
-      "characters/ada/prompts/compact_system.md": "Preserve {{char}}'s durable memories.",
-      "prompts/compact_rules.md": "Global rules.",
-    } },
-    { name: "character rules before legacy global rules", files: {
-      "characters/ada/prompts/compact_rules.md": "Preserve {{char}}'s durable memories.",
-      "prompts/compact_system.md": "Global rules.",
-    } },
-    { name: "empty rules before the legacy name", files: {
-      "characters/ada/prompts/compact_rules.md": "",
-      "characters/ada/prompts/compact_system.md": "Old rules.",
-      "prompts/compact_rules.md": "Global rules.",
+    { name: "empty character prompt before global prompt", files: {
+      "characters/ada/prompts/compact.md": "",
+      "prompts/compact.md": "Global prompt.",
     }, expected: "" },
-  ])("compact sends and resumes its task and rules as one user turn: $name", async ({ files, expected }) => {
+    { name: "combined default prompt", files: {}, expected: DEFAULT_COMPACT_PROMPT.replaceAll("{{char}}", "ada").replaceAll("{{user}}", "Tom") },
+  ])("compact sends and resumes one complete prompt: $name", async ({ files, expected }) => {
     const w = await configuredChat();
     w.config.app.memory.git_push = false;
+    w.config.app.defaults.display_name = "Tom";
     const prompts = join(w.config.dirs.config, "characters", "ada", "prompts");
     await mkdir(prompts, { recursive: true });
-    await writeFile(join(prompts, "compact.md"), "Compact {{char}}'s conversation.");
     for (const [file, text] of Object.entries(files)) {
       const path = join(w.config.dirs.config, file);
       await mkdir(join(path, ".."), { recursive: true });
@@ -222,15 +216,14 @@ describe("compaction model selection and claim ownership", () => {
     const request = requests[0];
     expect(request?.messages.map(message => message.role)).toEqual(["user", "assistant", "user"]);
     expect(request?.messages.at(-1)?.content).toEqual([
-      { type: "text", text: "Compact ada's conversation." },
-      { type: "text", text: expected ?? "Preserve ada's durable memories." },
+      { type: "text", text: expected ?? "Preserve ada's memories for Tom." },
     ]);
     expect(request?.messages.at(-1)?.transient_tail).toBe(1);
-    expect(JSON.stringify(request?.system)).not.toContain("Preserve ada's durable memories.");
+    expect(JSON.stringify(request?.system)).not.toContain("Preserve ada's memories for Tom.");
     const checkpoint = await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main");
     expect(checkpoint?.request.messages).toEqual(request?.messages);
     expect(w.engine.turnCount()).toBe(1);
-    await writeFile(join(prompts, "compact_rules.md"), "Changed rules for the next pass.");
+    await writeFile(join(prompts, "compact.md"), "Changed prompt for the next pass.");
     expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "compacted" });
     expect(requests).toHaveLength(2);
     expect(requests[1]?.messages).toEqual(request?.messages);

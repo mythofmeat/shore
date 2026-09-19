@@ -273,14 +273,13 @@
   ],
   "resolve_compaction_deps": [
     {
-      "name": "no templates on disk leaves both to the bundled defaults",
+      "name": "no templates on disk uses the bundled default",
       "note": "the resolver answers None and the caller substitutes",
       "input": {
         "model_configured": true,
         "templates_on_disk": []
       },
       "output": {
-        "system_template_override": null,
         "prompt_template_override": null,
         "model": "chat.fixture",
         "max_tool_iterations": 7,
@@ -292,30 +291,8 @@
       }
     },
     {
-      "name": "a character's own templates win",
-      "note": "both are looked up per character, under the config dir",
-      "input": {
-        "model_configured": true,
-        "templates_on_disk": [
-          "compact_system.md",
-          "compact.md"
-        ]
-      },
-      "output": {
-        "system_template_override": "# ada's system template",
-        "prompt_template_override": "# ada's prompt template",
-        "model": "chat.fixture",
-        "max_tool_iterations": 7,
-        "display_name": "eshen",
-        "compaction_settings": {
-          "min_turns": 8,
-          "max_turns": 16
-        }
-      }
-    },
-    {
-      "name": "one override and one default is allowed",
-      "note": "they resolve independently; there is no all-or-nothing",
+      "name": "a character's own prompt wins",
+      "note": "the prompt is looked up per character, under the config dir",
       "input": {
         "model_configured": true,
         "templates_on_disk": [
@@ -323,8 +300,7 @@
         ]
       },
       "output": {
-        "system_template_override": null,
-        "prompt_template_override": "# just the prompt",
+        "prompt_template_override": "# ada's prompt",
         "model": "chat.fixture",
         "max_tool_iterations": 7,
         "display_name": "eshen",
@@ -344,7 +320,6 @@
         ]
       },
       "output": {
-        "system_template_override": null,
         "prompt_template_override": "# the global prompt",
         "model": "chat.fixture",
         "max_tool_iterations": 7,
@@ -366,7 +341,6 @@
         ]
       },
       "output": {
-        "system_template_override": null,
         "prompt_template_override": "# ada's prompt",
         "model": "chat.fixture",
         "max_tool_iterations": 7,
@@ -385,7 +359,6 @@
         "templates_on_disk": []
       },
       "output": {
-        "system_template_override": null,
         "prompt_template_override": null,
         "model": null,
         "max_tool_iterations": null,

@@ -198,8 +198,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
       let error: string | undefined;
       try {
         built = llm.buildInitialRequest(
-          "COMPACTION RULES",
-          { role: "user", content: [{ type: "text", text: "compact now please" }] },
+          "compact now please\n\nCOMPACTION RULES",
           chatFrom(rec.chat_request as Json),
         );
       } catch (e) {
@@ -237,18 +236,12 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     expect(JSON.stringify(request.messages.slice(0, built.length))).toBe(before);
   });
 
-  test("the task and rules share a user turn without modifying the task", () => {
+  test("the entire compaction prompt is transient user text", () => {
     const request = { messages: [] } as unknown as SidecarRequest;
-    const task = { role: "user" as const, content: [{ type: "text" as const, text: "now" }] };
-    appendCompactionTail(
-      request,
-      task,
-      "instruction",
-    );
+    appendCompactionTail(request, "Maintain memory.\n\nSave and commit the edits.");
     expect(request.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "now" }, { type: "text", text: "instruction" }], transient_tail: 1 },
+      { role: "user", content: [{ type: "text", text: "Maintain memory.\n\nSave and commit the edits." }], transient_tail: 1 },
     ]);
-    expect(task.content).toEqual([{ type: "text", text: "now" }]);
     expect(request.messages.length).toBe(COMPACTION_TAIL_ENTRY_COUNT);
   });
 
@@ -278,8 +271,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     });
 
     const built = llm.buildInitialRequest(
-      "instruction",
-      { role: "user", content: [{ type: "text", text: "now" }] },
+      "Compact now.",
       chat,
     );
 
