@@ -21,7 +21,7 @@
     "@anthropic-ai/sdk": "^0.127.0",
     "@google/genai": "^2.23.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
     "ai": "^7.0.107",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
