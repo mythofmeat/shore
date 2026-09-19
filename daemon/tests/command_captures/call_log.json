@@ -631,12 +631,12 @@
       }
     },
     {
-      "case": "id_beats_filters",
+      "case": "id_beats_character_filter",
       "command": "call_log",
       "args": {
         "id": 3,
         "character": "nobody",
-        "call_type": "nope"
+        "call_type": "message"
       },
       "ok": {
         "enabled": true,

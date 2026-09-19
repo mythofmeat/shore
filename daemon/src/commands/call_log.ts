@@ -64,6 +64,12 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
   if (id !== undefined) {
     const payload = query(CALL_STORE_FAILED, () => store.getCall(id));
     if (payload === null) throw invalidRequest(`no call with id ${id}`);
+    const callType = asStr(args["call_type"]);
+    if (callType !== undefined && payload.call_type !== callType) {
+      throw invalidRequest(
+        `call ${id} has type ${JSON.stringify(payload.call_type)}; expected ${JSON.stringify(callType)}`,
+      );
+    }
     const wire = query(CALL_STORE_FAILED, () => store.httpCallsFor(payload.call_id));
     const bodies = args["wire"] === true;
     if (args["diff"] !== true) {
