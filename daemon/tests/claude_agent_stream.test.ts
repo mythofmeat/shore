@@ -90,7 +90,7 @@ describe("what the provider forwards from the SDK stream", () => {
     expect(redacted?.data).toBe("encrypted");
   });
 
-  test("a tool call is forwarded with its arguments assembled from the json deltas", async () => {
+  test("a tool call is forwarded with its completed SDK arguments", async () => {
     const { events } = await collect({
       rounds: [
         {
