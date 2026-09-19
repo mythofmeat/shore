@@ -410,11 +410,11 @@ MUTANTS = [
      '  if (scope !== "character" && scope !== "global") {',
      "  if (false as boolean) {"),
     ("set: the capability check never runs",
-     "  const failure = capabilityCheck(model.sdk, key, value, model.support);\n"
+     "  const failure = capabilityCheck(sdk, key, value, model.support, model.modelId);\n"
      "  if (failure !== undefined) throw failure;",
      "  void capabilityCheck;"),
     ("set: the capability check runs against the active model, not the target",
-     "  const failure = capabilityCheck(model.sdk, key, value, model.support);",
+     "  const failure = capabilityCheck(sdk, key, value, model.support, model.modelId);",
      "  const active = resolveActiveModel(ctx);\n"
      "  const failure = capabilityCheck(active.sdk, key, value, active.support);"),
     ("set: a character scope does not require a character",
@@ -466,8 +466,8 @@ MUTANTS = [
      "    scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),",
      "    scopes: scopesJson(scopes, INFO_SCOPE_FIELDS),"),
     ("settings: the schema ignores discovered model support",
-     "    setting_schema: settingSchema(model.sdk, model.support),",
-     "    setting_schema: settingSchema(model.sdk, undefined),"),
+     "    setting_schema: settingSchema(sdkFromWire(sampler.sdk ?? model.sdk) ?? model.sdk, model.support, model.modelId),",
+     "    setting_schema: settingSchema(sdkFromWire(sampler.sdk ?? model.sdk) ?? model.sdk, undefined, model.modelId),"),
 
     # --- sub-agent pins (#117) ----------------------------------------------
     ("sub-agent pin: a named sub-agent writes the shared default",

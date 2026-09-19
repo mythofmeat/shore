@@ -1,4 +1,7 @@
 import { required } from "../util/required.ts";
+import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
+import { keepalivePolicyError } from "../llm/cache_capability.ts";
+import { parseCacheKeepalive } from "../config/keepalive.ts";
 
 import {
   EffectiveCatalogError,
@@ -6,7 +9,7 @@ import {
   listEffectiveModels,
   type EffectiveModel,
 } from "../config/effective_catalog.ts";
-import { firstChatModel, resolvedModelToWire, type ResolvedModel } from "../config/models.ts";
+import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   characterPreferencesPath,
@@ -784,12 +787,29 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
 
   const target = settingTarget(ctx, args);
   const model = target.model;
-  const failure = capabilityCheck(model.sdk, key, value, model.support);
-  if (failure !== undefined) throw failure;
-
   const character = scope === "character" ? requireCharacter(ctx) : undefined;
   const prefs =
     character === undefined ? loadGlobalPreferences(ctx) : loadCharacterPreferences(ctx, character);
+  const global = character === undefined ? prefs : loadGlobalPreferences(ctx);
+  const charPrefs = character === undefined ? undefined : prefs;
+  const current = target.kind === "model"
+    ? resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model)
+    : resolveSubagentSampler(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
+        model.providerKey, model.modelId, model);
+  const sdk = sdkFromWire(current.sdk ?? model.sdk) ?? model.sdk;
+  const failure = capabilityCheck(sdk, key, value, model.support, model.modelId);
+  if (failure !== undefined) throw failure;
+  if (key === "sdk" && value === "gemini") {
+    const error = nanogptTransportError(model.providerKey, value);
+    if (error !== undefined) throw invalidRequest(error);
+  }
+  if (key === "cache_keepalive" && typeof value === "string") {
+    const parsed = parseCacheKeepalive(value);
+    if ("ok" in parsed && parsed.ok.kind === "every") {
+      const error = keepalivePolicyError(sdk, model.modelId, current.cacheTtl, parsed.ok.interval.asMillis());
+      if (error !== undefined) throw invalidRequest(error);
+    }
+  }
 
   const slot =
     target.kind === "subagent"
@@ -1114,7 +1134,7 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),
-    setting_schema: settingSchema(model.sdk, model.support),
+    setting_schema: settingSchema(sdkFromWire(sampler.sdk ?? model.sdk) ?? model.sdk, model.support, model.modelId),
     scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),
   };
 }

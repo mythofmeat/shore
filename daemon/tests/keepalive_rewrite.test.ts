@@ -40,6 +40,7 @@ function prefix(): KeepalivePrefix {
     model: "claude-opus-5",
     api_key: "k",
     max_tokens: 100,
+    provider_options: { cache_ttl: "1h" },
     replay_prior_thinking: "all",
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
     keepalive_interval_ms: 1000,
@@ -501,39 +502,38 @@ describe("the tracker names the double miss", () => {
 describe("a provider that never reports cache writes", () => {
   test("reading nothing is the miss, because there is no write to look for", () => {
     expect(pingLandedCold(usage(0, 0), "moonshot")).toBe(true);
-    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(false);
+    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(true);
   });
 
   test("a hit still looks like a hit even with the write field empty", () => {
     expect(pingLandedCold(usage(10_240, 0), "moonshot")).toBe(false);
   });
 
-  test("a missed ping disarms instead of scheduling another one", async () => {
+  test("an implicit-cache provider never sends an automatic ping", async () => {
     const h = harness(0, 0);
     h.service.arm(implicitPrefix(), true);
     h.advance(10_000);
     await h.service.tick();
 
-    expect(h.events.map((e) => e.outcome)).toEqual(["cold"]);
-    expect(h.events[0]?.detail).toContain("read nothing");
+    expect(h.events).toEqual([]);
     expect(h.service.nextPingAt("Rhia")).toBeUndefined();
 
     h.advance(10_000);
     await h.service.tick();
-    expect(h.sends()).toBe(1);
+    expect(h.sends()).toBe(0);
   });
 
-  test("a ping that reads cached tokens keeps the schedule running", async () => {
+  test("implicit caching does not arm a schedule even when a provider could report hits", async () => {
     const h = harness(10_240, 0);
     h.service.arm(implicitPrefix(), true);
     h.advance(10_000);
     await h.service.tick();
 
-    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
-    expect(h.service.nextPingAt("Rhia")).toBeDefined();
+    expect(h.events).toEqual([]);
+    expect(h.service.nextPingAt("Rhia")).toBeUndefined();
   });
 
-  test("two empty reads in a row halt everything, with the implicit-cache reason", async () => {
+  test("repeatedly arming an implicit-cache provider never pays to discover misses", async () => {
     const h = harness(0, 0);
     h.service.arm(implicitPrefix(), true);
     h.advance(10_000);
@@ -543,18 +543,18 @@ describe("a provider that never reports cache writes", () => {
     h.advance(10_000);
     await h.service.tick();
 
-    expect(h.service.halted?.character).toBe("Rhia");
-    expect(h.service.halted?.reason).toContain("two keepalive pings in a row missed");
-    expect(h.service.halted?.reason).toContain("the cache is implicit");
+    expect(h.sends()).toBe(0);
+    expect(h.service.halted).toBeUndefined();
   });
 
-  test("an anthropic prefix reading nothing with no write is still not a miss", async () => {
+  test("an explicit cache reading nothing with no write is disarmed", async () => {
     const h = harness(0, 0);
     h.service.arm(prefix(), true);
     h.advance(10_000);
     await h.service.tick();
 
-    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold"]);
+    expect(h.service.nextPingAt("Rhia")).toBeUndefined();
     expect(h.service.halted).toBeUndefined();
   });
 });

@@ -81,6 +81,9 @@ export async function activateKeepalive(
 
   const usage = outcome.usage;
   const created = usage?.cache_creation_tokens ?? 0;
+  if (created === 0 && (usage?.cache_read_tokens ?? 0) === 0) {
+    return { status: "skipped", detail: "The priming call was billed but read and wrote no cached tokens; keepalive remains disarmed" };
+  }
   return {
     status: "primed",
     input_tokens: usage?.input_tokens ?? 0,

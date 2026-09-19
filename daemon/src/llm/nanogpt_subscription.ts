@@ -35,7 +35,7 @@ export function nanoGptSubscriptionPath(cacheDir: string): string {
 }
 
 export function nanoGptUsageUrl(baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
+  const base = baseUrl.replace(/\/+$/, "").replace(/\/(?:subscription|paid)\/v1$/, "/v1");
   if (base === NANOGPT_BASE_URL) return NANOGPT_USAGE_URL;
   if (base.endsWith("/api/v1")) {
     return `${base.slice(0, -"/api/v1".length)}/api/subscription/v1/usage`;

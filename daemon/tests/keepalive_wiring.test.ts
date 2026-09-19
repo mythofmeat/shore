@@ -104,6 +104,7 @@ async function turnPersisted(
   chatToml: string,
   clock: ReturnType<typeof fakeClock>,
   opts: { ledgerPath?: string; maxIdleSecs?: () => number } = {},
+  cacheReadTokens = 4096,
 ) {
   const sent: SidecarRequest[] = [];
   const service = new KeepaliveService(
@@ -140,10 +141,12 @@ async function turnPersisted(
     newMessageId: () => "m_1",
   } as unknown as PersistContext;
 
+  const result = streamResult();
+  result.usage.cache_read_tokens = cacheReadTokens;
   await persistAndNotify(ctx, new CountingEngine(), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
-    result: streamResult(),
+    result,
     request: sentBody,
     keepaliveIntervalMs: intervalMs,
     keepaliveMaxSecs: maxSecs,
@@ -273,6 +276,32 @@ describe("a model brings its own idle ceiling", () => {
     return armed;
   }
 
+  test.each([
+    [CONFIGURED, 1],
+    [MODEL_CEILING, 0],
+    [EXPLICIT_OFF, 0],
+  ] as const)("current configuration is reapplied to a restored schedule: %s", async (chatToml, expectedPings) => {
+    const clock = fakeClock();
+    const before = await armedFrom(CONFIGURED, clock);
+    clock.advance(55 * MINUTE);
+    await before.service.tick();
+    const snapshot = before.service.scheduleFor(CHARACTER);
+    if (snapshot === undefined) throw new Error("missing persisted schedule");
+    const sent: SidecarRequest[] = [];
+    const restored = new KeepaliveService(async (request) => {
+      sent.push(request);
+      return response();
+    }, clock.now, { maxIdleSecs: () => TWENTY_HOURS });
+    expect(restored.restore(CHARACTER, snapshot)).toBe(true);
+    const current = turnFor(chatToml);
+    new LastRequestCache(restored).set(CHARACTER, current.request, {
+      intervalMs: current.intervalMs, maxSecs: current.maxSecs,
+    }, false);
+    clock.advance(55 * MINUTE);
+    await restored.tick();
+    expect(sent).toHaveLength(expectedPings);
+  });
+
   test("the model's 90m stops the pinging that the global 20h would have allowed", async () => {
     const clock = fakeClock();
     const { service, sent } = await armedFrom(MODEL_CEILING, clock);
@@ -317,6 +346,43 @@ describe("a model brings its own idle ceiling", () => {
 });
 
 describe("the cadence reaches the schedule", () => {
+  test("opting in does not schedule billable pings after a turn with no cache evidence", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await turnPersisted(CONFIGURED, clock, {}, 0);
+    expect(service.nextPingAt(CHARACTER)).toBeUndefined();
+    clock.advance(55 * MINUTE);
+    await service.tick();
+    expect(sent).toEqual([]);
+  });
+
+  test.each(["5m", "1h"])("a cadence as long as the %s TTL never arms", async (ttl) => {
+    const built = buildRequestWithResolvedKey({
+      name: "claude", qualified_name: "nanogpt:anthropic/claude-opus-4-6", category: "chat", provider_key: "nanogpt",
+      sdk: "nanogpt", model_id: "anthropic/claude-opus-4-6", cache_keepalive: ttl, cache_ttl: ttl,
+    }, "fixture-key", { messages: [], replay: "all" });
+    expect(built.keepalive_interval_ms).toBeUndefined();
+  });
+
+  test.each([
+    { sdk: "openai", model: "gpt-test", ttl: "1h" },
+    { sdk: "nanogpt", model: "google/gemini-flash-latest", ttl: "1h" },
+    { sdk: "nanogpt", model: "deepseek/deepseek-v4.1-flash", ttl: "1h" },
+    { sdk: "nanogpt", model: "anthropic/claude-opus-4-6", ttl: undefined },
+  ] as const)("unsupported or absent explicit cache never arms: %s", async ({ sdk, model, ttl }) => {
+    const built = buildRequestWithResolvedKey({
+      name: model, qualified_name: `nanogpt:${model}`, category: "chat", provider_key: "nanogpt",
+      sdk, model_id: model, cache_keepalive: "55m", ...(ttl === undefined ? {} : { cache_ttl: ttl }),
+    }, "fixture-key", { messages: [], replay: "all" });
+    expect(built.keepalive_interval_ms).toBeUndefined();
+    const clock = fakeClock();
+    const sent: SidecarRequest[] = [];
+    const service = new KeepaliveService(async (request) => { sent.push(request); return response(); }, clock.now);
+    new LastRequestCache(service).set(CHARACTER, built.request, { intervalMs: built.keepalive_interval_ms, maxSecs: undefined });
+    clock.advance(55 * MINUTE);
+    await service.tick();
+    expect(sent).toEqual([]);
+  });
+
   test("a model that asks for 55m pings at 55m", async () => {
     const clock = fakeClock();
     const { service, sent, intervalMs } = await turnPersisted(CONFIGURED, clock);

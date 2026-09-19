@@ -219,27 +219,33 @@ function buildOpenAICall(
   req: SidecarRequest,
   streaming: boolean,
 ): { client: OpenAI; params: ChatCompletionCreateParams } {
+  const nanogpt = req.provider_key === NANOGPT_PROVIDER || req.sdk === NANOGPT_PROVIDER;
   const client = new OpenAI({
     apiKey: req.api_key,
     maxRetries: 0,
     ...(req.base_url ? { baseURL: req.base_url } : {}),
+    ...(streaming && nanogpt
+      ? { defaultHeaders: { Accept: "text/event-stream" } } : {}),
   });
 
   const { messages, transientTail } = buildOpenAIMessagesWithTail(req);
 
   const tools = toOpenAITools(req.tools);
+  const tokenLimit = nanogpt ? { max_tokens: req.max_tokens } : { max_completion_tokens: req.max_tokens };
 
   const params: ChatCompletionCreateParams = {
     model: req.model,
     messages,
-    max_completion_tokens: req.max_tokens,
+    ...tokenLimit,
     ...(streaming ? { stream: true, stream_options: { include_usage: true } } : {}),
   };
   if (tools.length > 0) params.tools = tools;
   if (req.temperature !== undefined) params.temperature = req.temperature;
   if (req.top_p !== undefined) params.top_p = req.top_p;
 
-  const effort = req.provider_options?.reasoning_effort;
+  const effort = req.provider_options?.reasoning_effort ??
+    (nanogpt &&
+      req.provider_options?.thinking_enabled === false ? REASONING_OFF : undefined);
   if (typeof effort === "string" && effort.length > 0) {
     params.reasoning_effort = (effort === REASONING_OFF
       ? "none"
@@ -257,7 +263,7 @@ export function applyPromptCaching(
   transientTail: readonly number[] = [],
 ): void {
   const requested = req.provider_options?.cache_ttl ?? "";
-  const ttl = effectiveCacheTtl(req.sdk, requested);
+  const ttl = effectiveCacheTtl(req.sdk, requested, req.model);
   if (req.context !== undefined && ttl !== requested) {
     if (ttl === "") delete req.context.cache_ttl;
     else req.context.cache_ttl = ttl;

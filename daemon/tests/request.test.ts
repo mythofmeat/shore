@@ -177,7 +177,7 @@ describe("building a request once the key is known", () => {
 
 describe("keepalive settings ride alongside the request, never inside it", () => {
   test("an interval is returned in milliseconds and stays off the wire", () => {
-    const built = buildRequestWithResolvedKey(model({ cache_keepalive: "10m" }), "k", INPUTS);
+    const built = buildRequestWithResolvedKey(model({ sdk: "anthropic", cache_ttl: "1h", cache_keepalive: "10m" }), "k", INPUTS);
     expect(built.keepalive_interval_ms).toBe(600_000);
     expect(Object.keys(built.request)).not.toContain("keepalive_interval");
     expect(Object.keys(built.request)).not.toContain("cache_keepalive");

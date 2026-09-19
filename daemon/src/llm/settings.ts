@@ -289,8 +289,8 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "budget_tokens", field: "budgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("budget_tokens") },
   { key: "max_output_tokens", field: "maxOutputTokens", kind: "u32", suggestions: ["16384", "32768", "65536"], allowCustom: true, applicability: always, parse: parseU32("max_output_tokens") },
   { key: "cache_ttl", field: "cacheTtl", kind: "duration", suggestions: ["5m", "1h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseCacheTtl },
-  { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "55m"], allowCustom: true, applicability: always, parse: parseDuration("cache_keepalive", true), serialize: serializeKeepalive },
-  { key: "cache_keepalive_max", field: "cacheKeepaliveMax", kind: "duration", suggestions: ["90m", "12h"], allowCustom: true, applicability: always, parse: parseDuration("cache_keepalive_max", false), serialize: serializeDuration },
+  { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "55m"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseDuration("cache_keepalive", true), serialize: serializeKeepalive },
+  { key: "cache_keepalive_max", field: "cacheKeepaliveMax", kind: "duration", suggestions: ["90m", "12h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseDuration("cache_keepalive_max", false), serialize: serializeDuration },
   { key: "sdk", field: "sdk", kind: "string", suggestions: SDK_VARIANTS, allowCustom: false, applicability: always, parse: (value) => { const raw = parseString("sdk")(value); if ("error" in raw) return raw; const sdk = sdkFromWire(raw.value as string); return sdk === undefined ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(", ")}; got ${show(raw.value)}` } : { value: raw.value }; } },
   { key: "replay_prior_thinking", field: "replayPriorThinking", kind: "string", suggestions: ["all", "none"], allowCustom: false, applicability: always, parse: parseReplay },
   { key: "max_tool_iterations", field: "maxToolIterations", kind: "u32", suggestions: ["8", "16", "32", "64"], allowCustom: true, applicability: always, parse: (value) => { const parsed = parseU32("max_tool_iterations")(value); return "error" in parsed || parsed.value !== 0 ? parsed : { error: "max_tool_iterations must be >= 1; unset it (null) for unlimited" }; } },
@@ -328,15 +328,22 @@ export function parsedSettingValue(key: string, value: unknown): Parsed {
   return definition === undefined ? { error: `unknown setting key: ${key}` } : definition.parse(value);
 }
 
-export function settingApplicability(sdk: Sdk, key: string, support?: DiscoveredModelSupport): SettingApplicability {
+export function settingApplicability(sdk: Sdk, key: string, support?: DiscoveredModelSupport, modelId?: string): SettingApplicability {
+  if (key === "cache_ttl" || key === "cache_keepalive" || key === "cache_keepalive_max") {
+    return honorsCacheTtl(sdk, modelId) ? "honored" : "ignored";
+  }
   return BY_KEY.get(key)?.applicability(sdk, support) ?? "always";
 }
 
-export function validateSetting(sdk: Sdk, key: string, value: unknown, support?: DiscoveredModelSupport): string | undefined {
+export function validateSetting(sdk: Sdk, key: string, value: unknown, support?: DiscoveredModelSupport, modelId?: string): string | undefined {
   if (value === null || value === undefined) return undefined;
   const definition = BY_KEY.get(key);
   if (definition === undefined) return undefined;
-  const applicability = definition.applicability(sdk, support);
+  if (key === "cache_keepalive" && typeof value === "string") {
+    const keepalive = parseCacheKeepalive(value);
+    if ("ok" in keepalive && keepalive.ok.kind === "off") return undefined;
+  }
+  const applicability = settingApplicability(sdk, key, support, modelId);
   if (applicability === "ignored" || applicability === "rejected") {
     return `\`${key}\` is not applicable to the \`${sdk}\` sdk for this model`;
   }
@@ -353,11 +360,11 @@ export function validateSetting(sdk: Sdk, key: string, value: unknown, support?:
   return undefined;
 }
 
-export function settingSchema(sdk: Sdk, support?: DiscoveredModelSupport): SettingSchemaEntry[] {
+export function settingSchema(sdk: Sdk, support?: DiscoveredModelSupport, modelId?: string): SettingSchemaEntry[] {
   return SETTING_DEFINITIONS.map((definition) => ({
     key: definition.key,
     kind: definition.kind,
-    applicability: definition.applicability(sdk, support),
+    applicability: settingApplicability(sdk, definition.key, support, modelId),
     suggestions: typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions,
     allow_custom: typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
     ...(definition.editor === undefined ? {} : { editor: definition.editor }),

@@ -4,7 +4,6 @@ import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
 import {
-  DEFAULT_KEEPALIVE_MAX_SECS,
   type KeepaliveHalt,
   type KeepaliveService,
 } from "../cache/keepalive.ts";
@@ -118,7 +117,7 @@ export class AutonomyService {
 
     const persisted = restored?.keepalive;
     if (persisted !== undefined) {
-      this.#keepalive?.restore(character, toSnapshot(persisted), DEFAULT_KEEPALIVE_MAX_SECS);
+      this.#keepalive?.restore(character, toSnapshot(persisted));
     }
   }
 

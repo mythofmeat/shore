@@ -13,6 +13,7 @@ import {
   parseCacheKeepalive,
   parseCacheKeepaliveMax,
   resolvedModelFromParts,
+  applyKeepalivePolicy,
   sdkFromWire,
   type CacheKeepaliveSetting,
   type ModelCatalog,
@@ -32,6 +33,8 @@ import {
   validateSetting,
 } from "../llm/settings.ts";
 import { ZAI_SUBSCRIPTION_SETTING_MIGRATION } from "../llm/providers/zai_config.ts";
+import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
+import { keepalivePolicyError } from "../llm/cache_capability.ts";
 
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
@@ -361,6 +364,11 @@ function sanitizeForModel(
     }
     delete cleaned[field];
   }
+  const cadence = cleaned.cacheKeepalive;
+  if (cadence?.kind === "every" && keepalivePolicyError(
+    sdkFromWire(cleaned.sdk ?? model.sdk) ?? model.sdk,
+    model.modelId, cleaned.cacheTtl, cadence.interval.asMillis(),
+  ) !== undefined) cleaned.cacheKeepalive = { kind: "off" };
   return cleaned;
 }
 
@@ -717,6 +725,9 @@ export function applySamplerOverlay(
     }
   }
 
+  const transportError = nanogptTransportError(patched.providerKey, patched.sdk);
+  if (transportError !== undefined) throw new Error(transportError);
+  applyKeepalivePolicy(patched);
   return patched;
 }
 

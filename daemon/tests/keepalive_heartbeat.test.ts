@@ -63,6 +63,7 @@ test("idle heartbeat tool rounds preserve the chat keepalive and its idle ceilin
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
     sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: KEY_ENV,
     maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolIterations: 3,
+    cacheTtl: "1h",
     cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(55 * 60) },
     cacheKeepaliveMax: ConfigDuration.fromSecs(90 * 60),
   });

@@ -71,7 +71,8 @@ export async function persistAndNotify(
   const completedMessages = completedResponseMessages(result);
 
   ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
-    intervalMs: params.keepaliveIntervalMs,
+    intervalMs: result.usage.cache_read_tokens > 0 || result.usage.cache_creation_tokens > 0
+      ? params.keepaliveIntervalMs : undefined,
     maxSecs: params.keepaliveMaxSecs,
   });
   const notifyContent = notifyContentFromResponseMessages(completedMessages);

@@ -1,4 +1,5 @@
 import { messageBreakpoints } from "../cache_placement.ts";
+import type { Sdk } from "../types.ts";
 
 export const NANOGPT_PROVIDER = "nanogpt";
 
@@ -18,6 +19,16 @@ export const NANOGPT_SUBSCRIPTION_MODELS_URL =
 export const NANOGPT_PAID_MODELS_URL = `${NANOGPT_PAID_BASE_URL}/models${NANOGPT_MODELS_QUERY}`;
 
 export const NANOGPT_USAGE_URL = `${NANOGPT_SUBSCRIPTION_BASE_URL}/usage`;
+
+export function nanogptSupportsExplicitCache(model: string): boolean {
+  return /^(?:anthropic\/)?claude-/i.test(model);
+}
+
+export function nanogptTransportError(provider: string | undefined, sdk: Sdk): string | undefined {
+  return provider === NANOGPT_PROVIDER && sdk === "gemini"
+    ? 'NanoGPT does not expose the native Gemini API; use sdk = "nanogpt" for Gemini models (OpenAI-compatible chat completions)'
+    : undefined;
+}
 
 const FAILOVER_WOULD_DISCARD_THE_CACHED_PREFIX = true;
 

@@ -1,5 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { threadDataDir } from "../config/dirs.ts";
+import { resolveKeepaliveMaxSecs } from "../config/keepalive.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -596,7 +597,7 @@ function callContext(
   modelKeepaliveMaxSecs: number | undefined,
   call: { options?: ProviderOptions },
 ): CallContext {
-  const ceiling = modelKeepaliveMaxSecs ?? deps.keepaliveMaxSecs?.();
+  const ceiling = resolveKeepaliveMaxSecs(modelKeepaliveMaxSecs, deps.keepaliveMaxSecs?.());
   const usage = usageConfigView(config.app.usage);
   const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);

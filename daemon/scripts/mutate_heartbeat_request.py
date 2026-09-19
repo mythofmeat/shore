@@ -132,7 +132,7 @@ MUTANTS = [
      "    deps.cache.set(character, source, {\n"
      "      intervalMs: rebuilt.keepalive_interval_ms,\n"
      "      maxSecs: rebuilt.keepalive_max_secs,\n"
-     "    });",
+     "    }, false);",
      "    void rebuilt.keepalive_interval_ms;"),
     ("prepare: the rebuilt body is armed without the model's ceiling",
      H,

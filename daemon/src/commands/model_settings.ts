@@ -24,7 +24,8 @@ export function capabilityCheck(
   key: string,
   value: unknown,
   support?: DiscoveredModelSupport,
+  modelId?: string,
 ): CommandError | undefined {
-  const failure = validateSetting(sdk, key, value, support);
+  const failure = validateSetting(sdk, key, value, support, modelId);
   return failure === undefined ? undefined : invalidRequest(failure);
 }

@@ -20,7 +20,8 @@ import type {
 import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
 import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_config";
-import { NANOGPT_BASE_URL, NANOGPT_PROVIDER } from "./providers/nanogpt_config";
+import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "./providers/nanogpt_config";
+import { keepalivePolicyError } from "./cache_capability.ts";
 
 const DEFAULT_MAX_TOKENS = 32768;
 
@@ -141,6 +142,8 @@ export function buildRequestWithResolvedKey(
   apiKey: string,
   inputs: BuildInputs,
 ): BuiltRequest {
+  const transportError = nanogptTransportError(model.provider_key, model.sdk);
+  if (transportError !== undefined) throw new Error(transportError);
   const request: SidecarRequest = {
     sdk: model.sdk,
     model: model.model_id,
@@ -160,7 +163,10 @@ export function buildRequestWithResolvedKey(
     replay_prior_thinking: inputs.replay,
   };
 
-  const intervalMs = keepaliveIntervalMs(model.cache_keepalive);
+  const requestedInterval = keepaliveIntervalMs(model.cache_keepalive);
+  const intervalMs = requestedInterval !== undefined &&
+    keepalivePolicyError(request.sdk, request.model, request.provider_options?.cache_ttl, requestedInterval) === undefined
+    ? requestedInterval : undefined;
   const maxSecs = keepaliveMaxSecs(model.cache_keepalive_max);
   return {
     request,

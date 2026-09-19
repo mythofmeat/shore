@@ -66,6 +66,7 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
     system: [{ text: "You are a character.", label: "character" }],
     tools: [{ name: "read", description: "read a file", input_schema: { type: "object" } }],
     max_tokens: 4096,
+    provider_options: { cache_ttl: "1h" },
     replay_prior_thinking: "all",
     keepalive_interval_ms: INTERVAL_MS,
     context: {
@@ -188,8 +189,8 @@ describe("firing", () => {
     expect(required(h.events[0]).detail).toContain("COLD");
   });
 
-  test("read 0 with no write is not cold", () => {
-    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(false);
+  test("read 0 with no write is a miss too", () => {
+    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(true);
     expect(pingLandedCold(usage(0, 1), "anthropic")).toBe(true);
     expect(pingLandedCold(usage(2200, 200), "anthropic")).toBe(false);
   });

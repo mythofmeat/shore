@@ -485,6 +485,7 @@ describe("LastRequestCache", () => {
     config.models.chat.set("chat.fixture", {
       ...(FIXTURE_MODEL as object),
       cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(3300) },
+      cacheTtl: "1h",
     } as never);
 
     const decision = await cache.reprimeFromDisk("ada", dataDir, config);

@@ -1,4 +1,9 @@
-# Claude Agent SDK models
+# Models
+
+See [NanoGPT models](NANOGPT.md) for gateway transport and image support,
+and [cache keepalive](CACHE_KEEPALIVE.md) for caching settings and costs.
+
+## Claude Agent SDK models
 
 Configure the SDK as a provider in `config.toml` or an included TOML file:
 

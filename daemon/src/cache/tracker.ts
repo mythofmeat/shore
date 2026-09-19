@@ -190,8 +190,7 @@ export class CacheTracker {
 
     const pureMiss =
       obs.call_type === "keepalive" &&
-      obs.cache_read_tokens === 0 &&
-      obs.cache_write_tokens > 0;
+      obs.cache_read_tokens === 0;
 
     if (obs.call_type === "keepalive") {
       if (pureMiss && this.#lastKeepaliveMissed) {
@@ -205,7 +204,8 @@ export class CacheTracker {
     this.#lastKeepaliveMissed =
       obs.call_type === "keepalive"
         ? pureMiss
-        : this.#lastKeepaliveMissed && obs.cache_read_tokens === 0;
+        : this.#lastKeepaliveMissed &&
+          (obs.cache_read_tokens === 0 || obs.call_type === "heartbeat" || obs.call_type === "heartbeat_tool_loop");
 
     if (loopKind !== undefined) {
       if (anomaly === undefined) {

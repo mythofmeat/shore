@@ -153,10 +153,10 @@ describe("applicability", () => {
     }
   });
 
-  test("cache_ttl is offered on every adapter that can carry one", () => {
+  test.each(["cache_ttl", "cache_keepalive", "cache_keepalive_max"])("%s is offered only on adapters that carry explicit cache controls", (key) => {
     const carriers = new Set(["anthropic", "nanogpt"]);
     for (const sdk of SDK_VARIANTS) {
-      const entry = settingSchema(sdk).find((candidate) => candidate.key === "cache_ttl");
+      const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
       expect(entry?.applicability, `cache_ttl/${sdk}`).toBe(
         carriers.has(sdk) ? "honored" : "ignored",
       );
@@ -166,7 +166,7 @@ describe("applicability", () => {
   test("local settings and both advanced settings are always applicable", () => {
     for (const sdk of SDK_VARIANTS) {
       const schema = settingSchema(sdk);
-      for (const key of ["max_output_tokens", "cache_keepalive", "cache_keepalive_max", "sdk", "replay_prior_thinking", "max_tool_iterations", "supports_images"]) {
+      for (const key of ["max_output_tokens", "sdk", "replay_prior_thinking", "max_tool_iterations", "supports_images"]) {
         expect(schema.find((entry) => entry.key === key)?.applicability, `${key}/${sdk}`).toBe("always");
       }
     }

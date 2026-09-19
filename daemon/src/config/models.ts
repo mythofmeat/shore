@@ -1,6 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { settingApplicability, validateSetting } from "../llm/settings.ts";
+import { keepalivePolicyError } from "../llm/cache_capability.ts";
 import type { DiscoveredModelSupport } from "../llm/discovery.ts";
 import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
@@ -26,7 +27,7 @@ import {
   ZAI_SUB_PROVIDER,
   ZAI_SUBSCRIPTION_SETTING_MIGRATION,
 } from "../llm/providers/zai_config.ts";
-import { NANOGPT_BASE_URL, NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
+import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 
 export type { Sdk };
 export { SDK_VARIANTS, sdkFromWire };
@@ -215,6 +216,8 @@ export function resolvedModelFromParts(
 
   const sdk: Sdk =
     merged.sdk ?? (modelId.startsWith("anthropic/") ? "anthropic" : sdkFallback);
+  const transportError = nanogptTransportError(providerKey, sdk);
+  if (transportError !== undefined) throw CatalogError.parseEntry(category, providerKey, name, transportError);
 
   if (merged.cacheTtl === undefined) {
     if (sdk === "anthropic") merged.cacheTtl = "1h";
@@ -252,7 +255,16 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
+  applyKeepalivePolicy(resolved);
   return resolved;
+}
+
+export function applyKeepalivePolicy(model: ResolvedModel): void {
+  if (model.cacheKeepalive?.kind !== "every") return;
+  const error = keepalivePolicyError(model.sdk, model.modelId, model.cacheTtl, model.cacheKeepalive.interval.asMillis());
+  if (error === undefined) return;
+  shoreLog.warn(`shore: disabling keepalive for ${model.qualifiedName}: ${error}`);
+  model.cacheKeepalive = { kind: "off" };
 }
 
 function assignIfPresent<K extends keyof ResolvedModel>(
@@ -300,7 +312,7 @@ function warnIgnoredFields(
     ["zai_clear_thinking", fields.zaiClearThinking !== undefined],
   ];
   for (const [field, present] of checks) {
-    if (present && settingApplicability(sdk, field, support) === "ignored") {
+    if (present && settingApplicability(sdk, field, support, modelId) === "ignored") {
       shoreLog.warn(
         `shore: ignoring \`${field}\` for model ${modelId}: the \`${sdk}\` sdk does not honor it`,
       );

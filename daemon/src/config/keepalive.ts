@@ -1,5 +1,11 @@
 import { ConfigDuration, rustTrim, type ParseResult } from "./duration.ts";
 
+export const DEFAULT_KEEPALIVE_MAX_SECS = 12 * 60 * 60;
+
+export function resolveKeepaliveMaxSecs(model: number | undefined, configured?: number): number {
+  return model ?? configured ?? DEFAULT_KEEPALIVE_MAX_SECS;
+}
+
 export type CacheKeepaliveSetting =
   | { kind: "off" }
   | { kind: "every"; interval: ConfigDuration };

@@ -1,6 +1,7 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
+import { DEFAULT_KEEPALIVE_MAX_SECS } from "./keepalive.ts";
 
 type TomlValue = unknown;
 
@@ -409,7 +410,7 @@ export interface CacheConfig {
 }
 
 export const defaultCacheConfig = (): CacheConfig => ({
-  keepalive_max: ConfigDuration.fromSecs(43_200),
+  keepalive_max: ConfigDuration.fromSecs(DEFAULT_KEEPALIVE_MAX_SECS),
   forensics: false,
 });
 

@@ -1099,6 +1099,7 @@ describe("the command path", () => {
         {
           sdk: "anthropic",
           model: "claude-old",
+          provider_options: { cache_ttl: "1h" },
           api_key: "",
           messages: [],
           max_tokens: 128,

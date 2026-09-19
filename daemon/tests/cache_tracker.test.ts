@@ -268,6 +268,15 @@ describe("tool loops", () => {
 });
 
 describe("keepalive", () => {
+  test("zero-write misses still halt, and heartbeat hits do not clear chat misses", () => {
+    const t = new CacheTracker();
+    expect(t.observe(obs({ ts: at(0), call_type: "keepalive", cache_read_tokens: 0, cache_write_tokens: 0 })).anomaly)
+      .toBe("cold_keepalive");
+    t.observe(obs({ ts: at(1), call_type: "heartbeat", cache_read_tokens: 500 }));
+    expect(t.observe(obs({ ts: at(2), call_type: "keepalive", cache_read_tokens: 0, cache_write_tokens: 0 })).anomaly)
+      .toBe("keepalive_double_miss");
+  });
+
   test("TTL expiry plus a non-keepalive call is a miss", () => {
     const t = new CacheTracker();
     t.observe(obs({ ts: hour(1), cache_read_tokens: 500 }));

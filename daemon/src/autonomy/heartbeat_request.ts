@@ -140,7 +140,7 @@ export async function prepareHeartbeatRequest(
     deps.cache.set(character, source, {
       intervalMs: rebuilt.keepalive_interval_ms,
       maxSecs: rebuilt.keepalive_max_secs,
-    });
+    }, false);
   }
 
   const { request, override } = applyHeartbeatModelOverride(

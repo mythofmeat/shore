@@ -279,7 +279,7 @@ MUTANTS = [
      "  timeout: ConfigDuration.fromSecs(300),",
      "  timeout: ConfigDuration.fromSecs(0),"),
     ("defaults: keepalive max is an hour, not twelve",
-     "  keepalive_max: ConfigDuration.fromSecs(43_200),",
+     "  keepalive_max: ConfigDuration.fromSecs(DEFAULT_KEEPALIVE_MAX_SECS),",
      "  keepalive_max: ConfigDuration.fromSecs(3600),"),
     ("defaults: archive_after is on",
      "  archive_after: ConfigDuration.fromSecs(0),",

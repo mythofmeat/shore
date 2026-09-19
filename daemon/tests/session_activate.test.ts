@@ -40,6 +40,7 @@ function fixtureModel(keepalive: CacheKeepaliveSetting | "off"): unknown {
     apiKeyEnv: "SHORE_FIXTURE_API_KEY",
     maxContextTokens: 200_000,
     maxOutputTokens: 4096,
+    cacheTtl: "1h",
     maxToolIterations: 4,
     ...(keepalive === "off" ? {} : { cacheKeepalive: keepalive }),
   };
@@ -145,12 +146,13 @@ interface Harness {
 async function harnessFor(
   messages: Message[],
   keepalive: CacheKeepaliveSetting | "off" = keepaliveEvery("55m"),
+  initialReply = response(0, 5000),
 ): Promise<Harness> {
   const { config, dataDir } = await world(messages, keepalive);
   let clock = T0;
 
   const sent: SidecarRequest[] = [];
-  let reply = response(0, 5000);
+  let reply = initialReply;
   const keepaliveService = new KeepaliveService(
     async (req) => {
       sent.push(req);
@@ -198,6 +200,15 @@ afterEach(() => {
 });
 
 describe("session_activate", () => {
+  test("an unsuccessful cache prime reports its cost and never schedules more calls", async () => {
+    const h = await harnessFor(BETWEEN_TURNS, keepaliveEvery("55m"), response(0, 0));
+    expect((await h.activate()).keepalive).toMatchObject({ status: "skipped" });
+    expect(h.sent).toHaveLength(1);
+    h.advance(56 * MINUTE);
+    await h.tick();
+    expect(h.sent).toHaveLength(1);
+  });
+
   test("a cold character never pings until it is activated", async () => {
     const h = await harnessFor(BETWEEN_TURNS);
 

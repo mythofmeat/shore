@@ -50,6 +50,16 @@ test("the usage endpoint follows the NanoGPT base URL", () => {
   );
 });
 
+test.each(["subscription", "paid"])("%s routing still queries the subscription usage endpoint", async (mode) => {
+  const calls: Array<{ url: string; authorization: string }> = [];
+  await fetchNanoGptSubscription(
+    `https://proxy.test/api/${mode}/v1/`, "fixture-key", response({ active: false }, calls), NOW,
+  );
+  expect(calls).toEqual([{
+    url: "https://proxy.test/api/subscription/v1/usage", authorization: "Bearer fixture-key",
+  }]);
+});
+
 test("the live weekly token shape is normalized for the local cache", async () => {
   const calls: Array<{ url: string; authorization: string }> = [];
   const got = await fetchNanoGptSubscription(

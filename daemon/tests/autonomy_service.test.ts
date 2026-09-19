@@ -13,7 +13,7 @@ import {
 import { encodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import type { CompactionReason } from "../src/autonomy/tick.ts";
-import type { KeepaliveEvent, KeepaliveService } from "../src/cache/keepalive.ts";
+import { KeepaliveService, type KeepaliveEvent } from "../src/cache/keepalive.ts";
 import type { KeepaliveSnapshot } from "../src/cache/schedule.ts";
 
 const HOUR = 3_600_000;
@@ -111,6 +111,30 @@ function build(clock?: { value: number }) {
 }
 
 describe("registering", () => {
+  test("restoring a keepalive uses the configured global ceiling", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      await Bun.write(join(dir, STATE_FILENAME), encodeState({
+        ticksWithoutUser: 0, nextWakeAt: undefined, lastUserAt: START - 13 * HOUR,
+        coveredTurnCount: 0,
+        keepalive: { model: "claude-opus-4-6", intervalMs: HOUR, lastWarmAt: START, lastActiveAt: START - 13 * HOUR },
+      }));
+      const clock = { value: START };
+      const { service } = build(clock);
+      const events: KeepaliveEvent[] = [];
+      const keepalive = new KeepaliveService(async () => { throw new Error("no prefix restored"); },
+        () => clock.value, { maxIdleSecs: () => 20 * 3600 });
+      service.attachKeepalive(keepalive);
+      keepalive.onEvent((event) => events.push(event));
+      await service.register(registration("nova", dir));
+      clock.value += HOUR;
+      await keepalive.tick();
+      expect(events.map((event) => event.outcome)).toEqual(["skipped"]);
+      expect(keepalive.nextPingAt("nova")).toBeGreaterThan(clock.value);
+      await service.shutdown();
+    });
+  });
+
   test("restores the heartbeat deadline the character left behind", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");

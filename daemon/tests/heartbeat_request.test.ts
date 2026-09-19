@@ -366,10 +366,12 @@ describe("preparing a heartbeat body", () => {
     >;
     sonnet["cacheKeepalive"] = { kind: "every", interval: ConfigDuration.fromSecs(600) };
     sonnet["cacheKeepaliveMax"] = ConfigDuration.fromSecs(5400);
+    sonnet["cacheTtl"] = "1h";
 
     const armed: KeepalivePrefix[] = [];
+    const warmed: boolean[] = [];
     const cache = new LastRequestCache({
-      arm: (prefix: KeepalivePrefix) => armed.push(prefix),
+      arm: (prefix: KeepalivePrefix, warm: boolean) => { armed.push(prefix); warmed.push(warm); },
       disarm: () => {},
     } as never);
 
@@ -377,6 +379,7 @@ describe("preparing a heartbeat body", () => {
 
     expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
     expect(armed[0]?.context?.keepalive_max_secs).toBe(5400);
+    expect(warmed).toEqual([false]);
   });
 
   test("skips the tick when the conversation is mid-turn", async () => {

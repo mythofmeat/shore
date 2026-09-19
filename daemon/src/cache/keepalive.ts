@@ -2,7 +2,8 @@ import { shoreLog } from "../log.ts";
 
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
-import { reportsCacheWrites } from "../llm/cache_capability.ts";
+import { keepalivePolicyError, supportsKeepalive } from "../llm/cache_capability.ts";
+import { DEFAULT_KEEPALIVE_MAX_SECS, resolveKeepaliveMaxSecs } from "../config/keepalive.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { MAIN_THREAD } from "../config/dirs.ts";
 import {
@@ -25,7 +26,7 @@ import type {
 
 const KEEPALIVE_TICK_MS = 10_000;
 
-export const DEFAULT_KEEPALIVE_MAX_SECS = 12 * 60 * 60;
+export { DEFAULT_KEEPALIVE_MAX_SECS };
 const DEFAULT_MAX_IDLE_SECS = DEFAULT_KEEPALIVE_MAX_SECS;
 
 export interface KeepalivePrefix extends SidecarRequest {
@@ -59,7 +60,7 @@ export interface PingNowOutcome {
   status: "sent" | "skipped" | "failed";
   cold: boolean;
   usage?: Usage;
-  reason?: "no_prefix" | "budget";
+  reason?: "no_prefix" | "budget" | "unsupported_cache" | "halted";
   detail?: string;
 }
 
@@ -109,10 +110,9 @@ export function pingLandedCold(
     cache_read_tokens: number;
     cache_creation_tokens: number;
   },
-  sdk: Sdk,
+  _sdk: Sdk,
 ): boolean {
-  if (!reportsCacheWrites(sdk)) return usage.cache_read_tokens === 0;
-  return usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0;
+  return usage.cache_read_tokens === 0;
 }
 
 export function pingRewrotePrefix(usage: {
@@ -198,13 +198,8 @@ export class KeepaliveService {
   }
 
   #haltAll(character: string, sdk: Sdk, usage: Usage): void {
-    const evidence = reportsCacheWrites(sdk)
-      ? `The first wrote ${String(usage.cache_creation_tokens)} tokens, which should have left ` +
-        `an entry the second one read — it did not. The cache is not holding what shore writes ` +
-        `to it`
-      : `Neither read a single cached token, and on ${sdk} the cache is implicit: the entry the ` +
-        `real turn left behind is the one a ping reads, so reading nothing twice means there is ` +
-        `nothing there to keep alive`;
+    const evidence = `Neither read any cached tokens on ${sdk}; the latest wrote ` +
+      `${usage.cache_creation_tokens} tokens. There is no evidence that the prefix is being reused`;
     const reason =
       `two keepalive pings in a row missed with nothing in between. ${evidence}, so every ` +
       `further ping would pay full price for nothing. All keepalives are stopped for the life ` +
@@ -223,12 +218,16 @@ export class KeepaliveService {
   arm(prefix: KeepalivePrefix, warm = false): void {
     const character = prefix.context?.character;
     if (character === undefined) return;
-    const maxIdleSecs = prefix.context?.keepalive_max_secs ?? this.#configuredMaxIdleSecs();
+    const maxIdleSecs = resolveKeepaliveMaxSecs(prefix.context?.keepalive_max_secs, this.#configuredMaxIdleSecs());
     const entry = this.#entryFor(character, maxIdleSecs);
     entry.prefix = prefix;
     entry.armedFingerprint = prefixFingerprint(prefix);
     entry.lastCallFingerprint = undefined;
-    entry.keepalive.setInterval(prefix.keepalive_interval_ms, prefix.model, this.#now());
+    const requested = prefix.keepalive_interval_ms;
+    const interval = this.#halt === undefined && requested !== undefined &&
+      keepalivePolicyError(prefix.sdk, prefix.model, prefix.provider_options?.cache_ttl, requested) === undefined
+      ? requested : undefined;
+    entry.keepalive.setInterval(interval, prefix.model, this.#now());
     if (warm) entry.keepalive.onPrefixWarmed(this.#now());
   }
 
@@ -283,7 +282,11 @@ export class KeepaliveService {
     const entry = this.#entries.get(character);
     const model = entry?.prefix?.model;
     if (entry !== undefined && model !== undefined) {
-      entry.keepalive.onCacheWarmed(model, this.#now());
+      if ((outcome.usage?.cache_read_tokens ?? 0) > 0 || (outcome.usage?.cache_creation_tokens ?? 0) > 0) {
+        entry.keepalive.onCacheWarmed(model, this.#now());
+      } else {
+        entry.keepalive.onCacheInvalidated();
+      }
     }
     return outcome;
   }
@@ -293,10 +296,16 @@ export class KeepaliveService {
   }
 
   async #pingNow(character: string): Promise<PingNowOutcome> {
+    if (this.#halt !== undefined) {
+      return { status: "skipped", cold: false, reason: "halted", detail: this.#halt.reason };
+    }
     const entry = this.#entries.get(character);
     const prefix = entry?.prefix;
     if (entry === undefined || prefix === undefined) {
       return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
+    }
+    if (!supportsKeepalive(prefix.sdk, prefix.model, prefix.provider_options?.cache_ttl)) {
+      return { status: "skipped", cold: false, reason: "unsupported_cache", detail: "this model has no enabled explicit prompt cache" };
     }
     const ping = buildKeepalivePing(prefix, this.#labels(entry));
     await prepareCallAccounting(ping, fetch, this.#now());
@@ -348,7 +357,7 @@ export class KeepaliveService {
     );
   }
 
-  restore(character: string, snapshot: KeepaliveSnapshot, maxIdleSecs: number): boolean {
+  restore(character: string, snapshot: KeepaliveSnapshot, maxIdleSecs = this.#configuredMaxIdleSecs()): boolean {
     const entry = this.#entryFor(character, maxIdleSecs);
     return entry.keepalive.restore(snapshot, this.#now());
   }
@@ -455,7 +464,7 @@ export class KeepaliveService {
         character,
         outcome: "cold",
         detail:
-          `Cache refresh ping (COLD — ${reportsCacheWrites(prefix.sdk) ? "wrote cache" : "read nothing"}, ` +
+          `Cache refresh ping (COLD — ${usage.cache_creation_tokens > 0 ? "wrote cache" : "read nothing"}, ` +
           `disarmed; cache_read: ${usage.cache_read_tokens}, input: ${usage.input_tokens})`,
         at: this.#now(),
       });

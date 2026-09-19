@@ -565,6 +565,8 @@ describe("a halted keepalive reaches the status envelope", () => {
         {
           model: "claude-opus-4-6",
           max_tokens: 1,
+          sdk: "anthropic",
+          provider_options: { cache_ttl: "1h" },
           messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
           keepalive_interval_ms: 1_000,
           context: { character: CHARACTER, call_type: "message", thinking_enabled: false },

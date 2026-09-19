@@ -168,6 +168,7 @@ describe("what assembly wires together", () => {
       runtime.cache.set("ada", {
         model: "claude-fixture",
         sdk: "anthropic",
+        provider_options: { cache_ttl: "1h" },
         messages: [],
         context: { character: "ada", ledger: join(config.dirs.data, "shore.db"), call_type: "message" },
       } as never, undefined);
@@ -189,6 +190,7 @@ describe("what assembly wires together", () => {
       runtime.cache.set("ada", {
         model: "claude-fixture",
         sdk: "anthropic",
+        provider_options: { cache_ttl: "1h" },
         messages: [],
         context: { character: "ada", ledger: join(config.dirs.data, "shore.db"), call_type: "message" },
       } as never, undefined);
