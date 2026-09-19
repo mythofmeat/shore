@@ -8,9 +8,6 @@ import {
   budgetPeriodRank,
   parseAppConfig,
   validateCompaction,
-  validateMemoryBackend,
-  validateMemoryRecall,
-  validateMemoryRetain,
   type AppConfig,
   type UsageBudgetConfig,
   type UsageConfig,
@@ -455,13 +452,7 @@ function validateConfig(
 
   const compaction = validateCompaction(app.memory.compaction);
   if (compaction !== undefined) throw validationError(compaction);
-  const recall = validateMemoryRecall(app.memory.recall);
-  if (recall !== undefined) throw validationError(recall);
-  const retain = validateMemoryRetain(app.memory.retain);
-  if (retain !== undefined) throw validationError(retain);
 
-  const backend = validateMemoryBackend(app.memory.backend, app.memory);
-  if (backend !== undefined) throw validationError(backend);
 }
 
 function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {

@@ -645,7 +645,6 @@ describe("what the assembly hands the driver", () => {
       expect(deps.ledgerPath).toBe(join(root, "data", "shore.db"));
       expect(deps.dataDir).toBe(join(root, "data"));
       expect(deps.notifier).toBe(runtime.notifier);
-      expect(deps.recall).toBeDefined();
       expect(await routesToCurrentRegistry(runtime, deps.mcpRegistry)).toBe(true);
       expect(deps.mcpRegistry.toolDefsFiltered(["*"])).toEqual([]);
     } finally {

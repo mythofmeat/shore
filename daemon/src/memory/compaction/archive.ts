@@ -21,7 +21,6 @@ import type { ConversationManager } from "./types.ts";
 export interface DurableHistoryLocation {
   dbPath: string;
   archiveKey: string;
-  retain?: boolean;
   coverageClaim?: string;
 }
 
@@ -144,7 +143,6 @@ async function archiveToDatabase(
           message_count: messages.length,
           compacted_at: now(),
           ...(operationId === undefined ? {} : { compaction_id: operationId }),
-          ...(history.retain === true ? { retain: true } : {}),
           ...segmentMetadata,
         },
         messages,

@@ -533,13 +533,11 @@
         "name": "error_log",
         "data_keys": [
           "errors",
-          "key_fallbacks",
-          "memory_recall"
+          "key_fallbacks"
         ],
         "data_shape": {
           "errors": "object",
-          "key_fallbacks": "object",
-          "memory_recall": "object"
+          "key_fallbacks": "object"
         }
       }
     },

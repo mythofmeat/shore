@@ -146,7 +146,6 @@ interface GenerationInput {
   events: StreamEvent[];
   history: Message[];
   max_retries: number | null;
-  recalled_memory?: string;
   regen: boolean;
   rid: string | null;
   subagent: string | null;
@@ -372,7 +371,6 @@ interface Run {
   error?: string;
   compactionCheckedAfter: number;
   autonomyCalls: string[];
-  recallCalls: Array<{ character: string; rid?: string; messages: string[] }>;
   dataDir: string;
   turnCount: number;
 }
@@ -455,7 +453,6 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   let lastRequest: unknown;
   let compactionCheckedAfter = -1;
   const autonomyCalls: string[] = [];
-  const recallCalls: Array<{ character: string; rid?: string; messages: string[] }> = [];
   const autonomy: TurnAutonomy & GenerationDeps["autonomy"] = {
     ensureState: () => {
       autonomyCalls.push("ensureState");
@@ -507,16 +504,6 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     emitEvent: (m) => broadcast.push(m),
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
-    recall: {
-      run: async (recallInput) => {
-        recallCalls.push({
-          character: recallInput.character,
-          ...(recallInput.rid === undefined ? {} : { rid: recallInput.rid }),
-          messages: recallInput.messages.map((message) => message.content),
-        });
-        return turnInput.recalled_memory;
-      },
-    },
     newlyCrossedUsageBudgetWarnings: async () => [],
     now: () => MINTED_TS,
     newMessageId: () => `m_${crypto.randomUUID()}`,
@@ -571,7 +558,6 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     ...(error === undefined ? {} : { error }),
     compactionCheckedAfter,
     autonomyCalls,
-    recallCalls,
     dataDir: config.dirs.data,
     turnCount: engine.turnCount(),
   };
@@ -709,22 +695,11 @@ describe("runGeneration", () => {
       const body = input(c).body;
       const fresh = !input(c).regen &&
         (body.text !== "" || (body.images?.length ?? 0) > 0 || (body.image_data?.length ?? 0) > 0);
-      const recalls = input(c).regen || fresh;
       if (fresh) expectedCalls.push("onUserMessage");
       if ((out["result"] as Record<string, unknown>)["error"] === undefined) {
         expectedCalls.push("notifyLastRequest", "notifyAssistantMessage", "shouldCompactNow");
       }
       expect(run.autonomyCalls).toEqual(expectedCalls);
-      expect(run.recallCalls).toHaveLength(recalls ? 1 : 0);
-      if (recalls) {
-        expect(run.recallCalls[0]?.character).toBe("ada");
-        expect(run.recallCalls[0]?.rid).toBe(input(c).rid ?? undefined);
-        const expectedLastMessage = input(c).regen
-          ? input(c).history.findLast((message) => message.role === "user")?.content
-          : body.text;
-        expect(run.recallCalls[0]?.messages.at(-1)).toBe(expectedLastMessage);
-      }
-
       const expectedError = (out["result"] as Record<string, unknown>)["error"];
       if (expectedError === undefined) {
         expect(run.error).toBeUndefined();
@@ -738,9 +713,8 @@ describe("runGeneration", () => {
   }
 });
 
-test("regen recall uses history through the last user turn and is injected before guidance", async () => {
+test("regeneration sends history through the last user turn followed by guidance", async () => {
   const guidance = "Use ask_memory before responding, then respond naturally.";
-  const recalledMemory = "- Lio Rush was their childhood dog.";
   const run = await replayTurn({
     input: {
       history: [
@@ -762,7 +736,6 @@ test("regen recall uses history through the last user turn and is injected befor
         },
       ],
       body: { text: "", guidance },
-      recalled_memory: recalledMemory,
       regen: true,
       rid: "r-guided-regen",
       max_retries: 0,
@@ -790,18 +763,7 @@ test("regen recall uses history through the last user turn and is injected befor
   });
 
   expect(run.error).toBeUndefined();
-  expect(run.recallCalls).toEqual([{
-    character: "ada",
-    rid: "r-guided-regen",
-    messages: ["Do you remember Lio Rush?"],
-  }]);
-  const recalled = run.requests.at(-1)?.messages.at(-2);
-  expect(recalled).toMatchObject({
-    role: "system",
-    content: [{ type: "text" }],
-  });
-  expect(recalled?.content[0]?.type === "text" ? recalled.content[0].text : "")
-    .toContain(recalledMemory);
+  expect(run.requests.at(-1)?.messages.map(message => message.role)).toEqual(["user", "system"]);
   expect(run.requests.at(-1)?.messages.at(-1)).toEqual({
     role: "system",
     content: [{ type: "text", text: guidance }],
@@ -813,7 +775,6 @@ test("regen recall uses history through the last user turn and is injected befor
     "Of course I remember him.",
   ]);
   expect(JSON.stringify(stored)).not.toContain(guidance);
-  expect(JSON.stringify(stored)).not.toContain(recalledMemory);
 });
 
 test("a failed tool loop is durable before the final answer and repaired after restart", async () => {

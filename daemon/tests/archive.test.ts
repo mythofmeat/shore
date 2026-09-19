@@ -28,9 +28,8 @@ describe("character archives", () => {
     const sourceHistory = HistoryStore.open(join(source.data, "shore.db"));
     for (const key of ["ada/side", "ada/retired", "adam/side", "bea/side"]) {
       sourceHistory.putSegment(key, 0, {
-        file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z", retain: true,
+        file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
       }, [userMessage(key, `archived ${key}`)]);
-      sourceHistory.markMemoryDocument(key, 0, "stored");
     }
     sourceHistory.close();
     const output = join(source.runtime, "ada.shore.tar.gz");
@@ -59,8 +58,8 @@ describe("character archives", () => {
     expect(history.query("SELECT DISTINCT character FROM history_messages ORDER BY character").values()).toEqual([
       ["ada"], ["ada/retired"], ["ada/side"],
     ]);
-    expect(history.query("SELECT character, memory_doc FROM history_segments WHERE character != 'ada' ORDER BY character").values())
-      .toEqual([["ada/retired", "pending"], ["ada/side", "pending"]]);
+    expect(history.query("SELECT character FROM history_segments WHERE character != 'ada' ORDER BY character").values())
+      .toEqual([["ada/retired"], ["ada/side"]]);
     history.close();
   });
 

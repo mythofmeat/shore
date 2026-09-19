@@ -56,7 +56,6 @@ function put(
       file: "history.db",
       message_count: messages.length,
       compacted_at: STAMP,
-      retain: true,
       ...options,
     },
     messages,

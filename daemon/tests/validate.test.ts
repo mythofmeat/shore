@@ -506,53 +506,6 @@ describe("a config shore refuses, and what it says", () => {
   test("compaction min_turns not above keep_recent_turns", () => {
     expect(refused("\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("must both be greater than keep_recent_turns (4)");
   });
-  test("injecting recall requires usable limits and a backend", () => {
-    expect(refused("\n[memory.recall]\nmode = \"inject\"\n")).toContain(
-      "memory.backend.url must be set when memory.recall.mode is not \"off\"",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\nmax_memories = 0\n")).toContain(
-      "memory.recall.max_memories must be greater than 0",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\nrecent_messages = 0\n")).toContain(
-      "memory.recall.recent_messages must be greater than 0",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\nmax_tokens = 0\n")).toContain(
-      "memory.recall.max_tokens must be greater than 0",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\ntimeout = \"0s\"\n")).toContain(
-      "memory.recall.timeout must be greater than 0",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\n\n[memory.recall.min_scores]\nrerankr = 0.1\n")).toContain(
-      "memory.recall.min_scores has no score named 'rerankr'",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"mcp-hindsight:8888\"\n\n[memory.recall]\nmode = \"inject\"\n")).toContain(
-      "memory.backend.url must be an http or https URL, got 'mcp-hindsight:8888'",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"://nope\"\n\n[memory.recall]\nmode = \"inject\"\n")).toContain(
-      "memory.backend.url is not a valid URL",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"ftp://hindsight/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\n")).toContain(
-      "memory.backend.url must be an http or https URL",
-    );
-    expect(accepted("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\n")).toBeDefined();
-    expect(accepted("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\nbank = \"shared\"\n\n[memory.recall]\nmode = \"inject\"\n")).toBeDefined();
-  });
-  test("off recall permits zero limits because it performs no work", () => {
-    expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\ntimeout = \"0s\"\n")).toBeDefined();
-  });
-  test("archive retain can coexist with memory writes and requires a configured backend", () => {
-    expect(accepted("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.retain]\nenabled = true\n")).toBeDefined();
-    expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\n")).toContain(
-      "memory.backend.url must be set when memory.recall.mode is not \"off\"",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\npossessive_pronoun = \"  \"\n")).toContain(
-      "memory.retain.possessive_pronoun must not be blank",
-    );
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\ntimeout = \"0s\"\n")).toContain(
-      "memory.retain.timeout must be greater than 0",
-    );
-    expect(accepted("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\nuser_name = \"Ren\"\npossessive_pronoun = \"her\"\n")).toBeDefined();
-  });
   test("usage check precedes compaction check", () => {
     expect(refused("\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");
   });
@@ -615,4 +568,9 @@ describe("warning sink", () => {
       "shore: no fields here",
     ]);
   });
+});
+
+
+test.each(["backend", "recall", "retain"])("removed memory.%s settings cannot activate the old integration", (section) => {
+  expect(refused(`[memory.${section}]\n`)).toContain(`delete [memory.${section}]`);
 });

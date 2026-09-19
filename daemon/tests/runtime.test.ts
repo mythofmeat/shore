@@ -279,21 +279,6 @@ describe("what assembly wires together", () => {
     }
   });
 
-  test("retain registration follows the configured characters without a second index pass", async () => {
-    const { root, config } = await dirsUnder("shore-runtime-retain-");
-    try {
-      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
-      await mkdir(workspace, { recursive: true });
-      await writeFile(join(workspace, "SOUL.md"), "# ada");
-
-      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
-      expect(runtime.memoryRetain.registeredCharacters()).toEqual([]);
-
-      await runtime.shutdown();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
 
   test("characters on disk are discovered by the registry the executor holds", async () => {
     const { root, config } = await dirsUnder("shore-runtime-chars-");

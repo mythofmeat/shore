@@ -837,9 +837,6 @@ describe("the shipped defaults", () => {
     walk(defaultAppConfig(), "app");
   });
 
-  test("give memory recall enough time for a CPU reranker", () => {
-    expect(at(parsed(""), "memory.recall.timeout")).toEqual("30s");
-  });
 
   test("leave compaction's archive step off, since zero means disabled", () => {
     expect(defaultAppConfig().memory.compaction.archive_after.asMillis()).toBe(0);
@@ -890,39 +887,8 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "memory.retrieval.binary"), "memory.retrieval.binary").toEqual("metadata");
   });
 
-  test("memory.recall and archive-only rotation", () => {
-    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\npreamble = \"Relevant private notes:\"\nwrap_before = \"<recalled_memories>\\n\"\nwrap_after = \"\\n</recalled_memories>\"\n");
-    expect(at(cfg, "memory.compaction.write_memory")).toBe(false);
-    expect(at(cfg, "memory.recall")).toMatchObject({
-      mode: "inject",
-      query_from: "recent",
-      recent_messages: 3,
-      max_memories: 8,
-      timeout: "1500ms",
-      preamble: "Relevant private notes:",
-      wrap_before: "<recalled_memories>\n",
-      wrap_after: "\n</recalled_memories>",
-    });
-  });
 
-  test("memory.retain", () => {
-    const cfg = parsed("[memory.retain]\nenabled = true\nuser_name = \"Ren\"\npossessive_pronoun = \"his\"\ntimeout = \"20s\"\n");
-    expect(at(cfg, "memory.retain")).toEqual({
-      enabled: true,
-      user_name: "Ren",
-      possessive_pronoun: "his",
-      timeout: "20s",
-    });
-  });
 
-  test("memory.backend", () => {
-    const cfg = parsed("[memory.backend]\nurl = \"http://mcp-hindsight:8888/mcp/\"\nbank = \"shared\"\n\n[memory.backend.headers]\nAuthorization = \"Bearer t\"\n");
-    expect(at(cfg, "memory.backend")).toEqual({
-      url: "http://mcp-hindsight:8888/mcp/",
-      bank: "shared",
-      headers: { Authorization: "Bearer t" },
-    });
-  });
 
   test("memory.git_push", () => {
     const cfg = parsed("[memory]\ngit_push = true\n");
@@ -1165,9 +1131,6 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
     expect(rejected("[memory.retrieval]\nmode = \"semantic\"\n")).toContain("semantic");
   });
 
-  test("an unknown recall mode does not parse", () => {
-    expect(rejected("[memory.recall]\nmode = \"shadow\"\n")).toContain("shadow");
-  });
 
   test("an unknown binary mode does not parse", () => {
     expect(rejected("[memory.retrieval]\nbinary = \"embed\"\n")).toContain("embed");

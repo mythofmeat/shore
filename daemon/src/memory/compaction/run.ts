@@ -134,7 +134,6 @@ export async function rotateWithoutMemoryWrite(
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
-        retain: effective.app.memory.retain.enabled,
       },
     ).archiveAndRetain("archive-only", {
       keepLastN: commit.retained,
@@ -250,7 +249,6 @@ export async function runCompactionPass(
             {
               dbPath: join(dataDir, HISTORY_DB_FILE),
               archiveKey: archiveKey(character, thread),
-              retain: resolved.effective.app.memory.retain.enabled,
             },
           ),
           ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),

@@ -150,60 +150,7 @@ describe("segment management", () => {
     })).count).toBe(1);
   });
 
-  test("excluding a pre-existing segment schedules hindsight cleanup when retain is managed", async () => {
-    const root = testTmp(`segments-retain-exclude-${crypto.randomUUID()}`);
-    const characterDir = join(root, "ada");
-    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    put(characterDir, 0, [message("u0", "old import", 0)]);
 
-    await segments(root, "ada", MAIN_THREAD, { action: "exclude", index: 0 }, undefined, true);
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(store.nextCharacterMemoryRetainJob("ada")).toMatchObject({
-      segment: 0,
-      action: "delete",
-    });
-    store.close();
-  });
-
-  test("shows an exhausted hindsight operation and explicitly requeues it", async () => {
-    const root = testTmp(`segments-retain-retry-${crypto.randomUUID()}`);
-    const characterDir = join(root, "ada");
-    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    store.putSegment("ada", 0, {
-      file: HISTORY_DB_FILE,
-      message_count: 1,
-      compacted_at: "2026-08-20T11:00:00+10:00",
-      retain: true,
-    }, [message("u0", "rejected memory", 0)]);
-    store.requeueMemoryDocument("ada", 0, "document rejected", true);
-    store.close();
-
-    expect(await segments(root, "ada", MAIN_THREAD, { action: "show", index: 0 })).toMatchObject({
-      segment: {
-        memory_status: "failed",
-        memory_attempts: 0,
-        memory_error: "document rejected",
-      },
-    });
-
-    let wakes = 0;
-    expect(await segments(root, "ada", MAIN_THREAD, { action: "retry", index: 0 }, {
-      noteMemoryWork: () => { wakes += 1; },
-    })).toMatchObject({
-      action: "retry",
-      segment: { memory_status: "pending", memory_attempts: 0, memory_error: null },
-    });
-    expect(wakes).toBe(1);
-
-    const retried = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(retried.nextCharacterMemoryRetainJob("ada")).toMatchObject({
-      segment: 0,
-      action: "retain",
-      attempts: 0,
-    });
-    retried.close();
-  });
 
   async function twoThreads(tag: string): Promise<string> {
     const root = testTmp(`segments-${tag}-${crypto.randomUUID()}`);
@@ -280,21 +227,6 @@ describe("segment management", () => {
     });
   });
 
-  test("retrying hindsight requeues the thread's failed segment", async () => {
-    const root = await twoThreads("thread-retry");
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    store.requeueMemoryDocument("ada/eval", 0, "document rejected", true);
-    store.close();
-
-    expect(await segments(root, "ada", "eval", { action: "retry", index: 0 })).toMatchObject({
-      action: "retry",
-      segment: { memory_status: "pending" },
-    });
-
-    const retried = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(retried.nextCharacterMemoryRetainJob("ada/eval")).toMatchObject({ segment: 0 });
-    retried.close();
-  });
 
   async function refusal(root: string, thread: string, index: number): Promise<string> {
     try {

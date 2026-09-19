@@ -6,7 +6,6 @@ import { describe, expect, test } from "bun:test";
 import {
   assemblePrompt,
   renderTemplate,
-  xmlTagFromName,
   type PromptParams,
   type UserTimestampMode,
 } from "../src/engine/prompt";
@@ -201,17 +200,6 @@ describe("assembling the system prompt, over every recorded set of inputs", () =
   });
 });
 
-describe("the xml tag a prompt section gets", () => {
-  for (const c of fixture.xml_tag_from_name as {
-    input: string;
-    fallback: string;
-    expect: string;
-  }[]) {
-    test(`${JSON.stringify(c.input)} -> ${c.expect}`, () => {
-      expect(xmlTagFromName(c.input, c.fallback)).toBe(c.expect);
-    });
-  }
-});
 
 describe("rendering a template", () => {
   for (const c of fixture.render_template as {

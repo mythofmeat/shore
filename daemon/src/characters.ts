@@ -257,10 +257,7 @@ export class CharacterRegistry {
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
     return await this.#withThreadIndex(name, async () => {
-      const index = await archiveThread(this.#dataDir, name, id, {
-        ...options,
-        retain: options.retain ?? this.effectiveConfig(name).app.memory.retain.enabled,
-      });
+      const index = await archiveThread(this.#dataDir, name, id, options);
       this.#engines.delete(engineKey(name, id));
       return this.#remember(name, index);
     }, signal);

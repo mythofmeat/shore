@@ -56,7 +56,6 @@ import type {
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
-import { memoryRecallRunner } from "../memory/recall.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -90,12 +89,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
       ...runtime.mcp.callView(),
     },
     compaction: chatCompactionRunner(a),
-    recall: memoryRecallRunner({
-      backend: (character) => runtime.memoryBackends.get(character),
-      diagnostics: a.diagnostics,
-      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
-      ...(a.now === undefined ? {} : { monotonicMs: a.now }),
-    }),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
     ledgerPath,
     keepaliveMaxSecs: () =>
@@ -619,10 +612,6 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       progressFor: (character) => runtime.historyIndex.progress(character),
       noteMutation: (character) => {
         runtime.historyIndex.noteMutation(character);
-        runtime.memoryRetain.noteWork(character);
-      },
-      noteMemoryWork: (character) => {
-        runtime.memoryRetain.noteWork(character);
       },
     },
   };

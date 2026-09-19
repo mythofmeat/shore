@@ -65,7 +65,7 @@ test.each(["history.db", "shore.db"])("obsolete retention schema is removed from
   const legacyPath = join(paths.data, filename);
   const history = HistoryStore.open(legacyPath);
   history.putSegment("ada", 0, {
-    file: "0001.jsonl", message_count: 1, compacted_at: "2020-01-01T00:00:00Z", retain: true,
+    file: "0001.jsonl", message_count: 1, compacted_at: "2020-01-01T00:00:00Z",
   }, [{
     msg_id: "old-message", role: "user", content: "keep my history", images: [],
     content_blocks: [{ type: "text", text: "keep my history" }], timestamp: "2020-01-01T00:00:00Z",
@@ -74,8 +74,17 @@ test.each(["history.db", "shore.db"])("obsolete retention schema is removed from
   const legacy = new Database(legacyPath);
   legacy.run("ALTER TABLE history_segments ADD COLUMN memory_retain INTEGER NOT NULL DEFAULT 0");
   legacy.run("UPDATE history_segments SET memory_retain = 1");
+  legacy.run("ALTER TABLE history_segments ADD COLUMN retain_requested INTEGER");
+  legacy.run("ALTER TABLE history_segments ADD COLUMN memory_doc TEXT");
+  legacy.run("ALTER TABLE history_segments ADD COLUMN memory_doc_attempts INTEGER NOT NULL DEFAULT 0");
+  legacy.run("UPDATE history_segments SET retain_requested = 1, memory_doc = 'pending'");
+  legacy.run("CREATE TABLE memory_documents (character TEXT, document_id TEXT)");
+  legacy.run("INSERT INTO memory_documents VALUES ('ada', 'old-document')");
   legacy.run("CREATE TABLE history_memory_retain (character TEXT, segment INTEGER, status TEXT)");
   legacy.run("INSERT INTO history_memory_retain VALUES ('ada', 0, 'pending')");
+  legacy.run(`INSERT INTO memory_coverage(character, path, version, state, updated_at) VALUES
+    ('ada', 'hindsight', 'old-version', 'covered', '2020'),
+    ('ada', 'compaction', 'old-version', 'covered', '2020')`);
   legacy.close();
 
   migrateDatabases(paths);
@@ -86,8 +95,9 @@ test.each(["history.db", "shore.db"])("obsolete retention schema is removed from
       const columns = db.query("PRAGMA table_info(history_segments)").all() as { name: string }[];
       expect(columns.map((column) => column.name)).not.toContain("memory_retain");
       expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'history_memory_retain'").get()).toBeNull();
-      expect(db.query("SELECT retain_requested, memory_doc FROM history_segments").all())
-        .toEqual([{ retain_requested: 1, memory_doc: "pending" }]);
+      expect(columns.some(column => column.name === "retain_requested" || column.name.startsWith("memory_doc"))).toBe(false);
+      expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'memory_documents'").get()).toBeNull();
+      expect(db.query("SELECT path, version FROM memory_coverage").values()).toEqual([["compaction", "old-version"]]);
       expect(db.query("PRAGMA quick_check").values()).toEqual([["ok"]]);
     });
     const store = HistoryStore.open(databasePath(data));
@@ -99,7 +109,11 @@ test.each(["history.db", "shore.db"])("obsolete retention schema is removed from
   const archive = join(paths.root, "export.db");
   exportUnifiedDatabase(databasePath(paths.data), "ada", archive);
   const oldArchive = new Database(archive);
-  oldArchive.run("ALTER TABLE history_segments ADD COLUMN memory_retain INTEGER NOT NULL DEFAULT 0");
+  for (const name of ["memory_retain", "retain_requested", "memory_doc", "memory_doc_attempts", "memory_doc_error", "memory_doc_op", "memory_doc_due", "memory_doc_expires", "memory_doc_id", "memory_doc_claim"]) {
+    oldArchive.run(`ALTER TABLE history_segments ADD COLUMN ${name} TEXT`);
+  }
+  oldArchive.run(`INSERT INTO memory_coverage(character, path, version, state, updated_at)
+    VALUES ('ada', 'hindsight', 'old-version', 'covered', '2020')`);
   oldArchive.close();
   const target = dirs();
   importUnifiedDatabase(databasePath(target.data), archive, "ada");

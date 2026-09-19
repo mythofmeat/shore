@@ -291,6 +291,34 @@ async function contextFixture(c: ContextCase): Promise<{
 }
 
 describe("prepareChatContext", () => {
+  test("prompt files reach system blocks with their own formatting intact", async () => {
+    const base = contextCases[0];
+    if (base === undefined) throw new Error("missing context fixture");
+    const files = [
+      { name: "AGENTS.md", label: "system", content: "\n# My instructions\n<rules>Be concise.</rules>\n" },
+      { name: "TOOLS.md", label: "tools_guidance", content: "Use bash when needed.\n" },
+      { name: "SOUL.md", label: "character", content: "<my_identity>My own framing.</my_identity>\n" },
+      { name: "USER.md", label: "user", content: "  User-authored whitespace.\n\n" },
+      { name: "MEMORY.md", label: "memory_index", content: "# Notes\nKeep exactly this context.\n" },
+    ];
+    const c = structuredClone(base);
+    c.input.active_files = [];
+    c.input.canonical_files = files;
+    const { config, charDataDir, resolved } = await contextFixture(c);
+    const got = await prepareChatContext({
+      character: c.input.character,
+      characterDataDir: charDataDir,
+      config,
+      resolved,
+      messages: c.input.messages,
+      hasPriorContext: false,
+      mcpToolDefs: [],
+      timeZone: ZONE,
+    });
+    expect(got.system).toEqual(files.map(({ label, content }) => ({ label, text: content })));
+    expect(got.prompt.system).toEqual(files.map(({ label, content }) => ({ label, content })));
+  });
+
   for (const c of contextCases) {
     test(c.name, async () => {
       const dir = await images();

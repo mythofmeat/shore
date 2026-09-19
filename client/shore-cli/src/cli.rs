@@ -746,9 +746,6 @@ pub(crate) enum SegmentsCommand {
 
     /// Set a segment note, or omit NOTE to clear it
     Note { index: u32, note: Option<String> },
-
-    /// Retry a Hindsight retain or delete that exhausted its attempts
-    Retry { index: u32 },
 }
 
 /// Display elements `shore view` can change. Every one of these persists into
@@ -1084,18 +1081,6 @@ pub(crate) enum TraceCommand {
     Heartbeat {
         /// Number of entries to show
         #[arg(short = 'n', long = "count", default_value = "20")]
-        count: u32,
-
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// What memory recall pulled in before each turn: the query, scored
-    /// candidates, injected memories, and latency
-    Recall {
-        /// Number of turns to show
-        #[arg(short = 'n', long = "count", default_value = "10")]
         count: u32,
 
         /// Output raw JSON
@@ -2468,7 +2453,6 @@ pub(crate) fn to_swp_command(
                     ("label", Some(index), Some(label))
                 }
                 Some(SegmentsCommand::Note { index, note }) => ("note", Some(index), Some(note)),
-                Some(SegmentsCommand::Retry { index }) => ("retry", Some(index), None),
             };
             let mut args = serde_json::Map::new();
             _ = args.insert("action".into(), json!(action));
@@ -2579,10 +2563,6 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         TraceCommand::Heartbeat { count, .. } => Some((
             "transcript",
             json!({ "source": "heartbeat", "count": count }),
-        )),
-        TraceCommand::Recall { count, .. } => Some((
-            "transcript",
-            json!({ "source": "memory_recall", "count": count }),
         )),
         TraceCommand::Errors { count, .. } => Some(("error_log", json!({ "count": count }))),
         TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
@@ -4090,14 +4070,6 @@ mod tests {
             parsed_command(&segments),
             CliCommand::Segments {
                 subcommand: Some(SegmentsCommand::Show { index }),
-                ..
-            } => assert_eq!(*index, 4),
-        );
-        let retry = parse(&["segments", "retry", "4"]);
-        assert_variant!(
-            parsed_command(&retry),
-            CliCommand::Segments {
-                subcommand: Some(SegmentsCommand::Retry { index }),
                 ..
             } => assert_eq!(*index, 4),
         );
@@ -5711,18 +5683,10 @@ mod tests {
     }
 
     #[test]
-    fn trace_recall_reads_the_memory_recall_transcript() {
-        let (command, args) = to_swp_command(
-            parsed_command(&parse(&["trace", "recall", "-n", "4"])),
-            None,
-        )
-        .unwrap();
-        assert_eq!(command, "transcript");
-        assert_eq!(arg(&args, "source"), "memory_recall");
-        assert_eq!(
-            args.get("count").and_then(serde_json::Value::as_u64),
-            Some(4)
-        );
+    fn retired_hindsight_commands_are_rejected() {
+        for args in [["shore", "trace", "recall"], ["shore", "segments", "retry"]] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
     }
 
     #[test]
@@ -5792,12 +5756,6 @@ mod tests {
         assert_eq!(arg(&note_args, "action"), "note");
         assert_eq!(arg(&note_args, "index"), 2);
         assert_eq!(arg(&note_args, "value"), "review later");
-
-        let (retry_name, retry_args) =
-            to_swp_command(parsed_command(&parse(&["segments", "retry", "2"])), None).unwrap();
-        assert_eq!(retry_name, "segments");
-        assert_eq!(arg(&retry_args, "action"), "retry");
-        assert_eq!(arg(&retry_args, "index"), 2);
 
         let (clear_name, clear_args) =
             to_swp_command(parsed_command(&parse(&["clear", "--exclude"])), None).unwrap();

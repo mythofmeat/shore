@@ -28,12 +28,10 @@ export interface SegmentEngine {
 export interface SegmentIndexMutationSink {
   progressFor?(character: string): { indexPath: string } | undefined;
   noteMutation?(character: string): void;
-  noteMemoryWork?(character: string): void;
 }
 
 export interface ClearContext {
   dataDir: string;
-  retainArchived?: boolean;
   repoint?: (character: string) => Promise<void>;
   onComplete?: (character: string) => void;
   now?: () => string;
@@ -46,11 +44,10 @@ export async function segments(
   thread: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
-  retainArchived = false,
 ): Promise<unknown> {
   const action = typeof args["action"] === "string" ? args["action"] : "list";
   const mutate = () =>
-    runSegments(dataDir, character, thread, action, args, historyIndex, retainArchived);
+    runSegments(dataDir, character, thread, action, args, historyIndex);
   const indexPath =
     action === "list" || action === "show"
       ? undefined
@@ -67,7 +64,6 @@ function runSegments(
   action: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
-  retainArchived = false,
 ): unknown {
   const key = archiveKey(character, thread);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
@@ -92,10 +88,10 @@ function runSegments(
     let changed: boolean;
     switch (action) {
       case "exclude":
-        changed = store.setExcluded(key, idx, true, retainArchived);
+        changed = store.setExcluded(key, idx, true);
         break;
       case "include":
-        changed = store.setExcluded(key, idx, false, retainArchived);
+        changed = store.setExcluded(key, idx, false);
         break;
       case "label":
         changed = store.setLabel(key, idx, nullableText(args["value"], "label"));
@@ -103,20 +99,12 @@ function runSegments(
       case "note":
         changed = store.setNote(key, idx, nullableText(args["value"], "note"));
         break;
-      case "retry":
-        changed = store.retryMemoryDocument(key, idx);
-        if (!changed && store.entries(key).some((entry) => entry.idx === idx)) {
-          throw invalidRequest(`segment ${String(idx)} has no failed hindsight operation`);
-        }
-        break;
       default:
         throw invalidRequest(`unknown segment action: ${action}`);
     }
     if (!changed) throw notFound(missing(idx, character, thread));
     if (action === "exclude" || action === "include") {
       historyIndex?.noteMutation?.(character);
-    } else if (action === "retry") {
-      historyIndex?.noteMemoryWork?.(character);
     }
     const record = store.entries(key).find((entry) => entry.idx === idx);
     if (record === undefined) throw notFound(missing(idx, character, thread));
@@ -162,7 +150,6 @@ export async function clear(
         {
           dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
           archiveKey: archiveKey(character, engine.thread),
-          retain: ctx.retainArchived === true,
         },
         {
           ...(excluded ? { excluded: true } : {}),
@@ -215,9 +202,6 @@ function presentSegment(record: SegmentRecord): Record<string, unknown> {
     note: record.note ?? null,
     memory_before: record.memory_before ?? null,
     memory_after: record.memory_after ?? null,
-    memory_status: record.memory_status ?? null,
-    memory_attempts: record.memory_attempts ?? 0,
-    memory_error: record.memory_error ?? null,
   };
 }
 

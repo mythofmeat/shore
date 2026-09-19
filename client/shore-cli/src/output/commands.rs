@@ -130,16 +130,6 @@ fn print_segment_row(segment: &serde_json::Value) {
     if let Some(note) = segment["note"].as_str() {
         cli_out!("      {note}");
     }
-    if let Some(status @ ("failed" | "delete_failed")) = segment["memory_status"].as_str() {
-        let action = if status == "delete_failed" {
-            "delete"
-        } else {
-            "retain"
-        };
-        let attempts = segment["memory_attempts"].as_u64().unwrap_or(0);
-        let error = segment["memory_error"].as_str().unwrap_or("unknown error");
-        cli_out!("      hindsight {action} failed after {attempts} attempts: {error}");
-    }
     match (
         segment["memory_before"].as_str(),
         segment["memory_after"].as_str(),
@@ -524,97 +514,7 @@ pub(crate) fn write_trace_transcript<W: Write>(
     };
     let mut prev_date: Option<String> = None;
     for entry in entries {
-        if source == "memory_recall" {
-            print_recall_entry(out, entry, &mut prev_date);
-        } else {
-            print_transcript_entry(out, entry, &mut prev_date);
-        }
-    }
-}
-
-fn print_recall_entry(
-    out: &mut impl Write,
-    entry: &serde_json::Value,
-    prev_date: &mut Option<String>,
-) {
-    let ts = entry["ts"].as_str().unwrap_or("");
-    let time_str = parse_timestamp(ts).map_or_else(
-        || ts.chars().take(16).collect::<String>(),
-        |dt| {
-            let formatted = format_time(&dt, prev_date.as_deref());
-            *prev_date = Some(dt.format("%Y-%m-%d").to_string());
-            formatted
-        },
-    );
-    let body = &entry["entry"];
-    let status = body["status"].as_str().unwrap_or("?");
-    let elapsed = body["elapsed_ms"].as_u64().unwrap_or(0);
-    let memories = body["memories"]
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    let results = body["results"].as_array().map(Vec::as_slice).unwrap_or(&[]);
-    let injected = body["injected"]
-        .as_u64()
-        .and_then(|value| usize::try_from(value).ok())
-        .unwrap_or(memories.len());
-
-    _ = writeln!(out);
-    _ = write!(out, "{time_str}  {status}");
-    write_dim(out, &format!(" {elapsed}ms"));
-    _ = writeln!(out);
-
-    if let Some(query) = body["query"].as_str() {
-        let flat = query.replace('\n', " ");
-        let trimmed: String = flat.chars().take(160).collect();
-        indent_to(out, 1);
-        write_dim(out, &format!("searched: {trimmed}"));
-        _ = writeln!(out);
-    }
-    if results.is_empty() {
-        for memory in memories {
-            if let Some(text) = memory.as_str() {
-                indent_to(out, 1);
-                _ = writeln!(out, "{text}");
-            }
-        }
-    } else {
-        for (index, result) in results.iter().enumerate() {
-            let Some(text) = result["text"].as_str() else {
-                continue;
-            };
-            let rank = index.saturating_add(1);
-            indent_to(out, 1);
-            _ = writeln!(out, "{rank}. {text}");
-            indent_to(out, 2);
-            let disposition = if rank <= injected {
-                "injected"
-            } else {
-                "candidate"
-            };
-            let mut details = vec![disposition.to_owned()];
-            if let Some(kind) = result["type"].as_str() {
-                details.push(kind.to_owned());
-            }
-            if let Some(scores) = result.get("scores") {
-                for name in ["final", "reranker", "semantic", "keyword"] {
-                    match scores[name].as_f64() {
-                        Some(score) => details.push(format!("{name}={score:.4}")),
-                        None if scores.get(name).is_some_and(serde_json::Value::is_null) => {
-                            details.push(format!("{name}=null"));
-                        }
-                        None => {}
-                    }
-                }
-            }
-            write_dim(out, &details.join("  "));
-            _ = writeln!(out);
-        }
-    }
-    if let Some(error) = body["error"].as_str() {
-        indent_to(out, 1);
-        write_fg(out, COLOR_ERROR, error);
-        _ = writeln!(out);
+        print_transcript_entry(out, entry, &mut prev_date);
     }
 }
 
@@ -1733,25 +1633,6 @@ pub(crate) fn write_error_log<W: Write>(out: &mut W, data: &serde_json::Value) {
             _ = writeln!(w);
         },
     );
-
-    print_error_log_section(
-        out,
-        "Memory recall",
-        &data["memory_recall"],
-        width,
-        |w, event| {
-            let status = event["status"].as_str().unwrap_or("?");
-            let recalled = event["recalled"].as_u64().unwrap_or(0);
-            let elapsed = event["elapsed_ms"].as_u64().unwrap_or(0);
-
-            _ = write!(w, "{status:<10} {recalled} recalled");
-            write_dim(w, &format!("  {elapsed}ms"));
-            if let Some(error) = event["error"].as_str() {
-                write_fg(w, COLOR_ERROR, &format!("  {error}"));
-            }
-            _ = writeln!(w);
-        },
-    );
 }
 
 fn print_error_log_section<W: Write>(
@@ -1865,137 +1746,6 @@ mod tests {
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
-    }
-
-    #[test]
-    fn trace_recall_shows_the_query_and_every_injected_memory() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "enabled": true,
-            "source": "memory_recall",
-            "character": "qifei",
-            "entries": [{
-                "ts": "2026-08-29T10:00:00Z",
-                "entry": {
-                    "status": "recalled",
-                    "query": "remind me how i pick what music to listen to",
-                    "elapsed_ms": 129,
-                    "memories": [
-                        "Ren uses a Python script 'beet-smartplaylist.py' on a systemd timer",
-                        "Ren sorts his library into five tiers"
-                    ]
-                }
-            }]
-        });
-        let mut buf = Vec::new();
-
-        write_trace_transcript(&mut buf, &data, 100);
-        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
-
-        assert!(rendered.contains("memory_recall transcript"));
-        assert!(rendered.contains("recalled"));
-        assert!(rendered.contains("129ms"));
-        assert!(rendered.contains("searched: remind me how i pick"));
-        assert!(rendered.contains("beet-smartplaylist.py"));
-        assert!(rendered.contains("five tiers"));
-    }
-
-    #[test]
-    fn trace_recall_shows_scores_and_marks_uninjected_candidates() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "enabled": true,
-            "source": "memory_recall",
-            "character": "qifei",
-            "entries": [{
-                "ts": "2026-08-29T10:00:00Z",
-                "entry": {
-                    "status": "recalled",
-                    "query": "music",
-                    "elapsed_ms": 129,
-                    "injected": 1,
-                    "memories": ["first"],
-                    "results": [
-                        {
-                            "text": "first",
-                            "type": "world",
-                            "scores": {
-                                "final": 0.75,
-                                "reranker": 0.5,
-                                "semantic": 0.6,
-                                "keyword": null
-                            }
-                        },
-                        { "text": "second", "scores": { "final": 0.25 } }
-                    ]
-                }
-            }]
-        });
-        let mut buf = Vec::new();
-
-        write_trace_transcript(&mut buf, &data, 100);
-        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
-
-        assert!(rendered.contains("1. first"));
-        assert!(rendered.contains("injected  world  final=0.7500"));
-        assert!(rendered.contains("keyword=null"));
-        assert!(rendered.contains("2. second"));
-        assert!(rendered.contains("candidate  final=0.2500"));
-    }
-
-    #[test]
-    fn trace_recall_surfaces_a_failure_instead_of_pretending_it_recalled() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "enabled": true,
-            "source": "memory_recall",
-            "character": "qifei",
-            "entries": [{
-                "ts": "2026-08-29T10:00:00Z",
-                "entry": {
-                    "status": "failed",
-                    "query": "anything",
-                    "elapsed_ms": 12,
-                    "memories": [],
-                    "error": "MCP server 'hindsight' is unavailable"
-                }
-            }]
-        });
-        let mut buf = Vec::new();
-
-        write_trace_transcript(&mut buf, &data, 100);
-        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
-
-        assert!(rendered.contains("failed"));
-        assert!(rendered.contains("MCP server 'hindsight' is unavailable"));
-    }
-
-    #[test]
-    fn memory_recall_diagnostics_show_counts_without_recalled_text() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "errors": { "count": 0, "recent": [] },
-            "key_fallbacks": { "count": 0, "recent": [] },
-            "memory_recall": {
-                "count": 1,
-                "recent": [{
-                    "timestamp": "2026-08-28T10:00:00Z",
-                    "character": "poppy",
-                    "status": "recalled",
-                    "recalled": 4,
-                    "elapsed_ms": 118
-                }]
-            }
-        });
-        let mut buf = Vec::new();
-
-        write_error_log(&mut buf, &data);
-        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
-
-        assert!(rendered.contains("Memory recall"));
-        assert!(rendered.contains("recalled"));
-        assert!(rendered.contains("4 recalled"));
-        assert!(rendered.contains("118ms"));
     }
 
     #[test]

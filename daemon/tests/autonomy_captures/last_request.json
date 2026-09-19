@@ -768,11 +768,11 @@
       },
       {
         "label": "character",
-        "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>"
+        "text": "# ada\n\nA fixture character.\n"
       },
       {
         "label": "memory_index",
-        "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>"
+        "text": "- nothing yet\n"
       }
     ]
   }

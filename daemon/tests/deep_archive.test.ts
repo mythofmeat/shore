@@ -212,17 +212,13 @@ describe("runDeepIdleArchive", () => {
     const messages = uncovered.input.map((shape) => fromShape(shape));
     const { config, dataDir, characterDir } = await world(messages);
     config.app.memory.compaction.write_memory = false;
-    config.app.memory.retain.enabled = true;
 
     const result = await runDeepIdleArchive("ada", deps(config), uncovered.covered_turn_count);
 
     expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
     expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe("");
     const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
-    expect(history.nextCharacterMemoryRetainJob("ada")).toMatchObject({
-      segment: 0,
-      action: "retain",
-    });
+    expect(history.segmentCount("ada")).toBe(1);
     history.close();
   });
 

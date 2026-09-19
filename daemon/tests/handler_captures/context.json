@@ -51,7 +51,7 @@
     ],
     "s3": {
       "label": "memory_index",
-      "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md \u2014 a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- canon\n\n</memory_index>"
+      "text": "- canon\n"
     },
     "s4": [
       {
@@ -64,7 +64,7 @@
       },
       {
         "label": "character",
-        "text": "<qifei>\nI am qifei.\n\n</qifei>"
+        "text": "I am qifei.\n"
       }
     ],
     "s5": [
@@ -785,7 +785,7 @@
     },
     {
       "name": "text standin does not encode a readable image",
-      "note": "the file is there and openable, and the stand-in still wins \u2014 the mode decides, not whether the encode would have succeeded",
+      "note": "the file is there and openable, and the stand-in still wins — the mode decides, not whether the encode would have succeeded",
       "mode": "text_standin",
       "max_image_size": 1024,
       "prompt": {
@@ -1699,15 +1699,15 @@
           "label": "tools_guidance"
         },
         {
-          "text": "<qifei>\nI am qifei.\n\n</qifei>",
+          "text": "I am qifei.\n",
           "label": "character"
         },
         {
-          "text": "<ash>\nAsh likes brevity.\n\n</ash>",
+          "text": "Ash likes brevity.\n",
           "label": "user"
         },
         {
-          "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md \u2014 a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- a memory\n\n</memory_index>",
+          "text": "- a memory\n",
           "label": "memory_index"
         }
       ],
@@ -1805,7 +1805,7 @@
           "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
         },
         {
-          "text": "<qifei>\ncanonical soul\n\n</qifei>",
+          "text": "canonical soul\n",
           "label": "character"
         },
         {
@@ -2172,7 +2172,7 @@
     },
     {
       "name": "a blocked active_prompt is warned about, not fatal",
-      "note": "`active_prompt` is a regular file, so the snapshot step fails. Every prompt file then falls through to its canonical copy \u2014 the one path where that fallback is reachable",
+      "note": "`active_prompt` is a regular file, so the snapshot step fails. Every prompt file then falls through to its canonical copy — the one path where that fallback is reachable",
       "input": {
         "character": "qifei",
         "display_name": "Ash",
@@ -2231,7 +2231,7 @@
         },
         {
           "label": "character",
-          "text": "<qifei>\ncanonical soul\n\n</qifei>"
+          "text": "canonical soul\n"
         },
         {
           "$ref": "s3"
@@ -2252,7 +2252,7 @@
     },
     {
       "name": "an assistant image with tools off takes the stand-in",
-      "note": "anthropic, so the sdk alone would say tool_pair \u2014 the absent tool surface is what makes it text, and this is the only case where the mode chosen here is observable at all",
+      "note": "anthropic, so the sdk alone would say tool_pair — the absent tool surface is what makes it text, and this is the only case where the mode chosen here is observable at all",
       "input": {
         "character": "qifei",
         "display_name": "Ash",
@@ -2448,7 +2448,7 @@
           "content": [
             {
               "type": "text",
-              "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nhi"
+              "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nhi"
             }
           ]
         }
@@ -2460,7 +2460,7 @@
       "prompt_messages": [
         {
           "role": "user",
-          "content": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nhi",
+          "content": "[Tuesday 2026-06-30 · 8:00 PM]\n\nhi",
           "images": [],
           "content_blocks": [],
           "provider_key": null,
@@ -2582,7 +2582,7 @@
         },
         {
           "label": "character",
-          "text": "<qifei>\ncanonical soul\n\n</qifei>"
+          "text": "canonical soul\n"
         },
         {
           "$ref": "s3"

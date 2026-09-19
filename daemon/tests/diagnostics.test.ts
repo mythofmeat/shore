@@ -6,7 +6,6 @@ import {
   RingBuffer,
   type ErrorEntry,
   type KeyFallbackEntry,
-  type MemoryRecallEntry,
 } from "../src/diagnostics.ts";
 
 import rawFixture from "./diagnostics_captures/diagnostics.json" with { type: "json" };
@@ -113,7 +112,6 @@ describe("toJson", () => {
       seed(d);
       expect<unknown>(d.toJson(row.last_n)).toEqual({
         ...(row.ok as Record<string, unknown>),
-        memory_recall: { count: 0, recent: [] },
       });
     });
   }
@@ -155,19 +153,4 @@ test("a field that is present but falsy is kept", () => {
   expect(row["status"]).toBe(0);
   expect(row["to_key"]).toBe("");
   expect(row["rid"]).toBe("");
-});
-
-test("memory recall diagnostics record the decision but never the recalled text", () => {
-  const d = new Diagnostics();
-  const entry: MemoryRecallEntry = {
-    timestamp: "2026-08-28T10:00:00Z",
-    character: "poppy",
-    status: "recalled",
-    recalled: 4,
-    elapsed_ms: 118,
-  };
-  d.memory_recall.push(entry);
-
-  expect(d.toJson(1).memory_recall).toEqual({ count: 1, recent: [entry] });
-  expect(JSON.stringify(d.toJson(1))).not.toContain("recalled_memories");
 });

@@ -2,7 +2,7 @@ import { HISTORY_TABLES, LEDGER_TABLES } from "../storage/migrate.ts";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
-import { CHARACTER_ARCHIVES_SQL, HistoryStore } from "../engine/history_store.ts";
+import { CHARACTER_ARCHIVES_SQL, HistoryStore, OBSOLETE_RETENTION_COLUMNS } from "../engine/history_store.ts";
 import { Ledger } from "../ledger/store.ts";
 
 type Row = Record<string, SQLQueryBindings>;
@@ -15,7 +15,6 @@ const CHARACTER_SCOPED_TABLES = [
   "history_archive_revision",
   "history_thread_forks",
   "memory_coverage",
-  "memory_documents",
 ] as const;
 
 export function exportHistoryDatabase(path: string, character: string, output: string): void {
@@ -85,9 +84,12 @@ export function importHistoryDatabase(
       copyRows(source, destination, "history_segments", CHARACTER_ARCHIVES_SQL, "", character);
       copyRows(source, destination, "history_pending", CHARACTER_ARCHIVES_SQL, "", character);
       copyRows(source, destination, "history_character_stats", CHARACTER_ARCHIVES_SQL, "", character);
-      for (const table of ["history_thread_forks", "memory_coverage", "memory_documents"]) {
+      for (const table of ["history_thread_forks", "memory_coverage"]) {
         if (!hasTable(source, table)) continue;
-        copyRows(source, destination, table, CHARACTER_ARCHIVES_SQL, "OR IGNORE", character);
+        const scope = table === "memory_coverage"
+          ? `(${CHARACTER_ARCHIVES_SQL}) AND path != 'hindsight'`
+          : CHARACTER_ARCHIVES_SQL;
+        copyRows(source, destination, table, scope, "OR IGNORE", character);
       }
 
       const ids = new Map<number, number>();
@@ -123,21 +125,6 @@ export function importHistoryDatabase(
         ).run(binding(revision, "character"), binding(revision, "revision"));
       }
 
-      destination.query(
-        `UPDATE history_segments
-            SET memory_doc = 'pending', memory_doc_attempts = 0,
-                memory_doc_error = NULL, memory_doc_op = NULL,
-                memory_doc_due = 0, memory_doc_expires = 0,
-                memory_doc_id = NULL, memory_doc_claim = NULL
-          WHERE ${CHARACTER_ARCHIVES_SQL} AND committed = 1 AND excluded = 0
-            AND memory_doc IN ('submitted', 'stored')`,
-      ).run(character);
-      destination.query(
-        "DELETE FROM memory_coverage WHERE character = ?1 AND path = 'hindsight'",
-      ).run(character);
-      destination.query(
-        "DELETE FROM memory_documents WHERE character = ?1 AND path = 'hindsight'",
-      ).run(character);
       destination.query(
         "DELETE FROM memory_coverage WHERE character = ?1 AND state = 'claimed'",
       ).run(character);
@@ -261,7 +248,7 @@ function columnsOf(db: Database, table: string): string[] {
       if (typeof name !== "string") throw new Error(`archive has a malformed ${table} schema`);
       return name;
     })
-    .filter((name) => table !== "history_segments" || name !== "memory_retain");
+    .filter((name) => table !== "history_segments" || !OBSOLETE_RETENTION_COLUMNS.has(name));
 }
 
 function inserter(db: Database, table: string, columns: readonly string[], conflict = "") {

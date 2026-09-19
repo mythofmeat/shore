@@ -899,7 +899,7 @@
       },
       "err": {
         "code": "invalid_request",
-        "message": "unknown transcript source 'dreaming' (expected one of heartbeat, memory_recall)"
+        "message": "unknown transcript source 'dreaming' (expected one of heartbeat)"
       }
     },
     {
@@ -910,7 +910,7 @@
       },
       "err": {
         "code": "invalid_request",
-        "message": "unknown transcript source '' (expected one of heartbeat, memory_recall)"
+        "message": "unknown transcript source '' (expected one of heartbeat)"
       }
     },
     {
@@ -965,7 +965,7 @@
       },
       "err": {
         "code": "invalid_request",
-        "message": "unknown transcript source 'nope' (expected one of heartbeat, memory_recall)"
+        "message": "unknown transcript source 'nope' (expected one of heartbeat)"
       }
     },
     {

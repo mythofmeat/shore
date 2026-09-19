@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { CallStore } from "../call_store.ts";
 import type { ShoreDirs } from "../config/dirs.ts";
-import { HistoryStore } from "../engine/history_store.ts";
+import { HistoryStore, OBSOLETE_RETENTION_COLUMNS } from "../engine/history_store.ts";
 import { Ledger } from "../ledger/store.ts";
 import { databasePath, openStorage, pack } from "./store.ts";
 
@@ -13,7 +13,7 @@ export const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_cal
 export const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
 export const HISTORY_TABLES = [
   "history_blobs", "history_segments", "history_messages", "history_alternatives", "history_pending",
-  "history_thread_forks", "memory_coverage", "memory_documents", "history_metadata",
+  "history_thread_forks", "memory_coverage", "history_metadata",
   "history_character_stats", "history_archive_revision",
 ];
 
@@ -105,7 +105,7 @@ export function mergeTables(source: Database, destination: Database, kind: "hist
   const mappings = new Map<string, Map<number, number>>();
   for (const table of tables) {
     const columns = (source.query(`PRAGMA table_info(${table})`).all() as Column[])
-      .filter((column) => table !== "history_segments" || column.name !== "memory_retain");
+      .filter((column) => table !== "history_segments" || !OBSOLETE_RETENTION_COLUMNS.has(column.name));
     if (columns.length === 0) continue;
     const primary = columns.filter((c) => c.pk > 0);
     const autoId = primary.length === 1 && primary[0]?.name === "id" && primary[0].type === "INTEGER";
@@ -115,6 +115,7 @@ export function mergeTables(source: Database, destination: Database, kind: "hist
     const occurrences = new Map<string, number>();
     const insert = destination.query(`INSERT OR IGNORE INTO ${table} (${names.join(",")}) VALUES (${names.map(() => "?").join(",")})`);
     for (const row of source.query(`SELECT * FROM ${table} ORDER BY ${primary.map((c) => c.name).join(",") || "rowid"}`).iterate() as Iterable<Row>) {
+      if (table === "memory_coverage" && row["path"] === "hindsight") continue;
       const values = names.map((name) => {
         const value = row[name] ?? null;
         const target = referenceTable(table, name);

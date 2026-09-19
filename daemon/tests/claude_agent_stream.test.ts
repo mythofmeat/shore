@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   ClaudeAgentProvider,
+  type AgentPrompt,
   type AgentQuery,
   nextEntries,
   planTurn,
@@ -448,7 +449,14 @@ describe("generate", () => {
   });
 });
 
-describe("sending a picture", () => {
+async function sentMessages(prompt: AgentPrompt | undefined) {
+  if (prompt === undefined) throw new Error("missing SDK prompt");
+  const messages: unknown[] = [];
+  for await (const turn of prompt) messages.push(turn.message);
+  return messages;
+}
+
+describe("sending user content", () => {
   const withImage = request({
     messages: [
       {
@@ -461,9 +469,9 @@ describe("sending a picture", () => {
     ],
   });
 
-  test("a turn carrying no images is still sent as plain text", async () => {
+  test("a turn carrying no images is sent as a structured user message", async () => {
     const { agent } = await collect({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
-    expect(typeof agent.calls[0]?.prompt).toBe("string");
+    expect(await sentMessages(agent.calls[0]?.prompt)).toEqual(request().messages);
   });
 
   test("the image reaches the model rather than only being described", async () => {
@@ -579,14 +587,7 @@ test.each([false, true])("repeated regeneration of an eleven-message chat uses t
     for await (const event of restarted.stream(request({ messages: [...history] }))) events.push(event);
     expect(kinds(events)).not.toContain("error");
     expect(kinds(events)).not.toContain("provider_warning");
-    const prompt = calls.at(-1)?.prompt;
-    if (withImage && typeof prompt !== "string" && prompt !== undefined) {
-      const turns = [];
-      for await (const message of prompt) turns.push(message.message.content);
-      expect(turns).toHaveLength(1);
-      expect(JSON.stringify(turns)).toContain("question 6");
-      expect(JSON.stringify(turns)).not.toContain("prior_assistant_turn");
-    } else expect(prompt).toBe("question 6");
+    expect(await sentMessages(calls.at(-1)?.prompt)).toEqual([history.at(-1)]);
     expect(calls.at(-1)?.options.resume).toBe("session-1");
     expect(calls.at(-1)?.options.resumeSessionAt).toBe("session-1:5:msg_0_asst_0");
     expect(calls.at(-1)?.options.forkSession).toBe(true);
@@ -598,7 +599,7 @@ test("temporary system instructions do not diverge the conversation on the next 
   const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] });
   const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
   const history = request().messages;
-  for (const instruction of ["first recall", "second recall"]) {
+  for (const instruction of ["first guidance", "second guidance"]) {
     const events: StreamEvent[] = [];
     for await (const event of provider.stream(request({ messages: [
       ...history,
@@ -636,7 +637,9 @@ test("a heartbeat between chat turns cannot replace the chat session", async () 
     { role: "user", content: [{ type: "text", text: "continue" }] },
   ] }))) expect(event.type).not.toBe("error");
   expect(chat.calls[1]?.options.resume).toBe("chat-session");
-  expect(chat.calls[1]?.prompt).toBe("continue");
+  expect(await sentMessages(chat.calls[1]?.prompt)).toEqual([
+    { role: "user", content: [{ type: "text", text: "continue" }] },
+  ]);
   const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
   expect(Object.values(book).map(record => record.sessionId).sort()).toEqual(["chat-session", "heartbeat-session"]);
 });

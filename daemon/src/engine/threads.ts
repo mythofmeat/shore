@@ -365,7 +365,6 @@ export async function touchThread(
 export interface ArchiveThreadOptions {
   now?: () => string;
   newId?: () => string;
-  retain?: boolean;
 }
 
 export async function archiveThread(
@@ -405,7 +404,6 @@ export async function archiveThread(
         {
           dbPath: join(data, HISTORY_DB_FILE),
           archiveKey: archiveKey(character, id),
-          ...(options.retain === undefined ? {} : { retain: options.retain }),
         },
       );
     }

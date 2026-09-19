@@ -90,7 +90,7 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
 });
 
-test.each([false, true])("compaction resumes without repeating writes and queues retention only after archive (retain: %s)", async (retain) => {
+test("compaction resumes without repeating writes and commits only after archive", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
@@ -141,7 +141,6 @@ test.each([false, true])("compaction resumes without repeating writes and queues
         new Error("provider unavailable"),
       ]),
       true,
-      retain,
     ),
     { keepRecentTurns: 1 },
   );
@@ -157,12 +156,12 @@ test.each([false, true])("compaction resumes without repeating writes and queues
   expect(checkpoint.memoryBefore).toBe("before-sha");
 
   const pendingHistory = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
-  expect(pendingHistory.nextCharacterMemoryRetainJob("ada")).toBeUndefined();
+  expect(pendingHistory.segmentCount("ada")).toBe(0);
   pendingHistory.close();
 
   const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await compact(
-    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true, retain),
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true),
     { keepRecentTurns: 1 },
   );
 
@@ -177,13 +176,6 @@ test.each([false, true])("compaction resumes without repeating writes and queues
     memory_before: "before-sha",
     memory_after: "after-sha",
   });
-  const job = history.nextCharacterMemoryRetainJob("ada");
-  if (retain) {
-    expect(job?.action).toBe("retain");
-    expect(job?.status).toBe("pending");
-  } else {
-    expect(job).toBeUndefined();
-  }
   history.close();
 });
 
@@ -549,7 +541,6 @@ function options(
   tools: CompactionTools,
   llm: CompactionLlm,
   durable = false,
-  retain = false,
 ) {
   return {
     conversationId: "ada",
@@ -562,7 +553,7 @@ function options(
       join(dataDir, "ada", "threads", "main"),
       () => new Date().toISOString(),
       () => crypto.randomUUID(),
-      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada", retain } : undefined,
+      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" } : undefined,
     ),
     markdownStore: memoryStore,
     dryRun: false,

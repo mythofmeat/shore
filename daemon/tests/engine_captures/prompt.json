@@ -1,47 +1,5 @@
 {
   "timezone": "America/New_York",
-  "xml_tag_from_name": [
-    {
-      "input": "Ada",
-      "fallback": "character",
-      "expect": "ada"
-    },
-    {
-      "input": "Dr. Ada  Lovelace!",
-      "fallback": "character",
-      "expect": "dr_ada_lovelace"
-    },
-    {
-      "input": "###",
-      "fallback": "user",
-      "expect": "user"
-    },
-    {
-      "input": "",
-      "fallback": "user",
-      "expect": "user"
-    },
-    {
-      "input": "__leading_and_trailing__",
-      "fallback": "character",
-      "expect": "leading_and_trailing"
-    },
-    {
-      "input": "MiXeD CaSe",
-      "fallback": "character",
-      "expect": "mixed_case"
-    },
-    {
-      "input": "日本語",
-      "fallback": "character",
-      "expect": "character"
-    },
-    {
-      "input": "a1b2",
-      "fallback": "character",
-      "expect": "a1b2"
-    }
-  ],
   "render_template": [
     {
       "template": "hello {{name}}",

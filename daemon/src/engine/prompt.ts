@@ -110,30 +110,17 @@ function buildSystemBlocks(params: PromptParams): SystemBlock[] {
 
   const charDef = present(params.character_definition);
   if (charDef !== undefined) {
-    const tag = xmlTagFromName(params.character_name, "character");
-    system.push({ label: "character", content: `<${tag}>\n${charDef}\n</${tag}>` });
+    system.push({ label: "character", content: charDef });
   }
 
   const userDef = present(params.user_definition);
   if (userDef !== undefined) {
-    const tag = xmlTagFromName(params.display_name, "user");
-    system.push({ label: "user", content: `<${tag}>\n${userDef}\n</${tag}>` });
+    system.push({ label: "user", content: userDef });
   }
 
   const index = present(params.memory_index);
   if (index !== undefined) {
-    system.push({
-      label: "memory_index",
-      content:
-        "<memory_index>\n" +
-        "The following is your active memory from workspace/MEMORY.md — a dated, " +
-        "continuously pruned scratchpad of what is live right now: current state, " +
-        "still-relevant conversational throughlines, and thin pointers to where deeper " +
-        "material lives. It is not long-term storage; that is the job of your memory/ " +
-        "files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n" +
-        `${index}\n` +
-        "</memory_index>",
-    });
+    system.push({ label: "memory_index", content: index });
   }
 
   return withDynamicBlocksLast(system);
@@ -176,15 +163,6 @@ export function renderTemplate(template: string, vars: Map<string, string>): str
   }
 
   return result.replace(/\{\{([^{}]*)\}\}/g, (tag, name: string) => vars.get(name) ?? tag);
-}
-
-export function xmlTagFromName(name: string, fallback: string): string {
-  const tag = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return tag === "" ? fallback : tag;
 }
 
 export function stripOneTrailingNewline(raw: string): string {

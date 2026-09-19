@@ -38,7 +38,6 @@ import {
 } from "./agent_sessions.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
-import { omissionNotice } from "../images.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
@@ -118,122 +117,19 @@ function lastAssistantEntry(entries: readonly DeliveredEntry[], upto: number): n
   return -1;
 }
 
-function resultText(content: string | ContentBlock[]): string {
-  if (typeof content === "string") return content;
-  return content
-    .map((inner) => {
-      if (inner.type === "text") return inner.text;
-      if (inner.type === "image") {
-        return omissionNotice(inner.source.media_type, "this provider replays history as text");
-      }
-      return "";
-    })
-    .filter((text) => text !== "")
-    .join("\n");
-}
-
-function replayBlock(block: ContentBlock, attached: ContentBlock[]): string {
-  switch (block.type) {
-    case "text":
-      return block.text;
-    case "image":
-      attached.push(block);
-      return `[image attached: ${block.source.media_type}]`;
-    case "tool_use":
-      return (
-        `<prior_tool_call name="${block.name}">\n` +
-        `${JSON.stringify(block.input)}\n</prior_tool_call>`
-      );
-    case "tool_result":
-      return (
-        `<prior_tool_result${block.is_error === true ? ' failed="true"' : ""}>\n` +
-        `${resultText(block.content)}\n</prior_tool_result>`
-      );
-    case "thinking":
-    case "redacted_thinking":
-      return "";
-  }
-}
-
-function replayText(msg: WireMessage, attached: ContentBlock[]): string {
-  return hashableBlocks(msg)
-    .map((block) => replayBlock(block, attached))
-    .filter((text) => text !== "")
-    .join("\n");
-}
-
-
-export interface Replay {
-  text: string;
-  images: ContentBlock[];
-  content: ContentBlock[];
-}
-
-function renderReplay(msgs: readonly WireMessage[]): Replay {
-  const images: ContentBlock[] = [];
-  const text = msgs
-    .map((m) => {
-      const rendered = replayText(m, images);
-      if (rendered.trim() === "") return "";
-      if (m.role === "assistant") {
-        return `<prior_assistant_turn>\n${rendered}\n</prior_assistant_turn>`;
-      }
-      return rendered;
-    })
-    .filter((t) => t !== "")
-    .join("\n\n");
-  return { text, images, content: replayContent(msgs) };
-}
-
-function replayContent(msgs: readonly WireMessage[]): ContentBlock[] {
-  if (msgs.length === 1 && msgs[0]?.role === "user") return msgs[0].content;
-  const latestUser = msgs.findLastIndex((m) => m.role === "user" &&
-    hashableBlocks(m).some((block) => block.type === "text" || block.type === "image"));
-  const content: ContentBlock[] = [{
-    type: "text",
-    text: "Conversation replay follows. Images inside prior_user_turn belong to that earlier turn; they are not new uploads. Respond to current_user_turn.",
-  }];
-  for (const [index, message] of msgs.entries()) {
-    const tag = message.role === "assistant" ? "prior_assistant_turn"
-      : index === latestUser ? "current_user_turn" : "prior_user_turn";
-    content.push({ type: "text", text: `<${tag}>\n` });
-    for (const block of hashableBlocks(message)) {
-      if (block.type === "image") {
-        content.push({ type: "text", text: `[image attached: ${block.source.media_type}]` }, block);
-      } else {
-        const text = replayBlock(block, []);
-        if (text.trim() !== "") content.push({ type: "text", text });
-      }
-    }
-    content.push({ type: "text", text: `\n</${tag}>` });
-  }
-  return content;
-}
-
 export interface TurnPlan {
-  prompt: string;
-  nativeContent?: ContentBlock[];
-  sessionStore?: SessionStore;
-  replayContent?: ContentBlock[];
-  images: ContentBlock[];
   resume?: string;
   resumeSessionAt?: string;
   fork: boolean;
   keptEntries: DeliveredEntry[];
   delivered: WireMessage[];
-  replayReason?: string;
 }
 
-function coldStart(msgs: readonly WireMessage[], replayReason = "No matching native SDK session is available."): TurnPlan {
-  const replay = renderReplay(msgs);
+function coldStart(msgs: readonly WireMessage[]): TurnPlan {
   return {
-    prompt: replay.text,
-    images: replay.images,
-    replayContent: replay.content,
     fork: false,
     keptEntries: [],
     delivered: [...msgs],
-    replayReason,
   };
 }
 
@@ -244,14 +140,10 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   const k = commonPrefix(hashes, record.entries);
   const tail = msgs.slice(k);
 
-  if (k === 0) return coldStart(msgs, "The conversation no longer matches the start of the saved SDK session.");
+  if (k === 0) return coldStart(msgs);
 
   if (k === record.entries.length && tail.length > 0) {
-    const replay = renderReplay(tail.filter((m) => m.role !== "assistant"));
     return {
-      prompt: replay.text,
-      images: replay.images,
-      replayContent: replay.content,
       resume: record.sessionId,
       fork: false,
       keptEntries: record.entries.slice(0, k),
@@ -261,24 +153,24 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
 
   const anchor = lastAssistantEntry(record.entries, k);
   const at = anchor < 0 ? undefined : record.entries[anchor]?.uuid;
-  if (at === undefined) return coldStart(msgs, "The saved SDK session has no usable anchor for this regeneration or edit.");
+  if (at === undefined) return coldStart(msgs);
 
   const resumed = msgs.slice(anchor + 1);
-  const replay = renderReplay(resumed);
   return {
-    prompt: replay.text,
-    images: replay.images,
-    replayContent: replay.content,
     resume: record.entries[anchor]?.sessionId ?? record.sessionId,
     resumeSessionAt: at,
     fork: true,
     keptEntries: record.entries.slice(0, anchor + 1),
     delivered: [...resumed],
-    replayReason: "Continuing from the last matching native anchor would require replaying later history.",
   };
 }
 
-async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: string, key: string, record: SessionRecord | undefined): Promise<TurnPlan> {
+interface NativeTurnPlan extends TurnPlan {
+  content: ContentBlock[];
+  sessionStore: SessionStore;
+}
+
+async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: string, key: string, record: SessionRecord | undefined): Promise<NativeTurnPlan> {
   const continuing = plan.resume !== undefined && !plan.fork;
   const pending = continuing ? record?.pendingAssistantHashes ?? [] : [];
   const acknowledged = !continuing || (
@@ -288,17 +180,16 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
       return message?.role === "assistant" && messageHash(message) === hash;
     })
   );
-  const replayed = plan.delivered.slice(pending.length);
-  if ((plan.resume === undefined || record?.storedTranscript === true) && acknowledged && replayed.length === 1 && !replayed.some((message) => message.role === "assistant" ||
-    message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) {
-    return { ...plan, sessionStore: nativeHistoryStore(path, key) };
+  const remaining = plan.delivered.slice(pending.length);
+  const current = remaining[0];
+  if ((plan.resume === undefined || record?.storedTranscript === true) && acknowledged && remaining.length === 1 && current?.role === "user" &&
+    !current.content.some((block) => block.type === "tool_use" || block.type === "tool_result")) {
+    return { ...plan, content: current.content, sessionStore: nativeHistoryStore(path, key) };
   }
   const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key));
   shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
   return {
-    prompt: "",
-    images: [],
-    nativeContent: seeded.promptContent,
+    content: seeded.promptContent,
     sessionStore: seeded.sessionStore,
     resume: seeded.sessionId,
     fork: false,
@@ -313,7 +204,7 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
 function withSystemInstructions(req: SidecarRequest): { request: SidecarRequest; instructions: ContentBlock[] } {
   const instructions: ContentBlock[] = req.messages
     .filter((message) => message.role === "system")
-    .map((message) => ({ type: "text", text: replayText(message, []) }));
+    .map((message) => ({ type: "text", text: message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n") }));
   if (instructions.length === 0 && req.messages.at(-1)?.role !== "assistant") return { request: req, instructions };
   const messages = req.messages.filter((message) => message.role !== "system");
   if (messages.at(-1)?.role === "assistant") {
@@ -419,7 +310,7 @@ export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<st
 
 function buildOptions(
   req: SidecarRequest,
-  plan: TurnPlan,
+  plan: NativeTurnPlan,
   abort: AbortController,
   surface?: AgentToolSurface,
 ): Options {
@@ -459,7 +350,7 @@ function buildOptions(
           },
         }),
     ...(plan.resume === undefined ? {} : { resume: plan.resume }),
-    ...(plan.sessionStore === undefined ? {} : { sessionStore: plan.sessionStore }),
+    sessionStore: plan.sessionStore,
     ...(plan.resumeSessionAt === undefined ? {} : { resumeSessionAt: plan.resumeSessionAt }),
     ...(plan.fork ? { forkSession: true } : {}),
   };
@@ -699,7 +590,7 @@ export class BlockAssembler {
   }
 }
 
-export type AgentPrompt = string | AsyncIterable<SDKUserMessage>;
+export type AgentPrompt = AsyncIterable<SDKUserMessage>;
 
 export type AgentQuery = (params: {
   prompt: AgentPrompt;
@@ -714,16 +605,8 @@ async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessa
   } as SDKUserMessage;
 }
 
-export function agentPrompt(plan: TurnPlan, instructions: ContentBlock[] = []): AgentPrompt {
-  if (instructions.length > 0) {
-    const content = plan.nativeContent ?? (plan.images.length === 0
-      ? [{ type: "text" as const, text: plan.prompt }]
-      : plan.replayContent ?? [{ type: "text" as const, text: plan.prompt }, ...plan.images]);
-    return oneUserTurn([...content, ...instructions]);
-  }
-  if (plan.nativeContent !== undefined) return oneUserTurn(plan.nativeContent);
-  if (plan.images.length === 0) return plan.prompt;
-  return oneUserTurn(plan.replayContent ?? [{ type: "text", text: plan.prompt }, ...plan.images]);
+function agentPrompt(plan: NativeTurnPlan, instructions: ContentBlock[] = []): AgentPrompt {
+  return oneUserTurn([...plan.content, ...instructions]);
 }
 
 export interface ClaudeAgentDeps {
@@ -763,9 +646,10 @@ export class ClaudeAgentProvider implements SidecarProvider {
         throw new Error("Tool-capable generation requires a tool executor; use the shared tool loop");
       }
       yield { type: "start", model: req.model };
-      plan = await withNativeHistory(plan, req, path, key, record);
+      const native = await withNativeHistory(plan, req, path, key, record);
+      plan = native;
 
-      const run = this.#runQuery({ prompt: agentPrompt(plan, prepared.instructions), options: buildOptions(req, plan, abort) });
+      const run = this.#runQuery({ prompt: agentPrompt(native, prepared.instructions), options: buildOptions(req, native, abort) });
 
       for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
@@ -778,7 +662,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
           version: SESSION_BOOK_VERSION,
           sessionId: seen.sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuids),
-          ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
+          storedTranscript: true,
           ...(seen.assistantUuids.length === 0
             ? {}
             : {
@@ -1094,10 +978,11 @@ export async function* claudeAgentToolLoopEvents(
     const prepared = withSystemInstructions(await prepareRequestImages(req));
     Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
-    plan = await withNativeHistory(plan, req, path, key, record);
+    const native = await withNativeHistory(plan, req, path, key, record);
+    plan = native;
     const run = (deps.runQuery ?? query)({
-      prompt: agentPrompt(plan, prepared.instructions),
-      options: buildOptions(req, plan, abort, {
+      prompt: agentPrompt(native, prepared.instructions),
+      options: buildOptions(req, native, abort, {
         instance,
         canUseTool,
         maxTurns: cap === undefined ? TURN_BACKSTOP : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
@@ -1134,7 +1019,7 @@ export async function* claudeAgentToolLoopEvents(
           ...nextEntries(plan, record?.pendingAssistantUuids),
           ...round.nativeEntries(seen.assistantUuids),
         ],
-        ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
+        storedTranscript: true,
         ...(pendingAssistantUuids.length === 0
           ? {}
           : {

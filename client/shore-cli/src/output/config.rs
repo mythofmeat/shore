@@ -559,7 +559,7 @@ mod tests {
             "Things already known\nthat bear on what is being said\nright now".to_owned(),
         ];
         for value in values {
-            let data = json!({"key": "memory.recall.preamble", "config": value.as_str()});
+            let data = json!({"key": "subagents.memory.prompt", "config": value.as_str()});
             let out = render(&data, false);
             assert!(
                 out.contains(value.as_str()),

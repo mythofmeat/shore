@@ -90,10 +90,6 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
         destination.query("INSERT INTO events(character, kind, event_key, timestamp, content) VALUES (?1, ?2, ?3, ?4, ?5)")
           .run(row.character, row.kind, row.event_key, row.timestamp, row.content);
       }
-      destination.query(`UPDATE history_segments SET memory_doc = 'pending', memory_doc_attempts = 0,
-        memory_doc_error = NULL, memory_doc_op = NULL, memory_doc_due = 0, memory_doc_expires = 0,
-        memory_doc_id = NULL, memory_doc_claim = NULL WHERE ${CHARACTER_ARCHIVES_SQL}
-        AND committed = 1 AND excluded = 0 AND memory_doc IN ('submitted', 'stored')`).run(character);
       if (sourceData !== undefined && destinationData !== undefined && sourceData !== destinationData) {
         relocateMediaReferences(destination, character, sourceData, destinationData);
       }

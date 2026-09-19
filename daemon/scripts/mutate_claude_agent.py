@@ -233,33 +233,6 @@ MUTANTS = [
      "      const uuid = pending.shift();\n      if (uuid !== undefined) entry.uuid = uuid;",
      "      entry.uuid = pending.shift() as string;"),
 
-    # --- replaying a history that used tools ---------------------------------
-    ("replay: what the assistant did is dropped, leaving only what it said",
-     AGENT,
-     "    case \"tool_use\":\n"
-     "      return (\n"
-     "        `<prior_tool_call name=\"${block.name}\">\\n` +\n"
-     "        `${JSON.stringify(block.input)}\\n</prior_tool_call>`\n"
-     "      );",
-     "    case \"tool_use\":\n      return \"\";"),
-    ("replay: a tool call is named but not what it was asked for",
-     AGENT,
-     "        `${JSON.stringify(block.input)}\\n</prior_tool_call>`",
-     "        `</prior_tool_call>`"),
-    ("replay: what came back from a tool is dropped",
-     AGENT,
-     "    case \"tool_result\":\n"
-     "      return (\n"
-     "        `<prior_tool_result${block.is_error === true ? ' failed=\"true\"' : \"\"}>\\n` +\n"
-     "        `${resultText(block.content)}\\n</prior_tool_result>`\n"
-     "      );",
-     "    case \"tool_result\":\n      return \"\";"),
-    ("replay: a call that failed is replayed as one that worked",
-     AGENT,
-     "        `<prior_tool_result${block.is_error === true ? ' failed=\"true\"' : \"\"}>\\n` +",
-     "        `<prior_tool_result>\\n` +"),
-
-
     # --- the two names every tool has ----------------------------------------
     ("names: tools are advertised bare, under names the CLI cannot route",
      TOOLS,
@@ -342,16 +315,6 @@ MUTANTS = [
      "  const defs = req.tools ?? [];\n  if (defs.length === 0) {",
      "  const defs = req.tools ?? [];\n  if (true) {"),
 
-    # --- what a text-only replay says about the rest -------------------------
-    ("replay: an image-only turn is dropped again, so the history skips it in silence",
-     AGENT,
-     "      attached.push(block);\n"
-     "      return `[image attached: ${block.source.media_type}]`;",
-     '      return "";'),
-    ("images: the picture is described but never sent",
-     AGENT,
-     "      attached.push(block);\n",
-     ""),
     # --- the name at each boundary -------------------------------------------
     ("names: the namespaced name is advertised, so the CLI prefixes it twice",
      TOOLS,
@@ -408,28 +371,14 @@ MUTANTS = [
      "  if (isKeylessSdk(model.sdk)) {",
      "  if (false as boolean) {"),
 
-    ("images: every turn is sent in the streaming form, not only the ones with pictures",
-     AGENT,
-     "  if (plan.images.length === 0) return plan.prompt;\n",
-     ""),
-    ("images: the text is dropped when a picture rides along",
-     AGENT,
-     "  return oneUserTurn(plan.replayContent ?? [{ type: \"text\", text: plan.prompt }, ...plan.images]);",
-     "  return oneUserTurn(plan.images);"),
-    ("images: the pictures are dropped when the text rides along",
-     AGENT,
-     "  return oneUserTurn(plan.replayContent ?? [{ type: \"text\", text: plan.prompt }, ...plan.images]);",
-     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }]);"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from mutation import run as _run_mutants  # noqa: E402
 
-
 def main() -> int:
     return _run_mutants(MUTANTS, TESTS)
-
 
 if __name__ == "__main__":
     sys.exit(main())

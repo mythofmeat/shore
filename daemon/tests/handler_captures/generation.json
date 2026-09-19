@@ -188,7 +188,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,
@@ -455,7 +455,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,
@@ -583,7 +583,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,
@@ -604,7 +604,7 @@
     },
     {
       "name": "a provider error mid-stream fails the turn and persists nothing",
-      "note": "the chunks already relayed stay relayed \u2014 the client saw them \u2014 but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
+      "note": "the chunks already relayed stay relayed — the client saw them — but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
       "input": {
         "history": [],
         "body": {
@@ -725,7 +725,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,
@@ -922,7 +922,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,
@@ -1214,7 +1214,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "tools": [
@@ -1262,7 +1262,7 @@
     },
     {
       "name": "tools disabled keeps the loop out of the sidecar",
-      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead \u2014 which with no tools enabled produces no tool turns at all",
+      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead — which with no tools enabled produces no tool turns at all",
       "input": {
         "history": [],
         "body": {
@@ -1446,7 +1446,7 @@
               },
               {
                 "label": "character",
-                "text": "<ada>\nada system prompt\n</ada>"
+                "text": "ada system prompt"
               }
             ],
             "max_tokens": 4096,

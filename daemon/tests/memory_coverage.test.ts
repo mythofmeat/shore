@@ -6,10 +6,6 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { newMessageVersion, processingUnitId } from "../src/engine/versions.ts";
 import { claimUncovered, coverageIsRedundant } from "../src/memory/coverage.ts";
-import {
-  hindsightUnitFor,
-  type HindsightUnit,
-} from "../src/memory/hindsight_retain_service.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -35,26 +31,6 @@ function message(text: string, version?: string): Message {
     timestamp: STAMP,
     ...(version === undefined ? {} : { version }),
   };
-}
-
-function archive(
-  history: HistoryStore,
-  key: string,
-  idx: number,
-  messages: Message[],
-  options: { retain?: boolean } = {},
-): void {
-  history.putSegment(
-    key,
-    idx,
-    {
-      file: HISTORY_DB_FILE,
-      message_count: messages.length,
-      compacted_at: STAMP,
-      retain: options.retain ?? true,
-    },
-    messages,
-  );
 }
 
 describe("durable coverage for a memory path", () => {
@@ -117,14 +93,6 @@ describe("durable coverage for a memory path", () => {
     history.close();
   });
 
-  test("the two memory paths cover material independently", () => {
-    const history = store();
-    const version = newMessageVersion();
-    history.claimMemoryCoverage("ada", "compaction", [version], "c", "u", 0, 60_000);
-    history.commitMemoryCoverage("ada", "compaction", "c");
-    expect(history.coveredMemoryVersions("ada", "hindsight", [version]).size).toBe(0);
-    history.close();
-  });
 
   test("coverage is scoped to the character, so imported names cannot collide", () => {
     const history = store();
@@ -252,133 +220,6 @@ describe("compaction coverage and the archive commit", () => {
     );
     history.finishCompaction("ada/side", idx);
     expect(history.coveredMemoryVersions("ada", "compaction", [required(required(messages[0]).version)]).size).toBe(1);
-    history.close();
-  });
-});
-
-function unitFor(
-  history: HistoryStore,
-  key: string,
-  idx: number,
-  nowMs: number,
-): HindsightUnit {
-  const plan = hindsightUnitFor(history, key, idx, nowMs);
-  if (plan.kind !== "unit") throw new Error(`expected a unit, got ${plan.kind}`);
-  return plan;
-}
-
-describe("hindsight processing units across branches", () => {
-  test("a segment of unprocessed material submits one document for that material", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion()), message("two", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-
-    const unit = unitFor(history, "ada", 0, 1_000);
-    expect(unit.messages).toHaveLength(2);
-    expect(unit.background.size).toBe(0);
-    expect(unit.documentId).toBe(
-      `shore:ada:${processingUnitId(messages.map((m) => required(m.version)))}`,
-    );
-    history.close();
-  });
-
-  test("a shared unit takes the same document id from either branch", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-    archive(history, "ada/spin", 0, messages);
-
-    const parent = unitFor(history, "ada", 0, 1_000);
-    history.releaseMemoryCoverage("ada", "hindsight", parent.claim);
-    const child = unitFor(history, "ada/spin", 0, 1_000);
-    expect(child.documentId).toBe(parent.documentId);
-    history.close();
-  });
-
-  test("once one branch's document is confirmed, the other has nothing new to submit", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-    archive(history, "ada/spin", 0, messages);
-
-    const parent = unitFor(history, "ada", 0, 1_000);
-    history.commitMemoryCoverage("ada", "hindsight", parent.claim);
-    history.markMemoryDocumentOccurrence("ada", "hindsight", parent.documentId, "ada", 0);
-
-    expect(hindsightUnitFor(history, "ada/spin", 0, 2_000).kind).toBe("covered");
-    history.close();
-  });
-
-  test("a branch that adds new turns submits only those, with the rest as background", () => {
-    const history = store();
-    const inherited = message("inherited", newMessageVersion());
-    const fresh = message("fresh", newMessageVersion());
-    archive(history, "ada", 0, [inherited]);
-    archive(history, "ada/spin", 0, [inherited, fresh]);
-
-    const parent = unitFor(history, "ada", 0, 1_000);
-    history.commitMemoryCoverage("ada", "hindsight", parent.claim);
-
-    const child = unitFor(history, "ada/spin", 0, 2_000);
-    expect(child.messages.map((m) => m.content)).toEqual(["inherited", "fresh"]);
-    expect([...child.background]).toEqual([inherited.msg_id]);
-    expect(child.documentId).not.toBe(parent.documentId);
-    history.close();
-  });
-
-  test("a claim in flight in one branch is not handed to the other as well", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-    archive(history, "ada/spin", 0, messages);
-
-    expect(hindsightUnitFor(history, "ada", 0, 1_000).kind).toBe("unit");
-    expect(hindsightUnitFor(history, "ada/spin", 0, 1_000).kind).toBe("claimed_elsewhere");
-    history.close();
-  });
-
-  test("a shared document survives excluding one of its occurrences", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-    archive(history, "ada/spin", 0, messages);
-
-    const unit = unitFor(history, "ada", 0, 1_000);
-    history.commitMemoryCoverage("ada", "hindsight", unit.claim);
-    history.markMemoryDocumentOccurrence("ada", "hindsight", unit.documentId, "ada", 0);
-    history.markMemoryDocumentOccurrence("ada", "hindsight", unit.documentId, "ada/spin", 0);
-
-    history.setExcluded("ada", 0, true, true);
-    expect(
-      history.eligibleDocumentOccurrences("ada", "hindsight", unit.documentId),
-    ).toEqual([{ archive_key: "ada/spin", segment: 0 }]);
-
-    history.setExcluded("ada/spin", 0, true, true);
-    expect(history.eligibleDocumentOccurrences("ada", "hindsight", unit.documentId)).toEqual([]);
-
-    history.setExcluded("ada/spin", 0, false, true);
-    expect(
-      history.eligibleDocumentOccurrences("ada", "hindsight", unit.documentId),
-    ).toEqual([{ archive_key: "ada/spin", segment: 0 }]);
-    history.close();
-  });
-
-  test("dropping the last occupant of a document frees its material for retention again", () => {
-    const history = store();
-    const messages = [message("one", newMessageVersion())];
-    archive(history, "ada", 0, messages);
-    const unit = unitFor(history, "ada", 0, 1_000);
-    history.commitMemoryCoverage("ada", "hindsight", unit.claim);
-
-    history.releaseHindsightUnitCoverage("ada", unit.documentId);
-    expect(history.coveredMemoryVersions("ada", "hindsight", [required(required(messages[0]).version)]).size).toBe(0);
-    history.close();
-  });
-
-  test("a legacy segment with no versions keeps its per-segment document id", () => {
-    const history = store();
-    archive(history, "ada", 0, [message("legacy")]);
-    expect(unitFor(history, "ada", 0, 1_000).documentId).toBe("shore:ada:seg0");
     history.close();
   });
 });

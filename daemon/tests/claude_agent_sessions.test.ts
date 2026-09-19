@@ -1,10 +1,8 @@
-import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import {
   agentEffort,
-  agentPrompt,
   conversationKey,
   nextEntries,
   planTurn,
@@ -47,27 +45,20 @@ function seed(history: readonly WireMessage[], assistantUuid?: string): SessionR
 }
 
 describe("planTurn", () => {
-  test("cold start replays the whole history and opens a new session", () => {
+  test("cold start keeps structured history for native restoration", () => {
     const plan = planTurn(undefined, [user1]);
     expect(plan.resume).toBeUndefined();
     expect(plan.fork).toBe(false);
-    expect(plan.prompt).toContain("Brian");
-    expect(plan.delivered).toHaveLength(1);
+    expect(plan.delivered).toEqual([user1]);
   });
 
-  test("cold start marks prior assistant turns so they are not read as the user", () => {
-    const plan = planTurn(undefined, [user1, asst1, user2]);
-    expect(plan.prompt).toContain("<prior_assistant_turn>");
-    expect(plan.prompt).toContain("rest in piss");
-  });
 
   test("an exact prefix resumes the session and sends only the new user turn", () => {
     const record = seed([user1], "asst-uuid-1");
     const plan = planTurn(record, [user1, asst1, user2]);
     expect(plan.resume).toBe("session-1");
     expect(plan.fork).toBe(false);
-    expect(plan.prompt).toBe("what was his name again?");
-    expect(plan.prompt).not.toContain("rest in piss");
+    expect(plan.delivered).toEqual([asst1, user2]);
   });
 
   test("a diverged tail forks at the last kept assistant uuid", () => {
@@ -81,7 +72,6 @@ describe("planTurn", () => {
     expect(plan.fork).toBe(true);
     expect(plan.resume).toBe("session-1");
     expect(plan.resumeSessionAt).toBe("asst-uuid-1");
-    expect(plan.prompt).toBe("remind me what i named him?");
   });
 
   test("a fully diverged history falls back to a cold start", () => {
@@ -107,8 +97,7 @@ describe("planTurn regeneration", () => {
 
   test("regenerating the latest turn never sends an empty prompt", () => {
     const plan = planTurn(afterTwoTurns(), [user1, asst1, user2]);
-    expect(plan.prompt).not.toBe("");
-    expect(plan.prompt).toBe("what was his name again?");
+    expect(plan.delivered).toEqual([user2]);
   });
 
   test("regenerating the latest turn forks at the preceding assistant turn", () => {
@@ -136,7 +125,6 @@ describe("planTurn regeneration", () => {
     const plan = planTurn(record, [user1]);
     expect(plan.resume).toBeUndefined();
     expect(plan.fork).toBe(false);
-    expect(plan.prompt).toContain("Brian");
   });
 });
 
@@ -158,9 +146,6 @@ describe("planTurn fork bookkeeping", () => {
     expect(plan.fork).toBe(true);
     expect(plan.resumeSessionAt).toBe("asst-uuid-1");
     expect(plan.keptEntries).toHaveLength(2);
-    expect(plan.prompt).toContain("what was his name again?");
-    expect(plan.prompt).toContain("different nudge");
-    expect(plan.prompt).not.toContain("still there?");
   });
 
   test("a fork keeps parent anchors bound to the session that owns them", () => {
@@ -180,7 +165,6 @@ describe("planTurn fork bookkeeping", () => {
     const again = planTurn(fork, [user1, asst1, user2b]);
     expect(again.resume).toBe("session-1");
     expect(again.resumeSessionAt).toBe("asst-uuid-1");
-    expect(again.prompt).toBe(user2b.content[0]?.type === "text" ? user2b.content[0].text : "");
     const twice = { ...fork, sessionId: "fork-2", entries: nextEntries(again, ["fork-reply"]) };
     expect(planTurn(twice, [user1, asst1, user2b]).resume).toBe("session-1");
   });
@@ -205,7 +189,7 @@ describe("nextEntries", () => {
     expect(entries[2]?.uuid).toBeUndefined();
   });
 
-  test("a cold replay never adopts assistant UUIDs from an old session", () => {
+  test("a cold start never adopts assistant UUIDs from an old session", () => {
     const plan = planTurn(undefined, [user1, asst1, user2]);
     expect(nextEntries(plan, ["old-session-reply"]).every((entry) => entry.uuid === undefined)).toBe(true);
   });
@@ -395,7 +379,6 @@ describe("the session book version", () => {
     const plan = planTurn(stale, [user1, asst1, user2]);
     expect(plan.resume).toBeUndefined();
     expect(plan.fork).toBe(false);
-    expect(plan.prompt).toContain("Brian");
   });
 
   test("a book from before rounds were anchored one by one is not trusted", () => {
@@ -415,96 +398,7 @@ describe("the session book version", () => {
   });
 });
 
-describe("replaying a history that is not all text", () => {
-  const withImage: WireMessage = {
-    role: "user",
-    content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } }],
-  };
 
-  test("an image-only turn is named rather than silently deleted", () => {
-    const plan = planTurn(undefined, [withImage, asst1, user2]);
-    expect(plan.prompt).toContain("image attached");
-    expect(plan.prompt).toContain("image/png");
-  });
-
-  test("the image itself is carried alongside the text, not just described", () => {
-    const plan = planTurn(undefined, [withImage, asst1, user2]);
-    expect(plan.images).toEqual([
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } },
-    ]);
-  });
-
-  test("a history with no pictures carries none", () => {
-    expect(planTurn(undefined, [user1, asst1, user2]).images).toEqual([]);
-  });
-
-  test("images are carried in the order they were sent", () => {
-    const second: WireMessage = {
-      role: "user",
-      content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BB" } }],
-    };
-    const plan = planTurn(undefined, [withImage, asst1, second]);
-    expect(plan.images.map((b) => (b.type === "image" ? b.source.data : ""))).toEqual(["AA", "BB"]);
-  });
-});
-
-describe("replaying a history that used tools", () => {
-  const toolTurn: WireMessage[] = [
-    { role: "user", content: [{ type: "text", text: "what does SOUL.md say?" }] },
-    {
-      role: "assistant",
-      content: [
-        { type: "text", text: "let me look." },
-        { type: "tool_use", id: "t1", name: "read", input: { path: "SOUL.md" } },
-      ],
-    },
-    {
-      role: "user",
-      content: [{ type: "tool_result", tool_use_id: "t1", content: "his name is Brian" }],
-    },
-    { role: "assistant", content: [{ type: "text", text: "it says Brian." }] },
-    { role: "user", content: [{ type: "text", text: "and the freezer?" }] },
-  ];
-
-  test("a cold start keeps what the assistant did, not only what it said", () => {
-    const plan = planTurn(undefined, toolTurn);
-    expect(plan.prompt).toContain("<prior_tool_call");
-    expect(plan.prompt).toContain('name="read"');
-    expect(plan.prompt).toContain('{"path":"SOUL.md"}');
-  });
-
-  test("the answers those calls came back with survive too", () => {
-    const plan = planTurn(undefined, toolTurn);
-    expect(plan.prompt).toContain("<prior_tool_result>");
-    expect(plan.prompt).toContain("his name is Brian");
-  });
-
-  test("a tool result is not replayed as though the user had typed it", () => {
-    const plan = planTurn(undefined, toolTurn);
-    const beforeResult = plan.prompt.slice(0, plan.prompt.indexOf("his name is Brian"));
-    expect(beforeResult.endsWith("<prior_tool_result>\n")).toBe(true);
-  });
-
-  test("a failed call is replayed as one", () => {
-    const failed: WireMessage[] = [
-      {
-        role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "t1", content: "no such file", is_error: true },
-        ],
-      },
-      { role: "user", content: [{ type: "text", text: "try again" }] },
-    ];
-    expect(planTurn(undefined, failed).prompt).toContain('failed="true"');
-  });
-
-  test("an extension past a tool round still resumes rather than replaying it", () => {
-    const record = seed(toolTurn.slice(0, 4));
-    const plan = planTurn(record, toolTurn);
-    expect(plan.resume).toBe("session-1");
-    expect(plan.prompt).toBe("and the freezer?");
-  });
-});
 
 describe("anchoring several rounds in one turn", () => {
   test("each assistant turn is given its own frame, in order", () => {
@@ -536,80 +430,5 @@ describe("anchoring several rounds in one turn", () => {
       undefined,
       undefined,
     ]);
-  });
-});
-
-
-describe("image placement when a regeneration rebuilds history", () => {
-  const oldImage: WireMessage = {
-    role: "user",
-    content: [
-      { type: "text", text: "An earlier photo" },
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "OLD" } },
-    ],
-  };
-  const latest = msg("user", "A later message with no attachment");
-
-  async function deliveredBlocks(plan: ReturnType<typeof planTurn>) {
-    const prompt = agentPrompt(plan);
-    if (typeof prompt === "string") throw new Error("expected a multimodal replay");
-    const turns = [];
-    for await (const turn of prompt) turns.push(turn);
-    expect(turns).toHaveLength(1);
-    return required(turns[0]).message.content;
-  }
-
-  test("old image remains inside its historical turn before the current message", async () => {
-    const plan = planTurn(undefined, [oldImage, asst1, latest]);
-    const content = await deliveredBlocks(plan);
-    expect(Array.isArray(content)).toBe(true);
-    const blocks = content as { type: string; text?: string }[];
-    const imageIndex = blocks.findIndex((b) => b.type === "image");
-    const closePrior = blocks.findIndex((b) => b.text === "\n</prior_user_turn>");
-    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
-    expect(imageIndex).toBeGreaterThan(0);
-    expect(imageIndex).toBeLessThan(closePrior);
-    expect(closePrior).toBeLessThan(current);
-    expect(blocks.slice(current).some((b) => b.type === "image")).toBe(false);
-  });
-
-  test("a fork before the image turn preserves its historical placement", async () => {
-    const history = [user1, asst1, oldImage, msg("assistant", "Earlier reply"), latest];
-    const record = seed(history);
-    record.entries = nativeHistory(history, ["early-anchor"]);
-    const plan = planTurn(record, history);
-    expect(plan.fork).toBe(true);
-    const content = await deliveredBlocks(plan);
-    const blocks = content as { type: string; text?: string }[];
-    const imageIndex = blocks.findIndex((b) => b.type === "image");
-    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
-    expect(imageIndex).toBeGreaterThan(0);
-    expect(imageIndex).toBeLessThan(current);
-    expect(blocks.slice(current).some((b) => b.type === "image")).toBe(false);
-  });
-
-  test("regenerating the image-bearing turn still delivers its image as current", async () => {
-    const content = await deliveredBlocks(planTurn(undefined, [oldImage]));
-    expect<unknown>(content).toEqual(oldImage.content);
-  });
-
-  test("a session using the old flattened-image replay is rebuilt", () => {
-    const old = {
-      ...seed([oldImage, asst1, latest]),
-      version: 4,
-      entries: nativeHistory([oldImage, asst1, latest], ["anchor"]),
-    };
-    const plan = planTurn(old, [oldImage, asst1, latest]);
-    expect(plan.resume).toBeUndefined();
-    expect(plan.replayContent).toBeDefined();
-  });
-
-  test("a valid earlier anchor does not reattach an image already in the session", () => {
-    const record = seed([oldImage, asst1, latest]);
-    record.entries = nativeHistory([oldImage, asst1, latest], ["anchor"]);
-    const plan = planTurn(record, [oldImage, asst1, latest]);
-    expect(plan.fork).toBe(true);
-    expect(plan.images).toEqual([]);
-    expect(agentPrompt(plan)).toBe("A later message with no attachment");
   });
 });

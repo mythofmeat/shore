@@ -15,7 +15,6 @@ import { MAIN_THREAD, characterThreadsIndex } from "../src/config/dirs.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import { HistoryStore } from "../src/engine/history_store.ts";
 import { ThreadError } from "../src/engine/threads.ts";
 import { ForkBusy } from "../src/engine/fork.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
@@ -140,28 +139,6 @@ describe("the registry as the thread authority", () => {
     expect(await registry.getOrCreate("aria", "scratch")).not.toBe(scratch);
   });
 
-  test.each([true, false])("thread retirement honors effective retention = %s", async (enabled) => {
-    const { registry, dataDir, loaded } = await registryWith("aria");
-    const effective = {
-      ...loaded,
-      app: { ...loaded.app, memory: { ...loaded.app.memory, retain: { ...loaded.app.memory.retain, enabled } } },
-    };
-    registry.setRuntimeEffectiveConfig("aria", effective);
-    for (const id of ["configured", "optout"]) {
-      await registry.createThread("aria", id);
-      writeFileSync(join(dataDir, "aria", "threads", id, "active.jsonl"), JSON.stringify({
-        msg_id: id, role: "user", content: "remember this", content_blocks: [{ type: "text", text: "remember this" }],
-        timestamp: "2026-09-05T00:00:00Z", images: [],
-      }) + "\n");
-    }
-    await registry.archiveThread("aria", "configured");
-    await registry.archiveThread("aria", "optout", { retain: false });
-    const store = HistoryStore.open(join(dataDir, "shore.db"));
-    expect(store.entries("aria/configured")[0]?.memory_status).toBe(enabled ? "pending" : undefined);
-    expect(store.entries("aria/optout")[0]?.memory_status).toBeUndefined();
-    expect(store.backfillThreadArchiveRetention("aria")).toBe(0);
-    store.close();
-  });
 
   test("the home thread cannot be archived out from under the heartbeat", async () => {
     const { registry } = await registryWith("aria");

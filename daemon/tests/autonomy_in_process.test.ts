@@ -795,7 +795,7 @@ test("SDK heartbeat respects the configured tool round budget", async () => {
   expect(appended).toHaveLength(0);
 });
 
-test.each([false, true])("SDK compaction with Hindsight preserves writes across a paused run (%s)", async (pause) => {
+test.each([false, true])("SDK compaction preserves writes across a paused run (%s)", async (pause) => {
   const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
   const { HistoryStore, HISTORY_DB_FILE } = await import("../src/engine/history_store.ts");
   const config = await world();
@@ -804,7 +804,6 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
   config.app.tools.enabled_tools = ["bash"];
-  config.app.memory.retain.enabled = true;
   config.app.memory.compaction.write_memory = true;
   config.app.memory.git_push = false;
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
@@ -831,7 +830,7 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
     expect(outcome?.kind).toBe("paused");
     expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("Ready for the next conversation.");
     const pending = HistoryStore.open(join(config.dirs.data, HISTORY_DB_FILE));
-    expect(pending.nextCharacterMemoryRetainJob("ada")).toBeUndefined();
+    expect(pending.segmentCount("ada")).toBe(0);
     pending.close();
     const resumedAgent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "Memory maintenance is complete." }] }] });
     const resumedProvider = new ClaudeAgentProvider({ runQuery: resumedAgent.query, bookPath: () => join(config.dirs.data, "sdk-sessions.json") });
@@ -847,7 +846,7 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
   expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("Ready for the next conversation.");
   const history = HistoryStore.open(join(config.dirs.data, HISTORY_DB_FILE));
   try {
-    expect(history.nextCharacterMemoryRetainJob("ada")?.action).toBe("retain");
+    expect(history.segmentCount("ada")).toBe(1);
   } finally {
     history.close();
   }

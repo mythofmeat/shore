@@ -42,6 +42,9 @@ with empty `messages` and `messages_expired: true`.
 Shore mirrors new SDK sessions into the database so its retention policy does
 not depend on the SDK's separate local-file cleanup. Existing sessions without
 a mirror are rebuilt from Shore history on their next use.
+Claude Agent SDK history uses native user and assistant messages, preserving
+tool calls and their associated results. A failure to restore that history
+stops the request; Shore never falls back to a transcript embedded in user text.
 SDK sessions are retired when compaction or clearing replaces a thread's active
 conversation, or when another SDK session replaces them. Retired sessions keep
 their compressed database mirrors and local SDK transcript files for 30 days
@@ -68,6 +71,14 @@ The cache directory holds rebuildable material such as search indexes and
 thumbnails. Frozen prompts and autonomy state remain durable: losing them can
 change a resumed conversation or its scheduling. CLI selection/preferences and
 legacy thread-directory scaffolding may still appear under data.
+
+Hindsight integration, including automatic recall and background retention, has
+been removed. Delete `[memory.backend]`, `[memory.recall]`, and `[memory.retain]`
+from configuration; these sections now produce an explicit configuration error.
+The obsolete `trace recall` and `segments retry` commands are also removed.
+Database migration drops Hindsight bookkeeping while keeping conversation
+history and compaction coverage. Local Markdown memory and history search
+remain available.
 
 ## Migration
 

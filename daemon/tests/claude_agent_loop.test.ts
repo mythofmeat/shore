@@ -306,7 +306,11 @@ describe("continuing after native tool rounds", () => {
       const events: StreamEvent[] = [];
       for await (const event of provider.streamWithTools(request({ messages: [...history] }), tools)) events.push(event);
       expect(events.filter((event) => event.type === "error" || event.type === "provider_warning")).toEqual([]);
-      expect(agent.calls[turn]?.prompt).toBe(turn === 0 ? "read SOUL.md" : `continue ${String(turn)}`);
+      const prompt = agent.calls[turn]?.prompt;
+      if (prompt === undefined || typeof prompt === "string") throw new Error("expected a structured user turn");
+      const sent = [];
+      for await (const message of prompt) sent.push(message.message);
+      expect(sent).toEqual([{ role: "user", content: [{ type: "text", text: turn === 0 ? "read SOUL.md" : `continue ${String(turn)}` }] }]);
       if (turn > 0) expect(agent.calls[turn]?.options.resume).toBe("session-fake");
       history.push(...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks })));
       history.push({ role: "assistant", content: (done(events).content_blocks ?? []) as ContentBlock[] });
@@ -314,7 +318,7 @@ describe("continuing after native tool rounds", () => {
     }
   });
 
-  test("regenerating a final answer anchors after its tools and replays only their result", async () => {
+  test("regenerating a final answer anchors after its tool call and preserves its structured result", async () => {
     const tools = phase();
     const req = request();
     const { path } = await drive(ONE_CALL, tools, req);
@@ -326,9 +330,7 @@ describe("continuing after native tool rounds", () => {
     expect(plan.resume).toBe("session-fake");
     expect(plan.resumeSessionAt).toBe("msg_0_asst_1");
     expect(plan.fork).toBe(true);
-    expect(plan.delivered).toHaveLength(1);
-    expect(plan.prompt).not.toContain("read SOUL.md");
-    expect(plan.prompt).not.toContain("prior_tool_call");
+    expect(plan.delivered).toEqual([{ role: "user", content: tools.recorded.at(-1)?.blocks ?? [] }]);
   });
 
   test("changed tool output forks instead of being mistaken for an unchanged native result", async () => {
@@ -343,7 +345,6 @@ describe("continuing after native tool rounds", () => {
     const plan = planTurn(Object.values(book)[0], history);
     expect(plan.fork).toBe(true);
     expect(plan.resumeSessionAt).toBe("msg_0_asst_1");
-    expect(plan.prompt).toContain("edited result");
   });
 
   test.each(["error", "image"])("a native %s result is not replayed on continuation", async (kind) => {
@@ -367,8 +368,6 @@ describe("continuing after native tool rounds", () => {
     ]);
     expect(plan.resume).toBe("session-fake");
     expect(plan.fork).toBe(false);
-    expect(plan.prompt).toBe("continue");
-    expect(plan.images).toEqual([]);
   });
 
   test("overlapping plain and tool-using chats retain both sessions", async () => {

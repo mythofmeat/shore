@@ -88,7 +88,7 @@ test("subagent results and errors remain addressable after intermediate messages
 test("only old heartbeat events expire; history, state, ledger and malformed records remain", () => {
   const data = dataDir();
   const history = HistoryStore.open(databasePath(data));
-  history.putSegment("ada", 0, { file: "history.db", message_count: 0, compacted_at: old.toISOString(), retain: true }, []);
+  history.putSegment("ada", 0, { file: "history.db", message_count: 0, compacted_at: old.toISOString() }, []);
   history.close();
   writeState(data, "ada/autonomy_state.json", "keep state", "ada");
   withStorage(data, (db) => {

@@ -133,7 +133,7 @@ test.each([0, 1])("clearing or compacting retires sessions immediately (retained
   const content = ["user", "assistant"].map((role, i) => JSON.stringify({ msg_id: `m${i}`, role, content: "text", images: [], content_blocks: [], timestamp: new Date(start).toISOString() })).join("\n") + "\n";
   writeDurable(join(dir, "active.jsonl"), content);
   await archiveAndRetain(dir, keep, content, () => new Date(start).toISOString(), randomUUID, undefined,
-    { dbPath: join(f.data, "shore.db"), archiveKey: "ada", retain: true });
+    { dbPath: join(f.data, "shore.db"), archiveKey: "ada" });
   expect(readBook(f.book)[f.key]).toBeUndefined();
   expect(f.prune(start + DIAGNOSTIC_RETENTION_MS)).toBe(0);
   expect(f.prune(start + DIAGNOSTIC_RETENTION_MS + 1)).toBe(1);

@@ -57,6 +57,11 @@ their access to Shore's stored history. `web_search` and `generate_image` retain
 their configured providers. MCP tools, subagents, and heartbeat controls remain
 available as configured.
 
+Shore inserts `AGENTS.md`, `TOOLS.md`, `SOUL.md`, `USER.md`, and `MEMORY.md`
+as system prompt blocks without adding tags or explanatory paragraphs.
+Put any desired framing in the files themselves. Existing template substitution
+in `AGENTS.md` still applies.
+
 ## Targeted file edits
 
 `shore-patch` is a bundled command available through Bash, including when the

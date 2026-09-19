@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -72,6 +73,39 @@ const assistant = (text: string): WireMessage => ({ role: "assistant", content: 
 const req = (messages: WireMessage[]): SidecarRequest => ({
   sdk: "claude_agent", model: "claude-sonnet-4-6", api_key: "test-key",
   messages, max_tokens: 256, replay_prior_thinking: "all",
+});
+
+test.each([false, true])("native history storage failure stops generation before an SDK query (tools: %s)", async (withTools) => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-history-failure-"));
+  const path = join(dir, "sessions.json");
+  readBook(path);
+  const db = new Database(join(dir, "shore.db"));
+  db.run(`CREATE TRIGGER reject_transcript BEFORE INSERT ON state_files
+    WHEN NEW.path LIKE 'sdk_transcripts/%'
+    BEGIN SELECT RAISE(ABORT, 'native transcript storage unavailable'); END`);
+  db.close();
+  let queries = 0;
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => path,
+    runQuery: () => { queries += 1; throw new Error("must not query without native history"); },
+  });
+  const request = req([user("earlier question"), assistant("earlier answer"), user("continue")]);
+  if (withTools) request.tools = [{ name: "bash", description: "run a command", input_schema: { type: "object" } }];
+  const phase: ToolPhase = {
+    messages: [], recordTurn: () => { throw new Error("must not record a turn"); },
+    runTool: () => { throw new Error("must not run a tool"); },
+  };
+  try {
+    const events: StreamEvent[] = [];
+    for await (const event of withTools ? provider.streamWithTools(request, phase) : provider.stream(request)) events.push(event);
+    expect(queries).toBe(0);
+    expect(events.filter(event => event.type === "error")).toHaveLength(1);
+    expect(JSON.stringify(events)).toContain("native transcript storage unavailable");
+    expect(events.some(event => event.type === "done")).toBe(false);
+    expect(readBook(path)).toEqual({});
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("native history preserves images, signed thinking and completed tool pairs", async () => {

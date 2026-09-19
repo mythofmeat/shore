@@ -56,13 +56,6 @@ import { historyIndexPath } from "./memory/history_index.ts";
 import { HistoryIndexService } from "./memory/history_index_service.ts";
 import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
 import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
-import { HindsightRetainService } from "./memory/hindsight_retain_service.ts";
-import { memoryBackendNeeded, resolveDisplayName } from "./config/app.ts";
-import {
-  MemoryBackends,
-  memoryBackendTarget,
-  type ConnectMemoryBackend,
-} from "./memory/backend.ts";
 import { SnapshotGate } from "./snapshot_gate.ts";
 import { cachePath, readCacheSync } from "./llm/discovery.ts";
 import {
@@ -81,7 +74,6 @@ export interface RuntimeOptions {
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message, thread: string) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
-  connectMemoryBackend?: ConnectMemoryBackend | undefined;
   mcpRegistryOptions?: Omit<McpRegistryOptions, "onToolsChanged"> | undefined;
   diagnostics?: Diagnostics | undefined;
 }
@@ -100,8 +92,6 @@ export interface ShoreRuntime {
   readonly autonomy: AutonomyService;
   readonly historyIndex: HistoryIndexService;
   readonly workspaceIndex: WorkspaceIndexService;
-  readonly memoryRetain: HindsightRetainService;
-  readonly memoryBackends: MemoryBackends;
   readonly snapshotGate: SnapshotGate;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
@@ -127,8 +117,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   let historyIndex: HistoryIndexService | undefined;
   let workspaceIndex: WorkspaceIndexService | undefined;
-  let memoryRetain: HindsightRetainService | undefined;
-  const memoryBackends = new MemoryBackends(options.connectMemoryBackend);
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -137,7 +125,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       const character = history.selected_character;
       if (character !== undefined) {
         historyIndex?.noteMutation(character);
-        memoryRetain?.noteWork(character);
       }
       options.onHistory?.(history);
     },
@@ -194,45 +181,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(embedderError === undefined ? {} : { embedderError }),
       });
     }
-    refreshRetainRegistrations();
-  };
-  const refreshMemoryBackends = () => {
-    const available = new Set(registry.availableCharacters());
-    for (const character of registry.availableCharacters()) {
-      const memory = registry.effectiveConfig(character).app.memory;
-      if (!memoryBackendNeeded(memory) || memory.backend.url.trim() === "") {
-        memoryBackends.remove(character);
-        continue;
-      }
-      memoryBackends.set(character, memoryBackendTarget(memory.backend, character));
-    }
-    for (const character of memoryBackends.characters()) {
-      if (!available.has(character)) memoryBackends.remove(character);
-    }
-  };
-  const refreshRetainRegistrations = () => {
-    refreshMemoryBackends();
-    if (memoryRetain === undefined) return;
-    const available = new Set(registry.availableCharacters());
-    for (const character of memoryRetain.registeredCharacters()) {
-      if (!available.has(character)) memoryRetain.unregister(character);
-    }
-    for (const character of available) {
-      const effective = registry.effectiveConfig(character);
-      const retain = effective.app.memory.retain;
-      if (!retain.enabled) {
-        memoryRetain.unregister(character);
-        continue;
-      }
-      memoryRetain.register({
-        character,
-        historyPath: rustJoin(effective.dirs.data, "shore.db"),
-        userName:
-          retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
-        possessivePronoun: retain.possessive_pronoun,
-        timeoutMs: retain.timeout.asMillis(),
-      });
-    }
   };
   await refreshHistoryIndexes();
   await historyIndex.start();
@@ -269,11 +217,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       options.mcpRegistryOptions,
     ),
   );
-  memoryRetain = new HindsightRetainService((name) => memoryBackends.get(name), {
-    runActivity: async (run) => await snapshotGate.withActivity(run),
-  });
-  refreshRetainRegistrations();
-  memoryRetain.start();
 
   const autonomy: AutonomyService = new AutonomyService(
     new InProcessAutonomyExecutor({
@@ -325,16 +268,12 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     autonomy,
     historyIndex,
     workspaceIndex,
-    memoryRetain,
-    memoryBackends,
     snapshotGate,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
       await workspaceIndex.shutdown();
-      await memoryRetain.shutdown();
-      await memoryBackends.shutdown();
       await mcp.current.shutdown();
       closeStorageConnections();
       uninstallWireCapture();

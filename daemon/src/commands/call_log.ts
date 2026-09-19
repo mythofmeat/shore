@@ -102,7 +102,7 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
 }
 
 const TRANSCRIPT_SOURCE = "heartbeat";
-const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE, "memory_recall"];
+const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE];
 
 export function transcript(ctx: CallLogContext, args: Args): Json {
   const source = asStr(args["source"]) ?? TRANSCRIPT_SOURCE;

@@ -130,7 +130,6 @@ async function pureArchive(
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
-        retain: deps.config.app.memory.retain.enabled,
       },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
   } catch (e) {
