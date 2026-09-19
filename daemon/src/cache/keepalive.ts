@@ -247,7 +247,7 @@ export class KeepaliveService {
     fingerprint?: string,
     usage?: Pick<Usage, "cache_read_tokens">,
   ): void {
-    if (callType === "keepalive") return;
+    if (callType === "keepalive" || callType === "heartbeat" || callType === "heartbeat_tool_loop") return;
     const entry =
       this.#entries.get(character) ??
       this.#entryFor(character, maxIdleSecs ?? this.#configuredMaxIdleSecs());

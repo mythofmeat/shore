@@ -271,12 +271,29 @@ describe("the real event order", () => {
 });
 
 describe("what counts as a warm", () => {
+  test.each(["heartbeat", "heartbeat_tool_loop"])("a same-model %s does not move the chat deadline or activity", async (callType) => {
+    const h = harness();
+    armWarm(h);
+    const before = h.service.scheduleFor(CHARACTER);
+    const deadline = h.service.nextPingAt(CHARACTER);
+
+    h.clock.advance(minutes(50));
+    h.service.observe(CHARACTER, MODEL, callType, undefined, "heartbeat-prefix", { cache_read_tokens: 4096 });
+    expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
+
+    h.clock.advance(minutes(5));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(1);
+    expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
+  });
+
   test("a call on another model does not push the ping out", async () => {
     const h = harness();
     armWarm(h);
 
     h.clock.advance(minutes(50));
-    h.service.observe(CHARACTER, OTHER_MODEL, "heartbeat");
+    h.service.observe(CHARACTER, OTHER_MODEL, "message");
     h.clock.advance(minutes(6));
 
     await h.service.tick();
