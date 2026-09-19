@@ -6,7 +6,7 @@
       "note": "a second stream_end would make a client render an ending twice",
       "input": {
         "routed": "cancel",
-        "rid": "r1",
+        "rid": null,
         "running_before": false
       },
       "output": {
@@ -16,18 +16,18 @@
     },
     {
       "name": "a cancel ends the running generation with a cancelled stream_end",
-      "note": "the frame carries the CANCEL's rid, not the generation's",
+      "note": "the frame acknowledges the generation's rid; cancel carries no rid",
       "input": {
         "routed": "message then cancel",
         "message_rid": "r1",
-        "cancel_rid": "r2"
+        "cancel_rid": null
       },
       "output": {
         "launched": true,
         "lease_taken": true,
         "cancel_frame": {
           "type": "stream_end",
-          "rid": "r2",
+          "rid": "r1",
           "content": "",
           "metadata": {
             "tokens": {
@@ -99,6 +99,7 @@
         "leases_after": 0,
         "last_frame_1": {
           "type": "stream_end",
+          "rid": "r1",
           "content": "",
           "metadata": {
             "tokens": {
@@ -118,6 +119,7 @@
         },
         "last_frame_2": {
           "type": "stream_end",
+          "rid": "r1",
           "content": "",
           "metadata": {
             "tokens": {

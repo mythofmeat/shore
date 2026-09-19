@@ -66,6 +66,29 @@ fn cancellation_key_keeps_the_response_owned_until_acknowledged() {
             .iter()
             .any(|note| note.content == "generation cancelled")
     );
+
+    app.input.mode = app::InputMode::Normal;
+    let retry_action = input::handle_event(
+        &mut app,
+        crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('r'),
+            crossterm::event::KeyModifiers::NONE,
+        )),
+    );
+    let Action::Send(ConnCommand::Send(ClientMessage::Regen(regen))) = retry_action else {
+        panic!("regeneration must be available after cancellation");
+    };
+    let retry_rid = regen.rid.unwrap();
+    assert_ne!(retry_rid, rid);
+    assert!(app.stream.active);
+    end_reply(&mut app, &rid, "cancelled");
+    assert!(app.stream.active);
+    end_reply(&mut app, &retry_rid, "end_turn");
+    assert!(!app.stream.active);
+    assert_eq!(
+        app.entries.last().unwrap().as_turn().unwrap().joined_text(),
+        "finished reply"
+    );
 }
 
 #[test]

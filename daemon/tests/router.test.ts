@@ -10,7 +10,8 @@ import {
   type HandlerRegistry,
 } from "../src/handler/router.ts";
 import { StreamLeases } from "../src/handler/lease.ts";
-import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
+import { isControlRoutedMessage, SessionRouter, type RequestMeta } from "../src/swp/session.ts";
+import { routeClientMessage } from "../src/swp/routing.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { Command } from "../src/protocol/Command.ts";
 import { required } from "../src/util/required.ts";
@@ -158,6 +159,51 @@ const routed = fixture.routed as unknown as Array<{
 }>;
 
 describe("routed messages", () => {
+  test.each(["message", "regen"] as const)("wire cancellation acknowledges the active %s before retrying", async (kind) => {
+    const h = harness(["Alice"], 1);
+    const session = meta("Alice", 1, null, "cancel").session;
+    const route = async (msg: ClientMessage) => {
+      const outcome = routeClientMessage(msg, session, "Alice");
+      if (outcome.action !== "route") throw new Error("expected routed request");
+      if (isControlRoutedMessage(outcome.routed)) {
+        await h.handler.handleControl(outcome.routed);
+      } else {
+        await h.handler.handleRouted(outcome.routed);
+      }
+    };
+
+    await route(kind === "message"
+      ? message("first-reply", "hi", true)
+      : { type: "regen", rid: "first-reply", stream: true });
+    await route({ type: "cancel" });
+    expect(h.started[0]?.signal.aborted).toBe(true);
+    expect(h.frames.get(1)?.at(-1)).toMatchObject({
+      type: "stream_end", rid: "first-reply", finish_reason: "cancelled", is_final: true,
+    });
+
+    await route({ type: "regen", rid: "retried-reply", stream: true });
+    expect(h.started[1]?.signal.aborted).toBe(false);
+    await route({ type: "cancel" });
+    expect(h.frames.get(1)?.at(-1)).toMatchObject({
+      type: "stream_end", rid: "retried-reply", finish_reason: "cancelled", is_final: true,
+    });
+    await h.handler.drain();
+    expect(h.handler.sessionStateCount).toBe(0);
+  });
+
+  test.each([null, "réq"])("cancellation preserves an absent or rejected generation rid: %p", async (rid) => {
+    const h = harness(["Alice"], 1);
+    await h.handler.handleRouted({
+      kind: "engine", msg: message(rid, "hi", true), meta: meta("Alice", 1, rid, "message"),
+    });
+    await h.handler.handleControl({
+      kind: "engine", msg: { type: "cancel" }, meta: meta("Alice", 1, null, "cancel"),
+    });
+    expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", finish_reason: "cancelled" });
+    expect(h.frames.get(1)?.at(-1)).not.toHaveProperty("rid");
+    await h.handler.drain();
+  });
+
   test("a cancel with nothing running sends no frame", async () => {
     const c = caseByName(routed, "a cancel with nothing running sends no frame");
     const h = harness(["Alice"], 1);
@@ -165,7 +211,7 @@ describe("routed messages", () => {
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "cancel" },
-      meta: meta("Alice", 1, "r1", "cancel"),
+      meta: meta("Alice", 1, null, "cancel"),
     });
 
     expect(stripAbsent({ frames: h.frames.get(1), generation_running: false })).toEqual(
@@ -191,7 +237,7 @@ describe("routed messages", () => {
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "cancel" },
-      meta: meta("Alice", 1, "r2", "cancel"),
+      meta: meta("Alice", 1, null, "cancel"),
     });
 
     const received = h.frames.get(1) ?? [];
@@ -408,7 +454,7 @@ describe("what a generation is handed", () => {
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "cancel" },
-      meta: meta("Alice", 1, "r3", "cancel"),
+      meta: meta("Alice", 1, null, "cancel"),
     });
     expect(second?.signal.aborted).toBe(true);
   });
@@ -456,7 +502,7 @@ describe("session state lifecycle", () => {
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "cancel" },
-      meta: meta("Alice", 1, "r2", "cancel"),
+      meta: meta("Alice", 1, null, "cancel"),
     });
     expect(h.handler.sessionStateCount).toBe(0);
     finish?.();
@@ -933,10 +979,12 @@ test("different threads can generate in one session without cancelling or mixing
   await main.send({ type: "stream_chunk", text: "main", content_type: "text" });
   await scratch.send({ type: "stream_chunk", text: "scratch", content_type: "text" });
   expect(h.frames.get(1)).toEqual([{ type: "stream_chunk", text: "scratch", content_type: "text" }]);
-  await h.handler.cancelGeneration(1, null, "user cancelled");
+  await h.handler.cancelGeneration(1, "user cancelled");
   expect(scratch.signal.aborted).toBe(true);
   expect(main.signal.aborted).toBe(false);
+  expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "scratch", finish_reason: "cancelled" });
   await h.handler.handleControl({ kind: "all_clients_disconnected" });
   await h.handler.drain();
   expect(main.signal.aborted).toBe(true);
+  expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "main", finish_reason: "cancelled" });
 });
