@@ -64,8 +64,8 @@ Logs are in `out/issue-214/resume-2026-09-20/`. Existing Clippy and ts-rs warnin
 These overlap and are not equal-sized tickets.
 
 1. **Recovery and cancellation:** archive restart recovery and session command/compaction cancellation
-   are implemented in this continuation. Finish visible reconciliation of other uncertain mutations; durable
-   drafts/attachments and media recovery. Verify revision gaps, stale/duplicate events, thread
+   are implemented in this continuation, followed by local drafts/attachments. Finish visible
+   reconciliation of other uncertain mutations and the broader media recovery audit. Verify revision gaps, stale/duplicate events, thread
    switches during streams, multiple tabs, and terminal/browser concurrency against actual outcomes.
 2. **Exhaustive capability coverage:** audit real CLI/TUI variants, options, special runners, core
    message/regen/cancel requests, input fields, meaningful results, known events and useful local
@@ -128,8 +128,17 @@ previously documented equivalent survivor. All 64 staleness passes were current.
 
 ## Next work
 
+The draft/attachment continuation uses IndexedDB, separate attachment records, per-tab ownership,
+revision-safe writes/discards, explicit saved-draft recovery and a persistent send-review marker.
+Eight actual browser journeys cover reload, close, cloned/concurrent tabs, paste, interrupted send,
+storage failure, unsaved conversation switches and bounds. All eight required daemon checks passed
+(7,799 tests, 64 current staleness passes, three unchanged captures). All 26 browser journeys passed;
+the 10 affected draft/workspace/packaged journeys passed again after final safeguards. Final lint,
+typecheck, build and generation/inventory checks passed. See the latest `WEB_GUI.md` record and
+commit history; logs use the `drafts-` prefix in the continuation directory.
+
 Continue the broader recovery audit: uncertain ordinary
-mutations across reload/restart, drafts plus attachments, media recovery, and real concurrent-client
+mutations across reload/restart, remaining media recovery, and real concurrent-client
 outcomes. Then close the capability/event/local-preference inventory and package/CI gaps listed above.
 Do not treat the restart checkpoint as full parity or as proof of GitHub CI/required merge gates.
 
@@ -187,7 +196,7 @@ appropriate updates and commits are already authorized by the user's instruction
 > `/home/eshen/dev/shore-feat-web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
 > `docs/WEB_GUI.md`, and the current GitHub issue. Read the latest archive restart recovery checkpoint above.
 > Keep the full issue scope intact and make verified commits as you go, separating dependency
-> upgrades. Continue durable drafts/attachments and the remaining recovery/parity audit.
+> upgrades. Continue ordinary uncertain-command recovery and the remaining media/parity audit.
 > Archive restart recovery has been implemented and reproduced through actual process/browser journeys.
 > Preserve session ownership, authentication security,
 > shared dispatch and uncertain-mutation semantics. Continue through the remaining parity, recovery,

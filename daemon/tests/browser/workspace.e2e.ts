@@ -76,6 +76,7 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByRole("article", { name: "Streaming response" })).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "I checked the conversation", exact: true }).click();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await page.getByLabel("Message", { exact: true }).fill("Picture question");
   await page.getByLabel("Attach images", { exact: true }).setInputFiles({ name: "example.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==", "base64") });

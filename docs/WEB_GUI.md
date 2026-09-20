@@ -822,3 +822,54 @@ The cancellation pass killed 12/12 mutants; the router pass killed 31/32 with it
 equivalent survivor. All 64 staleness passes were current. The archive-boundary mutant initially
 survived; an additional complete compaction-pass regression now kills it and verifies explicit
 resume without another model call. Logs use the `cancel-` prefix under the continuation log directory.
+
+### Browser draft and attachment recovery, 2026-09-20
+
+The original browser journeys reproduced two losses: reload dropped selected image bytes, and a
+second tab overwrote the first tab's text for the same conversation. The composer now keeps text,
+image bytes and a send-review marker in browser-local IndexedDB. Attachments are stored separately
+so ordinary text edits do not rewrite their bytes. Saving reports completion only after the full
+transaction commits, using the browser's strict durability option; quota/permission failures stay
+visible with the current content open and an explicit retry. Failed saves remain in memory across
+conversation switches and keep the browser's unsaved-work warning active. Mobile layouts expose the same status.
+Browser data clearing, private-session expiry and browser storage eviction can still remove drafts;
+this is local recovery, not a remote backup. See the browser's
+[IndexedDB transaction lifecycle](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction).
+
+Each tab remembers its own per-conversation draft. An origin-scoped
+[Web Lock](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) detects duplicated tab
+session storage and forks the inherited draft instead of taking over the original. Browsers without
+Web Locks conservatively copy on recovery. Transactional revision checks also fork conflicting
+writes and reject stale discard requests. Saved drafts can be inspected across conversations,
+copied into an empty matching composer, and explicitly discarded with confirmation. Recovered
+copies preserve the source until it is discarded. Existing text-only drafts migrate after a
+successful save. Nothing is sent during restoration.
+
+The store admits at most 64 drafts and 128 MiB of accounted text/image data. It refuses new writes
+when full and retains other drafts for explicit cleanup. Individual picker/paste attachments keep
+the 8 MiB file and 16 MiB combined encoded-image limits, with a 32-image count bound. Clipboard
+images now use the same picker validation and persistence. Removing images deletes unreferenced
+stored attachment bytes transactionally. Drafts remain on this device across sign-out.
+
+Before dispatching a message, the composer attempts to persist a send-review marker. Confirmed
+completion clears only the submitted text/images that were not changed while the request ran.
+Interruption, cancellation or reload retains the draft and asks the user to inspect history before
+sending it again. Failed browser storage is explicitly reported; it does not disable messaging.
+The marker conservatively records possible delivery, not a proven server outcome. Recovery of
+uncertain ordinary commands remains separate work.
+
+Actual browser journeys cover reload and one-time send with image bytes, independent and duplicated
+tabs, closed-tab and clipboard recovery, interrupted sends without replay, storage failure/retry,
+stale concurrent discard refusal, and capacity refusal without eviction. The ordinary workspace
+journey also covers thread-specific restoration and the explicit review after cancellation.
+Browser-only source is typechecked with the DOM-enabled browser project; daemon tests retain their
+existing Bun type environment. Full issue acceptance, broader media/parity and CI work remain open.
+
+Checkpoint verification: all eight required daemon checks passed, including 7,799 Bun tests,
+64 current mutation-staleness passes and three unchanged independent captures. All 26 browser
+journeys passed; after the unsaved-memory safeguard and optional-MIME accounting correction, the
+eight draft journeys plus the workspace and packaged-executable journeys passed again (10/10).
+Final lint, typecheck, compiled build and browser/inventory generation checks passed. The change is
+browser-only; the preceding cancellation checkpoint's full Rust verification remains unchanged.
+Desktop and mobile screenshots were inspected, including visible saving status on mobile. Logs
+use the `drafts-` prefix in `out/issue-214/resume-2026-09-20/`.
