@@ -136,7 +136,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     const engine = engineOf(context);
     const compaction = context.deps.compaction;
     if (compaction === undefined) throw internalError("compact is not available in this build");
-    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
+    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.signal === undefined ? {} : { signal: context.session.signal }), ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
   }),
   segments: register("segments", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "none", label: "Inspect and manage segments", fields: {
     action: { label: "Segment action", hint: "Omit to list segments; inspection and edits require an index" },

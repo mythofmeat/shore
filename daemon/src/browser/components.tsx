@@ -1,8 +1,17 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ContentBlock } from "../protocol/ContentBlock.ts";
 import type { OperationField } from "../protocol/OperationField.ts";
 import { acceptsKind, initialValue, record, type Control } from "./forms.ts";
+
+export function CancelWork({ active, ready, cancel }: { active: boolean; ready: boolean; cancel: () => void }) {
+  const [notice, setNotice] = useState("");
+  useEffect(() => { if (active) setNotice(""); }, [active]);
+  return <>{active ? <button type="button" disabled={!ready || notice !== ""} onClick={() => {
+    try { cancel(); setNotice("Cancellation requested for active work in this tab. Changes already made may remain; inspect the outcome before repeating an action."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+  }}>Stop active work</button> : null}{notice === "" ? null : <p role="status">{notice}</p>}</>;
+}
 
 export function Inspect({ value, label = "Inspect data" }: { value: unknown; label?: string }) {
   return <details className="inspect"><summary>{label}</summary><pre>{JSON.stringify(value, null, 2)}</pre><button type="button" onClick={() => {

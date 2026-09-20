@@ -975,6 +975,48 @@ describe("per-session routing queues", () => {
   });
 });
 
+test("cancel bypasses a blocked command, isolates its session and preserves its confirmed result", async () => {
+  const { dispatch, gate, signals } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 2, undefined, dispatch);
+  const base = meta("ada", 1, "held-request", "command");
+  const request = { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } };
+  handler.enqueueRouted({ kind: "command", cmd: command("held"), meta: request });
+  handler.enqueueRouted({ kind: "command", cmd: command("other"), meta: meta("ada", 2, null, "command") });
+  try {
+    await settle();
+    handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+    await settle();
+    expect(required(signals.get("held")).aborted).toBe(true);
+    expect(required(signals.get("other")).aborted).toBe(false);
+    gate("held").resolve();
+    await settle();
+    expect(names(required(frames.get(1)))).toEqual(["held", "request_finished"]);
+    expect(frames.get(1)?.at(-1)).toMatchObject({ type: "request_finished", rid: "held-request", outcome: "completed" });
+  } finally {
+    gate("held").resolve(); gate("other").resolve(); await handler.drain();
+  }
+});
+
+test.each([false, true])("cancel prevents queued mutations from starting and leaves later requests usable (started: %s)", async (started) => {
+  const { dispatch, gate, started: calls } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+  const request = (rid: string) => { const base = meta("ada", 1, rid, "command"); return { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } }; };
+  handler.enqueueRouted({ kind: "command", cmd: command("first"), meta: request("first-rid") });
+  handler.enqueueRouted({ kind: "command", cmd: command("queued"), meta: request("queued-rid") });
+  if (started) await settle();
+  handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+  gate("first").resolve(); gate("queued").resolve();
+  await handler.drain();
+  expect(calls).toEqual(started ? ["first"] : []);
+  expect(frames.get(1)?.filter((frame) => frame.type === "request_finished")).toMatchObject([
+    { rid: "first-rid", outcome: started ? "completed" : "cancelled" },
+    { rid: "queued-rid", outcome: "cancelled" },
+  ]);
+  handler.enqueueRouted({ kind: "command", cmd: command("after"), meta: request("after-rid") });
+  gate("after").resolve(); await handler.drain();
+  expect(frames.get(1)?.at(-1)).toMatchObject({ type: "request_finished", rid: "after-rid", outcome: "completed" });
+});
+
 describe("a session that disconnects mid-command", () => {
   test("aborts the in-flight command and suppresses its reply", async () => {
     const { dispatch, gate, signals } = gatedDispatch();

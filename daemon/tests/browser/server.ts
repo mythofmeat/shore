@@ -59,7 +59,8 @@ bind_addr = "127.0.0.1:0"
 ${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""}
 `);
 let generation = 0;
-const memoryStream = compactionFixture();
+const cleanup = new AbortController();
+const memoryStream = compactionFixture(cleanup.signal);
 const provider: SidecarProvider = {
   async *stream(request, signal) {
     if (request.context?.call_type === "compaction") { yield* memoryStream(request, signal); return; }
@@ -87,8 +88,8 @@ try {
   await seedDiagnosticFixture(daemon.runtime, "nova");
   if (process.env["SHORE_BROWSER_USAGE_SEED"] === "true") await seedUsageFixture(daemon.runtime);
   seedArchivedSegment(daemon.runtime, "recovery");
-  process.once("SIGTERM", () => { daemon.stop(); });
-  process.once("SIGINT", () => { daemon.stop(); });
+  process.once("SIGTERM", () => { cleanup.abort(); daemon.stop(); });
+  process.once("SIGINT", () => { cleanup.abort(); daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
   console.log(`SHORE_BROWSER_READY ${daemon.web.origin}`);
   await daemon.done;

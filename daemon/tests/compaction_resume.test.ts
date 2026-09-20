@@ -529,6 +529,43 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
+test.each(["model", "before_archive", "preview"])("cancellation at %s preserves a completed checkpoint for explicit resume", async (phase) => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-cancel-race-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada", "threads", "main");
+  const workspace = join(root, "workspace");
+  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  const memory = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const content = conversation().map(activeLine).join("\n") + "\n";
+  writeDurable(join(characterDir, "active.jsonl"), content);
+  const controller = new AbortController();
+  const llm = scripted([response("end_turn", [{ type: "text", text: "Completed memory review" }])]);
+  const tools: CompactionTools = {
+    workspaceDir: workspace, dispatch: async () => { throw new Error("Unexpected tool replay"); },
+    ensureWorkspaceGitRepo: async () => {}, gitCommitAll: async () => false,
+    gitHead: async () => { if (phase === "before_archive" && llm.calls > 0) controller.abort(); return "unchanged"; },
+  };
+  const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+  const result = await compact({
+    ...options(dataDir, workspace, memory, plan, tools, { ...llm, run: async (...args) => {
+      const completed = await llm.run(...args);
+      if (phase === "model" || phase === "preview") controller.abort();
+      return completed;
+    } }), signal: controller.signal, dryRun: phase === "preview",
+  }, { keepRecentTurns: 1 });
+  expect(result.kind).toBe("paused");
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(content);
+  if (phase === "preview") return;
+  const resumed = scripted([]);
+  const completed = await compact(options(dataDir, workspace, memory,
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, resumed), { keepRecentTurns: 1 });
+  expect(completed.kind).toBe("compacted");
+  expect(resumed.calls).toBe(0);
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).not.toBe(content);
+});
+
 function options(
   dataDir: string,
   workspace: string,

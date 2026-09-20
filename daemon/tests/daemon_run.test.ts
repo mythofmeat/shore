@@ -1,4 +1,4 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { readDurable, writeDurable } from "../src/storage/files.ts";
 import { readThreadsIndex } from "../src/engine/threads.ts";
 import { globalPreferencesPath, characterPreferencesPath } from "../src/config/preferences.ts";
 import { required } from "../src/util/required.ts";
@@ -38,6 +38,7 @@ import { ledgerFor } from "../src/ledger/record.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
 
 const running: RunningDaemon[] = [];
@@ -381,6 +382,121 @@ describe("coming up", () => {
     }
     expect(outcomes[0]).toEqual(outcomes[1]);
   });
+  test("TCP and browser cancellation preserve tool effects and resumable compaction outcomes", async () => {
+    const outcomes: unknown[] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[tools.bash]\ntimeout = "6s"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const cleanup = new AbortController();
+      const compactStream = compactionFixture(cleanup.signal);
+      let compactionCalls = 0;
+      const chat = scriptedProvider("Stored fixture reply");
+      const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+        if (request.context?.call_type === "compaction") { compactionCalls += 1; yield* compactStream(request, signal); } else yield* chat.stream(request, signal);
+      } };
+      const daemon = await start(place, [], { anthropic: provider }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const seen = tcp?.frames ?? frames;
+      let sequence = 0;
+      const send = (request: BrowserRequest): string => {
+        if (browser !== undefined) return browser.client.submit(request).rid;
+        const rid = `cancellation-${String(++sequence)}`; required(tcp).send({ ...request, rid }); return rid;
+      };
+      const finish = async (rid: string) => {
+        await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} cancelled work did not settle`);
+        expect(seen.find((frame) => frame["type"] === "request_finished" && frame["rid"] === rid)).toMatchObject({ outcome: "completed" });
+        return seen.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+      };
+      const cancel = () => { if (browser !== undefined) browser.client.cancel(); else required(tcp).send({ type: "cancel" }); };
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Cancellation browser did not connect"); }
+        const before = join(place.root, "tool-started"); const after = join(place.root, "tool-finished");
+        const toolRid = send({ type: "command", name: "run_tool", args: { tool: "bash", input: { command: `printf started > '${before}'; sleep 60; printf finished > '${after}'` } } });
+        await until(() => existsSync(before), "The actual Bash tool did not start");
+        cancel();
+        const tool = await finish(toolRid);
+        expect(tool).toMatchObject({ ok: false, rejected: false });
+        expect(await readFile(before, "utf8")).toBe("started"); expect(existsSync(after)).toBe(false);
+        for (const text of ["cancel memory once", "Keep the recent turn"]) await finish(send({ type: "message", text, stream: true, images: [], image_data: [] }));
+        const rid = send({ type: "command", name: "compact", args: { keep_turns: 1 } });
+        await until(() => seen.some((frame) => frame["rid"] === rid && frame["type"] === "stream_chunk" && frame["text"] === "Waiting for compaction cancellation"), "Compaction did not reach its held provider call");
+        cancel();
+        const paused = await finish(rid);
+        expect(paused).toMatchObject({ status: "paused" });
+        const config = daemon.runtime.registry.globalConfig();
+        const memory = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "fixture.md");
+        const beforeResume = await readFile(memory, "utf8");
+        expect(beforeResume).toContain("Memory write 1");
+        expect(await loadCompactionCheckpoint(config.dirs.data, "ada", "main")).toMatchObject({ state: "paused" });
+        const conversation = () => MessageStore.load(threadFile(config.dirs.data, "ada", "main", "active.jsonl"));
+        expect([...(await conversation()).messages()].filter((message) => message.role === "user")).toHaveLength(2);
+        const resumed = await finish(send({ type: "command", name: "compact", args: { keep_turns: 1 } }));
+        expect(resumed).toMatchObject({ status: "compacted", retained_turns: 1 });
+        expect(await readFile(memory, "utf8")).toBe(beforeResume);
+        expect([...(await conversation()).messages()].filter((message) => message.role === "user")).toHaveLength(1);
+        const history = await segments(config.dirs.data, "ada", "main", {});
+        if (!("segments" in history)) throw new Error("Missing segment listing");
+        outcomes.push({ memory: beforeResume, archived: history.segments.map((segment) => segment.message_count) });
+        await finish(send({ type: "command", name: "create_thread", args: { name: "tool-cancel" } }));
+        await finish(send({ type: "command", name: "switch_thread", args: { name: "tool-cancel", resync: true } }));
+        for (const text of ["cancel memory tool once", "Keep the tool turn"]) await finish(send({ type: "message", text, stream: true, images: [], image_data: [] }));
+        const toolCompaction = send({ type: "command", name: "compact", args: { keep_turns: 1 } });
+        const toolPid = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "cancel-pid");
+        const unexpected = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "cancel-finished");
+        await until(() => existsSync(toolPid), "Compaction's actual tool did not start");
+        cancel();
+        expect(await finish(toolCompaction)).toMatchObject({ status: "paused" });
+        const pid = Number(await readFile(toolPid, "utf8"));
+        await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, "Compaction's tool is still running");
+        expect(existsSync(unexpected)).toBe(false);
+        const previousCalls = compactionCalls;
+        expect(await finish(send({ type: "command", name: "compact", args: { keep_turns: 1 } }))).toMatchObject({ status: "compacted" });
+        expect(compactionCalls).toBeGreaterThan(previousCalls);
+        expect(await readFile(toolPid, "utf8")).toBe(String(pid));
+        expect(existsSync(unexpected)).toBe(false);
+      } finally { cleanup.abort(); unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+
+  test("a compaction pass cancelled after its final model turn keeps history for explicit resume", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("Stored fixture reply") }, false);
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    try {
+      await client.awaitFrame("history");
+      for (const [index, text] of ["Remember this turn", "Keep this recent turn"].entries()) {
+        const rid = `archive-race-${String(index)}`;
+        client.send({ type: "message", text, stream: true, images: [], image_data: [], rid });
+        await until(() => client.frames.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), "Conversation did not finish");
+      }
+      const config = daemon.runtime.registry.globalConfig();
+      const active = threadFile(config.dirs.data, "ada", "main", "active.jsonl");
+      const before = readDurable(active);
+      const controller = new AbortController();
+      const outcome = await runCompactionPass("ada", {
+        config, env: place.env, signal: controller.signal,
+        generate: async (request, _model, _character, _sink, phase) => {
+          const response = await cacheFixture(request);
+          await phase?.onTurn?.(response);
+          controller.abort(new DOMException("Cancelled after model completion", "AbortError"));
+          return response;
+        },
+      }, { keepTurnsOverride: 1 });
+      expect(outcome?.kind).toBe("paused");
+      expect(readDurable(active)).toBe(before);
+      expect(await loadCompactionCheckpoint(config.dirs.data, "ada", "main")).toMatchObject({ state: "paused" });
+      const resumed = await runCompactionPass("ada", {
+        config, env: place.env, generate: () => { throw new Error("Completed model work must not replay"); },
+      }, { keepTurnsOverride: 1 });
+      expect(resumed?.kind).toBe("compacted");
+      expect(readDurable(active)).not.toBe(before);
+    } finally { client.close(); daemon.stop(); await daemon.done; }
+  });
+
   test("manual tools agree across independent TCP and browser workspaces, schemas and nested results", async () => {
     const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown>; file: string | null }[] = [
       { args: { tool: "bash", describe: true }, check: { mode: "tool_definition", enabled: false }, file: null },

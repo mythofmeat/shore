@@ -221,16 +221,17 @@ export type CompactionGenerate = (
   sink?: FrameSink,
   tools?: ToolPhase,
   options?: ToolLoopOptions,
+  signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
 export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
-  return async (request, model, character, sink, tools, options) => {
+  return async (request, model, character, sink, tools, options, signal) => {
     labelAccountedCall(request, deps.config, character, "compaction");
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
       deps,
-      { ...(sink === undefined ? {} : { sink }), ...(tools === undefined ? {} : { tools }), ...(options === undefined ? {} : { toolLoop: options }) },
+      { ...(sink === undefined ? {} : { sink }), ...(tools === undefined ? {} : { tools }), ...(options === undefined ? {} : { toolLoop: options }), ...(signal === undefined ? {} : { signal }) },
     );
     for (const event of fallbacks) {
       shoreLog.warn(

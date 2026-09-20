@@ -51,7 +51,7 @@ Local logs under `out/issue-214/` are useful evidence but are ignored and are no
 `transfer-generation-final.log`, `transfer-mutations-final.log`, `transfer-mutations.log`,
 `bun_test.log`, `bun_run_rerecord_check.log`, and the `cargo_*` logs.
 
-Current continuation verification: all eight required daemon checks and all three Rust workspace
+Archive restart checkpoint verification: all eight required daemon checks and all three Rust workspace
 checks passed. The Bun suite passed 7,789 tests across 273 files; Rust passed 1,486 tests with 15
 ignored. All 15 Playwright journeys passed, including compiled-binary restart recovery. Browser
 and inventory generation checks passed, independent captures were unchanged, recovery/archive
@@ -63,16 +63,16 @@ Logs are in `out/issue-214/resume-2026-09-20/`. Existing Clippy and ts-rs warnin
 
 These overlap and are not equal-sized tickets.
 
-1. **Recovery and cancellation:** archive restart recovery is implemented in this continuation. Finish
-   visible reconciliation of other uncertain mutations; responsive advanced-operation cancellation; durable
+1. **Recovery and cancellation:** archive restart recovery and session command/compaction cancellation
+   are implemented in this continuation. Finish visible reconciliation of other uncertain mutations; durable
    drafts/attachments and media recovery. Verify revision gaps, stale/duplicate events, thread
    switches during streams, multiple tabs, and terminal/browser concurrency against actual outcomes.
 2. **Exhaustive capability coverage:** audit real CLI/TUI variants, options, special runners, core
    message/regen/cancel requests, input fields, meaningful results, known events and useful local
    preferences/keyboard workflows. Close gaps rather than claiming useful capabilities are platform
    exceptions. Extend executable operation/field/renderer/event omission checks across the inventory.
-3. **Advanced workflows:** finish diagnostics/event presentation, tool/memory progress and
-   cancellation, large usage exports, richer message/media handling, and remaining local presentation
+3. **Advanced workflows:** finish diagnostics/event presentation, live manual-tool progress,
+   large usage exports, richer message/media handling, and remaining local presentation
    behavior. Preserve designed workflows as well as the generated action fallback.
 4. **Security and release coverage:** complete payload/redaction/resource audits, remaining compiled
    advanced journeys, incompatible old-tab DOM recovery, and package/container/release integration.
@@ -108,9 +108,27 @@ Read `daemon/tests/web_recovery.test.ts`, the archive tests, the two process/bro
 staging and dispatch-order evidence. The browser still directs users to inspect characters/history
 for an uncertain import; it does not claim a transactionally proven outcome from character existence.
 
+## Shared command/compaction cancellation checkpoint
+
+Following `a68bbe52`, the continuation adds cancellation of running and queued session commands,
+visible stop controls in tool/memory/generated-action modals, and delivery of confirmed outcomes
+that race cancellation. Compaction propagates the signal to providers and tools, retains its
+checkpoint and active history when stopped, and resumes without repeating completed writes.
+The generic provider loop now refuses to start a fresh model call after cancellation. Actual
+Bash, compaction and MCP browser journeys plus TCP/WebSocket conformance cover these changes.
+MCP cancellation remains explicitly unconfirmed; its server may still complete an external effect.
+This is a session-wide control, not a new targeted request protocol. Read the latest implementation
+record in `WEB_GUI.md` and the current commit history for verification of this checkpoint.
+
+All eight daemon checks and all three Rust checks passed for this checkpoint: 7,799 Bun tests,
+1,486 Rust tests with 15 ignored, 18 browser journeys, unchanged independent captures and current
+generation/inventory. The cancellation pass killed 12/12 mutants; router killed 31/32 with one
+previously documented equivalent survivor. All 64 staleness passes were current. Logs have the
+`cancel-` prefix under `out/issue-214/resume-2026-09-20/`.
+
 ## Next work
 
-Continue responsive advanced-operation cancellation and the broader recovery audit: uncertain ordinary
+Continue the broader recovery audit: uncertain ordinary
 mutations across reload/restart, drafts plus attachments, media recovery, and real concurrent-client
 outcomes. Then close the capability/event/local-preference inventory and package/CI gaps listed above.
 Do not treat the restart checkpoint as full parity or as proof of GitHub CI/required merge gates.
@@ -169,7 +187,7 @@ appropriate updates and commits are already authorized by the user's instruction
 > `/home/eshen/dev/shore-feat-web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
 > `docs/WEB_GUI.md`, and the current GitHub issue. Read the latest archive restart recovery checkpoint above.
 > Keep the full issue scope intact and make verified commits as you go, separating dependency
-> upgrades. Continue advanced cancellation and the remaining recovery/parity audit.
+> upgrades. Continue durable drafts/attachments and the remaining recovery/parity audit.
 > Archive restart recovery has been implemented and reproduced through actual process/browser journeys.
 > Preserve session ownership, authentication security,
 > shared dispatch and uncertain-mutation semantics. Continue through the remaining parity, recovery,

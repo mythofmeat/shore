@@ -170,9 +170,11 @@ export class MessageHandler {
     }
 
     const sessionId = routed.meta.session.sessionId;
+    const controller = routed.kind === "command" ? this.#commandController(sessionId) : undefined;
     const tail = this.#queues.get(sessionId) ?? Promise.resolve();
     const settled = this.#guard(
       tail.then(async () => {
+        if (routed.kind === "command") { await this.#runCommand(routed.cmd, routed.meta, controller); return; }
         if (!this.#deps.router.has(sessionId)) return;
         await this.handleRouted(routed);
       }),
@@ -200,22 +202,28 @@ export class MessageHandler {
     }
   }
 
-  async #runCommand(cmd: Command, meta: RequestMeta): Promise<void> {
-    const sessionId = meta.session.sessionId;
+  #commandController(sessionId: number): AbortController {
     const controller = new AbortController();
     const registered = this.#commandAborts.get(sessionId) ?? new Set<AbortController>();
     registered.add(controller);
     this.#commandAborts.set(sessionId, registered);
+    return controller;
+  }
+
+  async #runCommand(cmd: Command, meta: RequestMeta, controller = this.#commandController(meta.session.sessionId)): Promise<void> {
+    const sessionId = meta.session.sessionId;
     let outcome: RequestOutcome = "completed";
     let failure: ProtocolError | undefined;
 
     try {
+      if (!this.#deps.router.has(sessionId)) return;
+      controller.signal.throwIfAborted();
       const result = await this.#deps.dispatchCommand(cmd, meta, controller.signal);
-      if (controller.signal.aborted) return;
+      if (!this.#deps.router.has(sessionId)) return;
       if (result.type === "error") { outcome = "failed"; failure = result; }
       await this.#deps.router.sendToSession(sessionId, result);
     } catch (error) {
-      outcome = "failed";
+      outcome = controller.signal.aborted ? "cancelled" : "failed";
       failure = { code: "internal_error", message: describeError(error) };
       if (!controller.signal.aborted) throw error;
     } finally {
@@ -224,12 +232,12 @@ export class MessageHandler {
         live.delete(controller);
         if (live.size === 0) this.#commandAborts.delete(sessionId);
       }
-      await this.#finishRequest(meta, meta.rid, controller.signal.aborted ? "cancelled" : outcome, failure);
+      await this.#finishRequest(meta, meta.rid, outcome, failure);
     }
   }
 
   async #finishRequest(meta: RequestMeta, rid: string | null, outcome: RequestOutcome, error?: ProtocolError): Promise<void> {
-    if (rid === null || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
+    if (rid === null || !this.#deps.router.has(meta.session.sessionId) || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
     await this.#deps.router.sendToSession(meta.session.sessionId, {
       type: "request_finished", rid, outcome, ...(error === undefined ? {} : { error }),
     });
@@ -237,6 +245,7 @@ export class MessageHandler {
 
   async handleControl(routed: ControlRoutedMessage): Promise<void> {
     if (routed.kind === "engine") {
+      this.#abortSessionCommands(routed.meta.session.sessionId, "User requested cancellation");
       await this.cancelGeneration(
         routed.meta.session.sessionId,
         routed.meta.rid,
@@ -245,7 +254,7 @@ export class MessageHandler {
       return;
     }
     if (routed.kind === "session_disconnected") {
-      this.#abortSessionCommands(routed.sessionId);
+      this.#abortSessionCommands(routed.sessionId, "Client disconnected");
       this.#queues.delete(routed.sessionId);
       return;
     }
@@ -255,14 +264,15 @@ export class MessageHandler {
     this.#deps.leases.clear();
   }
 
-  #abortSessionCommands(sessionId: number): void {
+  #abortSessionCommands(sessionId: number, reason: string): void {
     const registered = this.#commandAborts.get(sessionId);
     if (registered === undefined) return;
-    this.#deps.log?.info?.("cancelling commands for departed session", {
+    this.#deps.log?.info?.("cancelling session commands", {
       session_id: sessionId,
       commands: registered.size,
+      reason,
     });
-    for (const controller of registered) controller.abort();
+    for (const controller of registered) controller.abort(new DOMException(reason, "AbortError"));
     this.#commandAborts.delete(sessionId);
   }
 
@@ -281,6 +291,7 @@ export class MessageHandler {
 
   async handleEngine(msg: ClientMessage, meta: RequestMeta): Promise<void> {
     if (msg.type === "cancel") {
+      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");
       await this.cancelGeneration(meta.session.sessionId, meta.rid, "user cancelled");
       return;
     }
