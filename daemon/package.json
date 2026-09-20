@@ -27,7 +27,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "matrix-js-sdk": "^42.4.0",
-    "openai": "^7.19.0",
+    "openai": "^7.20.0",
     "tar": "^7.5.22",
     "zhipu-ai-provider": "^0.4.0"
   },
