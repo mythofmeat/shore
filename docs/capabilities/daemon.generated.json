@@ -493,7 +493,7 @@
     "UsageBudgetFilters": "{ character: string | null, provider: string | null, api_key: string | null, model: string | null, call_type: string | null, usage_kind: Array<string>, }",
     "UsageBudgetLevel": "\"ok\" | \"warning\" | \"over_limit\"",
     "UsageBudgetPeriod": "\"hour\" | \"day\" | \"week\" | \"month\"",
-    "UsageBudgetReport": "{ timezone: string, allow_compaction_over_budget: boolean, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, }",
+    "UsageBudgetReport": "{ timezone: string, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, }",
     "UsageCacheCoverage": "{ state: string, reason: string | null, calls: number, cache_read_tokens: number, cache_write_tokens: number, }",
     "UsageCacheHealth": "{ character: string, state: UsageCacheState, streak: number, }",
     "UsageCacheState": "\"cold\" | \"warm\"",
