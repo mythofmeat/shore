@@ -9,7 +9,7 @@ import type { SegmentsListing } from "../protocol/SegmentsListing.ts";
 import type { SegmentInspection } from "../protocol/SegmentInspection.ts";
 import type { LiveTurn } from "./workspace.ts";
 import { operationPolicy } from "../operations/policy.ts";
-import { Blocks, ImageView, Inspect, Modal } from "./components.tsx";
+import { Blocks, CancelWork, ImageView, Inspect, Modal } from "./components.tsx";
 
 export function CompactionResult({ result }: { result: CompactionReport }) {
   const counts = <p>{String(result.message_count)} messages considered · {String(result.compacted_turns)} turns selected</p>;
@@ -98,6 +98,7 @@ export function Memory({ actions, operations, ready, character, thread, streams,
   }, [actions, ready, character, thread]);
   return <Modal title="Memory & segments" close={close}><div className="memory-panel"><p className="muted">{character} / {thread ?? "home"} · active context and archived conversations</p>
     {!ready ? <p role="status">Reconnect to inspect or change memory. Unsaved fields remain while this dialog stays open.</p> : null}{busy ? <p role="status">Working on memory…</p> : null}{error === "" ? null : <p role="alert" className="error">{error}</p>}
+    <CancelWork active={busy} ready={ready} cancel={() => actions.connection.cancel()} />
     <section aria-label="Active context controls"><h3>Active context</h3><p>Compaction summarizes older turns using the configured memory policy. A preview may make a provider request.</p>
       <form onSubmit={(event) => { event.preventDefault(); request({ name: "compact", args: compactArgs() }); }}><fieldset disabled={disabled || compactOperation?.available === false}>
         <legend>Compaction</legend><label className="field">Retain recent turns<input type="number" min="0" max="9007199254740991" step="1" value={keep} placeholder="Configured default" onChange={(event) => setKeep(event.target.value)} /></label>

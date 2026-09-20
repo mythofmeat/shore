@@ -5,7 +5,7 @@ import type { ToolDescription } from "../protocol/ToolDescription.ts";
 import type { ToolRunReport } from "../protocol/ToolRunReport.ts";
 import type { RunToolArgs } from "../protocol/RunToolArgs.ts";
 import { operationPolicy } from "../operations/policy.ts";
-import { Field, Inspect, JsonValue, Modal } from "./components.tsx";
+import { CancelWork, Field, Inspect, JsonValue, Modal } from "./components.tsx";
 import { initialValue, record, type Control } from "./forms.ts";
 import { toolControl, toolNames } from "./tool_forms.ts";
 
@@ -59,6 +59,7 @@ export function ToolWorkbench({ actions, operations, character, thread, ready, c
     <p>Inspect a tool's definition, enter its arguments and review the call. Manual tools can change files, contact services or spend provider tokens.</p>
     {!ready ? <p role="status">Reconnect to run tools. Unsaved arguments remain while this dialog stays open.</p> : null}
     {busy ? <p role="status">Working on tool request…</p> : null}{error === "" ? null : <p role="alert" className="error">{error}</p>}
+    <CancelWork active={busy} ready={ready} cancel={() => actions.connection.cancel()} />
     <div className="section-heading"><label className="field">Find a tool<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><button disabled={disabled} onClick={() => { void run(refresh); }}>Refresh tools</button></div>
     <nav aria-label="Available tools" className="tool-choices">{names.filter((name) => name.toLowerCase().includes(search.toLowerCase())).map((name) => <button key={name} disabled={disabled} aria-current={definition?.tool === name ? "true" : undefined} onClick={() => { void run(() => describe(name)); }}>{name}</button>)}</nav>
     {names.length === 0 ? <p>No tools listed.</p> : null}

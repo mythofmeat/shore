@@ -37,6 +37,7 @@ export type LedgerGenerate = (
   sink?: FrameSink,
   tools?: ToolPhase,
   options?: ToolLoopOptions,
+  signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
 export interface RealCompactionLlmOptions {
@@ -47,6 +48,7 @@ export interface RealCompactionLlmOptions {
   cacheDir: string;
   env?: NodeJS.ProcessEnv;
   emit?: FrameSink;
+  signal?: AbortSignal;
 }
 
 export class RealCompactionLlm implements CompactionLlm {
@@ -129,6 +131,7 @@ export class RealCompactionLlm implements CompactionLlm {
       this.#opts.emit,
       tools,
       options,
+      this.#opts.signal,
     );
   }
 

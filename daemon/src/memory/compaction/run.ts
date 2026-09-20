@@ -74,6 +74,7 @@ export interface CompactionRunDeps {
   now?: () => string;
   newId?: () => string;
   emit?: FrameSink;
+  signal?: AbortSignal;
 }
 
 export interface CompactionRunOptions {
@@ -161,11 +162,13 @@ export async function runCompactionPass(
   deps: CompactionRunDeps,
   options: CompactionRunOptions = {},
 ): Promise<CompactionOutcome | undefined> {
+  deps.signal?.throwIfAborted();
   const dataDir = deps.config.dirs.data;
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
 
   return await withConversation(threadDataDir(dataDir, character, thread), "update", async () => {
+    deps.signal?.throwIfAborted();
     const guard = tryBeginCompaction(dataDir, character);
     if (guard === undefined) throw CompactionError.busy(character);
 
@@ -267,6 +270,7 @@ export async function runCompactionPass(
             ? {}
             : { maxToolIterations: resolved.maxToolIterations }),
           ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
+          ...(deps.signal === undefined ? {} : { signal: deps.signal }),
         },
         {
           keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
@@ -430,6 +434,7 @@ async function resolveDeps(
   const toolCtx = await buildToolContext(effective, effective.dirs.data, character, {
     ...deps.tools, thread, conversation, dryRun,
   });
+  if (deps.signal !== undefined) toolCtx.signal = deps.signal;
   const entry = effective.providers.get(model.providerKey);
   const providerEntry = entry === undefined ? undefined : credentialEntry(entry);
 
@@ -445,6 +450,7 @@ async function resolveDeps(
       ...(deps.env === undefined ? {} : { env: deps.env }),
       ...(providerEntry === undefined ? {} : { providerEntry }),
       ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
+      ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     }),
     markdownStore,
     tools: compactionTools(toolCtx, effective, tools),

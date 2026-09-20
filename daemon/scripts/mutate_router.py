@@ -74,10 +74,12 @@ MUTANTS = [
     ("a cancel falls through (EQUIVALENT — the next guard catches it, and "
      "keeping both is what makes the intent readable)",
      '    if (msg.type === "cancel") {\n'
+     '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
      "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
      "      return;\n"
      "    }",
      '    if (msg.type === "cancel") {\n'
+     '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
      "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
      "    }"),
     ("a regen is dropped instead of launched",

@@ -242,6 +242,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
       text: string;
       firstAt: number;
     }> => {
+      this.abort.signal.throwIfAborted();
       const builder = new TurnBuilder();
       let callFirstTokenAt = 0;
 

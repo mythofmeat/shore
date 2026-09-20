@@ -9,21 +9,34 @@ export const cacheFixture: SidecarProvider["generate"] = (request) => Promise.re
   timing: { total_ms: 1, time_to_first_token_ms: 1 },
 });
 
-export function compactionFixture(): SidecarProvider["stream"] {
+export function compactionFixture(cleanup?: AbortSignal): SidecarProvider["stream"] {
   let paused = false;
   let truncated = false;
   let writes = 0;
-  return async function* (request) {
+  let cancelled = false;
+  let toolCancelled = false;
+  return async function* (request, signal) {
     yield { type: "start", model: request.model };
     yield { type: "thinking", text: "Reviewing the archived conversation" };
     const written = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "memory-fixture-write") === true;
     const conversation = JSON.stringify(request.messages);
+    if (written && conversation.includes("cancel memory once") && !cancelled) {
+      cancelled = true;
+      yield { type: "thinking", text: "Waiting for compaction cancellation" };
+      const stopped = signal === undefined ? cleanup : cleanup === undefined ? signal : AbortSignal.any([signal, cleanup]);
+      await new Promise<void>((resolve) => { if (stopped?.aborted === true) resolve(); else stopped?.addEventListener("abort", () => resolve(), { once: true }); });
+      throw new Error("Compaction fixture cancelled");
+    }
     if (written && conversation.includes("pause memory once") && !paused) { paused = true; throw new Error("Memory fixture provider temporarily unavailable"); }
     const stop = written && conversation.includes("truncate memory once") && !truncated;
     if (stop) truncated = true;
     if (!written) {
       writes += 1;
-      yield { type: "tool_use", id: "memory-fixture-write", name: "bash", input: { command: `mkdir -p memory && printf '# Retained fixture\\nMemory write ${String(writes)}\\n' > memory/fixture.md` } };
+      const hold = !toolCancelled && conversation.includes("cancel memory tool once");
+      if (hold) toolCancelled = true;
+      yield { type: "tool_use", id: "memory-fixture-write", name: "bash", input: { command: hold
+        ? `mkdir -p memory; printf '%s' "$$" > memory/cancel-pid; sleep 60; printf unexpected > memory/cancel-finished`
+        : `mkdir -p memory && printf '# Retained fixture\\nMemory write ${String(writes)}\\n' > memory/fixture.md` } };
     } else yield { type: "text", text: stop ? "Incomplete memory summary" : "Memory summary completed" };
     yield { type: "done", content: written ? "Memory summary" : "", finish_reason: written ? stop ? "max_tokens" : "end_turn" : "tool_use", usage: { input_tokens: 12, output_tokens: 5, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
   };

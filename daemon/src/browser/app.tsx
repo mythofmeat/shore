@@ -14,7 +14,7 @@ import { Models } from "./models.tsx";
 import { Settings } from "./settings.tsx";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
 import { BrowserConnection } from "./connection.ts";
-import { Blocks, Field, ImageView, Inspect, Modal } from "./components.tsx";
+import { Blocks, CancelWork, Field, ImageView, Inspect, Modal } from "./components.tsx";
 import { operationPolicy } from "../operations/policy.ts";
 import { actionControl, initialValue, record } from "./forms.ts";
 import { Workspace, type WorkspaceSnapshot } from "./workspace.ts";
@@ -97,6 +97,7 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
       {confirming ? <div className="confirmation"><strong>Confirm {policy.confirmation}</strong><p>Review the selected values before continuing.</p><pre>{JSON.stringify(values, null, 2)}</pre><button type="button" onClick={() => setConfirming(false)}>Go back</button></div> : null}
       <div className="actions"><button className={confirming ? "danger" : "primary"} disabled={busy || operation.available === false || state.status !== "ready"} type="submit">{busy ? "Working…" : confirming ? `Confirm ${policy.confirmation}` : "Run action"}</button></div>
     </form>
+    <CancelWork active={busy} ready={state.status === "ready"} cancel={() => workspace.connection.cancel()} />
     {result === undefined ? null : <div className="result"><h3>Action completed</h3><Inspect value={result} label="Complete action result" /></div>}
   </Modal>;
 }

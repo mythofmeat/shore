@@ -488,6 +488,7 @@ export interface CompactOptions {
   resumable?: boolean;
   coverage?: CompactionCoverage;
   emit?: FrameSink;
+  signal?: AbortSignal;
 }
 
 async function preparePassWorkspace(
@@ -604,6 +605,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const request = checkpoint.request;
   let state: ToolLoopState;
   try {
+    opts.signal?.throwIfAborted();
     state = await runCompactionToolLoop(
       opts.llm,
       request,
@@ -619,15 +621,9 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       },
       opts.emit,
     );
+    opts.signal?.throwIfAborted();
   } catch (e) {
-    if (opts.resumable !== true) throw e;
-    checkpoint.state = "paused";
-    checkpoint.pauseReason = pauseReason(e);
-    const resetAt = budgetResetAt(e);
-    if (resetAt === undefined) delete checkpoint.resumeAt;
-    else checkpoint.resumeAt = resetAt;
-    await persistCheckpoint(opts, checkpoint);
-    return pausedOutcome(opts, checkpoint, e instanceof Error ? e.message : String(e));
+    return await pauseCompaction(opts, checkpoint, e);
   }
   checkpoint.loop = state;
 
@@ -685,6 +681,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const archivedCount = plan.splitAt;
   const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
   const memoryAfter = await tools.gitHead?.(workspaceDir);
+  if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);
 
   const newConversationId = await archiveCompactPrefix(
     opts.conversationMgr,
@@ -952,6 +949,17 @@ function pausedOutcome(
     ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
     ...(checkpoint.resumeAt === undefined ? {} : { resumeAt: checkpoint.resumeAt }),
   };
+}
+
+async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheckpoint, error: unknown): Promise<CompactionOutcome> {
+  if (opts.resumable !== true) throw error;
+  checkpoint.state = "paused";
+  checkpoint.pauseReason = pauseReason(error);
+  const resetAt = budgetResetAt(error);
+  if (resetAt === undefined) delete checkpoint.resumeAt;
+  else checkpoint.resumeAt = resetAt;
+  await persistCheckpoint(opts, checkpoint);
+  return pausedOutcome(opts, checkpoint, error instanceof Error ? error.message : String(error));
 }
 
 function pauseReason(e: unknown): CompactionPauseReason {

@@ -171,6 +171,20 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 const typesOf = (events: StreamEvent[]) => events.map((e) => e.type);
 
+test.each([false, true])("cancellation prevents a fresh provider call even when the provider ignores abort (before start: %s)", async (beforeStart) => {
+  const controller = new AbortController();
+  const provider = new FakeProvider([
+    { kind: "tools", calls: [{ id: "cancelled-tool", name: "read", input: {} }] },
+    { kind: "text", text: "must not start this call" },
+  ]);
+  const tools = fakePhase({ output: () => { controller.abort(); return "effect already happened"; } });
+  if (beforeStart) controller.abort();
+  const events = await collect(genericToolLoopEvents(provider, request(), tools.phase, controller.signal));
+  expect(provider.requests).toHaveLength(beforeStart ? 0 : 1);
+  expect(tools.runs).toHaveLength(beforeStart ? 0 : 1);
+  expect(events.at(-1)).toMatchObject({ type: "error", aborted: true });
+});
+
 describe("driving a tool loop for a non-Anthropic dialect", () => {
   test("each model call gets a fresh retry budget without replaying a completed tool", async () => {
     const provider = new FakeProvider([

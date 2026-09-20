@@ -779,3 +779,46 @@ passing (existing warnings remain). All 15 Playwright journeys passed, including
 restart recovery. Browser-generation and capability-inventory checks passed. Recovery/archive
 mutation passes killed 35/35 mutants; all 63 staleness passes were current. Local logs are under
 `out/issue-214/resume-2026-09-20/`; they do not establish GitHub CI or required merge gates.
+
+### Shared command and compaction cancellation, 2026-09-20
+
+After the restart-recovery checkpoint (`a68bbe52`), a routed-command reproduction showed that cancel
+left a blocked command's signal untouched. The actual browser also had no accessible stop control
+while a tool modal was open. The shared handler now registers queued commands before they start,
+handles cancel on the existing control path, and aborts only commands belonging to that session.
+Cancelled queued mutations cannot begin; later requests remain usable. Disconnect still suppresses
+undeliverable replies. If a handler returns a confirmed result while cancellation is arriving, that
+result and its actual completion are delivered, preserving paused compaction and tool reports.
+
+The workbench, memory panel and generated actions expose Stop active work outside their disabled
+forms. This is a per-tab/session control, including that session's queued commands and selected chat
+turn; it is not a new targeted-cancellation protocol. The UI keeps cancellation-requested information
+visible and explains that changes already made can remain. The actual MCP fixture completes a file
+write after receiving cancellation; its result correctly says that stopping is unconfirmed and the
+browser never automatically repeats it. This uses the installed MCP SDK's AbortSignal support and
+the existing Shore MCP error handling, consistent with the
+[MCP cancellation specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation).
+
+Compaction now propagates the command signal through model calls and nested tools. A deeper actual
+flow found that the generic provider loop could start another call after its tool was cancelled.
+The loop now checks the signal before starting a provider call. Compaction also checks after model
+settlement and immediately before archival: cancellation preserves the checkpoint, partial writes
+and active history. Explicit resume continues an interrupted model call without repeating completed
+tools, or archives a fully completed checkpoint without issuing another model request. Preview
+cancellation follows the same checkpoint safeguards.
+
+Tests cover control-queue bypass, cancellation before queued work starts, cross-session isolation,
+confirmed-result races, cancelled-provider admission, late cancellation before archival, preview
+cancellation, real Bash termination, MCP late effects, and actual TCP/WebSocket equivalence for
+provider and nested-tool compaction cancellation. Full issue work remains: ordinary uncertain
+mutation recovery, durable attachments/drafts, live manual-tool progress, capability/local-preference
+coverage, release/security audits and actual PR/required-check evidence.
+
+Checkpoint verification: all eight required daemon checks passed, with 7,799 Bun tests across
+273 files. All three Rust workspace checks passed (1,486 tests, 15 ignored; existing warnings).
+The 18 browser journeys passed, including three new cancellation flows and the packaged daemon.
+Browser generation and inventory checks passed, and all three independent captures were unchanged.
+The cancellation pass killed 12/12 mutants; the router pass killed 31/32 with its existing reviewed
+equivalent survivor. All 64 staleness passes were current. The archive-boundary mutant initially
+survived; an additional complete compaction-pass regression now kills it and verifies explicit
+resume without another model call. Logs use the `cancel-` prefix under the continuation log directory.
