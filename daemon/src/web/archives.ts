@@ -1,9 +1,10 @@
 import { constants } from "node:fs";
-import { mkdtemp, open, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server, LocalPeer } from "../swp/server.ts";
-import type { WebSession } from "./auth.ts";
+import type { WebSession, WebSessions } from "./auth.ts";
+import type { WebRecovery } from "./recovery.ts";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
 import type { WebArchiveResult } from "../protocol/WebArchiveResult.ts";
@@ -44,12 +45,31 @@ export class ArchiveTransfers {
   #commands = 0;
   #closed = false;
 
-  constructor(readonly server: Server, readonly canAttach: () => boolean, limits: Partial<ArchiveTransferLimits> = {}) {
+  constructor(readonly server: Server, readonly canAttach: () => boolean, limits: Partial<ArchiveTransferLimits> = {}, readonly recovery?: WebRecovery) {
     this.#limits = { ...ARCHIVE_TRANSFER_LIMITS, ...limits };
     if (Object.values(this.#limits).some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error("Archive transfer limits must be positive safe integers");
   }
 
   get activePeers(): number { return this.#commands; }
+
+  restore(sessions: WebSessions): void {
+    for (const saved of this.recovery?.archives() ?? []) {
+      const owner = sessions.get(saved.owner);
+      if (owner === undefined || saved.info.expires_at <= Date.now()) { this.recovery?.removeArchive(saved.info.id); continue; }
+      const info = { ...saved.info, downloadable: false };
+      if (info.phase === "importing") {
+        info.phase = "uncertain"; info.error = "The daemon stopped before the import outcome was recorded."; delete info.result;
+      } else if (["uploading", "exporting", "ready"].includes(info.phase)) {
+        info.phase = "failed"; info.error = "The daemon restarted and removed the temporary file. Upload or export the archive again."; delete info.result;
+      }
+      this.recovery?.saveArchive(owner.id, info);
+      this.#record(owner, info, Promise.resolve(join(this.recovery?.artifacts ?? "", info.id)), 0);
+    }
+  }
+
+  #save(record: Artifact): void {
+    if (this.#records.get(record.info.id) === record) this.recovery?.saveArchive(record.owner.id, record.info);
+  }
 
   #owned(owner: WebSession, id: string): Artifact {
     const record = this.#records.get(id);
@@ -68,17 +88,23 @@ export class ArchiveTransfers {
     const existing = [...this.#records.values()];
     if (existing.length >= this.#limits.artifacts || existing.filter((record) => record.owner.id === owner.id).length >= this.#limits.perSession || existing.reduce((sum, record) => sum + record.reserved, 0) + this.#limits.uploadBytes > this.#limits.totalBytes) throw new ArchiveTransferError(429, "Archive transfer capacity reached; remove a completed transfer first");
     const id = crypto.randomUUID();
+    const info: WebArchiveInfo = { id, filename, bytes: 0, expires_at: Math.min(owner.expiresAt, Date.now() + this.#limits.lifetimeMs), phase, downloadable: false };
+    this.recovery?.saveArchive(owner.id, info);
+    const directory = this.recovery === undefined ? mkdtemp(join(tmpdir(), "shore-web-archive-")) : mkdir(join(this.recovery.artifacts, id), { mode: 0o700 }).then(() => join(this.recovery?.artifacts ?? "", id));
+    return this.#record(owner, info, directory, this.#limits.uploadBytes);
+  }
+
+  #record(owner: WebSession, info: WebArchiveInfo, directory: Promise<string>, reserved: number): Artifact {
     const abort = new AbortController();
     const expire = () => { void this.#remove(record); };
     const record: Artifact = {
-      owner, info: { id, filename, bytes: 0, expires_at: Date.now() + this.#limits.lifetimeMs, phase, downloadable: false },
-      directory: mkdtemp(join(tmpdir(), "shore-web-archive-")), abort, downloading: false,
-      timer: setTimeout(expire, this.#limits.lifetimeMs), reserved: this.#limits.uploadBytes,
+      owner, info, directory, abort, downloading: false,
+      timer: setTimeout(expire, Math.max(1, info.expires_at - Date.now())), reserved,
       detach: () => owner.signal.removeEventListener("abort", expire),
     };
     void record.directory.catch(() => {});
     owner.signal.addEventListener("abort", expire, { once: true });
-    this.#records.set(id, record);
+    this.#records.set(info.id, record);
     return record;
   }
 
@@ -88,8 +114,9 @@ export class ArchiveTransfers {
     return join(directory, "archive.tar.gz");
   }
 
-  #remove(record: Artifact): Promise<void> {
+  #remove(record: Artifact, preserve = false): Promise<void> {
     if (this.#records.get(record.info.id) !== record) return Promise.resolve();
+    if (!preserve) this.recovery?.removeArchive(record.info.id);
     this.#records.delete(record.info.id);
     clearTimeout(record.timer); record.detach(); record.abort.abort();
     const cleanup = (async () => {
@@ -151,6 +178,7 @@ export class ArchiveTransfers {
       }
       record.abort.signal.throwIfAborted();
       record.info.phase = "ready";
+      this.#save(record);
     })();
     try { await record.work; return { ...record.info }; }
     catch (error) { await this.#remove(record); throw error; }
@@ -173,6 +201,7 @@ export class ArchiveTransfers {
     const record = this.#owned(owner, id);
     if (record.info.phase !== "ready" || record.info.downloadable) return { ...record.info };
     this.#available();
+    this.recovery?.saveArchive(owner.id, { ...record.info, phase: "importing" });
     record.info.phase = "importing";
     this.#start(record, "import_character", async () => ({ archive: await this.#path(record) }));
     return { ...record.info };
@@ -191,11 +220,15 @@ export class ArchiveTransfers {
           record.info.phase = "ready"; record.info.downloadable = true;
         } else {
           record.info.phase = "imported";
+          this.#save(record);
           await rm(await record.directory, { recursive: true, force: true }); record.reserved = 0;
         }
+        this.#save(record);
       } catch (error) {
         record.info.phase = name === "import_character" && !(error instanceof ConfirmedArchiveFailure) ? "uncertain" : "failed";
         record.info.error = (error instanceof Error ? error.message : "Archive operation failed").slice(0, 4096);
+        delete record.info.result;
+        this.#save(record);
         await record.directory.then((directory) => rm(directory, { recursive: true, force: true })).catch(() => {});
         record.reserved = 0;
       } finally { this.#commands -= 1; }
@@ -209,7 +242,7 @@ export class ArchiveTransfers {
     let peer: LocalPeer | undefined;
     try {
       peer = await this.server.attachLocal({ clientType: "web", clientName: "Browser archive transfer", character: null, capabilities: ["request-lifecycle"], signal,
-        archiveLimits: { bytes: this.#limits.expandedBytes, entries: this.#limits.entries },
+        archiveLimits: { bytes: this.#limits.expandedBytes, entries: this.#limits.entries, temporaryDirectory: await record.directory },
         outboundLimits: { messages: 32, bytes: 1024 * 1024, onOverflow: () => controller.abort(new Error("Archive response exceeded its delivery limit")) },
       });
       const rid = `archive-${record.info.id}`;
@@ -291,7 +324,7 @@ export class ArchiveTransfers {
 
   async close(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled([...this.#records.values()].map((record) => this.#remove(record)));
+    await Promise.allSettled([...this.#records.values()].map((record) => this.#remove(record, this.recovery !== undefined)));
     await Promise.allSettled(this.#cleanup);
   }
 }

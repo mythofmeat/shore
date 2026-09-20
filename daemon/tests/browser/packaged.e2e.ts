@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve as absolutePath } from "node:path";
@@ -40,18 +40,27 @@ test("the compiled executable serves a real browser from an empty directory and 
       const origin = `http://127.0.0.1:${String(web)}`;
       const config = join(root, `config-${String(enabled)}.toml`);
       await writeFile(config, `[daemon.web]\nenabled = ${String(enabled)}\nbind_addr = "127.0.0.1:${String(web)}"\n`);
-      const child = spawn(binary, ["--config", config, "--addr", `127.0.0.1:${String(tcp)}`], { cwd: workingDirectory, env: {
-        HOME: root, XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"), SHORE_TOKEN: "packaged-test-token",
-      }, stdio: ["ignore", "ignore", "pipe"] });
-      let errors = "";
-      child.stderr.on("data", (chunk: Buffer) => { errors = (errors + chunk.toString()).slice(-4000); });
-      const stopped = new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
-      void stopped.catch(() => {});
+      const launch = () => {
+        const child = spawn(binary, ["--config", config, "--addr", `127.0.0.1:${String(tcp)}`], { cwd: workingDirectory, env: {
+          HOME: root, XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"), SHORE_TOKEN: "packaged-test-token",
+        }, stdio: ["ignore", "ignore", "pipe"] });
+        let errors = "";
+        child.stderr.on("data", (chunk: Buffer) => { errors = (errors + chunk.toString()).slice(-4000); });
+        const stopped = new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
+        void stopped.catch(() => {});
+        return async () => {
+          child.kill("SIGTERM");
+          const deadline = setTimeout(() => { child.kill("SIGKILL"); }, 10_000);
+          try { expect(await stopped, errors).toBe(0); } finally { clearTimeout(deadline); }
+        };
+      };
+      let stop = launch();
       try {
         await expect.poll(() => tcpReady(tcp), { message: "Packaged TCP handshake must work", timeout: 10_000 }).toBe(true);
         if (!enabled) {
           const reachable = await fetch(origin).then(() => true, () => false);
           expect(reachable).toBe(false);
+          expect(await access(join(root, "cache", "shore", "web")).then(() => true, () => false)).toBe(false);
           continue;
         }
         const context = await browser.newContext();
@@ -98,13 +107,15 @@ test("the compiled executable serves a real browser from an empty directory and 
           await dialog.getByRole("button", { name: "Close dialog" }).click();
           await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "P packaged" }).click();
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
+          await stop(); stop = launch();
+          await expect.poll(() => tcpReady(tcp), { message: "Packaged daemon must restart", timeout: 10_000 }).toBe(true);
+          await page.reload();
+          await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
+          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await expect(dialog.getByText("Import completed for packaged. Temporary upload removed.", { exact: true })).toBeVisible();
           expect(pageErrors).toEqual([]);
         } finally { await context.close(); }
-      } finally {
-        child.kill("SIGTERM");
-        const deadline = setTimeout(() => { child.kill("SIGKILL"); }, 10_000);
-        try { expect(await stopped, errors).toBe(0); } finally { clearTimeout(deadline); }
-      }
+      } finally { await stop(); }
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

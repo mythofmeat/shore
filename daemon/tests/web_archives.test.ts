@@ -98,6 +98,7 @@ test("uploads belong to the sign-in, use private controlled paths and import onc
   expect(await readFile(args.archive, "utf8")).toBe("exact uploaded bytes");
   expect((await stat(args.archive)).mode & 0o777).toBe(0o600);
   expect((await stat(dirname(args.archive))).mode & 0o777).toBe(0o700);
+  expect(route.meta.session.archiveLimits?.temporaryDirectory).toBe(dirname(args.archive));
   expect(route.meta).toMatchObject({ kind: "command", rid: `archive-${info.id}`, session: { clientType: "web", archiveLimits: { bytes: 256 * 1024 * 1024, entries: 20_000 } } });
   await f.finish(route);
   await until(() => f.transfers.get(a.session, info.id).phase === "imported" && f.transfers.activePeers === 0);

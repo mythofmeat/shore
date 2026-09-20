@@ -135,9 +135,9 @@ test("archive-only previews obey shared confirmation rules", async ({ page }) =>
   await memory.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
-  await settings.getByLabel("Find a setting").fill("memory.compaction.write_memory");
-  await settings.getByRole("button").filter({ has: page.locator("span", { hasText: /^memory\.compaction\.write_memory$/ }) }).click();
-  const setting = settings.getByRole("region", { name: "Setting memory.compaction.write_memory", exact: true });
+  await settings.getByLabel("Find a setting").fill("compaction.write_memory");
+  await settings.getByRole("button").filter({ has: page.locator("span", { hasText: /^compaction\.write_memory$/ }) }).click();
+  const setting = settings.getByRole("region", { name: "Setting compaction.write_memory", exact: true });
   await setting.getByLabel("Value", { exact: true }).uncheck();
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");

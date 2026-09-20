@@ -1,6 +1,6 @@
 # Optional browser client — implementation record
 
-Implementation is paused at the user's request. See [the handover and resume prompt](WEB_GUI_HANDOVER.md)
+Implementation resumed on 2026-09-20. See [the handover and resume prompt](WEB_GUI_HANDOVER.md)
 for the current checkpoint, verified results, remaining work and the next task.
 
 Full scope: [issue #214](https://github.com/mythofmeat/shore/issues/214). Completion means a usable
@@ -722,7 +722,7 @@ Remaining work follows the issue's sequence:
 3. Extend the initial workspace with the remaining dedicated screens,
    richer message formatting, complete media/draft persistence, and all local presentation workflows.
 4. Close the remaining advanced workflows: expanded diagnostics coverage, large usage exports,
-   expanded memory recovery and cancellation, archive restart recovery, keyboard customization and every known event.
+   expanded memory recovery and cancellation, keyboard customization and every known event.
 5. TCP/WebSocket deterministic conformance and real CLI/TUI/browser journeys: state/results/errors,
    confirmations, advanced options, empty state, failures, reconnect/restart, concurrency, media and
    cancellation. Demonstrate deliberate omission failures for operations, fields, renderers/events.
@@ -732,3 +732,50 @@ Remaining work follows the issue's sequence:
 7. Run all required verification plus browser, generation, security and parity gates in PR CI.
    Coordinate repository merge-policy changes separately, as requested by the issue. No merge-policy
    change has been made or assumed. Full completion requires evidence for every acceptance criterion.
+
+### Archive restart recovery, 2026-09-20
+
+The continuation started at `bd419249`. Toolchains and dependencies were refreshed before diagnosis:
+Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0 and actionlint
+1.7.12 were current; sccache was updated to 0.18.0 using the checksum-verified upstream release binary.
+Both package managers found no manifest/lock changes. Baselines passed 58 daemon tests, typechecking,
+and 520 shore-common tests. Actual browser/process reproductions then demonstrated loss of confirmed
+import outcomes on restart and orphan uploads after SIGKILL following a committed import.
+
+Web serving now opens a separate private recovery database while holding the daemon's existing data
+directory lease. Its cache namespace includes the canonical data-directory hash; it is outside all
+character data/cache/export paths. Session credentials are hashed, original session/transfer expiry
+is preserved, and origin or daemon-token changes invalidate old recovery state. Logout deletes the
+session and its outcomes durably. Disabled web serving does not open this store.
+
+The store uses Bun's installed SQLite transaction API and rollback journaling with
+[`synchronous = EXTRA`](https://www.sqlite.org/pragma.html#pragma_synchronous), including directory
+synchronization after journal removal. The import state is saved before shared session dispatch.
+Confirmed outcomes survive restart; an unfinished import becomes uncertain and cannot be retried with
+the same handle. Recovery never infers success merely from a character name. Temporary uploads,
+exports, database snapshots and extraction files are confined to the owned artifact directory and
+cleaned at restart. Uploads/exports that lost their bytes explicitly ask the user to prepare them
+again. Cache removal discards sign-ins and outcomes; legacy unowned temporary files are not swept
+globally. Session and artifact limits remain enforced, with a 64 MiB recovery database page ceiling.
+
+The new process fixture stops delivery after the actual import handler returns, proving recovery of
+a committed but unconfirmed mutation. Browser journeys exercise normal shutdown, SIGKILL, automatic
+reconnect, page reload, visible imported/uncertain outcomes, orphan cleanup and no replay. Focused
+tests cover ownership, credential secrecy, expiry, logout, token/origin changes, separate data roots,
+symlink boundaries, startup failure cleanup and failed persistence before dispatch. Archive export
+checks exclude the recovery database and bearer credentials.
+
+The full browser run also exposed stale test setup left by the earlier configuration/tool migration.
+Browser fixtures now use canonical settings and model identities, current provider discovery options,
+and the Bash tool for file operations. The diagnostics journey no longer selects the removed
+`memory_recall` source (the canonical transcript contract only supports heartbeat). The tool journey
+still verifies reviewed file changes, rejected arguments, overrides, untruncated downloads, nested
+subagent calls and structured MCP fields. All 15 browser journeys passed together after these repairs.
+
+Checkpoint verification: all eight required daemon checks passed; the full Bun suite reported
+7,789 tests across 273 files, and all three independently re-derived captures were unchanged.
+The Rust workspace suite reported 1,486 passing tests and 15 ignored, with formatting and Clippy
+passing (existing warnings remain). All 15 Playwright journeys passed, including compiled-binary
+restart recovery. Browser-generation and capability-inventory checks passed. Recovery/archive
+mutation passes killed 35/35 mutants; all 63 staleness passes were current. Local logs are under
+`out/issue-214/resume-2026-09-20/`; they do not establish GitHub CI or required merge gates.

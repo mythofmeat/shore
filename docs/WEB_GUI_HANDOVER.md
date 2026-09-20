@@ -1,26 +1,25 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-13. **Implementation is paused at the user's request.** This file does not itself
-authorize resuming work.
+Updated 2026-09-20. The user resumed implementation. Full issue completion remains outstanding.
 
 ## Checkpoint and estimate
 
 - Objective: <https://github.com/mythofmeat/shore/issues/214>, including full CLI/TUI capability parity
   and enforced CI gates. A working chat UI or registration of named commands does not complete it.
 - Branch: `feat/web-ui`.
-- Worktree: `/home/eshen/dev/shore/.worktree/feat/web-ui`.
-- Last implementation commit: `ac0141fa` — `feat(web): add controlled character archive transfers`.
-- Implementation was committed and the tree was clean at the pause. No restart-recovery code or
-  restart-specific reproduction has been written. Only dependency refresh and baselines followed.
+- Worktree: `/home/eshen/dev/shore-feat-web-ui`.
+- Starting revision for this continuation: `bd419249` — configuration compatibility fixes after the
+  archive-transfer checkpoint (`ca557d5b` in this checkout). This continuation adds archive restart
+  recovery; see the implementation record and current Git history for its verified commit.
 - The user wants verified commits as work progresses, with dependency updates kept separate.
-- GitHub checked on 2026-09-13: issue open, no comments, last update 2026-09-10T11:56:15Z.
+- GitHub checked on 2026-09-20: issue open, no comments, and no PR for `feat/web-ui`.
   No progress comment, acceptance-checkbox update, or merge-policy change has been published.
 
-The user reports approximately eight hours of work so far. Budget **another 6–10 hours of active
+The user reports approximately eight hours of work so far. Budget **another 5–9 hours of active
 work**, plus external CI/merge-policy waiting, as a rough planning range rather than a commitment.
 The earlier “two-thirds complete” estimate was not measured and was too optimistic as a time
 forecast. Allow roughly 2–3 hours for recovery/cancellation, 2–4 for capability gaps, and 2–3 for
-release/security checks and CI. Reassess from a concrete gap audit on resumption; hidden parity gaps
+release/security checks and CI. Reassess from the remaining concrete gap audit; hidden parity gaps
 or failing CI could extend this estimate.
 
 ## Implemented and verified
@@ -52,12 +51,20 @@ Local logs under `out/issue-214/` are useful evidence but are ignored and are no
 `transfer-generation-final.log`, `transfer-mutations-final.log`, `transfer-mutations.log`,
 `bun_test.log`, `bun_run_rerecord_check.log`, and the `cargo_*` logs.
 
+Current continuation verification: all eight required daemon checks and all three Rust workspace
+checks passed. The Bun suite passed 7,789 tests across 273 files; Rust passed 1,486 tests with 15
+ignored. All 15 Playwright journeys passed, including compiled-binary restart recovery. Browser
+and inventory generation checks passed, independent captures were unchanged, recovery/archive
+mutation passes killed 35/35 mutants, and all 63 staleness passes were current. Full browser checks
+also required repairing stale configuration/model/tool fixtures left by the earlier migration.
+Logs are in `out/issue-214/resume-2026-09-20/`. Existing Clippy and ts-rs warnings remain.
+
 ## Remaining workstreams
 
 These overlap and are not equal-sized tickets.
 
-1. **Recovery and cancellation:** daemon-restart archive outcomes and crash-orphan cleanup; visible
-   reconciliation of uncertain mutations; responsive advanced-operation cancellation; durable
+1. **Recovery and cancellation:** archive restart recovery is implemented in this continuation. Finish
+   visible reconciliation of other uncertain mutations; responsive advanced-operation cancellation; durable
    drafts/attachments and media recovery. Verify revision gaps, stale/duplicate events, thread
    switches during streams, multiple tabs, and terminal/browser concurrency against actual outcomes.
 2. **Exhaustive capability coverage:** audit real CLI/TUI variants, options, special runners, core
@@ -75,41 +82,38 @@ These overlap and are not equal-sized tickets.
    issue requests. Audit every acceptance criterion with evidence of the appropriate scope before
    declaring completion. No required merge gate has been changed or assumed.
 
-## Next task: archive restart recovery
+## Archive restart recovery checkpoint
 
-Start with `daemon/src/web/archives.ts`, `auth.ts`, `server.ts`,
-`daemon/src/browser/archives.tsx`, and canonical payloads in
-`client/shore-common/src/protocol/web.rs`. Existing tests are
-`daemon/tests/web_archives.test.ts`, `daemon/tests/browser/transfers.e2e.ts`, and
-`daemon/tests/browser/packaged.e2e.ts`.
+Actual browser/process reproductions first showed that a normal restart lost a confirmed import and
+that SIGKILL after the shared import handler committed left an orphan upload. Both now have regression
+journeys in `daemon/tests/browser/archive_restart.e2e.ts`; the crash fixture holds delivery of the
+actual import result rather than substituting a successful implementation.
 
-Both authentication sessions and transfer records currently live in memory. Artifacts use private
-`shore-web-archive-*` temporary directories. Reload/WebSocket reconnect within one daemon process
-is covered; process restart loses records and a hard crash bypasses cleanup. An import may commit
-before completion is observed. Restart must not turn that uncertainty into a safe-to-retry failure.
+`daemon/src/web/recovery.ts` stores hashed session credentials and archive metadata in a private SQLite
+database under `cache/web/<hash-of-canonical-data-directory>/`. The main character database and its
+exports contain no recovery tables. Startup already holds the data-directory lease. Recovery is only
+opened when web serving is enabled. The database binds to the origin and daemon token; changing either
+invalidates old sessions and transfers. Logout is durable; restart never extends the original expiry.
 
-Before the pause, a fresh toolchain/dependency refresh found no changes. Baselines passed **58 daemon
-tests** across transfers/transport/workspace, daemon typechecking, and `cargo test -p shore-common`.
-Write and run the actual restart/crash reproduction before implementation. No recovery design was
-selected: durable sessions versus separate recovery credentials were only considered.
+An import is durably marked `importing` before dispatch. Recovery preserves confirmed outcomes and
+converts unfinished imports to `uncertain`, without replay. Temporary uploads, downloads, snapshots
+and extraction directories live under the owned recovery directory and are removed on restart.
+Incomplete uploads/exports become explicit failures that can be prepared again. This design preserves
+outcomes, not temporary archive bytes. Clearing/changing the cache also clears sign-ins and outcomes.
+Legacy unowned `/tmp/shore-web-archive-*` directories from older versions cannot be safely attributed
+to this daemon and are not swept globally.
 
-Useful investigation findings to validate when resuming:
+Read `daemon/tests/web_recovery.test.ts`, the archive tests, the two process/browser journeys, and
+`daemon/scripts/mutate_web_recovery.py` for ownership, expiry, rotation, private storage, orphan cleanup,
+staging and dispatch-order evidence. The browser still directs users to inspect characters/history
+for an uncertain import; it does not claim a transactionally proven outcome from character existence.
 
-- The daemon already acquires a data-directory lease before starting web serving. See
-  `daemon/src/daemon/run.ts` and `daemon/src/daemon/data_directory_lease.ts`.
-- `startWebServer` receives an authentication predicate; daemon startup has the underlying token.
-  Durable authentication would need explicit treatment of token rotation, logout, expiry, origins,
-  cookie ownership and credential storage. Preserve session isolation.
-- Character names allow dots and many other characters. Character data lies directly under the
-  data root; character cache lies under `cache/characters/`. Recovery state must not collide with a
-  character's paths or be deleted/exported as character data.
-- Character export snapshots the main `shore.db` before filtering. Private web/session records must
-  not accidentally enter character archives.
-- Matching installed SQLite documentation is in
-  `daemon/node_modules/bun-types/docs/runtime/sqlite.mdx`. Existing storage uses transactions and
-  `synchronous = FULL`. The `engine/atomic.ts` rename helpers do not fsync writes.
-- Keep disabled-web behavior free of web-specific runtime work. Reuse shared handlers and session
-  semantics. Preserve original ownership/expiry and distinguish confirmed from uncertain outcomes.
+## Next work
+
+Continue responsive advanced-operation cancellation and the broader recovery audit: uncertain ordinary
+mutations across reload/restart, drafts plus attachments, media recovery, and real concurrent-client
+outcomes. Then close the capability/event/local-preference inventory and package/CI gaps listed above.
+Do not treat the restart checkpoint as full parity or as proof of GitHub CI/required merge gates.
 
 Current archive limits: 64 MiB compressed per artifact, 256 MiB aggregate reserved artifact bytes,
 four records per sign-in, 32 overall, 15-minute expiry, one bounded worker, five-minute operation
@@ -124,9 +128,11 @@ Cargo tooling and both dependency sets, including major versions. In `daemon/`, 
 `cargo update`. Establish the updated baseline and reproduce the target failure before fixing it.
 Inspect installed upstream implementations and matching documentation before adding workarounds.
 
-At the pause: Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0,
-sccache 0.17.0. Rustup is package-managed with self-update disabled; its installed version was
-current. Rust checks bypassed the unavailable sccache service using `RUSTC_WRAPPER=`. Do not
+At this continuation: Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13,
+cargo-sweep 0.8.0, sccache 0.18.0, actionlint 1.7.12. Both dependency update commands found no changes.
+The sccache update used the checksum-verified upstream binary in `/tmp/shore-214-tools/bin/`.
+Rustup is package-managed with self-update disabled; its installed version was current.
+Rust checks bypassed the unavailable sccache service using `RUSTC_WRAPPER=`. Do not
 repeatedly reinstall an already-current sccache: a redundant rebuild previously hit disk quota.
 
 Previous local runs used these conveniences; re-establish them if the temporary paths disappear:
@@ -160,11 +166,12 @@ appropriate updates and commits are already authorized by the user's instruction
 ## Copyable resume prompt
 
 > Resume https://github.com/mythofmeat/shore/issues/214 on `feat/web-ui` in
-> `/home/eshen/dev/shore/.worktree/feat/web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
-> `docs/WEB_GUI.md`, and the current GitHub issue. The last implementation checkpoint is `ac0141fa`.
+> `/home/eshen/dev/shore-feat-web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
+> `docs/WEB_GUI.md`, and the current GitHub issue. Read the latest archive restart recovery checkpoint above.
 > Keep the full issue scope intact and make verified commits as you go, separating dependency
-> upgrades. Start by reproducing archive outcome loss and orphan cleanup after daemon restart/crash;
-> no recovery implementation has been started. Preserve session ownership, authentication security,
+> upgrades. Continue advanced cancellation and the remaining recovery/parity audit.
+> Archive restart recovery has been implemented and reproduced through actual process/browser journeys.
+> Preserve session ownership, authentication security,
 > shared dispatch and uncertain-mutation semantics. Continue through the remaining parity, recovery,
 > release/security and CI checklist. Do not treat the 56 named registrations or existing green tests
 > as proof of full parity. Coordinate merge-policy changes separately. Report concrete progress and

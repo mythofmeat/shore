@@ -21,7 +21,7 @@ MUTANTS = [
     ("chunked uploads evade their byte limit", A,
      'if (bytes > this.#limits.uploadBytes)', 'if (false)'),
     ("uploads reserve no disk capacity", A,
-     'reserved: this.#limits.uploadBytes,', 'reserved: 0,'),
+     'this.#record(owner, info, directory, this.#limits.uploadBytes)', 'this.#record(owner, info, directory, 0)'),
     ("archive workers have no concurrency bound", A,
      'this.#commands >= 1 || !this.canAttach()', '!this.canAttach()'),
     ("timeouts become confirmed failures instead of uncertain imports", A,

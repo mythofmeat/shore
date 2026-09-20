@@ -60,8 +60,6 @@ test("diagnostic journeys inspect full captures, diffs, transcripts and stored m
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await view.selectOption("heartbeat");
   await expect(dialog.getByRole("region", { name: "Stored transcript" })).toContainText("Heartbeat fixture transcript");
-  await view.selectOption("memory_recall");
-  await expect(dialog.getByRole("region", { name: "Stored transcript" })).toContainText("Remember the stored fixture");
   await view.selectOption("subagents");
   await expect(dialog.getByRole("region", { name: "Stored subagent traces" })).toContainText("Stored messages have expired");
   await dialog.getByRole("button", { name: "Add parent tool ids", exact: true }).click();

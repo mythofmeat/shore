@@ -172,6 +172,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         config: loaded.app.daemon.web,
         server,
         authenticate: (presented) => tokenMatches(startup.token.token, presented),
+        recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },
       });
     }
   } catch (error) {

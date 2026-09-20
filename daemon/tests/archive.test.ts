@@ -4,7 +4,7 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Header } from "tar";
@@ -22,6 +22,31 @@ afterEach(async () => {
 });
 
 describe("character archives", () => {
+  test("browser archive snapshots and extraction remain inside the owned transfer directory", async () => {
+    const source = await root("owned-staging"); await seedCharacter(source, "ada", "archive history");
+    const temporaryDirectory = join(source.runtime, "owned-transfer"); await mkdir(temporaryDirectory);
+    const limits = { bytes: 1024 * 1024, entries: 100, temporaryDirectory };
+    const output = join(temporaryDirectory, "archive.tar.gz");
+    let snapshot = false;
+    await exportCharacter({ ...context(source, new Set(["ada"])), limits, withSnapshot: async (run) => {
+      const result = await run();
+      const directory = (await readdir(temporaryDirectory)).find((name) => name.startsWith("shore-export-"));
+      expect(directory).toBeDefined();
+      expect(await access(join(temporaryDirectory, directory ?? "", "shore.db")).then(() => true, () => false)).toBe(true);
+      snapshot = true; return result;
+    } }, { character: "ada", output });
+    expect(snapshot).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar.gz"]);
+    const target = await root("owned-extraction");
+    let extracted = false;
+    await importCharacter({ ...context(target, new Set()), limits, withSnapshot: async (run) => {
+      const directory = (await readdir(temporaryDirectory)).find((name) => name.startsWith("shore-import-"));
+      expect(directory).toBeDefined();
+      expect(await access(join(temporaryDirectory, directory ?? "", "shore.db")).then(() => true, () => false)).toBe(true);
+      extracted = true; return await run();
+    } }, { archive: output });
+    expect(extracted).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar.gz"]);
+  });
+
   test.each(["../outside", "workspace/../../outside", "unexpected/file", "/absolute/path"])("unsafe archive path %s rejects asynchronously without installing a character", async (path) => {
     const target = await root("unsafe-path");
     const output = join(target.runtime, "unsafe.tar.gz");
