@@ -9,7 +9,6 @@ import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleWebSearch, type FetchLike, type SearchConfigView } from "./web.ts";
 import {
   handleSearch,
-  type MemoryFileLimits,
   type ToolInput,
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
@@ -35,7 +34,6 @@ export interface ToolContext {
   searchConfig: SearchConfigView;
   retrievalConfig: RetrievalConfig;
   retrievalMode: RetrievalMode;
-  memoryFileLimits?: MemoryFileLimits;
 
   imageGenConfig?: ImageGenConfigView;
   imageGenerator?: ImageGenerator;

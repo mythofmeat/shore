@@ -162,10 +162,10 @@ MUTANTS = [
      '    call_type: optText(row["call_type"]),\n    character: optText(row["character"]),',
      '    call_type: optText(row["character"]),\n    character: optText(row["call_type"]),'),
     ("summary: the two blob sizes are swapped",
-     '    request_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),\n'
-     '    response_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),',
-     '    request_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),\n'
-     '    response_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),'),
+     '    request_bytes: count(row["request_size"]),\n'
+     '    response_bytes: count(row["response_size"]),',
+     '    request_bytes: count(row["response_size"]),\n'
+     '    response_bytes: count(row["request_size"]),'),
     ("summary: an absent duration reads as 0 rather than null",
      '    duration_ms: optCount(row["duration_ms"]),\n    error: optText(row["error"]),',
      '    duration_ms: count(row["duration_ms"]),\n    error: optText(row["error"]),'),
@@ -178,12 +178,12 @@ MUTANTS = [
      '    duration_ms: optCount(row["duration_ms"]),\n    error: optText(row["error"]),',
      '    duration_ms: optCount(row["duration_ms"]),\n    error: text(row["error"]),'),
     ("payload: the two http bodies are swapped",
-     '      request_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),\n'
+     '      request_body: this.#bodyText(row["request_payload_id"]),\n'
      '      response_headers: headersFrom(row["response_headers_zstd"]),\n'
-     '      response_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),',
-     '      request_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),\n'
+     '      response_body: this.#bodyText(row["response_payload_id"]),',
+     '      request_body: this.#bodyText(row["response_payload_id"]),\n'
      '      response_headers: headersFrom(row["response_headers_zstd"]),\n'
-     '      response_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),'),
+     '      response_body: this.#bodyText(row["request_payload_id"]),'),
     ("transcript: the iteration reports the row id",
      '      iteration: count(row["iteration"]),',
      '      iteration: count(row["id"]),'),
@@ -285,35 +285,15 @@ MUTANTS = [
      "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
      "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix ASC, id ASC LIMIT 1)"),
     ("rotate: the running total counts only the request blob",
-     '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)\n'
-     "                          + COALESCE(response_stored, LENGTH(response_zstd), 0)\n"
+     '                      SUM(COALESCE(request_stored, 0)\n'
+     "                          + COALESCE(response_stored, 0)\n"
      "                          + COALESCE(wire.bytes, 0))",
-     '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0))'),
+     '                      SUM(COALESCE(request_stored, 0))'),
     ("rotate: the size backstop is skipped entirely",
      "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE id IN (",
      "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE 0 AND id IN ("),
 
     # --- schema and migration -------------------------------------------------
-    ("migrate: an old DB never gains capture_transcripts.character",
-     '  if (!columnExists(db, "capture_transcripts", "character")) {',
-     "  if (false) {"),
-    ("migrate: the migration runs on every open",
-     '  if (!columnExists(db, "capture_transcripts", "character")) {',
-     "  if (true) {"),
-    ("migrate: the stale index is left in place, so adding the column fails",
-     "      `DROP INDEX IF EXISTS idx_capture_transcripts_source;\n"
-     "       ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,",
-     "      `ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,"),
-    ("migrate: the column check reads the wrong table",
-     '  if (!columnExists(db, "capture_transcripts", "character")) {',
-     '  if (!columnExists(db, "capture_calls", "character")) {'),
-    ("schema: the covering index is built before the migration that adds its column",
-     "    db.run(SCHEMA);\n    migrate(db);\n    db.run(\n"
-     "      `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source\n"
-     "           ON capture_transcripts (source, character, ts_unix);`,\n    );",
-     "    db.run(SCHEMA);\n    db.run(\n"
-     "      `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source\n"
-     "           ON capture_transcripts (source, character, ts_unix);`,\n    );\n    migrate(db);"),
     ("schema: a fresh DB has no character column",
      "    source            TEXT NOT NULL,\n    character         TEXT,\n    call_type         TEXT,",
      "    source            TEXT NOT NULL,\n    call_type         TEXT,"),

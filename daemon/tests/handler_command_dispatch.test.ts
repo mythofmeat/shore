@@ -158,7 +158,7 @@ describe("restartRequiredChanges", () => {
     restartRequiredChanges(config(), config(mutate));
 
   test("a config that only moved live-reloadable settings needs no restart", () => {
-    expect(changes((c) => (c.app.defaults.stream = !c.app.defaults.stream))).toEqual([]);
+    expect(changes((c) => (c.app.memory.compaction.enabled = !c.app.memory.compaction.enabled))).toEqual([]);
     expect(restartRequiredChanges(config(), config())).toEqual([]);
   });
 
@@ -206,7 +206,7 @@ describe("restartRequiredChanges", () => {
     ]) {
       expect(requiresRestart(key), key).toBe(true);
     }
-    for (const key of ["cache", "cache.keepalive_max", "defaults.stream", "daemonish"]) {
+    for (const key of ["cache", "cache.keepalive_max", "compaction.enabled", "daemonish"]) {
       expect(requiresRestart(key), key).toBe(false);
     }
   });
@@ -278,12 +278,12 @@ describe("a chat model change", () => {
 });
 
 describe("a runtime config set", () => {
-  const SET = { set: "defaults.stream", value: false };
+  const SET = { set: "compaction.enabled", value: false };
 
   test("publishes the merged config and invalidates the client's copy", async () => {
-    const f = fakes({ config: config((c) => (c.app.defaults.stream = false)) });
+    const f = fakes({ config: config((c) => (c.app.memory.compaction.enabled = false)) });
 
-    const out = await afterCommand("config", { key: "defaults.stream", value: "false" }, SET, f.ctx);
+    const out = await afterCommand("config", { key: "compaction.enabled", value: "false" }, SET, f.ctx);
 
     expect(out).toEqual({ ...SET, invalidated: { merged_character_configs: true } });
     expect(f.log.effective).toEqual([{ character: CHARACTER, config: f.ctx.config }]);
@@ -348,7 +348,7 @@ describe("a config_reload", () => {
 
   test("the apply phase adopts the command's config and invalidates all three", async () => {
     const f = fakes({
-      config: config((c) => (c.app.defaults.stream = false)),
+      config: config((c) => (c.app.memory.compaction.enabled = false)),
       summary: { characterDiscoveryChanged: true, droppedEngines: 1 },
     });
 

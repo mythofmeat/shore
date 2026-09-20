@@ -123,7 +123,7 @@ function historyPagePayload(
 
   embedMessagesImageData(page.slice(activePageStart));
   shoreLog.debug(
-    `shore: history page for ${character} (${history.metrics.storage_native ? "durable" : "fallback"}; ` +
+    `shore: history page for ${character} (durable; ` +
       `segments=${String(history.metrics.segments_read)}, rows=${String(history.metrics.rows_read)}, ` +
       `decoded_bytes=${String(history.metrics.decoded_body_bytes)}, ` +
       `page_bytes=${String(history.metrics.page_bytes)})`,

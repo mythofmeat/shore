@@ -11,7 +11,7 @@
       }
     },
     {
-      "note": "nothing but an unanswered autonomous run — already archived once",
+      "note": "nothing but an unanswered autonomous run \u2014 already archived once",
       "input": [
         {
           "role": "assistant",
@@ -35,7 +35,7 @@
       }
     },
     {
-      "note": "every user turn covered — the cheap arm",
+      "note": "every user turn covered \u2014 the cheap arm",
       "input": [
         {
           "role": "user",
@@ -113,7 +113,7 @@
       }
     },
     {
-      "note": "uncovered turns — the conversation never reached min_turns",
+      "note": "uncovered turns \u2014 the conversation never reached min_turns",
       "input": [
         {
           "role": "user",
@@ -152,7 +152,7 @@
       }
     },
     {
-      "note": "covered count above the on-disk count — still the LLM arm",
+      "note": "covered count above the on-disk count \u2014 still the LLM arm",
       "input": [
         {
           "role": "user",
@@ -388,7 +388,7 @@
   ],
   "pure_archive": [
     {
-      "note": "an ordinary covered conversation — everything goes",
+      "note": "an ordinary covered conversation \u2014 everything goes",
       "input": [
         {
           "role": "user",
@@ -428,19 +428,6 @@
         "archivable": 4
       },
       "active_after": "",
-      "segments_after": {
-        "0001.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"and another\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"and another\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"sure\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sure\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
-      },
-      "manifest_after": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 4,
-            "compacted_at": "<stamp>"
-          }
-        ],
-        "total_compacted_messages": 4
-      },
       "new_conversation_id_is_fresh": true,
       "notification": {
         "title": "Shore - ada",
@@ -488,19 +475,6 @@
         "archivable": 2
       },
       "active_after": "{\"msg_id\":\"m_3\",\"role\":\"assistant\",\"content\":\"thinking of you\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"thinking of you\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"still here\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"still here\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n",
-      "segments_after": {
-        "0001.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
-      },
-      "manifest_after": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 2,
-            "compacted_at": "<stamp>"
-          }
-        ],
-        "total_compacted_messages": 2
-      },
       "new_conversation_id_is_fresh": true,
       "notification": {
         "title": "Shore - ada",
@@ -534,25 +508,6 @@
         "archivable": 2
       },
       "active_after": "",
-      "segments_after": {
-        "0001.jsonl": "{}\n",
-        "0002.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello again\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello again\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"welcome back\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"welcome back\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
-      },
-      "manifest_after": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 4,
-            "compacted_at": "<stamp>"
-          },
-          {
-            "file": "0002.jsonl",
-            "message_count": 2,
-            "compacted_at": "<stamp>"
-          }
-        ],
-        "total_compacted_messages": 6
-      },
       "new_conversation_id_is_fresh": true,
       "notification": {
         "title": "Shore - ada",

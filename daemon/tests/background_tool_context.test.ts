@@ -69,7 +69,6 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
   app.tools.enabled_tools = ["bash", ARCHIVE_TOOL.name];
   app.tools.enabled_subagents = ["research"];
   app.behavior.autonomy.enabled = true;
-  app.behavior.autonomy.heartbeat.enabled = true;
   app.subagents.set("research", {
     description: "Consult a researcher", tools: ["bash"], model: undefined,
     max_iterations: undefined, timeout: undefined,

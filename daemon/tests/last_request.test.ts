@@ -1,3 +1,5 @@
+import { HistoryStore } from "../src/engine/history_store.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -79,27 +81,15 @@ async function world(
   await writeFile(join(workspace, "MEMORY.md"), "- nothing yet\n");
   const charDir = join(dirs.data, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(charDir, "threads", "main", "active.jsonl"),
-    messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
-  );
+  writeDurable(join(charDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"));
 
-  const [files, listed] = segments;
-  if (files > 0) {
-    await mkdir(join(charDir, "threads", "main", "segments"), { recursive: true });
-    const entries = [];
-    for (let n = 1; n <= files; n += 1) {
-      const file = `${String(n).padStart(4, "0")}.jsonl`;
-      await writeFile(join(charDir, "threads", "main", "segments", file), "");
-      if (n <= listed) {
-        entries.push({ file, message_count: 4, compacted_at: "2025-12-01T09:00:00-05:00" });
-      }
+  const [, listed] = segments;
+  const history = HistoryStore.open(join(dirs.data, "shore.db"));
+  try {
+    for (let index = 0; index < listed; index += 1) {
+      history.putSegment("ada", index, { file: "shore.db", message_count: 0, compacted_at: "2025-12-01T09:00:00-05:00" }, []);
     }
-    await writeFile(
-      join(charDir, "threads", "main", "compaction.json"),
-      JSON.stringify({ segments: entries, total_compacted_messages: listed * 4 }, null, 2),
-    );
-  }
+  } finally { history.close(); }
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
@@ -263,12 +253,9 @@ describe("rebuildRequestFromDisk", () => {
     const { config, dataDir } = await world(conversation("home", "a turn in the home thread"));
     const now = "2026-09-03T12:00:00.000Z";
     await createThread(dataDir, "ada", "scratch", now);
-    await writeFile(
-      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
-      `${conversation("scratch", "a turn in the side thread")
+    writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${conversation("scratch", "a turn in the side thread")
         .map((m) => JSON.stringify(m))
-        .join("\n")}\n`,
-    );
+        .join("\n")}\n`);
 
     const beforeMove = await rebuildRequestFromDisk("ada", dataDir, config);
     expect(JSON.stringify(beforeMove?.request.messages)).not.toContain("side thread");
@@ -314,11 +301,8 @@ describe("rebuildRequestFromDisk", () => {
     } as never);
     const now = "2026-09-03T12:00:00.000Z";
     await createThread(dataDir, "ada", "scratch", now, { chat_model: "chat.other" });
-    await writeFile(
-      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
-      `${JSON.stringify(turn("user", "m_su", "a turn in the side thread"))}\n` +
-        `${JSON.stringify(turn("assistant", "m_sa", "noted"))}\n`,
-    );
+    writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${JSON.stringify(turn("user", "m_su", "a turn in the side thread"))}\n` +
+        `${JSON.stringify(turn("assistant", "m_sa", "noted"))}\n`);
 
     expect((await rebuildRequestFromDisk("ada", dataDir, config))?.request.model).toBe(
       "claude-fixture",
@@ -545,10 +529,7 @@ describe("LastRequestCache", () => {
     const { config, dataDir } = await world(pair("home"));
     const now = "2026-09-03T12:00:00.000Z";
     await createThread(dataDir, "ada", "scratch", now);
-    await writeFile(
-      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
-      `${pair("scratch").map((m) => JSON.stringify(m)).join("\n")}\n`,
-    );
+    writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${pair("scratch").map((m) => JSON.stringify(m)).join("\n")}\n`);
 
     await cache.reprimeFromDisk("ada", dataDir, config);
     expect(k.armed[0]?.context?.thread).toBe("main");
@@ -567,10 +548,7 @@ describe("LastRequestCache", () => {
     ];
     const { config, dataDir } = await world(pair("home", "a turn in the home thread"));
     await createThread(dataDir, "ada", "scratch", "2026-09-03T12:00:00.000Z");
-    await writeFile(
-      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
-      `${pair("scratch", "a turn in the side thread").map((m) => JSON.stringify(m)).join("\n")}\n`,
-    );
+    writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${pair("scratch", "a turn in the side thread").map((m) => JSON.stringify(m)).join("\n")}\n`);
 
     const decision = await cache.reprimeFromDisk("ada", dataDir, config, { thread: "scratch" });
 

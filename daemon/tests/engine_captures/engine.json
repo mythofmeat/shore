@@ -1,179 +1,9 @@
 {
-  "segment_reader": [
-    {
-      "name": "no manifest is an empty reader",
-      "manifest": null,
-      "segment_files": {},
-      "segment_count": 0,
-      "total_message_count": 0,
-      "reads": [
-        {
-          "index": 0,
-          "err": "message not found: segment index 0"
-        }
-      ]
-    },
-    {
-      "name": "the manifest total is authoritative, not the file contents",
-      "manifest": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 2,
-            "compacted_at": "2026-03-26T00:00:00Z"
-          },
-          {
-            "file": "0002.jsonl",
-            "message_count": 1,
-            "compacted_at": "2026-03-27T00:00:00Z"
-          }
-        ],
-        "total_compacted_messages": 99
-      },
-      "segment_files": {
-        "0001.jsonl": "{\"msg_id\":\"a1\",\"role\":\"user\",\"content\":\"first\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"first\"}],\"timestamp\":\"2026-01-01T00:00:00Z\"}\n{\"msg_id\":\"a2\",\"role\":\"assistant\",\"content\":\"second\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"second\"}],\"timestamp\":\"2026-01-01T00:00:01Z\"}\n",
-        "0002.jsonl": "{\"msg_id\":\"b1\",\"role\":\"user\",\"content\":\"third\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"third\"}],\"timestamp\":\"2026-01-02T00:00:00Z\"}\n"
-      },
-      "segment_count": 2,
-      "total_message_count": 99,
-      "reads": [
-        {
-          "index": 0,
-          "ok": [
-            {
-              "msg_id": "a1",
-              "role": "user",
-              "content": "first",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "first"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "second",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "second"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
-        {
-          "index": 1,
-          "ok": [
-            {
-              "msg_id": "b1",
-              "role": "user",
-              "content": "third",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "third"
-                }
-              ],
-              "timestamp": "2026-01-02T00:00:00Z"
-            }
-          ]
-        },
-        {
-          "index": 2,
-          "err": "message not found: segment index 2"
-        }
-      ]
-    },
-    {
-      "name": "blank lines skipped, messages normalized on read",
-      "manifest": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 2,
-            "compacted_at": "2026-03-26T00:00:00Z"
-          }
-        ],
-        "total_compacted_messages": 2
-      },
-      "segment_files": {
-        "0001.jsonl": "\n   \n{\"msg_id\":\"n1\",\"role\":\"assistant\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"derived\"}],\"timestamp\":\"2026-01-01T00:00:00Z\"}\n\t\n{\"msg_id\":\"n2\",\"role\":\"user\",\"content\":\"plain\",\"timestamp\":\"2026-01-01T00:00:01Z\"}\n\n"
-      },
-      "segment_count": 1,
-      "total_message_count": 2,
-      "reads": [
-        {
-          "index": 0,
-          "ok": [
-            {
-              "msg_id": "n1",
-              "role": "assistant",
-              "content": "derived",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "derived"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "n2",
-              "role": "user",
-              "content": "plain",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "plain"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:01Z"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "a manifest entry whose file is gone fails the read",
-      "manifest": {
-        "segments": [
-          {
-            "file": "missing.jsonl",
-            "message_count": 5,
-            "compacted_at": "2026-03-26T00:00:00Z"
-          }
-        ],
-        "total_compacted_messages": 5
-      },
-      "segment_files": {},
-      "segment_count": 1,
-      "total_message_count": 5,
-      "reads": [
-        {
-          "index": 0,
-          "err_kind": "io",
-          "err_contains": "missing.jsonl"
-        }
-      ]
-    }
-  ],
   "engine_walk": [
     {
       "name": "revision advances on every mutation; generation only on rewrites",
       "character": "Nova",
       "initial_active": null,
-      "manifest": null,
-      "segment_files": {},
       "steps": [
         {
           "op": {
@@ -449,7 +279,8 @@
             "active_start": 0
           }
         }
-      ]
+      ],
+      "segments": []
     },
     {
       "name": "display_history merges each half separately; snapshot is active-only",
@@ -469,19 +300,6 @@
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
-      "manifest": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 3,
-            "compacted_at": "2026-03-26T00:00:00Z"
-          }
-        ],
-        "total_compacted_messages": 3
-      },
-      "segment_files": {
-        "0001.jsonl": "{\"msg_id\":\"s1\",\"role\":\"user\",\"content\":\"archived question\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"archived question\"}],\"timestamp\":\"2025-12-01T00:00:00Z\"}\n{\"msg_id\":\"s2\",\"role\":\"assistant\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"read_file\",\"input\":{\"path\":\"/tmp/x\"}}],\"timestamp\":\"2025-12-01T00:00:01Z\"}\n{\"msg_id\":\"s3\",\"role\":\"user\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tu_1\",\"content\":\"file contents\",\"is_error\":false}],\"timestamp\":\"2025-12-01T00:00:02Z\"}\n"
-      },
       "steps": [
         {
           "op": {
@@ -557,14 +375,68 @@
             "active_start": 2
           }
         }
+      ],
+      "segments": [
+        {
+          "entry": {
+            "file": "shore.db",
+            "message_count": 3,
+            "compacted_at": "2026-03-26T00:00:00Z"
+          },
+          "messages": [
+            {
+              "msg_id": "s1",
+              "role": "user",
+              "content": "archived question",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "archived question"
+                }
+              ],
+              "timestamp": "2025-12-01T00:00:00Z"
+            },
+            {
+              "msg_id": "s2",
+              "role": "assistant",
+              "content": "",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "tool_use",
+                  "id": "tu_1",
+                  "name": "read_file",
+                  "input": {
+                    "path": "/tmp/x"
+                  }
+                }
+              ],
+              "timestamp": "2025-12-01T00:00:01Z"
+            },
+            {
+              "msg_id": "s3",
+              "role": "user",
+              "content": "",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "tu_1",
+                  "content": "file contents",
+                  "is_error": false
+                }
+              ],
+              "timestamp": "2025-12-01T00:00:02Z"
+            }
+          ]
+        }
       ]
     },
     {
       "name": "snapshot embeds image bytes; an unreadable path stays data-less",
       "character": "Iris",
       "initial_active": null,
-      "manifest": null,
-      "segment_files": {},
       "image_files": {
         "pic.png": "iVBORw0KGgoBAg=="
       },
@@ -631,7 +503,8 @@
             "active_start": 0
           }
         }
-      ]
+      ],
+      "segments": []
     },
     {
       "name": "the five behaviours a first fixture recorded but did not pin",
@@ -653,19 +526,6 @@
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
-      "manifest": {
-        "segments": [
-          {
-            "file": "0001.jsonl",
-            "message_count": 2,
-            "compacted_at": "2026-03-26T00:00:00Z"
-          }
-        ],
-        "total_compacted_messages": 2
-      },
-      "segment_files": {
-        "0001.jsonl": "{\"msg_id\":\"w1\",\"role\":\"user\",\"content\":\"before\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"before\"}],\"timestamp\":\"2025-12-01T00:00:00Z\"}\n{\"msg_id\":\"w2\",\"role\":\"assistant\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_use\",\"id\":\"tu_straddle\",\"name\":\"read_file\",\"input\":{\"path\":\"/tmp/x\"}}],\"timestamp\":\"2025-12-01T00:00:01Z\"}\n"
-      },
       "image_files": {
         "real.png": "iVBORw==",
         "alt.png": "R0lGOA=="
@@ -808,33 +668,78 @@
         {
           "op": {
             "op": "external_write",
-            "manifest": {
-              "segments": [
-                {
-                  "file": "0001.jsonl",
+            "segments": [
+              {
+                "entry": {
+                  "file": "shore.db",
                   "message_count": 2,
                   "compacted_at": "2026-03-26T00:00:00Z"
                 },
-                {
-                  "file": "0002.jsonl",
+                "messages": [
+                  {
+                    "msg_id": "w1",
+                    "role": "user",
+                    "content": "before",
+                    "images": [],
+                    "content_blocks": [
+                      {
+                        "type": "text",
+                        "text": "before"
+                      }
+                    ],
+                    "timestamp": "2025-12-01T00:00:00Z"
+                  },
+                  {
+                    "msg_id": "w2",
+                    "role": "assistant",
+                    "content": "",
+                    "images": [],
+                    "content_blocks": [
+                      {
+                        "type": "tool_use",
+                        "id": "tu_straddle",
+                        "name": "read_file",
+                        "input": {
+                          "path": "/tmp/x"
+                        }
+                      }
+                    ],
+                    "timestamp": "2025-12-01T00:00:01Z"
+                  }
+                ]
+              },
+              {
+                "entry": {
+                  "file": "shore.db",
                   "message_count": 1,
                   "compacted_at": "2026-03-28T00:00:00Z"
-                }
-              ],
-              "total_compacted_messages": 3
-            },
-            "segment_files": {
-              "0002.jsonl": "{\"msg_id\":\"w7\",\"role\":\"user\",\"content\":\"newly archived\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"newly archived\"}],\"timestamp\":\"2025-12-02T00:00:00Z\"}\n"
-            }
+                },
+                "messages": [
+                  {
+                    "msg_id": "w7",
+                    "role": "user",
+                    "content": "newly archived",
+                    "images": [],
+                    "content_blocks": [
+                      {
+                        "type": "text",
+                        "text": "newly archived"
+                      }
+                    ],
+                    "timestamp": "2025-12-02T00:00:00Z"
+                  }
+                ]
+              }
+            ]
           },
           "revision": 3,
           "history_rewrite_generation": 0,
           "message_count": 4,
           "turn_count": 1,
-          "segment_count": 1,
+          "segment_count": 2,
           "broadcasts": 0,
           "display_history": {
-            "active_start": 2
+            "active_start": 3
           }
         },
         {
@@ -850,6 +755,47 @@
           "display_history": {
             "active_start": 3
           }
+        }
+      ],
+      "segments": [
+        {
+          "entry": {
+            "file": "shore.db",
+            "message_count": 2,
+            "compacted_at": "2026-03-26T00:00:00Z"
+          },
+          "messages": [
+            {
+              "msg_id": "w1",
+              "role": "user",
+              "content": "before",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "before"
+                }
+              ],
+              "timestamp": "2025-12-01T00:00:00Z"
+            },
+            {
+              "msg_id": "w2",
+              "role": "assistant",
+              "content": "",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "tool_use",
+                  "id": "tu_straddle",
+                  "name": "read_file",
+                  "input": {
+                    "path": "/tmp/x"
+                  }
+                }
+              ],
+              "timestamp": "2025-12-01T00:00:01Z"
+            }
+          ]
         }
       ]
     }

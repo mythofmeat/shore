@@ -1,7 +1,7 @@
 import { writeDurable } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -73,10 +73,7 @@ async function world(messages: Message[] = conversation()): Promise<{
   };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   await mkdir(join(dirs.data, "ada", "threads", "main"), { recursive: true });
-  await writeFile(
-    join(dirs.data, "ada", "threads", "main", "active.jsonl"),
-    messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
-  );
+  writeDurable(join(dirs.data, "ada", "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
 
   const app = defaultAppConfig();
   return {
@@ -92,9 +89,7 @@ async function writeCheckpoint(
   sourceContent: string,
   splitAt = 4,
 ): Promise<void> {
-  await writeFile(
-    join(dataDir, "ada", "threads", "main", "compaction-checkpoint.json"),
-    JSON.stringify({
+  writeDurable(join(dataDir, "ada", "threads", "main", "compaction-checkpoint.json"), JSON.stringify({
       version: 1,
       id: "cp",
       character: "ada",
@@ -117,8 +112,7 @@ async function writeCheckpoint(
         pendingResults: [],
         pendingUseCount: 0,
       },
-    }),
-  );
+    }));
 }
 
 interface Planned {
@@ -329,10 +323,7 @@ describe("deciding whether a compaction has anything new to write", () => {
       message("m_7", "user", "one more thing", newMessageVersion()),
       message("m_8", "assistant", "of course", newMessageVersion()),
     ];
-    await writeFile(
-      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
-      frozen + jsonl(arrived),
-    );
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), frozen + jsonl(arrived));
 
     const resumed = await planAuto(w, 1);
     expect(required(resumed.coverage).claim).toBe(claim);
@@ -364,12 +355,9 @@ describe("deciding whether a compaction has anything new to write", () => {
     const w = await world();
     cover(w.dataDir, w.messages.slice(0, 4));
     const edited = { ...required(w.messages[1]), version: newMessageVersion() };
-    await writeFile(
-      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
-      [w.messages[0], edited, ...w.messages.slice(2)]
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), [w.messages[0], edited, ...w.messages.slice(2)]
         .map((m) => JSON.stringify(m))
-        .join("\n") + "\n",
-    );
+        .join("\n") + "\n");
 
     const planned = await plan(w, 1);
     expect(planned.redundant).toBe(false);
@@ -469,10 +457,7 @@ describe("retiring a pass another branch finished for it", () => {
       message("m_7", "user", "one more thing", newMessageVersion()),
       message("m_8", "assistant", "of course", newMessageVersion()),
     ];
-    await writeFile(
-      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
-      frozen + jsonl(arrived),
-    );
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), frozen + jsonl(arrived));
 
     const outcome = await runPass(w);
     expect(outcome?.kind).toBe("rotated");
@@ -590,10 +575,7 @@ describe("one plan carried from resolution to archival", () => {
       message("m_7", "user", "one more thing", newMessageVersion()),
       message("m_8", "assistant", "of course", newMessageVersion()),
     ];
-    await writeFile(
-      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
-      frozen + jsonl(arrived),
-    );
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), frozen + jsonl(arrived));
 
     const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
     expect(resolved.resumed).toBe(true);
@@ -609,10 +591,7 @@ describe("one plan carried from resolution to archival", () => {
     const frozen = jsonl(w.messages);
     await writeCheckpoint(w.dataDir, "cl_paused", frozen);
     const arrived = [message("m_7", "user", "one more thing", newMessageVersion())];
-    await writeFile(
-      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
-      frozen + jsonl(arrived),
-    );
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), frozen + jsonl(arrived));
 
     const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
     const commit = required(

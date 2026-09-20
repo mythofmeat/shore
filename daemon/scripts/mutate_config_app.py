@@ -73,10 +73,7 @@ MUTANTS = [
      "      continue;\n"
      "    }\n"
      "    const parsed = read(value[key]);"),
-    ("readStruct: a removed field is reported as merely unknown",
-     "      const moved = spec.removed?.[key];\n"
-     "      if (moved !== undefined) return { err: `\\`${key}\\` was removed — ${moved}` };",
-     "      const moved = spec.removed?.[key];\n      void moved;"),
+
     ("readStruct: report missing fields in sorted order (EQUIVALENT — no spec "
      "declares its required fields out of sorted order, so the two agree)",
      "for (const key of spec.required ?? []) {",
@@ -127,27 +124,13 @@ MUTANTS = [
      "  if (false) return undefined;"),
     # --- flatten-only structs ---------------------------------------------
     # --- the positional (visit_seq) path ----------------------------------
-    ("readStructFromSeq: an array is a type error, not a positional struct",
-     "  if (Array.isArray(value)) return readStructFromSeq(spec, value);\n",
-     ""),
-    ("readStructFromSeq: trailing elements are ignored",
-     "  if (seq.length > keys.length) {\n    return { err: `invalid length ${seq.length}, expected fewer elements in array` };\n  }\n",
-     ""),
-    ("readStructFromSeq: a short array is always an error",
-     "      if (!noDefault.has(key)) continue;",
-     "      if (false) continue;"),
-    ("readStructFromSeq: a short array is never an error",
-     "      if (!noDefault.has(key)) continue;",
-     "      continue;"),
-    ("readStructFromSeq: the reported length is the array's, not the field index",
-     "err: `invalid length ${i}, expected struct ${spec.name} with ${keys.length} elements`,",
-     "err: `invalid length ${seq.length}, expected struct ${spec.name} with ${keys.length} elements`,"),
-    ("readStructFromSeq: an Option counts as defaulted, like on the map path",
-     "  const noDefault = new Set<string>(spec.noDefault ?? []);",
-     "  const noDefault = new Set<string>(spec.required ?? []);"),
-    ("readStructFromSeq: fields fill in sorted order, not declaration order",
-     "  const keys = Object.keys(spec.fields);\n  const noDefault",
-     "  const keys = Object.keys(spec.fields).sort();\n  const noDefault"),
+
+
+
+
+
+
+
     # --- maps -------------------------------------------------------------
     ("readMap: insertion order instead of code point order",
      "      for (const key of sortedKeys(v)) {\n        const parsed = inner(v[key]);",
@@ -195,12 +178,10 @@ MUTANTS = [
      "const resolved = tools.config.get(name)?.timeout ?? tools.timeout;\n  return resolved.asMillisExact() > 0n ? resolved : undefined;",
      "if (tools.timeout.asMillisExact() === 0n) return undefined;\n  return tools.config.get(name)?.timeout ?? tools.timeout;"),
     # --- defaults resolution ----------------------------------------------
-    ("resolveBackgroundModelName: background.model wins over the per-task key",
-     "return defaults.background[task] ?? defaults.background.model;",
-     "return defaults.background.model ?? defaults.background[task];"),
-    ("resolveBackgroundModelName: defaults.model is a background fallback",
-     "return defaults.background[task] ?? defaults.background.model;",
-     "return defaults.background[task] ?? defaults.background.model ?? defaults.model;"),
+    ('resolveBackgroundModelName: the task pin is ignored',
+     '  return defaults.background[task];',
+     '  return undefined;'),
+
     ("resolveDisplayName: $USER wins over the configured name",
      'return defaults.display_name ?? env["USER"] ?? "User";',
      'return env["USER"] ?? defaults.display_name ?? "User";'),
@@ -237,19 +218,12 @@ MUTANTS = [
     ("rejectFractionalSeconds: the first suggestion rounds up",
      "Use \\`${millis / 1000n}s\\`", "Use \\`${millis / 1000n + 1n}s\\`"),
     # --- thinking replay --------------------------------------------------
-    ("parseThinkingReplay: last_turn is rejected",
-     '    case "last_turn":\n      return "all";',
-     '      return "all";'),
-    ("parseThinkingReplay: the legacy stringy bools are rejected",
-     '    case "true":\n', ""),
+
+
     ("parseThinkingReplay: matching is case-insensitive",
      "  switch (s) {", "  switch (s.toLowerCase()) {"),
-    ("readThinkingReplay: a bool is not accepted",
-     'if (typeof v === "boolean") return { ok: v ? "all" : "none" };',
-     ""),
-    ("readThinkingReplay: the legacy bool is inverted",
-     'return { ok: v ? "all" : "none" };',
-     'return { ok: v ? "none" : "all" };'),
+
+
     ("readThinkingReplay: a non-string reports the string error",
      'return { err: "data did not match any variant of untagged enum BoolOrStr" };',
      'return { err: invalidType(v, "a string") };'),
@@ -273,8 +247,7 @@ MUTANTS = [
     ("defaults: message_complete is off",
      "  message_complete: true,\n  usage_warning: false,",
      "  message_complete: false,\n  usage_warning: false,"),
-    ("defaults: stream is off",
-     "  stream: true,", "  stream: false,"),
+
     ("defaults: the tool deadline is unlimited",
      "  timeout: ConfigDuration.fromSecs(300),",
      "  timeout: ConfigDuration.fromSecs(0),"),
@@ -286,9 +259,7 @@ MUTANTS = [
      "  archive_after: ConfigDuration.fromSecs(86_400),"),
     ("defaults: budgets warn at a single threshold",
      "    warn_at: [0.8, 1.0],", "    warn_at: [1.0],"),
-    ("defaults: allow_compaction_over_budget is on",
-     '  timezone: "local",\n  allow_compaction_over_budget: false,',
-     '  timezone: "local",\n  allow_compaction_over_budget: true,'),
+
     # --- schema shape -----------------------------------------------------
     ("schema: AppConfig field order changes the expected list",
      "    daemon: struct(DAEMON),\n    defaults: struct(DEFAULTS),",

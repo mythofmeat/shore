@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""Mutation pass over the thread index and its migration (#12).
-
-`engine/threads.ts` shipped in stage 02 with no direct tests — it was covered
-only through 136 fixture paths and one hand-run migration over the live data
-directory. That is the wrong shape of evidence for the one module in the feature
-that *moves a user's conversation on disk*: a fixture path proves where the code
-reads, not that the move is ordered so an interrupted run can be resumed.
-
-The decisions here are almost all orderings and refusals — the index is written
-last so a crash mid-move leaves the character un-migrated rather than
-half-migrated; the destination is checked before each rename so a partial run
-does not clobber what it already moved; the home thread refuses to be archived
-so the heartbeat always has somewhere to speak. None of those are visible from a
-single successful call, which is exactly the class of hole this harness exists
-to find.
-
-A mutant is KILLED if `bun test tests/threads.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_threads.py
-"""
+"""Mutation pass over thread initialization, selection, and archiving."""
 import pathlib
 import sys
 
@@ -51,53 +31,10 @@ MUTANTS = [
      "  if (isValidThreadId(id)) return;",
      "  if (true as boolean) return;"),
 
-    # --- the migration is resumable only if the index is written last -------
-    ("migration: a migrated character is migrated again",
-     "  if (durableExists(characterThreadsIndex(data, character))) return false;\n",
-     ""),
-    ("migration: the index is written before the move, not after",
-     "  await mkdir(to, { recursive: true });\n"
-     "  for (const entry of moving) {\n"
-     "    await rename(rustJoin(from, entry), rustJoin(to, entry));\n"
-     "  }\n"
-     "  await writeThreadsIndex(data, character, defaultThreadsIndex(now));",
-     "  await mkdir(to, { recursive: true });\n"
-     "  await writeThreadsIndex(data, character, defaultThreadsIndex(now));\n"
-     "  for (const entry of moving) {\n"
-     "    await rename(rustJoin(from, entry), rustJoin(to, entry));\n"
-     "  }"),
-    ("migration: a half-moved entry is moved over the one already there",
-     "    (entry) => existsSync(rustJoin(from, entry)) && !existsSync(rustJoin(to, entry)),",
-     "    (entry) => existsSync(rustJoin(from, entry)),"),
-    ("migration: an absent entry is renamed anyway",
-     "    (entry) => existsSync(rustJoin(from, entry)) && !existsSync(rustJoin(to, entry)),",
-     "    (entry) => !existsSync(rustJoin(to, entry)),"),
-    ("migration: the archived segments are left behind",
-     '  "active.jsonl",\n  "segments",',
-     '  "active.jsonl",'),
-    ("migration: the active conversation is left behind",
-     '  "active.jsonl",\n  "segments",',
-     '  "segments",'),
-    ("migration: the whole character directory is swept in",
-     "  const moving = MIGRATED_ENTRIES.filter(",
-     "  const moving = (await import(\"node:fs/promises\")).readdir === undefined\n"
-     "    ? []\n"
-     "    : ([...MIGRATED_ENTRIES, \"preferences.json\"] as readonly string[]).filter("),
-    ("migration: the dry run moves anyway",
-     "  if (dryRun) {\n"
-     "    shoreLog.warn(",
-     "  if (false as boolean) {\n"
-     "    shoreLog.warn("),
-    ("migration: the dry run reports that it migrated",
-     "    return false;\n  }\n\n  await mkdir(to, { recursive: true });",
-     "    return true;\n  }\n\n  await mkdir(to, { recursive: true });"),
-    ("migration: ensureThreads never migrates first",
-     "  await migrateCharacterToThreads(data, character, now, dryRun);\n",
-     ""),
-    ("migration: a fresh character gets no thread directory",
+    ("initialization: a fresh character gets no thread directory",
      "    await mkdir(threadDataDir(data, character, MAIN_THREAD), { recursive: true });\n",
      ""),
-    ("migration: ensureThreads writes an index even for a dry run",
+    ("initialization: ensureThreads writes an index even for a dry run",
      "  if (!dryRun) {\n"
      "    await mkdir(threadDataDir(data, character, MAIN_THREAD), { recursive: true });\n"
      "    await writeThreadsIndex(data, character, fresh);\n"
@@ -189,8 +126,8 @@ MUTANTS = [
      '  if (active.trim() !== "") {',
      "  if (false as boolean) {"),
     ("archive: the conversation is retained rather than fully archived",
-     '\n      await archiveAndRetain(\n        dir,\n        0,',
-     '    await archiveAndRetain(\n      dir,\n      1,'),
+     '        0,\n        active,',
+     '        1,\n        active,'),
     ("archive: the thread directory is left on disk",
      "  await rm(dir, { recursive: true, force: true });\n", ""),
     ("archive: the entry stays in the index",

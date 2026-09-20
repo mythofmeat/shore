@@ -407,7 +407,7 @@ test("the character path is given the character's effective config", async () =>
 async function setDefaultModel(h: Harness, value: string): Promise<Record<string, unknown>> {
   const frame = await dispatchCommand(
     h.deps,
-    { rid: null, name: "config", args: { key: "defaults.model", value } },
+    { rid: null, name: "config", args: { key: "chat.model", value } },
     meta("ada", null),
   );
   expect(frame.type).toBe("command_output");
@@ -416,7 +416,7 @@ async function setDefaultModel(h: Harness, value: string): Promise<Record<string
 
 test("a character with nothing saved masks no default", async () => {
   const h = await harness(["ada"]);
-  await writeFile(h.deps.configPath, '[defaults]\nmodel = "fixture"\n');
+  await writeFile(h.deps.configPath, "[chat]\nmodel = \"fixture\"\n");
 
   expect(h.savedModel("ada")).toBeUndefined();
   expect((await setDefaultModel(h, "spare"))["masked_by_preference"]).toBeNull();
@@ -424,7 +424,7 @@ test("a character with nothing saved masks no default", async () => {
 
 test("a saved model preference masks the default under its qualified name", async () => {
   const h = await harness(["ada"]);
-  await writeFile(h.deps.configPath, '[defaults]\nmodel = "spare"\n');
+  await writeFile(h.deps.configPath, "[chat]\nmodel = \"spare\"\n");
 
   await dispatchCommand(
     h.deps,
@@ -440,7 +440,7 @@ test("config_reload adopts the config the command re-read, not the one it starte
   const h = await harness(["ada"]);
   await writeFile(
     h.deps.configPath,
-    '[defaults]\nmodel = "spare"\n',
+    "[chat]\nmodel = \"spare\"\n",
   );
   const before = h.deps.globalConfig();
   const adopted: LoadedConfig[] = [];

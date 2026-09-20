@@ -1,6 +1,5 @@
-import { settingsDeprecations } from "./surface.ts";
 import { shoreLog } from "../log.ts";
-import { geminiMode, internalSettingKey, normalizeSettings } from "./surface.ts";
+import { geminiMode, normalizeSettings } from "./surface.ts";
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,7 +33,6 @@ import {
   settingApplicability,
   validateSetting,
 } from "../llm/settings.ts";
-import { ZAI_SUBSCRIPTION_SETTING_MIGRATION } from "../llm/providers/zai_config.ts";
 import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 import { keepalivePolicyError } from "../llm/cache_capability.ts";
 
@@ -280,7 +278,6 @@ export function loadPreferences(path: string): ModelPreferences {
   }
 
   const parsed = readPreferences(table);
-  for (const warning of settingsDeprecations(table, path, true)) shoreLog.warn(`Deprecated configuration ${warning.source}: ${warning.path} -> ${warning.replacement} (${warning.boundary})`);
   if ("err" in parsed) throw PreferenceError.parse(path, parsed.err);
   return parsed.ok;
 }
@@ -680,7 +677,7 @@ export function resolveActiveForCharacter(
       return findEffective(config, config.dirs.cache, appDefaultModel, true);
     } catch (e) {
       shoreLog.warn(
-        `shore: [defaults].model "${appDefaultModel}" could not be resolved, ` +
+        `shore: chat.model "${appDefaultModel}" could not be resolved, ` +
           `falling back to the first configured chat model: ${String(e)}`,
       );
     }
@@ -969,13 +966,10 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
 }
 
 function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings> {
+  const unknown = unknownField(table, SAMPLER_KEYS);
+  if (unknown !== undefined) return { err: unknown };
   try { table = normalizeSettings(table, "preferences"); }
   catch (error) { return { err: error instanceof Error ? error.message : String(error) }; }
-  if (Object.hasOwn(table, "zai_subscription")) {
-    return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
-  }
-  const unknown = unknownField(table, SAMPLER_KEYS.map(internalSettingKey));
-  if (unknown !== undefined) return { err: unknown };
 
   const out: SamplerSettings = {};
   const numbers = [
@@ -1059,11 +1053,10 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
 }
 
 function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
-  if (typeof value === "boolean") return { ok: value ? "all" : "none" };
   if (value === "all" || value === "none") return { ok: value };
   return {
     err: `invalid replay_prior_thinking ${JSON.stringify(value)}; ` +
-      `expected "all", "none" (or legacy true/false)`,
+      `expected "all", "none"`,
   };
 }
 

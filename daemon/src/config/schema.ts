@@ -4,7 +4,7 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { BUDGET_ALIASES, canonicalConfigPath, canonicalSettingKey, formatConfigPath, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath, REMOVED_CONFIG } from "./surface.ts";
+import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath } from "./surface.ts";
 
 export interface SchemaEntry {
   key: string;
@@ -147,11 +147,10 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const out: SchemaEntry[] = [];
   for (const old of internal) {
     if (old.kind === "table" || old.kind === "map") continue;
-    if (REMOVED_CONFIG.some((rule) => rule.path.join(".") === old.key)) continue;
-    if (["defaults.background.model", "usage.allow_compaction_over_budget", "behavior.autonomy.heartbeat.enabled", "notifications.enabled", "notifications.backend"].includes(old.key) || old.key.startsWith("notifications.events.") || old.key === "notifications.ntfy.token") continue;
+    if (["notifications.enabled", "notifications.backend"].includes(old.key) || old.key.startsWith("notifications.events.")) continue;
     const path = canonicalConfigPath(parseConfigPath(old.key));
     if (path[0] === "budgets" && path.length === 3) {
-      path[2] = BUDGET_ALIASES.find((rule) => rule.legacy[0] === path[2])?.canonical[0] ?? path[2] as string;
+      path[2] = BUDGET_FIELDS.find((rule) => rule.internal[0] === path[2])?.canonical[0] ?? path[2] as string;
     }
     const key = formatConfigPath(path);
     out.push({ ...old, key, settable: old.settable && !path.includes("<index>"), description: describeOption(path), scope: "global or character", ...(unitsOf(path) === undefined ? {} : { units: unitsOf(path) as string }) });
@@ -234,7 +233,29 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   const path = parseConfigPath(key);
   const template = entries.find((candidate) => {
     const pattern = parseConfigPath(candidate.key);
-    return pattern.length === path.length && pattern.every((part, i) => part === path[i] || part === "<name>" || part === "<provider:model_id>" && path[i]?.includes(":") === true);
+    return pattern.length === path.length && pattern.every((part, i) => part === path[i] || part === "<name>" || part === "<index>" && /^[0-9]+$/.test(path[i] ?? "") || part === "<provider:model_id>" && path[i]?.includes(":") === true);
   });
   return template === undefined ? undefined : { ...template, key };
+}
+
+export function validateConfigSource(input: Record<string, unknown>, source: string): void {
+  const entries = configSchema({ instancesAt: () => [] });
+  const visit = (value: unknown, path: string[]): void => {
+    const key = formatConfigPath(path);
+    const info = findSchemaEntry(entries, key);
+    if (info === undefined) {
+      const expected = entries.filter((candidate) => parseConfigPath(candidate.key).length === 1).map((candidate) => `\`${candidate.key}\``);
+      throw new Error(`${source}: unknown field \`${key}\`${path.length === 1 ? `, expected one of ${expected.join(", ")}` : ""}`);
+    }
+    if (info.kind === "table") {
+      if (!isConfigTable(value)) throw new Error(`${source}: ${key} must be a table`);
+      if (path.at(-1) === "openrouter_routing") return;
+      for (const [name, child] of Object.entries(value)) visit(child, [...path, name]);
+    } else if (info.kind === "list" && info.item_kind === "table" && Array.isArray(value)) {
+      for (const [index, child] of value.entries()) visit(child, [...path, String(index)]);
+    } else if (info.kind === "enum" && !info.values.includes(String(value))) {
+      throw new Error(`${source}: ${key} must be ${info.values.join(", ")}`);
+    }
+  };
+  for (const [key, value] of Object.entries(input)) visit(value, [key]);
 }

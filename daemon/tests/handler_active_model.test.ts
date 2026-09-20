@@ -20,14 +20,11 @@ import { resolveGenerationModel } from "../src/handler/setup.ts";
 const CHARACTER = "ashe";
 
 const CATALOG = `
-[anthropic.opus]
-model_id = "claude-opus-4-6"
+["anthropic:claude-opus-4-6"]
 temperature = 0.3
 max_output_tokens = 8000
 
-[anthropic.sonnet]
-model_id = "claude-sonnet-4-6"
-`;
+["anthropic:claude-sonnet-4-6"]`;
 
 const roots: string[] = [];
 afterAll(() => {
@@ -87,17 +84,17 @@ const selects = (provider: string, modelId: string) =>
 
 describe("which model", () => {
   test("a character selection wins", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
     w.charPrefs(selects("anthropic", "claude-sonnet-4-6"));
 
-    expect(resolve(w).model?.name).toBe("sonnet");
+    expect(resolve(w).model?.name).toBe("claude-sonnet-4-6");
   });
 
   test("a global selection is used when the character has none", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
     w.globalPrefs(selects("anthropic", "claude-sonnet-4-6"));
 
-    expect(resolve(w).model?.name).toBe("sonnet");
+    expect(resolve(w).model?.name).toBe("claude-sonnet-4-6");
   });
 
   test("the character's selection outranks the global one", () => {
@@ -105,19 +102,19 @@ describe("which model", () => {
     w.globalPrefs(selects("anthropic", "claude-sonnet-4-6"));
     w.charPrefs(selects("anthropic", "claude-opus-4-6"));
 
-    expect(resolve(w).model?.name).toBe("opus");
+    expect(resolve(w).model?.name).toBe("claude-opus-4-6");
   });
 
   test("the configured default is next", () => {
-    const w = world({ defaultModel: "sonnet" });
+    const w = world({ defaultModel: "claude-sonnet-4-6" });
 
-    expect(resolve(w).model?.name).toBe("sonnet");
+    expect(resolve(w).model?.name).toBe("claude-sonnet-4-6");
   });
 
   test("and the first chat model last", () => {
     const w = world();
 
-    expect(resolve(w).model?.name).toBe("opus");
+    expect(resolve(w).model?.name).toBe("claude-opus-4-6");
   });
 
   test("an empty catalog resolves to no model and no overlay", () => {
@@ -126,29 +123,29 @@ describe("which model", () => {
   });
 
   test("unreadable preferences warn and resolve on empty defaults", () => {
-    const w = world({ defaultModel: "sonnet" });
+    const w = world({ defaultModel: "claude-sonnet-4-6" });
     w.charPrefs("this is not toml = = =");
 
-    expect(resolve(w).model?.name).toBe("sonnet");
+    expect(resolve(w).model?.name).toBe("claude-sonnet-4-6");
   });
 });
 
 describe("the overlay", () => {
   test("is empty when preferences set nothing", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
 
     expect(resolve(w).overlay).toEqual({});
   });
 
   test("carries what preferences set", () => {
-    const w = world({ defaultModel: "opus" });
-    w.charPrefs("[defaults.sampler]\ntemperature = 0.9\nmax_tool_iterations = 4\n");
+    const w = world({ defaultModel: "claude-opus-4-6" });
+    w.charPrefs("[defaults.sampler]\ntemperature = 0.9\nmax_tool_rounds = 4\n");
 
     expect(resolve(w).overlay).toEqual({ temperature: 0.9, maxToolIterations: 4 });
   });
 
   test("layers global under character, as everywhere else", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
     w.globalPrefs("[defaults.sampler]\ntemperature = 0.1\nmax_output_tokens = 2000\n");
     w.charPrefs("[defaults.sampler]\ntemperature = 0.9\n");
 
@@ -156,7 +153,7 @@ describe("the overlay", () => {
   });
 
   test("is keyed by the resolved model, not by some other one", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
     w.charPrefs(
       '[models."anthropic:claude-opus-4-6"]\ntemperature = 0.9\n\n' +
         '[models."claude-opus-4-6:anthropic"]\ntemperature = 0.1\n',
@@ -166,7 +163,7 @@ describe("the overlay", () => {
   });
 
   test("a model-scoped preference outranks the defaults", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
     w.globalPrefs('[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 2000\n');
     w.charPrefs("[defaults.sampler]\nmax_output_tokens = 100\ntemperature = 0.9\n");
 
@@ -174,8 +171,8 @@ describe("the overlay", () => {
   });
 
   test("leaves the catalog's own settings out of it", () => {
-    const w = world({ defaultModel: "opus" });
-    w.charPrefs("[defaults.sampler]\nmax_tool_iterations = 4\n");
+    const w = world({ defaultModel: "claude-opus-4-6" });
+    w.charPrefs("[defaults.sampler]\nmax_tool_rounds = 4\n");
 
     const { model, overlay } = resolve(w);
     expect(model?.temperature).toBe(0.3);
@@ -183,7 +180,7 @@ describe("the overlay", () => {
   });
 
   test("an empty overlay leaves the catalog entry itself as the request's model", () => {
-    const w = world({ defaultModel: "opus" });
+    const w = world({ defaultModel: "claude-opus-4-6" });
 
     const { model, overlay } = resolve(w);
     expect(resolveGenerationModel(model, w.config, overlay)).toBe(required(model));
@@ -199,7 +196,10 @@ describe("the split does not change the answer", () => {
       "an overlay on a model that has settings of its own",
       (w) => {
         w.charPrefs(
-          `${selects("anthropic", "claude-opus-4-6")}\n[defaults.sampler]\nmax_tool_iterations = 4\n`,
+          `${selects("anthropic", "claude-opus-4-6")}
+[defaults.sampler]
+max_tool_rounds = 4
+`,
         );
       },
     ],
@@ -214,7 +214,7 @@ describe("the split does not change the answer", () => {
 
   for (const [name, setup] of cases) {
     test(name, () => {
-      const w = world({ defaultModel: "opus" });
+      const w = world({ defaultModel: "claude-opus-4-6" });
       setup(w);
 
       const { model, overlay } = resolve(w);

@@ -1,7 +1,8 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -192,20 +193,7 @@ describe("forking a thread", () => {
     expect(parent.every((m) => versionOf(m) !== undefined)).toBe(true);
   });
 
-  test("legacy messages with no version get one, shared with the copy", async () => {
-    const root = await dataDir();
-    await ensureThreads(root, "ada", NOW);
-    const path = join(root, "ada", "threads", "main", "active.jsonl");
-    await writeFile(path, `${JSON.stringify(user("u1", "legacy"))}\n`);
 
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const parent = await readMessages(path);
-    const child = await readMessages(join(root, "ada", "threads", "spin", "active.jsonl"));
-    const version = versionOf(required(parent[0]));
-    expect(version).toBeDefined();
-    expect(versionOf(required(child[0]))).toBe(required(version));
-  });
 
   test("an edit on either branch gives that occurrence its own version", async () => {
     const root = await dataDir();
@@ -236,11 +224,8 @@ describe("forking a thread", () => {
       compaction: true,
       chat_model: "anthropic:opus",
     });
-    await writeFile(
-      join(root, "ada", "threads", "eval", "active.jsonl"),
-      `${JSON.stringify(user("u9", "eval turn"))}\n`,
-    );
-    await writeFile(join(root, "ada", "threads", "eval", "compaction-checkpoint.json"), "{}\n");
+    writeDurable(join(root, "ada", "threads", "eval", "active.jsonl"), `${JSON.stringify(user("u9", "eval turn"))}\n`);
+    writeDurable(join(root, "ada", "threads", "eval", "compaction-checkpoint.json"), "{}\n");
 
     const result = await forkThread(root, "ada", "eval", "eval-b", { now: () => NOW });
     expect(result.child.compaction).toBe(true);
@@ -438,7 +423,7 @@ describe("forking a thread", () => {
     await seed(root, "ada", "main", [user("u1", "first")]);
     const squatter = join(root, "ada", "threads", "spin");
     await mkdir(squatter, { recursive: true });
-    await writeFile(join(squatter, "active.jsonl"), "keep me\n");
+    writeDurable(join(squatter, "active.jsonl"), "keep me\n");
 
     expect(forkThread(root, "ada", "main", "spin", { now: () => NOW })).rejects.toThrow(
       /already holds data/,

@@ -1,3 +1,4 @@
+import { seedHeartbeatEvents } from "./support/storage.ts";
 import { characterScope, readEvents } from "../src/storage/store.ts";
 import { dirname } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -182,7 +183,7 @@ describe("persistence", () => {
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const good = fixture.lines[0] ?? "";
-      await Bun.write(path, `${good}\nnot json\n\n${good}\n`);
+      seedHeartbeatEvents(dir, `${good}\nnot json\n\n${good}\n`);
 
       const loaded = await HeartbeatLog.load(path);
       expect(loaded.recent(10).length).toBe(2);
@@ -193,7 +194,7 @@ describe("persistence", () => {
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const line = fixture.lines[0] ?? "";
-      await Bun.write(path, Array.from({ length: HEARTBEAT_LOG_CAPACITY + 50 }, () => line).join("\n"));
+      seedHeartbeatEvents(dir, Array.from({ length: HEARTBEAT_LOG_CAPACITY + 50 }, () => line).join("\n"));
 
       const loaded = await HeartbeatLog.load(path);
       expect(loaded.recent(Number.MAX_SAFE_INTEGER).length).toBe(HEARTBEAT_LOG_CAPACITY + 50);

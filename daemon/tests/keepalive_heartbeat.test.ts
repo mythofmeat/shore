@@ -57,7 +57,6 @@ test("idle heartbeat tool rounds preserve the chat keepalive and its idle ceilin
   app.memory.compaction.enabled = false;
   app.tools.enabled_tools = [];
   app.behavior.autonomy.enabled = true;
-  app.behavior.autonomy.heartbeat.enabled = true;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",

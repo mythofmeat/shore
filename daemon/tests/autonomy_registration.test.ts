@@ -61,7 +61,6 @@ describe("reading the config a loop runs on", () => {
   test("the loop's gates come from the two sections that own them", () => {
     const config = configWith((app) => {
       app.behavior.autonomy.enabled = true;
-      app.behavior.autonomy.heartbeat.enabled = false;
       app.memory.compaction.enabled = true;
       app.memory.compaction.min_turns = 5;
       app.memory.compaction.max_turns = 25;
@@ -72,7 +71,7 @@ describe("reading the config a loop runs on", () => {
 
     expect(runnerConfigFor(config)).toEqual({
       autonomyEnabled: true,
-      heartbeatEnabled: false,
+      heartbeatEnabled: true,
       compactionEnabled: true,
       minTurns: 5,
       maxTurns: 25,

@@ -1,3 +1,4 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -108,13 +109,7 @@ describe("discoverCharacters", () => {
     expect(discoverCharacters(config)).toEqual(["stale"]);
   });
 
-  test("the legacy character.md still counts, root or no root", () => {
-    const config = scratch();
-    const ws = scratch();
-    write(config, "characters/old/character.md", "You are old.\n");
 
-    expect(discoverCharacters(config, ws)).toEqual(["old"]);
-  });
 
   test("both trees are merged, and the answer is deduplicated and sorted", () => {
     const config = scratch();
@@ -146,44 +141,22 @@ describe("definition loading", () => {
     expect(loadCharacterDefinition(config, "ada")).toBe("soul from the config tree\n");
   });
 
-  test("the legacy fallback still reads from the config tree", () => {
-    const config = scratch();
-    const ws = scratch();
-    write(config, "characters/old/character.md", "legacy soul\n");
-    write(config, "characters/old/user.md", "legacy user\n");
 
-    expect(loadCharacterDefinition(config, "old", ws)).toBe("legacy soul\n");
-    expect(resolveUserDefinition(config, "old", ws)).toBe("legacy user\n");
-  });
 });
 
 describe("workspace preparation", () => {
   test("ensureCharacterWorkspace builds the layout under the root", async () => {
     const config = scratch();
     const ws = scratch();
-    const data = scratch();
 
-    await ensureCharacterWorkspace(join(data, "ada"), config, "ada", ws);
+    await ensureCharacterWorkspace(config, "ada", ws);
 
     expect(readFileSync(join(ws, "ada", "TOOLS.md"), "utf8")).toContain("Read files before");
     expect(discoverCharacters(config, ws)).toEqual([]);
     expect(() => readFileSync(join(config, "characters/ada/workspace/TOOLS.md"))).toThrow();
   });
 
-  test("the legacy migration still reads out of the config tree", async () => {
-    const config = scratch();
-    const ws = scratch();
-    const data = scratch();
-    write(config, "characters/ada/character.md", "legacy soul\n");
-    write(config, "characters/ada/user.md", "legacy user\n");
-    write(config, "characters/ada/prompts/system.md", "legacy agents\n");
 
-    await ensureCharacterWorkspace(join(data, "ada"), config, "ada", ws);
-
-    expect(readFileSync(join(ws, "ada", "SOUL.md"), "utf8")).toBe("legacy soul\n");
-    expect(readFileSync(join(ws, "ada", "USER.md"), "utf8")).toBe("legacy user\n");
-    expect(readFileSync(join(ws, "ada", "AGENTS.md"), "utf8")).toBe("legacy agents\n");
-  });
 
   test("the memory index and the pending-edit diff follow the root", async () => {
     const config = scratch();
@@ -197,7 +170,7 @@ describe("workspace preparation", () => {
     );
     expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toEqual([]);
 
-    write(data, "ada/active_prompt/MEMORY.md", "the index under the config tree\n");
+    writePromptSnapshotFile(join(data, "ada/active_prompt/MEMORY.md"), "the index under the config tree\n");
 
     expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toContain(
       "MEMORY.md",

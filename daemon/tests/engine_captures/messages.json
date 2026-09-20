@@ -19,31 +19,8 @@
       }
     },
     {
-      "name": "legacy_content_only_gets_a_text_block",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"user\",\"content\":\"legacy\",\"timestamp\":\"2026-04-04T12:00:00-04:00\"}",
-      "expect": {
-        "ok": true,
-        "messages": [
-          {
-            "msg_id": "m1",
-            "role": "user",
-            "content": "legacy",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "legacy"
-              }
-            ],
-            "timestamp": "2026-04-04T12:00:00-04:00"
-          }
-        ],
-        "turn_count": 1
-      }
-    },
-    {
       "name": "blocks_only_derives_content",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"  derived  \"}],\"timestamp\":\"2026-04-04T12:00:00-04:00\"}",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"  derived  \"}],\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[]}",
       "expect": {
         "ok": true,
         "messages": [
@@ -66,7 +43,7 @@
     },
     {
       "name": "content_is_overwritten_by_blocks",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content\":\"STALE\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"fresh\"}],\"timestamp\":\"2026-04-04T12:00:00-04:00\"}",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content\":\"STALE\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"fresh\"}],\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[]}",
       "expect": {
         "ok": true,
         "messages": [
@@ -89,7 +66,7 @@
     },
     {
       "name": "tool_results_excluded_from_derived_content",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"said\"},{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"NOT IN CONTENT\",\"is_error\":false}],\"timestamp\":\"2026-04-04T12:00:00-04:00\"}",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"said\"},{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"NOT IN CONTENT\",\"is_error\":false}],\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[]}",
       "expect": {
         "ok": true,
         "messages": [
@@ -118,7 +95,7 @@
     },
     {
       "name": "alternatives_clamp_alt_count_and_index",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content\":\"a\",\"alt_index\":9,\"alt_count\":1,\"alternatives\":[{\"content\":\"one\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"t\"},{\"content\":\"two\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"t\"}],\"timestamp\":\"2026-04-04T12:00:00-04:00\"}",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"assistant\",\"content\":\"a\",\"alt_index\":9,\"alt_count\":1,\"alternatives\":[{\"content\":\"one\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"t\",\"images\":[]},{\"content\":\"two\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"t\",\"images\":[]}],\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"a\"}]}",
       "expect": {
         "ok": true,
         "messages": [
@@ -167,7 +144,7 @@
     },
     {
       "name": "trailing_newline_is_not_a_message",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"user\",\"content\":\"one\",\"timestamp\":\"t\"}\n",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"user\",\"content\":\"one\",\"timestamp\":\"t\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}]}\n",
       "expect": {
         "ok": true,
         "messages": [
@@ -190,7 +167,7 @@
     },
     {
       "name": "invalid_json_line_is_an_error",
-      "file": "{\"msg_id\":\"m1\",\"role\":\"user\",\"content\":\"ok\",\"timestamp\":\"t\"}\n{ not json",
+      "file": "{\"msg_id\":\"m1\",\"role\":\"user\",\"content\":\"ok\",\"timestamp\":\"t\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"ok\"}]}\n{ not json",
       "expect": {
         "ok": false,
         "error": "failed to parse /tmp/shore-msgstore-gen/load_invalid_json_line_is_an_error.jsonl"
@@ -591,12 +568,12 @@
             "append_msg": {
               "msg_id": "u1",
               "role": "user",
-              "content": "line\nbreak \"quoted\" \\slash\\ \ud83c\udf89 \u0000end",
+              "content": "line\nbreak \"quoted\" \\slash\\ 🎉 \u0000end",
               "images": [],
               "content_blocks": [
                 {
                   "type": "text",
-                  "text": "line\nbreak \"quoted\" \\slash\\ \ud83c\udf89 \u0000end"
+                  "text": "line\nbreak \"quoted\" \\slash\\ 🎉 \u0000end"
                 }
               ],
               "timestamp": "2026-04-04T12:00:00-04:00"
@@ -605,7 +582,7 @@
           "result": {
             "ok": true
           },
-          "file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"line\\nbreak \\\"quoted\\\" \\\\slash\\\\ \ud83c\udf89 \\u0000end\"}],\"version\":\"<minted_version>\"}\n"
+          "file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"line\\nbreak \\\"quoted\\\" \\\\slash\\\\ 🎉 \\u0000end\"}],\"version\":\"<minted_version>\"}\n"
         }
       ]
     },
@@ -1398,15 +1375,15 @@
       ]
     },
     {
-      "name": "truncate_noop_does_not_rewrite_a_legacy_file",
-      "seed_file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"content\":\"legacy\",\"timestamp\":\"2026-04-04T12:00:00-04:00\"}\n",
+      "name": "truncate_noop_does_not_rewrite_stored_rows",
+      "seed_file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"content\":\"legacy\",\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"legacy\"}]}\n",
       "ops": [
         {
           "op": "truncate",
           "result": {
             "removed": 0
           },
-          "file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"content\":\"legacy\",\"timestamp\":\"2026-04-04T12:00:00-04:00\"}\n"
+          "file": "{\"msg_id\":\"u1\",\"role\":\"user\",\"content\":\"legacy\",\"timestamp\":\"2026-04-04T12:00:00-04:00\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"legacy\"}]}\n"
         }
       ]
     }

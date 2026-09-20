@@ -1,8 +1,10 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
-import { Database } from "bun:sqlite";
+
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { clear, segments } from "../src/commands/segments.ts";
@@ -47,30 +49,7 @@ function put(characterDir: string, idx: number, messages: Message[]): void {
 }
 
 describe("segment management", () => {
-  test("migrates old rows and exposes stable inspection metadata", async () => {
-    const root = testTmp(`segments-migrate-${crypto.randomUUID()}`);
-    await mkdir(root, { recursive: true });
-    const path = join(root, HISTORY_DB_FILE);
-    const db = new Database(path, { create: true });
-    db.run(`CREATE TABLE history_segments (
-      character TEXT NOT NULL, idx INTEGER NOT NULL, file TEXT NOT NULL,
-      message_count INTEGER NOT NULL, compacted_at TEXT NOT NULL,
-      PRIMARY KEY (character, idx)
-    )`);
-    db.run(`INSERT INTO history_segments VALUES ('ada', 0, '0001.jsonl', 2, '2026-08-20T11:00:00Z')`);
-    db.close();
 
-    const store = HistoryStore.open(path);
-    expect(store.entries("ada")).toEqual([{
-      idx: 0,
-      file: "0001.jsonl",
-      message_count: 2,
-      compacted_at: "2026-08-20T11:00:00Z",
-      first_message_at: null,
-      last_message_at: null,
-    }]);
-    store.close();
-  });
 
   test("shows the complete contents of an individual segment", async () => {
     const root = testTmp(`segments-show-${crypto.randomUUID()}`);
@@ -254,13 +233,9 @@ describe("segment management", () => {
     const characterDir = join(root, "ada");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const active = [message("u0", "risky experiment", 0), message("a0", "result", 1)];
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      `${active.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
-    );
-    await mkdir(join(characterDir, "active_prompt"), { recursive: true });
-    await writeFile(join(characterDir, "active_prompt", "MEMORY.md"), "stale memory\n");
-    await writeFile(join(characterDir, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), `${active.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+    writePromptSnapshotFile(join(characterDir, "active_prompt", "MEMORY.md"), "stale memory\n");
+    writeDurable(join(characterDir, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
     let reloads = 0;
     let repoints = 0;
     let completed = 0;
@@ -297,10 +272,7 @@ describe("segment management", () => {
     await mkdir(join(characterDir, "threads", "eval"), { recursive: true });
     putUnder(root, "ada", 0, [message("u0", "home talk", 0), message("a0", "home reply", 1)]);
     putUnder(root, "ada/eval", 0, [message("u1", "an earlier eval run", 1)]);
-    await writeFile(
-      join(characterDir, "threads", "eval", "active.jsonl"),
-      `${JSON.stringify(message("u2", "eval talk", 2))}\n`,
-    );
+    writeDurable(join(characterDir, "threads", "eval", "active.jsonl"), `${JSON.stringify(message("u2", "eval talk", 2))}\n`);
 
     const result = await clear({
       characterName: "ada",

@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -44,7 +45,8 @@ async function build(entries: Entry[]): Promise<World> {
       continue;
     }
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, bytes ?? "");
+    if (path.endsWith("/deferred_edits.jsonl")) writeDurable(target, String(bytes ?? ""));
+    else await writeFile(target, bytes ?? "");
   }
   await mkdir(join(root, "data"), { recursive: true });
   return { root, config: join(root, "config"), data: join(root, "data") };
@@ -107,10 +109,10 @@ describe("listCharacters", () => {
       ],
     ],
     [
-      "a legacy character.md counts as a character",
+      "a workspace definition counts as a character",
       "mid",
       [
-        ["config/characters/legacy/character.md", "Legacy"],
+        ["config/characters/legacy/workspace/SOUL.md", "Legacy"],
         ["config/characters/mid/workspace/SOUL.md", "m"],
       ],
     ],
@@ -238,7 +240,7 @@ describe("characterInfo", () => {
         ["config/characters/mid/workspace/USER.md", "The user likes tests."],
         ["config/characters/mid/workspace/AGENTS.md", "agents"],
         ["config/characters/mid/workspace/TOOLS.md", "tools"],
-        ["config/characters/mid/config.toml", "[defaults]\n"],
+        ["config/characters/mid/config.toml", "\n"],
         ["data/mid/deferred_edits.jsonl", ""],
       ],
     ],

@@ -6,12 +6,8 @@ pub fn active_character_path() -> PathBuf {
     crate::dirs::data_dir().join("active_character")
 }
 
-fn legacy_active_character_path() -> PathBuf {
-    crate::dirs::runtime_dir().join("active_character")
-}
-
 pub fn read_active_character() -> Option<String> {
-    read_from(&active_character_path(), &legacy_active_character_path())
+    read_from(&active_character_path())
 }
 
 pub fn write_active_character(name: &str) -> std::io::Result<()> {
@@ -20,8 +16,7 @@ pub fn write_active_character(name: &str) -> std::io::Result<()> {
 
 pub fn clear_active_character() -> std::io::Result<()> {
     debug!("Clearing active character state file");
-    remove_at(&active_character_path())?;
-    remove_at(&legacy_active_character_path())
+    remove_at(&active_character_path())
 }
 
 fn thread_state_path(character: &str) -> Option<PathBuf> {
@@ -81,10 +76,8 @@ fn remove_at(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn read_from(primary: &Path, legacy: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(primary)
-        .or_else(|_| std::fs::read_to_string(legacy))
-        .ok()?;
+fn read_from(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
     let trimmed = content.trim();
     if trimmed.is_empty() {
         debug!("No active character in state file");
@@ -109,18 +102,12 @@ mod tests {
     struct Paths {
         _tmp: tempfile::TempDir,
         primary: PathBuf,
-        legacy: PathBuf,
     }
 
     fn paths() -> Paths {
         let tmp = tempfile::TempDir::new().unwrap();
         let primary = tmp.path().join("data").join("active_character");
-        let legacy = tmp.path().join("run").join("active_character");
-        Paths {
-            _tmp: tmp,
-            primary,
-            legacy,
-        }
+        Paths { _tmp: tmp, primary }
     }
 
     #[test]
@@ -129,28 +116,24 @@ mod tests {
             active_character_path(),
             crate::dirs::data_dir().join("active_character"),
         );
-        assert_eq!(
-            legacy_active_character_path(),
-            crate::dirs::runtime_dir().join("active_character"),
-        );
     }
 
     #[test]
     fn round_trips_through_the_data_dir() {
         let p = paths();
-        assert!(read_from(&p.primary, &p.legacy).is_none(), "missing file");
+        assert!(read_from(&p.primary).is_none(), "missing file");
 
         write_to(&p.primary, "alice").unwrap();
-        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("alice"));
+        assert_eq!(read_from(&p.primary).as_deref(), Some("alice"));
 
         write_to(&p.primary, "bob").unwrap();
-        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("bob"));
+        assert_eq!(read_from(&p.primary).as_deref(), Some("bob"));
 
         std::fs::write(&p.primary, "").unwrap();
-        assert!(read_from(&p.primary, &p.legacy).is_none(), "empty file");
+        assert!(read_from(&p.primary).is_none(), "empty file");
 
         std::fs::write(&p.primary, "  carol  \n").unwrap();
-        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("carol"));
+        assert_eq!(read_from(&p.primary).as_deref(), Some("carol"));
     }
 
     #[test]
@@ -158,10 +141,7 @@ mod tests {
         let p = paths();
         write_to(&p.primary, "eval").unwrap();
         remove_at(&p.primary).unwrap();
-        assert!(
-            read_from(&p.primary, &p.legacy).is_none(),
-            "the choice is gone",
-        );
+        assert!(read_from(&p.primary).is_none(), "the choice is gone",);
         remove_at(&p.primary).expect("clearing twice is not an error");
     }
 
@@ -174,20 +154,5 @@ mod tests {
             );
         }
         assert!(thread_state_path("qifei").is_some());
-    }
-
-    #[test]
-    fn a_choice_left_in_the_runtime_dir_is_still_read() {
-        let p = paths();
-        std::fs::create_dir_all(p.legacy.parent().unwrap()).unwrap();
-        std::fs::write(&p.legacy, "dana").unwrap();
-        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("dana"));
-
-        write_to(&p.primary, "erin").unwrap();
-        assert_eq!(
-            read_from(&p.primary, &p.legacy).as_deref(),
-            Some("erin"),
-            "the data dir wins once it has an answer",
-        );
     }
 }

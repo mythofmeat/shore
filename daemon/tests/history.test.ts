@@ -1,8 +1,11 @@
+import { HistoryStore, type SegmentEntry } from "../src/engine/history_store.ts";
+import type { Message } from "../src/engine/types.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { handleSearchHistory } from "../src/tools/history";
@@ -55,8 +58,7 @@ interface Fixture {
     skipped: number;
   }[];
   corpus: {
-    segments: { file: string; body: string }[];
-    "compaction.json": string;
+    segments: { entry: SegmentEntry; messages: Message[] }[];
     "active.jsonl": string;
   };
   end_to_end: {
@@ -101,7 +103,7 @@ describe("searching a conversation's history", () => {
   function storedMessages(): Map<string, Stored> {
     const out = new Map<string, Stored>();
     const lines = [
-      ...corpus.segments.flatMap((s) => s.body.split("\n")),
+      ...corpus.segments.flatMap(s => s.messages.map(message => JSON.stringify(message))),
       ...corpus["active.jsonl"].split("\n"),
     ];
     for (const line of lines) {
@@ -121,12 +123,12 @@ describe("searching a conversation's history", () => {
 
   async function characterDir(): Promise<string> {
     const dir = await mkdtemp(testTmp("shore-history-"));
-    await mkdir(join(dir, "threads", "main", "segments"), { recursive: true });
-    for (const segment of corpus.segments) {
-      await writeFile(join(dir, "threads", "main", "segments", segment.file), segment.body);
-    }
-    await writeFile(join(dir, "threads", "main", "compaction.json"), corpus["compaction.json"]);
-    await writeFile(join(dir, "threads", "main", "active.jsonl"), corpus["active.jsonl"]);
+    await mkdir(join(dir, "threads", "main"), { recursive: true });
+    const store = HistoryStore.open(join(dirname(dir), "shore.db"));
+    try {
+      for (const [index, segment] of corpus.segments.entries()) store.putSegment(basename(dir), index, segment.entry, segment.messages);
+    } finally { store.close(); }
+    writeDurable(join(dir, "threads", "main", "active.jsonl"), corpus["active.jsonl"]);
     return dir;
   }
 
@@ -138,7 +140,7 @@ describe("searching a conversation's history", () => {
       try {
         got = await handleSearchHistory(c.input, join(dir, "threads", "main"), {
           character: basename(dir),
-          dbPath: join(dirname(dir), "history.db"),
+          dbPath: join(dirname(dir), "shore.db"),
           defaultMode: "lexical",
           timeZone: "UTC",
           now: () => Date.parse("2026-01-05T00:00:00Z"),

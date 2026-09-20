@@ -1,8 +1,9 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
@@ -68,10 +69,7 @@ async function world(
 
   const characterDir = join(dirs.data, "ada");
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
-  );
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"));
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
@@ -297,10 +295,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
   test("runs the pass, then reloads the engine, then drains the deferred edits", async () => {
     const { config, characterDir } = await world();
     const order: string[] = [];
-    await writeFile(
-      join(characterDir, "deferred_edits.jsonl"),
-      JSON.stringify({ path: "prompt.md", operation: "append", content: "a line\n" }) + "\n",
-    );
+    writeDurable(join(characterDir, "deferred_edits.jsonl"), JSON.stringify({ path: "prompt.md", operation: "append", content: "a line\n" }) + "\n");
 
     const seen: { messages: unknown[] }[] = [];
     const model = writingModel(seen);

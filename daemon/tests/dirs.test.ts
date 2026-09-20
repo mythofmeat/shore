@@ -8,11 +8,9 @@ import fixture from "./config_captures/dirs.json" with { type: "json" };
 import {
   characterActiveJsonl,
   MAIN_THREAD,
-  characterCompactionManifest,
   characterConfigDir,
   characterDataDir,
   characterMemoryDir,
-  characterSegmentsDir,
   characterWorkspaceDir,
   characterWorkspaceFile,
   discoverCharacters,
@@ -161,10 +159,6 @@ describe("path helpers", () => {
       expect(characterMemoryDir(c.base, c.name)).toBe(c.character_memory_dir);
       expect(characterDataDir(c.base, c.name)).toBe(c.character_data_dir);
       expect(characterActiveJsonl(c.base, c.name, MAIN_THREAD)).toBe(c.character_active_jsonl);
-      expect(characterSegmentsDir(c.base, c.name, MAIN_THREAD)).toBe(c.character_segments_dir);
-      expect(characterCompactionManifest(c.base, c.name, MAIN_THREAD)).toBe(
-        c.character_compaction_manifest,
-      );
       expect(pluginsDir(c.base)).toBe(c.plugins_dir);
     });
   }
@@ -270,8 +264,8 @@ describe("per-character config merge", () => {
 
   test("merging does not mutate the global table", () => {
     const root = build([
-      { path: "config.toml", content: "[defaults]\nstream = true" },
-      { path: "characters/aria/config.toml", content: "[defaults]\nstream = false" },
+      { path: "config.toml", content: '[compaction]\nenabled = true\n' },
+      { path: "characters/aria/config.toml", content: '[compaction]\nenabled = false\n' },
     ]);
     const global = loadRawConfigTable(undefined, {
       env: { SHORE_CONFIG_DIR: root },

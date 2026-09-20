@@ -46,54 +46,16 @@ const LEADING_FLAGS: [(&str, &str); 5] = [
     ("--addr", "--addr"),
 ];
 
-const RETIRED_FLAGS: [(&str, &str); 6] = [
-    ("--config", "name the daemon with --addr, or set SHORE_ADDR"),
-    ("--no-color", "set NO_COLOR=1 in the environment"),
-    (
-        "--plain",
-        "output is already plain when it is not going to a terminal",
-    ),
-    (
-        "--temperature",
-        "set it on the model: shore model setting temperature <value>",
-    ),
-    (
-        "--top-p",
-        "set it on the model: shore model setting top_p <value>",
-    ),
-    (
-        "--thinking",
-        "set it on the model: shore model setting reasoning_budget_tokens <tokens>",
-    ),
-];
-
 const NAMED_BY_USE: [&str; 3] = ["model", "character", "thread"];
 
 /// Words people reach for when the bare command is already the listing.
 const LISTING_VERBS: [&str; 4] = ["list", "ls", "all", "show"];
 
-const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
-
-const FOLDED_IN: [(&str, &str); 1] = [(
-    "model background",
-    "every model role is listed by `shore model`; pin one with \
-     `shore model use --background=<heartbeat|compaction> <name>`, or \
-     bare `--background` for all of them",
-)];
-
-const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
-    "config",
-    "--reset",
-    "there were no runtime overrides to drop; re-read the file with: shore config reload",
-)];
-
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum FlagProblem {
     Misplaced(&'static str),
-    Retired(&'static str, &'static str),
     BareName(&'static str, String),
     AlreadyLists(&'static str, String),
-    Promoted(&'static str, &'static str),
     NeedsEquals(&'static str, String),
 }
 
@@ -182,13 +144,6 @@ fn leading_flag_named(spelled: &str) -> Option<&'static str> {
         .map(|&(_, canonical)| canonical)
 }
 
-fn retired_flag_named(spelled: &str) -> Option<FlagProblem> {
-    RETIRED_FLAGS
-        .iter()
-        .find(|&&(spelling, _)| spelling == spelled)
-        .map(|&(name, instead)| FlagProblem::Retired(name, instead))
-}
-
 pub(crate) fn flag_problem<I, S>(argv: I) -> Option<FlagProblem>
 where
     I: IntoIterator<Item = S>,
@@ -202,7 +157,6 @@ where
         return Some(problem);
     }
     let mut words: Vec<String> = Vec::new();
-    let mut flags: Vec<String> = Vec::new();
     let mut flagged = false;
     let mut expecting_value = false;
 
@@ -215,16 +169,6 @@ where
             continue;
         }
         let spelled = token.split('=').next().unwrap_or(token);
-        if words.first().is_some_and(|word| word == "config")
-            && words.get(1).is_some_and(|word| word == "migrate")
-            && matches!(spelled, "--config" | "--data-dir" | "--daemon")
-        {
-            expecting_value = !token.contains('=');
-            continue;
-        }
-        if let Some(problem) = retired_flag_named(spelled) {
-            return Some(problem);
-        }
         if let Some(flag) = leading_flag_named(spelled) {
             if words.is_empty() {
                 expecting_value = !token.contains('=');
@@ -234,44 +178,12 @@ where
         }
         if token.starts_with('-') {
             flagged = true;
-            flags.push(spelled.to_owned());
         } else {
             words.push(token.to_owned());
         }
     }
 
-    promoted(&words)
-        .or_else(|| folded_in(&words))
-        .or_else(|| retired_under(&words, &flags))
-        .or_else(|| bare_name(&words, flagged))
-}
-
-fn folded_in(words: &[String]) -> Option<FlagProblem> {
-    let command = words.first()?;
-    let sub = words.get(1)?;
-    let typed = format!("{command} {sub}");
-    FOLDED_IN
-        .iter()
-        .find(|&&(old, _)| old == typed)
-        .map(|&(old, instead)| FlagProblem::Retired(old, instead))
-}
-
-fn retired_under(words: &[String], flags: &[String]) -> Option<FlagProblem> {
-    let command = words.first()?;
-    RETIRED_UNDER
-        .iter()
-        .find(|&&(under, flag, _)| under == command && flags.iter().any(|f| f == flag))
-        .map(|&(_, flag, instead)| FlagProblem::Retired(flag, instead))
-}
-
-fn promoted(words: &[String]) -> Option<FlagProblem> {
-    let command = words.first()?;
-    let sub = words.get(1)?;
-    let typed = format!("{command} {sub}");
-    PROMOTED
-        .iter()
-        .find(|&&(old, _)| old == typed)
-        .map(|&(old, now)| FlagProblem::Promoted(old, now))
+    bare_name(&words, flagged)
 }
 
 fn bare_name(words: &[String], flagged: bool) -> Option<FlagProblem> {
@@ -311,11 +223,8 @@ pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCo
             cli_err!();
             cli_err!("  shore {flag} <value> <command>");
         }
-        FlagProblem::Retired(flag, instead) => {
-            crate::output::print_error(&format!("{flag} was removed — {instead}"));
-        }
         FlagProblem::BareName(command, ref name) => {
-            crate::output::print_error(&format!("`shore {command}` no longer takes a name"));
+            crate::output::print_error(&format!("select a name with `shore {command} use`"));
             cli_err!();
             cli_err!("  shore {command} use {name}");
         }
@@ -325,11 +234,6 @@ pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCo
             ));
             cli_err!();
             cli_err!("  shore {command}");
-        }
-        FlagProblem::Promoted(old, now) => {
-            crate::output::print_error(&format!("`shore {old}` is now a command of its own"));
-            cli_err!();
-            cli_err!("  shore {now}");
         }
         FlagProblem::NeedsEquals(flag, ref value) => {
             crate::output::print_error(&format!("{flag} takes its value with an ="));
@@ -1446,27 +1350,6 @@ pub(crate) enum ProviderCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ConfigCommand {
-    #[command(about = "Plan a local, offline configuration migration; use --write to apply it")]
-    Migrate {
-        #[arg(long, help = "Local main config.toml path")]
-        config: PathBuf,
-        #[arg(
-            long,
-            help = "Local daemon data directory, including saved model preferences"
-        )]
-        data_dir: Option<PathBuf>,
-        #[arg(
-            long,
-            help = "Apply the validated migration while the daemon is stopped"
-        )]
-        write: bool,
-        #[arg(
-            long,
-            env = "SHORE_DAEMON",
-            help = "Local shore-daemon executable for semantic validation"
-        )]
-        daemon: Option<PathBuf>,
-    },
     /// Read one setting, or a whole section, by dotted key.
     ///
     /// `shore config get chat.model`
@@ -2347,10 +2230,6 @@ pub(crate) fn to_swp_command(
         }
         | CliCommand::Config {
             subcommand: Some(ConfigCommand::Reload { .. }),
-            ..
-        }
-        | CliCommand::Config {
-            subcommand: Some(ConfigCommand::Migrate { .. }),
             ..
         } => None,
 
@@ -4115,17 +3994,6 @@ mod tests {
     }
 
     #[test]
-    fn compact_is_no_longer_under_memory() {
-        for args in [&["memory", "compact"][..], &["memory", "compact", "8"][..]] {
-            assert_eq!(
-                misplaced(args),
-                Some(FlagProblem::Promoted("memory compact", "compact")),
-                "{args:?}"
-            );
-        }
-    }
-
-    #[test]
     fn parse_config_no_args() {
         let cli = parse(&["config"]);
         assert_variant!(
@@ -4345,63 +4213,6 @@ mod tests {
     }
 
     #[test]
-    fn a_retired_flag_names_what_replaced_it() {
-        for args in [
-            &["--config", "/etc/shore.toml", "status"][..],
-            &["status", "--config=/etc/shore.toml"][..],
-        ] {
-            assert_eq!(
-                misplaced(args),
-                Some(FlagProblem::Retired(
-                    "--config",
-                    "name the daemon with --addr, or set SHORE_ADDR"
-                )),
-                "{args:?}"
-            );
-        }
-        assert_eq!(
-            misplaced(&["--no-color", "status"]),
-            Some(FlagProblem::Retired(
-                "--no-color",
-                "set NO_COLOR=1 in the environment"
-            ))
-        );
-        assert_eq!(
-            misplaced(&["log", "--plain"]),
-            Some(FlagProblem::Retired(
-                "--plain",
-                "output is already plain when it is not going to a terminal"
-            )),
-            "otherwise the message-reference parser answers first, and says \
-             '--plain' is not a message reference"
-        );
-    }
-
-    #[test]
-    fn a_retired_sampling_flag_points_at_the_model_settings() {
-        for (flag, instead) in [
-            (
-                "--temperature",
-                "set it on the model: shore model setting temperature <value>",
-            ),
-            (
-                "--top-p",
-                "set it on the model: shore model setting top_p <value>",
-            ),
-            (
-                "--thinking",
-                "set it on the model: shore model setting reasoning_budget_tokens <tokens>",
-            ),
-        ] {
-            assert_eq!(
-                misplaced(&["msg", "send", flag, "0.8", "hello"]),
-                Some(FlagProblem::Retired(flag, instead)),
-                "{flag}"
-            );
-        }
-    }
-
-    #[test]
     fn a_leading_flag_in_its_own_place_is_fine() {
         for args in [
             &["--character", "ada", "log"][..],
@@ -4470,24 +4281,6 @@ mod tests {
             &["provider", "models", "openrouter"][..],
             &["log", "last"][..],
             &["model", "--info", "opus"][..],
-        ] {
-            assert_eq!(misplaced(args), None, "{args:?}");
-        }
-    }
-
-    #[test]
-    fn reset_is_retired_under_config_and_nowhere_else() {
-        assert_eq!(
-            misplaced(&["config", "--reset"]),
-            Some(FlagProblem::Retired(
-                "--reset",
-                "there were no runtime overrides to drop; re-read the file with: shore config reload",
-            )),
-        );
-
-        for args in [
-            &["model", "setting", "--reset", "temperature"][..],
-            &["model", "--reset"][..],
         ] {
             assert_eq!(misplaced(args), None, "{args:?}");
         }
@@ -4865,19 +4658,6 @@ mod tests {
         assert!(Cli::try_parse_from(["shore", "model", "--background"]).is_err());
         let (name, _) = to_swp_command(parsed_command(&parse(&["model"])), None).unwrap();
         assert_eq!(name, "list_models");
-    }
-
-    #[test]
-    fn the_retired_background_subcommand_says_where_it_went() {
-        assert_eq!(
-            misplaced(&["model", "background"]),
-            Some(FlagProblem::Retired(
-                "model background",
-                "every model role is listed by `shore model`; pin one with \
-                 `shore model use --background=<heartbeat|compaction> <name>`, or \
-                 bare `--background` for all of them",
-            )),
-        );
     }
 
     #[test]

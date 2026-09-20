@@ -121,6 +121,7 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
         json!({
             "type": "command_output", "rid": get.get("rid"), "name": "get",
             "data": { "msg_id": "m_original", "role": "user", "content": "original text",
+                      "content_blocks": [{"type": "text", "text": "original text"}],
                       "timestamp": "2026-09-10T00:00:00Z" }
         }),
     );
@@ -128,7 +129,8 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
         &mut reader,
         json!({
             "type": "new_message", "character": "test", "msg_id": "m_new",
-            "role": "user", "content": "new arrival", "timestamp": "2026-09-10T00:00:01Z"
+            "role": "user", "content": "new arrival",
+            "content_blocks": [{"type": "text", "text": "new arrival"}], "timestamp": "2026-09-10T00:00:01Z"
         }),
     );
     let mut line = String::new();

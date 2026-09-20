@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -85,7 +86,7 @@ async function start(
 }
 
 const MODEL_CONFIG =
-  `[defaults]\nmodel = "anthropic:claude-opus-4-8"\n\n` +
+  "[chat]\nmodel = \"anthropic:claude-opus-4-8\"\n" +
   `[providers.anthropic]\napi_key_env = "SHORE_TEST_KEY"\n`;
 
 function scriptedProvider(text: string): SidecarProvider {
@@ -268,9 +269,7 @@ describe("coming up", () => {
     const charData = join(place.root, "data", "shore", "ada");
     await mkdir(charData, { recursive: true });
     const overdue = Date.now() - 45 * 60_000;
-    await writeFile(
-      join(charData, "autonomy_state.json"),
-      JSON.stringify({
+    writeDurable(join(charData, "autonomy_state.json"), JSON.stringify({
         version: 4,
         ticks_without_user: 0,
         next_wake_at: new Date(overdue).toISOString().replace(/\.\d{3}Z$/, "+00:00"),
@@ -280,8 +279,7 @@ describe("coming up", () => {
         keepalive_interval_ms: null,
         keepalive_last_warm_at: null,
         keepalive_last_active_at: null,
-      }),
-    );
+      }));
 
     const startedAt = Date.now();
     const daemon = await start(place);
@@ -638,7 +636,7 @@ describe("refusing to start", () => {
   test("a non-loopback bind is now ordinary, because the token is the boundary", async () => {
     const place = await layout(`
 [daemon]
-addr = "0.0.0.0:0"
+listen_addr = "0.0.0.0:0"
 `);
 
     const daemon = await startDaemon({
@@ -705,8 +703,8 @@ describe("a Matrix homeserver that never answers", () => {
     }
 
     const place = await layout(
-      `[connections.matrix]\nenabled = true\n` +
-        `homeserver = "http://127.0.0.1:${address.port}"\nuser_id = "@shore:example.com"\n`,
+      "[matrix]\nenabled = true\n" +
+        `homeserver_url = "http://127.0.0.1:${address.port}"\nuser_id = "@shore:example.com"\n`,
     );
     place.env[ACCESS_TOKEN_ENV] = "not-a-real-token";
 

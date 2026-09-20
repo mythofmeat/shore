@@ -1,4 +1,4 @@
-import { characterScope, importLegacyLog, insertEvent, readEvents, withStorage } from "../storage/store.ts";
+import { characterScope, insertEvent, readEvents, withStorage } from "../storage/store.ts";
 import { join } from "node:path";
 
 import type { Message } from "../engine/types.ts";
@@ -33,7 +33,6 @@ export async function appendSubagentTrace(
   now: () => Date = () => new Date(),
 ): Promise<void> {
   const record: SubagentTrace = { ...trace, ts: trace.ts ?? localRfc3339(now()) };
-  await migrateTraces(characterDataDir);
   const { data, character } = characterScope(characterDataDir);
   withStorage(data, (db) => insertEvent(db, { character, kind: "subagent", key: record.parent_tool_use_id, timestamp: record.ts, content: JSON.stringify(record) }));
 }
@@ -42,18 +41,9 @@ export async function readSubagentTraces(
   characterDataDir: string,
   query: TraceQuery = {},
 ): Promise<SubagentTrace[]> {
-  await migrateTraces(characterDataDir);
   const { data, character } = characterScope(characterDataDir);
   return readEvents(data, character, ["subagent", "subagent_result"], query.count, query.ids)
     .flatMap((line) => { const trace = parseTrace(line); return trace === undefined ? [] : [trace]; });
-}
-
-async function migrateTraces(characterDir: string): Promise<void> {
-  const { data, character } = characterScope(characterDir);
-  await importLegacyLog(data, `${character}/${TRACE_FILE}`, (line) => {
-    const trace = parseTrace(line);
-    return { character, kind: trace === undefined ? "legacy_invalid" : "subagent", key: trace?.parent_tool_use_id, timestamp: trace?.ts ?? "", content: line };
-  });
 }
 
 function parseTrace(line: string): SubagentTrace | undefined {

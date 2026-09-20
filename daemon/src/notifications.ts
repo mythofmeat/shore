@@ -29,7 +29,11 @@ export function expandArgv(argv: readonly string[], title: string, body: string)
   return argv.map((arg, i) => (i === 0 ? arg : fill(arg)));
 }
 
-export function ntfyUrl(config: NtfyConfig): string {
+export interface NtfyDelivery extends NtfyConfig {
+  token: string;
+}
+
+export function ntfyUrl(config: NtfyDelivery): string {
   return `${config.url.replace(/\/+$/, "")}/${config.topic}`;
 }
 
@@ -39,7 +43,7 @@ const SUMMARY_MAX_BYTES = 200;
 
 export interface NotificationSink {
   notifySend(title: string, body: string): Promise<void>;
-  ntfy(config: NtfyConfig, title: string, body: string): Promise<void>;
+  ntfy(config: NtfyDelivery, title: string, body: string): Promise<void>;
   command(argv: readonly string[], title: string, body: string): Promise<void>;
 }
 
@@ -121,7 +125,7 @@ export class NotificationService {
       case "ntfy":
         return this.#sink.ntfy({
           ...this.#config.ntfy,
-          token: this.#config.token_env === undefined ? this.#config.ntfy.token : process.env[this.#config.token_env] ?? "",
+          token: this.#config.token_env === undefined ? "" : process.env[this.#config.token_env] ?? "",
         }, title, body);
       case "command":
         return this.#sink.command(this.#config.command, title, body);

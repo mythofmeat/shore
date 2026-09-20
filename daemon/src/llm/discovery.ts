@@ -101,9 +101,9 @@ function decodeCache(bytes: string, path: string): ProviderModelsCache | undefin
     shoreLog.warn(`Provider cache failed to parse — treating as missing: ${path}`);
     return undefined;
   }
-  if (cache.version > CACHE_VERSION) {
+  if (cache.version !== CACHE_VERSION) {
     shoreLog.warn(
-      `Provider cache version ${cache.version} newer than this build (${CACHE_VERSION}) — treating as missing: ${path}`,
+      `Provider cache version ${cache.version} does not match this build (${CACHE_VERSION}) — treating as missing: ${path}`,
     );
     return undefined;
   }
@@ -122,7 +122,7 @@ function asCache(value: unknown): ProviderModelsCache | undefined {
 
   const models: DiscoveredModel[] = [];
   for (const raw of v.models) {
-    const model = asModel(raw, v.version);
+    const model = asModel(raw);
     if (model === undefined) return undefined;
     models.push(model);
   }
@@ -136,7 +136,7 @@ function asCache(value: unknown): ProviderModelsCache | undefined {
   };
 }
 
-function asModel(value: unknown, cacheVersion: number): DiscoveredModel | undefined {
+function asModel(value: unknown): DiscoveredModel | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const v = value as Record<string, unknown>;
   if (typeof v.provider_key !== "string") return undefined;
@@ -147,8 +147,7 @@ function asModel(value: unknown, cacheVersion: number): DiscoveredModel | undefi
   const rawMetadata = v.raw_provider_metadata !== undefined && v.raw_provider_metadata !== null
     ? v.raw_provider_metadata
     : undefined;
-  const support = asSupport(v.support) ??
-    (cacheVersion === 1 ? normalizeDiscoveredSupport(rawMetadata) : undefined);
+  const support = asSupport(v.support);
 
   return {
     provider_key: v.provider_key,

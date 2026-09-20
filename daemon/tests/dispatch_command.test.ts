@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ const UNWIRED: Record<string, string> = {
 
 const NOW_RESOLVES: Record<string, { was: string; value: unknown }> = {
   config: {
-    was: "Config section not found: behavior.autonomy.enabled",
+    was: "Config section not found: heartbeat.enabled",
     value: defaultAppConfig().behavior.autonomy.enabled,
   },
 };
@@ -89,10 +90,7 @@ async function harness(): Promise<{
   await mkdir(join(memoryDir, "daily"), { recursive: true });
   await writeFile(join(memoryDir, "daily", "2026-01-01.md"), "# a day\n\nsomething happened\n");
   await writeFile(join(memoryDir, "boats.md"), "# boats\n\nthey float\n");
-  await writeFile(
-    join(dirs.data, "ada", "threads", "main", "active.jsonl"),
-    SEEDED.map((m) => JSON.stringify(m)).join("\n") + "\n",
-  );
+  writeDurable(join(dirs.data, "ada", "threads", "main", "active.jsonl"), SEEDED.map((m) => JSON.stringify(m)).join("\n") + "\n");
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
@@ -151,7 +149,7 @@ async function autonomyWithState(dataDir: string): Promise<AutonomyService> {
     data_dir: join(dataDir, "ada"),
     config: {
       autonomyEnabled: a.enabled,
-      heartbeatEnabled: a.heartbeat.enabled,
+      heartbeatEnabled: a.enabled,
       compactionEnabled: defaultAppConfig().memory.compaction.enabled,
       minTurns: defaultAppConfig().memory.compaction.min_turns,
       maxTurns: defaultAppConfig().memory.compaction.max_turns,
@@ -255,7 +253,7 @@ describe("runCommand", () => {
         expect(want["message"]).toBe(resolves.was);
         expect(got["kind"]).toBe("command_output");
         const data = frame.type === "command_output" ? (frame.data as Record<string, unknown>) : {};
-        expect(data["key"]).toBe(c.args?.["key"] === "behavior.autonomy.enabled" ? "heartbeat.enabled" : c.args?.["key"]);
+        expect(data["key"]).toBe(c.args?.["key"]);
         expect(data["config"]).toEqual(resolves.value as never);
         return;
       }

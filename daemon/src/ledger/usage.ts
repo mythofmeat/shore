@@ -260,7 +260,6 @@ function budgetPayload(
   return {
     mode: "budget",
     timezone: config.timezone ?? "local",
-    allow_compaction_over_budget: config.allow_compaction_over_budget ?? false,
     budgets: budgetStatuses(db, config, now, opts),
     call_attempts: callAttemptStatus(db),
   };

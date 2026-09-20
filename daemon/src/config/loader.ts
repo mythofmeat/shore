@@ -1,3 +1,4 @@
+import { validateConfigSource } from "./schema.ts";
 import { shoreLog } from "../log.ts";
 import { hardcodedProviderBaseUrl } from "../llm/request.ts";
 
@@ -25,7 +26,7 @@ import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, readModelConfigFields, CatalogError, type ModelCatalog } from "./models.ts";
 import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
 import { renderStarterConfig } from "./starter.ts";
-import { formatConfigPath, normalizeConfigSource, type ConfigDeprecation } from "./surface.ts";
+import { formatConfigPath, normalizeConfigSource } from "./surface.ts";
 
 export type TomlTable = Record<string, unknown>;
 
@@ -33,7 +34,6 @@ export interface RawConfigTable {
   table: TomlTable;
   dirs: ShoreDirs;
   files: string[];
-  deprecations?: ConfigDeprecation[];
   adoptEnvironment?: () => void;
 }
 
@@ -188,12 +188,11 @@ export function loadRawConfigTable(
 
   let table: TomlTable;
   const files: string[] = [];
-  const deprecations: ConfigDeprecation[] = [];
   const read = (content: string, kind: ConfigErrorKind, path: string): TomlTable => {
     const parsed = parseToml(content, kind, path);
     const includes = parsed.include;
     delete parsed.include;
-    const normalized = normalizeSource(parsed, path, options.onWarn, deprecations);
+    const normalized = normalizeSource(parsed, path);
     if (includes !== undefined) normalized.include = includes;
     return normalized;
   };
@@ -226,7 +225,7 @@ export function loadRawConfigTable(
   loadConfD(rustJoin(configDirectory, "conf.d"), table, files, read);
 
   if (options.deferEnvironment !== true) adoptEnvironment?.();
-  return { table, dirs, files, deprecations, ...(adoptEnvironment === undefined ? {} : { adoptEnvironment }) };
+  return { table, dirs, files, ...(adoptEnvironment === undefined ? {} : { adoptEnvironment }) };
 }
 
 export function parentOf(path: string): string {
@@ -295,38 +294,28 @@ export interface LoadedConfig {
   dirs: ShoreDirs;
   rawTable: TomlTable | undefined;
   files?: string[];
-  deprecations?: ConfigDeprecation[];
   adoptEnvironment?: () => void;
 }
 
 export function normalizeSource(
   input: TomlTable,
   source: string,
-  onWarn: ConfigWarn = consoleConfigWarn,
-  warnings: ConfigDeprecation[] = [],
 ): TomlTable {
   try {
+    validateConfigSource(input, source);
     const normalized = normalizeConfigSource(input, source);
-    const valid = validateAppConfigLayer(normalized.table);
+    const valid = validateAppConfigLayer(normalized);
     if ("err" in valid) throw new Error(`${source}: ${valid.err}`);
-    const table = normalized.table;
+    const table = normalized;
     if (table.providers !== undefined && !isTable(table.providers)) throw new Error(`${source}: providers must be a table`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
     catalogFromSections(undefined, sectionTable(table.embedding), sectionTable(table.image_generation));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
       if (!isTable(entries)) continue;
-      const profiles = name.includes(":") ? [[name, entries] as const] : Object.entries(entries);
-      for (const [profile, fields] of profiles) {
-        if (!isTable(fields)) continue;
-        const parsed = readModelConfigFields(fields);
-        if ("err" in parsed) throw new Error(`${source}: ${formatConfigPath(name.includes(":") ? ["chat", name] : ["chat", name, profile])}: ${parsed.err}`);
-      }
+      const parsed = readModelConfigFields(entries);
+      if ("err" in parsed) throw new Error(`${source}: ${formatConfigPath(["chat", name])}: ${parsed.err}`);
     }
-    for (const warning of normalized.deprecations) {
-      warnings.push(warning);
-      onWarn("Deprecated configuration", [["source", source], ["key", warning.path], ["replacement", warning.replacement], ["removal", warning.boundary]]);
-    }
-    return normalized.table;
+    return normalized;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     throw new ConfigError("parse_app", message.startsWith(`${source}:`) ? message : `${source}: ${message}`, source);
@@ -344,8 +333,7 @@ export function parseConfigTable(
   files: string[] = [],
   normalized = false,
 ): LoadedConfig {
-  const deprecations: ConfigDeprecation[] = [];
-  if (!normalized) table = normalizeSource(table, files[0] ?? "config", onWarn, deprecations);
+  if (!normalized) table = normalizeSource(table, files[0] ?? "config");
   const rawTable = structuredClone(table);
 
   const remainder = { ...table };
@@ -381,7 +369,7 @@ export function parseConfigTable(
 
   validateConfig(app, models, providers, onWarn);
 
-  return { app, models, providers, dirs, rawTable, files, deprecations };
+  return { app, models, providers, dirs, rawTable, files };
 }
 
 export function loadConfig(
@@ -396,7 +384,6 @@ export function loadConfig(
 ): LoadedConfig {
   const raw = loadRawConfigTable(configPath, { ...options, deferEnvironment: true });
   const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files, true);
-  config.deprecations = raw.deprecations ?? [];
   if (options.deferEnvironment === true) {
     if (raw.adoptEnvironment !== undefined) config.adoptEnvironment = raw.adoptEnvironment;
   } else raw.adoptEnvironment?.();
@@ -411,12 +398,10 @@ export function loadCharacterConfig(
   const path = rustJoin(global.dirs.config, "characters", characterName, "config.toml");
   if (!exists(path)) return undefined;
 
-  const deprecations = [...(global.deprecations ?? [])];
-  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path, onWarn, deprecations);
+  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path);
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
   const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path], true);
-  loaded.deprecations = deprecations;
   scopeOverlayBudgetsToCharacter(loaded.app.usage, overlay, characterName);
   return loaded;
 }
@@ -447,32 +432,25 @@ function validateConfig(
   providers: ProviderRegistry,
   onWarn: ConfigWarn = consoleConfigWarn,
 ): void {
-  warnOnUnresolvableModelRef(catalog, providers, "defaults.model", app.defaults.model, onWarn);
+  warnOnUnresolvableModelRef(catalog, providers, "chat.model", app.defaults.model, onWarn);
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "defaults.background.model",
-    app.defaults.background.model,
-    onWarn,
-  );
-  warnOnUnresolvableModelRef(
-    catalog,
-    providers,
-    "defaults.background.heartbeat",
+    "heartbeat.model",
     app.defaults.background.heartbeat,
     onWarn,
   );
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "defaults.background.compaction",
+    "compaction.model",
     app.defaults.background.compaction,
     onWarn,
   );
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "defaults.subagent_model",
+    "subagents.model",
     app.defaults.subagent_model,
     onWarn,
   );
@@ -483,7 +461,7 @@ function validateConfig(
       if (resolved === undefined) {
         throw validationError(
           `subagents.${name} is enabled but resolves to no model; set ` +
-            `subagents.${name}.model, defaults.subagent_model, or defaults.model`,
+            `subagents.${name}.model, subagents.model, or chat.model`,
         );
       }
       if (!modelRefResolves(catalog, providers, resolved)) {
@@ -540,12 +518,6 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     ...[...app.subagents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
-    if (["read", "edit", "delete", "git", "fetch_url", "roll_dice"].includes(pattern)) {
-      onWarn(
-        `tool '${pattern}' has been replaced by bash; explicitly enable bash in tools.enabled or the subagent's tools list`,
-        [["pattern", pattern]],
-      );
-    }
     if (!pattern.startsWith("mcp__")) continue;
     const server = pattern.slice("mcp__".length).split("__")[0] ?? "";
     if (server !== "" && server !== "*" && !app.mcp.has(server)) {

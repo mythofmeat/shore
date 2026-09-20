@@ -231,11 +231,7 @@ describe("conversationKey", () => {
     );
   });
 
-  test("legacy ledger keys resolve to the unified database", () => {
-    const beforeThreads = conversationKey(request(context()));
-    expect(conversationKey(request(context("main")))).toBe(beforeThreads);
-    expect(beforeThreads).toBe("qifei\u0000/data/shore.db");
-  });
+
 
   test("the key still separates characters and ledgers", () => {
     expect(conversationKey(request({ ...context("scratch"), character: "aria" }))).not.toBe(

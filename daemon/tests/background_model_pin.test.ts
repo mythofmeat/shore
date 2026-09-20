@@ -14,19 +14,7 @@ import { loadConfig } from "../src/config/loader.ts";
 import { characterPreferencesPath } from "../src/config/preferences.ts";
 import { testTmp } from "./support/tmp.ts";
 
-const CATALOG = `
-[chat.anthropic.opus]
-model_id = "opus-id"
-sdk = "anthropic"
-
-[chat.anthropic.haiku]
-model_id = "haiku-id"
-sdk = "anthropic"
-
-[chat.openrouter.kimi]
-model_id = "kimi-id"
-sdk = "openrouter"
-`;
+const CATALOG = "[chat.\"anthropic:opus-id\"]\nsdk = \"anthropic\"\n\n[chat.\"anthropic:haiku-id\"]\nsdk = \"anthropic\"\n\n[chat.\"openrouter:kimi-id\"]\nsdk = \"openrouter\"\n";
 
 const silentRuntime = (): ConfigRuntime => ({
   reloadRuntimeConfig: () => {},
@@ -75,40 +63,40 @@ const readToml = (path: string) => readFile(path, "utf8");
 
 describe("pinning a background model", () => {
   test("writes the per-task key and moves only that role", async () => {
-    const { ctx, configPath } = await build(`[defaults]\nmodel = "opus"\n`);
+    const { ctx, configPath } = await build("[chat]\nmodel = \"opus-id\"\n");
     expect(roleOf(ctx, "heartbeat")?.source).toBe("inherits chat");
 
-    const result = switchModel(ctx, { name: "kimi", background_task: "heartbeat" }) as Record<
+    const result = switchModel(ctx, { name: "kimi-id", background_task: "heartbeat" }) as Record<
       string,
       unknown
     >;
 
     expect(result["role"]).toBe("heartbeat");
     expect(result["config_key"]).toBe("heartbeat.model");
-    expect(result["qualified_name"]).toBe("chat.openrouter.kimi");
-    expect(Bun.TOML.parse(await readToml(configPath))).toHaveProperty("heartbeat.model", "chat.openrouter.kimi");
+    expect(result["qualified_name"]).toBe("openrouter:kimi-id");
+    expect(Bun.TOML.parse(await readToml(configPath))).toHaveProperty("heartbeat.model", "openrouter:kimi-id");
 
-    expect(roleOf(ctx, "heartbeat")?.model).toBe("chat.openrouter.kimi");
+    expect(roleOf(ctx, "heartbeat")?.model).toBe("openrouter:kimi-id");
     expect(roleOf(ctx, "heartbeat")?.source).toBe("heartbeat.model");
     expect(roleOf(ctx, "compaction")?.source).toBe("inherits chat");
-    expect(roleOf(ctx, "chat")?.model).toBe("chat.anthropic.opus");
+    expect(roleOf(ctx, "chat")?.model).toBe("anthropic:opus-id");
   });
 
   test("leaves the character's chat selection alone", async () => {
-    const { ctx } = await build(`[defaults]\nmodel = "opus"\n`);
-    switchModel(ctx, { name: "kimi", background_task: "heartbeat" });
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+    switchModel(ctx, { name: "kimi-id", background_task: "heartbeat" });
 
     const prefs = characterPreferencesPath(ctx.dataDir, "Tester");
     expect(await readFile(prefs, "utf8").catch(() => "")).toBe("");
     expect(ctx.activeModel).toBeUndefined();
   });
 
-  test("`all` writes both task models and replaces legacy per-task pins", async () => {
+  test("`all` writes both task models and replaces both per-task pins", async () => {
     const { ctx, configPath } = await build(
-      `[defaults]\nmodel = "opus"\n\n[defaults.background]\nheartbeat = "haiku"\n`,
+      "[chat]\nmodel = \"opus-id\"\n\n[heartbeat]\nmodel = \"haiku-id\"\n",
     );
 
-    const result = switchModel(ctx, { name: "kimi", background_task: "all" }) as Record<
+    const result = switchModel(ctx, { name: "kimi-id", background_task: "all" }) as Record<
       string,
       unknown
     >;
@@ -119,16 +107,16 @@ describe("pinning a background model", () => {
     expect(result["cleared"]).toEqual([]);
 
     const written = await readToml(configPath);
-    expect(written).toContain("model = \"chat.openrouter.kimi\"");
+    expect(written).toContain("model = \"openrouter:kimi-id\"");
     expect(written).not.toContain("heartbeat =");
 
-    expect(roleOf(ctx, "heartbeat")?.model).toBe("chat.openrouter.kimi");
-    expect(roleOf(ctx, "compaction")?.model).toBe("chat.openrouter.kimi");
+    expect(roleOf(ctx, "heartbeat")?.model).toBe("openrouter:kimi-id");
+    expect(roleOf(ctx, "compaction")?.model).toBe("openrouter:kimi-id");
     expect(roleOf(ctx, "heartbeat")?.source).toBe("heartbeat.model");
   });
 
   test("an unknown name is an error and writes nothing", async () => {
-    const { ctx, configPath } = await build(`[defaults]\nmodel = "opus"\n`);
+    const { ctx, configPath } = await build("[chat]\nmodel = \"opus-id\"\n");
     const before = await readToml(configPath);
 
     let thrown: unknown;
@@ -143,26 +131,26 @@ describe("pinning a background model", () => {
   });
 
   test("an unknown task is an error", async () => {
-    const { ctx } = await build(`[defaults]\nmodel = "opus"\n`);
-    expect(() => switchModel(ctx, { name: "kimi", background_task: "dreaming" })).toThrow(
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+    expect(() => switchModel(ctx, { name: "kimi-id", background_task: "dreaming" })).toThrow(
       /unknown background task/,
     );
   });
 });
 
 describe("unpinning a background model", () => {
-  test("requires migration before clearing a legacy shared fallback", async () => {
-    const { ctx, configPath } = await build(
-      `[defaults]\nmodel = "opus"\n\n[defaults.background]\nmodel = "haiku"\nheartbeat = "kimi"\n`,
-    );
-    const before = await readToml(configPath);
-    expect(() => resetModel(ctx, { background_task: "heartbeat" })).toThrow(/migrate/);
-    expect(await readToml(configPath)).toBe(before);
-  });
+
 
   test("`all` clears every background key and the tasks inherit chat", async () => {
     const { ctx, configPath } = await build(
-      `[chat]\nmodel = "opus"\n\n[heartbeat]\nmodel = "haiku"\n[compaction]\nmodel = "kimi"\n`,
+      `[chat]
+model = "opus-id"
+
+[heartbeat]
+model = "haiku-id"
+[compaction]
+model = "kimi-id"
+`,
     );
 
     const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
@@ -178,7 +166,7 @@ describe("unpinning a background model", () => {
   });
 
   test("clearing a key that was never set is not an error", async () => {
-    const { ctx } = await build(`[defaults]\nmodel = "opus"\n`);
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
     const result = resetModel(ctx, { background_task: "compaction" }) as Record<string, unknown>;
 
     expect(result["cleared"]).toEqual([]);
@@ -186,7 +174,7 @@ describe("unpinning a background model", () => {
   });
 
   test("a bare reset still targets the chat model", async () => {
-    const { ctx } = await build(`[defaults]\nmodel = "opus"\n`);
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
     const result = resetModel(ctx) as Record<string, unknown>;
 
     expect(result["reset_to"]).toBe("config default");

@@ -1,5 +1,6 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 
 import { ConversationEngine } from "../src/engine/conversation.ts";
@@ -75,10 +76,7 @@ async function engineWith(timestamps: string[]): Promise<ConversationEngine> {
   const root = mkdtempSync(testTmp("shore-conversation-spend-"));
   const charDir = join(root, "aria");
   mkdirSync(join(charDir, "threads", "main"), { recursive: true });
-  writeFileSync(
-    join(charDir, "threads", "main", "active.jsonl"),
-    timestamps.map((t) => JSON.stringify(message(t))).join("\n") + (timestamps.length ? "\n" : ""),
-  );
+  writeDurable(join(charDir, "threads", "main", "active.jsonl"), timestamps.map((t) => JSON.stringify(message(t))).join("\n") + (timestamps.length ? "\n" : ""));
   return await ConversationEngine.load("aria", root);
 }
 

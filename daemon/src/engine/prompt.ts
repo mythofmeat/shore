@@ -170,9 +170,6 @@ export function stripOneTrailingNewline(raw: string): string {
 }
 
 function estimateMessageTokens(msg: Message): number {
-  if (msg.content_blocks.length === 0) {
-    return estimateTokens(msg.content);
-  }
   let total = 0;
   for (const block of msg.content_blocks) {
     switch (block.type) {

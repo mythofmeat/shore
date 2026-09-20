@@ -1,6 +1,7 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -92,8 +93,8 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
   const config = await loadedConfig(root, inputs.supportsImages);
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
   const charDir = join(config.dirs.data, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
 
@@ -103,10 +104,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
 
   const history = inputs.history ?? [];
   if (history.length > 0) {
-    await writeFile(
-      join(charDir, "threads", "main", "active.jsonl"),
-      history.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(charDir, "threads", "main", "active.jsonl"), history.map((m) => JSON.stringify(m)).join("\n") + "\n");
   }
 
   const requests: SidecarRequest[] = [];
@@ -179,7 +177,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
         text: inputs.text,
         stream: true,
         images: inputs.imagePaths ?? [],
-        image_data: [],
+        image_data: await Promise.all((inputs.imagePaths ?? []).map(async (path) => ({ filename: basename(path), data: (await readFile(path)).toString("base64") }))),
       },
       regen: false,
       charName: "ada",

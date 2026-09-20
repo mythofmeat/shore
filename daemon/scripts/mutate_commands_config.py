@@ -140,28 +140,20 @@ MUTANTS = [
     ("read: a non-string key is coerced rather than ignored",
      '  const key = asStr(args["key"]);',
      '  const key = args["key"] === undefined ? undefined : String(args["key"]);'),
-    ("read: an unknown key returns null instead of failing",
-     "  const found = walkConfigKey(app, canonical);\n  if (found === undefined) throw notFound(notFoundMessage(key));",
-     "  const found = walkConfigKey(app, canonical) ?? { value: null };"),
-    ("read: a settable-only alias is reported as a plain miss",
-     "  const readable = KEY_ALIASES.get(key);\n"
-     "  if (readable === undefined || readable === key) return `Config section not found: ${key}`;",
-     "  const readable = KEY_ALIASES.get(key);\n"
-     "  if (true as boolean) return `Config section not found: ${key}`;\n  void readable;"),
+    ('read: an unknown key returns null instead of failing',
+     '  const found = walkConfigKey(app, canonical);\n  if (found === undefined) throw notFound(`Config section not found: ${key}`);',
+     '  const found = walkConfigKey(app, canonical) ?? { value: null };'),
+
     ("read: the defaults baseline is the effective config",
      "  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;",
      "  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;\n"
      "  return out;"),
-    ("read: the key read returns the whole default baseline",
-     "  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null, ...(canonical === key ? {} : { deprecated_key: key }) };",
-     "  return { key, config: found.value, defaults };"),
-    ("read: the key read returns the default in place of the effective value",
-     "  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null, ...(canonical === key ? {} : { deprecated_key: key }) };",
-     "  return {\n"
-     "    key,\n"
-     "    config: walkConfigKey(defaults, key)?.value ?? null,\n"
-     "    defaults: walkConfigKey(defaults, key)?.value ?? null,\n"
-     "  };"),
+    ('read: the key read returns the whole default baseline',
+     '  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null };',
+     '  return { key, config: found.value, defaults };'),
+    ('read: the key read returns the default in place of the effective value',
+     '  return { key: canonical, config: found.value, defaults: walkConfigKey(defaults, canonical)?.value ?? null };',
+     '  return {\n    key,\n    config: walkConfigKey(defaults, key)?.value ?? null,\n    defaults: walkConfigKey(defaults, key)?.value ?? null,\n  };'),
     ("read: the walk accepts a prefix of the key it was asked for",
      "    if (!(segment in table)) return undefined;\n    current = table[segment];",
      "    if (!(segment in table)) return { value: current };\n    current = table[segment];"),

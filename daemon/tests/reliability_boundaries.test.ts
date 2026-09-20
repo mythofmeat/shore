@@ -21,8 +21,8 @@ test("a restored legacy file cannot overwrite authoritative database state", asy
   await mkdir(join(root, "ada"));
   writeState(root, "ada/state", "new DB content", "ada");
   await writeFile(join(root, "ada/state"), "old restored file");
-  expect(readState(root, "ada/state", "ada")).toBe("new DB content");
-  expect(readState(root, "ada/state", "ada")).toBe("new DB content");
+  expect(readState(root, "ada/state")).toBe("new DB content");
+  expect(readState(root, "ada/state")).toBe("new DB content");
 });
 
 test("a restored SDK book cannot restore sessions that were deliberately removed", async () => {

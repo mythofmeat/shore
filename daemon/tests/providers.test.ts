@@ -263,20 +263,7 @@ enabled = true
 ignore = ["vendor/two"]
 `;
 
-const CATALOG = `
-[chat.alpha.one]
-model_id = "static-one"
-sdk = "anthropic"
-max_output_tokens = 1024
-
-[chat.other.two]
-model_id = "static-two"
-sdk = "openai"
-
-[chat.alpha.shadowed]
-model_id = "vendor/two"
-sdk = "anthropic"
-`;
+const CATALOG = "[chat.\"alpha:static-one\"]\nsdk = \"anthropic\"\nmax_output_tokens = 1024\n\n[chat.\"alpha:vendor/two\"]\nsdk = \"anthropic\"\n\n[chat.\"other:static-two\"]\nsdk = \"openai\"\n";
 
 const REFRESH_GUARDS = `
 [disabled]
@@ -313,7 +300,7 @@ enabled = true
 
 function cacheJson(provider: string, models: [string, string][]): unknown {
   return {
-    version: 1,
+    version: 2,
     provider_key: provider,
     fetched_at: "1999-01-01T00:00:00Z",
     base_url: null,

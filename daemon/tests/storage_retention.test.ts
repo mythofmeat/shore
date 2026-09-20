@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { SnapshotGate } from "../src/snapshot_gate.ts";
-import { migrateDatabases } from "../src/storage/migrate.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
 import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics, startDiagnosticRetention } from "../src/storage/retention.ts";
 import { databasePath, insertEvent, pack, readEvents, unpack, withStorage, writeState, readState } from "../src/storage/store.ts";
 import { appendSubagentTrace, readSubagentTraces } from "../src/tools/subagent_trace.ts";
@@ -20,7 +20,7 @@ const old = new Date(cutoff - 1000);
 function dataDir() {
   const root = mkdtempSync(join(tmpdir(), "shore-retention-"));
   roots.push(root);
-  migrateDatabases({ data: root, cache: root });
+  initializeDatabase(root);
   return root;
 }
 
@@ -105,7 +105,7 @@ test("only old heartbeat events expire; history, state, ledger and malformed rec
   expect(readEvents(data, "ada", "heartbeat")).toEqual(["boundary heartbeat", "undated heartbeat"]);
   expect(readEvents(data, "ada", "subagent")).toEqual(["malformed trace"]);
   expect(readEvents(data, "ada", "legacy_invalid")).toEqual(["legacy record"]);
-  expect(readState(data, "ada/autonomy_state.json", "ada")).toBe("keep state");
+  expect(readState(data, "ada/autonomy_state.json")).toBe("keep state");
   withStorage(data, (db) => {
     expect(db.query("SELECT count(*) AS n FROM history_segments").get()).toEqual({ n: 1 });
     expect(db.query("SELECT id FROM call_attempts").get()).toEqual({ id: "old" });

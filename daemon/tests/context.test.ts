@@ -1,3 +1,4 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
 import { readdir } from "./support/stored_files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -239,8 +240,7 @@ async function contextFixture(c: ContextCase): Promise<{
     await mkdir(charDataDir, { recursive: true });
     await writeFile(activeDir, "not a directory");
   } else {
-    await mkdir(activeDir, { recursive: true });
-    for (const f of c.input.active_files) await writeFile(join(activeDir, f.name), f.content);
+    for (const f of c.input.active_files) writePromptSnapshotFile(join(activeDir, f.name), f.content);
   }
   await mkdir(cacheDir, { recursive: true });
 

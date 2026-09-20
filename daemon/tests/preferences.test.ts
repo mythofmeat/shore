@@ -277,12 +277,8 @@ function prefsFrom(text: string): ModelPreferences {
 }
 
 const STATIC_CHAT = `
-[anthropic.opus]
-model_id = "claude-opus-4-6"
-
-[anthropic.sonnet]
-model_id = "claude-sonnet-4-6"
-`;
+["anthropic:claude-opus-4-6"]
+["anthropic:claude-sonnet-4-6"]`;
 
 function buildConfig(
   chat: string,
@@ -415,13 +411,6 @@ ignore = ["glm-4.5"]
     ]);
   });
 
-  test("the removed Z.ai provider name names both replacements", () => {
-    const legacy = () => ProviderRegistry.fromSection({ zai: {} });
-    const message = catchError(ProviderRegistryError, legacy).message;
-    expect(message).toContain("zai-api");
-    expect(message).toContain("zai-sub");
-  });
-
   test("the compact key form becomes a synthetic `default` key", () => {
     const registry = ProviderRegistry.fromSection(
       Bun.TOML.parse('[p]\napi_key_env = "MY_KEY"\n') as never,
@@ -479,13 +468,7 @@ describe("loadPreferences", () => {
     expect(prefsToWire(prefs)).toEqual(fx.missing_file_is_empty);
   });
 
-  test("the removed Z.ai endpoint toggle has an actionable migration error", () => {
-    const root = tempRoot();
-    const path = join(root, "models.toml");
-    writeFileSync(path, "[defaults.sampler]\nzai_subscription = true\n");
-    const error = catchError(PreferenceError, () => loadPreferences(path));
-    expect(error.message).toContain("select `zai-sub:<model_id>`");
-  });
+
 
   test("an empty file still serializes the whole schema", () => {
     expect(serializePreferences(emptyPreferences())).toBe(
@@ -560,11 +543,11 @@ describe("resolveSamplerSettings", () => {
   });
 
   test("a zero iteration cap is treated as unset", () => {
-    const global = prefsFrom("[defaults.sampler]\nmax_tool_iterations = 0\n");
+    const global = prefsFrom("[defaults.sampler]\nmax_tool_rounds = 0\n");
     expect(
       resolveSamplerSettings(global, undefined, "p", "m", undefined).maxToolIterations,
     ).toBeUndefined();
-    const ok = prefsFrom("[defaults.sampler]\nmax_tool_iterations = 1\n");
+    const ok = prefsFrom("[defaults.sampler]\nmax_tool_rounds = 1\n");
     expect(resolveSamplerSettings(ok, undefined, "p", "m", undefined).maxToolIterations).toBe(1);
   });
 
@@ -835,14 +818,14 @@ describe("findEffectiveModel", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
     const config = buildConfig(
-      '[openrouter.opus]\nmodel_id = "anthropic/claude-opus-4-6"\n',
+      "[\"openrouter:anthropic/claude-opus-4-6\"]",
       "[openrouter]\nenabled = false\n",
       root,
     );
     expect(() =>
       findEffectiveModel(config, join(root, "cache"), "openrouter:anthropic/claude-opus-4-6", false),
     ).toThrow(EffectiveCatalogError);
-    expect(findEffectiveModel(config, join(root, "cache"), "opus", false).name).toBe("opus");
+    expect(() => findEffectiveModel(config, join(root, "cache"), "anthropic/claude-opus-4-6", false)).toThrow(EffectiveCatalogError);
   });
 
   test("a corrupt discovery cache is no discovery data, not an error", () => {
@@ -885,7 +868,7 @@ describe("resolveActiveForCharacter", () => {
     });
   }
 
-  test("an unresolvable [defaults].model still falls through, but says so", () => {
+  test("an unresolvable chat.model still falls through, but says so", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
     const config = buildConfig(STATIC_CHAT, "", root);
@@ -908,7 +891,7 @@ describe("resolveActiveForCharacter", () => {
 
     expect(resolved).toBeDefined();
     expect(warnings.join("\n")).toContain("nosuchprovider:nosuchmodel");
-    expect(warnings.join("\n")).toContain("[defaults].model");
+    expect(warnings.join("\n")).toContain("chat.model");
   });
 
   test("an empty catalog resolves to nothing rather than throwing", () => {
@@ -994,13 +977,8 @@ describe("resolveBackgroundModel", () => {
         join(root, "data", "ashe", "preferences", "models.toml"),
         row.character_prefs,
       );
-      const app = parseToml(row.background_toml) as
-        | { defaults?: { background?: Record<string, string> } }
-        | undefined;
-      const background = app?.defaults?.background;
-      const config = buildConfig(STATIC_CHAT, "", root, (task) =>
-        background === undefined ? undefined : (background[task] ?? background["model"]),
-      );
+      const background = parseToml(row.background_toml) as Record<string, { model?: string }> | undefined;
+      const config = buildConfig(STATIC_CHAT, "", root, (task) => background?.[task]?.model);
 
       const heartbeat = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
       expect(
@@ -1032,7 +1010,7 @@ describe("resolveBackgroundModel", () => {
       join(root, "data", "ashe", "preferences", "models.toml"),
       "[defaults.sampler]\nmax_output_tokens = 32000\n",
     );
-    const config = buildConfig(STATIC_CHAT, "", root, () => "sonnet");
+    const config = buildConfig(STATIC_CHAT, "", root, () => "claude-sonnet-4-6");
     const model = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
     expect(model?.maxOutputTokens).toBe(32000);
   });
@@ -1041,8 +1019,8 @@ describe("resolveBackgroundModel", () => {
 describe("sub-agent settings stand on their own", () => {
   const catalogModel = (): ResolvedModel =>
     ({
-      name: "opus",
-      qualifiedName: "chat.anthropic.opus",
+      name: "claude-opus-4-6",
+      qualifiedName: "anthropic:claude-opus-4-6",
       category: "chat",
       providerKey: "anthropic",
       modelId: "claude-opus-4-6",
@@ -1177,16 +1155,16 @@ describe("which model a sub-agent runs on", () => {
   test("the sub-agent's own model wins over defaults.subagent_model", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
-    const config = configWithSubagentDefault(root, "sonnet", "sonnet");
+    const config = configWithSubagentDefault(root, "claude-sonnet-4-6", "claude-sonnet-4-6");
 
-    const model = resolveSubagentBaseModel(config, "ashe", "opus", findEffectiveModel);
+    const model = resolveSubagentBaseModel(config, "ashe", "claude-opus-4-6", findEffectiveModel);
     expect(model?.modelId).toBe("claude-opus-4-6");
   });
 
   test("defaults.subagent_model wins over the chat model", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
-    const config = configWithSubagentDefault(root, "opus", "sonnet");
+    const config = configWithSubagentDefault(root, "claude-opus-4-6", "claude-sonnet-4-6");
 
     const model = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
     expect(model?.modelId).toBe("claude-opus-4-6");
@@ -1200,7 +1178,7 @@ describe("which model a sub-agent runs on", () => {
       join(root, "data", "ashe", "preferences", "models.toml"),
       '[selected]\nprovider = "anthropic"\nmodel_id = "claude-opus-4-6"\n',
     );
-    const config = configWithSubagentDefault(root, undefined, "sonnet");
+    const config = configWithSubagentDefault(root, undefined, "claude-sonnet-4-6");
 
     const model = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
     expect(model?.modelId).toBe("claude-opus-4-6");
@@ -1214,7 +1192,7 @@ describe("which model a sub-agent runs on", () => {
       join(root, "data", "ashe", "preferences", "models.toml"),
       '[models."anthropic:claude-sonnet-4-6"]\nmax_output_tokens = 32000\n',
     );
-    const config = configWithSubagentDefault(root, undefined, "sonnet");
+    const config = configWithSubagentDefault(root, undefined, "claude-sonnet-4-6");
 
     const inherited = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
     const chat = resolveChatModelForCharacter(config, "ashe", findEffectiveModel);
@@ -1226,7 +1204,7 @@ describe("which model a sub-agent runs on", () => {
   test("with no character there is no chat model to inherit", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
-    const config = configWithSubagentDefault(root, undefined, "sonnet");
+    const config = configWithSubagentDefault(root, undefined, "claude-sonnet-4-6");
 
     expect(
       resolveSubagentBaseModel(config, undefined, undefined, findEffectiveModel),
@@ -1236,7 +1214,7 @@ describe("which model a sub-agent runs on", () => {
   test("an explicitly empty model is a configuration error, not an unset value", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
-    const config = configWithSubagentDefault(root, undefined, "sonnet");
+    const config = configWithSubagentDefault(root, undefined, "claude-sonnet-4-6");
 
     expect(() => resolveSubagentBaseModel(config, "ashe", "", findEffectiveModel)).toThrow();
   });
@@ -1252,7 +1230,7 @@ describe("a pinned background model keeps its own settings slot", () => {
       '[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 32000\n\n' +
         '[models."anthropic:claude-sonnet-4-6"]\nmax_output_tokens = 4096\n',
     );
-    const config = buildConfig(STATIC_CHAT, "", root, () => "sonnet", "opus");
+    const config = buildConfig(STATIC_CHAT, "", root, () => "claude-sonnet-4-6", "claude-opus-4-6");
 
     const background = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
     const chat = resolveChatModelForCharacter(config, "ashe", findEffectiveModel);
@@ -1269,7 +1247,7 @@ describe("a pinned background model keeps its own settings slot", () => {
       join(root, "data", "ashe", "preferences", "models.toml"),
       '[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 32000\n',
     );
-    const config = buildConfig(STATIC_CHAT, "", root, () => undefined, "opus");
+    const config = buildConfig(STATIC_CHAT, "", root, () => undefined, "claude-opus-4-6");
 
     const background = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
     expect(background?.maxOutputTokens).toBe(32000);
@@ -1478,10 +1456,10 @@ describe("a thread's pinned model", () => {
     expect(pinned?.modelId).toBe("claude-opus-4-6");
   });
 
-  test("a bare alias is honoured the same as a qualified pin", () => {
+  test("a a model id resolves the same as a qualified pin", () => {
     const { config } = pinnedRoot("claude-opus-4-6");
 
-    expect(resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "sonnet")?.modelId).toBe(
+    expect(resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "claude-sonnet-4-6")?.modelId).toBe(
       "claude-sonnet-4-6",
     );
   });

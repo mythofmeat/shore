@@ -1,9 +1,11 @@
+import { withStorage } from "../src/storage/store.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 import fixture from "./autonomy_captures/deep_archive.json" with { type: "json" };
 import { MessageStore } from "../src/engine/message_store.ts";
@@ -63,29 +65,15 @@ async function world(
 
   const characterDir = join(dirs.data, "ada");
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    typeof content === "string"
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), typeof content === "string"
       ? content
-      : content.map((m) => JSON.stringify(m)).join("\n") + (content.length === 0 ? "" : "\n"),
-  );
+      : content.map((m) => JSON.stringify(m)).join("\n") + (content.length === 0 ? "" : "\n"));
 
   if (priorSegment) {
-    await mkdir(join(characterDir, "threads", "main", "segments"), { recursive: true });
-    await writeFile(join(characterDir, "threads", "main", "segments", "0001.jsonl"), "{}\n");
-    await writeFile(
-      join(characterDir, "threads", "main", "compaction.json"),
-      JSON.stringify(
-        {
-          segments: [
-            { file: "0001.jsonl", message_count: 4, compacted_at: "2025-12-01T09:00:00-05:00" },
-          ],
-          total_compacted_messages: 4,
-        },
-        null,
-        2,
-      ),
-    );
+    const history = HistoryStore.open(join(dirs.data, HISTORY_DB_FILE));
+    try {
+      history.putSegment("ada", 0, { file: HISTORY_DB_FILE, message_count: 0, compacted_at: "2025-12-01T09:00:00-05:00" }, []);
+    } finally { history.close(); }
   }
 
   const app = defaultAppConfig();
@@ -121,30 +109,10 @@ async function loadThroughStore(shapes: Shape[]): Promise<Message[]> {
   return [...store.messages()];
 }
 
-async function segmentsAfter(characterDir: string): Promise<Record<string, string>> {
-  let names: string[];
-  try {
-    names = (await readdir(join(characterDir, "threads", "main", "segments"))).sort();
-  } catch {
-    return {};
-  }
-  const out: Record<string, string> = {};
-  for (const name of names) {
-    out[name] = await readFile(join(characterDir, "threads", "main", "segments", name), "utf8");
-  }
-  return out;
-}
-
-async function manifestAfter(characterDir: string): Promise<unknown> {
-  let raw: string;
-  try {
-    raw = await readFile(join(characterDir, "threads", "main", "compaction.json"), "utf8");
-  } catch {
-    return null;
-  }
-  const v = JSON.parse(raw) as { segments?: { compacted_at?: string }[] };
-  for (const seg of v.segments ?? []) seg.compacted_at = "<stamp>";
-  return v;
+function archivedMessages(characterDir: string): Message[][] {
+  const history = HistoryStore.open(join(dirname(characterDir), HISTORY_DB_FILE));
+  try { return history.entries("ada").map(entry => history.readSegment("ada", entry.idx)); }
+  finally { history.close(); }
 }
 
 describe("deepArchivePlan", () => {
@@ -164,7 +132,7 @@ describe("deepArchivePlan", () => {
 describe("the pure archive", () => {
   for (const [i, kase] of fixture.pure_archive.entries()) {
     test(`case ${i}: ${kase.note}`, async () => {
-      const { characterDir } = await world(kase.active_before, kase.prior_segment);
+      const { characterDir, dataDir } = await world(kase.active_before, kase.prior_segment);
       const { store, raw } = await MessageStore.loadWithRaw(join(characterDir, "threads", "main", "active.jsonl"));
 
       const plan = deepArchivePlan(store.messages(), kase.covered_turn_count);
@@ -173,13 +141,16 @@ describe("the pure archive", () => {
 
       const newId = await conversationManager(
         join(characterDir, "threads", "main"),
+        { dbPath: join(dataDir, "shore.db"), archiveKey: "ada" },
         () => "2026-01-01T10:00:00-05:00",
         () => "conv-fixture",
       ).archiveAndRetain("deep-idle", { keepLastN: plan.tail, activeContent: raw });
 
       expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(kase.active_after);
-      expect(await segmentsAfter(characterDir)).toEqual(kase.segments_after as never);
-      expect(await manifestAfter(characterDir)).toEqual(kase.manifest_after as never);
+      const segments = archivedMessages(characterDir);
+      expect(segments).toHaveLength(kase.prior_segment ? 2 : 1);
+      const expected = kase.active_before.split("\n").filter(Boolean).map(line => JSON.parse(line) as Message).slice(0, plan.archivable);
+      expect(segments.at(-1)?.map(message => message.msg_id)).toEqual(expected.map(message => message.msg_id));
       expect(newId.length > 0).toBe(kase.new_conversation_id_is_fresh);
       expect(deepArchiveNotification("ada", plan.archivable)).toEqual(
         kase.notification as never,
@@ -264,9 +235,9 @@ describe("runDeepIdleArchive", () => {
     expect(notes).toEqual([[kase.notification.title, kase.notification.body]]);
     expect(reloaded).toEqual(["ada"]);
     expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(kase.active_after);
-    const segments = await segmentsAfter(characterDir);
-    if (kase.prior_segment) expect(segments).toEqual({ "0001.jsonl": "{}\n" });
-    else expect(segments).toEqual({});
+    const segments = archivedMessages(characterDir);
+    expect(segments).toHaveLength(kase.prior_segment ? 2 : 1);
+    expect(segments.at(-1)).toHaveLength(kase.plan.archivable);
    });
   }
 
@@ -311,7 +282,8 @@ describe("runDeepIdleArchive", () => {
   test("a failed archive reports failure and does not finish the idle period", async () => {
     const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
-    await mkdir(join(config.dirs.data, "shore.db"));
+    HistoryStore.open(join(config.dirs.data, HISTORY_DB_FILE)).close();
+    withStorage(config.dirs.data, db => db.run("CREATE TRIGGER refuse_archive BEFORE INSERT ON history_segments BEGIN SELECT RAISE(ABORT, 'archive write failure'); END"));
 
     const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 
@@ -324,9 +296,8 @@ describe("runDeepIdleArchive", () => {
 
   test("a conversation that will not load is a failure, not nothing to do", async () => {
     const kase = required(fixture.pure_archive[0]);
-    const { config, characterDir } = await world(kase.active_before);
-    await rm(join(characterDir, "threads", "main", "active.jsonl"));
-    await mkdir(join(characterDir, "threads", "main", "active.jsonl"));
+    const { config } = await world(kase.active_before);
+    withStorage(config.dirs.data, db => db.run("UPDATE state_files SET content = X'00' WHERE path = 'ada/threads/main/active.jsonl'"));
 
     const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 
@@ -502,7 +473,7 @@ describe("runDeepIdleArchive", () => {
 
   test("a conversation with one unreadable line still opens, minus that line", async () => {
     const { config, characterDir } = await world([]);
-    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), "{not json\n");
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), "{not json\n");
 
     const result = await runDeepIdleArchive("ada", deps(config), 0);
     expect(result.failed).toBeUndefined();

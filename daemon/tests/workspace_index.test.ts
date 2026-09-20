@@ -36,11 +36,9 @@ import {
 } from "../src/memory/workspace_index";
 import {
   documentHash,
-  WORKSPACE_INDEX_DB_FILE,
   WorkspaceIndexStore,
   type FileRow,
 } from "../src/memory/workspace_store";
-import { LEGACY_INDEX_FILE, migrateLegacyIndex } from "../src/memory/workspace_legacy";
 import { compareRustStrings, tokenizeQuery } from "../src/memory/lines";
 import {
   resolveEmbedder,
@@ -98,7 +96,7 @@ type ScriptStep =
   | { op: "write_millis"; path: string; text: string; mtime_ms: number }
   | { op: "symlink"; path: string; target: string }
   | { op: "mkdir" | "delete" | "socket"; path: string }
-  | { op: "seed_index"; raw: string }
+  | { op: "seed_index"; files: FileRow[]; embeddings: { model: string; hash: string; vectors: number[][] }[] }
   | { op: "config"; config: RawConfig }
   | { op: "search"; run: number }
   | { op: "block_index_parent" };
@@ -349,10 +347,16 @@ describe("hybridSearch", () => {
           case "delete":
             await rm(join(ws, step.path), { recursive: true, force: true });
             break;
-          case "seed_index":
-            await mkdir(dirname(idx), { recursive: true });
-            await writeFile(join(dirname(idx), "workspace_index.json"), step.raw);
+          case "seed_index": {
+            const store = WorkspaceIndexStore.open(idx);
+            try {
+              store.putFiles(step.files);
+              for (const entry of step.embeddings) store.putEmbeddings(entry.model, [entry]);
+            } finally {
+              store.close();
+            }
             break;
+          }
           case "config":
             config = configOf(step.config);
             break;
@@ -882,7 +886,7 @@ describe("indexPath", () => {
   for (const c of fixture.index_path) {
     test(`${c.cache_dir} / ${c.character}`, () => {
       expect(indexPath(c.cache_dir, c.character)).toBe(
-        c.out.replace(/workspace_index\.json$/, WORKSPACE_INDEX_DB_FILE),
+        c.out,
       );
     });
   }
@@ -1346,161 +1350,6 @@ describe("freshness keyed on the document, not the tuple", () => {
 
     expect(out.staleDocs).toEqual([]);
     expect(out.rows).toEqual([]);
-  });
-});
-
-describe("legacy JSON migration", () => {
-  async function seed(raw: string, files: Record<string, string>): Promise<string> {
-    const dir = await mkdtemp(join(root, "mig-"));
-    const ws = join(dir, "workspace");
-    for (const [path, text] of Object.entries(files)) {
-      await writeAt(join(ws, path), text, 1000);
-    }
-    await writeFile(join(dir, LEGACY_INDEX_FILE), raw);
-    return dir;
-  }
-
-  function legacyJson(entries: Record<string, unknown>): string {
-    return JSON.stringify({ entries });
-  }
-
-  test("a vector is carried over and the file is not re-embedded", async () => {
-    const dir = await seed(
-      legacyJson({
-        "a.md": {
-          hash: "mtime:1000:5",
-          size: 5,
-          modified_at_secs: 1000,
-          model_id: "topic-v1",
-          max_embed_chars_per_file: 4000,
-          embedded: true,
-          embedding: [0.25, 0.5],
-        },
-      }),
-      { "a.md": "hello" },
-    );
-    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-    const out = await migrateLegacyIndex(
-      store,
-      join(dir, LEGACY_INDEX_FILE),
-      join(dir, "workspace"),
-      documentForEmbedding,
-    );
-
-    expect(out).toEqual({ files: 1, vectors: 1, stale: 0 });
-    const hash = seededHash(join(dir, "workspace", "a.md"), "a.md", 4000);
-    expect(store.hasVector("topic-v1", hash)).toBe(true);
-    expect(vec(store.vectorsFor("topic-v1", [hash]).get(hash)?.[0])).toEqual(f32s([0.25, 0.5]));
-    expect(store.files().get("a.md")?.embedded).toBe(true);
-    store.close();
-  });
-
-  test("the JSON file is deleted once it has been drained", async () => {
-    const dir = await seed(legacyJson({}), {});
-    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-    await migrateLegacyIndex(
-      store,
-      join(dir, LEGACY_INDEX_FILE),
-      join(dir, "workspace"),
-      documentForEmbedding,
-    );
-    store.close();
-    expect(await Bun.file(join(dir, LEGACY_INDEX_FILE)).exists()).toBe(false);
-  });
-
-  test("a vector whose file has changed underneath it is dropped, not trusted", async () => {
-    const dir = await seed(
-      legacyJson({
-        "a.md": {
-          hash: "mtime:1000:5",
-          size: 999,
-          modified_at_secs: 1000,
-          model_id: "topic-v1",
-          max_embed_chars_per_file: 4000,
-          embedded: true,
-          embedding: [0.25, 0.5],
-        },
-      }),
-      { "a.md": "hello" },
-    );
-    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-    const out = await migrateLegacyIndex(
-      store,
-      join(dir, LEGACY_INDEX_FILE),
-      join(dir, "workspace"),
-      documentForEmbedding,
-    );
-    expect(out).toEqual({ files: 0, vectors: 0, stale: 1 });
-    store.close();
-  });
-
-  test("skip records survive the move with their reason", async () => {
-    const dir = await seed(
-      legacyJson({
-        "big.bin": {
-          hash: "mtime:1000:9",
-          size: 9,
-          modified_at_secs: 1000,
-          model_id: "topic-v1",
-          max_embed_chars_per_file: 4000,
-          embedded: false,
-          reason: "oversize",
-        },
-      }),
-      {},
-    );
-    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-    await migrateLegacyIndex(
-      store,
-      join(dir, LEGACY_INDEX_FILE),
-      join(dir, "workspace"),
-      documentForEmbedding,
-    );
-    expect(store.files().get("big.bin")).toMatchObject({
-      embedded: false,
-      reason: "oversize",
-    });
-    store.close();
-  });
-
-  test("a malformed legacy file migrates to nothing rather than throwing", async () => {
-    for (const raw of [
-      "not json at all { [ }",
-      "[1, 2, 3]",
-      '{"entries": []}',
-      '{"entries": {"a.md": 3}}',
-      '{"entries": {"a.md": {"hash": "h"}}}',
-      '{"entries": {"a.md": {"hash": 1, "size": 1, "modified_at_secs": 1, "model_id": "m", "embedded": true}}}',
-      '{"entries": {"a.md": {"hash": "h", "size": 1.5, "modified_at_secs": 1, "model_id": "m", "embedded": true}}}',
-      '{"entries": {"a.md": {"hash": "h", "size": 1, "modified_at_secs": 1, "model_id": "m", "embedded": "yes"}}}',
-      '{"entries": {"a.md": {"hash": "h", "size": 1, "modified_at_secs": 1, "model_id": "m", "embedded": true, "embedding": ["x"]}}}',
-      "{}",
-    ]) {
-      const dir = await seed(raw, {});
-      const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-      const out = await migrateLegacyIndex(
-        store,
-        join(dir, LEGACY_INDEX_FILE),
-        join(dir, "workspace"),
-        documentForEmbedding,
-      );
-      expect(out).toEqual({ files: 0, vectors: 0, stale: 0 });
-      expect(store.files().size).toBe(0);
-      store.close();
-    }
-  });
-
-  test("no legacy file at all is not a migration", async () => {
-    const dir = await mkdtemp(join(root, "none-"));
-    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
-    const out = await migrateLegacyIndex(
-      store,
-      join(dir, LEGACY_INDEX_FILE),
-      dir,
-      documentForEmbedding,
-    );
-    expect(out).toBeUndefined();
-    store.close();
   });
 });
 

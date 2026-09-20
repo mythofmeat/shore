@@ -101,14 +101,7 @@ describe("refusing to scaffold over someone", () => {
     expect(() => createCharacter(config, { name: "ada" })).toThrow(/already exists/);
   });
 
-  test("the legacy character.md layout counts as existing too", async () => {
-    const config = await tempRoot();
-    const charDir = join(config, "characters", "ada");
-    await mkdir(charDir, { recursive: true });
-    await writeFile(join(charDir, "character.md"), "You are ada.\n");
 
-    expect(() => createCharacter(config, { name: "ada" })).toThrow(/already exists/);
-  });
 
   test("a half-built character keeps the files it already has", async () => {
     const config = await tempRoot();

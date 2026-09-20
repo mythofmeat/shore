@@ -34,14 +34,14 @@
       "max_context_tokens": 200000,
       "max_output_tokens": 32768,
       "model_id": "claude-opus-4-6",
-      "name": "opus",
+      "name": "claude-opus-4-6",
       "provider_key": "anthropic",
-      "qualified_name": "chat.anthropic.opus",
+      "qualified_name": "anthropic:claude-opus-4-6",
       "sdk": "anthropic"
     },
     "s2": [
       {
-        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"meta-llama/llama-3\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\"},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"anthropic/claude-opus-4-6\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 111000, \"max_output_tokens\": 2222}\n  ]\n}",
+        "body": "{\n  \"version\": 2,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"meta-llama/llama-3\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\"\n    },\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"deepseek/deepseek-r1\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"context_length\": 64000,\n      \"max_output_tokens\": 4096\n    },\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"anthropic/claude-opus-4-6\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"context_length\": 111000,\n      \"max_output_tokens\": 2222\n    }\n  ]\n}",
         "provider": "openrouter"
       }
     ],
@@ -102,15 +102,15 @@
       "max_context_tokens": 200000,
       "max_output_tokens": 999,
       "model_id": "anthropic/claude-opus-4-6",
-      "name": "opus",
+      "name": "anthropic/claude-opus-4-6",
       "provider_key": "openrouter",
-      "qualified_name": "chat.openrouter.opus",
+      "qualified_name": "openrouter:anthropic/claude-opus-4-6",
       "sdk": "openrouter"
     },
     "s7": [
       {
         "hidden": false,
-        "qualified_name": "chat.openrouter.opus",
+        "qualified_name": "openrouter:anthropic/claude-opus-4-6",
         "source": "static"
       },
       {
@@ -163,11 +163,11 @@
     ],
     "s11": [
       {
-        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"meta-llama/llama-3\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\"},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"anthropic/claude-opus-4-6\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 111000, \"max_output_tokens\": 2222}\n  ]\n}",
+        "body": "{\n  \"version\": 2,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"meta-llama/llama-3\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\"\n    },\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"deepseek/deepseek-r1\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"context_length\": 64000,\n      \"max_output_tokens\": 4096\n    },\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"anthropic/claude-opus-4-6\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"context_length\": 111000,\n      \"max_output_tokens\": 2222\n    }\n  ]\n}",
         "provider": "openrouter"
       },
       {
-        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"other\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"other\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"base_url\": \"https://other/v1\", \"context_length\": 1000, \"max_output_tokens\": 100}\n  ]\n}",
+        "body": "{\n  \"version\": 2,\n  \"provider_key\": \"other\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\n      \"provider_key\": \"other\",\n      \"model_id\": \"deepseek/deepseek-r1\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"base_url\": \"https://other/v1\",\n      \"context_length\": 1000,\n      \"max_output_tokens\": 100\n    }\n  ]\n}",
         "provider": "other"
       }
     ],
@@ -311,38 +311,38 @@
       "matches": false
     },
     {
-      "pattern": "é*",
-      "input": "éa",
+      "pattern": "\u00e9*",
+      "input": "\u00e9a",
       "matches": true
     },
     {
-      "pattern": "*é",
-      "input": "aé",
+      "pattern": "*\u00e9",
+      "input": "a\u00e9",
       "matches": true
     },
     {
       "pattern": "*",
-      "input": "🎵",
+      "input": "\ud83c\udfb5",
       "matches": true
     },
     {
-      "pattern": "🎵*",
-      "input": "🎵drum",
+      "pattern": "\ud83c\udfb5*",
+      "input": "\ud83c\udfb5drum",
       "matches": true
     },
     {
-      "pattern": "a*🎵",
-      "input": "a🎵",
+      "pattern": "a*\ud83c\udfb5",
+      "input": "a\ud83c\udfb5",
       "matches": true
     },
     {
       "pattern": "ab*",
-      "input": "é",
+      "input": "\u00e9",
       "matches": false
     },
     {
-      "pattern": "🎵*🎵",
-      "input": "🎵",
+      "pattern": "\ud83c\udfb5*\ud83c\udfb5",
+      "input": "\ud83c\udfb5",
       "matches": false
     },
     {
@@ -648,11 +648,6 @@
       ]
     },
     {
-      "name": "removed_provider",
-      "toml": "[claude_code]\n",
-      "err": "[providers.claude_code] is no longer supported — the Claude Code transport was removed; drop this section from your config"
-    },
-    {
       "name": "conflicting_key_forms",
       "toml": "[p]\napi_key_env = \"A\"\n[[p.keys]]\nname = \"n\"\nenv = \"E\"\n",
       "err": "[providers.p] declares both `api_key_env` and explicit `[[keys]]`; use one form per provider"
@@ -791,7 +786,7 @@
     },
     {
       "name": "per_model",
-      "toml": "\n        [models.\"openrouter:anthropic/claude-sonnet-4.5\"]\n        temperature = 0.8\n        top_p = 0.95\n        reasoning_effort = \"medium\"\n        max_tool_iterations = 4\n        cache_keepalive = \"30m\"\n        zai_clear_thinking = false\n        ",
+      "toml": "\n        [models.\"openrouter:anthropic/claude-sonnet-4.5\"]\n        temperature = 0.8\n        top_p = 0.95\n        reasoning_effort = \"medium\"\n        max_tool_rounds = 4\n        cache_keepalive = \"30m\"\n        zai_clear_reasoning = false\n        ",
       "parsed": {
         "selected": {},
         "defaults": {
@@ -818,7 +813,7 @@
     },
     {
       "name": "legacy_bool_replay",
-      "toml": "[defaults.sampler]\nreplay_prior_thinking = true\n",
+      "toml": "[defaults.sampler]\nreasoning_replay = \"all\"\n",
       "parsed": {
         "selected": {},
         "defaults": {
@@ -836,7 +831,7 @@
     },
     {
       "name": "replay_none",
-      "toml": "[defaults.sampler]\nreplay_prior_thinking = \"none\"\n",
+      "toml": "[defaults.sampler]\nreasoning_replay = \"none\"\n",
       "parsed": {
         "selected": {},
         "defaults": {
@@ -854,7 +849,7 @@
     },
     {
       "name": "openrouter_provider_object",
-      "toml": "[models.\"p:m\".openrouter_provider]\norder = [\"a\", \"b\"]\n",
+      "toml": "[models.\"p:m\".openrouter_routing]\norder = [\"a\", \"b\"]\n",
       "parsed": {
         "selected": {},
         "defaults": {
@@ -876,7 +871,7 @@
         "p:m"
       ],
       "selected_key": null,
-      "serialized": "[selected]\n\n[defaults.sampler]\n\n[models.\"p:m\".openrouter_provider]\norder = [\n    \"a\",\n    \"b\",\n]\n",
+      "serialized": "[selected]\n\n[defaults.sampler]\n\n[models.\"p:m\".openrouter_routing]\norder = [\n    \"a\",\n    \"b\",\n]\n",
       "round_trips": true
     },
     {
@@ -889,10 +884,10 @@
         },
         "models": {
           "aaa:m": {
-            "temperature": 2.0
+            "temperature": 2
           },
           "zzz:m": {
-            "temperature": 1.0
+            "temperature": 1
           }
         }
       },
@@ -913,7 +908,7 @@
     {
       "name": "unknown_sampler_field",
       "toml": "[defaults.sampler]\nnope = 1\n",
-      "err": "failed to parse /tmp/.tmpslDvo3/unknown_sampler_field.toml: TOML parse error at line 2, column 1\n  |\n2 | nope = 1\n  | ^^^^\nunknown field `nope`, expected one of `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `max_output_tokens`, `cache_ttl`, `cache_keepalive`, `cache_keepalive_max`, `sdk`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`\n"
+      "err": "failed to parse /tmp/.tmpslDvo3/unknown_sampler_field.toml: TOML parse error at line 2, column 1\n  |\n2 | nope = 1\n  | ^^^^\nunknown field `nope`, expected one of `temperature`, `top_p`, `reasoning_effort`, `reasoning_budget_tokens`, `max_output_tokens`, `cache_ttl`, `cache_keepalive`, `cache_keepalive_for`, `sdk`, `reasoning_replay`, `max_tool_rounds`, `openrouter_routing`, `gemini_thinking_mode`, `zai_clear_reasoning`, `supports_images`\n"
     },
     {
       "name": "unknown_selected_field",
@@ -927,8 +922,8 @@
     },
     {
       "name": "bad_replay",
-      "toml": "[defaults.sampler]\nreplay_prior_thinking = \"sometimes\"\n",
-      "err": "failed to parse /tmp/.tmpslDvo3/bad_replay.toml: TOML parse error at line 2, column 25\n  |\n2 | replay_prior_thinking = \"sometimes\"\n  |                         ^^^^^^^^^^^\ninvalid replay_prior_thinking \"sometimes\"; expected \"all\", \"none\" (or legacy true/false)\n"
+      "toml": "[defaults.sampler]\nreasoning_replay = \"sometimes\"\n",
+      "err": "failed to parse /tmp/.tmpslDvo3/bad_replay.toml: TOML parse error at line 2, column 25\n  |\n2 | replay_prior_thinking = \"sometimes\"\n  |                         ^^^^^^^^^^^\ninvalid replay_prior_thinking \"sometimes\"; expected \"all\", \"none\"\n"
     },
     {
       "name": "bad_temperature_type",
@@ -1090,8 +1085,8 @@
       },
       "selected": null,
       "patched": {
-        "name": "opus",
-        "qualified_name": "chat.anthropic.opus",
+        "name": "claude-opus-4-6",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "category": "chat",
         "provider_key": "anthropic",
         "sdk": "anthropic",
@@ -1132,7 +1127,7 @@
     },
     {
       "name": "zero_tool_iterations_dropped",
-      "global_toml": "[defaults.sampler]\nmax_tool_iterations = 0\n",
+      "global_toml": "[defaults.sampler]\nmax_tool_rounds = 0\n",
       "character_toml": "",
       "provider": "p",
       "model_id": "m",
@@ -1144,7 +1139,7 @@
     },
     {
       "name": "nonzero_tool_iterations_kept",
-      "global_toml": "[defaults.sampler]\nmax_tool_iterations = 3\n",
+      "global_toml": "[defaults.sampler]\nmax_tool_rounds = 3\n",
       "character_toml": "",
       "provider": "p",
       "model_id": "m",
@@ -1197,19 +1192,19 @@
   "effective_catalog": [
     {
       "name": "static_only",
-      "chat_toml": "\n[anthropic.opus]\nmodel_id = \"claude-opus-4-6\"\n\n[anthropic.sonnet]\nmodel_id = \"claude-sonnet-4-6\"\n",
+      "chat_toml": "\n[\"anthropic:claude-opus-4-6\"]\n[\"anthropic:claude-sonnet-4-6\"]",
       "providers_toml": "",
       "caches": [],
       "lookups": [
         {
-          "name": "opus",
+          "name": "claude-opus-4-6",
           "include_hidden": false,
           "resolved": {
             "$ref": "s1"
           }
         },
         {
-          "name": "chat.anthropic.opus",
+          "name": "anthropic:claude-opus-4-6",
           "include_hidden": false,
           "resolved": {
             "$ref": "s1"
@@ -1224,24 +1219,24 @@
       "listed": [
         {
           "source": "static",
-          "qualified_name": "chat.anthropic.opus",
+          "qualified_name": "anthropic:claude-opus-4-6",
           "hidden": false
         },
         {
           "source": "static",
-          "qualified_name": "chat.anthropic.sonnet",
+          "qualified_name": "anthropic:claude-sonnet-4-6",
           "hidden": false
         }
       ],
       "listed_include_hidden": [
         {
           "source": "static",
-          "qualified_name": "chat.anthropic.opus",
+          "qualified_name": "anthropic:claude-opus-4-6",
           "hidden": false
         },
         {
           "source": "static",
-          "qualified_name": "chat.anthropic.sonnet",
+          "qualified_name": "anthropic:claude-sonnet-4-6",
           "hidden": false
         }
       ]
@@ -1352,7 +1347,7 @@
     },
     {
       "name": "static_wins_over_discovered",
-      "chat_toml": "[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\nmax_output_tokens = 999\n",
+      "chat_toml": "[\"openrouter:anthropic/claude-opus-4-6\"]\nmax_output_tokens = 999\n",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n",
       "caches": {
         "$ref": "s2"
@@ -1382,7 +1377,7 @@
     },
     {
       "name": "disabled_provider_is_uniformly_unreferenceable",
-      "chat_toml": "[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\n",
+      "chat_toml": "[\"openrouter:anthropic/claude-opus-4-6\"]",
       "providers_toml": "[openrouter]\nenabled = false\n[openrouter.discovery]\nenabled = true\n",
       "caches": {
         "$ref": "s2"
@@ -1399,33 +1394,22 @@
           "err": "model \"anthropic/claude-opus-4-6\" not found in static catalog or discovered models"
         },
         {
-          "name": "opus",
+          "name": "claude-opus-4-6",
           "include_hidden": false,
-          "resolved": {
-            "name": "opus",
-            "qualified_name": "chat.openrouter.opus",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "anthropic/claude-opus-4-6",
-            "api_key_env": "OPENROUTER_API_KEY",
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768
-          }
+          "err": "model \"claude-opus-4-6\" not found in static catalog or discovered models"
         }
       ],
       "listed": [
         {
           "source": "static",
-          "qualified_name": "chat.openrouter.opus",
+          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
           "hidden": false
         }
       ],
       "listed_include_hidden": [
         {
           "source": "static",
-          "qualified_name": "chat.openrouter.opus",
+          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
           "hidden": false
         }
       ]
@@ -1688,7 +1672,7 @@
       "caches": [
         {
           "provider": "custom",
-          "body": "{\n  \"version\": 1,\n  \"provider_key\": \"custom\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"custom\", \"model_id\": \"m\", \"sdk\": \"openai\",\n     \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"base_url\": \"https://from-the-cache/v1\",\n     \"context_length\": 5000000000, \"max_output_tokens\": 4096}\n  ]\n}"
+          "body": "{\n  \"version\": 2,\n  \"provider_key\": \"custom\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\n      \"provider_key\": \"custom\",\n      \"model_id\": \"m\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-01-01T00:00:00Z\",\n      \"base_url\": \"https://from-the-cache/v1\",\n      \"context_length\": 5000000000,\n      \"max_output_tokens\": 4096\n    }\n  ]\n}"
         }
       ],
       "lookups": [
@@ -1749,49 +1733,49 @@
       "global_toml": "",
       "character_toml": "",
       "app_default_model": null,
-      "qualified_name": "chat.anthropic.opus"
+      "qualified_name": "anthropic:claude-opus-4-6"
     },
     {
       "name": "character_selection_wins",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-opus-4-6\"\n",
       "app_default_model": null,
-      "qualified_name": "chat.anthropic.opus"
+      "qualified_name": "anthropic:claude-opus-4-6"
     },
     {
       "name": "global_selection_used",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "",
       "app_default_model": null,
-      "qualified_name": "chat.anthropic.sonnet"
+      "qualified_name": "anthropic:claude-sonnet-4-6"
     },
     {
       "name": "app_default_model",
       "global_toml": "",
       "character_toml": "",
-      "app_default_model": "sonnet",
-      "qualified_name": "chat.anthropic.sonnet"
+      "app_default_model": "claude-sonnet-4-6",
+      "qualified_name": "anthropic:claude-sonnet-4-6"
     },
     {
       "name": "app_default_unknown_falls_through",
       "global_toml": "",
       "character_toml": "",
       "app_default_model": "nope",
-      "qualified_name": "chat.anthropic.opus"
+      "qualified_name": "anthropic:claude-opus-4-6"
     },
     {
       "name": "first_chat_model_last_resort",
       "global_toml": "",
       "character_toml": "",
       "app_default_model": null,
-      "qualified_name": "chat.anthropic.opus"
+      "qualified_name": "anthropic:claude-opus-4-6"
     },
     {
       "name": "selection_beats_the_app_default",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "",
-      "app_default_model": "opus",
-      "qualified_name": "chat.anthropic.sonnet"
+      "app_default_model": "claude-opus-4-6",
+      "qualified_name": "anthropic:claude-sonnet-4-6"
     }
   ],
   "background_model": [
@@ -1800,76 +1784,76 @@
       "background_toml": "",
       "character_prefs": "",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32768
       },
       "chat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32768
       }
     },
     {
       "name": "per_task_pin",
-      "background_toml": "[defaults.background]\nheartbeat = \"sonnet\"\n",
+      "background_toml": "[heartbeat]\nmodel = \"anthropic:claude-sonnet-4-6\"\n",
       "character_prefs": "",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32768
       },
       "chat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32768
       }
     },
     {
-      "name": "blanket_pin",
-      "background_toml": "[defaults.background]\nmodel = \"sonnet\"\n",
+      "name": "both_tasks_pinned",
+      "background_toml": "[heartbeat]\nmodel = \"anthropic:claude-sonnet-4-6\"\n\n[compaction]\nmodel = \"anthropic:claude-sonnet-4-6\"\n",
       "character_prefs": "",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32768
       },
       "chat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32768
       }
     },
     {
-      "name": "per_task_beats_blanket",
-      "background_toml": "[defaults.background]\nmodel = \"opus\"\nheartbeat = \"sonnet\"\n",
+      "name": "tasks_have_separate_pins",
+      "background_toml": "[heartbeat]\nmodel = \"anthropic:claude-sonnet-4-6\"\n\n[compaction]\nmodel = \"anthropic:claude-opus-4-6\"\n",
       "character_prefs": "",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32768
       },
       "chat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32768
       }
     },
     {
       "name": "bad_pin_falls_back_to_chat",
-      "background_toml": "[defaults.background]\nheartbeat = \"nope\"\n",
+      "background_toml": "[heartbeat]\nmodel = \"nope\"\n",
       "character_prefs": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32768
       },
       "chat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32768
       }
     },
     {
       "name": "overlay_applies_to_background",
-      "background_toml": "[defaults.background]\nheartbeat = \"sonnet\"\n",
+      "background_toml": "[heartbeat]\nmodel = \"anthropic:claude-sonnet-4-6\"\n",
       "character_prefs": "[defaults.sampler]\nmax_output_tokens = 32000\n",
       "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
+        "qualified_name": "anthropic:claude-sonnet-4-6",
         "max_output_tokens": 32000
       },
       "chat": {
-        "qualified_name": "chat.anthropic.opus",
+        "qualified_name": "anthropic:claude-opus-4-6",
         "max_output_tokens": 32000
       }
     }

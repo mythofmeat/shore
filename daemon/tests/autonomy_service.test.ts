@@ -1,3 +1,5 @@
+import { seedHeartbeatEvents } from "./support/storage.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile, access } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -114,7 +116,7 @@ describe("registering", () => {
   test("restoring a keepalive uses the configured global ceiling", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
-      await Bun.write(join(dir, STATE_FILENAME), encodeState({
+      writeDurable(join(dir, STATE_FILENAME), encodeState({
         ticksWithoutUser: 0, nextWakeAt: undefined, lastUserAt: START - 13 * HOUR,
         coveredTurnCount: 0,
         keepalive: { model: "claude-opus-4-6", intervalMs: HOUR, lastWarmAt: START, lastActiveAt: START - 13 * HOUR },
@@ -138,16 +140,13 @@ describe("registering", () => {
   test("restores the heartbeat deadline the character left behind", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
-      await Bun.write(
-        join(dir, STATE_FILENAME),
-        encodeState({
+      writeDurable(join(dir, STATE_FILENAME), encodeState({
           ticksWithoutUser: 3,
           nextWakeAt: START + HOUR,
           lastUserAt: START - HOUR,
           coveredTurnCount: 9,
           keepalive: undefined,
-        }),
-      );
+        }));
 
       const { service } = build();
       await service.register(registration("nova", dir));
@@ -180,14 +179,11 @@ describe("registering", () => {
   test("reads the heartbeat log back so the CLI sees history, not just this run", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
-      await Bun.write(
-        join(dir, HEARTBEAT_LOG_FILENAME),
-        `${JSON.stringify({
+      seedHeartbeatEvents(dir, `${JSON.stringify({
           timestamp: "2026-07-30T12:00:00+00:00",
           kind: "message_sent",
           detail: "from a previous run",
-        })}\n`,
-      );
+        })}\n`);
 
       const { service } = build();
       await service.register(registration("nova", dir));
@@ -545,9 +541,7 @@ describe("the keepalive's two halves", () => {
   test("registering offers the persisted schedule back", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
-      await Bun.write(
-        join(dir, STATE_FILENAME),
-        encodeState({
+      writeDurable(join(dir, STATE_FILENAME), encodeState({
           ticksWithoutUser: 0,
           nextWakeAt: START + HOUR,
           lastUserAt: START,
@@ -558,8 +552,7 @@ describe("the keepalive's two halves", () => {
             lastWarmAt: START,
             lastActiveAt: START - 60_000,
           },
-        }),
-      );
+        }));
 
       const { service } = build();
       const ka = fakeKeepalive();

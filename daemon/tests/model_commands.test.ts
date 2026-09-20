@@ -1,3 +1,4 @@
+import { normalizeConfigSource } from "../src/config/surface.ts";
 import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -101,7 +102,7 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
 
   let app: AppConfig = defaultAppConfig();
   if (setup.defaults.trim() !== "") {
-    const parsed = parseAppConfig(parseToml(setup.defaults));
+    const parsed = parseAppConfig(normalizeConfigSource(parseToml(setup.defaults) as Record<string, unknown>));
     if ("err" in parsed) throw new Error(`fixture defaults do not parse: ${parsed.err}`);
     app = parsed.ok;
   }
@@ -443,27 +444,27 @@ test("a hidden model stays selected without being advertised", async () => {
 
 test("the active model is the one generation resolves, not the session's", async () => {
   const ctx = await buildContext({
-    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
-      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    catalog: "[chat.\"anthropic:alpha-id\"]\n" +
+      "[chat.\"anthropic:beta-id\"]\n",
     defaults: "",
     discovery: [],
     character: "ada",
     global_prefs: null,
     character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "beta-id"\n',
-    active_model: "chat.anthropic.alpha",
+    active_model: "anthropic:alpha-id",
   });
 
-  expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.beta");
+  expect((listModels(ctx, {}) as { active: string }).active).toBe("anthropic:beta-id");
   expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
-    "chat.anthropic.beta",
+    "anthropic:beta-id",
   );
 });
 
 test("a thread's pin is the active model, and switching the character's does not unseat it", async () => {
   const ctx = {
     ...(await buildContext({
-      catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
-        '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+      catalog: "[chat.\"anthropic:alpha-id\"]\n" +
+        "[chat.\"anthropic:beta-id\"]\n",
       defaults: "",
       discovery: [],
       character: "ada",
@@ -472,38 +473,38 @@ test("a thread's pin is the active model, and switching the character's does not
       active_model: null,
     })),
     thread: "eval",
-    threadModel: "chat.anthropic.alpha",
+    threadModel: "anthropic:alpha-id",
   };
 
   const listed = listModels(ctx, {}) as {
     active: string;
     roles: { role: string; model: string | null; source: string | null }[];
   };
-  expect(listed.active).toBe("chat.anthropic.alpha");
+  expect(listed.active).toBe("anthropic:alpha-id");
   expect(listed.roles.find((r) => r.role === "chat")).toEqual({
     role: "chat",
-    model: "chat.anthropic.alpha",
+    model: "anthropic:alpha-id",
     source: "thread eval",
   });
   expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
-    "chat.anthropic.alpha",
+    "anthropic:alpha-id",
   );
   expect(modelInfo(ctx, { background_task: "compaction" })).toMatchObject({
-    qualified_name: "chat.anthropic.alpha",
+    qualified_name: "anthropic:alpha-id",
   });
   expect(modelSettings(ctx, { background_task: "compaction" })).toMatchObject({
-    model: "chat.anthropic.alpha", model_id: "alpha-id",
+    model: "anthropic:alpha-id", model_id: "alpha-id",
   });
 
-  const switched = switchModel(ctx, { name: "chat.anthropic.beta" }) as Record<string, unknown>;
+  const switched = switchModel(ctx, { name: "anthropic:beta-id" }) as Record<string, unknown>;
   expect(switched["shadowed_by_thread"]).toBe("eval");
-  expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+  expect((listModels(ctx, {}) as { active: string }).active).toBe("anthropic:alpha-id");
 });
 
 test("with no pin the character's own pick is active and no shadow is reported", async () => {
   const ctx = await buildContext({
-    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
-      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    catalog: "[chat.\"anthropic:alpha-id\"]\n" +
+      "[chat.\"anthropic:beta-id\"]\n",
     defaults: "",
     discovery: [],
     character: "ada",
@@ -516,18 +517,18 @@ test("with no pin the character's own pick is active and no shadow is reported",
     active: string;
     roles: { role: string; model: string | null; source: string | null }[];
   };
-  expect(listed.active).toBe("chat.anthropic.beta");
+  expect(listed.active).toBe("anthropic:beta-id");
   expect(listed.roles.find((r) => r.role === "chat")?.source).toBe("character");
-  expect(switchModel(ctx, { name: "chat.anthropic.alpha" })).not.toHaveProperty(
+  expect(switchModel(ctx, { name: "anthropic:alpha-id" })).not.toHaveProperty(
     "shadowed_by_thread",
   );
-  expect((switchModel(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+  expect((switchModel(ctx, {}) as { active: string }).active).toBe("anthropic:alpha-id");
 });
 
 async function rolesFor(defaults: string) {
   const ctx = await buildContext({
-    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
-      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    catalog: "[chat.\"anthropic:alpha-id\"]\n" +
+      "[chat.\"anthropic:beta-id\"]\n",
     defaults,
     discovery: [],
     character: "ada",
@@ -541,24 +542,24 @@ async function rolesFor(defaults: string) {
 
 test("every model role reports where it came from", async () => {
   const roles = await rolesFor(
-    '[defaults]\nsubagent_model = "chat.anthropic.beta"\n' +
-      'embedding = "some:embedder"\nimage_generation = "some:painter"\n',
+    "[subagents]\nmodel = \"anthropic:beta-id\"\n" +
+      '[embedding]\nmodel = "some:embedder"\n[image]\nmodel = "some:painter"\n',
   );
 
   expect(roles.get("sub-agents")).toEqual({
     role: "sub-agents",
-    model: "chat.anthropic.beta",
+    model: "anthropic:beta-id",
     source: "subagents.model",
   });
   expect(roles.get("embedding")).toEqual({
     role: "embedding",
     model: "some:embedder",
-    source: "defaults.embedding",
+    source: "embedding.model",
   });
   expect(roles.get("images")).toEqual({
     role: "images",
     model: "some:painter",
-    source: "defaults.image_generation",
+    source: "image.model",
   });
 });
 
@@ -572,7 +573,7 @@ test("a role nobody configured reports nothing rather than guessing", async () =
 test("background tasks name the chat model they inherit", async () => {
   const roles = await rolesFor("");
   const chat = required(roles.get("chat"));
-  expect(chat.model).toBe("chat.anthropic.alpha");
+  expect(chat.model).toBe("anthropic:alpha-id");
   for (const task of ["heartbeat", "compaction"]) {
     expect(roles.get(task), task).toEqual({
       role: task,
@@ -584,7 +585,7 @@ test("background tasks name the chat model they inherit", async () => {
 
 test("sub-agents that pin their own model are counted, not hidden", async () => {
   const roles = await rolesFor(
-    '[defaults]\nsubagent_model = "chat.anthropic.beta"\n' +
+    "[subagents]\nmodel = \"anthropic:beta-id\"\n" +
       '[subagents.plain]\ndescription = "d"\nprompt = "p"\ntools = []\n' +
       '[subagents.picky]\ndescription = "d"\nprompt = "p"\ntools = []\n' +
       'model = "chat.anthropic.alpha"\n',
@@ -594,13 +595,13 @@ test("sub-agents that pin their own model are counted, not hidden", async () => 
 
 describe("targeting a sub-agent's own settings", () => {
   const CATALOG =
-    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\nsdk = "anthropic"\ntemperature = 0.5\n\n' +
-    '[chat.anthropic.beta]\nmodel_id = "beta-id"\nsdk = "anthropic"\ntemperature = 0.2\n';
+    "[chat.\"anthropic:alpha-id\"]\nsdk = \"anthropic\"\ntemperature = 0.5\n" +
+    "[chat.\"anthropic:beta-id\"]\nsdk = \"anthropic\"\ntemperature = 0.2\n";
 
   const DEFAULTS =
-    '[defaults]\nmodel = "alpha"\n\n' +
+    "[chat]\nmodel = \"alpha-id\"\n" +
     '[subagents.librarian]\ndescription = "looks things up"\nprompt = "you look things up"\n' +
-    'model = "beta"\n\n' +
+    "model = \"beta-id\"\n\n" +
     '[subagents.sharer]\ndescription = "shares the chat model"\nprompt = "you share"\n';
 
   const setup = (overrides: Partial<Setup> = {}): Setup => ({
@@ -677,17 +678,7 @@ describe("targeting a sub-agent's own settings", () => {
     expect(caught?.message).toContain("librarian");
   });
 
-  test("the removed Z.ai endpoint toggle points at the provider split", async () => {
-    const ctx = await buildContext(setup());
-    let caught: CommandError | undefined;
-    try {
-      setModelSetting(ctx, { key: "zai_subscription", value: true });
-    } catch (e) {
-      caught = e as CommandError;
-    }
-    expect(caught).toBeInstanceOf(CommandError);
-    expect(caught?.message).toContain("select `zai-sub:<model_id>`");
-  });
+
 
   test("--global writes the sub-agent slot in the global file", async () => {
     const ctx = await buildContext(setup());
@@ -705,7 +696,7 @@ describe("targeting a sub-agent's own settings", () => {
 
   test("naming a model targets it without switching the active one", async () => {
     const ctx = await buildContext(setup());
-    setModelSetting(ctx, { name: "beta", key: "temperature", value: 0.15 });
+    setModelSetting(ctx, { name: "beta-id", key: "temperature", value: 0.15 });
 
     const prefs = character(ctx);
     expect(prefs.models.get("anthropic:beta-id")?.sampler.temperature).toBe(0.15);
@@ -716,13 +707,13 @@ describe("targeting a sub-agent's own settings", () => {
 
 describe("targeting every sub-agent at once", () => {
   const CATALOG =
-    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\nsdk = "anthropic"\ntemperature = 0.5\n\n' +
-    '[chat.anthropic.beta]\nmodel_id = "beta-id"\nsdk = "anthropic"\ntemperature = 0.2\n';
+    "[chat.\"anthropic:alpha-id\"]\nsdk = \"anthropic\"\ntemperature = 0.5\n" +
+    "[chat.\"anthropic:beta-id\"]\nsdk = \"anthropic\"\ntemperature = 0.2\n";
 
   const sharedSetup = (): Setup => ({
     catalog: CATALOG,
     defaults:
-      '[defaults]\nmodel = "alpha"\nsubagent_model = "beta"\n\n' +
+      "[chat]\nmodel = \"alpha-id\"\n\n[subagents]\nmodel = \"beta-id\"\n" +
       '[subagents.internet]\ndescription = "d"\nprompt = "p"\n\n' +
       '[subagents.memory]\ndescription = "d"\nprompt = "p"\n\n' +
       '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
@@ -772,7 +763,7 @@ describe("targeting every sub-agent at once", () => {
     const setup = sharedSetup();
     setup.defaults = setup.defaults.replace(
       '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
-      '[subagents.music]\ndescription = "d"\nprompt = "p"\nmodel = "alpha"\n',
+      "[subagents.music]\ndescription = \"d\"\nprompt = \"p\"\nmodel = \"alpha-id\"\n",
     );
     const ctx = await buildContext(setup);
 
@@ -792,8 +783,8 @@ describe("targeting every sub-agent at once", () => {
     setup.defaults =
       setup.defaults.replace(
         '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
-        '[subagents.music]\ndescription = "d"\nprompt = "p"\nmodel = "alpha"\n',
-      ) + '\n[tools]\nenabled_subagents = ["internet", "memory"]\n';
+        "[subagents.music]\ndescription = \"d\"\nprompt = \"p\"\nmodel = \"alpha-id\"\n",
+      ).replace("[subagents]\n", '[subagents]\nenabled = ["internet", "memory"]\n');
     const ctx = await buildContext(setup);
 
     setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
@@ -817,8 +808,8 @@ describe("targeting every sub-agent at once", () => {
 
 describe("a session with no character falls back to the configured default", () => {
   const twoModels =
-    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
-    '[chat.anthropic.beta]\nmodel_id = "beta-id"\n';
+    "[chat.\"anthropic:alpha-id\"]\n" +
+    "[chat.\"anthropic:beta-id\"]\n";
 
   const characterless = (defaults: string): Setup => ({
     catalog: twoModels,
@@ -831,22 +822,22 @@ describe("a session with no character falls back to the configured default", () 
   });
 
   test("the default is preferred over the first catalog entry", async () => {
-    const ctx = await buildContext(characterless('[defaults]\nmodel = "beta"\n'));
+    const ctx = await buildContext(characterless("[chat]\nmodel = \"beta-id\"\n"));
 
-    expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.beta");
+    expect((listModels(ctx, {}) as { active: string }).active).toBe("anthropic:beta-id");
     expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
-      "chat.anthropic.beta",
+      "anthropic:beta-id",
     );
   });
 
   test("the first catalog entry answers only when no default is configured", async () => {
-    const ctx = await buildContext(characterless("[defaults]\n"));
+    const ctx = await buildContext(characterless("\n"));
 
-    expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+    expect((listModels(ctx, {}) as { active: string }).active).toBe("anthropic:alpha-id");
   });
 
   test("a default that resolves nowhere is reported as written", async () => {
-    const ctx = await buildContext(characterless('[defaults]\nmodel = "ghost"\n'));
+    const ctx = await buildContext(characterless("[chat]\nmodel = \"ghost\"\n"));
 
     expect((listModels(ctx, {}) as { active: string }).active).toBe("ghost");
   });
@@ -854,7 +845,7 @@ describe("a session with no character falls back to the configured default", () 
   test("a hidden default still resolves", async () => {
     const ctx = await buildContext({
       catalog: twoModels,
-      defaults: '[defaults]\nmodel = "vendor/hidden"\n',
+      defaults: "[chat]\nmodel = \"vendor/hidden\"\n",
       discovery: [
         {
           provider: "openrouter",
@@ -879,8 +870,8 @@ describe("a session with no character falls back to the configured default", () 
 describe("a discovered model's capabilities reach the settings table", () => {
   const discovered = async (): Promise<ModelsContext> =>
     await buildContext({
-      catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n',
-      defaults: "[defaults]\n",
+      catalog: "\n",
+      defaults: "\n",
       discovery: [
         {
           provider: "openrouter",
@@ -932,17 +923,17 @@ test("normal model selection pins only the thread, replaces its pin, and reset i
   const ctx = await buildContext(required(scenarios[0]).setup);
   const pins: Array<string | undefined> = [];
   const persist = async (model: string | undefined) => { pins.push(model); };
-  expect(await changeThreadModel(ctx, { name: "alpha" }, persist)).toMatchObject({
-    qualified_name: "chat.anthropic.alpha", changed: true,
+  expect(await changeThreadModel(ctx, { name: "alpha-id" }, persist)).toMatchObject({
+    qualified_name: "anthropic:alpha-id", changed: true,
   });
-  ctx.threadModel = "chat.anthropic.alpha";
-  expect(await changeThreadModel(ctx, { name: "beta" }, persist)).toMatchObject({
-    qualified_name: "chat.anthropic.beta", changed: true,
+  ctx.threadModel = "anthropic:alpha-id";
+  expect(await changeThreadModel(ctx, { name: "beta-id" }, persist)).toMatchObject({
+    qualified_name: "anthropic:beta-id", changed: true,
   });
   expect(await changeThreadModel(ctx, {}, persist, true)).toMatchObject({
-    active: "chat.anthropic.beta", reset_to: "character default",
+    active: "anthropic:beta-id", reset_to: "character default",
   });
-  expect(pins).toEqual(["chat.anthropic.alpha", "chat.anthropic.beta", undefined]);
+  expect(pins).toEqual(["anthropic:alpha-id", "anthropic:beta-id", undefined]);
   expect(existsSync(characterPreferencesPath(ctx.dataDir, "Tester"))).toBe(false);
   try {
     await changeThreadModel(ctx, { name: "missing-model" }, persist);

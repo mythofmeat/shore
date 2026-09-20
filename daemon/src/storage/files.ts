@@ -32,7 +32,7 @@ export function fileScope(path: DurableFile): StateFile {
 
 export function readDurable(path: DurableFile): string {
   const scope = fileScope(path);
-  const value = readState(scope.data, scope.key, scope.character);
+  const value = readState(scope.data, scope.key);
   if (value === undefined) throw Object.assign(new Error(`No stored file: ${durablePath(path)}`), { code: "ENOENT" });
   return value;
 }

@@ -449,12 +449,12 @@
     {
       "name": "config",
       "args": {
-        "key": "behavior.autonomy.enabled"
+        "key": "heartbeat.enabled"
       },
       "output": {
         "kind": "error",
         "code": "not_found",
-        "message": "Config section not found: behavior.autonomy.enabled"
+        "message": "Config section not found: heartbeat.enabled"
       }
     },
     {
@@ -487,7 +487,6 @@
           "chat_models",
           "config_dir",
           "data_dir",
-          "deprecations",
           "info",
           "providers",
           "valid",

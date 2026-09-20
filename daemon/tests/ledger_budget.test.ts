@@ -99,23 +99,23 @@ const clampedMonth: UsageBudgetConfig = {
 const CONFIGS: Record<string, UsageConfig> = {
   local_paced_weekly: {
     timezone: "local",
-    allow_compaction_over_budget: true,
-    budgets: [pacedWeekly],
+
+    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
   },
   utc_paced_weekly: {
     timezone: "utc",
-    allow_compaction_over_budget: true,
-    budgets: [pacedWeekly],
+
+    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
   },
   local_mixed: {
     timezone: "local",
-    allow_compaction_over_budget: true,
-    budgets: [blockingDay, filtered, clampedMonth],
+
+    budgets: [blockingDay, filtered, clampedMonth].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
   },
   local_edges: {
     timezone: "local",
-    allow_compaction_over_budget: true,
-    budgets: [backgroundPause, exactLimit, unknownKey],
+
+    budgets: [backgroundPause, exactLimit, unknownKey].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
   },
 };
 
@@ -416,8 +416,8 @@ describe("enforcing a budget on a call", () => {
   test("a filtered budget only blocks the calls its filter names", () => {
     const config: UsageConfig = {
       timezone: "local",
-      allow_compaction_over_budget: true,
-      budgets: [filtered],
+
+      budgets: [filtered].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
     };
     const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
     const db = caseLedger(index++);

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handleActivityHeatmap } from "../src/tools/activity.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
-import { handleRead, handleSearch } from "../src/tools/workspace.ts";
+import { handleSearch } from "../src/tools/workspace.ts";
 
 describe("compact built-in output", () => {
   test("groups excerpts without repeating paths or ranking diagnostics, retaining limitations", () => {
@@ -25,13 +25,6 @@ describe("compact built-in output", () => {
         { title: "Tea", url: "https://example.com/tea", content: "First paragraph\nSecond paragraph" },
       ],
     })).toBe('Web search "tea": 1 results\n\nSearch provider summary: A provider summary\n\n1. Tea\nhttps://example.com/tea\nFirst paragraph\nSecond paragraph');
-  });
-
-  test("keeps Git failure status and stderr, without echoed arguments or empty fields", () => {
-    expect(formatToolOutput("git", { exit_code: 1, stdout: "", stderr: "fatal: bad revision\n", args: ["bad"] }))
-      .toBe("git: exit 1\nstderr:\nfatal: bad revision");
-    expect(formatToolOutput("git", { exit_code: 0, stdout: "diff --git a/a b/a\n+hello\n", stderr: "" }))
-      .toBe("git: exit 0\ndiff --git a/a b/a\n+hello");
   });
 
   test("no activity does not produce zero-filled tables", () => {
@@ -63,21 +56,18 @@ describe("compact built-in output", () => {
   test("MCP objects and small receipts retain their existing serialization", () => {
     const result = { content: [{ type: "text", text: "hello" }], count: 3 };
     expect(formatToolOutput("mcp__test__search", result)).toBe(JSON.stringify(result));
-    expect(formatToolOutput("edit", { path: "a", bytes_written: 5 })).toBe('{"path":"a","bytes_written":5}');
-    expect(formatToolOutput("read", "workspace/\n└── a")).toBe("workspace/\n└── a");
+    expect(formatToolOutput("mcp__test__write", { path: "a", bytes_written: 5 })).toBe('{"path":"a","bytes_written":5}');
+    expect(formatToolOutput("mcp__test__list", "workspace/\n└── a")).toBe("workspace/\n└── a");
   });
 });
 
-test("real searches distinguish an exact limit from omitted matches, and reads preserve line numbers", async () => {
+test("real searches distinguish an exact limit from omitted matches", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "shore-output-"));
   try {
     await writeFile(join(workspace, "tea.md"), "tea one\ntea two\ncoffee");
     const search = async (max_results: number) => await handleSearch({ query: "tea", mode: "lexical", max_results }, workspace, undefined, undefined);
     expect(formatToolOutput("search", await search(1))).toContain("More matches available");
     expect(formatToolOutput("search", await search(2))).not.toContain("More matches available");
-    const read = await handleRead({ path: "tea.md", offset: 2, limit: 1 }, workspace);
-    expect(formatToolOutput("read", read)).toBe("tea.md: lines 2–2 of 3\n2: tea two\nShowing lines 2–2 of 3. Use offset=3 to continue.");
-    expect(formatToolOutput("read", await handleRead({ path: "tea.md", limit: 0 }, workspace))).toContain("no lines returned");
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }

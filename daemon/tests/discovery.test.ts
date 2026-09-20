@@ -358,31 +358,11 @@ describe("writing the cache", () => {
     expect(await readCache(path)).toEqual(full);
   });
 
-  test("version-1 caches reconstruct normalized support from raw provider metadata", async () => {
+  test("outdated caches are treated as missing", async () => {
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
-    await mkdir(join(dir, "providers", "openrouter"), { recursive: true });
-    await writeFile(path, JSON.stringify({
-      version: 1,
-      provider_key: "openrouter",
-      fetched_at: NOW,
-      models: [{
-        provider_key: "openrouter",
-        model_id: "legacy",
-        sdk: "openrouter",
-        raw_provider_metadata: {
-          id: "legacy",
-          supported_parameters: [],
-          capabilities: { effort: { supported: false }, thinking: { supported: false } },
-        },
-        discovered_at: NOW,
-      }],
-    }));
-    expect((await readCache(path))?.models[0]?.support).toEqual({
-      supported_parameters: [],
-      effort: { supported: false, levels: [] },
-      thinking: { adaptive: false, enabled: false },
-    });
+    await writeCache(path, { ...full, version: 1 });
+    expect(await readCache(path)).toBeUndefined();
   });
 
   test("creates the parent directories it needs", async () => {
@@ -515,9 +495,9 @@ describe("reading the cache back", () => {
     expect(await readCache(await withFile(newer))).toBeUndefined();
   });
 
-  test("one written by an older build still loads, so an upgrade does not refetch", async () => {
+  test("an older cache is discarded for refresh", async () => {
     const older = JSON.stringify({ ...cacheOf(), version: CACHE_VERSION - 1 });
-    expect(await readCache(await withFile(older))).toMatchObject({ version: CACHE_VERSION - 1 });
+    expect(await readCache(await withFile(older))).toBeUndefined();
   });
 
   test("a well-formed cache loads", async () => {

@@ -8,7 +8,7 @@ and its provenance before the registry entry, so an interrupted run can only
 ever leave a child that recovery can finish or throw away — never one the user
 can open and find empty. The destination is checked under the same lock that
 publishes it, so two forks racing for one name cannot both win. Versions are
-minted onto the source first, because a copy that shares no identity with what
+carried from the source, because a copy that shares no identity with what
 it was copied from is a duplicate rather than a branch, and every downstream
 guarantee — recall showing a shared message once, memory processing running over
 it once — rests on that identity.
@@ -51,23 +51,14 @@ MUTANTS = [
      "  return [...messages.slice(start)];"),
 
     # --- identity is what makes a copy a branch ------------------------------
-    ("identity: the copy gets fresh versions, so it is a duplicate not a branch",
-     "    const version = versionOf(message) ?? minted.get(message.msg_id);\n"
-     "    return version === undefined ? message : { ...message, version };",
-     "    return { ...message, version: newMessageVersion() };"),
-    ("identity: the source keeps no version, so the two sides never share one",
-     "  if (minted.size === 0) return minted;\n"
-     "  await source.stampMessageVersions(minted);",
-     "  if (minted.size === 0) return minted;"),
+    ('identity: the copy gets fresh versions, so it is a duplicate not a branch',
+     '  const copied = selectForkContext(live.messages(), turns);',
+     '  const copied = selectForkContext(live.messages(), turns).map(message => ({ ...message, version: "mv_replaced" }));'),
+
     ("identity: the source is re-read from disk, so a cached parent overwrites the stamp",
      "  const live = options.source ?? (await loadForkSource(data, character, source));",
      "  const live = await loadForkSource(data, character, source);"),
-    ("identity: an existing version is overwritten rather than carried across "
-     "(EQUIVALENT: stampVersions skips a message that already has one, and the copy "
-     "prefers the message's own version over the minted map, so overwriting the map "
-     "changes nothing either side can see)",
-     "    if (versionOf(message) === undefined) minted.set(message.msg_id, newMessageVersion());",
-     "    minted.set(message.msg_id, newMessageVersion());"),
+
 
     # --- refusals ------------------------------------------------------------
     ("refusal: an existing thread name is forked over rather than refused",

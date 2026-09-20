@@ -75,7 +75,7 @@ describe("precedence", () => {
   test("each source prints the name a user would recognise", () => {
     expect(sourceLabel("cli")).toBe("--addr");
     expect(sourceLabel("env")).toBe("SHORE_ADDR");
-    expect(sourceLabel("config")).toBe("[daemon].addr");
+    expect(sourceLabel("config")).toBe("[daemon].listen_addr");
   });
 });
 
@@ -135,7 +135,7 @@ describe("resolveStartup", () => {
   test("cli beats env beats config, all the way through", async () => {
     const { path, env } = await configRoot(`
 [daemon]
-addr = "127.0.0.1:7000"
+listen_addr = "127.0.0.1:7000"
 `);
 
     const startup = resolveStartup(

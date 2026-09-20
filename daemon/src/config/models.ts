@@ -26,7 +26,6 @@ import {
   zaiBaseUrl,
   ZAI_API_PROVIDER,
   ZAI_SUB_PROVIDER,
-  ZAI_SUBSCRIPTION_SETTING_MIGRATION,
 } from "../llm/providers/zai_config.ts";
 import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 
@@ -34,9 +33,6 @@ export type { Sdk };
 export { SDK_VARIANTS, sdkFromWire };
 
 function deserializeSdk(raw: string): ParseResult<Sdk> {
-  if (raw === "zhipuai") {
-    return { err: '`sdk = "zhipuai"` was removed — use `sdk = "openai"`' };
-  }
   const sdk = sdkFromWire(raw);
   if (sdk === undefined) {
     const expected = SDK_VARIANTS.map((v) => `\`${v}\``).join(", ");
@@ -126,10 +122,7 @@ export interface ProviderConfig {
   fields: ModelConfigFields;
 }
 
-export interface ModelEntry {
-  modelId?: string;
-  fields: ModelConfigFields;
-}
+
 
 export interface ResolvedModel {
   name: string;
@@ -349,12 +342,9 @@ export function emptyCatalog(): ModelCatalog {
 }
 
 export type CatalogErrorKind =
-  | "missing_model_id"
   | "parse_entry"
   | "ambiguous_name"
   | "not_found"
-  | "removed_provider"
-  | "provider_scalar_retired"
   | "aux_profile_invalid";
 
 export class CatalogError extends Error {
@@ -364,13 +354,6 @@ export class CatalogError extends Error {
   ) {
     super(message);
     this.name = "CatalogError";
-  }
-
-  static missingModelId(category: string, provider: string, name: string): CatalogError {
-    return new CatalogError(
-      "missing_model_id",
-      `model "${name}" in [${category}.${provider}] is missing required field \`model_id\``,
-    );
   }
 
   static parseEntry(
@@ -396,27 +379,6 @@ export class CatalogError extends Error {
     return new CatalogError("not_found", `model "${name}" not found`);
   }
 
-  static removedProvider(category: string): CatalogError {
-    return new CatalogError(
-      "removed_provider",
-      `[${category}.claude_code] is no longer supported — the Claude Code transport ` +
-        `was removed; drop this section from your config`,
-    );
-  }
-
-  static providerScalarRetired(
-    category: string,
-    provider: string,
-    key: string,
-    target: string,
-  ): CatalogError {
-    return new CatalogError(
-      "provider_scalar_retired",
-      `[${category}.${provider}] no longer accepts provider-level scalar \`${key}\`; ` +
-        `move it to ${target}`,
-    );
-  }
-
   static auxProfileInvalid(
     category: string,
     key: string,
@@ -433,9 +395,7 @@ export class CatalogError extends Error {
   }
 }
 
-const TRANSPORT_SCALAR_KEYS = ["sdk", "api_key_env", "base_url", "keys"];
 
-const RESERVED_DICT_KEYS = ["openrouter_provider"];
 
 export interface ProviderRegistryView {
   get(name: string): ProviderRegistryEntry | undefined;
@@ -521,62 +481,7 @@ function parseCategory(
       models.push([providerKey, resolvedModelFromParts(modelId, providerKey, category, provider, modelId, defaultSdk(provider), orFallback(parsed.ok, defaults))]);
       continue;
     }
-    if (providerKey === "claude_code") throw CatalogError.removedProvider(category);
-
-    const providerValue = section[providerKey];
-    if (!isTable(providerValue)) {
-      shoreLog.warn(`shore: skipping non-table key "${providerKey}" in [${category}]`);
-      continue;
-    }
-
-    for (const k of sortedKeys(providerValue)) {
-      if (!isTable(providerValue[k]) || RESERVED_DICT_KEYS.includes(k)) {
-        const target = TRANSPORT_SCALAR_KEYS.includes(k)
-          ? "the matching [providers.<name>] entry"
-          : "[providers.<name>.defaults]";
-        throw CatalogError.providerScalarRetired(category, providerKey, k, target);
-      }
-    }
-
-    const providerConfig = hardcodedProviderDefaults(providerKey);
-
-    const entry = providers?.get(providerKey);
-    if (entry !== undefined) {
-      const registryOverlay: ModelConfigFields = {};
-      if (entry.sdk !== undefined) registryOverlay.sdk = entry.sdk;
-      if (entry.baseUrl !== undefined) registryOverlay.baseUrl = entry.baseUrl;
-      mergeFrom(providerConfig.fields, registryOverlay);
-      mergeFrom(providerConfig.fields, entry.defaults);
-    }
-
-    for (const modelName of sortedKeys(providerValue)) {
-      const modelValue = providerValue[modelName];
-      if (!isTable(modelValue) || RESERVED_DICT_KEYS.includes(modelName)) continue;
-
-      const parsed = readModelEntry(modelValue);
-      if ("err" in parsed) {
-        throw CatalogError.parseEntry(category, providerKey, modelName, parsed.err);
-      }
-      const modelId = parsed.ok.modelId;
-      if (modelId === undefined) {
-        throw CatalogError.missingModelId(category, providerKey, modelName);
-      }
-
-      const qualified = `${category}.${providerKey}.${modelName}`;
-      const merged = orFallback(parsed.ok.fields, providerConfig.fields);
-      models.push([
-        qualified,
-        resolvedModelFromParts(
-          modelName,
-          qualified,
-          category,
-          providerKey,
-          modelId,
-          defaultSdk(providerKey),
-          merged,
-        ),
-      ]);
-    }
+    throw CatalogError.parseEntry(category, providerKey, "", "expected a provider:model_id settings table");
   }
 
   return new Map(models.sort((a, b) => compareByCodePoint(a[0], b[0])));
@@ -799,10 +704,7 @@ function readF64(table: Record<string, unknown>, key: string): ParseResult<numbe
 }
 
 export function readModelConfigFields(table: Record<string, unknown>): ParseResult<ModelConfigFields> {
-  if (Object.hasOwn(table, "zai_subscription")) {
-    return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
-  }
-  const unknown = denyUnknown(table, [...MODEL_FIELDS, "sdk", "api_key_env", "base_url", "model_id"]);
+  const unknown = denyUnknown(table, [...MODEL_FIELDS, "sdk", "api_key_env", "base_url"]);
   if (unknown !== undefined) return { err: unknown };
   const out: ModelConfigFields = {};
 
@@ -881,22 +783,12 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   if (out.maxToolIterations === 0) return { err: "max_tool_rounds must be positive" };
   if (table.replay_prior_thinking !== undefined) {
     const replay = table.replay_prior_thinking;
-    if (replay === "all" || replay === true || replay === "last_turn") out.replayPriorThinking = "all";
-    else if (replay === "none" || replay === false) out.replayPriorThinking = "none";
+    if (replay === "all") out.replayPriorThinking = "all";
+    else if (replay === "none") out.replayPriorThinking = "none";
     else return { err: "reasoning_replay must be all or none" };
   }
 
   return { ok: out };
-}
-
-function readModelEntry(table: Record<string, unknown>): ParseResult<ModelEntry> {
-  const modelId = readString(table, "model_id");
-  if ("err" in modelId) return modelId;
-  const fields = readModelConfigFields(table);
-  if ("err" in fields) return fields;
-  const entry: ModelEntry = { fields: fields.ok };
-  if (modelId.ok !== undefined) entry.modelId = modelId.ok;
-  return { ok: entry };
 }
 
 function denyUnknown(table: Record<string, unknown>, known: readonly string[]): string | undefined {

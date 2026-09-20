@@ -125,12 +125,12 @@ async function pureArchive(
   try {
     await conversationManager(
       threadDataDir(dataDir, character, thread),
-      deps.now ?? (() => new Date().toISOString()),
-      deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
       },
+      deps.now ?? (() => new Date().toISOString()),
+      deps.newId ?? (() => crypto.randomUUID()),
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
   } catch (e) {
     shoreLog.warn(

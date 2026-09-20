@@ -1,4 +1,3 @@
-import { preparePersistentStorage } from "../src/storage/prepare.ts";
 import { writeSession, readBook, bookPathIn, sessionKey, SESSION_BOOK_VERSION } from "../src/llm/providers/agent_sessions.ts";
 import { writeDurable, readDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
@@ -66,20 +65,18 @@ describe("character archives", () => {
   test("media and native sessions resume after moving an archive to another data directory", async () => {
     const source = await root("media-source");
     await seedCharacter(source, "ada", "image conversation");
-    const oldImage = join(source.data, "ada", "images", "generated", "picture.png");
-    await mkdir(join(source.data, "ada", "images", "generated"), { recursive: true });
+    const oldImage = join(source.data, "media", "ada", "generated", "picture.png");
+    await mkdir(join(source.data, "media", "ada", "generated"), { recursive: true });
     await writeFile(oldImage, "original image bytes");
     const active = join(source.data, "ada", "threads", "main", "active.jsonl");
     writeDurable(active, JSON.stringify({ ...userMessage("ada", "image"), images: [oldImage] }) + "\n");
     writeSession(bookPathIn(source.data), sessionKey("ada", join(source.data, "shore.db"), "main"), {
       version: SESSION_BOOK_VERSION, sessionId: "resume-me", entries: [],
     });
-    await preparePersistentStorage(source);
     const output = join(source.runtime, "media.shore.tar.gz");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("media-target");
     await importCharacter(context(target, new Set()), { archive: output });
-    await preparePersistentStorage(target);
     expect(await readFile(join(target.data, "media", "ada", "generated", "picture.png"), "utf8")).toBe("original image bytes");
     expect(readDurable(join(target.data, "ada", "threads", "main", "active.jsonl"))).toContain(join(target.data, "media", "ada"));
     expect(readBook(bookPathIn(target.data))[sessionKey("ada", join(target.data, "shore.db"), "main")]?.sessionId).toBe("resume-me");
@@ -167,9 +164,9 @@ async function seedCharacter(dirs: ShoreDirs, character: string, text: string): 
   await mkdir(join(data, "threads", "main"), { recursive: true });
   await mkdir(join(dirs.config, "characters", character), { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), `You are ${character}.\n`);
-  await writeFile(join(dirs.config, "characters", character, "config.toml"), "[defaults]\nstream = true\n");
+  await writeFile(join(dirs.config, "characters", character, "config.toml"), '[chat]\nmodel = "openai:gpt-test"\n');
   const message = userMessage(character, text);
-  await writeFile(join(data, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
+  writeDurable(join(data, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
   const history = HistoryStore.open(join(dirs.data, "shore.db"));
   history.putSegment(
     character,

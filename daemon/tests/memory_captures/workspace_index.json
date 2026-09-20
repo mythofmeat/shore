@@ -118,10 +118,6 @@
         "query": "tea"
       }
     ],
-    "s6": {
-      "op": "seed_index",
-      "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[-1.0,0.0,0.0]}}}"
-    },
     "s7": [
       {
         "counts_only": false,
@@ -1580,70 +1576,6 @@
       }
     },
     {
-      "name": "a corrupt index is discarded and rewritten",
-      "topics": [
-        "tea",
-        "garden",
-        "rust"
-      ],
-      "model": "topic-v1",
-      "unconfigured": false,
-      "missing_root": false,
-      "fail_embed": null,
-      "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "tea time",
-          "mtime": 1000
-        },
-        {
-          "op": "seed_index",
-          "raw": "not json at all { [ }"
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
-      "runs": {
-        "$ref": "s4"
-      }
-    },
-    {
-      "name": "an index with the wrong shape is discarded",
-      "topics": [
-        "tea",
-        "garden",
-        "rust"
-      ],
-      "model": "topic-v1",
-      "unconfigured": false,
-      "missing_root": false,
-      "fail_embed": null,
-      "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "tea time",
-          "mtime": 1000
-        },
-        {
-          "op": "seed_index",
-          "raw": "[1, 2, 3]"
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
-      "runs": {
-        "$ref": "s4"
-      }
-    },
-    {
       "name": "a seeded fresh entry is reused without re-embedding",
       "topics": [
         "tea",
@@ -1664,7 +1596,29 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 8,
+              "modified_at_secs": 1000,
+              "document_hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "vectors": [
+                [
+                  0.1,
+                  0.2,
+                  0.3
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -1696,39 +1650,29 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"some-other-model\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
-      "runs": {
-        "$ref": "s4"
-      }
-    },
-    {
-      "name": "a legacy entry with no max_embed_chars_per_file is stale",
-      "topics": [
-        "tea",
-        "garden",
-        "rust"
-      ],
-      "model": "topic-v1",
-      "unconfigured": false,
-      "missing_root": false,
-      "fail_embed": null,
-      "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "tea time",
-          "mtime": 1000
-        },
-        {
-          "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"sha256:deadbeef\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 8,
+              "modified_at_secs": 1000,
+              "document_hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "some-other-model",
+              "hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "vectors": [
+                [
+                  0.1,
+                  0.2,
+                  0.3
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -1760,7 +1704,29 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"gone.md\":{\"hash\":\"h\",\"size\":1,\"modified_at_secs\":1,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}}}"
+          "files": [
+            {
+              "display_path": "gone.md",
+              "size": 1,
+              "modified_at_secs": 1,
+              "document_hash": "8f68093592bb8352de438180de83a8426086b66df44a421732df8ccf8d70498e",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "8f68093592bb8352de438180de83a8426086b66df44a421732df8ccf8d70498e",
+              "vectors": [
+                [
+                  1.0,
+                  0.0,
+                  0.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -1881,7 +1847,27 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0]}}}"
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 8,
+              "modified_at_secs": 1000,
+              "document_hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "vectors": [
+                [
+                  1.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -1913,7 +1899,29 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.0,0.0,0.0]}}}"
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 8,
+              "modified_at_secs": 1000,
+              "document_hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "495b9881b141ef5c928c5ca4ccece9be2acef8941c328e70d1533e79c1a10db7",
+              "vectors": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -1944,7 +1952,30 @@
           "mtime": 1000
         },
         {
-          "$ref": "s6"
+          "op": "seed_index",
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 3,
+              "modified_at_secs": 1000,
+              "document_hash": "5873a7f298373b01b33ddbd791074290038f7c8257a28a3d5fa87eccdd8da597",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "5873a7f298373b01b33ddbd791074290038f7c8257a28a3d5fa87eccdd8da597",
+              "vectors": [
+                [
+                  -1.0,
+                  0.0,
+                  0.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -2000,13 +2031,13 @@
         },
         {
           "op": "write",
-          "path": "\ue000.md",
+          "path": ".md",
           "text": "tea",
           "mtime": 1003
         },
         {
           "op": "write",
-          "path": "\ud83c\udf0a.md",
+          "path": "🌊.md",
           "text": "tea",
           "mtime": 1004
         },
@@ -2029,17 +2060,17 @@
               "C.md",
               "a.md",
               "b.md",
-              "\ue000.md",
-              "\ud83c\udf0a.md"
+              ".md",
+              "🌊.md"
             ]
           },
           "embedded_paths": [
             [
               "C.md",
               "a.md",
-              "\ue000.md",
+              ".md",
               "b.md",
-              "\ud83c\udf0a.md"
+              "🌊.md"
             ]
           ]
         }
@@ -2336,7 +2367,30 @@
           "mtime": 1000
         },
         {
-          "$ref": "s6"
+          "op": "seed_index",
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 3,
+              "modified_at_secs": 1000,
+              "document_hash": "7b1c2f07e8f38e845316577dae2f25931ff5415bf399660c43aac20ae3ff5599",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "7b1c2f07e8f38e845316577dae2f25931ff5415bf399660c43aac20ae3ff5599",
+              "vectors": [
+                [
+                  -1.0,
+                  0.0,
+                  0.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -2368,7 +2422,29 @@
         },
         {
           "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}}}"
+          "files": [
+            {
+              "display_path": "a.md",
+              "size": 3,
+              "modified_at_secs": 1000,
+              "document_hash": "5873a7f298373b01b33ddbd791074290038f7c8257a28a3d5fa87eccdd8da597",
+              "embed_chars": 4000,
+              "embedded": true
+            }
+          ],
+          "embeddings": [
+            {
+              "model": "topic-v1",
+              "hash": "5873a7f298373b01b33ddbd791074290038f7c8257a28a3d5fa87eccdd8da597",
+              "vectors": [
+                [
+                  1.0,
+                  0.0,
+                  0.0
+                ]
+              ]
+            }
+          ]
         },
         {
           "op": "search",
@@ -2675,7 +2751,7 @@
         {
           "op": "write",
           "path": "a.md",
-          "text": "\ufeff# tea\n\nbody",
+          "text": "﻿# tea\n\nbody",
           "mtime": 1000
         },
         {
@@ -2718,114 +2794,6 @@
       "runs": {
         "$ref": "s4"
       }
-    },
-    {
-      "name": "one bad entry discards the whole index file",
-      "topics": [
-        "tea",
-        "garden",
-        "rust"
-      ],
-      "model": "topic-v1",
-      "unconfigured": false,
-      "missing_root": false,
-      "fail_embed": null,
-      "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "tea time",
-          "mtime": 1000
-        },
-        {
-          "op": "write",
-          "path": "b.md",
-          "text": "tea again",
-          "mtime": 1001
-        },
-        {
-          "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"h\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]},\"b.md\":{\"hash\":\"h\"}}}"
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md",
-              "b.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "a.md",
-              "b.md"
-            ]
-          ]
-        }
-      ]
-    },
-    {
-      "name": "an index whose entries are a list is discarded",
-      "topics": [
-        "tea",
-        "garden",
-        "rust"
-      ],
-      "model": "topic-v1",
-      "unconfigured": false,
-      "missing_root": false,
-      "fail_embed": null,
-      "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "0",
-          "text": "tea time",
-          "mtime": 1000
-        },
-        {
-          "op": "seed_index",
-          "raw": "{\"entries\":[{\"hash\":\"h\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}]}"
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "0"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "0"
-            ]
-          ]
-        }
-      ]
     },
     {
       "name": "an index that cannot be written does not fail the search",
@@ -3295,8 +3263,8 @@
     {
       "name": "non-ascii",
       "workspace_dir": "/ws",
-      "path": "/ws/caf\u00e9/na\u00efve.md",
-      "out": "caf\u00e9/na\u00efve.md"
+      "path": "/ws/café/naïve.md",
+      "out": "café/naïve.md"
     },
     {
       "name": "a literal backslash in a name",
@@ -3330,15 +3298,15 @@
       ]
     },
     {
-      "query": "\u00e9",
+      "query": "é",
       "out": [
-        "\u00e9"
+        "é"
       ]
     },
     {
-      "query": "\u00e9\u00e9",
+      "query": "éé",
       "out": [
-        "\u00e9\u00e9"
+        "éé"
       ]
     },
     {
@@ -3382,7 +3350,7 @@
       ]
     },
     {
-      "query": "\ud83c\udf0a wave",
+      "query": "🌊 wave",
       "out": [
         "wave"
       ]
@@ -3549,19 +3517,19 @@
     },
     {
       "name": "multibyte term passes the two-byte floor at one char",
-      "path": "caf\u00e9.md",
-      "content": "# caf\u00e9\n\ncaf\u00e9",
-      "query": "\u00e9",
-      "q_lower": "\u00e9",
+      "path": "café.md",
+      "content": "# café\n\ncafé",
+      "query": "é",
+      "q_lower": "é",
       "terms": [
-        "\u00e9"
+        "é"
       ],
       "out": 146
     },
     {
       "name": "a byte-order mark before the hash is not stripped, so no heading",
       "path": "a.md",
-      "content": "\ufeff# tea\n\nbody",
+      "content": "﻿# tea\n\nbody",
       "query": "tea",
       "q_lower": "tea",
       "terms": [
@@ -3572,7 +3540,7 @@
     {
       "name": "a NEL before the hash is stripped, so it is a heading",
       "path": "a.md",
-      "content": "\u0085# tea\n\nbody",
+      "content": "# tea\n\nbody",
       "query": "tea",
       "q_lower": "tea",
       "terms": [
@@ -3583,7 +3551,7 @@
     {
       "name": "a heading found after a BOM line falls through to the next hash",
       "path": "a.md",
-      "content": "\ufeff# not it\n# tea heading\nbody",
+      "content": "﻿# not it\n# tea heading\nbody",
       "query": "tea",
       "q_lower": "tea",
       "terms": [
@@ -3905,16 +3873,16 @@
     {
       "name": "the cap counts chars, not utf-16 units",
       "path": "a.md",
-      "content": "\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a tail",
+      "content": "🌊🌊🌊 tail",
       "max_embed_chars_per_file": 2,
-      "out": "path: a.md\n\n\ud83c\udf0a\ud83c\udf0a"
+      "out": "path: a.md\n\n🌊🌊"
     },
     {
       "name": "multibyte under the cap",
       "path": "a.md",
-      "content": "caf\u00e9",
+      "content": "café",
       "max_embed_chars_per_file": 10,
-      "out": "path: a.md\n\ncaf\u00e9"
+      "out": "path: a.md\n\ncafé"
     },
     {
       "name": "empty content",
@@ -3952,22 +3920,22 @@
     {
       "cache_dir": "/cache",
       "character": "ren",
-      "out": "/cache/characters/ren/workspace_index.json"
+      "out": "/cache/characters/ren/workspace_index.db"
     },
     {
       "cache_dir": "/cache/",
       "character": "ren",
-      "out": "/cache/characters/ren/workspace_index.json"
+      "out": "/cache/characters/ren/workspace_index.db"
     },
     {
       "cache_dir": "relative",
       "character": "ren",
-      "out": "relative/characters/ren/workspace_index.json"
+      "out": "relative/characters/ren/workspace_index.db"
     },
     {
       "cache_dir": "/cache",
       "character": "name with spaces",
-      "out": "/cache/characters/name with spaces/workspace_index.json"
+      "out": "/cache/characters/name with spaces/workspace_index.db"
     }
   ],
   "embed_batching": [
@@ -5525,7 +5493,7 @@
           ]
         ],
         "stale_docs": [
-          "path: a.md\n\ntea \ud83c\udf0a\ud83c\udf0a"
+          "path: a.md\n\ntea 🌊🌊"
         ],
         "skipped_binary_or_large": 0,
         "dirty": false,
@@ -5534,7 +5502,7 @@
             "display_path": "a.md",
             "size": 21,
             "modified_at_secs": 1000,
-            "content": "tea \ud83c\udf0a\ud83c\udf0a\ud83c\udf0a tail",
+            "content": "tea 🌊🌊🌊 tail",
             "skip_reason": null
           }
         ],

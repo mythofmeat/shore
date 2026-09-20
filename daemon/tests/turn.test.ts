@@ -1,3 +1,6 @@
+import type { Message } from "../src/engine/types.ts";
+import { HistoryStore } from "../src/engine/history_store.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
@@ -135,10 +138,7 @@ async function seedCharacter(root: string, history: unknown[]): Promise<string> 
   const charDir = join(dataDir, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
   if (history.length > 0) {
-    await writeFile(
-      join(charDir, "threads", "main", "active.jsonl"),
-      history.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(charDir, "threads", "main", "active.jsonl"), history.map((m) => JSON.stringify(m)).join("\n") + "\n");
   }
   return dataDir;
 }
@@ -185,7 +185,7 @@ describe("appendUserTurn", () => {
           {
             text: input["body"].text,
             images,
-            image_data: input["body"].image_data ?? [],
+            image_data: input["body"].image_data ?? (input["body"].images ?? []).map((filename) => ({ filename, data: Buffer.from(PNG_BYTES).toString("base64") })),
           },
           input["regen"],
         );
@@ -230,28 +230,13 @@ describe("ensureAndBackfillAutonomy", () => {
           state_exists: boolean;
         };
         const dataDir = await seedCharacter(root, rehydrate(input["active"]));
-        const charDir = join(dataDir, "ada");
 
         const archived = rehydrate(input["archived"]);
         if (archived.length > 0) {
-          await mkdir(join(charDir, "threads", "main", "segments"), { recursive: true });
-          await writeFile(
-            join(charDir, "threads", "main", "segments", "0001.jsonl"),
-            archived.map((m) => JSON.stringify(m)).join("\n") + "\n",
-          );
-          await writeFile(
-            join(charDir, "threads", "main", "compaction.json"),
-            JSON.stringify({
-              segments: [
-                {
-                  file: "0001.jsonl",
-                  message_count: archived.length,
-                  compacted_at: "2026-01-01T00:00:00-05:00",
-                },
-              ],
-              total_compacted_messages: archived.length,
-            }),
-          );
+          const history = HistoryStore.open(join(dataDir, "shore.db"));
+          try {
+            history.putSegment("ada", 0, { file: "shore.db", message_count: archived.length, compacted_at: "2026-01-01T00:00:00-05:00" }, archived as Message[]);
+          } finally { history.close(); }
         }
 
         const rec = recorder({

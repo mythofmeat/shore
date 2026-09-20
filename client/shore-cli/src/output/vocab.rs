@@ -999,8 +999,6 @@ mod tests {
         assert_eq!(stated, "  440 hidden \u{00b7} --all to include\n");
     }
 
-    const NOT_YET_MIGRATED: &[&str] = &[];
-
     fn source_files() -> Vec<(String, String)> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut found = Vec::new();
@@ -1034,7 +1032,7 @@ mod tests {
     fn only_the_vocabulary_is_allowed_to_emit_color() {
         let mut offenders = Vec::new();
         for (name, text) in source_files() {
-            if name == "output/vocab.rs" || NOT_YET_MIGRATED.contains(&name.as_str()) {
+            if name == "output/vocab.rs" {
                 continue;
             }
             for (i, line) in text.lines().enumerate() {
@@ -1054,7 +1052,7 @@ mod tests {
     fn only_the_vocabulary_is_allowed_to_hardcode_indentation() {
         let mut offenders = Vec::new();
         for (name, text) in source_files() {
-            if name == "output/vocab.rs" || NOT_YET_MIGRATED.contains(&name.as_str()) {
+            if name == "output/vocab.rs" {
                 continue;
             }
             for (i, line) in text.lines().enumerate() {
@@ -1069,17 +1067,6 @@ mod tests {
             "indentation must come from output::vocab, not literal spaces. \
              Offenders: {offenders:?}"
         );
-    }
-
-    #[test]
-    fn the_not_yet_migrated_list_only_names_files_that_exist() {
-        let names: Vec<String> = source_files().into_iter().map(|(n, _)| n).collect();
-        for stale in NOT_YET_MIGRATED {
-            assert!(
-                names.iter().any(|n| n == stale),
-                "NOT_YET_MIGRATED names {stale}, which no longer exists \u{2014} delete the entry"
-            );
-        }
     }
 
     #[test]

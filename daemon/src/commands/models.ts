@@ -43,7 +43,6 @@ import {
 } from "../config/preferences.ts";
 import type { SubagentConfig } from "../config/app.ts";
 import { SETTING_STORAGE_FIELDS, samplerToWire, settingSchema } from "../llm/settings.ts";
-import { ZAI_SUBSCRIPTION_SETTING_MIGRATION } from "../llm/providers/zai_config.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
 import {
@@ -133,7 +132,7 @@ function backgroundTask(selector: string): BackgroundTask {
 }
 
 function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): ResolvedModel {
-  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;
+  const pinned = ctx.config.app.defaults.background[task];
   if (pinned !== undefined) return resolve(ctx, pinned, true);
 
   const character = requireCharacter(ctx);
@@ -294,9 +293,6 @@ function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRol
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
-  if (bg.model !== undefined) {
-    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };
-  }
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
@@ -323,7 +319,7 @@ function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
 function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRole {
   const name = ctx.config.app.defaults[key as "embedding" | "image_generation"];
   if (name === undefined || name === "") return { role, model: null, source: null };
-  return { role, model: qualify(ctx, name), source: `defaults.${key}` };
+  return { role, model: qualify(ctx, name), source: key === "embedding" ? "embedding.model" : "image.model" };
 }
 
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
@@ -568,7 +564,6 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
 function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
   const config = configContext(ctx);
   const keys = backgroundKeys(selector);
-  if (ctx.config.app.defaults.background.model !== undefined) throw invalidRequest("a legacy shared background model is configured; run shore config migrate before resetting task models");
 
   const cleared: string[] = [];
   let file: string | undefined;
@@ -764,7 +759,6 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
   const key = canonicalSettingKey(rawKey.trim());
-  if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (!SAMPLER_KEYS.includes(key)) {
     throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
   }
@@ -1060,7 +1054,6 @@ function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
   const raw = asName(args["key"]);
   if (raw === undefined) return undefined;
   const key = canonicalSettingKey(raw.trim());
-  if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (SAMPLER_KEYS.includes(key)) return key;
   if (ctx.config.app.subagents.has(key)) {
     throw invalidRequest(

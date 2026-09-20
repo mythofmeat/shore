@@ -86,7 +86,7 @@ test("unreferenced mirrors get a grace period; unrelated SDK files and symlink t
   expect(f.prune(start + DIAGNOSTIC_RETENTION_MS + 1)).toBe(1);
   expect(existsSync(f.local(unrelated))).toBe(true);
   expect(existsSync(join(outside, `${orphan}.jsonl`))).toBe(true);
-  expect(readState(f.data, "ada/memory.md", "ada")).toBe("memory");
+  expect(readState(f.data, "ada/memory.md")).toBe("memory");
 });
 
 test("an unreadable session book prevents transcript deletion", async () => {
@@ -132,8 +132,15 @@ test.each([0, 1])("clearing or compacting retires sessions immediately (retained
   const dir = join(f.data, "ada", "threads", "main");
   const content = ["user", "assistant"].map((role, i) => JSON.stringify({ msg_id: `m${i}`, role, content: "text", images: [], content_blocks: [], timestamp: new Date(start).toISOString() })).join("\n") + "\n";
   writeDurable(join(dir, "active.jsonl"), content);
-  await archiveAndRetain(dir, keep, content, () => new Date(start).toISOString(), randomUUID, undefined,
-    { dbPath: join(f.data, "shore.db"), archiveKey: "ada" });
+  await archiveAndRetain(
+    dir,
+    { dbPath: join(f.data, "shore.db"), archiveKey: "ada" },
+    keep,
+    content,
+    () => new Date(start).toISOString(),
+    randomUUID,
+    undefined,
+  );
   expect(readBook(f.book)[f.key]).toBeUndefined();
   expect(f.prune(start + DIAGNOSTIC_RETENTION_MS)).toBe(0);
   expect(f.prune(start + DIAGNOSTIC_RETENTION_MS + 1)).toBe(1);

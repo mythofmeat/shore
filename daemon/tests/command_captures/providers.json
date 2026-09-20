@@ -14,7 +14,7 @@
     },
     {
       "name": "keys, env probes, ignore rules and a cache",
-      "note": "no env var *name* and no key value ever appears in the payload — only the boolean; a blank value counts as unset",
+      "note": "no env var *name* and no key value ever appears in the payload \u2014 only the boolean; a blank value counts as unset",
       "ok": {
         "providers": [
           {
@@ -132,7 +132,7 @@
   "list_provider_models": [
     {
       "name": "discovered plus static, hidden split out",
-      "note": "static entries are never filtered — a manual catalog entry is always intentional",
+      "note": "static entries are never filtered \u2014 a manual catalog entry is always intentional",
       "ok": {
         "$ref": "s0"
       }
@@ -176,7 +176,7 @@
     },
     {
       "name": "a provider known only through a static entry",
-      "note": "no registry entry, but `[chat.other.*]` references it, so it is not a miss — and with no entry there are no ignore rules, so nothing it discovered is hidden",
+      "note": "no registry entry, but `[chat.other.*]` references it, so it is not a miss \u2014 and with no entry there are no ignore rules, so nothing it discovered is hidden",
       "ok": {
         "provider": "other",
         "discovered": [
@@ -199,8 +199,8 @@
         "static": [
           {
             "source": "static",
-            "name": "two",
-            "qualified_name": "chat.other.two",
+            "name": "static-two",
+            "qualified_name": "other:static-two",
             "model_id": "static-two",
             "sdk": "openai",
             "max_output_tokens": null
@@ -313,7 +313,7 @@
     },
     {
       "name": "a successful refresh writes the cache",
-      "note": "the first key whose env var is non-empty is used — `first` has an unset env var so `second` is chosen, and the upstream only accepts `second`'s value, which is what makes the choice observable at all. There is no rotation on failure here, unlike chat traffic.",
+      "note": "the first key whose env var is non-empty is used \u2014 `first` has an unset env var so `second` is chosen, and the upstream only accepts `second`'s value, which is what makes the choice observable at all. There is no rotation on failure here, unlike chat traffic.",
       "ok": {
         "provider": "alpha",
         "model_count": 2,
@@ -418,7 +418,7 @@
     },
     {
       "name": "a provider whose sdk comes from its built-in default",
-      "note": "no `sdk` key, so the default for the provider name decides — and the configured base_url still wins over the built-in one, which points at the real API",
+      "note": "no `sdk` key, so the default for the provider name decides \u2014 and the configured base_url still wins over the built-in one, which points at the real API",
       "ok": {
         "provider": "anthropic",
         "model_count": 1,
@@ -482,14 +482,14 @@
     },
     {
       "name": "a failing upstream preserves the previous cache",
-      "note": "the cache is only ever replaced on success — a bad refresh must not leave the daemon with fewer models than it had",
+      "note": "the cache is only ever replaced on success \u2014 a bad refresh must not leave the daemon with fewer models than it had",
       "err": {
         "code": "internal_error",
         "message": "provider alpha: discovery HTTP 500"
       },
       "caches_after": {
         "alpha": {
-          "version": 1,
+          "version": 2,
           "provider_key": "alpha",
           "fetched_at": "1999-01-01T00:00:00Z",
           "base_url": null,
@@ -516,7 +516,7 @@
   "refresh_all_provider_models": [
     {
       "name": "one succeeds, one fails, two are skipped",
-      "note": "a per-provider failure is aggregated rather than aborting the batch — a missing key on one provider must not stop the others refreshing",
+      "note": "a per-provider failure is aggregated rather than aborting the batch \u2014 a missing key on one provider must not stop the others refreshing",
       "ok": {
         "results": [
           {
@@ -642,16 +642,16 @@
       {
         "max_output_tokens": 1024,
         "model_id": "static-one",
-        "name": "one",
-        "qualified_name": "chat.alpha.one",
+        "name": "static-one",
+        "qualified_name": "alpha:static-one",
         "sdk": "anthropic",
         "source": "static"
       },
       {
         "max_output_tokens": null,
         "model_id": "vendor/two",
-        "name": "shadowed",
-        "qualified_name": "chat.alpha.shadowed",
+        "name": "vendor/two",
+        "qualified_name": "alpha:vendor/two",
         "sdk": "anthropic",
         "source": "static"
       }

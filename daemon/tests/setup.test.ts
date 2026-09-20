@@ -1,3 +1,4 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -100,10 +101,8 @@ const resolveCases = fixture.resolve_generation_model as unknown as ResolveCase[
 const buildCases = fixture.build_generation_request as unknown as BuildCase[];
 
 const CATALOG_TOML = {
-  anthropic: {
-    alpha: { model_id: "alpha-id", sdk: "anthropic", temperature: 0.1 },
-    beta: { model_id: "beta-id", sdk: "anthropic", temperature: 0.2 },
-  },
+  "anthropic:alpha-id": { sdk: "anthropic", temperature: 0.1 },
+  "anthropic:beta-id": { sdk: "anthropic", temperature: 0.2 },
 };
 
 function some<T>(value: T | null | undefined): T | undefined {
@@ -226,7 +225,7 @@ describe("resolveGenerationModel", () => {
         await writeFile(
           path,
           JSON.stringify({
-            version: 1,
+            version: 2,
             provider_key: discovery.provider,
             fetched_at: "2026-07-01T00:00:00Z",
             models: discovery.models.map((m) => ({
@@ -284,8 +283,7 @@ describe("buildGenerationRequest", () => {
       await mkdir(workspace, { recursive: true });
       await writeFile(join(workspace, "SOUL.md"), "I am qifei.\n");
       const activePrompt = join(characterDataDir(dirs.data, "qifei"), "active_prompt");
-      await mkdir(activePrompt, { recursive: true });
-      await writeFile(join(activePrompt, "AGENTS.md"), "Answer as qifei, tersely.\n");
+      writePromptSnapshotFile(join(activePrompt, "AGENTS.md"), "Answer as qifei, tersely.\n");
       await mkdir(dirs.cache, { recursive: true });
 
       const app = defaultAppConfig();

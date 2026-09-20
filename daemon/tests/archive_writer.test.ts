@@ -1,144 +1,61 @@
-import { listDurableFiles } from "../src/storage/files.ts";
-import { readFileSync, readFile } from "./support/stored_files.ts";
-import { required } from "../src/util/required.ts";
-
-import { describe, expect, test } from "bun:test";
-
-import { mkdtemp, mkdir, readdir, writeFile, rm } from "node:fs/promises";
+import { afterEach, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { join } from "node:path";
+import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
+import { ConversationEngine } from "../src/engine/conversation.ts";
+import { HistoryStore } from "../src/engine/history_store.ts";
+import type { Message } from "../src/engine/types.ts";
+import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 
-import { archiveAndRetain } from "../src/memory/compaction/archive";
-import { CompactionError } from "../src/memory/compaction/types";
+const roots: string[] = [];
+afterEach(async () => {
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+});
+const stamp = "2026-09-20T00:00:00Z";
+const messages: Message[] = Array.from({ length: 4 }, (_, i) => ({
+  msg_id: `m${i}`, role: i % 2 === 0 ? "user" : "assistant", timestamp: stamp,
+  content: `turn ${i}`, content_blocks: [{ type: "text", text: `turn ${i}` }], images: [], version: `mv_${i}`,
+}));
+const jsonl = (rows: Message[]) => rows.map(row => JSON.stringify(row) + "\n").join("");
 
-interface Case {
-  name: string;
-  keep_last_n: number;
-  active_content_b64: string;
-  before: Record<string, string>;
-  after: Record<string, string>;
-  outcome: { ok: boolean; returns_uuid_v4?: boolean; err?: string };
-}
-
-const fixture = JSON.parse(
-  readFileSync(
-    join(import.meta.dir, "memory_captures/archive_writer.json"),
-    "utf8",
-  ),
-) as {
-  constants: Record<string, unknown>;
-  archive_and_retain: Case[];
-};
-
-const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
-
-async function snapshot(dir: string): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  async function walk(cur: string): Promise<void> {
-    for (const entry of await readdir(cur, { withFileTypes: true })) {
-      const p = join(cur, entry.name);
-      if (entry.isDirectory()) await walk(p);
-      else out[relative(dir, p).replaceAll("\\", "/")] = await readFile(p, "utf8");
-    }
-  }
-  await walk(dir);
-  for (const name of listDurableFiles(dir)) {
-    if (!name.includes("/")) {
-      try { out[name] = await readFile(join(dir, name), "utf8"); } catch {}
-    }
-  }
-  return out;
-}
-
-function normalizeManifest(raw: string, seeded: Set<string>): string {
-  let parsed: { segments?: { file: string; compacted_at: string }[] };
-  try {
-    parsed = JSON.parse(raw) as typeof parsed;
-  } catch {
-    return raw;
-  }
-  if (!Array.isArray(parsed.segments)) return raw;
-
-  let out = raw;
-  for (const seg of parsed.segments) {
-    if (seeded.has(seg.file)) continue;
-    expect(seg.compacted_at).toBeString();
-    expect(Number.isNaN(Date.parse(seg.compacted_at))).toBe(false);
-    out = out.replace(JSON.stringify(seg.compacted_at), '"<stamped>"');
-  }
-  return out;
-}
-
-const UUID_V4 =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
-describe("writing an archived segment", () => {
-  test("the fixture pins the path constants this module hardcodes", () => {
-    expect(fixture.constants.active_jsonl_file).toBe("active.jsonl");
-    expect(fixture.constants.segments_dir).toBe("segments");
-    expect(fixture.constants.compaction_manifest_file).toBe("compaction.json");
-  });
-
-  for (const c of fixture.archive_and_retain) {
-    test(c.name, async () => {
-      const dir = await mkdtemp(join(tmpdir(), "compaction-writer-"));
-      try {
-        for (const [rel, content] of Object.entries(c.before)) {
-          const p = join(dir, rel);
-          await mkdir(dirname(p), { recursive: true });
-          await writeFile(p, b64(content), "utf8");
-        }
-
-        const seeded = new Set<string>();
-        if (c.before["compaction.json"] !== undefined) {
-          try {
-            const m = JSON.parse(b64(c.before["compaction.json"])) as {
-              segments?: { file: string }[];
-            };
-            for (const s of m.segments ?? []) seeded.add(s.file);
-          } catch {
-          }
-        }
-
-        let returned: string | undefined;
-        let threw: unknown;
-        try {
-          returned = await archiveAndRetain(dir, c.keep_last_n, b64(c.active_content_b64));
-        } catch (e) {
-          threw = e;
-        }
-
-        if (c.outcome.ok) {
-          expect(threw).toBeUndefined();
-          expect(c.outcome.returns_uuid_v4).toBe(true);
-          expect(returned).toMatch(UUID_V4);
-        } else {
-          expect(threw).toBeInstanceOf(CompactionError);
-          expect((threw as CompactionError).kind).toBe("conversation");
-          expect((threw as Error).message).toStartWith("conversation:");
-          expect(c.outcome.err).toStartWith("conversation:");
-        }
-
-        const actual = await snapshot(dir);
-        const expected = Object.fromEntries(
-          Object.entries(c.after).map(([k, v]) => [k, b64(v)]),
-        );
-
-        expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
-
-        for (const [rel, want] of Object.entries(expected)) {
-          const got = required(actual[rel]);
-          if (rel === "compaction.json") {
-            expect(normalizeManifest(got, seeded)).toBe(
-              normalizeManifest(want, seeded),
-            );
-          } else {
-            expect(got).toBe(want);
-          }
-        }
-      } finally {
-        await rm(dir, { recursive: true, force: true });
+for (const keep of [0, 1, 4, 10]) {
+  test(`archiving with ${keep} retained messages survives a conversation restart`, async () => {
+    const data = await mkdtemp(join(tmpdir(), "shore-archive-writer-"));
+    roots.push(data);
+    const dir = join(data, "ada/threads/main");
+    await mkdir(dir, { recursive: true });
+    const active = threadFile(data, "ada", "main", "active.jsonl");
+    writeDurable(active, jsonl(messages));
+    const location = { dbPath: join(data, "shore.db"), archiveKey: "ada" };
+    const id = await archiveAndRetain(dir, location, keep, jsonl(messages), () => stamp, () => "next", "archive-once");
+    expect(id).toBe("next");
+    const retained = Math.min(keep, messages.length);
+    expect(readDurable(active)).toBe(jsonl(messages.slice(messages.length - retained)));
+    const engine = await ConversationEngine.load("ada", data);
+    expect(engine.messages().map(row => row.msg_id)).toEqual(messages.slice(messages.length - retained).map(row => row.msg_id));
+    const history = HistoryStore.open(location.dbPath);
+    try {
+      expect(history.segmentCount("ada")).toBe(retained < messages.length ? 1 : 0);
+      if (retained < messages.length) {
+        expect(history.readSegment("ada", 0).map(row => row.msg_id)).toEqual(messages.slice(0, messages.length - retained).map(row => row.msg_id));
+        expect(history.hasCompactionOperation("ada", "archive-once")).toBe(true);
       }
-    });
+    } finally { history.close(); }
+  });
+}
+
+test("retrying a completed compaction does not create another archive segment", async () => {
+  const data = await mkdtemp(join(tmpdir(), "shore-archive-retry-"));
+  roots.push(data);
+  const dir = join(data, "ada/threads/main");
+  await mkdir(dir, { recursive: true });
+  const location = { dbPath: join(data, "shore.db"), archiveKey: "ada" };
+  writeDurable(threadFile(data, "ada", "main", "active.jsonl"), jsonl(messages));
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await archiveAndRetain(dir, location, 2, jsonl(messages), () => stamp, () => "next", "same-operation");
   }
+  const history = HistoryStore.open(location.dbPath);
+  try { expect(history.segmentCount("ada")).toBe(1); }
+  finally { history.close(); }
 });

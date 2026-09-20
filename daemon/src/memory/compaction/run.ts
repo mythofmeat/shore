@@ -129,12 +129,12 @@ export async function rotateWithoutMemoryWrite(
   if (!dryRun) {
     await conversationManager(
       conversationDir,
-      deps.now ?? (() => new Date().toISOString()),
-      deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
       },
+      deps.now ?? (() => new Date().toISOString()),
+      deps.newId ?? (() => crypto.randomUUID()),
     ).archiveAndRetain("archive-only", {
       keepLastN: commit.retained,
       activeContent: commit.liveContent,
@@ -244,12 +244,12 @@ export async function runCompactionPass(
           llm: resolved.llm,
           conversationMgr: conversationManager(
             loaded.conversationDir,
-            deps.now ?? (() => new Date().toISOString()),
-            deps.newId ?? (() => crypto.randomUUID()),
             {
               dbPath: join(dataDir, HISTORY_DB_FILE),
               archiveKey: archiveKey(character, thread),
             },
+            deps.now ?? (() => new Date().toISOString()),
+            deps.newId ?? (() => crypto.randomUUID()),
           ),
           ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
           dryRun: options.dryRun ?? false,

@@ -3,7 +3,7 @@
     {
       "name": "empty config dir",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": []
       },
@@ -39,9 +39,9 @@
       ]
     },
     {
-      "name": "discovery is sorted and takes both definition files",
+      "name": "discovery is sorted and reads workspace definitions",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -95,7 +95,7 @@
     {
       "name": "a directory without a definition file is not a character",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -124,7 +124,7 @@
         },
         {
           "op": "fs:write",
-          "path": "characters/Empty/character.md",
+          "path": "characters/Empty/workspace/SOUL.md",
           "body": "now it is"
         },
         {
@@ -142,7 +142,7 @@
     {
       "name": "refresh re-scans; nothing else does",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -214,7 +214,7 @@
     {
       "name": "one character auto-selects",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -268,7 +268,7 @@
     {
       "name": "two characters are ambiguous without a request",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -312,7 +312,7 @@
     {
       "name": "engines are cached per character",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -378,7 +378,7 @@
     {
       "name": "reload drops engines for removed characters only",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -476,7 +476,7 @@
     {
       "name": "refresh keeps a removed character's engine",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -552,7 +552,7 @@
     {
       "name": "per-character config is cached, including its absence",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -580,7 +580,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -588,13 +587,12 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -606,7 +604,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -615,7 +612,6 @@
           "op": "effective_config",
           "name": "Bob",
           "result": {
-            "stream": true,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -625,7 +621,7 @@
     {
       "name": "an unloadable character config fails closed",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -657,7 +653,7 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nembedding = \"bare-alias\"\n"
+          "toml": "[embedding]\nmodel = \"bare-alias\"\n"
         },
         {
           "op": "invalidate_configs"
@@ -672,7 +668,7 @@
     {
       "name": "effective_config does not check membership",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -695,7 +691,6 @@
           "op": "effective_config",
           "name": "Nobody",
           "result": {
-            "stream": true,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -705,7 +700,7 @@
     {
       "name": "a runtime override outranks the file until invalidated",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -727,13 +722,12 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -741,13 +735,12 @@
         {
           "op": "set_runtime_effective_config",
           "name": "Alice",
-          "toml": "[defaults]\ndisplay_name = \"RUNTIME\"\n"
+          "toml": "[chat]\ndisplay_name = \"RUNTIME\"\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": "RUNTIME",
             "addr": "127.0.0.1:7320"
           }
@@ -759,7 +752,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -769,7 +761,7 @@
     {
       "name": "set_global_config clears the per-character cache",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -791,26 +783,24 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
         },
         {
           "op": "set_global_config",
-          "toml": "[defaults]\ndisplay_name = \"REPLACED\"\n"
+          "toml": "[chat]\ndisplay_name = \"REPLACED\"\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "REPLACED",
             "addr": "127.0.0.1:7320"
           }
@@ -820,7 +810,7 @@
     {
       "name": "reload clears the per-character cache too",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -842,13 +832,12 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -856,13 +845,12 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = true\nsubagent_model = \"x\"\n"
+          "toml": "[subagents]\nmodel = \"x\"\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -880,7 +868,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -890,7 +877,7 @@
     {
       "name": "overrides follow the global config's dirs, discovery does not",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -912,26 +899,24 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
         },
         {
           "op": "set_global_config_elsewhere",
-          "toml": "[defaults]\ndisplay_name = \"ELSEWHERE\"\n"
+          "toml": "[chat]\ndisplay_name = \"ELSEWHERE\"\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": "ELSEWHERE",
             "addr": "127.0.0.1:7320"
           }
@@ -977,7 +962,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": true,
             "display_name": null,
             "addr": "127.0.0.1:7320"
           }
@@ -985,7 +969,7 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "invalidate_configs"
@@ -994,7 +978,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": null,
             "addr": "127.0.0.1:7320"
           }
@@ -1004,7 +987,7 @@
     {
       "name": "reload summary counts before, after and drops",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1079,7 +1062,7 @@
     {
       "name": "discovery_changed compares names, not counts",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1127,7 +1110,7 @@
     {
       "name": "only characters with a live engine count as dropped",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1204,7 +1187,7 @@
     {
       "name": "a character whose workspace cannot be prepared is still available",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1274,7 +1257,7 @@
     {
       "name": "a fixed character config takes effect without an invalidation",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1306,13 +1289,12 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[defaults]\nstream = false\n"
+          "toml": "\n"
         },
         {
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -1324,7 +1306,6 @@
           "op": "effective_config",
           "name": "Alice",
           "result": {
-            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
@@ -1332,9 +1313,9 @@
       ]
     },
     {
-      "name": "user definition prefers workspace over legacy",
+      "name": "user definition reads workspace edits",
       "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
         "characters": [
           {
@@ -1360,7 +1341,7 @@
         },
         {
           "op": "fs:write",
-          "path": "characters/Alice/user.md",
+          "path": "characters/Alice/workspace/USER.md",
           "body": "legacy user"
         },
         {
@@ -1377,45 +1358,6 @@
           "op": "user_definition",
           "name": "Alice",
           "result": "workspace user"
-        }
-      ]
-    },
-    {
-      "name": "SOUL.md outranks the legacy character.md",
-      "seed": {
-        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
-        "raw_table": true,
-        "characters": [
-          {
-            "name": "Alice",
-            "soul": false
-          }
-        ]
-      },
-      "steps": [
-        {
-          "op": "new",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": []
-          }
-        },
-        {
-          "op": "character_definition",
-          "name": "Alice",
-          "result": "Alice legacy"
-        },
-        {
-          "op": "fs:write",
-          "path": "characters/Alice/workspace/SOUL.md",
-          "body": "soul wins"
-        },
-        {
-          "op": "character_definition",
-          "name": "Alice",
-          "result": "soul wins"
         }
       ]
     }

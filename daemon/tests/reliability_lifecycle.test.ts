@@ -83,7 +83,7 @@ test("clearing a side thread does not adopt changed prompts in main", async () =
 test("a thread named threads stores its active conversation in the character's database", async () => {
   const h = await reliabilityGeneration(plain, "threads");
   await h.run();
-  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl", "ada")).toContain("reply");
+  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl")).toContain("reply");
 });
 
 for (const enabled of [false, true]) {
@@ -170,6 +170,6 @@ test("clearing a thread named threads refreshes every cached reader of that conv
   const second = await ConversationEngine.load("ada", h.config.dirs.data, undefined, "threads");
   await clear(h.engine, { dataDir: h.config.dirs.data }, {});
   expect(second.messageCount()).toBe(0);
-  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl", "ada")).toBe("");
+  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl")).toBe("");
   expect(second.segments().segmentCount()).toBe(1);
 });

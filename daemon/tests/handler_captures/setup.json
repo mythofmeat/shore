@@ -3,12 +3,12 @@
   "resolve_generation_model": [
     {
       "name": "the pre-resolved model passes straight through",
-      "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
+      "note": "an empty overlay must not rebuild the model \u2014 the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
           "$ref": "s1"
         },
-        "default_model": "alpha",
+        "default_model": "anthropic:alpha-id",
         "with_catalog": true,
         "discovery": null,
         "overlay": {
@@ -49,8 +49,8 @@
       },
       "result": {
         "ok": {
-          "name": "opus",
-          "qualified_name": "chat.anthropic.opus",
+          "name": "opus-id",
+          "qualified_name": "anthropic:opus-id",
           "category": "chat",
           "provider_key": "anthropic",
           "sdk": "anthropic",
@@ -78,7 +78,7 @@
       "note": "app defaults are user configuration, so this goes through find_effective_model with hidden models included",
       "input": {
         "active_model": null,
-        "default_model": "beta",
+        "default_model": "anthropic:beta-id",
         "with_catalog": true,
         "discovery": null,
         "overlay": {
@@ -87,8 +87,8 @@
       },
       "result": {
         "ok": {
-          "name": "beta",
-          "qualified_name": "chat.anthropic.beta",
+          "name": "beta-id",
+          "qualified_name": "anthropic:beta-id",
           "category": "chat",
           "provider_key": "anthropic",
           "sdk": "anthropic",
@@ -116,7 +116,7 @@
       "note": "the overlay applies to whichever branch produced the model",
       "input": {
         "active_model": null,
-        "default_model": "beta",
+        "default_model": "anthropic:beta-id",
         "with_catalog": true,
         "discovery": null,
         "overlay": {
@@ -137,8 +137,8 @@
       },
       "result": {
         "ok": {
-          "name": "beta",
-          "qualified_name": "chat.anthropic.beta",
+          "name": "beta-id",
+          "qualified_name": "anthropic:beta-id",
           "category": "chat",
           "provider_key": "anthropic",
           "sdk": "anthropic",
@@ -163,7 +163,7 @@
     },
     {
       "name": "a misspelled default surfaces as an error",
-      "note": "not silently swapped for the first model — a typo in user config should say so",
+      "note": "not silently swapped for the first model \u2014 a typo in user config should say so",
       "input": {
         "active_model": null,
         "default_model": "nope",
@@ -179,7 +179,7 @@
     },
     {
       "name": "no default falls back to the first static chat model",
-      "note": "first, not any — catalog order is the tiebreak",
+      "note": "first, not any \u2014 catalog order is the tiebreak",
       "input": {
         "active_model": null,
         "default_model": null,
@@ -191,8 +191,8 @@
       },
       "result": {
         "ok": {
-          "name": "alpha",
-          "qualified_name": "chat.anthropic.alpha",
+          "name": "alpha-id",
+          "qualified_name": "anthropic:alpha-id",
           "category": "chat",
           "provider_key": "anthropic",
           "sdk": "anthropic",
@@ -455,7 +455,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nfirst"
+                "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nfirst"
               }
             ]
           },
@@ -532,7 +532,7 @@
     },
     {
       "name": "the mcp surface is filtered by enabled_tools",
-      "note": "one server, two tools, one allowlisted — and the static tools come first, which is the cache prefix",
+      "note": "one server, two tools, one allowlisted \u2014 and the static tools come first, which is the cache prefix",
       "input": {
         "history": {
           "$ref": "s0"
@@ -868,10 +868,10 @@
       "max_output_tokens": 1024,
       "max_tool_iterations": null,
       "model_id": "opus-id",
-      "name": "opus",
+      "name": "opus-id",
       "openrouter_provider": null,
       "provider_key": "anthropic",
-      "qualified_name": "chat.anthropic.opus",
+      "qualified_name": "anthropic:opus-id",
       "reasoning_effort": null,
       "replay_prior_thinking": null,
       "sdk": "anthropic",

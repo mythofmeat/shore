@@ -138,7 +138,6 @@ pub struct Message {
     pub content: String,
     #[serde(default)]
     pub images: Vec<ImageRef>,
-    #[serde(default)]
     pub content_blocks: Vec<ContentBlock>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alt_index: Option<u32>,
@@ -162,7 +161,6 @@ pub struct MessageAlternative {
     pub content: String,
     #[serde(default)]
     pub images: Vec<ImageRef>,
-    #[serde(default)]
     pub content_blocks: Vec<ContentBlock>,
     #[serde(default)]
     pub timestamp: String,
@@ -174,27 +172,13 @@ pub struct MessageAlternative {
 
 impl MessageAlternative {
     pub fn normalize(&mut self) {
-        if self.content_blocks.is_empty() && !self.content.is_empty() {
-            self.content_blocks = vec![ContentBlock::Text {
-                text: self.content.clone(),
-            }];
-        } else if !self.content_blocks.is_empty() {
-            self.content = derive_content_from_blocks(&self.content_blocks);
-        } else {
-        }
+        self.content = derive_content_from_blocks(&self.content_blocks);
     }
 }
 
 impl Message {
     pub fn normalize(&mut self) {
-        if self.content_blocks.is_empty() && !self.content.is_empty() {
-            self.content_blocks = vec![ContentBlock::Text {
-                text: self.content.clone(),
-            }];
-        } else if !self.content_blocks.is_empty() {
-            self.content = derive_content_from_blocks(&self.content_blocks);
-        } else {
-        }
+        self.content = derive_content_from_blocks(&self.content_blocks);
 
         for alt in &mut self.alternatives {
             alt.normalize();
@@ -216,34 +200,6 @@ impl Message {
                 .content_blocks
                 .iter()
                 .all(|b| matches!(b, ContentBlock::ToolResult { .. }))
-    }
-
-    pub fn serialize_for_storage(&self) -> Result<String, serde_json::Error> {
-        let mut val = serde_json::to_value(self)?;
-        if let Some(obj) = val.as_object_mut() {
-            let _ignored = obj.remove("content");
-
-            let strip_image_data = |images: Option<&mut serde_json::Value>| {
-                if let Some(arr) = images.and_then(|v| v.as_array_mut()) {
-                    for img in arr {
-                        if let Some(img_obj) = img.as_object_mut() {
-                            let _removed = img_obj.remove("data");
-                        }
-                    }
-                }
-            };
-
-            strip_image_data(obj.get_mut("images"));
-
-            if let Some(alternatives) = obj.get_mut("alternatives").and_then(|v| v.as_array_mut()) {
-                for alternative in alternatives {
-                    if let Some(alt_obj) = alternative.as_object_mut() {
-                        strip_image_data(alt_obj.get_mut("images"));
-                    }
-                }
-            }
-        }
-        serde_json::to_string(&val)
     }
 }
 
@@ -337,10 +293,6 @@ impl CharacterInfo {
 mod tests {
     use super::*;
 
-    fn field<'val>(value: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
-        value.get(key).expect("expected JSON field")
-    }
-
     #[test]
     fn thinking_signature_storage_format_is_unchanged() {
         let cases = [
@@ -388,10 +340,6 @@ mod tests {
         let round_tripped = ThinkingSignature::from_wire(&collided.to_wire());
         assert_ne!(round_tripped, collided);
         assert!(round_tripped.is_foreign_carrier());
-    }
-
-    fn item<T>(items: &[T], index: usize) -> &T {
-        items.get(index).expect("expected item")
     }
 
     #[test]
@@ -478,17 +426,6 @@ mod tests {
     }
 
     #[test]
-    fn normalize_legacy_wraps_content_in_text_block() {
-        let mut msg = make_msg("hello world", vec![]);
-        msg.normalize();
-        assert_eq!(msg.content_blocks.len(), 1);
-        assert!(
-            matches!(item(&msg.content_blocks, 0), ContentBlock::Text { text } if text == "hello world")
-        );
-        assert_eq!(msg.content, "hello world");
-    }
-
-    #[test]
     fn normalize_canonical_derives_content_from_blocks() {
         let mut msg = make_msg(
             "",
@@ -507,76 +444,6 @@ mod tests {
         msg.normalize();
         assert_eq!(msg.content, "");
         assert!(msg.content_blocks.is_empty());
-    }
-
-    #[test]
-    fn serialize_for_storage_omits_content_field() {
-        let msg = make_msg(
-            "should be removed",
-            vec![ContentBlock::Text {
-                text: "canonical".into(),
-            }],
-        );
-        let json_str = msg.serialize_for_storage().unwrap();
-        let val: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert!(
-            val.get("content").is_none(),
-            "content field should be omitted"
-        );
-        assert!(val.get("content_blocks").is_some());
-    }
-
-    #[test]
-    fn serialize_for_storage_roundtrips_other_fields() {
-        let msg = make_msg(
-            "ignored",
-            vec![ContentBlock::Text {
-                text: "hello".into(),
-            }],
-        );
-        let json_str = msg.serialize_for_storage().unwrap();
-        let val: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(field(&val, "msg_id"), "m1");
-        assert_eq!(field(&val, "role"), "user");
-        assert_eq!(field(&val, "timestamp"), "2026-01-01T00:00:00Z");
-    }
-
-    #[test]
-    fn serialize_for_storage_strips_inline_image_data_everywhere() {
-        let mut msg = make_msg(
-            "ignored",
-            vec![ContentBlock::Text {
-                text: "active".into(),
-            }],
-        );
-        msg.images = vec![ImageRef {
-            path: "/img/top.png".into(),
-            caption: None,
-            data: Some("TOPDATA".into()),
-        }];
-        msg.alternatives = vec![MessageAlternative {
-            content: "alt".into(),
-            images: vec![ImageRef {
-                path: "/img/alt.png".into(),
-                caption: None,
-                data: Some("ALTDATA".into()),
-            }],
-            content_blocks: vec![],
-            timestamp: "2026-01-01T00:00:00Z".into(),
-            provider_key: None,
-            model: None,
-        }];
-
-        let json_str = msg.serialize_for_storage().unwrap();
-        assert!(
-            !json_str.contains("TOPDATA"),
-            "top-level image data must be stripped"
-        );
-        assert!(
-            !json_str.contains("ALTDATA"),
-            "alternative image data must be stripped"
-        );
-        assert!(json_str.contains("/img/alt.png"));
     }
 
     #[test]

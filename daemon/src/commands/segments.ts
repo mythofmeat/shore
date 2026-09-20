@@ -142,15 +142,15 @@ export async function clear(
       const note = nullableOptionalText(args["note"], "note");
       await archiveAndRetain(
         conversationDir,
+        {
+          dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
+          archiveKey: archiveKey(character, engine.thread),
+        },
         0,
         activeContent,
         ctx.now ?? (() => new Date().toISOString()),
         ctx.newId ?? (() => crypto.randomUUID()),
         `clear-${crypto.randomUUID()}`,
-        {
-          dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
-          archiveKey: archiveKey(character, engine.thread),
-        },
         {
           ...(excluded ? { excluded: true } : {}),
           ...(note === undefined ? {} : { note }),

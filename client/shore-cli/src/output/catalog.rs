@@ -236,10 +236,7 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
     }
     section(out, "model settings", Some(text(data, "model")));
     let Some(schema) = data.get("setting_schema").and_then(Value::as_array) else {
-        empty(
-            out,
-            "client and daemon must be upgraded together to edit model settings",
-        );
+        empty(out, "daemon returned invalid model settings");
         return;
     };
     let Some(effective) = data.get("effective_sampler").and_then(Value::as_object) else {
@@ -959,14 +956,14 @@ mod tests {
     }
 
     #[test]
-    fn a_legacy_settings_response_requires_a_lockstep_upgrade() {
+    fn an_invalid_settings_response_is_reported() {
         let data = json!({
-            "model": "openai:legacy",
+            "model": "openai:example",
             "effective_sampler": {"temperature": 1}
         });
         let out = render(|buffer| write_model_settings(buffer, &data));
         assert!(
-            out.contains("client and daemon must be upgraded together"),
+            out.contains("daemon returned invalid model settings"),
             "{out}"
         );
     }

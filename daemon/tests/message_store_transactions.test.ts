@@ -1,20 +1,19 @@
+import { fileScope } from "../src/storage/files.ts";
 import { withStorage } from "../src/storage/store.ts";
 import { readFile } from "./support/stored_files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { backupBeforeWrite, resetBackupThrottle } from "../src/engine/backup.ts";
+import { resetBackupThrottle } from "../src/engine/backup.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import {
   MessageStore,
   normalizeMessage,
-  type MessageStoreIo,
 } from "../src/engine/message_store.ts";
 import type { Message, MessageAlternative, Role } from "../src/engine/types.ts";
 
-type FailureStage = "backup" | "write" | "rename";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -73,41 +72,8 @@ const wire = (value: unknown): unknown =>
     key === "version" ? undefined : entry,
   );
 
-function faultInjectingIo(): {
-  io: MessageStoreIo;
-  failAt(stage: FailureStage | undefined): void;
-} {
-  let failure: FailureStage | undefined;
-  return {
-    failAt: (stage) => {
-      failure = stage;
-    },
-    io: {
-      backup: async (path) => {
-        if (failure === "backup") throw new Error("injected backup failure");
-        await backupBeforeWrite(path);
-      },
-      mkdir: async (path) => {
-        await mkdir(path, { recursive: true });
-      },
-      writeFile: async (path, contents) => {
-        await writeFile(path, contents, "utf8");
-        if (failure === "write") throw new Error("injected write failure");
-      },
-      rename: async (from, to) => {
-        if (failure === "rename") throw new Error("injected rename failure");
-        await rename(from, to);
-      },
-      remove: async (path) => {
-        await rm(path, { force: true });
-      },
-      tempPath: (dir) => join(dir, `.${crypto.randomUUID()}.tmp`),
-    },
-  };
-}
-
-async function seededStore(path: string, io: MessageStoreIo): Promise<MessageStore> {
-  const store = MessageStore.create(path, io);
+async function seededStore(path: string): Promise<MessageStore> {
+  const store = MessageStore.create(path);
   for (const seed of initialMessages()) await store.append(seed);
   return store;
 }
@@ -149,92 +115,46 @@ const mutations: MutationCase[] = [
 
 describe("transactional message mutations", () => {
   for (const mutation of mutations) {
-    for (const stage of ["backup", "write", "rename"] as const) {
-      test(`${mutation.name} leaves no trace after a ${stage} failure`, async () => {
-        const { dir, path } = await workspace();
-        const injected = faultInjectingIo();
-        const store = await seededStore(path, injected.io);
-        const beforeMessages = structuredClone(store.messages());
-        const beforeFile = await readFile(path, "utf8");
-
-        injected.failAt(stage);
-        expect(mutation.run(store)).rejects.toThrow(`injected ${stage} failure`);
-
-        expect(wire(store.messages())).toEqual(wire(beforeMessages));
-        expect(await readFile(path, "utf8")).toBe(beforeFile);
-        expect((await readdir(dir)).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
-
-        injected.failAt(undefined);
-        const recovery = message("recovery", "user", "saved afterward", 20);
-        await store.append(recovery);
-
-        const reloaded = await MessageStore.load(path);
-        expect(wire(reloaded.messages())).toEqual(wire([...beforeMessages, recovery]));
+    test(`${mutation.name} preserves memory and storage after a database failure`, async () => {
+      const { path } = await workspace();
+      const store = await seededStore(path);
+      const beforeMessages = structuredClone(store.messages());
+      const beforeFile = await readFile(path, "utf8");
+      const { data, key } = fileScope(path);
+      withStorage(data, db => {
+        for (const operation of ["INSERT", "UPDATE", "DELETE"]) {
+          const record = operation === "DELETE" ? "OLD" : "NEW";
+          db.run(`CREATE TRIGGER refuse_${operation} BEFORE ${operation} ON state_lines
+            WHEN ${record}.path = '${key}' BEGIN SELECT RAISE(ABORT, 'injected database failure'); END`);
+        }
       });
-    }
+      expect(mutation.run(store)).rejects.toThrow("injected database failure");
+      expect(wire(store.messages())).toEqual(wire(beforeMessages));
+      expect(await readFile(path, "utf8")).toBe(beforeFile);
+      withStorage(data, db => {
+        for (const operation of ["INSERT", "UPDATE", "DELETE"]) db.run(`DROP TRIGGER refuse_${operation}`);
+      });
+      const recovery = message("recovery", "user", "saved afterward", 20);
+      await store.append(recovery);
+      const reloaded = await MessageStore.load(path);
+      expect(wire(reloaded.messages())).toEqual(wire([...beforeMessages, recovery]));
+    });
   }
 });
 
-describe("concurrent message mutations", () => {
-  test("wait for the preceding commit and preserve call order", async () => {
-    const { path } = await workspace();
-    let releaseFirst!: () => void;
-    const released = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    let firstWriteStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      firstWriteStarted = resolve;
-    });
-    let shouldBlock = false;
-    let writes = 0;
-    let activeWrites = 0;
-    let mostActiveWrites = 0;
-
-    const io: MessageStoreIo = {
-      backup: async (target) => {
-        await backupBeforeWrite(target);
-      },
-      mkdir: async (target) => {
-        await mkdir(target, { recursive: true });
-      },
-      writeFile: async (target, contents) => {
-        writes += 1;
-        activeWrites += 1;
-        mostActiveWrites = Math.max(mostActiveWrites, activeWrites);
-        try {
-          if (shouldBlock) {
-            shouldBlock = false;
-            firstWriteStarted();
-            await released;
-          }
-          await writeFile(target, contents, "utf8");
-        } finally {
-          activeWrites -= 1;
-        }
-      },
-      rename,
-      remove: async (target) => await rm(target, { force: true }),
-      tempPath: (dir) => join(dir, `.${crypto.randomUUID()}.tmp`),
-    };
-
-    const store = MessageStore.create(path, io);
-    await store.append(message("u1", "user", "seed", 1));
-    shouldBlock = true;
-    const first = store.append(message("u2", "user", "first", 2));
-    await started;
-    const second = store.append(message("u3", "user", "second", 3));
-
-    expect(store.messages().map((item) => item.msg_id)).toEqual(["u1"]);
-    expect(writes).toBe(2);
-    releaseFirst();
-    await Promise.all([first, second]);
-
-    expect(mostActiveWrites).toBe(1);
-    expect(store.messages().map((item) => item.msg_id)).toEqual(["u1", "u2", "u3"]);
-    const reloaded = await MessageStore.load(path);
-    expect(reloaded.messages().map((item) => item.msg_id)).toEqual(["u1", "u2", "u3"]);
-  });
+test("concurrent message mutations preserve call order across reload", async () => {
+  const { path } = await workspace();
+  const store = MessageStore.create(path);
+  await store.append(message("u1", "user", "seed", 1));
+  await Promise.all([
+    store.append(message("u2", "user", "first", 2)),
+    store.append(message("u3", "user", "second", 3)),
+    store.edit("u2", "edited"),
+  ]);
+  const reloaded = await MessageStore.load(path);
+  expect(reloaded.messages().map(item => item.msg_id)).toEqual(["u1", "u2", "u3"]);
+  expect(reloaded.messages()[1]?.content).toBe("edited");
+  expect(reloaded.messages()).toEqual(store.messages());
 });
 
 test("a failed store commit does not advance the conversation revision", async () => {

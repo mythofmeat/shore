@@ -20,7 +20,7 @@ import type {
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
-import { handleDelete, handleEdit } from "../src/tools/workspace.ts";
+import { handleBash } from "../src/tools/bash.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -39,30 +39,27 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   await mkdir(join(workspace, "assets"));
   const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
   const activeContent = conversation().map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
   const bytes = Buffer.from([0, 255, 254, 128, 10]);
   await writeFile(join(workspace, "assets/data.bin"), bytes);
   await symlink("data.bin", join(workspace, "assets/link.bin"));
   await writeFile(join(workspace, "projects/note.md"), "original context");
-  const dispatch = (name: string, input: unknown) => renderToolOutcome(() => name === "delete"
-      ? handleDelete(input as Record<string, unknown>, workspace, characterDir)
-      : handleEdit(input as Record<string, unknown>, workspace));
   const tools: CompactionTools = {
     workspaceDir: workspace,
     dispatch: (name, input, trackNestedWrite) => {
-      if (name !== "ask_research") return dispatch(name, input);
+      if (name !== "ask_research") return renderToolOutcome(() => handleBash(input as Record<string, unknown>, workspace, "ada"));
       const nested = input as { name: string; input: unknown };
-      return required(trackNestedWrite)(nested.name, nested.input, () => dispatch(nested.name, nested.input));
+      return required(trackNestedWrite)(nested.name, nested.input, () => renderToolOutcome(() => handleBash(nested.input as Record<string, unknown>, workspace, "ada")));
     },
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };
   const calls: GenerateResponse["content_blocks"] = [
-    { type: "tool_use", id: "edit-note", name: "edit", input: { path: "projects/note.md", content: "new context" } },
-    { type: "tool_use", id: "edit-binary", name: "edit", input: { path: "assets/data.bin", content: "replacement" } },
-    { type: "tool_use", id: "delete-link", name: "delete", input: { path: "assets/link.bin" } },
-    { type: "tool_use", id: "delete-binary", name: "delete", input: { path: "assets/data.bin" } },
-    { type: "tool_use", id: "create", name: "edit", input: { path: "projects/new.md", content: "new file" } },
+    { type: "tool_use", id: "edit-note", name: "bash", input: { command: "printf 'new context' > projects/note.md" } },
+    { type: "tool_use", id: "edit-binary", name: "bash", input: { command: "printf replacement > assets/data.bin" } },
+    { type: "tool_use", id: "delete-link", name: "bash", input: { command: "rm assets/link.bin" } },
+    { type: "tool_use", id: "delete-binary", name: "bash", input: { command: "rm assets/data.bin" } },
+    { type: "tool_use", id: "create", name: "bash", input: { command: "printf 'new file' > projects/new.md" } },
   ];
   const opts = options(dataDir, workspace, memoryStore,
     await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools,
@@ -102,7 +99,7 @@ test("compaction resumes without repeating writes and commits only after archive
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   let edits = 0;
   const heads = ["before-sha", "during-sha", "after-sha"];
@@ -140,7 +137,6 @@ test("compaction resumes without repeating writes and commits only after archive
         ]),
         new Error("provider unavailable"),
       ]),
-      true,
     ),
     { keepRecentTurns: 1 },
   );
@@ -161,7 +157,7 @@ test("compaction resumes without repeating writes and commits only after archive
 
   const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await compact(
-    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true),
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm),
     { keepRecentTurns: 1 },
   );
 
@@ -190,7 +186,7 @@ test.each([false, true])("the tool-round ceiling preserves resumable slices, inc
   const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   let edits = 0;
   const tools: CompactionTools = {
@@ -247,7 +243,7 @@ test("an explicit keep-turns count wins over the split a stale checkpoint planne
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -323,7 +319,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -338,7 +334,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
     gitCommitAll: async () => false,
   };
   const run = async (plan: ArchivalPlan, llm: CompactionLlm) =>
-    await compact(options(dataDir, workspace, memoryStore, plan, tools, llm, true), {
+    await compact(options(dataDir, workspace, memoryStore, plan, tools, llm), {
       keepRecentTurns: 1,
     });
 
@@ -393,7 +389,7 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -477,7 +473,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   let edits = 0;
   const tools: CompactionTools = {
@@ -518,7 +514,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
     ...messages.slice(1),
   ];
   const editedLines = edited.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), editedLines, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), editedLines);
 
   const freshLlm = scripted([editTurn, response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await run(
@@ -540,7 +536,6 @@ function options(
   plan: ArchivalPlan,
   tools: CompactionTools,
   llm: CompactionLlm,
-  durable = false,
 ) {
   return {
     conversationId: "ada",
@@ -551,9 +546,9 @@ function options(
     llm,
     conversationMgr: conversationManager(
       join(dataDir, "ada", "threads", "main"),
+      { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" },
       () => new Date().toISOString(),
       () => crypto.randomUUID(),
-      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" } : undefined,
     ),
     markdownStore: memoryStore,
     dryRun: false,
@@ -653,7 +648,7 @@ test("an archived operation whose turns are still live is not mistaken for a fin
   const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -670,7 +665,6 @@ test("an archived operation whose turns are still live is not mistaken for a fin
       await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
       tools,
       scripted([new Error("provider unavailable")]),
-      true,
     ),
     { keepRecentTurns: 1 },
   );
@@ -708,7 +702,6 @@ test("an archived operation whose turns are still live is not mistaken for a fin
       await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
       tools,
       secondLlm,
-      true,
     ),
     { keepRecentTurns: 1 },
   );
@@ -729,7 +722,7 @@ test("a conversation rewritten after the plan was resolved pauses instead of arc
 
   const messages = conversation();
   const activePath = join(characterDir, "threads", "main", "active.jsonl");
-  await writeFile(activePath, messages.map(activeLine).join("\n") + "\n", "utf8");
+  writeDurable(activePath, messages.map(activeLine).join("\n") + "\n");
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -752,7 +745,6 @@ test("a conversation rewritten after the plan was resolved pauses instead of arc
       plan,
       tools,
       scripted([response("end_turn", [{ type: "text", text: "done" }])]),
-      true,
     ),
     { keepRecentTurns: 1 },
   );
@@ -779,7 +771,7 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
   const messages = conversation();
   const activePath = join(characterDir, "threads", "main", "active.jsonl");
   const planned = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(activePath, planned, "utf8");
+  writeDurable(activePath, planned);
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
@@ -800,7 +792,6 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
       plan,
       tools,
       scripted([response("end_turn", [{ type: "text", text: "done" }])]),
-      true,
     ),
     { keepRecentTurns: 1 },
   );

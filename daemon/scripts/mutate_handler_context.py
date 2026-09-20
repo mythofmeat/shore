@@ -164,23 +164,20 @@ MUTANTS = [
      "      await encodeImageBlock(img);"),
 
     # --- empty-block filtering --------------------------------------------
-    ("filter: empty text blocks ship", WIRE,
-     '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));',
-     "    blocks.push(...m.content_blocks);"),
-    ("filter: whitespace is not trimmed before the emptiness test", WIRE,
-     '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));',
-     '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text === "")));'),
-    ("filter: every block type is filtered, not just text (EQUIVALENT — `text` is "
-     "declared on exactly one arm of ContentBlock, so `\"text\" in b` and "
-     "`b.type === \"text\"` select the same blocks)", WIRE,
-     '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));',
-     '    blocks.push(...m.content_blocks.filter((b) => !("text" in b && b.text.trim() === "")));'),
-    ("fallback: a turn whose blocks all filtered out ships nothing", WIRE,
-     "    content = blocks.length === 0 ? await fallback() : blocks;",
-     "    content = blocks;"),
-    ("fallback: the derived string always wins over stored blocks", WIRE,
-     "  if (m.content_blocks.length === 0) {\n    content = await fallback();",
-     "  if (true as boolean) {\n    content = await fallback();"),
+    ('filter: empty text blocks ship',
+     WIRE,
+     '  content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));',
+     '  content.push(...m.content_blocks);'),
+    ('filter: whitespace is not trimmed before the emptiness test',
+     WIRE,
+     '  content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));',
+     '  content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text === "")));'),
+    ('filter: every block type is filtered, not just text (EQUIVALENT — `text` is declared on exactly one arm of ContentBlock, so `"text" in b` and `b.type === "text"` select the same blocks)',
+     WIRE,
+     '  content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));',
+     '  content.push(...m.content_blocks.filter((block) => !("text" in block && block.text.trim() === "")));'),
+
+
     ("drop: an empty turn ships instead of being dropped", WIRE,
      "  if (content.length === 0) return undefined;",
      "  if (false as boolean) return undefined;"),

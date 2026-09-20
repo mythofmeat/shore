@@ -8,10 +8,6 @@
     ],
     "memory_index_file": "MEMORY.md",
     "active_prompt_dir": "active_prompt",
-    "legacy_snapshots": [
-      "RECENT_MEMORY.md",
-      "HEARTBEAT.md"
-    ],
     "queue_file": "deferred_edits.jsonl",
     "character": "Iris"
   },
@@ -23,11 +19,13 @@
         "path": "SOUL.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDEwODczMTU5KzAwOjAwIn0K"
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDEwODczMTU5KzAwOjAwIn0K"
+      }
     },
     {
       "name": "queue the memory index without creating a snapshot sentinel",
@@ -36,11 +34,13 @@
         "path": "MEMORY.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTEzODg3MzcrMDA6MDAifQo="
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTEzODg3MzcrMDA6MDAifQo="
+      }
     },
     {
       "name": "queue a path that is not prompt visible is a no-op",
@@ -51,7 +51,9 @@
       "before": {},
       "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "queue normalises a workspace prefixed path",
@@ -60,11 +62,13 @@
         "path": "workspace/SOUL.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDExODY4OTIzKzAwOjAwIn0K"
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDExODY4OTIzKzAwOjAwIn0K"
+      }
     },
     {
       "name": "queue normalises a dot slash prefixed path",
@@ -73,11 +77,13 @@
         "path": "./workspace/./USER.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDEyMTY0NjQ3KzAwOjAwIn0K"
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDgtMDJUMDI6MzM6MzQuMDEyMTY0NjQ3KzAwOjAwIn0K"
+      }
     },
     {
       "name": "queue normalises a leading slash",
@@ -86,11 +92,13 @@
         "path": "/AGENTS.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiQUdFTlRTLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTIzODg5MTIrMDA6MDAifQo="
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiQUdFTlRTLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTIzODg5MTIrMDA6MDAifQo="
+      }
     },
     {
       "name": "queue a backslash separated path",
@@ -99,11 +107,13 @@
         "path": "workspace\\TOOLS.md"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVE9PTFMubWQiLCJ0aW1lc3RhbXAiOiIyMDI2LTA4LTAyVDAyOjMzOjM0LjAxMjg4MzU1NyswMDowMCJ9Cg=="
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVE9PTFMubWQiLCJ0aW1lc3RhbXAiOiIyMDI2LTA4LTAyVDAyOjMzOjM0LjAxMjg4MzU1NyswMDowMCJ9Cg=="
+      }
     },
     {
       "name": "queue an unknown root file is a no-op",
@@ -114,7 +124,9 @@
       "before": {},
       "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "queue an empty path is a no-op",
@@ -125,7 +137,9 @@
       "before": {},
       "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "queue the memory index leaves an existing snapshot alone",
@@ -133,15 +147,17 @@
         "fn": "queue_deferred_edit",
         "path": "MEMORY.md"
       },
-      "before": {
+      "before": {},
+      "after": {},
+      "returns": null,
+      "err": null,
+      "before_state": {
         "data/active_prompt/MEMORY.md": "ZXhpc3RpbmcgaW5kZXgK"
       },
-      "after": {
+      "after_state": {
         "data/active_prompt/MEMORY.md": "ZXhpc3RpbmcgaW5kZXgK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTM1MTY3NjErMDA6MDAifQo="
-      },
-      "returns": null,
-      "err": null
+      }
     },
     {
       "name": "queue appends to an existing queue",
@@ -149,14 +165,16 @@
         "fn": "queue_deferred_edit",
         "path": "SOUL.md"
       },
-      "before": {
+      "before": {},
+      "after": {},
+      "returns": null,
+      "err": null,
+      "before_state": {
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDEtMDFUMDA6MDA6MDArMDA6MDAifQo="
       },
-      "after": {
+      "after_state": {
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6IjIwMjYtMDEtMDFUMDA6MDA6MDArMDA6MDAifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTM4MTEzNjArMDA6MDAifQo="
-      },
-      "returns": null,
-      "err": null
+      }
     },
     {
       "name": "note_memory_index_deferred queues the index",
@@ -164,11 +182,13 @@
         "fn": "note_memory_index_deferred"
       },
       "before": {},
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTQwNzQ0NTcrMDA6MDAifQo="
-      },
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTQwNzQ0NTcrMDA6MDAifQo="
+      }
     },
     {
       "name": "pending paths with no queue file",
@@ -178,57 +198,65 @@
       "before": {},
       "after": {},
       "returns": [],
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "pending paths are deduped and sorted, not in insertion order",
       "op": {
         "fn": "pending_deferred_edit_paths"
       },
-      "before": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
-      },
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
-      },
+      "before": {},
+      "after": {},
       "returns": [
         "AGENTS.md",
         "MEMORY.md",
         "SOUL.md",
         "USER.md"
       ],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
+      },
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
+      }
     },
     {
       "name": "pending paths skip malformed lines and keep the rest",
       "op": {
         "fn": "pending_deferred_edit_paths"
       },
-      "before": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6InQifQpub3QganNvbgoKICAgCnsibm9fcGF0aF9maWVsZCI6dHJ1ZX0KeyJwYXRoIjoxMjN9CnsicGF0aCI6Im5vdC1wcm9tcHQtdmlzaWJsZS5tZCJ9CnsicGF0aCI6IndvcmtzcGFjZS9UT09MUy5tZCJ9Cg=="
-      },
-      "after": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6InQifQpub3QganNvbgoKICAgCnsibm9fcGF0aF9maWVsZCI6dHJ1ZX0KeyJwYXRoIjoxMjN9CnsicGF0aCI6Im5vdC1wcm9tcHQtdmlzaWJsZS5tZCJ9CnsicGF0aCI6IndvcmtzcGFjZS9UT09MUy5tZCJ9Cg=="
-      },
+      "before": {},
+      "after": {},
       "returns": [
         "SOUL.md",
         "TOOLS.md"
       ],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6InQifQpub3QganNvbgoKICAgCnsibm9fcGF0aF9maWVsZCI6dHJ1ZX0KeyJwYXRoIjoxMjN9CnsicGF0aCI6Im5vdC1wcm9tcHQtdmlzaWJsZS5tZCJ9CnsicGF0aCI6IndvcmtzcGFjZS9UT09MUy5tZCJ9Cg=="
+      },
+      "after_state": {
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCIsInRpbWVzdGFtcCI6InQifQpub3QganNvbgoKICAgCnsibm9fcGF0aF9maWVsZCI6dHJ1ZX0KeyJwYXRoIjoxMjN9CnsicGF0aCI6Im5vdC1wcm9tcHQtdmlzaWJsZS5tZCJ9CnsicGF0aCI6IndvcmtzcGFjZS9UT09MUy5tZCJ9Cg=="
+      }
     },
     {
       "name": "pending paths on an entirely empty queue file",
       "op": {
         "fn": "pending_deferred_edit_paths"
       },
-      "before": {
-        "data/deferred_edits.jsonl": ""
-      },
-      "after": {
-        "data/deferred_edits.jsonl": ""
-      },
+      "before": {},
+      "after": {},
       "returns": [],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/deferred_edits.jsonl": ""
+      },
+      "after_state": {
+        "data/deferred_edits.jsonl": ""
+      }
     },
     {
       "name": "load_active_prompt_file reads a populated snapshot",
@@ -236,14 +264,16 @@
         "fn": "load_active_prompt_file",
         "name": "SOUL.md"
       },
-      "before": {
-        "data/active_prompt/SOUL.md": "aSBhbSBpcmlzCg=="
-      },
-      "after": {
-        "data/active_prompt/SOUL.md": "aSBhbSBpcmlzCg=="
-      },
+      "before": {},
+      "after": {},
       "returns": "i am iris\n",
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "aSBhbSBpcmlzCg=="
+      },
+      "after_state": {
+        "data/active_prompt/SOUL.md": "aSBhbSBpcmlzCg=="
+      }
     },
     {
       "name": "load_active_prompt_file treats a whitespace only snapshot as missing",
@@ -251,14 +281,16 @@
         "fn": "load_active_prompt_file",
         "name": "SOUL.md"
       },
-      "before": {
-        "data/active_prompt/SOUL.md": "ICAgCgkK"
-      },
-      "after": {
-        "data/active_prompt/SOUL.md": "ICAgCgkK"
-      },
+      "before": {},
+      "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "ICAgCgkK"
+      },
+      "after_state": {
+        "data/active_prompt/SOUL.md": "ICAgCgkK"
+      }
     },
     {
       "name": "load_active_prompt_file on a file that does not exist",
@@ -269,7 +301,9 @@
       "before": {},
       "after": {},
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "load_memory_index prefers the active snapshot over canonical",
@@ -277,15 +311,19 @@
         "fn": "load_memory_index"
       },
       "before": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "after": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "returns": "snapshot index\n",
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+      },
+      "after_state": {
+        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+      }
     },
     {
       "name": "load_memory_index falls through to canonical when the snapshot is absent",
@@ -299,7 +337,9 @@
         "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "returns": "canonical index\n",
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "load_memory_index does not fall through when the snapshot omits memory",
@@ -307,15 +347,19 @@
         "fn": "load_memory_index"
       },
       "before": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "after": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+      },
+      "after_state": {
+        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+      }
     },
     {
       "name": "load_memory_index does NOT fall through when the snapshot is blank",
@@ -323,15 +367,19 @@
         "fn": "load_memory_index"
       },
       "before": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "ICAK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "after": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "ICAK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/MEMORY.md": "ICAK"
+      },
+      "after_state": {
+        "data/active_prompt/MEMORY.md": "ICAK"
+      }
     },
     {
       "name": "load_canonical_memory_index ignores the snapshot entirely",
@@ -339,15 +387,19 @@
         "fn": "load_canonical_memory_index"
       },
       "before": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "after": {
-        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg=="
       },
       "returns": "canonical index\n",
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+      },
+      "after_state": {
+        "data/active_prompt/MEMORY.md": "c25hcHNob3QgaW5kZXgK"
+      }
     },
     {
       "name": "changed prompt files with nothing anywhere",
@@ -357,7 +409,9 @@
       "before": {},
       "after": {},
       "returns": [],
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "changed prompt files reports a workspace edit",
@@ -365,31 +419,37 @@
         "fn": "changed_prompt_files"
       },
       "before": {
-        "config/characters/Iris/workspace/SOUL.md": "bmV3IHNvdWwK",
-        "data/active_prompt/SOUL.md": "b2xkIHNvdWwK"
+        "config/characters/Iris/workspace/SOUL.md": "bmV3IHNvdWwK"
       },
       "after": {
-        "config/characters/Iris/workspace/SOUL.md": "bmV3IHNvdWwK",
-        "data/active_prompt/SOUL.md": "b2xkIHNvdWwK"
+        "config/characters/Iris/workspace/SOUL.md": "bmV3IHNvdWwK"
       },
       "returns": [
         "SOUL.md"
       ],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "b2xkIHNvdWwK"
+      },
+      "after_state": {
+        "data/active_prompt/SOUL.md": "b2xkIHNvdWwK"
+      }
     },
     {
       "name": "changed prompt files treats blank and missing as equal",
       "op": {
         "fn": "changed_prompt_files"
       },
-      "before": {
-        "data/active_prompt/USER.md": "ICAgCg=="
-      },
-      "after": {
-        "data/active_prompt/USER.md": "ICAgCg=="
-      },
+      "before": {},
+      "after": {},
       "returns": [],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/USER.md": "ICAgCg=="
+      },
+      "after_state": {
+        "data/active_prompt/USER.md": "ICAgCg=="
+      }
     },
     {
       "name": "changed prompt files counts a whitespace only byte difference",
@@ -397,17 +457,21 @@
         "fn": "changed_prompt_files"
       },
       "before": {
-        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg==",
-        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg=="
       },
       "after": {
-        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg==",
-        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg=="
       },
       "returns": [
         "AGENTS.md"
       ],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+      },
+      "after_state": {
+        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+      }
     },
     {
       "name": "changed prompt files sees the memory index too",
@@ -415,17 +479,21 @@
         "fn": "changed_prompt_files"
       },
       "before": {
-        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK",
-        "data/active_prompt/USER.md": "ICAgCg=="
+        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK"
       },
       "after": {
-        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK",
-        "data/active_prompt/USER.md": "ICAgCg=="
+        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK"
       },
       "returns": [
         "MEMORY.md"
       ],
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/USER.md": "ICAgCg=="
+      },
+      "after_state": {
+        "data/active_prompt/USER.md": "ICAgCg=="
+      }
     },
     {
       "name": "changed prompt files reports nothing without a snapshot",
@@ -439,7 +507,9 @@
         "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK"
       },
       "returns": [],
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "ensure snapshot seeds missing files but preserves existing ones",
@@ -448,37 +518,23 @@
       },
       "before": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "config/characters/Iris/workspace/USER.md": "Y2Fub25pY2FsIHVzZXIK",
-        "data/active_prompt/SOUL.md": "c3RhbGUgc25hcHNob3QK"
+        "config/characters/Iris/workspace/USER.md": "Y2Fub25pY2FsIHVzZXIK"
       },
       "after": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
         "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "config/characters/Iris/workspace/USER.md": "Y2Fub25pY2FsIHVzZXIK",
+        "config/characters/Iris/workspace/USER.md": "Y2Fub25pY2FsIHVzZXIK"
+      },
+      "returns": null,
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "c3RhbGUgc25hcHNob3QK"
+      },
+      "after_state": {
         "data/active_prompt/SOUL.md": "c3RhbGUgc25hcHNob3QK",
         "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
         "data/active_prompt/USER.md": "Y2Fub25pY2FsIHVzZXIK"
-      },
-      "returns": null,
-      "err": null
-    },
-    {
-      "name": "ensure snapshot removes retired legacy snapshots",
-      "op": {
-        "fn": "ensure_active_prompt_snapshot"
-      },
-      "before": {
-        "data/active_prompt/HEARTBEAT.md": "b2xkIGhlYXJ0YmVhdAo=",
-        "data/active_prompt/RECENT_MEMORY.md": "b2xkIGJsb2NrCg==",
-        "data/active_prompt/SOUL.md": "a2VlcCBtZQo="
-      },
-      "after": {
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "data/active_prompt/SOUL.md": "a2VlcCBtZQo=",
-        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
-      },
-      "returns": null,
-      "err": null
+      }
     },
     {
       "name": "refresh overwrites an existing snapshot",
@@ -486,29 +542,39 @@
         "fn": "refresh_active_prompt_snapshot"
       },
       "before": {
-        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/active_prompt/SOUL.md": "c3RhbGUgc25hcHNob3QK"
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
       },
       "after": {
-        "$ref": "s0"
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/SOUL.md": "c3RhbGUgc25hcHNob3QK"
+      },
+      "after_state": {
+        "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      }
     },
     {
       "name": "refresh deletes a snapshot whose canonical source is gone",
       "op": {
         "fn": "refresh_active_prompt_snapshot"
       },
-      "before": {
-        "data/active_prompt/USER.md": "b3JwaGFuZWQgc25hcHNob3QK"
-      },
+      "before": {},
       "after": {
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/active_prompt/USER.md": "b3JwaGFuZWQgc25hcHNob3QK"
+      },
+      "after_state": {
+        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      }
     },
     {
       "name": "refresh carries the memory index across under its own name",
@@ -520,12 +586,15 @@
       },
       "after": {
         "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "data/active_prompt/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
-        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {
+        "data/active_prompt/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
+        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      }
     },
     {
       "name": "apply refreshes the snapshot and deletes the queue",
@@ -533,16 +602,24 @@
         "fn": "apply_deferred_edits"
       },
       "before": {
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
+      },
+      "after": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      },
+      "returns": null,
+      "err": null,
+      "before_state": {
         "data/threads/main/active.jsonl": "e30K",
         "data/active_prompt/SOUL.md": "c3RhbGUK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
       },
-      "after": {
-        "$ref": "s1"
-      },
-      "returns": null,
-      "err": null
+      "after_state": {
+        "data/threads/main/active.jsonl": "e30K",
+        "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      }
     },
     {
       "name": "apply with no queue present still refreshes",
@@ -550,14 +627,22 @@
         "fn": "apply_deferred_edits"
       },
       "before": {
-        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/threads/main/active.jsonl": "e30K"
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
       },
       "after": {
-        "$ref": "s1"
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {
+        "data/threads/main/active.jsonl": "e30K"
+      },
+      "after_state": {
+        "data/threads/main/active.jsonl": "e30K",
+        "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+      }
     },
     {
       "name": "apply drops the snapshot and queue for an empty conversation",
@@ -565,17 +650,21 @@
         "fn": "apply_deferred_edits"
       },
       "before": {
-        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
+      },
+      "after": {
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
+      },
+      "returns": null,
+      "err": null,
+      "before_state": {
         "data/threads/main/active.jsonl": "",
         "data/active_prompt/SOUL.md": "c3RhbGUK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
       },
-      "after": {
-        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+      "after_state": {
         "data/threads/main/active.jsonl": ""
-      },
-      "returns": null,
-      "err": null
+      }
     },
     {
       "name": "ensure workspace writes the default tools guidance",
@@ -587,7 +676,9 @@
         "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
       },
       "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "ensure workspace preserves an existing tools file",
@@ -601,62 +692,9 @@
         "config/characters/Iris/workspace/TOOLS.md": "bXkgb3duIHRvb2xzIGRvYwo="
       },
       "returns": null,
-      "err": null
-    },
-    {
-      "name": "ensure workspace migrates the legacy character and user and system files",
-      "op": {
-        "fn": "ensure_character_workspace"
-      },
-      "before": {
-        "config/characters/Iris/character.md": "bGVnYWN5IHNvdWwK",
-        "config/characters/Iris/prompts/system.md": "bGVnYWN5IGFnZW50cwo=",
-        "config/characters/Iris/user.md": "bGVnYWN5IHVzZXIK"
-      },
-      "after": {
-        "config/characters/Iris/character.md": "bGVnYWN5IHNvdWwK",
-        "config/characters/Iris/prompts/system.md": "bGVnYWN5IGFnZW50cwo=",
-        "config/characters/Iris/user.md": "bGVnYWN5IHVzZXIK",
-        "config/characters/Iris/workspace/AGENTS.md": "bGVnYWN5IGFnZW50cwo=",
-        "config/characters/Iris/workspace/SOUL.md": "bGVnYWN5IHNvdWwK",
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "config/characters/Iris/workspace/USER.md": "bGVnYWN5IHVzZXIK"
-      },
-      "returns": null,
-      "err": null
-    },
-    {
-      "name": "ensure workspace does not clobber a workspace file with a legacy one",
-      "op": {
-        "fn": "ensure_character_workspace"
-      },
-      "before": {
-        "config/characters/Iris/character.md": "bGVnYWN5IHNvdWwK",
-        "config/characters/Iris/workspace/SOUL.md": "Y3VycmVudCBzb3VsCg=="
-      },
-      "after": {
-        "config/characters/Iris/character.md": "bGVnYWN5IHNvdWwK",
-        "config/characters/Iris/workspace/SOUL.md": "Y3VycmVudCBzb3VsCg==",
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
-      },
-      "returns": null,
-      "err": null
-    },
-    {
-      "name": "ensure workspace seeds the global user file when the workspace has none",
-      "op": {
-        "fn": "ensure_character_workspace"
-      },
-      "before": {
-        "config/user.md": "Z2xvYmFsIHVzZXIK"
-      },
-      "after": {
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "config/characters/Iris/workspace/USER.md": "Z2xvYmFsIHVzZXIK",
-        "config/user.md": "Z2xvYmFsIHVzZXIK"
-      },
-      "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     },
     {
       "name": "ensure workspace prefers an existing workspace user over the global one",
@@ -673,42 +711,9 @@
         "config/user.md": "Z2xvYmFsIHVzZXIK"
       },
       "returns": null,
-      "err": null
-    },
-    {
-      "name": "ensure workspace copies a legacy memories tree without overwriting",
-      "op": {
-        "fn": "ensure_character_workspace"
-      },
-      "before": {
-        "config/characters/Iris/workspace/memory/a.md": "ZXhpc3RpbmcgYQo=",
-        "data/memories/a.md": "bGVnYWN5IGEK",
-        "data/memories/nested/b.md": "bGVnYWN5IG5lc3RlZCBiCg=="
-      },
-      "after": {
-        "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-        "config/characters/Iris/workspace/memory/a.md": "ZXhpc3RpbmcgYQo=",
-        "config/characters/Iris/workspace/memory/nested/b.md": "bGVnYWN5IG5lc3RlZCBiCg==",
-        "data/memories/a.md": "bGVnYWN5IGEK",
-        "data/memories/nested/b.md": "bGVnYWN5IG5lc3RlZCBiCg=="
-      },
-      "returns": null,
-      "err": null
+      "err": null,
+      "before_state": {},
+      "after_state": {}
     }
-  ],
-  "$shared": {
-    "s0": {
-      "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-      "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-      "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-      "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
-    },
-    "s1": {
-      "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-      "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-      "data/threads/main/active.jsonl": "e30K",
-      "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-      "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRoZSB0b29scyBhdmFpbGFibGUgaW4gdGhpcyBjb252ZXJzYXRpb24gd2hlbiB0aGV5IGhlbHAuCgotIFVzZSBgYmFzaGAgZm9yIGZpbGVzLCBleGFjdCB0ZXh0IHNlYXJjaGVzLCBHaXQsIGFuZCBvdGhlciBjb21tYW5kLWxpbmUgd29yay4gUmVhZCBmaWxlcyBiZWZvcmUgZWRpdGluZyB0aGVtIGFuZCBpbnNwZWN0IHRoZSByZXN1bHQgYWZ0ZXJ3YXJkLgotIFByZWZlciBgc2hvcmUtcGF0Y2hgIHRocm91Z2ggYGJhc2hgIGZvciB0YXJnZXRlZCBlZGl0cy4gSXQgYWNjZXB0cyBhIHN0YW5kYXJkIHVuaWZpZWQgZGlmZiBpbiBhIHF1b3RlZCBoZXJlZG9jIGFuZCBjaGVja3MgdGhlIGV4aXN0aW5nIGNvbnRleHQgYmVmb3JlIHdyaXRpbmcuIFJ1biBgc2hvcmUtcGF0Y2ggLS1oZWxwYCBmb3IgdGhlIGZvcm1hdCBvciB1c2UgYC0tY2hlY2tgIHRvIHByZXZpZXcgYSBwYXRjaCB3aXRob3V0IGNoYW5naW5nIGZpbGVzLgotIFVzZSBgc2VhcmNoYCBmb3Igc2VtYW50aWMgd29ya3NwYWNlIHJldHJpZXZhbCBhbmQgYHNlYXJjaF9jaGF0X2xvZ3NgIGZvciBhcmNoaXZlZCBjb252ZXJzYXRpb25zLiBSZWFkIHRoZSByZWxldmFudCBzb3VyY2VzIGJlZm9yZSB0cmVhdGluZyBhIHNlYXJjaCBleGNlcnB0IGFzIHRoZSBmdWxsIHN0b3J5LgotIENoZWNrIG1lbW9yeSBiZWZvcmUgZ3Vlc3NpbmcgZmFjdHMgYWJvdXQgdGhlIHVzZXIgb3IgcGFzdCBldmVudHMuIElmIGEgc2VhcmNoIG1pc3NlcywgdHJ5IG90aGVyIHdvcmRpbmcgb3IgZm9sbG93IHJlbGF0ZWQgZmlsZXMgYmVmb3JlIGNvbmNsdWRpbmcgdGhlcmUgaXMgbm8gcmVjb3JkLgotIFByZXNlcnZlIEdpdCBoaXN0b3J5LiBSZWNvcmQgY29ycmVjdGlvbnMgaW4gbmV3IGNvbW1pdHM7IGRvIG5vdCBmb3JjZS1wdXNoLCByZXdyaXRlIGV4aXN0aW5nIGNvbW1pdHMsIG9yIGRpc2NhcmQgdW5jb21taXR0ZWQgd29yay4KLSBSZXBvcnQgdG9vbCBmYWlsdXJlcyB0aGF0IHByZXZlbnQgdGhlIHRhc2sgZnJvbSBiZWluZyBjb21wbGV0ZWQuIERvIG5vdCBjbGFpbSBhIGZpbGUgd2FzIHNhdmVkLCBhIGNvbW1pdCBtYWRlLCBvciBhIHB1c2ggY29tcGxldGVkIHdpdGhvdXQgY2hlY2tpbmcgdGhlIHJlc3VsdC4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
-    }
-  }
+  ]
 }

@@ -18,12 +18,6 @@ import type {
 
 export const HISTORY_DB_FILE = "shore.db";
 
-export const OBSOLETE_RETENTION_COLUMNS = new Set([
-  "memory_retain", "retain_requested", "memory_doc", "memory_doc_attempts",
-  "memory_doc_error", "memory_doc_op", "memory_doc_due", "memory_doc_expires",
-  "memory_doc_id", "memory_doc_claim",
-]);
-
 const bumpRevision = (source: "NEW" | "OLD") =>
   `INSERT INTO history_archive_revision(character, revision) VALUES (${source}.character, 1)
      ON CONFLICT(character) DO UPDATE SET revision = revision + 1;`;
@@ -142,11 +136,6 @@ CREATE TABLE IF NOT EXISTS memory_coverage (
 CREATE INDEX IF NOT EXISTS idx_memory_coverage_claim
     ON memory_coverage (character, path, state, claimed_at);
 
-CREATE TABLE IF NOT EXISTS history_metadata (
-    key   TEXT PRIMARY KEY,
-    value INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS history_character_stats (
     character     TEXT PRIMARY KEY,
     display_count INTEGER NOT NULL,
@@ -157,6 +146,10 @@ CREATE TABLE IF NOT EXISTS history_archive_revision (
     character TEXT PRIMARY KEY,
     revision  INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_history_messages_version ON history_messages (character, version);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation ON history_segments (character, compaction_id) WHERE compaction_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_history_messages_display ON history_messages (character, display_seq, segment, ordinal);
+CREATE INDEX IF NOT EXISTS idx_history_messages_turn ON history_messages (character, is_user_turn, display_seq);
 ${ARCHIVE_REVISION_TRIGGERS}
 `;
 
@@ -233,7 +226,6 @@ const DISPLAY_OTHER = 0;
 const DISPLAY_ASSISTANT = 1;
 const DISPLAY_TOOL_ASSISTANT = 2;
 const DISPLAY_TOOL_RESULT = 3;
-const DISPLAY_METADATA_VERSION = 2;
 
 export class HistoryStore {
   readonly #db: Database;
@@ -244,7 +236,6 @@ export class HistoryStore {
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
     db.run(HISTORY_SCHEMA);
-    migrate(db);
   }
 
   static open(path: string): HistoryStore {
@@ -1051,132 +1042,6 @@ function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function migrate(db: Database): void {
-  const seeded = db
-    .query("SELECT value FROM history_metadata WHERE key = 'archive_revision_seeded'")
-    .get() as { value: number } | null;
-  if (seeded === null) {
-    db.transaction(() => {
-      db.run(`INSERT OR IGNORE INTO history_archive_revision(character, revision)
-               SELECT character, count(*) FROM history_messages GROUP BY character`);
-      db.run("INSERT INTO history_metadata (key, value) VALUES ('archive_revision_seeded', 1)");
-    })();
-  }
-  const columns = db.query("PRAGMA table_info(history_segments)").all() as { name: string }[];
-  if (!columns.some((column) => column.name === "compaction_id")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN compaction_id TEXT");
-  }
-  if (!columns.some((column) => column.name === "committed")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN committed INTEGER NOT NULL DEFAULT 1");
-  }
-  if (!columns.some((column) => column.name === "memory_before")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN memory_before TEXT");
-  }
-  if (!columns.some((column) => column.name === "memory_after")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN memory_after TEXT");
-  }
-  if (!columns.some((column) => column.name === "excluded")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
-  }
-  db.transaction(() => {
-    db.run("DROP TABLE IF EXISTS history_memory_retain");
-    db.run("DROP TABLE IF EXISTS memory_documents");
-    for (const column of columns) {
-      if (OBSOLETE_RETENTION_COLUMNS.has(column.name)) {
-        db.run(`ALTER TABLE history_segments DROP COLUMN ${column.name}`);
-      }
-    }
-    db.run("DELETE FROM memory_coverage WHERE path = 'hindsight'");
-  })();
-  if (!columns.some((column) => column.name === "label")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN label TEXT");
-  }
-  if (!columns.some((column) => column.name === "note")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN note TEXT");
-  }
-  const pendingColumns = db.query("PRAGMA table_info(history_pending)").all() as {
-    name: string;
-  }[];
-  if (!pendingColumns.some((column) => column.name === "coverage_claim")) {
-    db.run("ALTER TABLE history_pending ADD COLUMN coverage_claim TEXT");
-  }
-  const messageColumns = db.query("PRAGMA table_info(history_messages)").all() as {
-    name: string;
-  }[];
-  if (!messageColumns.some((column) => column.name === "display_kind")) {
-    db.run("ALTER TABLE history_messages ADD COLUMN display_kind INTEGER");
-  }
-  if (!messageColumns.some((column) => column.name === "display_seq")) {
-    db.run("ALTER TABLE history_messages ADD COLUMN display_seq INTEGER");
-  }
-  if (!messageColumns.some((column) => column.name === "is_user_turn")) {
-    db.run("ALTER TABLE history_messages ADD COLUMN is_user_turn INTEGER");
-  }
-  if (!messageColumns.some((column) => column.name === "version")) {
-    db.run("ALTER TABLE history_messages ADD COLUMN version TEXT");
-  }
-  const alternativeColumns = db.query("PRAGMA table_info(history_alternatives)").all() as {
-    name: string;
-  }[];
-  if (!alternativeColumns.some((column) => column.name === "version")) {
-    db.run("ALTER TABLE history_alternatives ADD COLUMN version TEXT");
-  }
-  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_version
-           ON history_messages (character, version)`);
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
-           ON history_segments (character, compaction_id)
-           WHERE compaction_id IS NOT NULL`);
-  const oldBlobs = db
-    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'blobs'")
-    .get();
-  if (oldBlobs !== null) {
-    db.run(`INSERT OR IGNORE INTO history_blobs (hash, size, compressed, data)
-             SELECT hash, size, compressed, data FROM blobs`);
-  }
-  const metadata = db
-    .query("SELECT value FROM history_metadata WHERE key = 'display_version'")
-    .get() as { value: number } | null;
-  if (metadata?.value !== DISPLAY_METADATA_VERSION) {
-    db.transaction(() => {
-      const rows = db
-        .query("SELECT id, role, blocks_hash FROM history_messages ORDER BY id")
-        .all() as { id: number; role: Message["role"]; blocks_hash: string }[];
-      const update = db.query(
-        "UPDATE history_messages SET display_kind = ?2, is_user_turn = ?3 WHERE id = ?1",
-      );
-      for (const row of rows) {
-        const blocks = loadBlocks(db, row.blocks_hash);
-        const kind = displayKind({ role: row.role, content_blocks: blocks });
-        const userTurn = row.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0;
-        update.run(row.id, kind, userTurn);
-      }
-      const characters = db
-        .query("SELECT DISTINCT character FROM history_segments ORDER BY character")
-        .all() as { character: string }[];
-      for (const { character } of characters) reindexDisplayMetadata(db, character, 0);
-      db.run("DELETE FROM history_character_stats");
-      db.run(
-        `INSERT INTO history_character_stats (character, display_count, turn_count)
-         SELECT s.character,
-                COALESCE(MAX(m.display_seq) + 1, 0),
-                COALESCE(SUM(CASE WHEN m.is_user_turn = 1 THEN 1 ELSE 0 END), 0)
-         FROM history_segments s
-         LEFT JOIN history_messages m ON m.character = s.character AND m.segment = s.idx
-         WHERE s.committed = 1
-         GROUP BY s.character`,
-      );
-      db.query(
-        `INSERT INTO history_metadata (key, value) VALUES ('display_version', ?1)
-         ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-      ).run(DISPLAY_METADATA_VERSION);
-    })();
-  }
-  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_display
-           ON history_messages (character, display_seq, segment, ordinal)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_turn
-           ON history_messages (character, is_user_turn, display_seq)`);
-}
-
 function displayKind(message: Pick<Message, "role" | "content_blocks">): number {
   if (
     message.role === "user" &&
@@ -1252,16 +1117,6 @@ function displayStateAfter(
   if (row.display_kind === DISPLAY_TOOL_ASSISTANT) return "after_tool_assistant";
   if (row.display_kind === DISPLAY_TOOL_RESULT) return "after_tool_result";
   return "none";
-}
-
-function loadBlocks(db: Database, hash: string): ContentBlock[] {
-  const row = db
-    .query("SELECT size, compressed, data FROM history_blobs WHERE hash = ?1")
-    .get(hash) as { size: number; compressed: number; data: Uint8Array } | null;
-  if (row === null) throw new MissingBody(hash);
-  const bytes = row.compressed === 0 ? row.data : zstdDecompressSync(row.data);
-  if (bytes.byteLength !== row.size) throw new MissingBody(hash);
-  return JSON.parse(decoder.decode(bytes)) as ContentBlock[];
 }
 
 export class MissingBody extends Error {

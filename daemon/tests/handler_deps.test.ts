@@ -1276,7 +1276,7 @@ describe("reloading [mcp]", () => {
       const before = runtime.mcp.current;
       const fresh = configFor(root, (app) => {
         withServer(app, "hue", "hue-server");
-        app.defaults.stream = !app.defaults.stream;
+        app.memory.compaction.enabled = !app.memory.compaction.enabled;
       });
       await applyReloadedConfig(assemblyOf(runtime), fresh);
 
@@ -1377,7 +1377,7 @@ describe("reloading [mcp]", () => {
 
       const fresh = configFor(root, (app) => {
         withServer(app, "hue", "hue-server");
-        app.defaults.stream = !app.defaults.stream;
+        app.memory.compaction.enabled = !app.memory.compaction.enabled;
       });
       await applyReloadedConfig(assemblyOf(runtime), fresh);
 

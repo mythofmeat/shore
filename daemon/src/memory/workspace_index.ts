@@ -1,15 +1,12 @@
 import { required } from "../util/required.ts";
 
-import { shoreLog } from "../log.ts";
-
 import { readFile, readdir, lstat, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 import { toF32, type Embedder } from "../llm/embed";
 import { describeError } from "../llm/errors";
 import { chunkText } from "./chunking.ts";
 import { compareRustStrings, rustLines, rustTrimStart, tokenizeQuery } from "./lines";
-import { migrateLegacyIndex } from "./workspace_legacy.ts";
 import {
   documentHash,
   withWorkspaceIndexLock,
@@ -117,8 +114,6 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
   return await withWorkspaceIndexLock(options.indexPath, async () => {
     const store = WorkspaceIndexStore.open(options.indexPath);
     try {
-      await migrateIfLegacy(store, options.indexPath, workspaceDir);
-
       const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
       const existing = store.files();
       pruneAndScope(store, existing, candidates, pathFilter);
@@ -186,8 +181,6 @@ export async function indexPendingBatch(
   return await withWorkspaceIndexLock(options.indexPath, async () => {
     const store = WorkspaceIndexStore.open(options.indexPath);
     try {
-      await migrateIfLegacy(store, options.indexPath, workspaceDir);
-
       const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
       const existing = store.files();
       pruneAndScope(store, existing, candidates, undefined);
@@ -237,25 +230,6 @@ export async function workspaceIndexStats(dbPath: string) {
       store.close();
     }
   });
-}
-
-async function migrateIfLegacy(
-  store: WorkspaceIndexStore,
-  dbPath: string,
-  workspaceDir: string,
-): Promise<void> {
-  if (store.metadata("migrated_from_json_at") !== undefined) return;
-  const legacy = legacyPathFor(dbPath);
-  const outcome = await migrateLegacyIndex(store, legacy, workspaceDir, documentForEmbedding);
-  if (outcome === undefined) return;
-  shoreLog.warn(
-    `shore: migrated workspace index from JSON: ${outcome.files} files, ` +
-      `${outcome.vectors} vectors carried over, ${outcome.stale} stale`,
-  );
-}
-
-function legacyPathFor(dbPath: string): string {
-  return join(dirname(dbPath), "workspace_index.json");
 }
 
 export interface StaleEntry {

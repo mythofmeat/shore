@@ -6,7 +6,8 @@ import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
 import { join } from "node:path";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { McpClient } from "../src/mcp/client.ts";
-import { handleGit, runProcess } from "../src/tools/workspace.ts";
+import { handleBash } from "../src/tools/bash.ts";
+import { runProcess } from "../src/tools/workspace.ts";
 import { executeDiceRoll, MAX_DICE_COUNT } from "../src/tools/basic.ts";
 
 const TOOL = "mcp__audit__optional";
@@ -108,17 +109,17 @@ test("cancelled Git requests do not start a command", async () => {
   await mkdir(workspace);
   const parent = new AbortController();
   parent.abort();
-  expect(handleGit({ subcommand: "status" }, workspace, "ada", parent.signal)).rejects.toThrow();
+  expect(handleBash({ command: "git status" }, workspace, "ada", parent.signal)).rejects.toThrow();
 });
 
 test("Git output is bounded while the process is read", async () => {
   const h = await reliabilityGeneration(providerFor({ input: {} }));
   const workspace = join(h.root, "workspace");
   await mkdir(workspace);
-  await handleGit({ subcommand: "init" }, workspace, "ada");
+  await handleBash({ command: "git init" }, workspace, "ada");
   await writeFile(join(workspace, "large.txt"), "large line\n".repeat(210_000));
-  await handleGit({ subcommand: "add", args: ["-N", "large.txt"] }, workspace, "ada");
-  const result = await handleGit({ subcommand: "diff" }, workspace, "ada") as { stdout: string };
+  await handleBash({ command: "git add -N large.txt" }, workspace, "ada");
+  const result = await handleBash({ command: "git diff" }, workspace, "ada") as { stdout: string };
   expect(result.stdout.length).toBeLessThan(1_100_000);
   expect(result.stdout).toContain("truncated");
 });

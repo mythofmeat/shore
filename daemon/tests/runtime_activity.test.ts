@@ -63,7 +63,6 @@ test("heartbeat heatmaps use persisted and live user activity for the requested 
   app.memory.compaction.enabled = false;
   app.tools.enabled_tools = ["activity_heatmap"];
   app.behavior.autonomy.enabled = true;
-  app.behavior.autonomy.heartbeat.enabled = true;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",

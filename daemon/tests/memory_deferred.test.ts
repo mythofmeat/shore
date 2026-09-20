@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { Database } from "bun:sqlite";
-import { unpack } from "../src/storage/store.ts";
+import { unpack, writeState } from "../src/storage/store.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
@@ -30,6 +30,8 @@ interface Case {
   op: { fn: string; path?: string; name?: string };
   before: Record<string, string>;
   after: Record<string, string>;
+  before_state: Record<string, string>;
+  after_state: Record<string, string>;
   returns: unknown;
   err: string | null;
 }
@@ -93,10 +95,6 @@ describe("applying a deferred edit", () => {
       "AGENTS.md",
       "TOOLS.md",
     ]);
-    expect(fixture.constants.legacy_snapshots).toEqual([
-      "RECENT_MEMORY.md",
-      "HEARTBEAT.md",
-    ]);
     expect(fixture.constants.queue_file).toBe("deferred_edits.jsonl");
     expect(fixture.constants.active_prompt_dir).toBe("active_prompt");
   });
@@ -114,6 +112,13 @@ describe("applying a deferred edit", () => {
           const p = join(root, rel);
           await mkdir(dirname(p), { recursive: true });
           await writeFile(p, b64(content), "utf8");
+        }
+
+        for (const [key, content] of Object.entries(c.before_state)) {
+          writeState(root, key, b64(content), "data");
+        }
+        if (Object.keys(c.before_state).some(key => key.startsWith("data/active_prompt/"))) {
+          writeState(root, "data/active_prompt/.snapshot", "1", "data");
         }
 
         let returned: unknown = null;
@@ -140,7 +145,7 @@ describe("applying a deferred edit", () => {
             await refreshActivePromptSnapshot(dataDir, configDir, CHAR);
             break;
           case "ensure_character_workspace":
-            await ensureCharacterWorkspace(dataDir, configDir, CHAR);
+            await ensureCharacterWorkspace(configDir, CHAR);
             break;
           case "load_memory_index":
             returned = (await loadMemoryIndex(dataDir, configDir, CHAR)) ?? null;
@@ -172,7 +177,7 @@ describe("applying a deferred edit", () => {
 
         const actual = await snapshot(root);
         const expected = Object.fromEntries(
-          Object.entries(c.after).map(([k, v]) => [k, b64(v)]),
+          Object.entries({ ...c.after, ...c.after_state }).map(([k, v]) => [k, b64(v)]),
         );
 
         expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());

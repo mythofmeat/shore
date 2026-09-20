@@ -1,6 +1,6 @@
-import { readFile } from "./support/stored_files.ts";
+import { readBook, writeBook } from "../src/llm/providers/agent_sessions.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -352,7 +352,7 @@ describe("what the turn leaves behind", () => {
       sessionId: "s-1",
       rounds: [{ blocks: [{ kind: "text", text: "hi" }] }],
     });
-    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    const book = readBook(path);
     const record = Object.values(book)[0];
     expect(record?.sessionId).toBe("s-1");
     expect(record?.version).toBe(SESSION_BOOK_VERSION);
@@ -370,7 +370,7 @@ describe("what the turn leaves behind", () => {
         },
       ],
     });
-    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    const book = readBook(path);
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_1"]);
   });
 
@@ -393,7 +393,7 @@ describe("what the turn leaves behind", () => {
         entries: nextEntries({ ...planTurn(undefined, history), resume: "forked-session" }, ["missing-parent-uuid"]),
       },
     };
-    await writeFile(path, JSON.stringify(stale), "utf8");
+    writeBook(path, stale);
     const agent = fakeAgent({
       rounds: [],
       throwOn: new Error(
@@ -411,7 +411,7 @@ describe("what the turn leaves behind", () => {
     for await (const _event of provider.stream(req)) {
       void _event;
     }
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({});
+    expect(readBook(path)).toEqual({});
 
     const retried: StreamEvent[] = [];
     const recovered = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "recovered" }] }] });
@@ -640,6 +640,6 @@ test("a heartbeat between chat turns cannot replace the chat session", async () 
   expect(await sentMessages(chat.calls[1]?.prompt)).toEqual([
     { role: "user", content: [{ type: "text", text: "continue" }] },
   ]);
-  const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+  const book = readBook(path);
   expect(Object.values(book).map(record => record.sessionId).sort()).toEqual(["chat-session", "heartbeat-session"]);
 });

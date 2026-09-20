@@ -21,7 +21,7 @@ const opts = { localZone: doc.timezone, now: NOW };
 function config(timezone = "utc"): UsageConfig {
   return {
     timezone,
-    allow_compaction_over_budget: false,
+
     budgets: [
       {
         name: "daily",

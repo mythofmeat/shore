@@ -19,7 +19,7 @@ export function sourceLabel(source: StartupValueSource): string {
     case "env":
       return "SHORE_ADDR";
     case "config":
-      return "[daemon].addr";
+      return "[daemon].listen_addr";
   }
 }
 

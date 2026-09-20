@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -195,14 +196,11 @@ async function seedCharacter(dirs: ShoreDirs, character: string): Promise<void> 
   await writeFile(join(dirs.cache, "characters", character, "history_search.db"), "");
   await writeFile(
     join(dirs.config, "characters", character, "config.toml"),
-    "[defaults]\nstream = true\n",
+    "\n",
   );
 
   const message = userMessage(character);
-  await writeFile(
-    join(dirs.data, character, "threads", "main", "active.jsonl"),
-    `${JSON.stringify(message)}\n`,
-  );
+  writeDurable(join(dirs.data, character, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
   const history = HistoryStore.open(join(dirs.data, "shore.db"));
   history.putSegment(
     character,

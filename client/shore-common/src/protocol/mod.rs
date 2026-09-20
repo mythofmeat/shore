@@ -777,15 +777,13 @@ mod tests {
     }
 
     #[test]
-    fn old_message_json_without_content_blocks_deserializes() {
+    fn messages_require_content_blocks() {
         let json = json!({
-            "msg_id": "m_legacy",
+            "msg_id": "m_invalid",
             "role": "assistant",
             "content": "old message",
             "timestamp": "2025-01-01T00:00:00Z"
         });
-        let msg: Message = serde_json::from_value(json).unwrap();
-        assert!(msg.content_blocks.is_empty());
-        assert_eq!(msg.content, "old message");
+        assert!(serde_json::from_value::<Message>(json).is_err());
     }
 }

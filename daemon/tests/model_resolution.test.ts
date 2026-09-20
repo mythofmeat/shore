@@ -341,8 +341,8 @@ describe("resolvedModelFromParts", () => {
           ? { temperature: 0.3, topP: 0.9, budgetTokens: 4096 }
           : { temperature: 1.0, maxOutputTokens: 8192 };
       const resolved = resolvedModelFromParts(
-        "m",
-        "chat.p.m",
+        row.model_id,
+        `p:${row.model_id}`,
         "chat",
         "p",
         row.model_id,
@@ -436,10 +436,7 @@ describe("field merging", () => {
     expect(merged.zaiClearThinking).toBe(false);
   });
 
-  test("the removed Z.ai endpoint toggle points at the provider split", () => {
-    const read = readModelConfigFields({ zai_subscription: true });
-    expect("err" in read ? read.err : null).toContain("select `zai-sub:<model_id>`");
-  });
+
 });
 
 describe("catalogFromSections", () => {
@@ -493,15 +490,15 @@ describe("catalogFromSections", () => {
   test("catalog order is code point order, not UTF-16 order", () => {
     const catalog = catalogFromSections(
       Bun.TOML.parse(
-        '["🎵drum".m]\nmodel_id = "a"\n["ﬀute".m]\nmodel_id = "b"\n[zzz.m]\nmodel_id = "c"\n',
+        "[\"🎵drum:a\"]\n[\"ﬀute:b\"]\n[\"zzz:c\"]\n",
       ) as Record<string, unknown>,
       undefined,
       undefined,
     );
     expect([...catalog.chat.keys()]).toEqual([
-      "chat.zzz.m",
-      "chat.ﬀute.m",
-      "chat.🎵drum.m",
+      "zzz:c",
+      "ﬀute:b",
+      "🎵drum:a",
     ]);
     expect([...catalog.chat.keys()].sort()).not.toEqual([...catalog.chat.keys()]);
   });
@@ -512,51 +509,20 @@ describe("catalogFromSections", () => {
     expect(Bun.TOML.parse('a = "🎵"')).toEqual({ a: "🎵" });
   });
 
-  test("the retired-scalar error names the first offending key in BTreeMap order", () => {
-    const error = catchCatalogError(() =>
-      catalogFromSections(
-        Bun.TOML.parse('[anthropic]\nzzz = 1\naaa = 2\n[anthropic.opus]\nmodel_id = "x"\n') as Record<
-          string,
-          unknown
-        >,
-        undefined,
-        undefined,
-      ),
-    );
-    expect(error.message).toContain("`aaa`");
-    expect(error.message).not.toContain("`zzz`");
-  });
 
-  test("a transport scalar and a behavioral scalar point at different homes", () => {
-    const transport = catchCatalogError(() =>
-      catalogFromSections(
-        Bun.TOML.parse('[anthropic]\nsdk = "anthropic"\n') as Record<string, unknown>,
-        undefined,
-        undefined,
-      ),
-    );
-    expect(transport.message).toContain("the matching [providers.<name>] entry");
 
-    const behavioral = catchCatalogError(() =>
-      catalogFromSections(
-        Bun.TOML.parse("[anthropic]\nmax_output_tokens = 1\n") as Record<string, unknown>,
-        undefined,
-        undefined,
-      ),
-    );
-    expect(behavioral.message).toContain("[providers.<name>.defaults]");
-  });
+
 
   test("the registry cascade sits between hardcoded defaults and per-model fields", () => {
     const chat = Bun.TOML.parse(
-      '[custom.fast]\nmodel_id = "m"\nmax_output_tokens = 111\n',
+      "[\"custom:m\"]\n\nmax_output_tokens = 111\n",
     ) as Record<string, unknown>;
     const registry = registryFromToml(
       '[custom]\nsdk = "openai"\nbase_url = "https://custom.example/v1"\n' +
         "[custom.defaults]\nmax_output_tokens = 4096\ntemperature = 0.7\n",
     );
     const catalog = catalogFromSections(chat, undefined, undefined, registry);
-    const model = catalog.chat.get("chat.custom.fast") as ResolvedModel;
+    const model = catalog.chat.get("custom:m") as ResolvedModel;
 
     expect(model.maxOutputTokens).toBe(111);
     expect(model.temperature).toBe(0.7);
@@ -566,8 +532,8 @@ describe("catalogFromSections", () => {
 
   test("a provider default idle ceiling reaches its models, and a model overrides it", () => {
     const chat = Bun.TOML.parse(
-      '[moonshotai.k3]\nmodel_id = "kimi-k3"\n' +
-        '[moonshotai.k3-long]\nmodel_id = "kimi-k3"\ncache_keepalive_max = "6h"\n',
+      "[\"moonshotai:kimi-k3\"]\n" +
+        "[\"moonshotai:kimi-k2\"]\n\ncache_keepalive_max = \"6h\"\n",
     ) as Record<string, unknown>;
     const read = readModelConfigFields(
       Bun.TOML.parse('cache_keepalive = "10m"\ncache_keepalive_max = "90m"\n') as Record<
@@ -581,23 +547,23 @@ describe("catalogFromSections", () => {
     };
     const catalog = catalogFromSections(chat, undefined, undefined, registry);
 
-    const inherited = catalog.chat.get("chat.moonshotai.k3") as ResolvedModel;
+    const inherited = catalog.chat.get("moonshotai:kimi-k3") as ResolvedModel;
     expect(inherited.cacheKeepaliveMax?.toString()).toBe("90m");
 
-    const overridden = catalog.chat.get("chat.moonshotai.k3-long") as ResolvedModel;
+    const overridden = catalog.chat.get("moonshotai:kimi-k2") as ResolvedModel;
     expect(overridden.cacheKeepaliveMax?.toString()).toBe("6h");
   });
 
   test("a model that names no ceiling leaves the field absent for the global to fill", () => {
     const catalog = catalogFromSections(
-      Bun.TOML.parse('[anthropic.main]\nmodel_id = "claude-opus-4-6"\n') as Record<
+      Bun.TOML.parse("[\"anthropic:claude-opus-4-6\"]\n") as Record<
         string,
         unknown
       >,
       undefined,
       undefined,
     );
-    expect((catalog.chat.get("chat.anthropic.main") as ResolvedModel).cacheKeepaliveMax)
+    expect((catalog.chat.get("anthropic:claude-opus-4-6") as ResolvedModel).cacheKeepaliveMax)
       .toBeUndefined();
   });
 
@@ -606,46 +572,39 @@ describe("catalogFromSections", () => {
       get: () => ({ sdk: "openai", defaults: {}, baseUrl: "https://x/v1" }),
     };
     const catalog = catalogFromSections(
-      Bun.TOML.parse('[custom.fast]\nmodel_id = "m"\n') as Record<string, unknown>,
+      Bun.TOML.parse("[\"custom:m\"]\n") as Record<string, unknown>,
       undefined,
       undefined,
       registry,
     );
-    expect((catalog.chat.get("chat.custom.fast") as ResolvedModel).apiKeyEnv).toBeUndefined();
+    expect((catalog.chat.get("custom:m") as ResolvedModel).apiKeyEnv).toBeUndefined();
   });
 
   test("the provider defaults are not shared between models", () => {
     const catalog = catalogFromSections(
       Bun.TOML.parse(
-        '[anthropic.new]\nmodel_id = "claude-opus-4-7"\ntemperature = 0.5\n[anthropic.old]\nmodel_id = "claude-opus-4-6"\n',
+        "[\"anthropic:claude-opus-4-7\"]\n\ntemperature = 0.5\n[\"anthropic:claude-opus-4-6\"]\n",
       ) as Record<string, unknown>,
       undefined,
       undefined,
     );
-    expect((catalog.chat.get("chat.anthropic.new") as ResolvedModel).temperature).toBe(0.5);
-    expect((catalog.chat.get("chat.anthropic.old") as ResolvedModel).temperature).toBeUndefined();
+    expect((catalog.chat.get("anthropic:claude-opus-4-7") as ResolvedModel).temperature).toBe(0.5);
+    expect((catalog.chat.get("anthropic:claude-opus-4-6") as ResolvedModel).temperature).toBeUndefined();
   });
 
   test("the final sort is load-bearing, not a formality", () => {
     const catalog = catalogFromSections(
-      Bun.TOML.parse('[a.m]\nmodel_id = "x"\n["a-b".m]\nmodel_id = "y"\n') as Record<
+      Bun.TOML.parse("[\"a:x\"]\n[\"a-b:y\"]\n") as Record<
         string,
         unknown
       >,
       undefined,
       undefined,
     );
-    expect([...catalog.chat.keys()]).toEqual(["chat.a-b.m", "chat.a.m"]);
+    expect([...catalog.chat.keys()]).toEqual(["a-b:y", "a:x"]);
   });
 
-  test("a non-table provider value is skipped, not an error", () => {
-    const catalog = catalogFromSections(
-      Bun.TOML.parse("anthropic = 1\n") as Record<string, unknown>,
-      undefined,
-      undefined,
-    );
-    expect(catalog.chat.size).toBe(0);
-  });
+
 });
 
 describe("findModel", () => {
@@ -672,8 +631,8 @@ describe("findModel", () => {
   });
 
   test("a qualified name beats a short name", () => {
-    expect(findModel(catalog, "chat.openrouter.opus").providerKey).toBe("openrouter");
-    expect(() => findModel(catalog, "opus")).toThrow(/ambiguous/);
+    expect(findModel(catalog, "openrouter:claude-opus-4-6").providerKey).toBe("openrouter");
+    expect(() => findModel(catalog, "claude-opus-4-6")).toThrow(/ambiguous/);
   });
 
   test("an empty catalog reports not-found rather than throwing something else", () => {

@@ -183,7 +183,7 @@ const TOOLS_QUERIES = [
   },
   {
     "name": "a zero global deadline is overridable per tool",
-    "toml": "[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = 0\n\n[tools.config.git]\ntimeout = \"45s\"\n",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = \"0s\"\n\n[tools.config.git]\ntimeout = \"45s\"\n",
     "any_enabled": true,
     "tools": [
       {
@@ -199,7 +199,7 @@ const TOOLS_QUERIES = [
   },
   {
     "name": "a zero per-tool deadline opts one tool out of a global one",
-    "toml": "[tools]\nenabled_tools = [\"read\", \"slow\"]\ntimeout = \"30s\"\n\n[tools.config.slow]\ntimeout = 0\n",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"slow\"]\ntimeout = \"30s\"\n\n[tools.config.slow]\ntimeout = \"0s\"\n",
     "any_enabled": true,
     "tools": [
       {
@@ -371,15 +371,13 @@ const BACKGROUND = [
     "defaults": {
       "model": null,
       "background": {
-        "model": null,
         "heartbeat": null,
         "compaction": null
       },
       "embedding": null,
       "image_generation": null,
       "subagent_model": null,
-      "display_name": null,
-      "stream": true
+      "display_name": null
     },
     "heartbeat": null,
     "compaction": null
@@ -389,90 +387,32 @@ const BACKGROUND = [
     "defaults": {
       "model": "chat",
       "background": {
-        "model": null,
         "heartbeat": null,
         "compaction": null
       },
       "embedding": null,
       "image_generation": null,
       "subagent_model": null,
-      "display_name": null,
-      "stream": true
+      "display_name": null
     },
     "heartbeat": null,
     "compaction": null
-  },
-  {
-    "name": "background.model covers every task",
-    "defaults": {
-      "model": "chat",
-      "background": {
-        "model": "bg",
-        "heartbeat": null,
-        "compaction": null
-      },
-      "embedding": null,
-      "image_generation": null,
-      "subagent_model": null,
-      "display_name": null,
-      "stream": true
-    },
-    "heartbeat": "bg",
-    "compaction": "bg"
-  },
-  {
-    "name": "a per-task override wins over background.model",
-    "defaults": {
-      "model": "chat",
-      "background": {
-        "model": "bg",
-        "heartbeat": "hb",
-        "compaction": null
-      },
-      "embedding": null,
-      "image_generation": null,
-      "subagent_model": null,
-      "display_name": null,
-      "stream": true
-    },
-    "heartbeat": "hb",
-    "compaction": "bg"
   },
   {
     "name": "a per-task override with no blanket model",
     "defaults": {
       "model": null,
       "background": {
-        "model": null,
         "heartbeat": null,
         "compaction": "c"
       },
       "embedding": null,
       "image_generation": null,
       "subagent_model": null,
-      "display_name": null,
-      "stream": true
+      "display_name": null
     },
     "heartbeat": null,
     "compaction": "c"
-  },
-  {
-    "name": "the deprecated top-level key is not consulted before normalizing",
-    "defaults": {
-      "model": null,
-      "background": {
-        "model": null,
-        "heartbeat": null,
-        "compaction": null
-      },
-      "embedding": null,
-      "image_generation": null,
-      "subagent_model": null,
-      "display_name": null,
-      "stream": true
-    },
-    "heartbeat": null,
-    "compaction": null
   }
 ];
 
@@ -748,15 +688,15 @@ const THINKING_REPLAY = [
   },
   {
     "input": "true",
-    "parsed": "all"
+    "parsed": null
   },
   {
     "input": "false",
-    "parsed": "none"
+    "parsed": null
   },
   {
     "input": "last_turn",
-    "parsed": "all"
+    "parsed": null
   },
   {
     "input": "All",
@@ -780,29 +720,6 @@ const THINKING_REPLAY = [
   }
 ];
 
-const REMOVED_KEYS = [
-  {
-    "name": "the retired alias is refused, not forwarded",
-    "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
-    "err": "`heartbeat` was removed — set `heartbeat.model`"
-  },
-  {
-    "name": "setting both spellings is still refused",
-    "toml": "[defaults]\nheartbeat = \"hb-old\"\n\n[defaults.background]\nheartbeat = \"hb-new\"\n",
-    "err": "`heartbeat` was removed — set `heartbeat.model`"
-  },
-  {
-    "name": "an empty string is a value, not an absence",
-    "toml": "[defaults]\nheartbeat = \"\"\n",
-    "err": "`heartbeat` was removed — set `heartbeat.model`"
-  },
-  {
-    "name": "the key that replaced it still parses",
-    "toml": "[defaults.background]\nheartbeat = \"hb\"\n",
-    "err": null
-  }
-];
-
 describe("the shipped defaults", () => {
   test("parse out of an empty document, so a config file is optional", () => {
     expect(parsed("")).toEqual(canonical(defaultAppConfig()));
@@ -813,7 +730,8 @@ describe("the shipped defaults", () => {
     expect(d.model).toBeUndefined();
     expect(d.embedding).toBeUndefined();
     expect(d.subagent_model).toBeUndefined();
-    expect(d.background.model).toBeUndefined();
+    expect(d.background.heartbeat).toBeUndefined();
+    expect(d.background.compaction).toBeUndefined();
   });
 
   test("give every duration a sane value, never negative", () => {
@@ -859,7 +777,7 @@ describe("when a document has more than one thing wrong", () => {
   });
 
   test("a bad type is reported with the value that was wrong", () => {
-    expect(rejected('[defaults]\nstream = "yes"\n')).toBe(
+    expect(rejected("[memory.compaction]\nenabled = \"yes\"\n")).toBe(
       'invalid type: string "yes", expected a boolean',
     );
   });
@@ -929,7 +847,7 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("a zero timeout means no deadline", () => {
-    const cfg = parsed("[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = 0\n\n[tools.config.git]\ntimeout = \"45s\"\n");
+    const cfg = parsed("[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = \"0s\"\n\n[tools.config.git]\ntimeout = \"45s\"\n");
     expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual(["read","git"]);
     expect(at(cfg, "tools.timeout"), "tools.timeout").toEqual("0s");
     expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"git":{"max_result_chars":null,"timeout":"45s"}});
@@ -955,9 +873,8 @@ describe("a config.toml sets what it says and nothing else", () => {
 
 
   test("autonomy and heartbeat durations", () => {
-    const cfg = parsed("[behavior.autonomy]\nenabled = true\n\n[behavior.autonomy.heartbeat]\nenabled = false\nfallback_heartbeat_interval = \"90m\"\ndormant_after_heartbeat_turns = 7\ndormant_after_idle_time = \"1d\"\nminimum_heartbeat_latency = \"500ms\"\nwrap_up_grace_rounds = 1\n\n[cache]\nkeepalive_max = \"6h\"\n");
+    const cfg = parsed("[behavior.autonomy]\nenabled = true\n\n[behavior.autonomy.heartbeat]\nfallback_heartbeat_interval = \"90m\"\ndormant_after_heartbeat_turns = 7\ndormant_after_idle_time = \"1d\"\nminimum_heartbeat_latency = \"500ms\"\nwrap_up_grace_rounds = 1\n\n[cache]\nkeepalive_max = \"6h\"\n");
     expect(at(cfg, "behavior.autonomy.enabled"), "behavior.autonomy.enabled").toEqual(true);
-    expect(at(cfg, "behavior.autonomy.heartbeat.enabled"), "behavior.autonomy.heartbeat.enabled").toEqual(false);
     expect(at(cfg, "behavior.autonomy.heartbeat.fallback_heartbeat_interval"), "behavior.autonomy.heartbeat.fallback_heartbeat_interval").toEqual("90m");
     expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns"), "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns").toEqual(7);
     expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_idle_time"), "behavior.autonomy.heartbeat.dormant_after_idle_time").toEqual("1d");
@@ -966,10 +883,7 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("6h");
   });
 
-  test("a bare integer duration means seconds", () => {
-    const cfg = parsed("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = 90\n");
-    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("90s");
-  });
+
 
   test("a fractional duration is accepted at parse time", () => {
     const cfg = parsed("[memory.compaction]\nidle_trigger = \"1.5s\"\n");
@@ -1001,18 +915,14 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "memory.thinking.replay_prior_thinking"), "memory.thinking.replay_prior_thinking").toEqual("none");
   });
 
-  test("replay_prior_thinking accepts the legacy bool false", () => {
-    const cfg = parsed("[memory.thinking]\nreplay_prior_thinking = false\n");
-    expect(at(cfg, "memory.thinking.replay_prior_thinking"), "memory.thinking.replay_prior_thinking").toEqual("none");
-  });
+
 
   test("notifications", () => {
-    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"ntfy\"\ngeneration_threshold = \"20s\"\n\n[notifications.ntfy]\nurl = \"https://ntfy.example.com\"\ntopic = \"shore-test\"\ntoken = \"tk_secret\"\n\n[notifications.events]\ncache_warning = false\nmessage_complete = true\n");
+    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"ntfy\"\ngeneration_threshold = \"20s\"\n\n[notifications.ntfy]\nurl = \"https://ntfy.example.com\"\ntopic = \"shore-test\"\n\n[notifications.events]\ncache_warning = false\nmessage_complete = true\n");
     expect(at(cfg, "notifications.enabled"), "notifications.enabled").toEqual(true);
     expect(at(cfg, "notifications.backend"), "notifications.backend").toEqual("ntfy");
     expect(at(cfg, "notifications.ntfy.url"), "notifications.ntfy.url").toEqual("https://ntfy.example.com");
     expect(at(cfg, "notifications.ntfy.topic"), "notifications.ntfy.topic").toEqual("shore-test");
-    expect(at(cfg, "notifications.ntfy.token"), "notifications.ntfy.token").toEqual("tk_secret");
     expect(at(cfg, "notifications.generation_threshold"), "notifications.generation_threshold").toEqual("20s");
     expect(at(cfg, "notifications.events.cache_warning"), "notifications.events.cache_warning").toEqual(false);
     expect(at(cfg, "notifications.events.message_complete"), "notifications.events.message_complete").toEqual(true);
@@ -1028,61 +938,27 @@ describe("a config.toml sets what it says and nothing else", () => {
 
 
   test("the background section", () => {
-    const cfg = parsed("[defaults.background]\nmodel = \"bg\"\nheartbeat = \"bg-h\"\ncompaction = \"bg-c\"\n");
-    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("bg");
+    const cfg = parsed("[defaults.background]\nheartbeat = \"bg-h\"\ncompaction = \"bg-c\"\n");
     expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("bg-h");
     expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("bg-c");
   });
 
-  test("defaults.stream can be turned off", () => {
-    const cfg = parsed("[defaults]\nstream = false\ndisplay_name = \"Alice\"\nembedding = \"e\"\nimage_generation = \"i\"\n");
-    expect(at(cfg, "defaults.embedding"), "defaults.embedding").toEqual("e");
-    expect(at(cfg, "defaults.image_generation"), "defaults.image_generation").toEqual("i");
-    expect(at(cfg, "defaults.display_name"), "defaults.display_name").toEqual("Alice");
-    expect(at(cfg, "defaults.stream"), "defaults.stream").toEqual(false);
-  });
-
-  test("a sequence fills a struct positionally", () => {
-    const cfg = parsed("[behavior]\nautonomy = [true]\n");
-    expect(at(cfg, "behavior.autonomy.enabled"), "behavior.autonomy.enabled").toEqual(true);
-  });
-
-
-  test("seq: DefaultsConfig, at its minimum", () => {
-    const cfg = parsed("defaults = [\"m\", [\"bm\", \"bh\", \"bc\"], \"e\", \"i\", \"s\", \"d\"]\n");
-    expect(at(cfg, "defaults.model"), "defaults.model").toEqual("m");
-    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("bm");
-    expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("bh");
-    expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("bc");
-    expect(at(cfg, "defaults.embedding"), "defaults.embedding").toEqual("e");
-    expect(at(cfg, "defaults.image_generation"), "defaults.image_generation").toEqual("i");
-    expect(at(cfg, "defaults.subagent_model"), "defaults.subagent_model").toEqual("s");
-    expect(at(cfg, "defaults.display_name"), "defaults.display_name").toEqual("d");
-  });
-
-  test("seq: BackgroundDefaultsConfig, at its minimum", () => {
-    const cfg = parsed("[defaults]\nbackground = [\"m\", \"h\", \"c\"]\n");
-    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("m");
-    expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("h");
-    expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("c");
-  });
 
 
 
-  test("seq: McpServerConfig, at its minimum", () => {
-    const cfg = parsed("[mcp]\ns = [\"node\", [], {}, \"/srv\", \"http://x\"]\n");
-    expect(at(cfg, "mcp"), "mcp").toMatchObject({"s":{"command":"node","args":[],"env":{},"cwd":"/srv","url":"http://x"}});
-  });
 
-  test("seq: UsageBudgetConfig, at its minimum", () => {
-    const cfg = parsed("[usage]\nbudgets = [[\"n\", \"week\", 5.0]]\n");
-    expect(at(cfg, "usage.budgets"), "usage.budgets").toMatchObject([{"name":"n","period":"week","cost_usd":5,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null}]);
-  });
 
-  test("seq: ToolOverride needs nothing", () => {
-    const cfg = parsed("[tools.config]\nread = []\n");
-    expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"read":{"max_result_chars":null,"timeout":null}});
-  });
+
+
+
+
+
+
+
+
+
+
+
 
   test("an empty per-tool table is not an error", () => {
     const cfg = parsed("[tools.config.read]\n");
@@ -1094,10 +970,7 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "tools.timeout"), "tools.timeout").toEqual("0s");
   });
 
-  test("a bare float duration", () => {
-    const cfg = parsed("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = 1.5\n");
-    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("1500ms");
-  });
+
 
   test("integer where a float is expected is widened", () => {
     const cfg = parsed("[[usage.budgets]]\ncost_usd = 10\n");
@@ -1214,9 +1087,7 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
     expect(rejected("[\"🎵\"]\nk = 1\n\n[\"ﬀ\"]\nk = 2\n")).toContain("ﬀ");
   });
 
-  test("a bad type at a sequence position", () => {
-    expect(rejected("[behavior]\nautonomy = [1]\n")).toContain("1");
-  });
+
 
   test("a retired connection is refused in its positional form too", () => {
     expect(rejected("[connections]\ntelegram = [1]\n")).toContain("telegram");
@@ -1226,29 +1097,17 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
     expect(rejected("[behavior]\nautonomy = [true, {}, \"6h\", 1]\n")).not.toBe("");
   });
 
-  test("seq: DefaultsConfig", () => {
-    expect(rejected("defaults = []\n")).not.toBe("");
-  });
 
-  test("seq: BackgroundDefaultsConfig", () => {
-    expect(rejected("[defaults]\nbackground = []\n")).not.toBe("");
-  });
 
-  test("seq: AdvancedConfig", () => {
-    expect(rejected("advanced = []\n")).not.toBe("");
-  });
 
-  test("seq: LlmSidecarConfig", () => {
-    expect(rejected("[advanced]\nllm_sidecar = []\n")).not.toBe("");
-  });
 
-  test("seq: McpServerConfig", () => {
-    expect(rejected("[mcp]\ns = []\n")).not.toBe("");
-  });
 
-  test("seq: UsageBudgetConfig", () => {
-    expect(rejected("[usage]\nbudgets = [[]]\n")).not.toBe("");
-  });
+
+
+
+
+
+
 
   test("a required field missing from a positional sequence", () => {
     expect(rejected("[subagents]\nmusic = [\"d\"]\n")).not.toBe("");
@@ -1271,7 +1130,7 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
   });
 
   test("a bad type where a bool is expected", () => {
-    expect(rejected("[defaults]\nstream = \"yes\"\n")).not.toBe("");
+    expect(rejected("[memory.compaction]\nenabled = \"yes\"\n")).not.toBe("");
   });
 
   test("a bad type where a string is expected", () => {
@@ -1438,7 +1297,7 @@ describe("a per-tool limit", () => {
   });
 
   test("a zero deadline means no deadline, not an instant one", () => {
-    expect(timeoutFor(toolsOf("[tools]\ntimeout = 0\n"), "read")).toBeUndefined();
+    expect(timeoutFor(toolsOf("[tools]\ntimeout = \"0s\"\n"), "read")).toBeUndefined();
   });
 });
 
@@ -1479,18 +1338,16 @@ describe("tool_pattern_matches", () => {
 
 function defaultsFromJson(json: {
   model: string | null;
-  background: { model: string | null; heartbeat: string | null; compaction: string | null };
+  background: { heartbeat: string | null; compaction: string | null };
   embedding: string | null;
   image_generation: string | null;
   subagent_model: string | null;
   display_name: string | null;
-  stream: boolean;
 }): DefaultsConfig {
   const or = (v: string | null) => v ?? undefined;
   return {
     model: or(json.model),
     background: {
-      model: or(json.background.model),
       heartbeat: or(json.background.heartbeat),
       compaction: or(json.background.compaction),
     },
@@ -1498,7 +1355,6 @@ function defaultsFromJson(json: {
     image_generation: or(json.image_generation),
     subagent_model: or(json.subagent_model),
     display_name: or(json.display_name),
-    stream: json.stream,
   };
 }
 
@@ -1516,24 +1372,7 @@ describe("background model resolution", () => {
   }
 });
 
-describe("removed config keys", () => {
-  for (const c of REMOVED_KEYS) {
-    test(c.name, () => {
-      const outcome = parseAppConfig(parseToml(c.toml));
-      expect("err" in outcome ? outcome.err : null).toBe(c.err);
-    });
-  }
 
-  test("the message names the key that replaced it, not just the valid fields", () => {
-    const refused = REMOVED_KEYS.filter((c) => c.err !== null);
-    expect(refused.length).toBeGreaterThan(0);
-    for (const c of refused) {
-      expect(c.err).toContain("was removed");
-      expect(c.err).toContain("heartbeat.model");
-      expect(c.err).not.toContain("unknown field");
-    }
-  });
-});
 
 describe("resolve_display_name", () => {
   for (const c of DISPLAY_NAME) {
@@ -1634,9 +1473,7 @@ describe("parse_wire for replay_prior_thinking", () => {
     });
   }
 
-  test("the retired last_turn mode is accepted, not rejected", () => {
-    expect(parseThinkingReplay("last_turn")).toBe("all");
-  });
+
 });
 
 describe("mapKeysInOrder", () => {

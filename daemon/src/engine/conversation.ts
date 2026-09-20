@@ -41,7 +41,6 @@ export interface HistoryPageMetrics {
   rows_read: number;
   decoded_body_bytes: number;
   page_bytes: number;
-  storage_native: boolean;
 }
 
 export interface DisplayHistoryPage {
@@ -195,27 +194,6 @@ export class ConversationEngine {
     before: number | "active" | undefined,
     limit: HistoryPageLimit,
   ): Promise<DisplayHistoryPage> {
-    if (!this.#segments.supportsDisplayPaging()) {
-      const history = await this.displayHistory();
-      const end = historyEnd(before, history.activeStart, history.messages.length);
-      const start = historyPageStart(history.messages, end, limit);
-      const messages = history.messages.slice(start, end);
-      return {
-        messages,
-        activeStart: Math.max(Math.min(history.activeStart, end) - start, 0),
-        cursor: start,
-        globalActiveStart: history.activeStart,
-        totalTurns: countUserTurns(history.messages),
-        metrics: {
-          segments_read: this.#segments.segmentCount(),
-          rows_read: this.#segments.totalMessageCount(),
-          decoded_body_bytes: 0,
-          page_bytes: encodedMessageBytes(messages),
-          storage_native: false,
-        },
-      };
-    }
-
     const globalActiveStart = this.#segments.displayMessageCount();
     const active = mergeToolLoopMessages([...this.#messages.messages()]);
     const totalMessages = globalActiveStart + active.length;
@@ -242,7 +220,6 @@ export class ConversationEngine {
       metrics: {
         ...archivedSlice.metrics,
         page_bytes: encodedMessageBytes(messages),
-        storage_native: true,
       },
     };
   }
@@ -262,12 +239,6 @@ export class ConversationEngine {
       if (remaining === 0) return globalActiveStart + index;
     }
     return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), remaining);
-  }
-
-  async stampMessageVersions(versions: ReadonlyMap<string, string>): Promise<number> {
-    return await withConversation(this.#conversationDir, "update", async () => {
-      return await this.#messages.stampVersions(versions);
-    });
   }
 
   async appendMessage(msg: Message): Promise<void> {
@@ -464,22 +435,6 @@ function historyEnd(
 ): number {
   if (before === "active") return activeStart;
   return Math.min(before ?? total, total);
-}
-
-function historyPageStart(
-  messages: readonly Message[],
-  end: number,
-  limit: HistoryPageLimit,
-): number {
-  if (limit.kind === "count") return Math.max(0, end - limit.value);
-  if (limit.value === 0) return end;
-  let seen = 0;
-  for (let index = end - 1; index >= 0; index -= 1) {
-    if (requiredMessage(messages, index).role !== "user") continue;
-    seen += 1;
-    if (seen >= limit.value) return index;
-  }
-  return 0;
 }
 
 function countUserTurns(messages: readonly Message[]): number {

@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS usage_budget_warnings (
     UNIQUE (budget_name, period_start, threshold)
 );
 
+CREATE INDEX IF NOT EXISTS idx_calls_api_key ON calls (provider, api_key_name);
 CREATE INDEX IF NOT EXISTS idx_calls_ts        ON calls (ts);
 CREATE INDEX IF NOT EXISTS idx_calls_character ON calls (character);
 CREATE INDEX IF NOT EXISTS idx_calls_provider  ON calls (provider);
@@ -98,80 +99,6 @@ CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, st
 CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
     ON usage_budget_warnings (budget_name, period_start);
 `;
-
-const MIGRATIONS: readonly string[] = [
-  "ALTER TABLE calls ADD COLUMN cache_ttl TEXT DEFAULT '1h'",
-  "ALTER TABLE calls ADD COLUMN api_key_name TEXT",
-  "CREATE INDEX IF NOT EXISTS idx_calls_api_key ON calls (provider, api_key_name)",
-  "ALTER TABLE calls ADD COLUMN cost_source TEXT DEFAULT 'pricing_catalog'",
-  `UPDATE calls
-      SET cost_source = 'provider_reported'
-    WHERE total_cost IS NOT NULL
-      AND input_cost IS NULL
-      AND output_cost IS NULL
-      AND cache_read_cost IS NULL
-      AND cache_write_cost IS NULL`,
-  `CREATE TABLE IF NOT EXISTS usage_budget_warnings (
-      id             INTEGER PRIMARY KEY AUTOINCREMENT,
-      budget_name    TEXT NOT NULL,
-      period_start   TEXT NOT NULL,
-      threshold      TEXT NOT NULL,
-      created_at     TEXT NOT NULL,
-      UNIQUE (budget_name, period_start, threshold)
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
-      ON usage_budget_warnings (budget_name, period_start)`,
-  "ALTER TABLE calls ADD COLUMN reasoning_effort TEXT",
-  "ALTER TABLE calls ADD COLUMN tool_surface TEXT",
-  `CREATE TABLE IF NOT EXISTS call_attempts (
-      id TEXT PRIMARY KEY,
-      started_at TEXT NOT NULL,
-      finished_at TEXT,
-      status TEXT NOT NULL,
-      character TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      api_key_name TEXT,
-      model TEXT NOT NULL,
-      call_type TEXT NOT NULL,
-      estimated_cost REAL,
-      call_id INTEGER,
-      error TEXT,
-      FOREIGN KEY (call_id) REFERENCES calls(id)
-  )`,
-  "CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)",
-  "ALTER TABLE calls ADD COLUMN output_tokens_estimated INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE calls ADD COLUMN thinking_dropped INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE calls ADD COLUMN cache_state_reason TEXT",
-];
-
-function migrate(db: Database): void {
-  for (const statement of MIGRATIONS) {
-    try {
-      db.run(statement);
-    } catch (e) {
-      if (!String(e).includes("duplicate column")) throw e;
-    }
-  }
-}
-
-function migrateCallAttempts(db: Database): void {
-  db.run(`CREATE TABLE IF NOT EXISTS call_attempts (
-    id TEXT PRIMARY KEY,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    status TEXT NOT NULL,
-    character TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    api_key_name TEXT,
-    model TEXT NOT NULL,
-    call_type TEXT NOT NULL,
-    estimated_cost REAL,
-    call_id INTEGER,
-    error TEXT,
-    FOREIGN KEY (call_id) REFERENCES calls(id)
-  )`);
-  db.run("CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)");
-}
 
 let subscriptionProviders = new Set(["opencode-go", "opencode"]);
 let characterSubscriptionProviders = new Map<string, Set<string>>();
@@ -348,7 +275,6 @@ export class Ledger {
     db.run("PRAGMA busy_timeout = 5000;");
     db.run("PRAGMA journal_mode = WAL;");
     db.run(SCHEMA);
-    migrate(db);
     if (recoverPending) db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
   }
@@ -363,8 +289,6 @@ export class Ledger {
       db.close();
       throw new Error(`${path} has no 'calls' table — the daemon owns the schema and creates it`);
     }
-    migrateCallAttempts(db);
-    db.run(PRICING_CATALOG_SCHEMA);
     return new Ledger(db, pricing);
   }
 

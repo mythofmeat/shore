@@ -28,7 +28,7 @@ def environment(root):
 
 
 def message(text):
-    return {"msg_id": "stable-message-id", "role": "assistant", "content": text, "timestamp": "2026-09-10T00:00:00Z"}
+    return {"msg_id": "stable-message-id", "role": "assistant", "content": text, "content_blocks": [{"type": "text", "text": text}], "timestamp": "2026-09-10T00:00:00Z"}
 
 
 def terminal_frame(rid, text):
@@ -132,8 +132,7 @@ class ReliabilityFlows(unittest.TestCase):
     def test_offline_startup_recovers_the_requested_conversation(self):
         with tempfile.TemporaryDirectory() as root:
             drafts = Path(root) / "data" / "drafts"
-            drafts.mkdir(parents=True)
-            (drafts / "current.md").write_text("DRAFT_BEFORE_CONNECT")
+            self.offline_tui(root, b"DRAFT_BEFORE_CONNECT")
             frames = self.offline_tui(root)
             self.assertIn("DRAFT_BEFORE_CONNECT", frames)
             saved = [json.loads(path.read_text()) for path in drafts.glob("*/*.json")]

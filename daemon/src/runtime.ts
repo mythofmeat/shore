@@ -1,6 +1,5 @@
 import { closeStorageConnections } from "./storage/store.ts";
-import { preparePersistentStorage } from "./storage/prepare.ts";
-import { migrateDatabases } from "./storage/migrate.ts";
+import { initializeDatabase } from "./storage/database.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
 import { shoreLog } from "./log.ts";
 
@@ -104,8 +103,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     loadConfig(options.configPath, options.env === undefined ? {} : { env: options.env });
 
   createRuntimeDirs(config);
-  migrateDatabases(config.dirs);
-  await preparePersistentStorage(config.dirs);
+  initializeDatabase(config.dirs.data);
 
   const notifier = new NotificationService(config.app.notifications);
   const snapshotGate = new SnapshotGate();

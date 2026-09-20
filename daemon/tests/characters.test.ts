@@ -1,11 +1,7 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
+import { writeDurable, durableExists } from "../src/storage/files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -68,21 +64,8 @@ function makeRoot(): string {
 
 function writeCharacter(configDir: string, name: string, soul: boolean): void {
   const dir = join(configDir, "characters", name);
-  if (soul) {
-    mkdirSync(join(dir, "workspace"), { recursive: true });
-    writeFileSync(join(dir, "workspace", "SOUL.md"), `${name} soul`);
-  } else {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "character.md"), `${name} legacy`);
-  }
-}
-
-function isDir(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
+  mkdirSync(join(dir, "workspace"), { recursive: true });
+  writeFileSync(join(dir, "workspace", "SOUL.md"), `${name} ${soul ? "soul" : "legacy"}`);
 }
 
 function snapshotsOnDisk(dataDir: string): string[] {
@@ -93,7 +76,7 @@ function snapshotsOnDisk(dataDir: string): string[] {
     return [];
   }
   return entries
-    .filter((name) => isDir(join(dataDir, name, "active_prompt")))
+    .filter((name) => durableExists(join(dataDir, name, "active_prompt", ".snapshot")))
     .sort(compareByCodePoint);
 }
 
@@ -114,7 +97,6 @@ function withResolvedSoulPath(result: unknown, configDir: string): unknown {
 
 function configMarks(config: LoadedConfig): unknown {
   return {
-    stream: config.app.defaults.stream,
     display_name: config.app.defaults.display_name ?? null,
     addr: config.app.daemon.addr,
   };
@@ -350,7 +332,7 @@ test("registration prepares the character workspace", async () => {
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeFileSync(join(configDir, "config.toml"), "\n");
   writeCharacter(configDir, "Alice", true);
   mkdirSync(dataDir, { recursive: true });
 
@@ -365,10 +347,10 @@ test("a character whose workspace cannot be prepared is warned about, not fatal"
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   mkdirSync(join(configDir, "characters", "Blocked"), { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeFileSync(join(configDir, "config.toml"), "\n");
   writeCharacter(configDir, "Alice", true);
-  writeFileSync(join(configDir, "characters", "Blocked", "character.md"), "Blocked legacy");
-  writeFileSync(join(configDir, "characters", "Blocked", "workspace"), "not a directory");
+  writeCharacter(configDir, "Blocked", true);
+  writeFileSync(join(configDir, "characters", "Blocked", "workspace", "memory"), "not a directory");
   mkdirSync(dataDir, { recursive: true });
 
   const registry = await CharacterRegistry.create(
@@ -386,22 +368,21 @@ test("a snapshot left behind on an empty conversation is dropped at registration
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeFileSync(join(configDir, "config.toml"), "\n");
   writeCharacter(configDir, "Alice", true);
   writeCharacter(configDir, "Bob", true);
   for (const name of ["Alice", "Bob"]) {
-    mkdirSync(join(dataDir, name, "active_prompt"), { recursive: true });
-    writeFileSync(join(dataDir, name, "active_prompt", "MEMORY.md"), "stale index\n");
-    writeFileSync(join(dataDir, name, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
+    writePromptSnapshotFile(join(dataDir, name, "active_prompt", "MEMORY.md"), "stale index\n");
+    writeDurable(join(dataDir, name, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
   }
   mkdirSync(join(dataDir, "Bob", "threads", "main"), { recursive: true });
-  writeFileSync(join(dataDir, "Bob", "threads", "main", "active.jsonl"), '{"msg_id":"u1","role":"user"}\n');
+  writeDurable(join(dataDir, "Bob", "threads", "main", "active.jsonl"), '{"msg_id":"u1","role":"user"}\n');
 
   await CharacterRegistry.create(configDir, dataDir, loadFrom(join(configDir, "config.toml")));
 
   expect(snapshotsOnDisk(dataDir)).toEqual(["Bob"]);
-  expect(existsSync(join(dataDir, "Alice", "deferred_edits.jsonl"))).toBe(false);
-  expect(existsSync(join(dataDir, "Bob", "deferred_edits.jsonl"))).toBe(true);
+  expect(durableExists(join(dataDir, "Alice", "deferred_edits.jsonl"))).toBe(false);
+  expect(durableExists(join(dataDir, "Bob", "deferred_edits.jsonl"))).toBe(true);
 });
 
 test("concurrent first loads of one character resolve to the same engine", async () => {
@@ -409,7 +390,7 @@ test("concurrent first loads of one character resolve to the same engine", async
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeFileSync(join(configDir, "config.toml"), "\n");
   writeCharacter(configDir, "Alice", true);
   mkdirSync(join(dataDir, "Alice", "threads", "main"), { recursive: true });
 
@@ -434,12 +415,10 @@ test("opening a character seals tool calls interrupted by a daemon restart", asy
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeFileSync(join(configDir, "config.toml"), "\n");
   writeCharacter(configDir, "Alice", true);
   mkdirSync(join(dataDir, "Alice", "threads", "main"), { recursive: true });
-  writeFileSync(
-    join(dataDir, "Alice", "threads", "main", "active.jsonl"),
-    [
+  writeDurable(join(dataDir, "Alice", "threads", "main", "active.jsonl"), [
       {
         msg_id: "u1",
         role: "user",
@@ -452,8 +431,7 @@ test("opening a character seals tool calls interrupted by a daemon restart", asy
         content_blocks: [{ type: "tool_use", id: "t1", name: "read_file", input: {} }],
         timestamp: "2026-08-28T00:01:00Z",
       },
-    ].map((message) => JSON.stringify(message)).join("\n") + "\n",
-  );
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n");
 
   const registry = await CharacterRegistry.create(
     configDir,
@@ -476,11 +454,11 @@ test("an invalid character overlay fails closed with the rejected field", async 
   const dataDir = join(root, "data");
   mkdirSync(join(configDir, "characters", "Alice", "workspace"), { recursive: true });
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(join(configDir, "config.toml"), "[defaults]\ndisplay_name = \"GLOBAL\"\n");
+  writeFileSync(join(configDir, "config.toml"), "[chat]\ndisplay_name = \"GLOBAL\"\n");
   writeFileSync(join(configDir, "characters", "Alice", "workspace", "SOUL.md"), "Alice");
   writeFileSync(
     join(configDir, "characters", "Alice", "config.toml"),
-    "[behavior.autonomy]\ncache_keepalive_max = \"20h\"\n",
+    '[heartbeat]\ninvalid_setting = true\n',
   );
 
   const registry = await CharacterRegistry.create(
@@ -491,7 +469,7 @@ test("an invalid character overlay fails closed with the rejected field", async 
 
   expect(() => registry.effectiveConfig("Alice")).toThrow(CharacterConfigError);
   expect(() => registry.effectiveConfig("Alice")).toThrow(
-    `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`cache_keepalive_max\`, expected \`enabled\` or \`heartbeat\``,
+    `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`heartbeat.invalid_setting\``,
   );
 });
 
@@ -502,7 +480,7 @@ describe("the character a bare command lands on", () => {
     const dataDir = join(root, "data");
     mkdirSync(configDir, { recursive: true });
     mkdirSync(dataDir, { recursive: true });
-    writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+    writeFileSync(join(configDir, "config.toml"), "\n");
     for (const name of names) writeCharacter(configDir, name, true);
     return await CharacterRegistry.create(
       configDir,

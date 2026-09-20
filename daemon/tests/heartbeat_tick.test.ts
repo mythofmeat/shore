@@ -1,7 +1,9 @@
+import { Ledger } from "../src/ledger/store.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { copyFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -20,7 +22,7 @@ import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { BudgetBlocked } from "../src/llm/generate.ts";
-import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const cleanups: Array<() => void> = [];
@@ -78,10 +80,7 @@ async function world(
 
   const characterDir = join(dirs.data, "ada");
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
-  );
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"));
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
@@ -492,15 +491,15 @@ describe("running a tick", () => {
   test("the real gate pauses the tick, because the body is tagged as a heartbeat", async () => {
     setSystemTime(new Date("2026-08-31T12:00:00.000Z"));
     const config = await world();
-    const f = freshLedger();
-    cleanups.push(f.cleanup);
-    const db = openLedger(f.path);
+    const ledgerPath = join(config.dirs.data, "shore.db");
+    Ledger.create(ledgerPath).close();
+    const db = openLedger(ledgerPath);
     db.query(
       `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
          total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
        VALUES (?1, 'ada', 'anthropic', 'default', 'claude-fixture', 'message',
-         10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 9.0)`,
+         10, 5, 0, 0, 100, 10, 'end_turn', 1, 'provider_reported', 9.0)`,
     ).run(new Date().toISOString());
     db.close();
 
@@ -515,7 +514,7 @@ describe("running a tick", () => {
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
         max_tokens: 128,
         context: {
-          ledger: f.path,
+          ledger: ledgerPath,
           character: "ada",
           call_type: "message",
           api_key_name: "default",
@@ -538,7 +537,6 @@ describe("running a tick", () => {
       undefined,
     );
 
-    await copyFile(f.path, join(config.dirs.data, "shore.db"));
     config.app.usage.timezone = "utc";
     config.app.usage.budgets = [{
       name: "monthly",

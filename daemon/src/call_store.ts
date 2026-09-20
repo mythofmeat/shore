@@ -1,4 +1,3 @@
-import { renameLegacyCaptureTables } from "./storage/legacy_schema.ts";
 import { required } from "./util/required.ts";
 
 import { Database } from "bun:sqlite";
@@ -30,8 +29,8 @@ CREATE TABLE IF NOT EXISTS capture_calls (
     cache_write_tokens INTEGER,
     duration_ms        INTEGER,
     error             TEXT,
-    request_zstd      BLOB,
-    response_zstd     BLOB
+    request_payload_id INTEGER,
+    response_payload_id INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_capture_calls_ts ON capture_calls (ts_unix);
 CREATE INDEX IF NOT EXISTS idx_capture_calls_type ON capture_calls (call_type, ts_unix);
@@ -71,9 +70,9 @@ CREATE TABLE IF NOT EXISTS capture_http_calls (
     duration_ms           INTEGER,
     error                 TEXT,
     request_headers_zstd  BLOB,
-    request_body_zstd     BLOB,
+    request_payload_id    INTEGER,
     response_headers_zstd BLOB,
-    response_body_zstd    BLOB
+    response_payload_id   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_capture_http_calls_call ON capture_http_calls (call_id, seq);
 CREATE INDEX IF NOT EXISTS idx_capture_http_calls_ts ON capture_http_calls (ts_unix);
@@ -269,12 +268,10 @@ export class CallStore {
 
   private constructor(db: Database) {
     this.#db = db;
-    renameLegacyCaptureTables(db);
     db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
     db.run(SCHEMA);
-    migrate(db);
     db.run(
       `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source
            ON capture_transcripts (source, character, ts_unix);`,
@@ -547,8 +544,8 @@ export class CallStore {
       .query(
         `SELECT id, call_id, seq, ts, character, call_type, rid, method, url,
                 status, status_text, duration_ms, error,
-                request_headers_zstd, request_body_zstd, request_payload_id,
-                response_headers_zstd, response_body_zstd, response_payload_id,
+                request_headers_zstd, request_payload_id,
+                response_headers_zstd, response_payload_id,
                 (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
                 (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size
          FROM capture_http_calls WHERE call_id = ?1 ORDER BY seq`,
@@ -569,11 +566,11 @@ export class CallStore {
       duration_ms: optCount(row["duration_ms"]),
       error: optText(row["error"]),
       request_headers: headersFrom(row["request_headers_zstd"]),
-      request_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),
+      request_body: this.#bodyText(row["request_payload_id"]),
       response_headers: headersFrom(row["response_headers_zstd"]),
-      response_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),
-      request_bytes: uncompressedBytes(row["request_size"], row["request_body_zstd"]),
-      response_bytes: uncompressedBytes(row["response_size"], row["response_body_zstd"]),
+      response_body: this.#bodyText(row["response_payload_id"]),
+      request_bytes: count(row["request_size"]),
+      response_bytes: count(row["response_size"]),
     }));
   }
 
@@ -611,8 +608,7 @@ export class CallStore {
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, duration_ms, error,
                 (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
-                (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size,
-                request_zstd, response_zstd
+                (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size
          FROM capture_calls
          WHERE (?1 IS NULL OR call_type = ?1)
            AND (?2 IS NULL OR character = ?2)
@@ -631,7 +627,6 @@ export class CallStore {
                 cache_write_tokens, duration_ms, error,
                 (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
                 (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size,
-                request_zstd, response_zstd,
                 request_payload_id, response_payload_id
          FROM capture_calls WHERE id = ?1`,
       )
@@ -639,17 +634,17 @@ export class CallStore {
     if (row === null) return null;
     return {
       ...rowToSummary(row),
-      request: this.#bodyText(row["request_payload_id"], row["request_zstd"]),
-      response: this.#bodyText(row["response_payload_id"], row["response_zstd"]),
+      request: this.#bodyText(row["request_payload_id"]),
+      response: this.#bodyText(row["response_payload_id"]),
     };
   }
 
-  #bodyText(payloadId: unknown, legacy: unknown): string | null {
+  #bodyText(payloadId: unknown): string | null {
     if (typeof payloadId === "number") {
       const bytes = this.loadPayload(payloadId);
       if (bytes !== null) return new TextDecoder("utf-8").decode(bytes);
     }
-    return blobToText(legacy);
+    return null;
   }
 
   queryTranscripts(source: string, character: string | null | undefined, limit: number): TranscriptRow[] {
@@ -719,8 +714,8 @@ export class CallStore {
       `DELETE FROM capture_calls WHERE id IN (
            SELECT id FROM (
                SELECT id,
-                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)
-                          + COALESCE(response_stored, LENGTH(response_zstd), 0)
+                      SUM(COALESCE(request_stored, 0)
+                          + COALESCE(response_stored, 0)
                           + COALESCE(wire.bytes, 0))
                           OVER (ORDER BY ts_unix DESC, id DESC
                                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running
@@ -737,11 +732,9 @@ export class CallStore {
                           SUM(COALESCE(LENGTH(request_headers_zstd), 0)
                               + COALESCE(LENGTH(response_headers_zstd), 0)
                               + COALESCE(
-                                  (SELECT stored FROM capture_payloads WHERE id = request_payload_id),
-                                  LENGTH(request_body_zstd), 0)
+                                  (SELECT stored FROM capture_payloads WHERE id = request_payload_id), 0)
                               + COALESCE(
-                                  (SELECT stored FROM capture_payloads WHERE id = response_payload_id),
-                                  LENGTH(response_body_zstd), 0)) AS bytes
+                                  (SELECT stored FROM capture_payloads WHERE id = response_payload_id), 0)) AS bytes
                    FROM capture_http_calls GROUP BY call_id
                ) AS wire ON wire.call_id = capture_calls.call_id
            )
@@ -826,15 +819,9 @@ function rowToSummary(row: Row): CallSummary {
     usage: usageFrom(row),
     duration_ms: optCount(row["duration_ms"]),
     error: optText(row["error"]),
-    request_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),
-    response_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),
+    request_bytes: count(row["request_size"]),
+    response_bytes: count(row["response_size"]),
   };
-}
-
-function uncompressedBytes(size: unknown, legacy: unknown): number {
-  if (typeof size === "number") return size;
-  if (!(legacy instanceof Uint8Array)) return 0;
-  return zstdDecompressSync(legacy).byteLength;
 }
 
 function usageFrom(row: Row): Usage {
@@ -1045,38 +1032,4 @@ function count(v: unknown): number {
 
 function optCount(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? Math.max(v, 0) : null;
-}
-
-function migrate(db: Database): void {
-  addIntegerColumns(db, [
-    ["capture_calls", "request_payload_id"],
-    ["capture_calls", "response_payload_id"],
-    ["capture_http_calls", "request_payload_id"],
-    ["capture_http_calls", "response_payload_id"],
-  ]);
-
-  if (!columnExists(db, "capture_transcripts", "character")) {
-    db.run(
-      `DROP INDEX IF EXISTS idx_capture_transcripts_source;
-       ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,
-    );
-  }
-
-  addIntegerColumns(db, [
-    ["capture_calls", "cache_write_tokens"],
-    ["capture_transcripts", "cache_write_tokens"],
-  ]);
-}
-
-function addIntegerColumns(db: Database, columns: readonly (readonly [string, string])[]): void {
-  for (const [table, column] of columns) {
-    if (!columnExists(db, table, column)) {
-      db.run(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
-    }
-  }
-}
-
-function columnExists(db: Database, table: string, column: string): boolean {
-  const rows = db.query(`PRAGMA table_info(${table})`).all() as Row[];
-  return rows.some((row) => row["name"] === column);
 }

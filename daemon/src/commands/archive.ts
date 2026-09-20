@@ -17,16 +17,11 @@ import {
 } from "../config/dirs.ts";
 import { invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
-import {
-  importHistoryDatabase,
-  importLedgerDatabase,
-  removeCharacterDatabaseRows,
-} from "./archive_databases.ts";
 
 const FORMAT = "shore-character";
 const VERSION = 2;
 const MAX_EXTRACTED_BYTES = 4 * 1024 * 1024 * 1024 * 1024;
-const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "history.db", "ledger.db", "shore.db", "media"]);
+const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "shore.db", "media"]);
 
 export interface ArchiveContext {
   readonly dirs: ShoreDirs;
@@ -38,8 +33,8 @@ export interface ArchiveContext {
 
 interface Manifest {
   format: typeof FORMAT;
-  version: 1 | 2;
-  source_data?: string;
+  version: typeof VERSION;
+  source_data: string;
   character: string;
   created_at: string;
   contents: {
@@ -151,15 +146,10 @@ export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<
   }
 
   const historyPath = databasePath(ctx.dirs.data);
-  const ledgerPath = databasePath(ctx.dirs.data);
   await ctx.withSnapshot(async () => {
     await ctx.releaseCharacter(character);
     for (const path of present) await rm(path, { recursive: true, force: true });
     if (await exists(historyPath)) removeStoredCharacter(historyPath, character);
-    removeCharacterDatabaseRows(historyPath, ledgerPath, character, {
-      history: await exists(historyPath),
-      ledger: await exists(ledgerPath),
-    });
     await ctx.refreshDiscovery();
   });
 
@@ -276,7 +266,7 @@ async function readManifest(stage: string): Promise<Manifest> {
   } catch (error) {
     throw invalidRequest(`Not a readable Shore character archive: ${String(error)}`);
   }
-  if (!isRecord(value) || value["format"] !== FORMAT || (value["version"] !== 1 && value["version"] !== VERSION)) {
+  if (!isRecord(value) || value["format"] !== FORMAT || value["version"] !== VERSION) {
     throw invalidRequest("Unsupported or malformed Shore character archive");
   }
   const character = value["character"];
@@ -286,10 +276,10 @@ async function readManifest(stage: string): Promise<Manifest> {
   if (!await exists(join(stage, "workspace", SOUL_FILE))) {
     throw invalidRequest(`Archive has no workspace/${SOUL_FILE}`);
   }
-  for (const file of value["version"] === 1 ? ["history.db", "ledger.db"] : ["shore.db"]) {
+  for (const file of ["shore.db"]) {
     if (!await exists(join(stage, file))) throw invalidRequest(`Archive has no ${file}`);
   }
-  if (value["version"] === 2 && (typeof value["source_data"] !== "string" || !isAbsolute(value["source_data"]))) {
+  if (typeof value["source_data"] !== "string" || !isAbsolute(value["source_data"])) {
     throw invalidRequest("Archive has an invalid source data directory");
   }
   return value as unknown as Manifest;
@@ -307,9 +297,8 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
   }
 
   const historyPath = databasePath(ctx.dirs.data);
-  const ledgerPath = databasePath(ctx.dirs.data);
   const created: string[] = [];
-  const imported = { history: false, ledger: false };
+  let imported = false;
   try {
     await mkdir(dirname(configTarget), { recursive: true });
     if (await hasEntries(join(stage, "config"))) {
@@ -326,29 +315,20 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     await cp(join(stage, "data"), dataTarget, copyOptions());
     created.push(dataTarget);
 
-    if (await exists(join(stage, "shore.db"))) {
-      const manifest = await readManifest(stage);
-      importUnifiedDatabase(historyPath, join(stage, "shore.db"), character, manifest.source_data, ctx.dirs.data);
-      imported.history = true;
-      imported.ledger = true;
-      const media = characterMediaDir(ctx.dirs.data, character);
-      if (await exists(join(stage, "media"))) {
-        await mkdir(dirname(media), { recursive: true });
-        await cp(join(stage, "media"), media, copyOptions());
-        created.push(media);
-      }
-    } else {
-      importHistoryDatabase(historyPath, join(stage, "history.db"), character);
-      imported.history = true;
-      importLedgerDatabase(ledgerPath, join(stage, "ledger.db"), character);
-      imported.ledger = true;
+    const manifest = await readManifest(stage);
+    importUnifiedDatabase(historyPath, join(stage, "shore.db"), character, manifest.source_data, ctx.dirs.data);
+    imported = true;
+    const media = characterMediaDir(ctx.dirs.data, character);
+    if (await exists(join(stage, "media"))) {
+      await mkdir(dirname(media), { recursive: true });
+      await cp(join(stage, "media"), media, copyOptions());
+      created.push(media);
     }
     await ctx.refreshDiscovery();
   } catch (error) {
-    if (imported.history || imported.ledger) {
+    if (imported) {
       try {
         removeStoredCharacter(historyPath, character);
-        removeCharacterDatabaseRows(historyPath, ledgerPath, character, imported);
       } catch {}
     }
     for (const path of [...created].reverse()) await rm(path, { recursive: true, force: true });

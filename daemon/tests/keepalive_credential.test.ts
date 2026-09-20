@@ -20,8 +20,7 @@ const LIVE_KEY = "sk-ant-live";
 const T0 = Date.UTC(2026, 7, 8, 12, 0, 0);
 
 const CHAT_TOML = `
-[anthropic.main]
-model_id = "claude-opus-4-6"
+["anthropic:claude-opus-4-6"]
 cache_keepalive = "55m"
 `;
 
@@ -93,7 +92,7 @@ function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined }
     undefined,
     undefined,
   );
-  const model = catalog.chat.get("chat.anthropic.main");
+  const model = catalog.chat.get("anthropic:claude-opus-4-6");
   if (model === undefined) throw new Error("the fixture catalog lost its model");
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "", {

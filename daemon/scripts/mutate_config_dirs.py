@@ -66,39 +66,11 @@ MUTANTS = [
      'return rustJoin(base, "shore");', 'return base;'),
     # --- discovery --------------------------------------------------------
     (DIRS, "discoverCharacters: sort in UTF-16 order",
-     "  return [...names].sort(compareByCodePoint);",
-     "  return [...names].sort();"),
+     "  ).sort(compareByCodePoint);",
+     "  ).sort();"),
     (DIRS, "discoverCharacters: do not sort at all",
-     "  return [...names].sort(compareByCodePoint);",
-     "  return [...names];"),
-    (DIRS, "discoverCharacters: require both SOUL.md and the legacy file",
-     "      (workspaceDir === undefined &&\n"
-     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||\n"
-     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))",
-     "      (workspaceDir === undefined &&\n"
-     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) &&\n"
-     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))"),
-    (DIRS, "discoverCharacters: drop the legacy character.md branch",
-     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))",
-     "      false"),
-    (DIRS, "discoverCharacters: the config tree is searched even when a workspace root is given",
-     "      (workspaceDir === undefined &&\n"
-     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||",
-     "      pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||"),
-    (DIRS, "discoverCharacters: the workspace root is never searched",
-     "    for (const name of readdirOrEmpty(workspaceDir)) {",
-     "    for (const name of [] as string[]) {"),
-    (DIRS, "loadCharacterDefinition: legacy wins over SOUL.md",
-     "    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)) ??\n"
-     "    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))",
-     "    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE)) ??\n"
-     "    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir))"),
-    (DIRS, "loadCharacterDefinition: blank SOUL.md falls through to legacy",
-     "  return (\n    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)) ??",
-     "  return (\n    (readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)) ||\n"
-     "      undefined) ??"),
-    (DIRS, "resolveUserDefinition: drop the legacy user.md fallback",
-     'readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_USER_FILE))', 'undefined'),
+     "  ).sort(compareByCodePoint);",
+     "  );"),
     (DIRS, "resolvePromptTemplate: global wins over the character override",
      'return (\n    readOrUndefined(\n      rustJoin(characterConfigDir(config, characterName), "prompts", templateName),\n    ) ?? readOrUndefined(rustJoin(config, "prompts", templateName))\n  );',
      'return (\n    readOrUndefined(rustJoin(config, "prompts", templateName)) ??\n    readOrUndefined(\n      rustJoin(characterConfigDir(config, characterName), "prompts", templateName),\n    )\n  );'),

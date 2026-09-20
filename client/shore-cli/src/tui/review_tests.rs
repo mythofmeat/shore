@@ -9,7 +9,7 @@ fn history(thread: &str, rid: Option<&str>, text: &str) -> ServerMessage {
     frame(
         json!({"type":"history", "rid":rid, "selected_character":"ada",
         "selected_thread":thread, "messages":[{"msg_id":"reply", "role":"assistant",
-        "content":text, "timestamp":""}], "config":{}, "revision":2}),
+        "content":text, "content_blocks":[{"type":"text","text":text}], "timestamp":""}], "config":{}, "revision":2}),
     )
 }
 

@@ -263,7 +263,7 @@ async function runGenerationCore(
     config.dirs.cache,
   );
 
-  const incomingImages = body.images.length + body.image_data.length;
+  const incomingImages = body.image_data.length;
   if (imageSupport === false && incomingImages > 0 && !regen) {
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }

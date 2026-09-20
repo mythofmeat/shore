@@ -1,5 +1,6 @@
-import { readdir } from "./support/stored_files.ts";
-import { readFile } from "./support/stored_files.ts";
+
+
+
 import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 
 import rawFixture from "./memory_captures/compaction_assembly.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
-import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
+
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 import { resolvePromptTemplate } from "../src/config/dirs.ts";
 import { defaultAppConfig, defaultCompactionConfig, resolveDisplayName } from "../src/config/app.ts";
@@ -21,8 +22,6 @@ import { findEffectiveModel } from "../src/config/effective_catalog.ts";
 import { InvalidArgs, ToolIoError } from "../src/tools/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 
-const STAMP = "2026-01-01T00:00:00-05:00";
-const NEW_ID = "11111111-2222-4333-8444-555555555555";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -39,108 +38,6 @@ const FIXTURE_MODEL = {
 
 async function tempRoot(): Promise<string> {
   return await mkdtemp(testTmp("shore-compaction-"));
-}
-
-function msgIds(content: string): string[] {
-  return content
-    .split("\n")
-    .filter((l) => l !== "")
-    .map((l) => {
-      try {
-        return (JSON.parse(l) as { msg_id?: string }).msg_id ?? l;
-      } catch {
-        return l;
-      }
-    });
-}
-
-describe("archiveAndRetain", () => {
-  for (const c of fixture.archive_and_retain) {
-    test(c.name, async () => {
-      const input = c.input as Record<string, unknown>;
-      const out = c.output as Record<string, unknown>;
-      const root = await tempRoot();
-      const characterDir = join(root, "ada");
-      await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-
-      await writeFile(
-        join(characterDir, "threads", "main", "active.jsonl"),
-        input["on_disk_differs"] === true
-          ? `${input["active_content"] as string}${extraLine()}`
-          : (input["active_content"] as string),
-      );
-      if (input["existing_manifest"] !== null) {
-        await writeFile(
-          join(characterDir, "threads", "main", "compaction.json"),
-          JSON.stringify(input["existing_manifest"], null, 2),
-        );
-      }
-
-      const id = await archiveAndRetain(
-        join(characterDir, "threads", "main"),
-        input["keep_last_n"] as number,
-        input["active_content"] as string,
-        () => STAMP,
-        () => NEW_ID,
-      );
-
-      expect(out["ok"]).toBe(true);
-      expect(out["returns_uuid"]).toBe(true);
-      expect(id).toBe(NEW_ID);
-
-      const segmentsDir = join(characterDir, "threads", "main", "segments");
-      let files: string[] = [];
-      try {
-        files = (await readdir(segmentsDir)).sort();
-      } catch {
-        files = [];
-      }
-      const segments = await Promise.all(
-        files.map(async (file) => ({
-          file,
-          lines: msgIds(await readFile(join(segmentsDir, file), "utf8")),
-        })),
-      );
-      expect(segments).toEqual(out["segments"] as { file: string; lines: string[] }[]);
-
-      const manifestRaw = await readFile(join(characterDir, "threads", "main", "compaction.json"), "utf8").catch(
-        () => undefined,
-      );
-      const manifest =
-        manifestRaw === undefined ? null : normaliseStamps(JSON.parse(manifestRaw) as unknown);
-      expect(manifest).toEqual(out["manifest"] ?? null);
-
-      const raw = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
-      expect(msgIds(raw)).toEqual(out["retained"] as string[]);
-      expect(raw).toBe(out["retained_raw"] as string);
-    });
-  }
-});
-
-function extraLine(): string {
-  return (
-    JSON.stringify({
-      msg_id: "m_4",
-      role: "user",
-      content: "arrived late",
-      images: [],
-      content_blocks: [{ type: "text", text: "arrived late" }],
-      timestamp: "2026-01-01T10:00:00-05:00",
-    }) + "\n"
-  );
-}
-
-function normaliseStamps(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(normaliseStamps);
-  if (v !== null && typeof v === "object") {
-    return Object.fromEntries(
-      Object.entries(v).map(([k, val]) => [
-        k,
-        k === "compacted_at" ? "<stamp>" : normaliseStamps(val),
-      ]),
-    );
-  }
-  return v;
 }
 
 describe("resolveCompactionDeps", () => {

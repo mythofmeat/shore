@@ -3,8 +3,6 @@ import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
 
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 
 import { rustTrim } from "../memory/lines.ts";
 import {
@@ -31,13 +29,6 @@ export class InvalidAlt extends Error {
   }
 }
 
-export class JsonParseError extends Error {
-  constructor(path: string, cause: string) {
-    super(`failed to parse ${path}: ${cause}`);
-    this.name = "JsonParseError";
-  }
-}
-
 export interface PendingAlt {
   alternatives: MessageAlternative[];
 }
@@ -48,32 +39,6 @@ export interface AltSelection {
   alt_count: number;
   content: string;
 }
-
-export interface MessageStoreIo {
-  backup(path: string): Promise<void>;
-  mkdir(path: string): Promise<void>;
-  writeFile(path: string, contents: string): Promise<void>;
-  rename(from: string, to: string): Promise<void>;
-  remove(path: string): Promise<void>;
-  tempPath(dir: string): string;
-}
-
-const messageStoreIo: MessageStoreIo = {
-  backup: async (path) => {
-    await backupBeforeWrite(path);
-  },
-  mkdir: async (path) => {
-    await mkdir(path, { recursive: true });
-  },
-  writeFile: async (path, contents) => {
-    await writeFile(path, contents, "utf8");
-  },
-  rename,
-  remove: async (path) => {
-    await rm(path, { force: true });
-  },
-  tempPath: (dir) => join(dir, `.${crypto.randomUUID()}.tmp`),
-};
 
 function versioned(msg: Message): Message {
   return versionOf(msg) === undefined ? { ...msg, version: newMessageVersion() } : msg;
@@ -130,16 +95,8 @@ export function deriveContentFromBlocks(
 export function normalizeMessage(msg: Message): Message {
   const m: Message = {
     ...msg,
-    content: msg.content ?? "",
-    images: msg.images ?? [],
-    content_blocks: msg.content_blocks ?? [],
+    content: deriveContentFromBlocks(msg.content_blocks, true),
   };
-
-  if (m.content_blocks.length === 0 && m.content !== "") {
-    m.content_blocks = [{ type: "text", text: m.content }];
-  } else if (m.content_blocks.length > 0) {
-    m.content = deriveContentFromBlocks(m.content_blocks, true);
-  }
 
   if (m.alternatives !== undefined && m.alternatives.length > 0) {
     m.alternatives = m.alternatives.map(normalizeAlternative);
@@ -151,18 +108,10 @@ export function normalizeMessage(msg: Message): Message {
 }
 
 function normalizeAlternative(alt: MessageAlternative): MessageAlternative {
-  const a: MessageAlternative = {
+  return {
     ...alt,
-    content: alt.content ?? "",
-    images: alt.images ?? [],
-    content_blocks: alt.content_blocks ?? [],
+    content: deriveContentFromBlocks(alt.content_blocks, true),
   };
-  if (a.content_blocks.length === 0 && a.content !== "") {
-    a.content_blocks = [{ type: "text", text: a.content }];
-  } else if (a.content_blocks.length > 0) {
-    a.content = deriveContentFromBlocks(a.content_blocks, true);
-  }
-  return a;
 }
 
 const stripImageData = (images: ImageRef[] | undefined): ImageRef[] | undefined =>
@@ -346,39 +295,36 @@ export class MessageStore {
   #messages: Message[];
   readonly #path: string;
   readonly #file: DurableFile;
-  readonly #io: MessageStoreIo;
   #mutationTail: Promise<void> = Promise.resolve();
   #quarantined = 0;
   #repairRows = false;
   #altDefects: readonly AlternativeDefect[] = [];
 
-  private constructor(path: DurableFile, messages: Message[], io: MessageStoreIo) {
+  private constructor(path: DurableFile, messages: Message[]) {
     this.#path = durablePath(path);
     this.#file = path;
     this.#messages = messages;
-    this.#io = io;
   }
 
-  static create(path: DurableFile, io: MessageStoreIo = messageStoreIo): MessageStore {
-    const store = new MessageStore(path, [], io);
+  static create(path: DurableFile): MessageStore {
+    const store = new MessageStore(path, []);
     store.#repairRows = true;
     return store;
   }
 
-  static async load(path: DurableFile, io: MessageStoreIo = messageStoreIo): Promise<MessageStore> {
-    return (await MessageStore.loadWithRaw(path, io)).store;
+  static async load(path: DurableFile): Promise<MessageStore> {
+    return (await MessageStore.loadWithRaw(path)).store;
   }
 
   static async loadWithRaw(
     path: DurableFile,
-    io: MessageStoreIo = messageStoreIo,
   ): Promise<{ store: MessageStore; raw: string }> {
     let raw: string;
     try {
-      raw = io === messageStoreIo ? readDurable(path) : await readFile(durablePath(path), "utf8");
+      raw = readDurable(path);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        return { store: new MessageStore(path, [], io), raw: "" };
+        return { store: new MessageStore(path, []), raw: "" };
       }
       throw e;
     }
@@ -410,7 +356,7 @@ export class MessageStore {
     const report = describeAlternativeDefects(durablePath(path), defects);
     if (report !== undefined) shoreLog.warn(report);
 
-    const store = new MessageStore(path, messages, io);
+    const store = new MessageStore(path, messages);
     store.#quarantined = unreadable.length;
     store.#repairRows = (raw.match(/[^\n]*\n|[^\n]+$/g) ?? []).length !== messages.length;
     store.#altDefects = defects;
@@ -461,16 +407,10 @@ export class MessageStore {
 
   async append(msg: Message): Promise<void> {
     const candidate = versioned(structuredClone(msg));
-    if (this.#io === messageStoreIo) {
-      return await this.#enqueue(async () => {
-        this.#prepareRows();
-        appendDurableLine(this.#file, `${serializeForStorage(candidate)}\n`);
-        this.#messages.push(candidate);
-      });
-    }
-    await this.#mutate((messages) => {
-      messages.push(candidate);
-      return changed(undefined);
+    return await this.#enqueue(async () => {
+      this.#prepareRows();
+      appendDurableLine(this.#file, `${serializeForStorage(candidate)}\n`);
+      this.#messages.push(candidate);
     });
   }
 
@@ -520,44 +460,18 @@ export class MessageStore {
     });
   }
 
-  async stampVersions(versions: ReadonlyMap<string, string>): Promise<number> {
-    return await this.#mutate((messages) => {
-      let stamped = 0;
-      for (const message of messages) {
-        const version = versions.get(message.msg_id);
-        if (version === undefined || versionOf(message) !== undefined) continue;
-        message.version = version;
-        stamped += 1;
-      }
-      return stamped === 0 ? unchanged(0) : changed(stamped);
-    });
-  }
-
   async edit(msgId: string, newContent: string): Promise<void> {
-    if (this.#io === messageStoreIo) {
-      return await this.#enqueue(async () => {
-        const index = this.#messages.findIndex(message => message.msg_id === msgId);
-        if (index === -1) throw new MessageNotFound(msgId);
-        const msg = structuredClone(required(this.#messages[index]));
-        msg.content = newContent;
-        msg.content_blocks = msg.role === "assistant" ? editAssistantText(msg.content_blocks, newContent) : [{ type: "text", text: newContent }];
-        msg.version = newMessageVersion();
-        await backupBeforeWrite(this.#file);
-        this.#prepareRows();
-        updateDurableLine(this.#file, index, `${serializeForStorage(msg)}\n`);
-        this.#messages[index] = msg;
-      });
-    }
-    await this.#mutate((messages) => {
-      const msg = messages.find((m) => m.msg_id === msgId);
-      if (msg === undefined) throw new MessageNotFound(msgId);
+    return await this.#enqueue(async () => {
+      const index = this.#messages.findIndex(message => message.msg_id === msgId);
+      if (index === -1) throw new MessageNotFound(msgId);
+      const msg = structuredClone(required(this.#messages[index]));
       msg.content = newContent;
-      msg.content_blocks =
-        msg.role === "assistant"
-          ? editAssistantText(msg.content_blocks, newContent)
-          : [{ type: "text", text: newContent }];
+      msg.content_blocks = msg.role === "assistant" ? editAssistantText(msg.content_blocks, newContent) : [{ type: "text", text: newContent }];
       msg.version = newMessageVersion();
-      return changed(undefined);
+      await backupBeforeWrite(this.#file);
+      this.#prepareRows();
+      updateDurableLine(this.#file, index, `${serializeForStorage(msg)}\n`);
+      this.#messages[index] = msg;
     });
   }
 
@@ -573,34 +487,25 @@ export class MessageStore {
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
     const replacements = structuredClone(newMessages).map(versioned);
-    if (this.#io === messageStoreIo) {
-      return await this.#enqueue(async () => {
-        const keep = this.#keepIndex();
-        const removed = this.#messages.length - keep;
-        const candidates = new Map(replacements.map(message => [message.msg_id, message]));
-        const preserves = this.#messages.slice(keep).every(previous => {
-          const replacement = candidates.get(previous.msg_id);
-          if (replacement === undefined) return false;
-          const { version: _beforeVersion, ...before } = previous;
-          const { version: _afterVersion, ...after } = replacement;
-          if (serializeForStorage(before) !== serializeForStorage(after)) return false;
-          if (previous.version !== undefined) replacement.version = previous.version;
-          return true;
-        });
-        if (!preserves) await backupBeforeWrite(this.#file);
-        this.#prepareRows();
-        replaceDurableSuffix(this.#file, keep, replacements.map(message => `${serializeForStorage(message)}\n`));
-        this.#messages.length = keep;
-        this.#messages.push(...replacements);
-        return removed;
+    return await this.#enqueue(async () => {
+      const keep = this.#keepIndex();
+      const removed = this.#messages.length - keep;
+      const candidates = new Map(replacements.map(message => [message.msg_id, message]));
+      const preserves = this.#messages.slice(keep).every(previous => {
+        const replacement = candidates.get(previous.msg_id);
+        if (replacement === undefined) return false;
+        const { version: _beforeVersion, ...before } = previous;
+        const { version: _afterVersion, ...after } = replacement;
+        if (serializeForStorage(before) !== serializeForStorage(after)) return false;
+        if (previous.version !== undefined) replacement.version = previous.version;
+        return true;
       });
-    }
-    return await this.#mutate((messages) => {
-      const keep = this.#keepIndex(messages);
-      const removed = messages.length - keep;
-      messages.length = keep;
-      messages.push(...replacements);
-      return changed(removed);
+      if (!preserves) await backupBeforeWrite(this.#file);
+      this.#prepareRows();
+      replaceDurableSuffix(this.#file, keep, replacements.map(message => `${serializeForStorage(message)}\n`));
+      this.#messages.length = keep;
+      this.#messages.push(...replacements);
+      return removed;
     });
   }
 
@@ -767,27 +672,7 @@ export class MessageStore {
   }
 
   async #persist(messages: readonly Message[]): Promise<void> {
-    await (this.#io === messageStoreIo ? backupBeforeWrite(this.#file) : this.#io.backup(this.#path));
-    let buf = "";
-    for (const msg of messages) buf += `${serializeForStorage(msg)}\n`;
-
-    if (this.#io === messageStoreIo) {
-      writeDurable(this.#file, buf);
-      return;
-    }
-    const dir = dirname(this.#path);
-    await this.#io.mkdir(dir);
-    const tmp = this.#io.tempPath(dir);
-    try {
-      await this.#io.writeFile(tmp, buf);
-      await this.#io.rename(tmp, this.#path);
-    } catch (error) {
-      await this.#io.remove(tmp).catch((cleanupError: unknown) => {
-        shoreLog.warn(
-          `shore: could not remove failed message-store write ${tmp}: ${String(cleanupError)}`,
-        );
-      });
-      throw error;
-    }
+    await backupBeforeWrite(this.#file);
+    writeDurable(this.#file, serializeMessages(messages));
   }
 }

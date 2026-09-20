@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
@@ -264,13 +265,7 @@ describe("buildToolContext", () => {
   test("an OpenRouter image default works without a provider section or config warning", async () => {
     const root = await tempRoot("image-default");
     const warnings: string[] = [];
-    const config = parseConfigTable(Bun.TOML.parse(`
-      [defaults]
-      image_generation = "openrouter:fixture/image-model"
-      [image_generation."openrouter:fixture/image-model"]
-      aspect_ratio = "16:9"
-      image_size = "2K"
-    `) as TomlTable, {
+    const config = parseConfigTable(Bun.TOML.parse("[image]\nmodel = \"openrouter:fixture/image-model\"\n\n[image.\"openrouter:fixture/image-model\"]\naspect_ratio = \"16:9\"\nimage_size = \"2K\"\n") as TomlTable, {
       config: join(root, "config"),
       data: join(root, "data"),
       cache: join(root, "cache"),
@@ -409,18 +404,15 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   });
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada system prompt");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada system prompt");
   const charDir = join(config.dirs.data, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
 
   const history = turnInput.history;
   seededTimestamps = new Set(history.map((m) => m.timestamp));
   if (history.length > 0) {
-    await writeFile(
-      join(charDir, "threads", "main", "active.jsonl"),
-      history.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(charDir, "threads", "main", "active.jsonl"), history.map((m) => JSON.stringify(m)).join("\n") + "\n");
   }
 
   const direct: ServerMessage[] = [];
@@ -644,7 +636,7 @@ describe("runGeneration", () => {
             ...(rest["context"] as Record<string, unknown>),
             ledger: join(run.dataDir, "shore.db"),
             keepalive_max_secs: 43200,
-            usage: { allow_compaction_over_budget: false, budgets: [], timezone: "local" },
+            usage: { budgets: [], timezone: "local" },
           },
         }),
       );
@@ -837,8 +829,8 @@ test("a sampler preference set for the character reaches the outgoing request", 
   const config = await loadedConfig(root, { with_model: true });
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
   await mkdir(join(config.dirs.data, "ada", "preferences"), { recursive: true });
   await writeFile(
     join(config.dirs.data, "ada", "preferences", "models.toml"),
@@ -920,8 +912,8 @@ test("the turn tells the provider which thread it belongs to", async () => {
   const config = await loadedConfig(root, { with_model: true });
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
   await mkdir(join(config.dirs.data, "ada", "threads", "scratch"), { recursive: true });
 
   const requests: SidecarRequest[] = [];
@@ -1006,8 +998,8 @@ test("a turn in a pinned thread runs on that thread's model, not the character's
   });
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
   await mkdir(join(config.dirs.data, "ada", "threads", "eval"), { recursive: true });
 
   const requests: SidecarRequest[] = [];

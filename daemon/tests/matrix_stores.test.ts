@@ -1,8 +1,8 @@
-import { withStorage } from "../src/storage/store.ts";
+import { withStorage, writeState } from "../src/storage/store.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, basename } from "node:path";
 
 import { EventMap, EVENT_MAP_CAP, type MappedEvent } from "../src/connections/matrix/event_map.ts";
 import { ViewPrefs } from "../src/connections/matrix/prefs.ts";
@@ -78,7 +78,7 @@ describe("room bindings", () => {
 
   test("an unreadable sidecar starts empty rather than throwing", () => {
     const path = join(scratch(), "rooms.json");
-    writeFileSync(path, "{ not json");
+    writeState(dirname(path), basename(path), "{ not json");
     expect(new RoomBindings(path).entries()).toEqual([]);
   });
 });
@@ -152,7 +152,7 @@ describe("the daemon-message to Matrix-event map", () => {
 
     expect(new EventMap(path).byMsgId("m1")?.eventId).toBe("$e1");
 
-    writeFileSync(path, JSON.stringify({ entries: [reply(), { msgId: 7 }] }));
+    writeState(dirname(path), basename(path), JSON.stringify({ entries: [reply(), { msgId: 7 }] }));
     const recovered = new EventMap(path);
     expect(recovered.byMsgId("m1")).toBeDefined();
   });
@@ -193,7 +193,7 @@ describe("sidecar durability", () => {
   test("a corrupt file is set aside rather than silently read as empty", () => {
     const root = scratch();
     const path = join(root, "bindings.json");
-    writeFileSync(path, "{ not json at all");
+    writeState(dirname(path), basename(path), "{ not json at all");
 
     const rooms = new RoomBindings(path);
     expect(rooms.entries()).toEqual([]);

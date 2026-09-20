@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { listDurableFiles } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
@@ -71,10 +72,7 @@ async function world(messages: unknown[]): Promise<World> {
   const workspace = join(dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "# ada");
-  await writeFile(
-    join(charDataDir, "threads", "main", "active.jsonl"),
-    messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
-  );
+  writeDurable(join(charDataDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"));
 
   const config: LoadedConfig = {
     app: defaultAppConfig(),
@@ -583,7 +581,7 @@ describe("write_memory = false", () => {
   async function disableWriteMemory(w: World): Promise<void> {
     await writeFile(
       join(w.config.dirs.config, "characters", "ada", "config.toml"),
-      "[memory.compaction]\nwrite_memory = false\n",
+      "[compaction]\nwrite_memory = false\n",
     );
   }
 
@@ -652,10 +650,7 @@ describe("write_memory = false", () => {
           now,
           pins.scratch === undefined ? {} : { chat_model: pins.scratch },
         );
-        await writeFile(
-          join(w.charDataDir, "threads", thread, "active.jsonl"),
-          SIX.map((m) => JSON.stringify(m)).join("\n") + "\n",
-        );
+        writeDurable(join(w.charDataDir, "threads", thread, "active.jsonl"), SIX.map((m) => JSON.stringify(m)).join("\n") + "\n");
       }
 
       let seen: { replay_prior_thinking?: string } | undefined;

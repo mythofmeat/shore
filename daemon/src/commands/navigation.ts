@@ -120,7 +120,6 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
   };
 }
 
-const LEGACY_CHARACTER_FILE = "character.md";
 
 const soulTemplate = (name: string): string => `You are ${name}.\n`;
 
@@ -145,8 +144,7 @@ export function createCharacter(
   requireUsableCharacterName(name);
 
   const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
-  const legacy = rustJoin(characterConfigDir(configDir, name), LEGACY_CHARACTER_FILE);
-  if (pathExists(rustJoin(workspaceDir, SOUL_FILE)) || pathExists(legacy)) {
+  if (pathExists(rustJoin(workspaceDir, SOUL_FILE))) {
     throw invalidRequest(`Character '${name}' already exists at ${workspaceDir}`);
   }
 

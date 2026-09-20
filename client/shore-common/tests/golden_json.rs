@@ -819,6 +819,7 @@ fn message_object_unknown_fields_ignored() {
         "msg_id": "m_unk",
         "role": "user",
         "content": "test",
+        "content_blocks": [{"type": "text", "text": "test"}],
         "images": [],
         "timestamp": "2026-01-01T00:00:00Z",
         "reactions": ["thumbs_up"],
@@ -861,6 +862,7 @@ fn message_missing_optionals() {
         "msg_id": "m_opt",
         "role": "user",
         "content": "test",
+        "content_blocks": [{"type": "text", "text": "test"}],
         "timestamp": "2026-01-01T00:00:00Z"
     }"#;
     let msg: Message = serde_json::from_str(fixture).expect("missing optionals");

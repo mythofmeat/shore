@@ -500,56 +500,49 @@
     },
     {
       "name": "threshold_float",
-      "toml": "generation_threshold = 1.5\n",
+      "toml": "generation_threshold = \"1.5s\"\n",
       "ok": {
         "generation_threshold_ms": "1500"
       }
     },
     {
       "name": "threshold_float_negative",
-      "toml": "generation_threshold = -1.5\n",
+      "toml": "generation_threshold = \"-1.5s\"\n",
       "err": "duration cannot be negative"
     },
     {
       "name": "threshold_int_negative",
-      "toml": "generation_threshold = -30\n",
+      "toml": "generation_threshold = \"-30s\"\n",
       "err": "duration cannot be negative"
     },
     {
       "name": "threshold_zero_int",
-      "toml": "generation_threshold = 0\n"
+      "toml": "generation_threshold = \"0s\"\n"
     },
     {
       "name": "threshold_bool",
       "toml": "generation_threshold = true\n",
-      "err": "invalid type: boolean `true`, expected a duration string (e.g. \"30s\", \"2m\"), or a number (seconds)"
+      "err": "invalid type: boolean `true`, expected a duration string (e.g. \"30s\", \"2m\")"
     },
     {
       "name": "threshold_array",
       "toml": "generation_threshold = [1]\n",
-      "err": "invalid type: sequence, expected a duration string (e.g. \"30s\", \"2m\"), or a number (seconds)"
+      "err": "invalid type: sequence, expected a duration string (e.g. \"30s\", \"2m\")"
     },
     {
       "name": "threshold_float_tiny",
-      "toml": "generation_threshold = 0.0005\n"
-    },
-    {
-      "name": "threshold_i64_max",
-      "toml": "generation_threshold = 9223372036854775807\n",
-      "ok": {
-        "generation_threshold_ms": "18446744073709551615"
-      }
+      "toml": "generation_threshold = \"0.0005s\"\n"
     },
     {
       "name": "threshold_float_whole",
-      "toml": "generation_threshold = 1.0\n",
+      "toml": "generation_threshold = \"1.0s\"\n",
       "ok": {
         "generation_threshold_ms": "1000"
       }
     },
     {
       "name": "threshold_float_half_ms",
-      "toml": "generation_threshold = 0.0015\n",
+      "toml": "generation_threshold = \"0.0015s\"\n",
       "ok": {
         "generation_threshold_ms": "1"
       }
@@ -572,7 +565,7 @@
     {
       "name": "ntfy_unknown_order_asc",
       "toml": "[ntfy]\naaa = 1\nzzz = 2\n",
-      "err": "unknown field `aaa`, expected one of `url`, `topic`, `token`"
+      "err": "unknown field `aaa`, expected `url` or `topic`"
     },
     {
       "name": "events_unknown_order_asc",
@@ -616,13 +609,13 @@
     },
     {
       "name": "ntfy_full",
-      "toml": "[ntfy]\nurl = \"https://push.example\"\ntopic = \"shore\"\ntoken = \"tk\"\n",
+      "toml": "token_env = \"SHORE_NTFY_TOKEN\"\n[ntfy]\nurl = \"https://push.example\"\ntopic = \"shore\"\n",
       "ok": {
         "ntfy": {
           "url": "https://push.example",
-          "topic": "shore",
-          "token": "tk"
-        }
+          "topic": "shore"
+        },
+        "token_env": "SHORE_NTFY_TOKEN"
       }
     },
     {
@@ -641,7 +634,7 @@
     {
       "name": "ntfy_unknown_field",
       "toml": "[ntfy]\nurl = \"u\"\nzzz = 1\naaa = 2\n",
-      "err": "unknown field `zzz`, expected one of `url`, `topic`, `token`"
+      "err": "unknown field `zzz`, expected `url` or `topic`"
     },
     {
       "name": "ntfy_wrong_type",
@@ -651,7 +644,7 @@
     {
       "name": "command_shell_template_string",
       "toml": "command = \"echo {body}\"\n",
-      "err": "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell"
+      "err": "invalid type: string \"echo {body}\", expected a sequence"
     },
     {
       "name": "command_argv",
@@ -667,7 +660,7 @@
     {
       "name": "command_shell_template_table",
       "toml": "[command]\ntemplate = \"echo {body}\"\n",
-      "err": "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell"
+      "err": "invalid type: map, expected a sequence"
     },
     {
       "name": "threshold_secs",
@@ -685,7 +678,7 @@
     },
     {
       "name": "threshold_bare_int",
-      "toml": "generation_threshold = \"45\"\n",
+      "toml": "generation_threshold = \"45s\"\n",
       "ok": {
         "generation_threshold_ms": "45000"
       }
@@ -702,7 +695,7 @@
     },
     {
       "name": "threshold_wrong_type",
-      "toml": "generation_threshold = 30\n",
+      "toml": "generation_threshold = \"30s\"\n",
       "ok": {
         "generation_threshold_ms": "30000"
       }

@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import {
   CallStore,
@@ -160,7 +157,7 @@ function storedRequestBytes(store: CallStore, callId: string): number {
   const row = store.database
     .query(
       `SELECT COALESCE((SELECT stored FROM capture_payloads WHERE id = request_payload_id),
-                       LENGTH(request_zstd), 0) AS stored
+                       0) AS stored
          FROM capture_calls WHERE call_id = ?1`,
     )
     .get(callId) as { stored: number };
@@ -395,35 +392,7 @@ describe("the schema a store opens with", () => {
     store.close();
   });
 
-  test("a database missing transcripts.character gains it when reopened", () => {
-    const path = join(mkdtempSync(join(tmpdir(), "call-store-migrate-")), "db.sqlite");
-    const before = CallStore.open(path);
-    for (const row of before.database
-      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'capture_transcripts'")
-      .all() as { name: string }[]) {
-      if (!row.name.startsWith("sqlite_")) before.database.run(`DROP INDEX "${row.name}"`);
-    }
-    before.database.run("ALTER TABLE capture_transcripts DROP COLUMN character");
-    expect(schemaShape(before).transcript_columns).not.toContain("character");
-    before.close();
 
-    const after = CallStore.open(path);
-    expect(schemaShape(after).transcript_columns).toContain("character");
-    after.recordTranscript({
-      ts: at(0),
-      source: "dreaming",
-      character: "poppy",
-      call_type: "dreaming",
-      iteration: 0,
-      model: "deepseek",
-      provider: "deepseek",
-      finish_reason: "end_turn",
-      usage: ZERO_USAGE,
-      entry_json: JSON.stringify({ text: "hi" }),
-    });
-    expect(after.queryTranscripts("dreaming", "poppy", 0)).toHaveLength(1);
-    after.close();
-  });
 });
 
 describe("what a call body costs to store", () => {

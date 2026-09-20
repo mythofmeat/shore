@@ -1,4 +1,4 @@
-import { readDurable } from "../src/storage/files.ts";
+import { readDurable, writeDurable } from "../src/storage/files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
@@ -32,7 +32,7 @@ const hydrate = (m: Message): Message => ({
 async function inTemp<T>(fn: (path: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "shore-msgstore-"));
   try {
-    return await fn(join(dir, "threads", "main", "active.jsonl"));
+    return await fn(join(dir, "ada", "threads", "main", "active.jsonl"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -46,7 +46,7 @@ describe("loading", () => {
   }[]) {
     test(c.name, async () => {
       await inTemp(async (path) => {
-        if (c.file !== null) await Bun.write(path, c.file);
+        if (c.file !== null) writeDurable(path, c.file);
         if (!c.expect.ok) {
           const store = await MessageStore.load(path);
           expect(store.quarantinedLines).toBeGreaterThan(0);
@@ -439,7 +439,7 @@ describe("operation traces", () => {
     test(t.name, async () => {
       await inTemp(async (path) => {
         const target = t.name.includes("tail_branch") ? "a2" : "a1";
-        if (t.seed_file !== "") await Bun.write(path, t.seed_file);
+        if (t.seed_file !== "") writeDurable(path, t.seed_file);
         const store = await MessageStore.load(path);
 
         for (const step of t.ops) {

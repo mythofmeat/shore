@@ -1,9 +1,10 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readdir } from "./support/stored_files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp,  rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -50,10 +51,9 @@ describe("one malformed line no longer costs the whole conversation", () => {
   test("the readable turns load and the unreadable one is quarantined", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(
+    writeDurable(
       path,
       [line("m1", "kept"), "{ truncated", line("m3", "also kept")].join("\n") + "\n",
-      "utf8",
     );
 
     const store = await MessageStore.load(path);
@@ -70,7 +70,7 @@ describe("one malformed line no longer costs the whole conversation", () => {
   test("a clean conversation quarantines nothing and writes no quarantine file", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(path, `${line("m1", "fine")}\n`, "utf8");
+    writeDurable(path, `${line("m1", "fine")}\n`);
 
     const store = await MessageStore.load(path);
     expect(store.quarantinedLines).toBe(0);
@@ -82,7 +82,7 @@ describe("backupBeforeWrite", () => {
   test("copies the live file before it is rewritten", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(path, "original\n", "utf8");
+    writeDurable(path, "original\n");
 
     const made = await backupBeforeWrite(path, () => 1_000_000);
     expect(made).toBeDefined();
@@ -92,7 +92,7 @@ describe("backupBeforeWrite", () => {
   test("throttles, so a busy conversation does not thrash the disk", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(path, "original\n", "utf8");
+    writeDurable(path, "original\n");
 
     let at = 1_000_000;
     expect(await backupBeforeWrite(path, () => at)).toBeDefined();
@@ -105,7 +105,7 @@ describe("backupBeforeWrite", () => {
   test("retains a bounded number of copies", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(path, "original\n", "utf8");
+    writeDurable(path, "original\n");
 
     let at = 1_000_000;
     for (let i = 0; i < MAX_BACKUPS + 5; i += 1) {
@@ -120,7 +120,7 @@ describe("backupBeforeWrite", () => {
     const path = join(dir, "threads", "main", "active.jsonl");
 
     expect(await backupBeforeWrite(path, () => 1)).toBeUndefined();
-    await writeFile(path, "", "utf8");
+    writeDurable(path, "");
     expect(await backupBeforeWrite(path, () => 20_000)).toBeUndefined();
   });
 });
@@ -129,7 +129,7 @@ describe("the store takes a copy before it rewrites the file", () => {
   test("the prior contents survive an edit", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
-    await writeFile(path, `${line("m1", "before")}\n`, "utf8");
+    writeDurable(path, `${line("m1", "before")}\n`);
 
     const store = await MessageStore.load(path);
     await store.append(message("m2", "new turn"));

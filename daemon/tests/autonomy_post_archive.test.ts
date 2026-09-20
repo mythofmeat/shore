@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -69,12 +70,9 @@ async function world(): Promise<{ config: LoadedConfig; characterDir: string }> 
 
   const characterDir = join(dirs.data, "ada");
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    conversation()
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation()
       .map((m) => JSON.stringify(m))
-      .join("\n") + "\n",
-  );
+      .join("\n") + "\n");
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";

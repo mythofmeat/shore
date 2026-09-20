@@ -18,8 +18,8 @@ export async function reliabilityGeneration(provider: SidecarProvider, thread = 
     rawTable: undefined,
   };
   for (const dir of [config.dirs.config, config.dirs.data, config.dirs.cache, config.dirs.runtime]) await mkdir(dir, { recursive: true });
-  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "Ada");
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "Ada");
   config.app.defaults.model = "fixture";
   config.models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",

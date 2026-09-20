@@ -87,21 +87,19 @@ MUTANTS = [
      '  const app = parsed.ok;\n'),
 
     # --- validateConfig: which defaults are checked ------------------------
-    ("validate: defaults.model is not checked",
-     '  warnOnUnresolvableModelRef(catalog, providers, "defaults.model", app.defaults.model, onWarn);\n',
-     ""),
-    ("validate: defaults.background.model is not checked",
-     '    "defaults.background.model",\n    app.defaults.background.model,\n    onWarn,\n  );\n',
-     ""),
-    ("validate: background.heartbeat is reported under the legacy name",
-     '    "defaults.background.heartbeat",',
+    ('validate: defaults.model is not checked',
+     '  warnOnUnresolvableModelRef(catalog, providers, "chat.model", app.defaults.model, onWarn);\n',
+     ''),
+
+    ('validate: background.heartbeat is reported under the legacy name',
+     '    "heartbeat.model",',
      '    "defaults.heartbeat",'),
     ("validate: background.compaction reads the heartbeat value",
      "    app.defaults.background.compaction,",
      "    app.defaults.background.heartbeat,"),
-    ("validate: subagent_model is not checked",
-     '    "defaults.subagent_model",\n    app.defaults.subagent_model,\n    onWarn,\n  );\n',
-     ""),
+    ('validate: subagent_model is not checked',
+     '    "subagents.model",\n    app.defaults.subagent_model,\n    onWarn,\n  );\n',
+     ''),
 
     # --- validateConfig: sub-agents ---------------------------------------
     ("subagents: the enabled test is inverted",

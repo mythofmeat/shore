@@ -71,7 +71,6 @@ function modelHistoryText(value: ModelHistoryResult): string {
 
 export function formatToolOutput(name: string, value: unknown): string {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return payloadText(value);
-  const record = value as Record<string, unknown>;
   switch (name) {
     case "bash": {
       const result = value as BashResult;
@@ -107,24 +106,6 @@ export function formatToolOutput(name: string, value: unknown): string {
       for (const [index, row] of result.results.entries()) {
         lines.push("", `${index + 1}. ${oneLine(row.title)}`, row.url, row.content);
       }
-      return lines.join("\n");
-    }
-    case "git": {
-      const result = value as { exit_code: number; stdout: string; stderr: string };
-      const lines = [`git: exit ${result.exit_code}`];
-      if (result.stdout) lines.push(result.stdout.replace(/\n$/, ""));
-      if (result.stderr) lines.push(`stderr:\n${result.stderr.replace(/\n$/, "")}`);
-      return lines.join("\n");
-    }
-    case "read": {
-      if (typeof record.content !== "string") return payloadText(value);
-      const result = value as { path: string; content: string; total_lines: number; offset?: number; returned_lines?: number; note?: string };
-      const start = result.offset ?? 1;
-      const count = result.returned_lines ?? result.total_lines;
-      const header = count === 0 ? `${oneLine(result.path)}: no lines returned (${result.total_lines} total)` : `${oneLine(result.path)}: lines ${start}–${start + count - 1} of ${result.total_lines}`;
-      const lines = [header];
-      if (count > 0) lines.push(...result.content.split("\n").map((line, i) => `${start + i}: ${line}`));
-      if (result.note) lines.push(result.note);
       return lines.join("\n");
     }
     default:

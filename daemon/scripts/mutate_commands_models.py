@@ -141,15 +141,11 @@ MUTANTS = [
      '  if (selector === "heartbeat" || selector === "compaction") return selector;',
      '  if (selector === "heartbeat" || selector === "compaction" || selector === "dreaming")\n'
      "    return selector as BackgroundTask;"),
-    ("background: the per-task pin is ignored",
-     "  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;",
-     "  const pinned = ctx.config.app.defaults.background.model;"),
-    ("background: the blanket pin is ignored",
-     "  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;",
-     "  const pinned = ctx.config.app.defaults.background[task];"),
-    ("background: the blanket pin beats the per-task one",
-     "  const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;",
-     "  const pinned = ctx.config.app.defaults.background.model ?? ctx.config.app.defaults.background[task];"),
+    ('background: the per-task pin is ignored',
+     '  const pinned = ctx.config.app.defaults.background[task];',
+     '  const pinned = undefined;'),
+
+
     ("background: the inherited model is the config default, not the character's",
      "  const inherited = resolveChatModelForCharacter(\n"
      "    configView(ctx.config), character, findEffective,\n"
@@ -220,9 +216,7 @@ MUTANTS = [
     ("switch: a shadowed switch is reported as if it took effect",
      "    ...(ctx.threadModel === undefined ? {} : { shadowed_by_thread: ctx.thread ?? null }),",
      "    ...{},"),
-    ("rows: the source always says per-task",
-     '    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };',
-     '    return { role: task, model: qualify(ctx, bg.model), source: `${task}.model` };'),
+
     ("rows: an unresolved inherit still claims to inherit",
      '  return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };',
      '  return { role: task, model: chat.model, source: "inherits chat" };'),

@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { afterEach, expect, test } from "bun:test";
@@ -34,7 +35,7 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
   const deferred: string[] = [];
 
   const outcome = await compact(
@@ -73,7 +74,7 @@ test("a pass that ends cleanly still archives", async () => {
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
 
   const outcome = await compact(
     options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools(workspace), scripted([
@@ -126,7 +127,7 @@ function options(
     charName: "ada",
     userName: "user",
     llm,
-    conversationMgr: conversationManager(join(dataDir, "ada", "threads", "main")),
+    conversationMgr: conversationManager(join(dataDir, "ada", "threads", "main"), { dbPath: join(dataDir, "shore.db"), archiveKey: "ada" }),
     markdownStore: memoryStore,
     dryRun: false,
     chatRequest: request(),

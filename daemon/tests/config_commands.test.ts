@@ -1,3 +1,5 @@
+import { recordedValue, recording } from "./support/rerecord.ts";
+import { writePromptSnapshotFile } from "./support/storage.ts";
 import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -13,7 +15,6 @@ import {
   configCheck,
   configReload,
   reportedDefaults,
-  settableKeySpellings,
   tools,
   type ConfigContext,
   type ConfigRuntime,
@@ -22,45 +23,6 @@ import { CommandError } from "../src/commands/errors.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
-
-const REMOVED = [
-  "defaults.dreaming",
-  "defaults.background.dreaming",
-  "memory.dreaming",
-  "tools.sandbox",
-  "connections.matrix",
-  "daemon.unsafe_allow_remote_access",
-  "daemon.allowed_hosts",
-  "usage.spike_warnings",
-] as const;
-
-function stripRemoved(blob: unknown): unknown {
-  if (blob === null || typeof blob !== "object") return blob;
-  const out = structuredClone(blob) as Record<string, unknown>;
-  for (const path of REMOVED) {
-    const parts = path.split(".");
-    let node: Record<string, unknown> | undefined = out;
-    for (const part of parts.slice(0, -1)) {
-      const next: unknown = node?.[part];
-      if (!isRecord(next)) {
-        node = undefined;
-        break;
-      }
-      node = next;
-    }
-    if (node !== undefined) delete node[parts[parts.length - 1] as string];
-  }
-  return out;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stripSection(section: string, blob: unknown): unknown {
-  const wrapped = stripRemoved({ [section]: blob }) as Record<string, unknown>;
-  return wrapped[section];
-}
 
 interface Row {
   name: string;
@@ -74,13 +36,14 @@ interface Row {
 type Section =
   | "tools"
   | "config_check"
-  | "config_read"
-  | "config_set"
   | "config_reload";
+
+const rowLocations = new WeakMap<Row, [Section, number]>();
 
 const row = (section: Section, name: string): Row => {
   const found = (fixture[section] as unknown as Row[]).find((r) => r.name === name);
   if (found === undefined) throw new Error(`no fixture row named ${JSON.stringify(name)}`);
+  rowLocations.set(found, [section, (fixture[section] as unknown as Row[]).indexOf(found)]);
   return found;
 };
 
@@ -162,79 +125,29 @@ const stateOf = (w: World): unknown =>
     w.root,
   );
 
-const PARSE_BOUNDARIES = [
-  /^([\s\S]*failed to parse config\.toml: )[\s\S]*$/,
-  /^([\s\S]*failed to parse include file [^:]*: )[\s\S]*$/,
-];
-
-function upToParser(message: string): string {
-  for (const re of PARSE_BOUNDARIES) {
-    const m = re.exec(message);
-    if (m !== null) return m[1] as string;
-  }
-  return message;
-}
-
-async function check(
-  r: Row,
-  w: World,
-  run: () => unknown,
-  normalize: (ok: unknown) => unknown = (v) => v,
-  normalizeResult: (actual: unknown) => unknown = normalize,
-): Promise<void> {
+async function check(r: Row, w: World, run: () => unknown): Promise<void> {
   let result: unknown;
   let thrown: unknown;
-  try {
-    result = await run();
-  } catch (e) {
-    thrown = e;
-  }
-
+  try { result = await run(); } catch (error) { thrown = error; }
+  const pointer = required(rowLocations.get(r));
+  const capture = "tests/command_captures/config_commands.json";
+  recordedValue(capture, [...pointer, "state_after"], stateOf(w));
   if (r.err !== undefined) {
     expect(thrown, r.name).toBeInstanceOf(CommandError);
     expect((thrown as CommandError).code, r.name).toBe(r.err.code as never);
-    const actual = (thrown as CommandError).message.split(w.root).join("<root>");
-    expect(upToParser(actual), r.name).toBe(upToParser(r.err.message));
+    const actual = { code: (thrown as CommandError).code, message: (thrown as Error).message.split(w.root).join("<root>") };
+    recordedValue(capture, [...pointer, "err"], actual);
+    if (!recording) expect<unknown>(actual, r.name).toEqual(r.err);
   } else {
     expect(thrown, r.name).toBeUndefined();
-    if (r.ok !== undefined && isRecord(result) && "deprecations" in result) { result = { ...result }; delete (result as Record<string, unknown>).deprecations; }
-    expect(normalizeResult(scrub(result, w.root)), r.name).toEqual(normalize(r.ok) as never);
+    const actual = scrub(result, w.root);
+    recordedValue(capture, [...pointer, "ok"], actual);
+    if (!recording) expect(actual, r.name).toEqual(r.ok as never);
   }
-  expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
+  if (!recording) expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
 }
 
-const FURNISHED = `
-[chat.anthropic.primary]
-model_id = "claude-primary"
-api_key_env = "SHORE_FIXTURE_KEY_SET"
-
-[chat.anthropic.secondary]
-model_id = "claude-secondary"
-api_key_env = "SHORE_FIXTURE_KEY_MISSING"
-
-[chat]
-model = "primary"
-
-[heartbeat]
-enabled = true
-
-[tools]
-enabled = ["web_search", "not_a_real_tool"]
-
-[subagents]
-enabled = ["researcher", "ghost"]
-
-[subagents.researcher]
-description = "Looks things up"
-prompt = "You look things up."
-tools = ["web_search", "also_not_real"]
-model = "primary"
-
-[subagents.idle]
-description = "Never enabled"
-prompt = "You are idle."
-tools = ["bash", "idle_not_real"]
-`;
+const FURNISHED = "[chat]\nmodel = \"anthropic:claude-primary\"\n\n[providers.anthropic]\napi_key_env = \"SHORE_FIXTURE_KEY_SET\"\n[chat.\"anthropic:claude-primary\"]\n\n[providers.anthropic_secondary]\nsdk = \"anthropic\"\napi_key_env = \"SHORE_FIXTURE_KEY_MISSING\"\n[chat.\"anthropic_secondary:claude-secondary\"]\n\n[subagents]\nenabled = [\"researcher\", \"ghost\"]\n\n[subagents.researcher]\ndescription = \"Looks things up\"\nprompt = \"You look things up.\"\ntools = [\"web_search\", \"also_not_real\"]\nmodel = \"anthropic:claude-primary\"\n\n[subagents.idle]\ndescription = \"Never enabled\"\nprompt = \"You are idle.\"\ntools = [\"bash\", \"idle_not_real\"]\n\n[tools]\nenabled = [\"web_search\", \"not_a_real_tool\"]\n\n[heartbeat]\nenabled = true\n";
 
 const BARE = "";
 
@@ -252,9 +165,8 @@ async function seedPromptFiles(
   await writeFile(join(workspace, "USER.md"), user);
 
   const snapshot = join(w.ctx.config.dirs.data, "mid", "active_prompt");
-  await mkdir(snapshot, { recursive: true });
-  if (soulSnapshot !== undefined) await writeFile(join(snapshot, "SOUL.md"), soulSnapshot);
-  await writeFile(join(snapshot, "USER.md"), user);
+  if (soulSnapshot !== undefined) writePromptSnapshotFile(join(snapshot, "SOUL.md"), soulSnapshot);
+  writePromptSnapshotFile(join(snapshot, "USER.md"), user);
 }
 
 describe("tools", () => {
@@ -270,11 +182,11 @@ describe("tools", () => {
   }
 
   const withSubagent = (extra: string, subagentTools: string): string =>
-    '\n[chat.anthropic.primary]\nmodel_id = "claude-primary"\n\n' +
-    '[defaults]\nmodel = "primary"\n' +
+    '[chat."anthropic:claude-primary"]\n' +
+    "[chat]\nmodel = \"anthropic:claude-primary\"\n" +
     extra +
-    '\n[tools]\nenabled_subagents = ["probe"]\n\n' +
-    '[subagents.probe]\ndescription = "d"\nprompt = "p"\nmodel = "primary"\n' +
+    "[subagents]\nenabled = [\"probe\"]\n" +
+    "[subagents.probe]\ndescription = \"d\"\nprompt = \"p\"\nmodel = \"anthropic:claude-primary\"\n" +
     `tools = [${subagentTools}]\n`;
 
   test("a configured mcp server's tools are not reported as unknown", async () => {
@@ -321,12 +233,12 @@ describe("configCheck", () => {
     ["no models at all", BARE],
     [
       "a default model that is not in the catalog",
-      '\n[chat.anthropic.primary]\nmodel_id = "claude-primary"\n\n[defaults]\nmodel = "nonexistent"\n',
+      "[chat]\nmodel = \"nonexistent\"\n",
     ],
-    ["models but no default set", '\n[chat.anthropic.primary]\nmodel_id = "claude-primary"\n'],
+    ["models but no default set", "[chat.\"anthropic:claude-primary\"]\n"],
     [
       "an api key env var that is set but empty",
-      '\n[chat.anthropic.blank]\nmodel_id = "claude-blank"\napi_key_env = "SHORE_FIXTURE_KEY_BLANK"\n',
+      "[providers.anthropic]\napi_key_env = \"SHORE_FIXTURE_KEY_BLANK\"\n[chat.\"anthropic:claude-blank\"]\n",
     ],
   ];
   for (const [name, toml] of cases) {
@@ -340,7 +252,7 @@ describe("configCheck", () => {
     const w = await build(
       "mid",
       '\n[providers.deepseek]\napi_key_env = "SHORE_FIXTURE_KEY_SET"\n\n' +
-        '[defaults]\nmodel = "deepseek:deepseek-v4-flash"\n',
+        "[chat]\nmodel = \"deepseek:deepseek-v4-flash\"\n",
     );
     const result = configCheck(w.ctx, ENV) as { warnings: string[]; info: string[] };
 
@@ -349,7 +261,7 @@ describe("configCheck", () => {
   });
 
   test("a default naming an unconfigured provider is still called out", async () => {
-    const w = await build("mid", '\n[defaults]\nmodel = "ghost:whatever"\n');
+    const w = await build("mid", "[chat]\nmodel = \"ghost:whatever\"\n");
     const result = configCheck(w.ctx, ENV) as { warnings: string[] };
 
     expect(result.warnings).toContain('Default model "ghost:whatever" not found in catalog');
@@ -357,110 +269,24 @@ describe("configCheck", () => {
 });
 
 describe("config read", () => {
-  const liveDefaults = () => stripRemoved(reportedDefaults());
-  const liveSectionDefaults = (section: string) =>
-    stripSection(section, reportedDefaults()[section]);
-
-  const actualWhole = (ok: unknown) => {
-    const whole = ok as { config: unknown; defaults: unknown };
-    return {
-      config: stripRemoved(whole.config),
-      defaults: stripRemoved(whole.defaults),
-    };
-  };
-
-  function setPath(root: Record<string, unknown>, path: string, value: unknown): void {
-    const parts = path.split(".");
-    let node = root;
-    for (const part of parts.slice(0, -1)) {
-      const next = node[part];
-      node[part] = typeof next === "object" && next !== null && !Array.isArray(next) ? { ...next } : {};
-      node = node[part] as Record<string, unknown>;
+  test("the whole config includes current settings and defaults", async () => {
+    const w = await build("mid", FURNISHED);
+    const result = config(w.ctx, {}) as { config: Record<string, unknown>; defaults: unknown };
+    expect(result.defaults).toEqual(reportedDefaults());
+    expect(result.config).toMatchObject({ chat: { model: "anthropic:claude-primary" }, heartbeat: { enabled: true } });
+    expect(result.config).not.toHaveProperty("defaults");
+    for (const key of ["tools", "subagents"]) {
+      expect(config(w.ctx, { key })).toEqual({ key, config: result.config[key], defaults: reportedDefaults()[key] });
     }
-    node[required(parts.at(-1))] = value;
-  }
-
-  function overlaid(base: unknown, overrides: Record<string, unknown> | undefined): unknown {
-    const out = structuredClone(base) as Record<string, unknown>;
-    for (const [path, value] of Object.entries(overrides ?? {})) setPath(out, path, value);
-    return out;
-  }
-
-  const expectedWhole = (ok: unknown) => {
-    const overrides = (ok as { overrides?: Record<string, unknown> } | null)?.overrides;
-    return { config: overlaid(liveDefaults(), overrides), defaults: liveDefaults() };
-  };
-
-  test("the whole config and the whole default baseline", async () => {
-    const w = await build("mid", FURNISHED);
-    await check(
-      row("config_read", "the whole config and the whole default baseline"),
-      w,
-      () => config(w.ctx, {}),
-      expectedWhole,
-      actualWhole,
-    );
-  });
-
-  const sectionCases: [name: string, args: Record<string, unknown>, section: string][] = [
-    ["one section by key", { key: "tools" }, "tools"],
-    ["a map-valued section", { key: "subagents" }, "subagents"],
-  ];
-  for (const [name, args, section] of sectionCases) {
-    test(name, async () => {
-      const w = await build("mid", FURNISHED);
-      await check(
-        row("config_read", name),
-        w,
-        () => config(w.ctx, args),
-        (ok) => {
-          const row_ = ok as { key?: unknown; overrides?: Record<string, unknown> } | null;
-          return {
-            key: row_?.key,
-            config: overlaid(liveSectionDefaults(section), row_?.overrides),
-            defaults: liveSectionDefaults(section),
-          };
-        },
-        (ok) => {
-          const whole = ok as Record<string, unknown> & { config: unknown; defaults: unknown };
-          return {
-            key: whole["key"],
-            config: stripSection(section, whole.config),
-            defaults: stripSection(section, whole.defaults),
-          };
-        },
-      );
-    });
-  }
-
-  const wholeCases: [name: string, args: Record<string, unknown>][] = [
-    ["a non-string key is no key at all", { key: 7 }],
-    ["a value without a key is still a read", { value: "true" }],
-  ];
-  for (const [name, args] of wholeCases) {
-    test(name, async () => {
-      const w = await build("mid", FURNISHED);
-      await check(
-        row("config_read", name),
-        w,
-        () => config(w.ctx, args),
-        expectedWhole,
-        actualWhole,
-      );
-    });
-  }
-
-  test("an unknown section", async () => {
-    const w = await build("mid", FURNISHED);
-    await check(row("config_read", "an unknown section"), w, () =>
-      config(w.ctx, { key: "nosuchsection" }),
-    );
+    expect(config(w.ctx, { key: 7 })).toEqual(result);
+    expect(config(w.ctx, { value: "true" })).toEqual(result);
+    expect(() => config(w.ctx, { key: "nosuchsection" })).toThrow("Config section not found");
   });
 });
 
 describe("config read walks dots", () => {
   const cases: [key: string, value: unknown][] = [
-    ["chat.model", "primary"],
+    ["chat.model", "anthropic:claude-primary"],
         ["heartbeat.enabled", true],
     ["daemon.listen_addr", "127.0.0.1:7320"],
     ["tools.enabled", ["web_search", "not_a_real_tool"]],
@@ -474,35 +300,11 @@ describe("config read walks dots", () => {
     });
   }
 
-  test("`advanced.editor` is gone; the CLI reads $VISUAL and $EDITOR itself", async () => {
-    expect(build("mid", `${FURNISHED}\n[advanced]\neditor = "hx"\n`)).rejects.toThrow(
-      "`editor` was removed",
-    );
-  });
 
-  test("every settable key reads back, or says where it reads back from", async () => {
-    const w = await build("mid", FURNISHED);
-    for (const key of settableKeySpellings()) {
-      let redirect: string | undefined;
-      try {
-        config(w.ctx, { key });
-      } catch (e) {
-        redirect = (e as Error).message;
-      }
-      if (redirect === undefined) continue;
-      const named = /read it as (\S+)$/.exec(redirect)?.[1];
-      expect(named, `${key} missed without naming a readable path`).toBeDefined();
-      expect(() => config(w.ctx, { key: required(named) })).not.toThrow();
-    }
-  });
 
-  test("the set arm accepts exactly the spellings the table lists", async () => {
-    const w = await build("mid", FURNISHED);
-    for (const key of settableKeySpellings()) {
-      const value = key.endsWith("model") ? "primary" : "true";
-      expect(() => config(w.ctx, { key, value })).not.toThrow();
-    }
-  });
+
+
+
 
   test("the default baseline is scoped to the same key", async () => {
     const w = await build("mid", FURNISHED);
@@ -534,10 +336,8 @@ describe("config read walks dots", () => {
 
 describe("config set", () => {
   const cases: [string, string, unknown][] = [
-    ["chat.model", "secondary", "secondary"],
-    ["model", "secondary", "secondary"],
+    ["chat.model", "anthropic_secondary:claude-secondary", "anthropic_secondary:claude-secondary"],
     ["heartbeat.enabled", "false", false],
-    ["autonomy.enabled", "no", false],
     ["cache.keepalive_for", "90m", "90m"],
     ["chat.display_name", "Ellie", "Ellie"],
     ["subagents.enabled", "researcher,idle", ["researcher", "idle"]],
@@ -556,8 +356,8 @@ describe("config set", () => {
     ["memory.mode", "x", "not found"],
     ["compaction", "x", "table"],
     ["chat.user_timestamps", "sometimes", "not one of"],
-    ["defaults.stream", "true", "unused setting"],
-    ["stream", "yes", "unused setting"],
+    ["defaults.stream", "true", "not found"],
+    ["stream", "yes", "not found"],
   ];
   for (const [key, value, error] of invalid) test(`rejects ${key} = ${value}`, async () => {
     const w = await build("mid", FURNISHED);
@@ -568,8 +368,8 @@ describe("config set", () => {
 
   test("a saved preference masks the fallback model", async () => {
     const w = await build("mid", FURNISHED);
-    w.ctx.activeModel = "primary";
-    expect(config(w.ctx, { key: "chat.model", value: "secondary" })).toMatchObject({ masked_by_preference: "primary" });
+    w.ctx.activeModel = "anthropic:claude-primary";
+    expect(config(w.ctx, { key: "chat.model", value: "anthropic_secondary:claude-secondary" })).toMatchObject({ masked_by_preference: "anthropic:claude-primary" });
   });
 
   test("an ordinary edit keeps comments and untouched lines", async () => {
@@ -601,9 +401,8 @@ describe("configReload", () => {
     const w = await build("mid", FURNISHED);
     await writeFile(
       w.ctx.configPath,
-      '\n[chat.anthropic.primary]\nmodel_id = "claude-primary"\n\n' +
-        '[chat.anthropic.third]\nmodel_id = "claude-third"\n\n' +
-        '[defaults]\nmodel = "third"\nstream = true\n',
+      "[chat.\"anthropic:claude-third\"]\n" +
+        "[chat]\nmodel = \"anthropic:claude-third\"\n",
     );
     await check(row("config_reload", "apply adopts the config on disk"), w, () =>
       configReload(w.ctx, { apply: true }),
@@ -695,27 +494,21 @@ describe("configReload", () => {
 });
 
 describe("secrets in config output", () => {
-  const SECRETS = [
-    "[notifications.ntfy]",
-    'url = "https://ntfy.example.com"',
-    'topic = "shore"',
-    'token = "tk_do_not_leak"',
-    "",
-    "[mcp.weather]",
-    'command = "weather-mcp"',
-    "",
-    "[mcp.weather.env]",
-    'WEATHER_API_KEY = "env_do_not_leak"',
-    "",
-    "[mcp.remote]",
-    'url = "https://mcp.example.com"',
-    "",
-    "[mcp.remote.headers]",
-    'Authorization = "Bearer hdr_do_not_leak"',
-    "",
-  ].join("\n");
-
-  const sentinels = ["tk_do_not_leak", "env_do_not_leak", "hdr_do_not_leak"];
+  const SECRETS = `
+[notifications]
+url = "https://ntfy.example.com"
+topic = "shore"
+token_env = "NTFY_TOKEN"
+[mcp.weather]
+command = "weather-mcp"
+[mcp.weather.env]
+WEATHER_API_KEY = "env_do_not_leak"
+[mcp.remote]
+url = "https://mcp.example.com"
+[mcp.remote.headers]
+Authorization = "Bearer hdr_do_not_leak"
+`;
+  const sentinels = ["env_do_not_leak", "hdr_do_not_leak"];
 
   test("a full config dump redacts them", async () => {
     const w = await build(undefined, SECRETS);
@@ -726,8 +519,8 @@ describe("secrets in config output", () => {
 
   test("asking for the key directly redacts it too", async () => {
     const w = await build(undefined, SECRETS);
-    expect(config(w.ctx, { key: "notifications.ntfy.token" })).toMatchObject({
-      key: "notifications.ntfy.token",
+    expect(config(w.ctx, { key: "mcp.weather.env.WEATHER_API_KEY" })).toMatchObject({
+      key: "mcp.weather.env.WEATHER_API_KEY",
       config: "<redacted>",
     });
     const headers = JSON.stringify(config(w.ctx, { key: "mcp" }));
@@ -737,7 +530,7 @@ describe("secrets in config output", () => {
 
   test("non-secret neighbours are still readable", async () => {
     const w = await build(undefined, SECRETS);
-    expect(config(w.ctx, { key: "notifications.ntfy.url" })).toMatchObject({
+    expect(config(w.ctx, { key: "notifications.url" })).toMatchObject({
       config: "https://ntfy.example.com",
     });
     expect(config(w.ctx, { key: "mcp.weather.command" })).toMatchObject({
@@ -745,8 +538,8 @@ describe("secrets in config output", () => {
     });
   });
 
-  test("an unset secret reads as empty, not as one that is set", async () => {
-    const w = await build(undefined, "[notifications.ntfy]\ntopic = \"shore\"\n");
-    expect(config(w.ctx, { key: "notifications.ntfy.token" })).toMatchObject({ config: "" });
+  test("an unset secret reads as empty", async () => {
+    const w = await build(undefined, '[mcp.weather]\ncommand="weather-mcp"\n[mcp.weather.env]\nWEATHER_API_KEY=""');
+    expect(config(w.ctx, { key: "mcp.weather.env.WEATHER_API_KEY" })).toMatchObject({ config: "" });
   });
 });

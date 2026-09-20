@@ -854,7 +854,7 @@
     {
       "name": "chat prefix carried, model rebuilt",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -865,7 +865,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1005,7 +1006,7 @@
     {
       "name": "empty chat prefix",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1016,7 +1017,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1081,7 +1083,7 @@
     {
       "name": "no tools",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1092,7 +1094,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1188,7 +1191,7 @@
     {
       "name": "empty tools list is not the same as none",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1199,7 +1202,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1285,7 +1289,7 @@
     {
       "name": "the model's own api_key_env is the fallback",
       "model": {
-        "qualified_name": "chat.selfhosted.compact",
+        "qualified_name": "selfhosted:my-compact",
         "provider_key": "selfhosted",
         "model_id": "my-compact",
         "sdk": "anthropic",
@@ -1296,7 +1300,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "my-compact"
       },
       "providers": [],
       "env": [
@@ -1367,7 +1372,7 @@
     {
       "name": "provider keys beat the model's api_key_env",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1378,7 +1383,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1466,7 +1472,7 @@
     {
       "name": "no key set",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1477,7 +1483,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1529,7 +1536,7 @@
     {
       "name": "disabled provider",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1540,7 +1547,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {
@@ -1592,7 +1600,7 @@
     {
       "name": "replay policy comes from chat, not the model",
       "model": {
-        "qualified_name": "chat.anthropic.compact",
+        "qualified_name": "anthropic:claude-compact",
         "provider_key": "anthropic",
         "model_id": "claude-compact",
         "sdk": "anthropic",
@@ -1603,7 +1611,8 @@
         "top_p": null,
         "cache_ttl": "1h",
         "reasoning_effort": null,
-        "budget_tokens": null
+        "budget_tokens": null,
+        "name": "claude-compact"
       },
       "providers": [
         {

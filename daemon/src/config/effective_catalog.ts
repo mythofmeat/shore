@@ -65,7 +65,9 @@ export function findEffectiveModel(
   includeHidden: boolean,
 ): ResolvedModel {
   try {
-    return findModel(config.models, name);
+    const model = findModel(config.models, name);
+    if (config.providers.get(model.providerKey)?.enabled === false) throw EffectiveCatalogError.notFound(name);
+    return model;
   } catch (e) {
     if (!(e instanceof CatalogError)) throw e;
   }

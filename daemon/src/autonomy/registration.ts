@@ -11,7 +11,7 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   const autonomy = config.app.behavior.autonomy;
   return {
     autonomyEnabled: autonomy.enabled,
-    heartbeatEnabled: autonomy.heartbeat.enabled,
+    heartbeatEnabled: autonomy.enabled,
     ...compactionConfigFor(config),
   };
 }

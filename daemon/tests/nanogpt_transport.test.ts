@@ -72,7 +72,7 @@ async function chat(modelId: string, sdk: Sdk, cacheTtl?: string, reasoningEffor
         session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
         rid: "chat", kind: "message",
       },
-      body: { rid: "chat", text: "Describe this image", stream: true, images: [imagePath], image_data: [] },
+      body: { rid: "chat", text: "Describe this image", stream: true, images: [imagePath], image_data: [{ filename: "picture.png", mime_type: "image/png", data: PNG }] },
       charName: "ada", regen: false, rid: "chat", signal: AbortSignal.timeout(5000), send: async () => {},
     });
     await autonomy.settled("ada");

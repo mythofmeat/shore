@@ -236,7 +236,7 @@ describe("loadRawConfigTable", () => {
 
   test("the config table still loads with a `.env` present", () => {
     const root = tempDir();
-    writeFileSync(join(root, "config.toml"), '[defaults]\ndisplay_name = "ren"\n');
+    writeFileSync(join(root, "config.toml"), "[chat]\ndisplay_name = \"ren\"\n");
     writeFileSync(join(root, ".env"), "A=1\n");
 
     const raw = loadRawConfigTable(join(root, "config.toml"), {

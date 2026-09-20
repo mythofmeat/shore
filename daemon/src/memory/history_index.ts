@@ -3,12 +3,12 @@ import { required } from "../util/required.ts";
 
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { versionOf } from "../engine/versions.ts";
-import { characterCacheDir, compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
+import { characterCacheDir } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
@@ -642,18 +642,7 @@ async function sourceFingerprint(ref: CharacterHistoryRef): Promise<string> {
   } finally {
     reader.close();
   }
-  const legacy = [
-    compactionManifestIn(ref.mainConversationDir),
-    segmentsDirIn(ref.mainConversationDir),
-  ].map((path) => {
-    try {
-      const s = statSync(path, { bigint: true });
-      return `${path}:${s.size}:${s.mtimeNs}`;
-    } catch {
-      return `${path}:-`;
-    }
-  }).join("|");
-  return `${digest}|${legacy}`;
+  return digest;
 }
 
 function embeddingIdentity(embedder: Embedder): string {

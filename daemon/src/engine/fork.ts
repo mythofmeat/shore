@@ -28,7 +28,7 @@ import {
   type ThreadsIndex,
 } from "./threads.ts";
 import type { Message } from "./types.ts";
-import { newMessageVersion, realUserTurnIndices, tailTurnStart, versionOf } from "./versions.ts";
+import { realUserTurnIndices, tailTurnStart } from "./versions.ts";
 
 export const FORK_MARKER_FILE = ".fork-pending.json";
 
@@ -55,7 +55,6 @@ export interface ForkMarker {
 
 export interface ForkSource {
   messages(): readonly Message[];
-  stampMessageVersions(versions: ReadonlyMap<string, string>): Promise<number>;
 }
 
 export interface ForkThreadOptions {
@@ -186,13 +185,7 @@ async function forkThreadLocked(
   }
 
   const live = options.source ?? (await loadForkSource(data, character, source));
-  const selected = selectForkContext(live.messages(), turns);
-
-  const minted = await mintSourceVersions(live, selected);
-  const copied = selected.map((message) => {
-    const version = versionOf(message) ?? minted.get(message.msg_id);
-    return version === undefined ? message : { ...message, version };
-  });
+  const copied = selectForkContext(live.messages(), turns);
 
   const marker: ForkMarker = {
     version: 1,
@@ -261,21 +254,7 @@ async function loadForkSource(
   );
   return {
     messages: () => store.messages(),
-    stampMessageVersions: async (versions) => await store.stampVersions(versions),
   };
-}
-
-async function mintSourceVersions(
-  source: ForkSource,
-  selected: readonly Message[],
-): Promise<Map<string, string>> {
-  const minted = new Map<string, string>();
-  for (const message of selected) {
-    if (versionOf(message) === undefined) minted.set(message.msg_id, newMessageVersion());
-  }
-  if (minted.size === 0) return minted;
-  await source.stampMessageVersions(minted);
-  return minted;
 }
 
 export async function recoverForks(data: string, character: string): Promise<string[]> {

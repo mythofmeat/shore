@@ -1055,24 +1055,6 @@ fn report_unresolved_thread(
 }
 
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
-    if let Some(CliCommand::Config {
-        subcommand:
-            Some(crate::cli::ConfigCommand::Migrate {
-                config,
-                data_dir,
-                write,
-                daemon,
-            }),
-        ..
-    }) = &cli.command
-    {
-        return Some(crate::config_migrate::run(
-            config,
-            data_dir.as_deref(),
-            *write,
-            daemon.as_deref(),
-        ));
-    }
     if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return Some(print_config_path(cli).await);
     }

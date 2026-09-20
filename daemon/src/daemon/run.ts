@@ -355,8 +355,7 @@ async function runDaemon(options: DaemonOptions): Promise<void> {
 
 if (import.meta.main) {
   try {
-    if (process.argv.includes("--config-migration-helper")) await runMigrationHelper();
-    else await runDaemon({
+    await runDaemon({
       argv: process.argv.slice(2),
       providers: DEFAULT_PROVIDERS,
       log: {
@@ -402,4 +401,3 @@ export async function bounded(
     clearTimeout(timer);
   }
 }
-import { runMigrationHelper } from "../config/migration.ts";

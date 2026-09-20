@@ -1,7 +1,8 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -68,7 +69,7 @@ describe("a character's history across threads", () => {
       await index.reconcile();
       expect(index.allRows()).toHaveLength(1);
       await createThread(f.dir, "ada", "retired", stamp);
-      await writeFile(join(f.dir, "ada", "threads", "retired", "active.jsonl"), JSON.stringify(message("retired needle")) + "\n");
+      writeDurable(join(f.dir, "ada", "threads", "retired", "active.jsonl"), JSON.stringify(message("retired needle")) + "\n");
       await archiveThread(f.dir, "ada", "retired");
       expect(existsSync(join(f.dir, "ada", "threads", "retired"))).toBe(false);
       await index.reconcile();

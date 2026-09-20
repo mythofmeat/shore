@@ -31,7 +31,6 @@ libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 shlex = "2"
 sha2 = "0.11.0"
-toml_edit = "0.25.15"
 
 [dev-dependencies]
 insta = { workspace = true }

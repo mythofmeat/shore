@@ -1,5 +1,6 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,11 +95,7 @@ describe("the audit runs at load", () => {
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const path = join(dir, "threads", "main", "active.jsonl");
     await mkdir(join(dir, "threads", "main"), { recursive: true });
-    await writeFile(
-      path,
-      `${JSON.stringify(message({ alternatives: [alt([TEXT]), alt([THINKING, TEXT])] }))}\n`,
-      "utf8",
-    );
+    writeDurable(path, `${JSON.stringify(message({ alternatives: [alt([TEXT]), alt([THINKING, TEXT])] }))}\n`);
 
     const store = await MessageStore.load(path);
     expect(store.alternativeDefects).toEqual([

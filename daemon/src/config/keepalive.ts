@@ -10,11 +10,10 @@ export type CacheKeepaliveSetting =
   | { kind: "off" }
   | { kind: "every"; interval: ConfigDuration };
 
-const KEEPALIVE_OFF_SPELLINGS = ["off", "none", "disabled", "false", "0"];
 
 export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSetting> {
   const trimmed = raw.trim();
-  if (KEEPALIVE_OFF_SPELLINGS.includes(asciiLowercase(trimmed))) return { ok: { kind: "off" } };
+  if (trimmed === "off") return { ok: { kind: "off" } };
 
   const interval = ConfigDuration.parse(trimmed);
   if ("err" in interval) return interval;
@@ -41,8 +40,4 @@ export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | un
 
 export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
-}
-
-function asciiLowercase(s: string): string {
-  return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }

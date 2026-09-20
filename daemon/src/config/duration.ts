@@ -25,13 +25,6 @@ export class ConfigDuration {
     if (s === "") return { err: "duration string is empty" };
     if (s.startsWith("-")) return { err: "duration cannot be negative" };
 
-    const bare = parseU64(s);
-    if (bare !== undefined) {
-      const millis = bare * MILLIS_PER_SECOND;
-      if (millis > U64_MAX) return { err: `duration too large: ${s}` };
-      return { ok: new ConfigDuration(millis) };
-    }
-
     const digitEnd = s.search(/[^0-9.]/);
     if (digitEnd < 0) return { err: `invalid duration: ${s}` };
 
@@ -48,11 +41,6 @@ export class ConfigDuration {
 
   static deserialize(value: unknown): ParseResult<ConfigDuration> {
     if (typeof value === "string") return ConfigDuration.parse(value);
-    if (typeof value === "number") {
-      if (value < 0) return { err: "duration cannot be negative" };
-      if (Number.isInteger(value)) return { ok: ConfigDuration.fromSecs(BigInt(value)) };
-      return millisFromSecsFloat(value);
-    }
     return { err: invalidDurationType(value) };
   }
 
@@ -186,16 +174,7 @@ function millisFromFractionalDigits(
   return { ok: fractionalMillis };
 }
 
-const DURATION_EXPECTING = 'a duration string (e.g. "30s", "2m"), or a number (seconds)';
-
-function millisFromSecsFloat(secs: number): ParseResult<ConfigDuration> {
-  const RANGE_ERR = { err: "duration must be finite, non-negative, and in range" };
-  if (!Number.isFinite(secs) || secs < 0) return RANGE_ERR;
-  if (secs >= 18446744073709551616) return RANGE_ERR;
-  const millis = BigInt(Math.floor(secs * 1000));
-  if (millis > (1n << 64n) - 1n) return { err: "duration is too large" };
-  return { ok: ConfigDuration.fromMillis(millis) };
-}
+const DURATION_EXPECTING = 'a duration string (e.g. "30s", "2m")';
 
 function invalidDurationType(value: unknown): string {
   if (Array.isArray(value)) return `invalid type: sequence, expected ${DURATION_EXPECTING}`;

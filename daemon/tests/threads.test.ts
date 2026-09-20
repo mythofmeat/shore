@@ -1,8 +1,9 @@
+import { readBook, writeBook } from "../src/llm/providers/agent_sessions.ts";
 import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { MAIN_THREAD, archiveKey } from "../src/config/dirs.ts";
@@ -23,7 +24,6 @@ import {
   homeThread,
   homeThreadOf,
   isValidThreadId,
-  migrateCharacterToThreads,
   readThreadsIndex,
   setHomeThread,
   setThreadLabel,
@@ -60,16 +60,6 @@ function messageLine(text: string): string {
   });
 }
 
-async function seedLegacyCharacter(root: string, character: string): Promise<string> {
-  const dir = join(root, character);
-  await mkdir(join(dir, "segments"), { recursive: true });
-  await writeFile(join(dir, "active.jsonl"), `${messageLine("hello")}\n`);
-  await writeFile(join(dir, "compaction.json"), '{"segments":[],"total_compacted_messages":0}\n');
-  await writeFile(join(dir, "segments", "seg-0.jsonl"), `${messageLine("archived")}\n`);
-  await writeFile(join(dir, "preferences.json"), "{}\n");
-  return dir;
-}
-
 describe("thread ids", () => {
   test("accepts ordinary ids and rejects path-shaped ones", () => {
     expect(isValidThreadId("main")).toBe(true);
@@ -96,73 +86,7 @@ describe("archive key", () => {
   });
 });
 
-describe("migration", () => {
-  test("moves the conversation under threads/main and writes the index", async () => {
-    const root = await dataDir();
-    const dir = await seedLegacyCharacter(root, "aria");
-
-    expect(await migrateCharacterToThreads(root, "aria", NOW)).toBe(true);
-
-    expect(existsSync(join(dir, "threads", "main", "active.jsonl"))).toBe(true);
-    expect(existsSync(join(dir, "threads", "main", "segments", "seg-0.jsonl"))).toBe(true);
-    expect(existsSync(join(dir, "threads", "main", "compaction.json"))).toBe(true);
-    expect(existsSync(join(dir, "active.jsonl"))).toBe(false);
-    expect(existsSync(join(dir, "segments"))).toBe(false);
-    expect(existsSync(join(dir, "preferences.json"))).toBe(true);
-
-    expect(await readThreadsIndex(root, "aria")).toEqual(defaultThreadsIndex(NOW));
-  });
-
-  test("is a no-op once the index exists", async () => {
-    const root = await dataDir();
-    await seedLegacyCharacter(root, "aria");
-    await migrateCharacterToThreads(root, "aria", NOW);
-
-    await writeFile(join(root, "aria", "active.jsonl"), `${messageLine("stray")}\n`);
-    expect(await migrateCharacterToThreads(root, "aria", "2026-09-04T00:00:00.000Z")).toBe(false);
-
-    expect(existsSync(join(root, "aria", "active.jsonl"))).toBe(true);
-    expect((await readThreadsIndex(root, "aria"))?.threads[0]?.created_at).toBe(NOW);
-  });
-
-  test("keeps what a half-finished run already moved", async () => {
-    const root = await dataDir();
-    const dir = await seedLegacyCharacter(root, "aria");
-    await mkdir(join(dir, "threads", MAIN_THREAD), { recursive: true });
-    await writeFile(join(dir, "threads", MAIN_THREAD, "active.jsonl"), `${messageLine("moved")}\n`);
-
-    expect(await migrateCharacterToThreads(root, "aria", NOW)).toBe(true);
-
-    const active = await readFile(join(dir, "threads", MAIN_THREAD, "active.jsonl"), "utf8");
-    expect(active).toBe(`${messageLine("moved")}\n`);
-    expect(existsSync(join(dir, "active.jsonl"))).toBe(true);
-    expect(existsSync(join(dir, "threads", MAIN_THREAD, "segments"))).toBe(true);
-  });
-
-  test("a move that fails leaves no index claiming the character is migrated", async () => {
-    const root = await dataDir();
-    const dir = await seedLegacyCharacter(root, "aria");
-    const to = join(dir, "threads", MAIN_THREAD);
-    await mkdir(to, { recursive: true });
-    await chmod(to, 0o500);
-
-    try {
-      expect(migrateCharacterToThreads(root, "aria", NOW)).rejects.toThrow();
-      expect(existsSync(join(dir, "threads.json"))).toBe(false);
-    } finally {
-      await chmod(to, 0o700);
-    }
-  });
-
-  test("ensureThreads migrates a legacy character before reading the index", async () => {
-    const root = await dataDir();
-    const dir = await seedLegacyCharacter(root, "aria");
-
-    expect(await ensureThreads(root, "aria", NOW)).toEqual(defaultThreadsIndex(NOW));
-    expect(existsSync(join(dir, "threads", MAIN_THREAD, "active.jsonl"))).toBe(true);
-    expect(existsSync(join(dir, "active.jsonl"))).toBe(false);
-  });
-
+describe("initialization", () => {
   test("ensureThreads repairs an index it cannot read", async () => {
     const root = await dataDir();
     await ensureThreads(root, "aria", NOW);
@@ -185,17 +109,6 @@ describe("migration", () => {
     expect(await ensureThreads(root, "aria", later, true)).toEqual(defaultThreadsIndex(later));
     expect(existsSync(join(root, "aria", "threads", MAIN_THREAD))).toBe(false);
     expect(await readFile(join(root, "aria", "threads.json"), "utf8")).toBe("{ not json");
-  });
-
-  test("a dry run reports without touching anything", async () => {
-    const root = await dataDir();
-    const dir = await seedLegacyCharacter(root, "aria");
-
-    expect(await migrateCharacterToThreads(root, "aria", NOW, true)).toBe(false);
-
-    expect(existsSync(join(dir, "active.jsonl"))).toBe(true);
-    expect(existsSync(join(dir, "threads"))).toBe(false);
-    expect(await readThreadsIndex(root, "aria")).toBeUndefined();
   });
 
   test("ensureThreads creates the index for a character with no data yet", async () => {
@@ -369,7 +282,7 @@ describe("archiving a thread", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
     const threadDir = join(root, "aria", "threads", "scratch");
-    await writeFile(join(threadDir, "active.jsonl"), `${messageLine("one")}\n${messageLine("two")}\n`);
+    writeDurable(join(threadDir, "active.jsonl"), `${messageLine("one")}\n${messageLine("two")}\n`);
 
     const index = await archiveThread(root, "aria", "scratch");
 
@@ -404,11 +317,11 @@ describe("archiving a thread", () => {
       [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
       [sessionKey("bo", "shore", "scratch")]: { version: SESSION_BOOK_VERSION, sessionId: "s-other", entries: [] },
     };
-    await writeFile(bookPathIn(root), JSON.stringify(book));
+    writeBook(bookPathIn(root), book);
 
     await archiveThread(root, "aria", "scratch");
 
-    expect(JSON.parse(await readFile(bookPathIn(root), "utf8"))).toEqual({
+    expect(readBook(bookPathIn(root))).toEqual({
       [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
       [sessionKey("bo", "shore", "scratch")]: { version: SESSION_BOOK_VERSION, sessionId: "s-other", entries: [] },
     });
@@ -418,16 +331,16 @@ describe("archiving a thread", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
     await setHomeThread(root, "aria", "scratch", NOW);
-    await writeFile(
+    writeBook(
       bookPathIn(root),
-      JSON.stringify({
+      {
         [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
-      }),
+      },
     );
 
     await archiveThread(root, "aria", MAIN_THREAD);
 
-    expect(JSON.parse(await readFile(bookPathIn(root), "utf8"))).toEqual({});
+    expect(readBook(bookPathIn(root))).toEqual({});
   });
 
   test("leaves a book with nothing of this thread's in it untouched", async () => {
@@ -436,7 +349,7 @@ describe("archiving a thread", () => {
     const raw = JSON.stringify({
       [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
     });
-    await writeFile(bookPathIn(root), raw);
+    writeBook(bookPathIn(root), JSON.parse(raw) as SessionBook);
 
     await archiveThread(root, "aria", "scratch");
 
@@ -461,10 +374,7 @@ describe("counting a thread's turns", () => {
   async function writeActive(root: string, thread: string, lines: unknown[]): Promise<void> {
     const dir = join(root, "aria", "threads", thread);
     await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "active.jsonl"),
-      lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
-    );
+    writeDurable(join(dir, "active.jsonl"), lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
   }
 
   const user = (text: string) => ({
@@ -521,10 +431,7 @@ describe("counting a thread's turns", () => {
     const root = await dataDir();
     const dir = join(root, "aria", "threads", "scratch");
     await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "active.jsonl"),
-      `${JSON.stringify(user("kept"))}\n{"role":"user","conte\n`,
-    );
+    writeDurable(join(dir, "active.jsonl"), `${JSON.stringify(user("kept"))}\n{"role":"user","conte\n`);
 
     expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
   });

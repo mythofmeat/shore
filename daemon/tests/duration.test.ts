@@ -8,11 +8,11 @@ import { parseCacheKeepalive } from "../src/config/models.ts";
 type ParseCase = { raw: string; millis: string; err?: undefined } | { raw: string; millis?: undefined; err: string };
 
 const PARSE: readonly ParseCase[] = [
-  { raw: "0", millis: "0" },
-  { raw: "1", millis: "1000" },
-  { raw: "30", millis: "30000" },
-  { raw: "007", millis: "7000" },
-  { raw: "18446744073709551615", err: "duration too large: 18446744073709551615" },
+  { raw: "0", err: "invalid duration: 0" },
+  { raw: "1", err: "invalid duration: 1" },
+  { raw: "30", err: "invalid duration: 30" },
+  { raw: "007", err: "invalid duration: 007" },
+  { raw: "18446744073709551615", err: "invalid duration: 18446744073709551615" },
   { raw: "18446744073709551616", err: "invalid duration: 18446744073709551616" },
   { raw: "99999999999999999999999", err: "invalid duration: 99999999999999999999999" },
   { raw: "500ms", millis: "500" },
@@ -143,13 +143,13 @@ type KeepaliveCase =
 
 const KEEPALIVE: readonly KeepaliveCase[] = [
   { raw: "off", display: "off", intervalMillis: null },
-  { raw: "none", display: "off", intervalMillis: null },
-  { raw: "disabled", display: "off", intervalMillis: null },
-  { raw: "false", display: "off", intervalMillis: null },
-  { raw: "0", display: "off", intervalMillis: null },
-  { raw: "OFF", display: "off", intervalMillis: null },
-  { raw: "Off", display: "off", intervalMillis: null },
-  { raw: "oFf", display: "off", intervalMillis: null },
+  { raw: "none", err: "invalid duration suffix: none" },
+  { raw: "disabled", err: "invalid duration suffix: disabled" },
+  { raw: "false", err: "invalid duration suffix: false" },
+  { raw: "0", err: "invalid duration: 0" },
+  { raw: "OFF", err: "invalid duration suffix: OFF" },
+  { raw: "Off", err: "invalid duration suffix: Off" },
+  { raw: "oFf", err: "invalid duration suffix: oFf" },
   { raw: "  off  ", display: "off", intervalMillis: null },
   { raw: "55m", display: "55m", intervalMillis: "3300000" },
   { raw: "6h", display: "6h", intervalMillis: "21600000" },
@@ -183,11 +183,7 @@ describe("parseCacheKeepalive", () => {
     });
   }
 
-  test("off has three spellings and they all mean the same thing", () => {
-    for (const spelling of ["off", "none", "disabled"]) {
-      const got = parseCacheKeepalive(spelling);
-      expect("ok" in got, spelling).toBe(true);
-      expect((got as { ok: { kind: string } }).ok.kind).toBe("off");
-    }
+  test("off disables keepalive", () => {
+    expect(parseCacheKeepalive("off")).toEqual({ ok: { kind: "off" } });
   });
 });

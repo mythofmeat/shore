@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
-import { basename, dirname } from "node:path";
-import { characterScope, importLegacyLog, insertEvent, readEvents, withStorage } from "../storage/store.ts";
+import { dirname } from "node:path";
+import { characterScope, insertEvent, readEvents, withStorage } from "../storage/store.ts";
 
 export const HEARTBEAT_LOG_CAPACITY = 100;
 
@@ -77,10 +77,6 @@ export class HeartbeatLog {
   static async load(path: string): Promise<HeartbeatLog> {
     const log = new HeartbeatLog(path);
     const { data, character } = characterScope(dirname(path));
-    await importLegacyLog(data, `${character}/${basename(path)}`, (line) => {
-      const event = decodeEvent(line);
-      return { character, kind: event === undefined ? "legacy_invalid" : "heartbeat", timestamp: event?.timestamp ?? "", content: line };
-    });
     for (const line of readEvents(data, character, "heartbeat", HEARTBEAT_LOG_CAPACITY)) {
       const event = decodeEvent(line);
       if (event !== undefined) log.#append(event);

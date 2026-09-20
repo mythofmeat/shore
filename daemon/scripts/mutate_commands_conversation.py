@@ -171,30 +171,6 @@ MUTANTS = [
 
     # --- paging arithmetic, fallback path ----------------------------------
     # `historyPageStart` walks a conversation that is already fully in memory.
-    ("historyPageStart: zero turns returns the whole page",
-     ENGINE,
-     "  if (limit.value === 0) return end;",
-     "  if (limit.value === 0) return 0;"),
-    ("historyPageStart: the boundary is exclusive of the turn's own message",
-     ENGINE,
-     "    if (seen >= limit.value) return index;",
-     "    if (seen >= limit.value) return index + 1;"),
-    ("historyPageStart: off by one on the turn count",
-     ENGINE,
-     "    if (seen >= limit.value) return index;",
-     "    if (seen > limit.value) return index;"),
-    ("historyPageStart: the scan starts at the end bound itself",
-     ENGINE,
-     "  for (let index = end - 1; index >= 0; index -= 1) {",
-     "  for (let index = end; index >= 0; index -= 1) {"),
-    ("historyPageStart: assistant turns are counted too",
-     ENGINE,
-     '    if (requiredMessage(messages, index).role !== "user") continue;\n',
-     ""),
-    ("historyPageStart: a count page is not clamped at the start of the list",
-     ENGINE,
-     '  if (limit.kind === "count") return Math.max(0, end - limit.value);',
-     '  if (limit.kind === "count") return end - limit.value;'),
 
     # --- paging arithmetic, storage-native path ----------------------------
     # `#pageStartByTurns` spends the turn budget on the in-memory tail first and
@@ -243,10 +219,6 @@ MUTANTS = [
      ENGINE,
      "    const activeStart = Math.max(start - globalActiveStart, 0);",
      "    const activeStart = start - globalActiveStart;"),
-    ("page split: the fallback active boundary is not rebased on the page",
-     ENGINE,
-     "        activeStart: Math.max(Math.min(history.activeStart, end) - start, 0),",
-     "        activeStart: history.activeStart,"),
 
     # --- turn totals -------------------------------------------------------
     ("countUserTurns: counts every message",
@@ -257,10 +229,6 @@ MUTANTS = [
      ENGINE,
      '  return messages.filter((message) => message.role === "user").length;',
      '  return messages.filter((message) => message.role !== "system").length;'),
-    ("totals: the fallback counts the page, not the conversation",
-     ENGINE,
-     "        totalTurns: countUserTurns(history.messages),",
-     "        totalTurns: countUserTurns(messages),"),
     ("totals: the storage path forgets the archived turns",
      ENGINE,
      "      totalTurns: this.#segments.displayTurnCount() + countUserTurns(active),",

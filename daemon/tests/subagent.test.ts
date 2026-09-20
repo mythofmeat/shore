@@ -1,3 +1,4 @@
+import { writePromptSnapshotFile } from "./support/storage.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,9 +57,8 @@ function buildLayout(withSnapshot: boolean): Layout {
 
   if (withSnapshot) {
     const active = join(data, "active_prompt");
-    mkdirSync(active, { recursive: true });
-    writeFileSync(join(active, "SOUL.md"), "SNAPSHOT SOUL");
-    writeFileSync(join(active, "MEMORY.md"), "SNAPSHOT MEMORY");
+    writePromptSnapshotFile(join(active, "SOUL.md"), "SNAPSHOT SOUL");
+    writePromptSnapshotFile(join(active, "MEMORY.md"), "SNAPSHOT MEMORY");
   }
 
   const layout = { data, ws, outside };

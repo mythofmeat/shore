@@ -6,7 +6,6 @@
     "start": "bun run src/daemon/run.ts",
     "build": "bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
     "typecheck": "tsc --noEmit",
-    "config:reference": "bun run scripts/config_reference.ts",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",

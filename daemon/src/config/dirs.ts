@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
-import { join } from "node:path";
 
 import { compareByCodePoint } from "../util/sort.ts";
 
@@ -12,14 +11,10 @@ export const TOOLS_FILE = "TOOLS.md";
 const MEMORY_DIR = "memory";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
-const SEGMENTS_DIR = "segments";
-const COMPACTION_MANIFEST_FILE = "compaction.json";
 const THREADS_DIR = "threads";
 const THREADS_INDEX_FILE = "threads.json";
 const PLUGINS_DIR = "plugins";
 
-const LEGACY_CHARACTER_FILE = "character.md";
-const LEGACY_USER_FILE = "user.md";
 
 export interface ShoreDirs {
   config: string;
@@ -191,23 +186,8 @@ export const threadDirIn = (characterDir: string, thread: string): string =>
 export const activeJsonlIn = (conversationDir: string): string =>
   rustJoin(conversationDir, ACTIVE_JSONL_FILE);
 
-export const segmentsDirIn = (conversationDir: string): string =>
-  rustJoin(conversationDir, SEGMENTS_DIR);
-
-export const compactionManifestIn = (conversationDir: string): string =>
-  rustJoin(conversationDir, COMPACTION_MANIFEST_FILE);
-
 export const characterActiveJsonl = (data: string, name: string, thread: string): string =>
   activeJsonlIn(threadDataDir(data, name, thread));
-
-export const characterSegmentsDir = (data: string, name: string, thread: string): string =>
-  segmentsDirIn(threadDataDir(data, name, thread));
-
-export const characterCompactionManifest = (
-  data: string,
-  name: string,
-  thread: string,
-): string => compactionManifestIn(threadDataDir(data, name, thread));
 
 export function isFile(path: string): boolean {
   try {
@@ -235,30 +215,10 @@ export function readOrUndefined(path: string): string | undefined {
 }
 
 export function discoverCharacters(config: string, workspaceDir?: string): string[] {
-  const names = new Set<string>();
-
-  const charsDir = rustJoin(config, "characters");
-  for (const name of readdirOrEmpty(charsDir)) {
-    if (!isUsableCharacterName(name)) continue;
-    const dir = join(charsDir, name);
-    if (
-      (workspaceDir === undefined &&
-        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||
-      pathExists(join(dir, LEGACY_CHARACTER_FILE))
-    ) {
-      names.add(name);
-    }
-  }
-
-  if (workspaceDir !== undefined) {
-    for (const name of readdirOrEmpty(workspaceDir)) {
-      if (!isUsableCharacterName(name)) continue;
-      const dir = join(workspaceDir, name);
-      if (pathExists(join(dir, SOUL_FILE))) names.add(name);
-    }
-  }
-
-  return [...names].sort(compareByCodePoint);
+  const root = workspaceDir ?? rustJoin(config, "characters");
+  return readdirOrEmpty(root).filter(name =>
+    isUsableCharacterName(name) && pathExists(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)),
+  ).sort(compareByCodePoint);
 }
 
 function readdirOrEmpty(dir: string): string[] {
@@ -274,10 +234,7 @@ export function loadCharacterDefinition(
   name: string,
   workspaceDir?: string,
 ): string | undefined {
-  return (
-    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)) ??
-    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))
-  );
+  return readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir));
 }
 
 export function resolveUserDefinition(
@@ -285,10 +242,7 @@ export function resolveUserDefinition(
   name: string,
   workspaceDir?: string,
 ): string | undefined {
-  return (
-    readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceDir)) ??
-    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_USER_FILE))
-  );
+  return readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceDir));
 }
 
 export function resolvePromptTemplate(

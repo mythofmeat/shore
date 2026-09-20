@@ -379,32 +379,9 @@ pub(crate) fn write_check<W: Write>(out: &mut W, data: &Value) {
         .and_then(Value::as_array)
         .map(|items| items.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
-    let deprecations = data.get("deprecations").and_then(Value::as_array);
-    if let Some(items) = deprecations {
-        for item in items {
-            let text = |key| item.get(key).and_then(Value::as_str).unwrap_or("unknown");
-            warning(
-                out,
-                &format!(
-                    "{}: {} -> {} ({})",
-                    text("source"),
-                    text("path"),
-                    text("replacement"),
-                    text("boundary")
-                ),
-            );
-        }
-    }
     if warnings.is_empty() {
         blank(out);
-        note(
-            out,
-            if deprecations.is_some_and(|items| !items.is_empty()) {
-                "legacy settings still work; use `shore config migrate` to review an update"
-            } else {
-                "no problems found"
-            },
-        );
+        note(out, "no problems found");
         return;
     }
     blank(out);

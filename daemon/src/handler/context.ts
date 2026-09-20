@@ -67,7 +67,6 @@ export async function prepareChatContext(
     try {
       await resetActivePromptSnapshot(characterDataDir, params.thread);
       await ensureCharacterWorkspace(
-        characterDataDir,
         config.dirs.config,
         character,
         config.dirs.workspace,

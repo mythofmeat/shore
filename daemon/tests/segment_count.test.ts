@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -36,20 +36,6 @@ function message(text: string): Message {
   };
 }
 
-async function writeManifest(charDir: string, files: string[]): Promise<void> {
-  await writeFile(
-    join(charDir, "threads", "main", "compaction.json"),
-    JSON.stringify({
-      segments: files.map((file, index) => ({
-        file,
-        message_count: index + 1,
-        compacted_at: "2026-08-14T00:00:00.000Z",
-      })),
-      total_compacted_messages: files.length,
-    }),
-  );
-}
-
 function seedDatabase(dataRoot: string, character: string, count: number): void {
   const store = HistoryStore.open(join(dataRoot, HISTORY_DB_FILE));
   try {
@@ -71,15 +57,7 @@ function seedDatabase(dataRoot: string, character: string, count: number): void 
 }
 
 describe("segmentCount", () => {
-  test("counts a manifest when there is no history database", async () => {
-    const root = await dataDir();
-    const charDir = await characterDir(root, "ada");
-    await writeManifest(charDir, ["0001.jsonl", "0002.jsonl"]);
-
-    expect(await segmentCount(conversationRef(root, "ada", MAIN_THREAD, false))).toBe(2);
-  });
-
-  test("counts database segments after the manifest is gone", async () => {
+  test("counts database segments", async () => {
     const root = await dataDir();
     await characterDir(root, "ada");
     seedDatabase(root, "ada", 3);
@@ -93,15 +71,6 @@ describe("segmentCount", () => {
     seedDatabase(root, "grace", 4);
 
     expect(await segmentCount(conversationRef(root, "ada", MAIN_THREAD, false))).toBe(0);
-  });
-
-  test("takes the larger of a partially imported manifest and the database", async () => {
-    const root = await dataDir();
-    const charDir = await characterDir(root, "ada");
-    await writeManifest(charDir, ["0001.jsonl"]);
-    seedDatabase(root, "ada", 5);
-
-    expect(await segmentCount(conversationRef(root, "ada", MAIN_THREAD, false))).toBe(5);
   });
 
   test("returns zero for a character with no history at all", async () => {

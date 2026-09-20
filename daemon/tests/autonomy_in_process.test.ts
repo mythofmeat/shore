@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent } from "../src/testing/fake_agent_query.ts";
@@ -70,12 +71,9 @@ async function world(): Promise<LoadedConfig> {
 
   const characterDir = join(dirs.data, "ada");
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")]
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")]
       .map((m) => JSON.stringify(m))
-      .join("\n") + "\n",
-  );
+      .join("\n") + "\n");
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";

@@ -191,7 +191,7 @@ describe("notification gating", () => {
       configWith({
         enabled: true,
         backend: "ntfy",
-        ntfy: { url: "u", topic: "t", token: "" },
+        ntfy: { url: "u", topic: "t" },
         events: { ...defaultNotificationEvents(), error: true },
       }),
       recordingSink(sent),
@@ -322,7 +322,8 @@ function configToFixtureShape(config: NotificationsConfig): Row {
   return {
     enabled: config.enabled,
     backend: config.backend,
-    ntfy: { url: config.ntfy.url, topic: config.ntfy.topic, token: config.ntfy.token },
+    ntfy: { url: config.ntfy.url, topic: config.ntfy.topic },
+    token_env: config.token_env,
     command: [...config.command],
     generation_threshold_ms: config.generation_threshold.asMillisExact().toString(),
     events: { ...config.events },
@@ -344,7 +345,6 @@ const REJECTED_ONLY_BY_A_STRICTER_PARSER = new Set([
   "backend_wrong_type",
 ]);
 
-const BUN_TOML_REFUSES = new Set(["threshold_i64_max"]);
 
 describe("[notifications] parsing", () => {
   const defaults = (): Row => {
@@ -369,7 +369,7 @@ describe("[notifications] parsing", () => {
     expect(defaults()).toEqual({
       enabled: false,
       backend: "notify_send",
-      ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
+      ntfy: { url: "https://ntfy.sh", topic: "" },
       command: [],
       generation_threshold_ms: "0",
       events: {
@@ -385,7 +385,6 @@ describe("[notifications] parsing", () => {
 
   for (const c of f["config_parse"] as Row[]) {
     if (REJECTED_ONLY_BY_A_STRICTER_PARSER.has(c["name"] as string)) continue;
-    if (BUN_TOML_REFUSES.has(c["name"] as string)) continue;
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
       const parsed = readNotificationsConfig(table);
@@ -409,18 +408,9 @@ describe("[notifications] parsing", () => {
     expect((Bun.TOML.parse("a = -inf") as Row)["a"]).toBe(-Infinity);
   });
 
-  test("the recorded i64::MAX threshold cannot be replayed — Bun refuses the document", () => {
-    const c = (f["config_parse"] as Row[]).find((x) => x["name"] === "threshold_i64_max");
-    if (c === undefined) throw new Error("fixture case missing");
-    expect((c["ok"] as Row)["generation_threshold_ms"]).toBe("18446744073709551615");
-    expect(() => Bun.TOML.parse(c["toml"] as string)).toThrow("losslessly");
-  });
-
-  test("a bare number on generation_threshold is seconds", () => {
-    const parsed = readNotificationsConfig(
-      Bun.TOML.parse("generation_threshold = 30\n") as Record<string, unknown>,
-    );
-    expect("ok" in parsed && parsed.ok.generation_threshold.asMillis()).toBe(30_000);
+  test("numeric duration values are rejected", () => {
+    const parsed = readNotificationsConfig({ generation_threshold: 30 });
+    expect("err" in parsed).toBe(true);
   });
 });
 
@@ -438,7 +428,7 @@ describe("ntfy url", () => {
       configWith({
         enabled: true,
         backend: "ntfy",
-        ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
+        ntfy: { url: "https://ntfy.sh", topic: "" },
         events: { ...defaultNotificationEvents(), error: true },
       }),
     );

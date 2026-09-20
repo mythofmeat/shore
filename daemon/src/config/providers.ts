@@ -8,14 +8,13 @@ import {
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
-import { ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "../llm/providers/zai_config.ts";
+import { ZAI_SUB_PROVIDER } from "../llm/providers/zai_config.ts";
 
 export type ProviderRegistryErrorKind =
   | "parse_entry"
   | "conflicting_key_forms"
   | "missing_key_field"
   | "duplicate_key_name"
-  | "removed_provider"
   | "transport_in_defaults";
 
 export class ProviderRegistryError extends Error {
@@ -54,19 +53,6 @@ export class ProviderRegistryError extends Error {
       "duplicate_key_name",
       `[providers.${provider}] has duplicate key name ${JSON.stringify(name)}; ` +
         `each key under a provider must have a unique name`,
-    );
-  }
-
-  static removedProvider(provider = "claude_code"): ProviderRegistryError {
-    const message = provider === "zai"
-      ? `[providers.zai] was split into [providers.${ZAI_API_PROVIDER}] for pay-as-you-go ` +
-        `traffic and [providers.${ZAI_SUB_PROVIDER}] for Coding Plan traffic; rename the ` +
-        `section to whichever endpoint your key is for`
-      : `[providers.claude_code] is no longer supported — the Claude Code transport ` +
-        `was removed; drop this section from your config`;
-    return new ProviderRegistryError(
-      "removed_provider",
-      message,
     );
   }
 
@@ -183,9 +169,6 @@ export class ProviderRegistry {
 
     const providers = new Map<string, ProviderEntry>();
     for (const name of sortedKeys(section)) {
-      if (name === "claude_code" || name === "zai") {
-        throw ProviderRegistryError.removedProvider(name);
-      }
       providers.set(name, parseEntry(name, section[name]));
     }
     return new ProviderRegistry(

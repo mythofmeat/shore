@@ -95,14 +95,11 @@ interface StructSpec<T> {
   name: string;
   fields: { [K in keyof T]?: Reader<T[K]> };
   required?: readonly (keyof T & string)[];
-  noDefault?: readonly (keyof T & string)[];
-  removed?: Readonly<Record<string, string>>;
   alsoAccepted?: readonly string[];
   make: () => T;
 }
 
 function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): ParseResult<T> {
-  if (Array.isArray(value)) return readStructFromSeq(spec, value);
   if (!isTable(value)) return { err: invalidType(value, `struct ${spec.name}`) };
 
   const elsewhere = new Set<string>(spec.alsoAccepted ?? []);
@@ -114,8 +111,6 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
     const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];
     if (read === undefined) {
       if (elsewhere.has(key)) continue;
-      const moved = spec.removed?.[key];
-      if (moved !== undefined) return { err: `\`${key}\` was removed — ${moved}` };
       return { err: unknownField(key, known) };
     }
     const parsed = read(value[key]);
@@ -126,33 +121,6 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
 
   for (const key of spec.required ?? []) {
     if (!seen.has(key)) return { err: `missing field \`${key}\`` };
-  }
-  return { ok: out };
-}
-
-function readStructFromSeq<T extends object>(
-  spec: StructSpec<T>,
-  seq: readonly TomlValue[],
-): ParseResult<T> {
-  const keys = Object.keys(spec.fields);
-  const noDefault = new Set<string>(spec.noDefault ?? []);
-  const out = spec.make();
-
-  if (seq.length > keys.length) {
-    return { err: `invalid length ${seq.length}, expected fewer elements in array` };
-  }
-
-  for (const [i, key] of keys.entries()) {
-    if (i >= seq.length) {
-      if (!noDefault.has(key)) continue;
-      return {
-        err: `invalid length ${i}, expected struct ${spec.name} with ${keys.length} elements`,
-      };
-    }
-    const read = (spec.fields as Record<string, Reader<unknown>>)[key] as Reader<unknown>;
-    const parsed = read(seq[i]);
-    if ("err" in parsed) return parsed;
-    (out as Record<string, unknown>)[key] = parsed.ok;
   }
   return { ok: out };
 }
@@ -277,23 +245,19 @@ const DAEMON: StructSpec<DaemonConfig> = {
 };
 
 export interface BackgroundDefaultsConfig {
-  model: string | undefined;
   heartbeat: string | undefined;
   compaction: string | undefined;
 }
 
 const defaultBackgroundDefaults = (): BackgroundDefaultsConfig => ({
-  model: undefined,
   heartbeat: undefined,
   compaction: undefined,
 });
 
 const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
   name: "BackgroundDefaultsConfig",
-  noDefault: ["model", "heartbeat", "compaction"],
   make: defaultBackgroundDefaults,
   fields: {
-    model: optional(readChatModelName),
     heartbeat: optional(readChatModelName),
     compaction: optional(readChatModelName),
   },
@@ -306,7 +270,6 @@ export interface DefaultsConfig {
   image_generation: string | undefined;
   subagent_model: string | undefined;
   display_name: string | undefined;
-  stream: boolean;
 }
 
 const defaultDefaultsConfig = (): DefaultsConfig => ({
@@ -316,13 +279,10 @@ const defaultDefaultsConfig = (): DefaultsConfig => ({
   image_generation: undefined,
   subagent_model: undefined,
   display_name: undefined,
-  stream: true,
 });
 
 const DEFAULTS: StructSpec<DefaultsConfig> = {
   name: "DefaultsConfig",
-  noDefault: ["model", "embedding", "image_generation", "subagent_model", "display_name"],
-  removed: { heartbeat: "set `heartbeat.model`" },
   make: defaultDefaultsConfig,
   fields: {
     model: optional(readChatModelName),
@@ -331,7 +291,6 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
     image_generation: optional(readImageModelName),
     subagent_model: optional(readChatModelName),
     display_name: optional(readString),
-    stream: readBool,
   },
 };
 
@@ -341,7 +300,7 @@ export function resolveBackgroundModelName(
   defaults: DefaultsConfig,
   task: BackgroundTask,
 ): string | undefined {
-  return defaults.background[task] ?? defaults.background.model;
+  return defaults.background[task];
 }
 
 export function resolveDisplayName(
@@ -356,7 +315,6 @@ export type UserTimestampMode = "auto" | "always" | "never";
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
 export interface HeartbeatConfig {
-  enabled: boolean;
   fallback_heartbeat_interval: ConfigDuration;
   dormant_after_heartbeat_turns: number;
   dormant_after_idle_time: ConfigDuration;
@@ -365,7 +323,6 @@ export interface HeartbeatConfig {
 }
 
 const defaultHeartbeatConfig = (): HeartbeatConfig => ({
-  enabled: true,
   fallback_heartbeat_interval: ConfigDuration.fromSecs(3600),
   dormant_after_heartbeat_turns: 3,
   dormant_after_idle_time: ConfigDuration.fromSecs(172_800),
@@ -377,7 +334,6 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
   name: "HeartbeatConfig",
   make: defaultHeartbeatConfig,
   fields: {
-    enabled: readBool,
     fallback_heartbeat_interval: readDuration,
     dormant_after_heartbeat_turns: readU32,
     dormant_after_idle_time: readDuration,
@@ -624,11 +580,8 @@ export type ThinkingReplay = "all" | "none";
 export function parseThinkingReplay(s: string): ThinkingReplay | undefined {
   switch (s) {
     case "all":
-    case "true":
-    case "last_turn":
       return "all";
     case "none":
-    case "false":
       return "none";
     default:
       return undefined;
@@ -647,7 +600,6 @@ const THINKING_REPLAY_MODES: readonly ThinkingReplay[] = ["all", "none"];
 
 const readThinkingReplay: Reader<ThinkingReplay> = typed(
   (v) => {
-    if (typeof v === "boolean") return { ok: v ? "all" : "none" };
     if (typeof v !== "string") {
       return { err: "data did not match any variant of untagged enum BoolOrStr" };
     }
@@ -656,7 +608,7 @@ const readThinkingReplay: Reader<ThinkingReplay> = typed(
       return {
         err:
           `invalid replay_prior_thinking ${JSON.stringify(v)}; ` +
-          'expected "all", "none" (or legacy true/false)',
+          'expected "all", "none"',
       };
     }
     return { ok: parsed };
@@ -709,37 +661,13 @@ const RETRIEVAL: StructSpec<RetrievalConfig> = {
 
 export interface MemoryConfig {
   compaction: CompactionConfig;
-  file_limits: MemoryFileLimitsConfig;
   thinking: ThinkingConfig;
   retrieval: RetrievalConfig;
   git_push: boolean;
 }
 
-export interface MemoryFileLimitsConfig {
-  max_note_bytes: number;
-  max_index_bytes: number;
-  max_prompt_bytes: number;
-}
-
-const defaultMemoryFileLimitsConfig = (): MemoryFileLimitsConfig => ({
-  max_note_bytes: 8 * 1024,
-  max_index_bytes: 16 * 1024,
-  max_prompt_bytes: 64 * 1024,
-});
-
-const MEMORY_FILE_LIMITS: StructSpec<MemoryFileLimitsConfig> = {
-  name: "MemoryFileLimitsConfig",
-  make: defaultMemoryFileLimitsConfig,
-  fields: {
-    max_note_bytes: readU64,
-    max_index_bytes: readU64,
-    max_prompt_bytes: readU64,
-  },
-};
-
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
-  file_limits: defaultMemoryFileLimitsConfig(),
   thinking: defaultThinkingConfig(),
   retrieval: defaultRetrievalConfig(),
   git_push: false,
@@ -747,15 +675,9 @@ const defaultMemoryConfig = (): MemoryConfig => ({
 
 const MEMORY: StructSpec<MemoryConfig> = {
   name: "MemoryConfig",
-  removed: {
-    backend: "Hindsight support was removed; delete [memory.backend]",
-    recall: "automatic memory recall was removed; delete [memory.recall]",
-    retain: "Hindsight retention was removed; delete [memory.retain]",
-  },
   make: defaultMemoryConfig,
   fields: {
     compaction: struct(COMPACTION),
-    file_limits: struct(MEMORY_FILE_LIMITS),
     thinking: struct(THINKING),
     retrieval: struct(RETRIEVAL),
     git_push: readBool,
@@ -817,31 +739,18 @@ const NOTIFICATION_BACKENDS: readonly NotificationBackend[] = [
 export interface NtfyConfig {
   url: string;
   topic: string;
-  token: string;
 }
 
 const defaultNtfyConfig = (): NtfyConfig => ({
   url: "https://ntfy.sh",
   topic: "",
-  token: "",
 });
 
 const NTFY: StructSpec<NtfyConfig> = {
   name: "NtfyConfig",
   make: defaultNtfyConfig,
-  fields: { url: readString, topic: readString, token: readString },
+  fields: { url: readString, topic: readString },
 };
-
-const NOTIFY_COMMAND_WAS_A_SHELL_TEMPLATE =
-  "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell";
-
-const readNotifyCommand: Reader<string[]> = typed(
-  (v) =>
-    typeof v === "string" || (isTable(v) && "template" in v)
-      ? { err: NOTIFY_COMMAND_WAS_A_SHELL_TEMPLATE }
-      : readStringSeq(v),
-  { kind: "list", item: { kind: "string" } },
-);
 
 export interface NotificationEventsConfig {
   autonomous_message: boolean;
@@ -901,7 +810,7 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
     enabled: readBool,
     backend: readEnum(NOTIFICATION_BACKENDS),
     ntfy: struct(NTFY),
-    command: readNotifyCommand,
+    command: readStringSeq,
     generation_threshold: readDuration,
     events: struct(NOTIFICATION_EVENTS),
   },
@@ -969,7 +878,6 @@ export interface UsageBudgetConfig {
 const BUDGET: StructSpec<UsageBudgetConfig> = {
   name: "UsageBudgetConfig",
   required: ["cost_usd"],
-  noDefault: ["cost_usd"],
   make: () => ({
     name: "",
     period: "day",
@@ -1026,13 +934,11 @@ export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
 
 export interface UsageConfig {
   timezone: string;
-  allow_compaction_over_budget: boolean;
   budgets: UsageBudgetConfig[];
 }
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
-  allow_compaction_over_budget: false,
   budgets: [],
 });
 
@@ -1041,7 +947,6 @@ const USAGE: StructSpec<UsageConfig> = {
   make: defaultUsageConfig,
   fields: {
     timezone: readString,
-    allow_compaction_over_budget: readBool,
     budgets: readSeq(struct(BUDGET)),
   },
 };
@@ -1058,8 +963,6 @@ const defaultAdvancedConfig = (): AdvancedConfig => ({
 
 const ADVANCED: StructSpec<AdvancedConfig> = {
   name: "AdvancedConfig",
-  noDefault: ["max_retries", "retry_backoff"],
-  removed: { editor: "shore uses $VISUAL, then $EDITOR, then vi" },
   make: defaultAdvancedConfig,
   fields: {
     max_retries: optional(readU32),
@@ -1079,7 +982,6 @@ export interface SubagentConfig {
 const SUBAGENT: StructSpec<SubagentConfig> = {
   name: "SubagentConfig",
   required: ["description", "prompt"],
-  noDefault: ["description", "prompt", "model", "max_iterations", "timeout"],
   make: () => ({
     description: "",
     prompt: "",
@@ -1109,7 +1011,6 @@ export interface McpServerConfig {
 
 const MCP_SERVER: StructSpec<McpServerConfig> = {
   name: "McpServerConfig",
-  noDefault: ["command", "cwd", "url"],
   make: () => ({
     command: undefined,
     args: [],
@@ -1196,7 +1097,7 @@ export function validateAppConfigLayer(table: Table): ParseResult<AppConfig> {
 
 function layerShapeProblem(value: unknown, info: ConfigTypeInfo, path: string[]): string | undefined {
   if (info.kind === "table") {
-    if (Array.isArray(value)) return `${formatConfigPath(canonicalConfigPath(path))}: must be a table; convert the legacy array encoding to named fields`;
+    if (Array.isArray(value)) return `${formatConfigPath(canonicalConfigPath(path))}: must be a table`;
     if (!isTable(value)) return undefined;
     const fields = info.table?.().fields ?? {};
     for (const [key, child] of Object.entries(value)) {

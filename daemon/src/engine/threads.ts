@@ -1,7 +1,6 @@
 import { withConversation } from "./lifecycle.ts";
-import { threadFile, readDurable, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
-import { existsSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { threadFile, readDurable, writeDurable, deleteThreadState } from "../storage/files.ts";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -9,7 +8,6 @@ import {
   archiveKey,
   characterDataDir,
   characterThreadsIndex,
-  rustJoin,
   threadDataDir,
   threadsIndexIn,
 } from "../config/dirs.ts";
@@ -18,7 +16,6 @@ import { isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
-import { shoreLog } from "../log.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
@@ -49,13 +46,6 @@ export function assertThreadId(id: string): void {
       `(at most ${String(MAX_THREAD_ID_LENGTH)} characters)`,
   );
 }
-
-const MIGRATED_ENTRIES = [
-  "active.jsonl",
-  "segments",
-  "compaction.json",
-  "compaction-checkpoint.json",
-] as const;
 
 export interface ThreadForkOrigin {
   fork_id: string;
@@ -197,48 +187,12 @@ export async function writeThreadsIndex(
   writeDurable(characterThreadsIndex(data, character), `${JSON.stringify(index, null, 2)}\n`);
 }
 
-export async function migrateCharacterToThreads(
-  data: string,
-  character: string,
-  now: string,
-  dryRun = false,
-): Promise<boolean> {
-  if (durableExists(characterThreadsIndex(data, character))) return false;
-
-  const from = characterDataDir(data, character);
-  const to = threadDataDir(data, character, MAIN_THREAD);
-  const moving = MIGRATED_ENTRIES.filter(
-    (entry) => existsSync(rustJoin(from, entry)) && !existsSync(rustJoin(to, entry)),
-  );
-
-  if (dryRun) {
-    shoreLog.warn(
-      `shore: [dry run] would migrate ${character} to threads/${MAIN_THREAD}: ` +
-        (moving.length === 0 ? "(nothing to move)" : moving.join(", ")),
-    );
-    return false;
-  }
-
-  await mkdir(to, { recursive: true });
-  for (const entry of moving) {
-    await rename(rustJoin(from, entry), rustJoin(to, entry));
-  }
-  await writeThreadsIndex(data, character, defaultThreadsIndex(now));
-
-  shoreLog.warn(
-    `shore: migrated ${character} to threads/${MAIN_THREAD} ` +
-      `(moved: ${moving.length === 0 ? "nothing" : moving.join(", ")})`,
-  );
-  return true;
-}
-
 export async function ensureThreads(
   data: string,
   character: string,
   now: string,
   dryRun = false,
 ): Promise<ThreadsIndex> {
-  await migrateCharacterToThreads(data, character, now, dryRun);
   const index = await readThreadsIndex(data, character);
   if (index !== undefined) return index;
   const fresh = defaultThreadsIndex(now);
@@ -396,15 +350,15 @@ export async function archiveThread(
     if (active.trim() !== "") {
       await archiveAndRetain(
         dir,
+        {
+          dbPath: join(data, HISTORY_DB_FILE),
+          archiveKey: archiveKey(character, id),
+        },
         0,
         active,
         now,
         options.newId ?? (() => crypto.randomUUID()),
         `thread-archive-${crypto.randomUUID()}`,
-        {
-          dbPath: join(data, HISTORY_DB_FILE),
-          archiveKey: archiveKey(character, id),
-        },
       );
     }
 

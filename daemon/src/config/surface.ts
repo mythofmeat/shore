@@ -1,81 +1,78 @@
-import { ConfigDuration } from "./duration.ts";
 
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_FORMAT_VERSION = 1;
 export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "cache", "budgets", "notifications", "mcp", "matrix", "web_search", "retrieval", "usage"] as const;
-export const DEPRECATION_BOUNDARY = "supported until at least 180 days and two subsequent stable releases after the first flat-config release; no removal release scheduled";
 
-export interface ConfigAlias {
-  legacy: ConfigPath;
+export interface ConfigField {
+  internal: ConfigPath;
   canonical: ConfigPath;
 }
 
-const alias = (legacy: string, canonical: string): ConfigAlias => ({
-  legacy: legacy.split("."), canonical: canonical.split("."),
+const field = (internal: string, canonical: string): ConfigField => ({
+  internal: internal.split("."), canonical: canonical.split("."),
 });
 
-export const CONFIG_ALIASES: readonly ConfigAlias[] = [
-  alias("daemon.addr", "daemon.listen_addr"),
-  alias("cache.forensics", "daemon.cache_forensics"),
-  alias("cache.keepalive_max", "cache.keepalive_for"),
-  alias("defaults.model", "chat.model"),
-  alias("defaults.display_name", "chat.display_name"),
-  alias("defaults.embedding", "embedding.model"),
-  alias("defaults.image_generation", "image.model"),
-  alias("defaults.subagent_model", "subagents.model"),
-  alias("defaults.background.heartbeat", "heartbeat.model"),
-  alias("defaults.background.compaction", "compaction.model"),
-  alias("behavior.user_message_timestamps", "chat.user_timestamps"),
-  alias("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
-  ...["max_retries", "retry_backoff"].map((key) => alias(`advanced.${key}`, `chat.${key}`)),
+export const CONFIG_FIELDS: readonly ConfigField[] = [
+  field("daemon.addr", "daemon.listen_addr"),
+  field("cache.forensics", "daemon.cache_forensics"),
+  field("cache.keepalive_max", "cache.keepalive_for"),
+  field("defaults.model", "chat.model"),
+  field("defaults.display_name", "chat.display_name"),
+  field("defaults.embedding", "embedding.model"),
+  field("defaults.image_generation", "image.model"),
+  field("defaults.subagent_model", "subagents.model"),
+  field("defaults.background.heartbeat", "heartbeat.model"),
+  field("defaults.background.compaction", "compaction.model"),
+  field("behavior.user_message_timestamps", "chat.user_timestamps"),
+  field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
+  ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
   ...Object.entries({
     fallback_heartbeat_interval: "interval",
     minimum_heartbeat_latency: "min_interval",
     dormant_after_heartbeat_turns: "max_idle_turns",
     dormant_after_idle_time: "idle_timeout",
     wrap_up_grace_rounds: "max_wrap_up_rounds",
-  }).map(([old, key]) => alias(`behavior.autonomy.heartbeat.${old}`, `heartbeat.${key}`)),
-  ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => alias(`memory.compaction.${key}`, `compaction.${key}`)),
-  alias("memory.compaction.idle_trigger", "compaction.idle_after"),
-  alias("memory.git_push", "compaction.git_push"),
-  alias("tools.enabled_tools", "tools.enabled"),
-  alias("tools.enabled_subagents", "subagents.enabled"),
-  alias("tools.config.*", "tools.*"),
-  alias("subagents.*.max_iterations", "subagents.*.max_tool_rounds"),
+  }).map(([old, key]) => field(`behavior.autonomy.heartbeat.${old}`, `heartbeat.${key}`)),
+  ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
+  field("memory.compaction.idle_trigger", "compaction.idle_after"),
+  field("memory.git_push", "compaction.git_push"),
+  field("tools.enabled_tools", "tools.enabled"),
+  field("tools.enabled_subagents", "subagents.enabled"),
+  field("tools.config.*", "tools.*"),
+  field("subagents.*.max_iterations", "subagents.*.max_tool_rounds"),
   ...Object.entries({
     mode: "mode", max_file_bytes: "max_file_bytes", max_indexed_files: "max_files",
     max_total_indexed_bytes: "max_total_bytes", max_embed_chars_per_file: "max_embedding_chars_per_file", binary: "binary",
-  }).map(([old, key]) => alias(`memory.retrieval.${old}`, `retrieval.${key}`)),
+  }).map(([old, key]) => field(`memory.retrieval.${old}`, `retrieval.${key}`)),
   ...Object.entries({
     enabled: "enabled", user_id: "user_id", room_id: "room_id", homeserver: "homeserver_url", mirror_all: "mirror_user_messages",
-  }).map(([old, key]) => alias(`connections.matrix.${old}`, `matrix.${key}`)),
-  alias("connections.matrix", "matrix"),
-  alias("notifications.generation_threshold", "notifications.min_generation_duration"),
-  alias("notifications.ntfy.url", "notifications.url"),
-  alias("notifications.ntfy.topic", "notifications.topic"),
+  }).map(([old, key]) => field(`connections.matrix.${old}`, `matrix.${key}`)),
+    field("connections.matrix", "matrix"),
+  field("notifications.generation_threshold", "notifications.min_generation_duration"),
+  field("notifications.ntfy.url", "notifications.url"),
+  field("notifications.ntfy.topic", "notifications.topic"),
   ...Object.entries({api_key_env: "api_key_env", result_limit: "max_results", search_depth: "depth", include_answer: "include_answer"})
-    .map(([old, key]) => alias(`tools.web_search.${old}`, `web_search.${key}`)),
-  alias("mcp.*.cwd", "mcp.*.working_dir"),
-  alias("usage.budgets", "budgets"),
-  alias("image_generation", "image"),
-  alias("providers.*.discovery.enabled", "providers.*.discover"),
-  alias("providers.*.discovery.ignore", "providers.*.ignore_models"),
-  alias("providers.*.keys.*.env", "providers.*.keys.*.api_key_env"),
+    .map(([old, key]) => field(`tools.web_search.${old}`, `web_search.${key}`)),
+  field("mcp.*.cwd", "mcp.*.working_dir"),
+  field("usage.budgets", "budgets"),
+  field("image_generation", "image"),
+  field("providers.*.discovery.enabled", "providers.*.discover"),
+  field("providers.*.discovery.ignore", "providers.*.ignore_models"),
+  field("providers.*.keys.*.env", "providers.*.keys.*.api_key_env"),
 ];
 
-export const BUDGET_ALIASES: readonly ConfigAlias[] = Object.entries({
+export const BUDGET_FIELDS: readonly ConfigField[] = Object.entries({
   warn_at: "warn_fractions", limit: "limit_action", pace_warn_at: "pace_warn_fractions",
   usage_kind: "usage_kinds", allow_compaction_over_budget: "allow_compaction",
-}).map(([old, key]) => alias(old, key));
+}).map(([old, key]) => field(old, key));
 
-export const SETTING_ALIASES: readonly ConfigAlias[] = Object.entries({
+export const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
   budget_tokens: "reasoning_budget_tokens", cache_keepalive_max: "cache_keepalive_for",
   replay_prior_thinking: "reasoning_replay", max_tool_iterations: "max_tool_rounds",
   openrouter_provider: "openrouter_routing", gemini_generation: "gemini_thinking_mode",
   zai_clear_thinking: "zai_clear_reasoning",
-}).map(([old, key]) => alias(old, key));
+}).map(([old, key]) => field(old, key));
 
 export const MODEL_FIELDS = [
   "max_context_tokens", "max_output_tokens", "temperature", "top_p", "reasoning_effort",
@@ -83,21 +80,7 @@ export const MODEL_FIELDS = [
   "max_tool_iterations", "openrouter_provider", "gemini_generation", "zai_clear_thinking", "supports_images",
 ] as const;
 
-export const REMOVED_CONFIG = [
-  { path: ["defaults", "stream"], reason: "streaming is selected by the client; delete this unused setting" },
-  ...["max_note_bytes", "max_index_bytes", "max_prompt_bytes"].map((key) => ({
-    path: ["memory", "file_limits", key], reason: "the active workspace tools do not enforce this ceiling; delete this unused setting",
-  })),
-] as const;
-
 export const NOTIFICATION_EVENTS = ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"] as const;
-
-export interface ConfigDeprecation {
-  source: string;
-  path: string;
-  replacement: string;
-  boundary: string;
-}
 
 export function isConfigTable(value: unknown): value is ConfigTable {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -168,15 +151,10 @@ export function translatePath(path: ConfigPath, from: ConfigPath, to: ConfigPath
   return [...to.map((part) => part === "*" ? captures[index++] as string : part), ...path.slice(from.length)];
 }
 
-function conflict(source: string, first: ConfigPath, second: ConfigPath): never {
-  throw new Error(`${source}: conflicting declarations ${formatConfigPath(first)} and ${formatConfigPath(second)}; use only the canonical spelling in this source`);
-}
-
-function moveAliases(table: ConfigTable, aliases: readonly ConfigAlias[], source: string): void {
-  for (const rule of aliases) {
+function toInternal(table: ConfigTable, fields: readonly ConfigField[]): void {
+  for (const rule of fields) {
     for (const path of matchingPaths(table, rule.canonical)) {
-      const target = translatePath(path, rule.canonical, rule.legacy) as string[];
-      if (valueAt(table, target) !== undefined) conflict(source, target, path);
+      const target = translatePath(path, rule.canonical, rule.internal) as string[];
       const value = valueAt(table, path);
       removeAt(table, path);
       putAt(table, target, value);
@@ -185,11 +163,11 @@ function moveAliases(table: ConfigTable, aliases: readonly ConfigAlias[], source
 }
 
 export function canonicalSettingKey(key: string): string {
-  return SETTING_ALIASES.find((rule) => rule.legacy[0] === key)?.canonical[0] ?? key;
+  return SETTING_FIELDS.find((rule) => rule.internal[0] === key)?.canonical[0] ?? key;
 }
 
 export function internalSettingKey(key: string): string {
-  return SETTING_ALIASES.find((rule) => rule.canonical[0] === key)?.legacy[0] ?? key;
+  return SETTING_FIELDS.find((rule) => rule.canonical[0] === key)?.internal[0] ?? key;
 }
 
 export function geminiMode(value: unknown): unknown {
@@ -203,110 +181,20 @@ export function normalizeSettings(input: ConfigTable, source = "model settings")
     if (mode !== "auto" && mode !== "budget" && mode !== "level") throw new Error(`${source}: gemini_thinking_mode must be auto, budget, or level`);
     table.gemini_thinking_mode = mode === "auto" ? 0 : mode === "budget" ? 2 : 3;
   }
-  moveAliases(table, SETTING_ALIASES, source);
+  toInternal(table, SETTING_FIELDS);
   return table;
 }
 
-export function settingPaths(input: ConfigTable, preferences = false): string[][] {
-  const patterns = preferences
-    ? [["defaults", "sampler"], ["models", "*"], ["subagent_models", "*"], ["subagents", "*"]]
-    : [["providers", "*"], ["providers", "*", "defaults"], ["chat", "*"], ["chat", "*", "*"]];
-  return patterns.flatMap((pattern) => matchingPaths(input, pattern)).filter((path) => isConfigTable(valueAt(input, path)));
-}
-
-export function legacyValues(input: ConfigTable, preferences = false): { path: string[]; value: unknown }[] {
-  const settings = settingPaths(input, preferences);
-  const durations = preferences ? [] : [
-    ["chat", "retry_backoff"], ["heartbeat", "interval"], ["heartbeat", "min_interval"], ["heartbeat", "idle_timeout"],
-    ["compaction", "idle_after"], ["compaction", "archive_after"], ["tools", "timeout"], ["tools", "*", "timeout"],
-    ["subagents", "*", "timeout"], ["cache", "keepalive_for"], ["notifications", "min_generation_duration"],
-  ].flatMap((pattern) => matchingPaths(input, pattern));
-  durations.push(...settings.flatMap((path) => ["cache_ttl", "cache_keepalive_for", "cache_keepalive_max"].map((key) => [...path, key])));
-  const changes: { path: string[]; value: unknown }[] = [];
-  for (const path of durations) {
-    const value = valueAt(input, path);
-    if (typeof value !== "number" && !(typeof value === "string" && /^[0-9]+$/.test(value))) continue;
-    const parsed = ConfigDuration.deserialize(value);
-    if ("ok" in parsed) changes.push({ path, value: parsed.ok.toString() });
-  }
-  for (const path of [...settings.flatMap((prefix) => ["reasoning_replay", "replay_prior_thinking"].map((key) => [...prefix, key])), ...(!preferences ? [["chat", "reasoning_replay"], ["memory", "thinking", "replay_prior_thinking"]] : [])]) {
-    const value = valueAt(input, path);
-    if (value === true || value === false || value === "last_turn") changes.push({ path, value: value === false ? "none" : "all" });
-  }
-  for (const prefix of settings) {
-    const path = [...prefix, "cache_keepalive"];
-    const value = valueAt(input, path);
-    if (typeof value !== "string" || value === "off") continue;
-    if (["off", "none", "disabled", "false", "0"].includes(value.trim().toLowerCase())) changes.push({ path, value: "off" });
-    else if (/^[0-9]+$/.test(value.trim())) {
-      const parsed = ConfigDuration.parse(value);
-      if ("ok" in parsed) changes.push({ path, value: parsed.ok.toString() });
-    }
-  }
-  return changes;
-}
-
-export function settingsDeprecations(input: ConfigTable, source: string, preferences = false): ConfigDeprecation[] {
-  const found: ConfigDeprecation[] = [];
-  for (const prefix of settingPaths(input, preferences)) for (const rule of SETTING_ALIASES) {
-    const path = [...prefix, ...rule.legacy];
-    if (valueAt(input, path) !== undefined) found.push({ source, path: formatConfigPath(path), replacement: formatConfigPath([...prefix, ...rule.canonical]), boundary: DEPRECATION_BOUNDARY });
-  }
-  for (const change of legacyValues(input, preferences)) found.push({ source, path: formatConfigPath(change.path), replacement: `${formatConfigPath(change.path)} with an explicit duration unit or canonical enum value`, boundary: DEPRECATION_BOUNDARY });
-  return found;
-}
-
-function deprecations(input: ConfigTable, source: string): ConfigDeprecation[] {
-  const found = new Map<string, ConfigDeprecation>();
-  const add = (path: ConfigPath, replacement: string): void => {
-    const key = formatConfigPath(path);
-    found.set(key, { source, path: key, replacement, boundary: DEPRECATION_BOUNDARY });
-  };
-  for (const rule of CONFIG_ALIASES) for (const path of matchingPaths(input, rule.legacy)) {
-    add(path, formatConfigPath(translatePath(path, rule.legacy, rule.canonical) as string[]));
-  }
-  for (const rule of REMOVED_CONFIG) if (valueAt(input, rule.path) !== undefined) add(rule.path, rule.reason);
-  for (const [path, replacement] of [
-    ["behavior.autonomy.enabled", "heartbeat.enabled (combine both legacy gates)"],
-    ["behavior.autonomy.heartbeat.enabled", "heartbeat.enabled (combine both legacy gates)"],
-    ["defaults.background.model", "heartbeat.model and compaction.model where inherited"],
-    ["usage.allow_compaction_over_budget", "budgets[].allow_compaction where inherited"],
-    ["notifications.enabled", "notifications.via"], ["notifications.backend", "notifications.via"],
-    ["notifications.ntfy.token", "notifications.token_env; relocate nonempty secrets manually"],
-  ]) if (path !== undefined && valueAt(input, path.split(".")) !== undefined) add(path.split("."), replacement as string);
-  if (isConfigTable(valueAt(input, ["notifications", "events"]))) for (const key of Object.keys(valueAt(input, ["notifications", "events"]) as ConfigTable)) add(["notifications", "events", key], "notifications.events (list)");
-  for (const [name, provider] of Object.entries(isConfigTable(input.providers) ? input.providers : {})) {
-    if (!isConfigTable(provider)) continue;
-    if (isConfigTable(provider.defaults)) for (const key of Object.keys(provider.defaults)) add(["providers", name, "defaults", key], formatConfigPath(["providers", name, canonicalSettingKey(key)]));
-  }
-  for (const entry of settingsDeprecations(input, source)) if (!found.has(entry.path)) add(parseConfigPath(entry.path), entry.replacement);
-  for (const root of [["budgets"], ["usage", "budgets"]]) for (const rule of BUDGET_ALIASES) for (const path of matchingPaths(input, [...root, "*", ...rule.legacy])) add(path, formatConfigPath(["budgets", path[root.length] as string, ...rule.canonical]));
-  for (const path of matchingPaths(input, ["chat", "*", "*"])) if (isConfigTable(valueAt(input, path)) && !path[1]?.includes(":")) add(path, "a quoted [chat.\"provider:model_id\"] table; use shore config migrate");
-  for (const name of ["enabled", "model"]) if (isConfigTable(valueAt(input, ["subagents", name]))) add(["subagents", name], "rename this legacy subagent; its name is now reserved");
-  for (const path of [["web_search", "depth"], ["tools", "web_search", "search_depth"]]) if (valueAt(input, path) === "ultra-fast") add(path, "web_search.depth = ultra_fast");
-  return [...found.values()];
-}
-
-export function normalizeConfigSource(input: ConfigTable, source = "config"): { table: ConfigTable; deprecations: ConfigDeprecation[] } {
-  for (const key of Object.keys(input)) if (!(CONFIG_SECTIONS as readonly string[]).includes(key) && !["defaults", "behavior", "memory", "connections", "advanced", "image_generation"].includes(key)) {
-    throw new Error(`${source}: unknown field \`${key}\`, expected one of ${CONFIG_SECTIONS.map((section) => `\`${section}\``).join(", ")}`);
-  }
-  const warnings = deprecations(input, source);
+export function normalizeConfigSource(input: ConfigTable, source = "config"): ConfigTable {
   const table = structuredClone(input);
   const heartbeat = valueAt(table, ["heartbeat", "enabled"]);
   if (heartbeat !== undefined) {
-    for (const path of [["behavior", "autonomy", "enabled"], ["behavior", "autonomy", "heartbeat", "enabled"]]) {
-      if (valueAt(table, path) !== undefined) conflict(source, path, ["heartbeat", "enabled"]);
-    }
     removeAt(table, ["heartbeat", "enabled"]);
     putAt(table, ["behavior", "autonomy", "enabled"], heartbeat);
-    putAt(table, ["behavior", "autonomy", "heartbeat", "enabled"], true);
   }
   const notifications = table.notifications;
   if (isConfigTable(notifications)) {
-    if (notifications.token_env !== undefined && valueAt(notifications, ["ntfy", "token"]) !== undefined && valueAt(notifications, ["ntfy", "token"]) !== "") conflict(source, ["notifications", "ntfy", "token"], ["notifications", "token_env"]);
     if (notifications.via !== undefined) {
-      for (const key of ["enabled", "backend"]) if (notifications[key] !== undefined) conflict(source, ["notifications", key], ["notifications", "via"]);
       const via = notifications.via;
       if (typeof via !== "string" || !["off", "notify_send", "ntfy", "command"].includes(via)) throw new Error(`${source}: notifications.via must be off, notify_send, ntfy, or command`);
       notifications.enabled = via !== "off";
@@ -322,23 +210,14 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): { 
   const sourceTools = table.tools;
   if (isConfigTable(sourceTools)) {
     for (const [name, value] of Object.entries(sourceTools)) {
-      if (["enabled", "enabled_tools", "enabled_subagents", "timeout", "max_result_chars", "config"].includes(name)) continue;
-      if (name === "web_search") {
-        if (!isConfigTable(value)) continue;
-        const overrides = Object.fromEntries(Object.entries(value).filter(([key]) => ["timeout", "max_result_chars"].includes(key)));
-        for (const key of Object.keys(overrides)) delete value[key];
-        if (Object.keys(overrides).length > 0) putAt(table, ["tools", "config", name], overrides);
-        continue;
-      }
-      if (valueAt(table, ["tools", "config", name]) !== undefined) conflict(source, ["tools", "config", name], ["tools", name]);
+      if (["enabled", "timeout", "max_result_chars"].includes(name)) continue;
       delete sourceTools[name];
       putAt(table, ["tools", "config", name], value);
     }
   }
-  const regular = CONFIG_ALIASES.filter((rule) => rule.legacy.join(".") !== "tools.config.*");
+  const regular = CONFIG_FIELDS.filter((rule) => rule.internal.join(".") !== "tools.config.*");
   for (const rule of regular) {
-    if (rule.canonical[0] === "subagents" && rule.canonical.length === 2 && isConfigTable(valueAt(table, rule.canonical))) continue;
-    moveAliases(table, [rule], source);
+    toInternal(table, [rule]);
   }
   const providers = isConfigTable(table.providers) ? table.providers : {};
   for (const [name, provider] of Object.entries(providers)) {
@@ -346,11 +225,9 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): { 
     const normalized = normalizeSettings(provider, `${source}: providers.${name}`);
     providers[name] = normalized;
     for (const key of MODEL_FIELDS) if (normalized[key] !== undefined) {
-      if (valueAt(normalized, ["defaults", key]) !== undefined) conflict(source, ["providers", name, "defaults", key], ["providers", name, canonicalSettingKey(key)]);
       putAt(normalized, ["defaults", key], normalized[key]);
       delete normalized[key];
     }
-    if (isConfigTable(normalized.defaults)) normalized.defaults = normalizeSettings(normalized.defaults, source);
   }
   for (const section of ["chat", "embedding", "image_generation"]) {
     const entries = table[section];
@@ -358,17 +235,16 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): { 
     if (!isConfigTable(entries)) throw new Error(`${source}: ${section} must be a table`);
     for (const [name, entry] of Object.entries(entries)) {
       if (!isConfigTable(entry)) throw new Error(`${source}: ${formatConfigPath([section, name])} must be a table`);
-      if (name.includes(":")) entries[name] = normalizeSettings(entry, source);
-      else if (section === "chat") for (const [model, settings] of Object.entries(entry)) if (isConfigTable(settings)) entry[model] = normalizeSettings(settings, source);
+      entries[name] = normalizeSettings(entry, source);
     }
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
-  if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) moveAliases(budget, BUDGET_ALIASES, source);
+  if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
   const depth = valueAt(table, ["tools", "web_search", "search_depth"]);
   if (depth === "ultra_fast") putAt(table, ["tools", "web_search", "search_depth"], "ultra-fast");
   else if (depth !== undefined && (typeof depth !== "string" || !["basic", "advanced", "fast", "ultra-fast"].includes(depth))) throw new Error(`${source}: web_search.depth must be basic, advanced, fast, or ultra_fast`);
   for (const section of ["heartbeat", "compaction", "retrieval", "matrix", "web_search", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
-  return { table, deprecations: warnings };
+  return table;
 }
 
 export function canonicalConfigPath(path: ConfigPath): string[] {
@@ -379,49 +255,43 @@ export function canonicalConfigPath(path: ConfigPath): string[] {
   const section = sections[path.join(".")];
   if (section !== undefined) return section;
   let result = [...path];
-  for (const rule of CONFIG_ALIASES) {
-    const mapped = translatePath(path, rule.legacy, rule.canonical);
+  for (const rule of CONFIG_FIELDS) {
+    const mapped = translatePath(path, rule.internal, rule.canonical);
     if (mapped !== undefined) { result = mapped; break; }
   }
-  if (path.join(".") === "behavior.autonomy.enabled" || path.join(".") === "behavior.autonomy.heartbeat.enabled") return ["heartbeat", "enabled"];
+  if (path.join(".") === "behavior.autonomy.enabled") return ["heartbeat", "enabled"];
   if (result[0] === "providers" && result[2] === "defaults") result.splice(2, 1);
-  const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" ? result[1]?.includes(":") ? 2 : 3 : undefined;
+  const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" && result[1]?.includes(":") ? 2 : undefined;
   if (settingIndex !== undefined && result[settingIndex] !== undefined) result[settingIndex] = canonicalSettingKey(result[settingIndex]);
-  if (result[0] === "budgets" && result[2] !== undefined) result[2] = BUDGET_ALIASES.find((rule) => rule.legacy[0] === result[2])?.canonical[0] ?? result[2];
+  if (result[0] === "budgets" && result[2] !== undefined) result[2] = BUDGET_FIELDS.find((rule) => rule.internal[0] === result[2])?.canonical[0] ?? result[2];
   return result;
 }
 
 export function publicConfig(input: ConfigTable): ConfigTable {
   const out = structuredClone(input);
-  for (const rule of CONFIG_ALIASES) for (const path of matchingPaths(input, rule.legacy)) {
+  for (const rule of CONFIG_FIELDS) for (const path of matchingPaths(input, rule.internal)) {
     const original = valueAt(out, path);
     if (original === undefined) continue;
-    const target = translatePath(path, rule.legacy, rule.canonical) as string[];
+    const target = translatePath(path, rule.internal, rule.canonical) as string[];
     if (path[0] === "tools" && path[1] === "config" && ["enabled", "timeout", "max_result_chars"].includes(path[2] ?? "")) continue;
-    if (target[0] === "subagents" && target.length === 2 && isConfigTable(valueAt(out, target))) continue;
     removeAt(out, path);
     const value = structuredClone(original);
     const existing = valueAt(out, target);
     putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
   }
-  putAt(out, ["heartbeat", "enabled"], valueAt(input, ["behavior", "autonomy", "enabled"]) === true && valueAt(input, ["behavior", "autonomy", "heartbeat", "enabled"]) !== false);
-  const fallback = valueAt(input, ["defaults", "background", "model"]);
-  for (const task of ["heartbeat", "compaction"]) {
-    const selected = valueAt(out, [task, "model"]);
-    if ((selected === null || selected === undefined) && fallback !== null && fallback !== undefined) putAt(out, [task, "model"], fallback);
-  }
+  putAt(out, ["heartbeat", "enabled"], valueAt(input, ["behavior", "autonomy", "enabled"]) === true);
   const enabled = valueAt(input, ["notifications", "enabled"]);
   putAt(out, ["notifications", "via"], enabled === true ? valueAt(input, ["notifications", "backend"]) ?? "notify_send" : "off");
   const events = valueAt(input, ["notifications", "events"]);
   if (isConfigTable(events)) putAt(out, ["notifications", "events"], NOTIFICATION_EVENTS.filter((key) => events[key] === true));
   const budgets = out.budgets;
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) {
-    for (const rule of BUDGET_ALIASES) {
-      const old = rule.legacy[0] as string;
+    for (const rule of BUDGET_FIELDS) {
+      const old = rule.internal[0] as string;
       const key = rule.canonical[0] as string;
       if (budget[old] !== undefined) { budget[key] = budget[old]; delete budget[old]; }
     }
-    budget.allow_compaction ??= valueAt(input, ["usage", "allow_compaction_over_budget"]) ?? false;
+    budget.allow_compaction ??= false;
   }
   const providers = isConfigTable(out.providers) ? out.providers : {};
   for (const [name, provider] of Object.entries(providers)) {
@@ -436,16 +306,16 @@ export function publicConfig(input: ConfigTable): ConfigTable {
   }
   if (valueAt(out, ["web_search", "depth"]) === "ultra-fast") putAt(out, ["web_search", "depth"], "ultra_fast");
   for (const path of [
-    ["behavior"], ["defaults"], ["memory", "file_limits"], ["usage", "allow_compaction_over_budget"],
-    ["notifications", "enabled"], ["notifications", "backend"], ["notifications", "ntfy", "token"],
+    ["behavior"], ["defaults"],
+    ["notifications", "enabled"], ["notifications", "backend"], ["tools", "config"],
   ]) removeAt(out, path);
   return out;
 }
 
 export function publicSettings(input: ConfigTable): ConfigTable {
   const out = { ...input };
-  for (const rule of SETTING_ALIASES) {
-    const old = rule.legacy[0] as string;
+  for (const rule of SETTING_FIELDS) {
+    const old = rule.internal[0] as string;
     const key = rule.canonical[0] as string;
     if (out[old] === undefined) continue;
     out[key] = old === "gemini_generation" ? geminiMode(out[old]) : out[old];

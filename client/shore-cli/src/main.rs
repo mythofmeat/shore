@@ -23,7 +23,6 @@ macro_rules! cli_err {
 }
 
 mod cli;
-mod config_migrate;
 mod output;
 mod run;
 mod state;

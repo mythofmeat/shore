@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -225,12 +226,9 @@ async function withConversation(config: LoadedConfig): Promise<void> {
   await mkdir(join(config.dirs.config, "characters", "alice", "workspace", "memory"), {
     recursive: true,
   });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")]
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")]
       .map((m) => JSON.stringify(m))
-      .join("\n") + "\n",
-  );
+      .join("\n") + "\n");
 }
 
 const PINNED = { now: () => Date.parse("2026-07-30T13:00:00Z"), timeZone: "UTC" };
@@ -386,10 +384,7 @@ describe("preparing a heartbeat body", () => {
     const config = await baseConfig();
     const characterDir = join(config.dirs.data, "alice");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      JSON.stringify(message("user", "m_1", "you there?")) + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), JSON.stringify(message("user", "m_1", "you there?")) + "\n");
 
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-opus-slowthink"));
@@ -442,7 +437,7 @@ describe("preparing a heartbeat body", () => {
   test("the home thread's pinned model sets the cap the tick runs under", async () => {
     const config = await baseConfig();
     await withConversation(config);
-    await writeFile(
+    writeDurable(
       join(config.dirs.data, "alice", "threads.json"),
       JSON.stringify({
         version: 1,
@@ -470,7 +465,7 @@ describe("preparing a heartbeat body", () => {
   test("a side thread's pin does not reach the heartbeat, which lives at home", async () => {
     const config = await baseConfig();
     await withConversation(config);
-    await writeFile(
+    writeDurable(
       join(config.dirs.data, "alice", "threads.json"),
       JSON.stringify({
         version: 1,

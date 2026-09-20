@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { handleBash } from "../src/tools/bash.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
 import { snapshotWorkspace } from "../src/tools/workspace_snapshot.ts";
@@ -388,11 +389,7 @@ describe("loading a conversation", () => {
     const root = await mkdtemp(join(tmpdir(), "shore-compaction-load-"));
     try {
       await mkdir(join(root, "Aria", "threads", "main"), { recursive: true });
-      await writeFile(
-        join(root, "Aria", "threads", "main", "active.jsonl"),
-        rec.active_jsonl as string,
-        "utf8",
-      );
+      writeDurable(join(root, "Aria", "threads", "main", "active.jsonl"), rec.active_jsonl as string);
       const loaded = await loadMessagesForCompaction(root, "Aria", "main");
       expect(loaded.rawContent).toBe(rec.raw_content as string);
       expect(loaded.messages).toEqual(

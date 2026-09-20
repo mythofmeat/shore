@@ -200,22 +200,16 @@ export async function ingestImages(
     keep(upload.filename, await ingestUpload(attachmentsDir, upload, now));
   }
 
-  if (imageData.length === 0) {
-    for (const src of imagePaths) {
-      keep(src.split(/[/\\]/).pop() ?? src, await ingestLegacyPath(attachmentsDir, src, now));
-    }
-  } else {
-    let uploadIndex = 0;
-    for (const src of imagePaths) {
-      const label = src.split(/[/\\]/).pop() ?? src;
-      if (imageData[uploadIndex]?.filename === label) {
-        uploadIndex += 1;
-      } else {
-        blocks.push({
-          type: "text",
-          text: omissionNotice(label, "the client could not upload it"),
-        });
-      }
+  let uploadIndex = 0;
+  for (const src of imagePaths) {
+    const label = src.split(/[/\\]/).pop() ?? src;
+    if (imageData[uploadIndex]?.filename === label) {
+      uploadIndex += 1;
+    } else {
+      blocks.push({
+        type: "text",
+        text: omissionNotice(label, "the client could not upload it"),
+      });
     }
   }
 
@@ -238,52 +232,8 @@ async function ingestUpload(
   return await saveAttachment(attachmentsDir, upload.filename, upload.mime_type, bytes, now);
 }
 
-async function ingestLegacyPath(
-  attachmentsDir: string,
-  srcPath: string,
-  now: Date,
-): Promise<ImageRef | undefined> {
-  let bytes: Uint8Array;
-  try {
-    bytes = await readFile(srcPath);
-  } catch {
-    if (!(await Bun.file(srcPath).exists())) {
-      shoreLog.warn(`shore: skipping non-existent image: ${srcPath}`);
-      return undefined;
-    }
-    shoreLog.warn(`shore: failed to read image for attachments copy: ${srcPath}`);
-    return { path: srcPath };
-  }
-
-  const name = srcPath.split(/[/\\]/).pop();
-  const saved = await saveAttachment(
-    attachmentsDir,
-    name === undefined || name === "" ? "image" : name,
-    undefined,
-    bytes,
-    now,
-  );
-  return saved ?? { path: srcPath };
-}
-
 function decodeBase64(data: string): Uint8Array {
   return Uint8Array.from(Buffer.from(data, "base64"));
-}
-
-export async function buildContent(
-  text: string,
-  images: readonly ImageRef[],
-): Promise<ContentBlock[]> {
-  const blocks: ContentBlock[] = [];
-
-  for (const img of images) {
-    const source = await encodeImageBlock(img);
-    if (source !== undefined) blocks.push({ type: "image", source });
-  }
-
-  if (text.trim() !== "") blocks.push({ type: "text", text });
-
-  return blocks;
 }
 
 export async function encodeImageBlock(

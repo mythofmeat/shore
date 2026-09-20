@@ -47,7 +47,7 @@ function turnFor(chatToml: string): {
     undefined,
     undefined,
   );
-  const model = catalog.chat.get("chat.anthropic.main");
+  const model = catalog.chat.get("anthropic:claude-opus-4-6");
   if (model === undefined) throw new Error("the fixture catalog lost its model");
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "sk-test", {
@@ -158,26 +158,21 @@ async function turnPersisted(
 }
 
 const DEFAULTED = `
-[anthropic.main]
-model_id = "claude-opus-4-6"
-`;
+["anthropic:claude-opus-4-6"]`;
 
 const CONFIGURED = `
-[anthropic.main]
-model_id = "claude-opus-4-6"
+["anthropic:claude-opus-4-6"]
 cache_keepalive = "55m"
 `;
 
 const MODEL_CEILING = `
-[anthropic.main]
-model_id = "claude-opus-4-6"
+["anthropic:claude-opus-4-6"]
 cache_keepalive = "55m"
 cache_keepalive_max = "90m"
 `;
 
 const EXPLICIT_OFF = `
-[anthropic.main]
-model_id = "claude-opus-4-6"
+["anthropic:claude-opus-4-6"]
 cache_keepalive = "off"
 `;
 

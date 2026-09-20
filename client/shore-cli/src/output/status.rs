@@ -405,10 +405,10 @@ mod tests {
                 "cache_read": 300_000, "cache_write": 0
             });
         }
-        let legacy_out = render(&data);
+        let cumulative_out = render(&data);
         assert!(
-            !legacy_out.contains("1.8M"),
-            "an older daemon's cumulative counters must not masquerade as context: {legacy_out}"
+            !cumulative_out.contains("1.8M"),
+            "cumulative usage counters must not masquerade as context: {cumulative_out}"
         );
         if let Some(map) = data.as_object_mut() {
             drop(map.insert("context_tokens".to_owned(), json!(23_400)));

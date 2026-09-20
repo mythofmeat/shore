@@ -60,14 +60,12 @@ export interface UsageBudgetConfig {
 
 export interface UsageConfig {
   timezone?: string;
-  allow_compaction_over_budget?: boolean;
   budgets?: UsageBudgetConfig[];
 }
 
 export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
   return {
     timezone: cfg.timezone,
-    allow_compaction_over_budget: cfg.allow_compaction_over_budget,
     budgets: cfg.budgets.map(
       (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
     ),
@@ -653,7 +651,7 @@ function budgetStatus(
     warning_thresholds: warningThresholds,
     crossed_warn_at: crossedWarnAt,
     over_limit: overLimit,
-    compaction_allowed_over_budget: compactionAllowed(config, budget),
+    compaction_allowed_over_budget: compactionAllowed(budget),
     filters: budgetFiltersJson(budget),
   };
   if (pace !== undefined) {
@@ -1104,7 +1102,7 @@ function shouldBlock(
   action: UsageBudgetAction,
   callType: string,
 ): boolean {
-  if (callType === "compaction" && compactionAllowed(config, budget)) {
+  if (callType === "compaction" && compactionAllowed(budget)) {
     return false;
   }
   switch (action) {
@@ -1120,14 +1118,9 @@ function shouldBlock(
 }
 
 function compactionAllowed(
-  config: UsageConfig,
   budget: UsageBudgetConfig,
 ): boolean {
-  return (
-    budget.allow_compaction_over_budget ??
-    config.allow_compaction_over_budget ??
-    false
-  );
+  return budget.allow_compaction_over_budget ?? false;
 }
 
 function isBackgroundCall(callType: string): boolean {

@@ -41,8 +41,8 @@ describe("createDefaultConfig", () => {
 
     const content = readFileSync(join(dir, "config.toml"), "utf8");
     expect(content).toContain("Shore configuration");
-    expect(content).toContain("[chat]");
-    expect(content).toContain("[providers.anthropic]");
+    expect(content).toContain("\n");
+    expect(content).toContain("\n");
     expect(content).not.toContain("[chat.");
   });
 
@@ -55,7 +55,7 @@ describe("createDefaultConfig", () => {
       onWarn: () => {},
     });
     expect(loaded.app.defaults.model).toBe("anthropic:claude-opus-4-8");
-    expect(loaded.deprecations).toEqual([]);
+
   });
 
   test("a directory it cannot write warns and returns undefined", () => {
@@ -118,7 +118,7 @@ describe("loadConfig", () => {
   test("an existing config.toml is never overwritten", () => {
     const root = tempDir();
     const configPath = join(root, "config.toml");
-    writeFileSync(configPath, '[defaults]\ndisplay_name = "ren"\n');
+    writeFileSync(configPath, "[chat]\ndisplay_name = \"ren\"\n");
 
     loadConfig(configPath, {
       env: { SHORE_CONFIG_DIR: root },

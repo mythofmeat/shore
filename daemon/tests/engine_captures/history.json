@@ -1461,15 +1461,108 @@
   "corpus": {
     "segments": [
       {
-        "file": "0001.jsonl",
-        "body": "{\"msg_id\":\"s0-tea\",\"role\":\"user\",\"timestamp\":\"2026-01-01T09:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"We talked about tea last winter, mostly oolong.\"}]}\n{\"msg_id\":\"s0-coffee\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up too, but only briefly.\"}],\"timestamp\":\"2026-01-01T10:00:00Z\"}\n"
+        "entry": {
+          "file": "shore.db",
+          "message_count": 2,
+          "compacted_at": "2026-01-01T12:00:00Z"
+        },
+        "messages": [
+          {
+            "msg_id": "s0-tea",
+            "role": "user",
+            "timestamp": "2026-01-01T09:00:00Z",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "We talked about tea last winter, mostly oolong."
+              }
+            ]
+          },
+          {
+            "msg_id": "s0-coffee",
+            "role": "assistant",
+            "model": "claude-opus-4-6",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "Coffee came up too, but only briefly."
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00Z"
+          }
+        ]
       },
       {
-        "file": "0002.jsonl",
-        "body": "{\"msg_id\":\"s1-long\",\"role\":\"assistant\",\"model\":\"anthropic/claude-opus-4.6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards\"}],\"timestamp\":\"2026-01-02T09:00:00Z\"}\n{\"msg_id\":\"s1-unicode\",\"role\":\"user\",\"timestamp\":\"2026-01-02T10:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42 \u4e16\u754c\u306e\u8a71\u3092\u3057\u3088\u3046 tea \u4e16\u754c\u4e16\u754c\u4e16\u754c \ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\"}]}\n{\"msg_id\":\"s1-silent\",\"role\":\"assistant\",\"timestamp\":\"2026-01-02T11:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"thinking\",\"thinking\":\"tea tea tea\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\":\"tea\"}}]}\n{\"msg_id\":\"s1-toolresult\",\"role\":\"user\",\"timestamp\":\"2026-01-02T12:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"brewing instructions\",\"is_error\":false}]}\n"
+        "entry": {
+          "file": "shore.db",
+          "message_count": 4,
+          "compacted_at": "2026-01-02T12:00:00Z"
+        },
+        "messages": [
+          {
+            "msg_id": "s1-long",
+            "role": "assistant",
+            "model": "anthropic/claude-opus-4.6",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards"
+              }
+            ],
+            "timestamp": "2026-01-02T09:00:00Z"
+          },
+          {
+            "msg_id": "s1-unicode",
+            "role": "user",
+            "timestamp": "2026-01-02T10:00:00Z",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42 \u4e16\u754c\u306e\u8a71\u3092\u3057\u3088\u3046 tea \u4e16\u754c\u4e16\u754c\u4e16\u754c \ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42"
+              }
+            ]
+          },
+          {
+            "msg_id": "s1-silent",
+            "role": "assistant",
+            "timestamp": "2026-01-02T11:00:00Z",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "thinking",
+                "thinking": "tea tea tea"
+              },
+              {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "search",
+                "input": {
+                  "q": "tea"
+                }
+              }
+            ]
+          },
+          {
+            "msg_id": "s1-toolresult",
+            "role": "user",
+            "timestamp": "2026-01-02T12:00:00Z",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "t1",
+                "content": "brewing instructions",
+                "is_error": false
+              }
+            ]
+          }
+        ]
       }
     ],
-    "compaction.json": "{\n  \"segments\": [\n    {\n      \"file\": \"0001.jsonl\",\n      \"message_count\": 2,\n      \"compacted_at\": \"2026-01-01T12:00:00Z\"\n    },\n    {\n      \"file\": \"0002.jsonl\",\n      \"message_count\": 4,\n      \"compacted_at\": \"2026-01-02T12:00:00Z\"\n    }\n  ],\n  \"total_compacted_messages\": 6\n}",
     "active.jsonl": "{\"msg_id\":\"a-regen\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"alt_index\":0,\"alt_count\":3,\"alternatives\":[{\"content\":\"Tea came up again today.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"},{\"content\":\"Coffee came up in a regenerated reply.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up in a regenerated reply.\"}],\"timestamp\":\"2026-01-03T09:05:00Z\",\"model\":\"gpt-5\"},{\"content\":\"A third take, still about tea.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"A third take, still about tea.\"}],\"timestamp\":\"\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"}\n{\"msg_id\":\"a-bad-ts\",\"role\":\"user\",\"timestamp\":\"not-a-timestamp\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea with a broken timestamp.\"}]}\n{\"msg_id\":\"a-recent\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"One more note on tea.\"}],\"timestamp\":\"2026-01-04T09:00:00Z\"}\n"
   },
   "end_to_end": [

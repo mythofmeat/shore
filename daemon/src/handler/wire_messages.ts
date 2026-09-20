@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import type { ImageRef, ContentBlock } from "../engine/types.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
-import { buildContent, encodeImageBlock } from "./images.ts";
+import { encodeImageBlock } from "./images.ts";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 
@@ -82,21 +82,12 @@ async function renderMessageContent(
   const imageRender = reroute ? await renderAssistantImages(m.images, mode) : undefined;
   const turnImages = reroute ? [] : m.images;
 
-  const fallback = () => buildContent(m.content, turnImages);
-
-  let content: ContentBlock[];
-  if (m.content_blocks.length === 0) {
-    content = await fallback();
-  } else {
-    const blocks: ContentBlock[] = [];
-    for (const img of turnImages) {
-      const source = await encodeImageBlock(img);
-      if (source !== undefined) blocks.push({ type: "image", source });
-    }
-    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));
-
-    content = blocks.length === 0 ? await fallback() : blocks;
+  let content: ContentBlock[] = [];
+  for (const img of turnImages) {
+    const source = await encodeImageBlock(img);
+    if (source !== undefined) content.push({ type: "image", source });
   }
+  content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));
 
   if (imageRender !== undefined) content = [...content, ...imageRender.assistantBlocks];
   if (content.length === 0) return undefined;

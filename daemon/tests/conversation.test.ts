@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { withStorage } from "../src/storage/store.ts";
 import { required } from "../src/util/required.ts";
 
@@ -97,27 +98,12 @@ async function buildScenario(
   const active = substitute(scenario.active);
   if (scenario.archived.length > 0) {
     const archived = substitute(scenario.archived);
-    await mkdir(join(characterDir, "threads", "main", "segments"), { recursive: true });
-    await writeFile(join(characterDir, "threads", "main", "segments", "0001.jsonl"), jsonl(archived));
-    await writeFile(
-      join(characterDir, "threads", "main", "compaction.json"),
-      JSON.stringify(
-        {
-          segments: [
-            {
-              file: "0001.jsonl",
-              message_count: archived.length,
-              compacted_at: "2026-01-01T00:00:00Z",
-            },
-          ],
-          total_compacted_messages: archived.length,
-        },
-        null,
-        2,
-      ),
-    );
+    const history = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    try {
+      history.putSegment("TestChar", 0, { file: HISTORY_DB_FILE, message_count: archived.length, compacted_at: "2026-01-01T00:00:00Z" }, archived);
+    } finally { history.close(); }
   }
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
 
   let count = 0;
   const engine = await ConversationEngine.load("TestChar", root, () => {
@@ -645,10 +631,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
       content_blocks: [{ type: "text" as const, text: `turn ${i + 1}` }],
       timestamp: "2026-01-01T00:00:00Z",
     }));
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
@@ -682,10 +665,7 @@ describe("which page an argument asks for", () => {
     const root = await mkdtemp(testTmp("shore-args-"));
     const characterDir = join(root, "TestChar");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
@@ -742,7 +722,7 @@ describe("storage-native conversation paging", () => {
     const root = await mkdtemp(testTmp("shore-bounded-history-"));
     const characterDir = join(root, "TestChar");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), "");
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), "");
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     const expected: string[] = [];
     for (let segment = 0; segment < 200; segment += 1) {
@@ -771,7 +751,6 @@ describe("storage-native conversation paging", () => {
     let before: number | undefined;
     for (;;) {
       const page = await engine.displayHistoryPage(before, { kind: "count", value: 8 });
-      expect(page.metrics.storage_native).toBe(true);
       expect(page.metrics.rows_read).toBeLessThanOrEqual(8);
       expect(page.metrics.segments_read).toBeLessThanOrEqual(4);
       if (page.messages.length === 8) decodedSizes.add(page.metrics.decoded_body_bytes);
@@ -809,7 +788,7 @@ describe("storage-native conversation paging", () => {
       archived,
     );
     store.close();
-    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
 
     const engine = await ConversationEngine.load("TestChar", root, () => {});
     const before = 4;
@@ -833,10 +812,7 @@ describe("storage-native conversation paging", () => {
       active.slice(0, 2),
     );
     compactionStore.close();
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      jsonl([...active.slice(2), archivedMessage("u3", "user")]),
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl([...active.slice(2), archivedMessage("u3", "user")]));
     await engine.reload();
 
     const afterCompaction = await engine.displayHistoryPage(before, {
@@ -881,10 +857,7 @@ describe("which alternate an argument selects", () => {
         timestamp: "2026-01-01T00:00:00Z",
       },
     ];
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
@@ -989,10 +962,7 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
     const root = await mkdtemp(testTmp("shore-orphan-"));
     const characterDir = join(root, "TestChar");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
@@ -1088,12 +1058,9 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
       const root = await mkdtemp(testTmp("shore-readonly-"));
       const characterDir = join(root, "TestChar");
       await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-      await writeFile(
-        join(characterDir, "threads", "main", "active.jsonl"),
-        [msg("m_1", "user", [{ type: "text", text: "go" }]), msg("m_2", "user", [{ type: "text", text: "stay" }])]
+      writeDurable(join(characterDir, "threads", "main", "active.jsonl"), [msg("m_1", "user", [{ type: "text", text: "go" }]), msg("m_2", "user", [{ type: "text", text: "stay" }])]
           .map((m) => JSON.stringify(m))
-          .join("\n") + "\n",
-      );
+          .join("\n") + "\n");
       const engine = await ConversationEngine.load("TestChar", root, () => {});
 
       withStorage(root, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_files BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
@@ -1124,101 +1091,6 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
 
     expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_1", "m_2", "m_3", "m_4"]);
     expect(orphanedToolResults(engine.messages())).toEqual([]);
-  });
-});
-
-describe("paging when the legacy import could not finish", () => {
-  const msg = (id: string, role: "user" | "assistant"): Message => ({
-    msg_id: id,
-    role,
-    content: id,
-    images: [],
-    content_blocks: [{ type: "text", text: id }],
-    timestamp: "2026-01-01T00:00:00Z",
-  });
-
-  async function engineWhoseLegacyImportAborted(): Promise<ConversationEngine> {
-    const root = await mkdtemp(testTmp("shore-fallback-page-"));
-    const characterDir = join(root, "TestChar");
-    await mkdir(join(characterDir, "threads", "main", "segments"), { recursive: true });
-
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    store.putSegment(
-      "TestChar",
-      0,
-      {
-        file: "0001.jsonl",
-        message_count: 4,
-        compacted_at: "2026-01-01T00:00:00Z",
-        compaction_id: "compact-1",
-      },
-      [msg("u1", "user"), msg("a1", "assistant"), msg("u2", "user"), msg("a2", "assistant")],
-    );
-    store.close();
-
-    await writeFile(
-      join(characterDir, "threads", "main", "compaction.json"),
-      JSON.stringify({
-        segments: [
-          { file: "0001.jsonl", message_count: 4, compacted_at: "2026-01-01T00:00:00Z" },
-          { file: "0002.jsonl", message_count: 2, compacted_at: "2026-01-01T00:00:00Z" },
-        ],
-        total_compacted_messages: 6,
-      }),
-    );
-    await writeFile(join(characterDir, "threads", "main", "segments", "0002.jsonl"), "{ not json at all\n");
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      [msg("u3", "user"), msg("a3", "assistant"), msg("u4", "user"), msg("a4", "assistant")]
-        .map((m) => JSON.stringify(m))
-        .join("\n") + "\n",
-    );
-    return await ConversationEngine.load("TestChar", root, () => {});
-  }
-
-  test("the fallback is the path under test", async () => {
-    const engine = await engineWhoseLegacyImportAborted();
-    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
-    expect(page.metrics.storage_native).toBe(false);
-    expect(page.messages.map((m) => m.msg_id)).toEqual(["u1", "a1", "u2", "a2", "u3", "a3", "u4", "a4"]);
-    expect(page.globalActiveStart).toBe(4);
-  });
-
-  test("a turn bound stops on the turn's own message, counting only user turns", async () => {
-    const engine = await engineWhoseLegacyImportAborted();
-    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
-
-    expect(page.cursor).toBe(4);
-    expect(page.messages.map((m) => m.msg_id)).toEqual(["u3", "a3", "u4", "a4"]);
-  });
-
-  test("zero turns asks for nothing, not for everything", async () => {
-    const engine = await engineWhoseLegacyImportAborted();
-    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 0 });
-
-    expect(page.messages).toEqual([]);
-    expect(page.cursor).toBe(8);
-  });
-
-  test("a count larger than the conversation clamps to the start", async () => {
-    const engine = await engineWhoseLegacyImportAborted();
-    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
-
-    expect(page.cursor).toBe(0);
-    expect(page.messages).toHaveLength(8);
-  });
-
-  test("the active boundary is rebased on the page, and the totals are not", async () => {
-    const engine = await engineWhoseLegacyImportAborted();
-    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
-
-    expect(page.activeStart).toBe(0);
-    expect(page.globalActiveStart).toBe(4);
-    expect(page.totalTurns).toBe(4);
-
-    const whole = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
-    expect(whole.activeStart).toBe(4);
-    expect(whole.totalTurns).toBe(4);
   });
 });
 
@@ -1253,10 +1125,7 @@ describe("a turn budget spent across the archive boundary", () => {
     }
     store.close();
 
-    await writeFile(
-      join(characterDir, "threads", "main", "active.jsonl"),
-      [msg("ux", "user"), msg("ax", "assistant")].map((m) => JSON.stringify(m)).join("\n") + "\n",
-    );
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), [msg("ux", "user"), msg("ax", "assistant")].map((m) => JSON.stringify(m)).join("\n") + "\n");
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
@@ -1264,7 +1133,6 @@ describe("a turn budget spent across the archive boundary", () => {
     const engine = await engineOf();
     const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
 
-    expect(page.metrics.storage_native).toBe(true);
     expect(page.cursor).toBe(2);
     expect(page.messages.map((m) => m.msg_id)).toEqual(["u1", "a1", "ux", "ax"]);
     expect(page.activeStart).toBe(2);

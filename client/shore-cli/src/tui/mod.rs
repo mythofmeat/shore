@@ -412,28 +412,6 @@ fn prefs_path() -> PathBuf {
     shore_common::dirs::data_dir().join("tui_prefs.json")
 }
 
-fn legacy_prefs_paths() -> [PathBuf; 2] {
-    [
-        shore_common::dirs::config_dir().join("tui_prefs.json"),
-        shore_common::dirs::runtime_dir().join("tui_prefs.json"),
-    ]
-}
-
-fn migrate_prefs(current: &Path, legacy: &[PathBuf]) -> Option<String> {
-    for old in legacy {
-        let Ok(data) = std::fs::read_to_string(old) else {
-            continue;
-        };
-        if write_prefs_file(current, &data).is_ok()
-            && let Err(e) = std::fs::remove_file(old)
-        {
-            warn!("kept {} after migrating it: {e}", old.display());
-        }
-        return Some(data);
-    }
-    None
-}
-
 fn load_keymap(app: &mut App) {
     app.keymap = keymap::Keymap::load();
     for warning in app.keymap.warnings.clone() {
@@ -443,9 +421,7 @@ fn load_keymap(app: &mut App) {
 
 fn load_prefs(app: &mut App) {
     let path = prefs_path();
-    let prefs_data = std::fs::read_to_string(&path)
-        .ok()
-        .or_else(|| migrate_prefs(&path, &legacy_prefs_paths()));
+    let prefs_data = std::fs::read_to_string(&path).ok();
     if let Some(data) = prefs_data
         && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&data)
     {
@@ -2972,20 +2948,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "model_settings" => {
                     let pending_response = app.sampler_settings_rid_matches(co.rid.as_deref());
                     let sampler_snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
-                    let incompatible = co.data.get("effective_sampler").is_some()
-                        && co.data.get("setting_schema").is_none();
                     if pending_response {
                         app.finish_sampler_settings_refresh();
                         if let Some(snapshot) = sampler_snapshot {
                             app.note_active_model_from_snapshot(&snapshot);
                             app.effective_sampler = Some(snapshot);
                         } else {
-                            if incompatible {
-                                app.effective_sampler = None;
-                                app.set_error(
-                                    "client and daemon must be upgraded together to edit model settings",
-                                );
-                            }
+                            app.effective_sampler = None;
+                            app.set_error("daemon returned invalid model settings");
                         }
                     } else {
                         if co.rid.is_none()
@@ -5140,6 +5110,7 @@ mod redraw_tests {
             let arrival = serde_json::from_value(serde_json::json!({
                 "type": "new_message", "character": app.character_name,
                 "msg_id": "m_new", "role": "user", "content": "new arrival",
+                "content_blocks": [{"type": "text", "text": "new arrival"}],
                 "timestamp": "2026-09-10T00:00:00Z"
             }))
             .unwrap();
@@ -5348,7 +5319,7 @@ mod redraw_tests {
     }
 
     #[test]
-    fn a_legacy_model_settings_response_requires_a_lockstep_upgrade() {
+    fn an_invalid_model_settings_response_is_reported() {
         let mut app = App::default();
         let rid = app.begin_sampler_settings_refresh();
 
@@ -5367,7 +5338,7 @@ mod redraw_tests {
         assert!(
             app.error_log
                 .iter()
-                .any(|entry| entry.contains("client and daemon must be upgraded together"))
+                .any(|entry| entry.contains("daemon returned invalid model settings"))
         );
     }
 
@@ -6023,54 +5994,6 @@ mod draft_lifecycle_tests {
 }
 
 #[cfg(test)]
-mod prefs_path_tests {
-    use super::*;
-
-    #[test]
-    fn a_prefs_file_left_in_the_config_dir_moves_to_the_data_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let data = tmp.path().join("data/tui_prefs.json");
-        let config = tmp.path().join("config/tui_prefs.json");
-        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(&config, r#"{"show_tools":false}"#).unwrap();
-
-        let found = migrate_prefs(&data, std::slice::from_ref(&config));
-
-        assert_eq!(found.as_deref(), Some(r#"{"show_tools":false}"#));
-        assert_eq!(
-            std::fs::read_to_string(&data).unwrap(),
-            r#"{"show_tools":false}"#
-        );
-        assert!(!config.exists(), "the old copy should not be left behind");
-    }
-
-    #[test]
-    fn the_first_legacy_location_that_has_a_file_wins() {
-        let tmp = tempfile::tempdir().unwrap();
-        let data = tmp.path().join("data/tui_prefs.json");
-        let config = tmp.path().join("config/tui_prefs.json");
-        let runtime = tmp.path().join("runtime/tui_prefs.json");
-        std::fs::create_dir_all(runtime.parent().unwrap()).unwrap();
-        std::fs::write(&runtime, r#"{"show_thinking":true}"#).unwrap();
-
-        let found = migrate_prefs(&data, &[config, runtime.clone()]);
-
-        assert_eq!(found.as_deref(), Some(r#"{"show_thinking":true}"#));
-        assert!(!runtime.exists());
-    }
-
-    #[test]
-    fn nothing_to_migrate_leaves_the_data_dir_untouched() {
-        let tmp = tempfile::tempdir().unwrap();
-        let data = tmp.path().join("data/tui_prefs.json");
-        let missing = tmp.path().join("config/tui_prefs.json");
-
-        assert!(migrate_prefs(&data, &[missing]).is_none());
-        assert!(!data.exists());
-    }
-}
-
-#[cfg(test)]
 mod reliability_tests {
     use super::*;
     use serde_json::json;
@@ -6078,7 +6001,7 @@ mod reliability_tests {
         serde_json::from_value(value).unwrap()
     }
     fn msg(id: &str, text: &str) -> serde_json::Value {
-        json!({"msg_id":id,"role":"assistant","content":text,"timestamp":"2026-09-10T00:00:00Z"})
+        json!({"msg_id":id,"role":"assistant","content":text,"content_blocks":[{"type":"text","text":text}],"timestamp":"2026-09-10T00:00:00Z"})
     }
     fn history(thread: &str, messages: serde_json::Value) -> ServerMessage {
         frame(
@@ -6280,7 +6203,7 @@ mod conversation_reliability_tests {
         let _page = handle_server_message(
             &mut app,
             frame(
-                json!({"type":"command_output", "name":"history_page", "rid":page_rid, "data":{"messages":[{"msg_id":"wrong", "role":"assistant", "content":"wrong conversation", "timestamp":""}]}}),
+                json!({"type":"command_output", "name":"history_page", "rid":page_rid, "data":{"messages":[{"msg_id":"wrong", "role":"assistant", "content":"wrong conversation", "content_blocks":[{"type":"text","text":"wrong conversation"}], "timestamp":""}]}}),
             ),
         );
         let _catalog = handle_server_message(
@@ -6298,7 +6221,7 @@ mod conversation_reliability_tests {
         let _new_page = handle_server_message(
             &mut app,
             frame(
-                json!({"type":"command_output", "name":"history_page", "rid":fresh, "data":{"messages":[{"msg_id":"right", "role":"assistant", "content":"right conversation", "timestamp":""}], "active_start":0, "has_more_before":false}}),
+                json!({"type":"command_output", "name":"history_page", "rid":fresh, "data":{"messages":[{"msg_id":"right", "role":"assistant", "content":"right conversation", "content_blocks":[{"type":"text","text":"right conversation"}], "timestamp":""}], "active_start":0, "has_more_before":false}}),
             ),
         );
         assert_eq!(

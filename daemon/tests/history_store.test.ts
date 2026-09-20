@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -112,12 +111,12 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
 
   await archiveAndRetain(
     join(characterDir, "threads", "main"),
+    { dbPath, archiveKey: "ada" },
     0,
     active,
     () => "2026-08-13T10:01:00+10:00",
     () => "conversation-2",
     "compact-2",
-    { dbPath, archiveKey: "ada" },
   );
 
   expect(access(join(characterDir, "threads", "main", "segments"))).rejects.toThrow();
@@ -161,48 +160,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   ]);
 });
 
-test("legacy segments import lazily and survive removal of the source files", async () => {
-  const dataDir = testTmp(`history-import-${crypto.randomUUID()}`);
-  const characterDir = join(dataDir, "ada");
-  const segmentsDir = join(characterDir, "threads", "main", "segments");
-  const dbPath = join(dataDir, HISTORY_DB_FILE);
-  await mkdir(segmentsDir, { recursive: true });
-  const messages = [message("u1", "old hello")];
-  await writeFile(join(segmentsDir, "0001.jsonl"), `${JSON.stringify(messages[0])}\n`);
-  await writeFile(
-    join(characterDir, "threads", "main", "compaction.json"),
-    JSON.stringify({
-      segments: [
-        {
-          file: "0001.jsonl",
-          message_count: 1,
-          compacted_at: "2026-08-13T10:01:00+10:00",
-        },
-      ],
-      total_compacted_messages: 1,
-    }),
-  );
 
-  const importing = await SegmentReader.load({
-    dir: join(characterDir, "threads", "main"),
-    dbPath,
-    archiveKey: "ada",
-    createHistoryDb: true,
-  });
-  expect(await importing.readSegment(0)).toEqual(messages);
-  importing.close();
-
-  expect(access(segmentsDir)).rejects.toThrow();
-  expect(access(join(characterDir, "threads", "main", "compaction.json"))).rejects.toThrow();
-  const durable = await SegmentReader.load({
-    dir: join(characterDir, "threads", "main"),
-    dbPath,
-    archiveKey: "ada",
-    createHistoryDb: true,
-  });
-  expect(await durable.readSegment(0)).toEqual(messages);
-  durable.close();
-});
 
 describe("storage-native display paging", () => {
   test("one display group can cross several archived segments", () => {
@@ -265,35 +223,7 @@ describe("storage-native display paging", () => {
     expect(long.segments_read).toBe(4);
   });
 
-  test("an existing archive receives display metadata when it is upgraded", () => {
-    const path = testTmp(`history-display-migration-${crypto.randomUUID()}.db`);
-    const initial = HistoryStore.open(path);
-    initial.putSegment(
-      "ada",
-      0,
-      {
-        file: HISTORY_DB_FILE,
-        message_count: 3,
-        compacted_at: "2026-08-13T10:01:00+10:00",
-      },
-      [toolAssistant("a1", "t1"), toolResult("r1", "t1"), message("a2", "done")],
-    );
-    initial.close();
 
-    const raw = new Database(path, { readwrite: true });
-    raw.run("DELETE FROM history_metadata WHERE key = 'display_version'");
-    raw.run("UPDATE history_messages SET display_kind = 0, display_seq = NULL, is_user_turn = 0");
-    raw.close();
-
-    const upgraded = HistoryStore.open(path);
-    expect(upgraded.displayMessageCount("ada")).toBe(1);
-    expect(upgraded.readDisplayRange("ada", 0, 1).messages.map((entry) => entry.msg_id)).toEqual([
-      "a1",
-      "r1",
-      "a2",
-    ]);
-    upgraded.close();
-  });
 });
 
 describe("archive revision", () => {

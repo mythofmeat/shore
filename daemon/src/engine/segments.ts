@@ -1,27 +1,15 @@
 import { readDurable, archiveFile } from "../storage/files.ts";
-import { shoreLog } from "../log.ts";
-
-import { access, readFile, rmdir, unlink } from "node:fs/promises";
-import { basename, join } from "node:path";
-
-import {
-  archiveKey,
-  compactionManifestIn,
-  segmentsDirIn,
-  threadDataDir,
-} from "../config/dirs.ts";
-
+import { access } from "node:fs/promises";
+import { join } from "node:path";
+import { archiveKey, threadDataDir } from "../config/dirs.ts";
 import {
   HISTORY_DB_FILE,
   HistoryStore,
   type HistoryDisplaySlice,
-  type SegmentEntry,
   type SegmentRecord,
 } from "./history_store.ts";
-import { MessageNotFound, JsonParseError, normalizeMessage } from "./message_store";
-import { quarantineLines } from "./backup.ts";
+import { MessageNotFound } from "./message_store";
 import type { Message } from "./types";
-
 
 export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
 
@@ -46,207 +34,81 @@ export function conversationRef(
   };
 }
 
-export interface CompactionManifest {
-  segments: SegmentEntry[];
-  total_compacted_messages: number;
-}
-
-const EMPTY_MANIFEST: CompactionManifest = {
-  segments: [],
-  total_compacted_messages: 0,
-};
-
 export class SegmentReader {
-  readonly #segmentsDir: string;
-  readonly #manifest: CompactionManifest;
-  readonly #history: HistoryStore | undefined;
-  readonly #character: string;
-  readonly #displayPaging: boolean;
-
   private constructor(
-    segmentsDir: string,
-    manifest: CompactionManifest,
-    history: HistoryStore | undefined,
-    character: string,
-  ) {
-    this.#segmentsDir = segmentsDir;
-    this.#manifest = manifest;
-    this.#history = history;
-    this.#character = character;
-    this.#displayPaging =
-      history !== undefined && history.segmentCount(character) >= manifest.segments.length;
-  }
+    private readonly history: HistoryStore | undefined,
+    private readonly character: string,
+  ) {}
 
   static async load(ref: ConversationRef): Promise<SegmentReader> {
-    const manifestPath = compactionManifestIn(ref.dir);
-    const segmentsDir = segmentsDirIn(ref.dir);
-    const character = ref.archiveKey;
-
-    let raw: string;
-    try {
-      raw = await readFile(manifestPath, "utf8");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        const history = await openHistory(ref);
-        if (history !== undefined) await recoverPending(history, ref);
-        return new SegmentReader(
-          segmentsDir,
-          EMPTY_MANIFEST,
-          history,
-          character,
-        );
-      }
-      throw e;
-    }
-
-    let manifest: CompactionManifest;
-    try {
-      manifest = JSON.parse(raw) as CompactionManifest;
-    } catch (e) {
-      throw new JsonParseError(manifestPath, (e as Error).message);
-    }
-    if (!Array.isArray(manifest.segments)) {
-      throw new JsonParseError(manifestPath, "missing field `segments`");
-    }
-    if (typeof manifest.total_compacted_messages !== "number") {
-      throw new JsonParseError(
-        manifestPath,
-        "missing field `total_compacted_messages`",
-      );
-    }
     const history = await openHistory(ref);
-    if (history !== undefined) {
-      await recoverPending(history, ref);
-      await importLegacySegments(history, character, manifest, segmentsDir, manifestPath);
-    }
-    return new SegmentReader(segmentsDir, manifest, history, character);
+    if (history !== undefined) await recoverPending(history, ref);
+    return new SegmentReader(history, ref.archiveKey);
   }
 
   segmentCount(): number {
-    return Math.max(
-      this.#manifest.segments.length,
-      this.#history?.segmentCount(this.#character) ?? 0,
-    );
+    return this.history?.segmentCount(this.character) ?? 0;
   }
 
   totalMessageCount(): number {
-    const historyCount = this.#history?.segmentCount(this.#character) ?? 0;
-    return historyCount >= this.#manifest.segments.length
-      ? (this.#history?.totalMessageCount(this.#character) ?? 0)
-      : this.#manifest.total_compacted_messages;
-  }
-
-  supportsDisplayPaging(): boolean {
-    return this.#displayPaging;
+    return this.history?.totalMessageCount(this.character) ?? 0;
   }
 
   displayMessageCount(): number {
-    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
-    return this.#history?.displayMessageCount(this.#character) ?? 0;
+    return this.history?.displayMessageCount(this.character) ?? 0;
   }
 
   displayTurnCount(): number {
-    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
-    return this.#history?.displayTurnCount(this.#character) ?? 0;
+    return this.history?.displayTurnCount(this.character) ?? 0;
   }
 
   displayStartForTurns(end: number, turns: number): number {
-    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
-    return this.#history?.displayStartForTurns(this.#character, end, turns) ?? end;
+    return this.history?.displayStartForTurns(this.character, end, turns) ?? end;
   }
 
   readDisplayRange(start: number, end: number): HistoryDisplaySlice {
-    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
-    return (
-      this.#history?.readDisplayRange(this.#character, start, end) ?? {
-        messages: [],
-        metrics: { segments_read: 0, rows_read: 0, decoded_body_bytes: 0 },
-      }
-    );
+    return this.history?.readDisplayRange(this.character, start, end) ?? {
+      messages: [],
+      metrics: { segments_read: 0, rows_read: 0, decoded_body_bytes: 0 },
+    };
   }
 
   archiveDigest(): string {
-    const durable = this.#history?.archiveDigest(this.#character) ?? "";
-    const manifest = this.#manifest.segments
-      .map((entry) => `${entry.file}:${entry.message_count}:${entry.compacted_at}`)
-      .join(",");
-    return `${durable}|${manifest}`;
+    return this.history?.archiveDigest(this.character) ?? "";
   }
 
   entries(): readonly SegmentRecord[] {
-    const historyEntries = this.#history?.entries(this.#character) ?? [];
-    return historyEntries.length >= this.#manifest.segments.length
-      ? historyEntries
-      : this.#manifest.segments.map((entry, idx) => ({
-          ...entry,
-          idx,
-          first_message_at: null,
-          last_message_at: null,
-        }));
+    return this.history?.entries(this.character) ?? [];
   }
 
   entry(index: number): SegmentRecord | undefined {
-    return this.entries().find((entry) => entry.idx === index);
+    return this.entries().find(entry => entry.idx === index);
   }
 
   async readSegment(index: number): Promise<Message[]> {
-    if (this.#history?.hasSegment(this.#character, index) === true) {
-      return this.#history.readSegment(this.#character, index);
-    }
-
-    const entry = this.#manifest.segments[index];
-    if (entry === undefined) {
+    if (this.history?.hasSegment(this.character, index) !== true) {
       throw new MessageNotFound(`segment index ${index}`);
     }
-
-    const path = legacySegmentPath(this.#segmentsDir, entry.file);
-    const content = await readFile(path, "utf8");
-
-    const messages: Message[] = [];
-    const unreadable: string[] = [];
-    for (const rawLine of content.split("\n")) {
-      const line = rawLine.trim();
-      if (line === "") continue;
-      let parsed: Message;
-      try {
-        parsed = JSON.parse(line) as Message;
-      } catch {
-        unreadable.push(rawLine);
-        continue;
-      }
-      messages.push(normalizeMessage(parsed));
-    }
-    if (unreadable.length > 0) {
-      const quarantined = await quarantineLines(path, unreadable);
-      shoreLog.error(
-        `shore: ${String(unreadable.length)} unreadable line(s) in segment ${path} were ` +
-          `quarantined${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
-          `${String(messages.length)} message(s) recovered`,
-      );
-    }
-    this.#history?.putSegment(this.#character, index, entry, messages);
-    return messages;
+    return this.history.readSegment(this.character, index);
   }
 
   close(): void {
-    this.#history?.close();
+    this.history?.close();
   }
 }
 
 async function openHistory(ref: ConversationRef): Promise<HistoryStore | undefined> {
-  if (ref.createHistoryDb) return HistoryStore.open(ref.dbPath);
-  try {
-    await access(ref.dbPath);
-    return HistoryStore.open(ref.dbPath);
-  } catch {
-    return undefined;
+  if (!ref.createHistoryDb) {
+    try { await access(ref.dbPath); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
   }
+  return HistoryStore.open(ref.dbPath);
 }
 
-async function recoverPending(
-  history: HistoryStore,
-  ref: ConversationRef,
-): Promise<void> {
+async function recoverPending(history: HistoryStore, ref: ConversationRef): Promise<void> {
   let active = "";
   try {
     active = readDurable(archiveFile(ref.dbPath, ref.archiveKey, "active.jsonl"));
@@ -254,74 +116,4 @@ async function recoverPending(
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
   history.recoverPending(ref.archiveKey, active);
-}
-
-async function importLegacySegments(
-  history: HistoryStore,
-  character: string,
-  manifest: CompactionManifest,
-  segmentsDir: string,
-  manifestPath: string,
-): Promise<void> {
-  if (manifest.segments.length === 0) return;
-  try {
-    for (const [idx, entry] of manifest.segments.entries()) {
-      const path = legacySegmentPath(segmentsDir, entry.file);
-      if (history.hasSegment(character, idx)) {
-        try {
-          const messages = await readJsonlSegment(path);
-          if (JSON.stringify(history.readSegment(character, idx)) !== JSON.stringify(messages)) {
-            throw new Error(`database segment ${idx} disagrees with ${entry.file}`);
-          }
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        }
-      } else {
-        const messages = await readJsonlSegment(path);
-        history.putSegment(character, idx, entry, messages);
-      }
-    }
-    for (const entry of manifest.segments) {
-      await unlinkIfExists(legacySegmentPath(segmentsDir, entry.file));
-    }
-    await unlinkIfExists(manifestPath);
-    try {
-      await rmdir(segmentsDir);
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT" && code !== "ENOTEMPTY") throw e;
-    }
-  } catch (e) {
-    shoreLog.warn(`shore: legacy history import kept its JSONL source: ${String(e)}`);
-  }
-}
-
-function legacySegmentPath(segmentsDir: string, file: string): string {
-  if (file === "" || basename(file) !== file || file === "." || file === "..") {
-    throw new Error(`unsafe legacy history segment path: ${file}`);
-  }
-  return join(segmentsDir, file);
-}
-
-async function unlinkIfExists(path: string): Promise<void> {
-  try {
-    await unlink(path);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-}
-
-async function readJsonlSegment(path: string): Promise<Message[]> {
-  const content = await readFile(path, "utf8");
-  const messages: Message[] = [];
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (line === "") continue;
-    try {
-      messages.push(normalizeMessage(JSON.parse(line) as Message));
-    } catch (e) {
-      throw new JsonParseError(path, (e as Error).message);
-    }
-  }
-  return messages;
 }

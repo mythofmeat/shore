@@ -107,7 +107,7 @@ for (const stage of ["context", "provenance", "publish"] as const) {
     await queueDeferredEdit(charDir, "SOUL.md");
     expect(registry.forkThread("ada", "main", "child", { failAfter: stage })).rejects.toThrow("injected fork failure");
     await recoverForks(h.config.dirs.data, "ada");
-    const snapshot = readState(h.config.dirs.data, "ada/threads/child/active_prompt/.snapshot", "ada");
+    const snapshot = readState(h.config.dirs.data, "ada/threads/child/active_prompt/.snapshot");
     expect(snapshot).toBe(stage === "publish" ? "1" : undefined);
     expect(await pendingDeferredEditPaths(charDir, "child")).toEqual(stage === "publish" ? ["SOUL.md"] : []);
     expect(await loadPromptFile(charDir, h.config.dirs.config, "ada", "SOUL.md")).toBe("Ada");

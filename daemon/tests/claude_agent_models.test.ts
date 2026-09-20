@@ -25,16 +25,7 @@ test("provider-only Claude Agent configuration discovers, selects, and uses SDK 
     ANTHROPIC_API_KEY: "test-key", ANTHROPIC_BASE_URL: mock.url,
   };
   try {
-    const config = parseConfigTable(Bun.TOML.parse(`
-[providers.claude_agent]
-[providers.claude_agent.discovery]
-enabled = true
-ignore = ["haiku"]
-[providers.claude_agent.defaults]
-max_output_tokens = 256
-[defaults]
-model = "claude_agent:default"
-`) as TomlTable, { config: dir, data: dir, cache: dir, runtime: dir });
+    const config = parseConfigTable(Bun.TOML.parse("[providers.claude_agent]\ndiscover = true\nignore_models = [\"haiku\"]\nmax_output_tokens = 256\n\n[chat]\nmodel = \"claude_agent:default\"\n") as TomlTable, { config: dir, data: dir, cache: dir, runtime: dir });
     await refreshProviderModels({ config, runClaudeAgentQuery: params => {
       expect(params.options?.persistSession).toBe(false);
       return query({ ...params, options: { ...params.options, env: { ...params.options?.env, ...env } } });
@@ -91,15 +82,7 @@ model = "claude_agent:default"
 test("custom SDK providers auto-discover, preserve capabilities and old caches on failure, and accept explicit IDs", async () => {
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-custom-models-"));
   try {
-    const config = parseConfigTable(Bun.TOML.parse(`
-[providers.subscription]
-sdk = "claude_agent"
-base_url = "http://local-model-endpoint.invalid"
-[providers.subscription.discovery]
-enabled = true
-[providers.subscription.defaults]
-max_context_tokens = 123456
-`) as TomlTable, { config: dir, data: dir, cache: dir, runtime: dir });
+    const config = parseConfigTable(Bun.TOML.parse("[providers.subscription]\nsdk = \"claude_agent\"\nbase_url = \"http://local-model-endpoint.invalid\"\ndiscover = true\nmax_context_tokens = 123456\n") as TomlTable, { config: dir, data: dir, cache: dir, runtime: dir });
     const models: ModelInfo[] = [
       { value: "sonnet", displayName: "Sonnet", description: "SDK alias",
         resolvedModel: "claude-sonnet-test", supportsEffort: true,

@@ -67,7 +67,7 @@
       }
     },
     {
-      "name": "a legacy character.md counts as a character",
+      "name": "a workspace definition counts as a character",
       "ok": {
         "characters": [
           {

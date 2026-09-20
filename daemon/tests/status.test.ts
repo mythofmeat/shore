@@ -1,10 +1,12 @@
+import { seedHeartbeatEvents } from "./support/storage.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AutonomyService, HEARTBEAT_LOG_FILENAME } from "../src/autonomy/service.ts";
+import { AutonomyService } from "../src/autonomy/service.ts";
 import type { HeartbeatClockConfig } from "../src/autonomy/heartbeat.ts";
 import { STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
@@ -169,9 +171,7 @@ async function build(name: string): Promise<StatusContext> {
     new Date(now + offset * 1000).toISOString().replace(/\.\d{3}Z$/, "+00:00");
   if (s.persisted !== undefined) {
     const [ticks, wake, user, covered] = s.persisted;
-    writeFileSync(
-      join(charData, STATE_FILENAME),
-      JSON.stringify(
+    writeDurable(join(charData, STATE_FILENAME), JSON.stringify(
         {
           version: 4,
           ticks_without_user: ticks,
@@ -185,17 +185,13 @@ async function build(name: string): Promise<StatusContext> {
         },
         null,
         2,
-      ),
-    );
+      ));
   }
   if (s.log === true) {
-    writeFileSync(
-      join(charData, HEARTBEAT_LOG_FILENAME),
-      LOG_LINES.map((e) => `${JSON.stringify(e)}\n`).join(""),
-    );
+    seedHeartbeatEvents(charData, LOG_LINES.map((e) => `${JSON.stringify(e)}\n`).join(""));
   }
   if (s.deferred === true) {
-    writeFileSync(join(charData, "deferred_edits.jsonl"), DEFERRED_LINES.map((l) => `${l}\n`).join(""));
+    writeDurable(join(charData, "deferred_edits.jsonl"), DEFERRED_LINES.map((l) => `${l}\n`).join(""));
   }
 
   const autonomy = new AutonomyService(IDLE_EXECUTOR);

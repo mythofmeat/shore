@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
@@ -61,10 +62,7 @@ function archive(characterDir: string, index: number, messages: Message[]): void
 
 async function activeWindow(characterDir: string, messages: Message[]): Promise<void> {
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-  await writeFile(
-    join(characterDir, "threads", "main", "active.jsonl"),
-    messages.map((item) => JSON.stringify(item)).join("\n") + "\n",
-  );
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), messages.map((item) => JSON.stringify(item)).join("\n") + "\n");
 }
 
 class FakeEmbedder implements Embedder {
