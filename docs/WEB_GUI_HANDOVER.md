@@ -1,6 +1,7 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-20. The user resumed implementation. Full issue completion remains outstanding.
+Updated 2026-09-20. The user requested a wrap-up, commits and an updated handover. Work is paused
+at verified checkpoints; full issue completion remains outstanding.
 
 ## Checkpoint and estimate
 
@@ -9,18 +10,22 @@ Updated 2026-09-20. The user resumed implementation. Full issue completion remai
 - Branch: `feat/web-ui`.
 - Worktree: `/home/eshen/dev/shore-feat-web-ui`.
 - Starting revision for this continuation: `bd419249` — configuration compatibility fixes after the
-  archive-transfer checkpoint (`ca557d5b` in this checkout). This continuation adds archive restart
-  recovery; see the implementation record and current Git history for its verified commit.
+  archive-transfer checkpoint (`ca557d5b` in this checkout).
+- Verified feature commits from this continuation:
+  - `a68bbe52` — recover archive outcomes after daemon restart.
+  - `8ffd72a2` — cancel queued commands and resumable compaction.
+  - `e0889d08` — recover drafts and attachments across tabs and reloads.
+- The final wrap-up commit changes documentation only. Unfinished ordinary request recovery was
+  saved as an ignored local patch and removed from the working tree; see the resumption notes below.
 - The user wants verified commits as work progresses, with dependency updates kept separate.
 - GitHub checked on 2026-09-20: issue open, no comments, and no PR for `feat/web-ui`.
   No progress comment, acceptance-checkbox update, or merge-policy change has been published.
 
-The user reports approximately eight hours of work so far. Budget **another 5–9 hours of active
-work**, plus external CI/merge-policy waiting, as a rough planning range rather than a commitment.
-The earlier “two-thirds complete” estimate was not measured and was too optimistic as a time
-forecast. Allow roughly 2–3 hours for recovery/cancellation, 2–4 for capability gaps, and 2–3 for
-release/security checks and CI. Reassess from the remaining concrete gap audit; hidden parity gaps
-or failing CI could extend this estimate.
+Before these three checkpoints, the planning estimate was another 5–9 hours of active work plus
+external CI/merge-policy waiting. That is historical, not an updated estimate. The earlier
+“two-thirds complete” estimate was not measured and was too optimistic as a time forecast.
+Re-estimate from the remaining concrete gaps when resuming; capability, release and CI work
+still require substantial verification.
 
 ## Implemented and verified
 
@@ -126,7 +131,7 @@ generation/inventory. The cancellation pass killed 12/12 mutants; router killed 
 previously documented equivalent survivor. All 64 staleness passes were current. Logs have the
 `cancel-` prefix under `out/issue-214/resume-2026-09-20/`.
 
-## Next work
+## Draft and attachment recovery checkpoint
 
 The draft/attachment continuation uses IndexedDB, separate attachment records, per-tab ownership,
 revision-safe writes/discards, explicit saved-draft recovery and a persistent send-review marker.
@@ -137,10 +142,47 @@ the 10 affected draft/workspace/packaged journeys passed again after final safeg
 typecheck, build and generation/inventory checks passed. See the latest `WEB_GUI.md` record and
 commit history; logs use the `drafts-` prefix in the continuation directory.
 
+## Next work
+
 Continue the broader recovery audit: uncertain ordinary
 mutations across reload/restart, remaining media recovery, and real concurrent-client
 outcomes. Then close the capability/event/local-preference inventory and package/CI gaps listed above.
 Do not treat the restart checkpoint as full parity or as proof of GitHub CI/required merge gates.
+
+The ordinary-request failure was reproduced through the actual browser tool workbench: Bash appended
+to a file, then remained running; reloading the page lost the visible uncertain-outcome notice even
+though the side effect had happened. The reproduction is saved in the local patch below, with its
+expected failing run in `out/issue-214/resume-2026-09-20/requests-reproduction.log`.
+
+Unfinished work is preserved locally at
+`out/issue-214/resume-2026-09-20/request-recovery-wip.patch`. This ignored file is **not committed or
+available in another clone**. It applies cleanly to `e0889d08` and contains preliminary Rust request
+contracts, generated bindings/schemas, validators, SQLite metadata helpers, a partial `RequestHistory`
+class, and the browser reproduction. Only the 13 Rust web-contract tests ran successfully for this
+partial work; it has no complete lint/typecheck/test verification and is not wired into HTTP,
+WebSocket dispatch or the browser. Review it before reuse; do not treat it as an implemented feature.
+
+After refreshing dependencies and establishing the baseline, restore it if useful with:
+
+```sh
+git apply --check out/issue-214/resume-2026-09-20/request-recovery-wip.patch
+git apply out/issue-214/resume-2026-09-20/request-recovery-wip.patch
+```
+
+The proposed direction reuses authenticated daemon recovery storage to record mutation admission
+before shared dispatch and retain bounded typed results through the existing Rust-canonical
+`OperationResponse`. Connection loss/restart must expose uncertainty without replay. Still needed:
+dispatch/result/disconnect wiring, authenticated owner-scoped list/acknowledgement routes, browser
+review/results UI, and ownership/expiry/redaction/bounds/persistence-failure/process-restart tests.
+Read current selection from the session router at admission: `LocalPeer.session` is an initial
+snapshot and can be stale. Review pruning, logout, duplicate IDs and storage-failure behavior in the
+partial class before integrating it. Existing archive recovery is the reference for crash tests.
+
+Additional audit leads, not completed fixes: `docs/capabilities/README.md` still describes 37 migrated
+and 19 legacy operations despite the current 56 registrations; compare actual terminal preferences
+and core request variants against browser coverage. Inspect the extra `}` in the daemon Dockerfile's
+`COPY --chown` argument during container verification. No container build or actual PR CI run was
+completed in this continuation.
 
 Current archive limits: 64 MiB compressed per artifact, 256 MiB aggregate reserved artifact bytes,
 four records per sign-in, 32 overall, 15-minute expiry, one bounded worker, five-minute operation
@@ -194,7 +236,8 @@ appropriate updates and commits are already authorized by the user's instruction
 
 > Resume https://github.com/mythofmeat/shore/issues/214 on `feat/web-ui` in
 > `/home/eshen/dev/shore-feat-web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
-> `docs/WEB_GUI.md`, and the current GitHub issue. Read the latest archive restart recovery checkpoint above.
+> `docs/WEB_GUI.md`, and the current GitHub issue. The latest verified feature commit is `e0889d08`;
+> read all three continuation checkpoints and the unverified local patch notes above.
 > Keep the full issue scope intact and make verified commits as you go, separating dependency
 > upgrades. Continue ordinary uncertain-command recovery and the remaining media/parity audit.
 > Archive restart recovery has been implemented and reproduced through actual process/browser journeys.
