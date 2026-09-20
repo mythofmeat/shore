@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import type { ImageUpload } from "../protocol/ImageUpload.ts";
+import { Composer } from "./composer.tsx";
 import type { Message } from "../protocol/Message.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { Providers } from "./providers.tsx";
@@ -102,53 +102,6 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
   </Modal>;
 }
 
-function Composer({ state }: { state: WorkspaceSnapshot }) {
-  const key = `shore.draft.v1.${JSON.stringify([state.character, state.thread])}`;
-  const [text, setText] = useState(() => saved(key));
-  const [images, setImages] = useState<ImageUpload[]>([]);
-  const [busy, setBusy] = useState(false);
-  const textRef = useRef<HTMLTextAreaElement>(null);
-  const change = (value: string) => { setText(value); save(key, value); };
-  const send = async () => {
-    const submitted = text;
-    const submittedImages = images;
-    setBusy(true);
-    try {
-      const result = await workspace.connection.submit({ type: "message", text: submitted, stream: true, images: [], image_data: submittedImages }).finished;
-      if (result.outcome === "completed") {
-        setText((current) => { if (current !== submitted) return current; save(key, ""); return ""; });
-        setImages((current) => current === submittedImages ? [] : current);
-      } else workspace.report(result.error?.message ?? `Request ${result.outcome}. Your draft is retained.`);
-    } catch (error) { workspace.report(error); } finally { setBusy(false); }
-  };
-  const attach = async (files: FileList | null) => {
-    if (files === null) return;
-    const added: ImageUpload[] = [];
-    for (const file of files) {
-      if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) throw new Error("Choose PNG, JPEG, WebP or GIF images");
-      if (file.size > 8 * 1024 * 1024) throw new Error("Choose images smaller than 8 MiB");
-      const data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result.split(",", 2)[1] ?? "") : reject(new Error("Could not read image"));
-        reader.onerror = () => reject(new Error("Could not read image")); reader.readAsDataURL(file);
-      });
-      added.push({ filename: file.name, data, mime_type: file.type });
-    }
-    if ([...images, ...added].reduce((sum, image) => sum + image.data.length, 0) > 16 * 1024 * 1024) throw new Error("Attachments exceed the 16 MiB browser limit");
-    setImages((previous) => [...previous, ...added]);
-  };
-  useEffect(() => {
-    const focus = (event: KeyboardEvent) => { if (event.altKey && event.key === "m") { event.preventDefault(); textRef.current?.focus(); } };
-    window.addEventListener("keydown", focus); return () => { window.removeEventListener("keydown", focus); };
-  }, []);
-  return <form className="composer" onSubmit={(event) => { event.preventDefault(); if (!busy) void send(); }}>
-    <label className="sr-only" htmlFor="message-composer">Message</label>
-    <textarea id="message-composer" ref={textRef} rows={3} placeholder={state.character === null ? "Create or select a character to begin" : `Message ${state.character}…`} value={text} onChange={(event) => change(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !busy && state.status === "ready" && state.character !== null) { event.preventDefault(); void send(); } }} />
-    {images.length === 0 ? null : <div className="attachments">{images.map((image, index) => <button type="button" key={index} onClick={() => setImages(images.filter((_, position) => position !== index))}>Remove {image.filename}</button>)}<small>Keep this page open to retain attachments.</small></div>}
-    <div className="composer-footer"><label className="attach">Attach images<input aria-label="Attach images" className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(event) => { const files = event.target.files; perform(() => attach(files)); event.target.value = ""; }} /></label><small>Ctrl/⌘ Enter to send · draft saved locally</small><button type="button" onClick={() => workspace.connection.cancel()} disabled={state.status !== "ready"}>Stop</button><button type="submit" className="primary" disabled={busy || state.status !== "ready" || state.character === null || (text.trim() === "" && images.length === 0)}>{busy ? "Sending…" : "Send"}</button></div>
-  </form>;
-}
-
 function MessageCard({ message, reasoning, tools, openImage, action }: { message: Message; reasoning: boolean; tools: boolean; openImage: (source: string) => void; action: (name: string, preset?: Record<string, unknown>) => void }) {
   return <article className={`message ${message.role}`} aria-label={`${message.role} message`}>
     <div className="message-heading"><strong>{message.role}</strong><time>{message.timestamp ? new Date(message.timestamp).toLocaleString() : ""}</time></div>
@@ -214,7 +167,7 @@ function App() {
       <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
         {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
         {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><div className="message-text">{stream.text}</div>{reasoning && stream.reasoning !== "" ? <details><summary>Reasoning</summary><pre>{stream.reasoning}</pre></details> : null}<Blocks blocks={stream.blocks.filter((block) => block.type !== "text")} reasoning={reasoning} tools={tools} openImage={setImage} /></article>)}<div ref={tail} />
-      </div><Composer key={JSON.stringify([state.character, state.thread])} state={state} />
+      </div><Composer key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
     </main>
     {activity ? <aside className="activity"><h2>Activity & details</h2><Inspect label="Conversation configuration" value={state.config} />{state.streams.filter((stream) => stream.subagent !== null).map((stream) => <section key={stream.key}><h3>{stream.subagent}</h3><div className="message-text">{stream.text}</div><Blocks blocks={stream.blocks} reasoning={reasoning} tools={tools} openImage={setImage} /></section>)}{state.activity.slice().reverse().map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}</aside> : null}
     {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
