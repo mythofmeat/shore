@@ -16,13 +16,13 @@ test("settings use live types, preserve collections and secrets, validate writes
     await dialog.getByRole("button").filter({ has: page.locator("span", { hasText: new RegExp(`^${key.replaceAll(".", "\\.")}$`) }) }).click();
     return dialog.getByRole("region", { name: `Setting ${key}`, exact: true });
   };
-  let setting = await choose("defaults.stream");
+  let setting = await choose("compaction.enabled");
   await expect(setting.getByRole("heading", { name: "Default", exact: true })).toBeVisible();
   await setting.getByLabel("Value", { exact: true }).uncheck();
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
   await expect(setting.getByLabel("Value", { exact: true })).not.toBeChecked();
-  setting = await choose("cache.keepalive_max");
+  setting = await choose("cache.keepalive_for");
   await setting.getByLabel("Value", { exact: true }).fill("90m");
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
@@ -30,11 +30,11 @@ test("settings use live types, preserve collections and secrets, validate writes
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("alert")).toContainText("durations look like");
   await expect(setting.getByLabel("Value", { exact: true })).toHaveValue("yesterday");
-  setting = await choose("behavior.user_message_timestamps");
+  setting = await choose("chat.user_timestamps");
   await setting.getByLabel("Value", { exact: true }).selectOption("always");
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
-  setting = await choose("memory.compaction.min_turns");
+  setting = await choose("compaction.min_turns");
   await setting.getByLabel("Value", { exact: true }).fill("4");
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
@@ -46,7 +46,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Restart required: [notifications]");
   await expect(setting.getByLabel("Value 2", { exact: true })).toHaveValue("a,b");
-  setting = await choose("notifications.ntfy.token");
+  setting = await choose("notifications.topic");
   await expect(setting.getByLabel("Value", { exact: true })).toHaveAttribute("type", "password");
   await setting.getByLabel("Value", { exact: true }).fill("settings-fixture-secret");
   await setting.getByRole("button", { name: "Save setting" }).click();
@@ -72,7 +72,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   setting = await choose("notifications.command");
   await expect(setting.getByLabel("Value 2", { exact: true })).toHaveValue("a,b");
-  setting = await choose("cache.keepalive_max");
+  setting = await choose("cache.keepalive_for");
   await expect(setting.getByLabel("Value", { exact: true })).toHaveValue("90m");
   expect(responses.join("\n")).not.toContain("settings-fixture-secret");
   expect(errors).toEqual([]);

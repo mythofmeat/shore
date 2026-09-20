@@ -1009,7 +1009,7 @@ describe("optional browser transport", () => {
     } finally { b.client.stop(); }
   });
 
-  test("the browser connection restores its selected conversation after a daemon restart and sign-in", async () => {
+  test("the browser connection restores its selected conversation after a daemon restart without signing in again", async () => {
     const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     const daemon = await start(place, [], { anthropic: scriptedProvider("persisted answer") }, false);
     const web = required(daemon.web);
@@ -1020,12 +1020,12 @@ describe("optional browser transport", () => {
       expect((await b.client.submit({ type: "command", name: "switch_thread", args: { name: "side", resync: true } }).finished).outcome).toBe("completed");
       expect((await b.client.submit({ type: "message", text: "persisted question", stream: true, images: [], image_data: [] }).finished).outcome).toBe("completed");
       daemon.stop(); await daemon.done;
+      await until(() => b.client.status !== "ready", "Browser did not observe shutdown");
+      b.updates.length = 0;
       await writeFile(place.configPath, `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${new URL(web.origin).port}"\n`);
       const restarted = await start(place, [], { anthropic: scriptedProvider("should not be called") }, false);
       expect(required(restarted.web).origin).toBe(web.origin);
-      await until(() => b.client.status === "signed_out", "Restarted daemon must require a new browser session");
-      b.updates.length = 0;
-      await b.client.signIn(TEST_TOKEN); await until(() => b.client.status === "ready", "Browser did not reconnect");
+      await until(() => b.client.status === "ready", "Browser did not reconnect with its existing session");
       expect(b.client.selection).toMatchObject({ character: "ada", thread: "side" });
       const history = b.updates.find((update) => update.kind === "frame" && update.message.type === "history");
       if (history?.kind !== "frame" || history.message.type !== "history") throw new Error("Missing restored history");
@@ -1063,6 +1063,7 @@ describe("optional browser transport", () => {
     const place = await layout();
     const daemon = await start(place);
     expect(daemon.web).toBeUndefined();
+    expect(existsSync(join(place.root, "cache", "shore", "web"))).toBe(false);
     const client = await Client.open(daemon.port, "ada");
     try {
       await client.awaitFrame("hello");
@@ -1132,8 +1133,7 @@ describe("optional browser transport", () => {
     if (address === null || typeof address === "string") throw new Error("Expected address");
     await new Promise<void>((resolve) => { probe.close(() => resolve()); });
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
-    await mkdir(join(place.root, "cache"));
-    await writeFile(join(place.root, "cache", "shore"), "blocks the runtime cache directory");
+    await mkdir(join(place.root, "data", "shore", "shore.db"), { recursive: true });
     let failure: unknown;
     try { await start(place); } catch (error) { failure = error; }
     expect(failure).toBeInstanceOf(StartupError);

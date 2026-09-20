@@ -21,41 +21,36 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   ] });
   return new Response("Fixture discovery unavailable", { status: 503 });
 } });
-await writeFile(configPath, `[defaults]
+await writeFile(configPath, `[chat]
 model = "anthropic:claude-opus-4-8"
-[tools.config.read]
+[tools.bash]
 max_result_chars = 1024
 [mcp.tool_fixture]
 command = ${JSON.stringify(process.execPath)}
 args = ["run", ${JSON.stringify(join(import.meta.dir, "../support/mcp_tool_fixture.ts"))}]
-[chat.anthropic.fast-fixture]
-model_id = "fast-fixture"
-sdk = "anthropic"
-[chat.openrouter.vendor-fixture]
-model_id = "vendor-fixture"
-sdk = "openrouter"
+[chat."anthropic:fast-fixture"]
+max_output_tokens = 4096
+[chat."openrouter:vendor-fixture"]
+max_output_tokens = 4096
 [subagents.worker]
 description = "Local browser test worker"
 prompt = "You are a test worker."
 model = "anthropic:fast-fixture"
-tools = ["read"]
+tools = ["bash"]
 [providers.anthropic]
 api_key_env = "SHORE_BROWSER_KEY"
-[providers.anthropic.discovery]
-enabled = false
+discover = false
 [providers.fixture]
 sdk = "openai"
 base_url = "${discovery.url.href}v1"
 api_key_env = "SHORE_BROWSER_DISCOVERY_KEY"
-[providers.fixture.discovery]
-enabled = true
-ignore = ["vendor/hidden"]
+discover = true
+ignore_models = ["vendor/hidden"]
 [providers.broken]
 sdk = "openai"
 base_url = "${discovery.url.href}broken"
 api_key_env = "SHORE_BROWSER_DISCOVERY_KEY"
-[providers.broken.discovery]
-enabled = true
+discover = true
 [providers.off]
 enabled = false
 [daemon.web]

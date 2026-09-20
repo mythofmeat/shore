@@ -10,6 +10,7 @@ import { readSmallJson, sameOrigin, securityHeaders, webBinding, WebBodyTooLarge
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
+import { WebRecovery, type WebRecoveryOptions } from "./recovery.ts";
 
 export interface WebServerOptions {
   readonly config: WebConfig;
@@ -19,6 +20,7 @@ export interface WebServerOptions {
   readonly handshakeTimeoutMs?: number;
   readonly drainTimeoutMs?: number;
   readonly archiveLimits?: Partial<ArchiveTransferLimits>;
+  readonly recovery?: WebRecoveryOptions;
 }
 
 export interface RunningWebServer {
@@ -51,12 +53,14 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     options.drainTimeoutMs ?? WEB_LIMITS.drainTimeoutMs);
   let origin = "";
   let sessions: WebSessions;
+  let closeSessions: (() => void) | undefined;
   let active = false;
   let stopping: Promise<void> | undefined;
   let loginWindow = Date.now();
   let loginAttempts = 0;
   let loginRequests = 0;
-  const archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits);
+  let archives: ArchiveTransfers;
+  let recovery: WebRecovery | undefined;
   const server = Bun.serve({
     hostname: binding.hostname,
     port: binding.port,
@@ -177,7 +181,13 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     error() { return problem(500, "unavailable", "Browser transport error"); },
   });
   origin = config.public_origin ?? server.url.origin;
-  sessions = new WebSessions(origin, config.max_connections * 2, options.sessionLifetimeMs ?? WEB_LIMITS.sessionLifetimeMs);
+  try {
+    recovery = options.recovery === undefined ? undefined : new WebRecovery(options.recovery, origin);
+    sessions = new WebSessions(origin, config.max_connections * 2, options.sessionLifetimeMs ?? WEB_LIMITS.sessionLifetimeMs, recovery);
+    closeSessions = () => sessions.close();
+    archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits, recovery);
+    archives.restore(sessions);
+  } catch (error) { closeSessions?.(); recovery?.close(); void server.stop(true); throw error; }
   return {
     origin,
     port: server.port ?? binding.port,
@@ -190,6 +200,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       stopping = (async () => {
         await server.stop(true);
         await drained;
+        recovery?.close();
       })();
       return stopping;
     },

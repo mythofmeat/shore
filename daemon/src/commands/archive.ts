@@ -35,7 +35,7 @@ export interface ArchiveContext {
   releaseCharacter(name: string): Promise<void>;
 }
 
-export interface ArchiveLimits { readonly bytes: number; readonly entries: number }
+export interface ArchiveLimits { readonly bytes: number; readonly entries: number; readonly temporaryDirectory?: string }
 
 interface Manifest {
   format: typeof FORMAT;
@@ -61,7 +61,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
   if (await exists(output)) throw invalidRequest(`Refusing to overwrite existing archive: ${output}`);
   if (!await exists(dirname(output))) throw invalidRequest(`Archive directory does not exist: ${dirname(output)}`);
 
-  const stage = await mkdtemp(join(tmpdir(), "shore-export-"));
+  const stage = await mkdtemp(join(ctx.limits?.temporaryDirectory ?? tmpdir(), "shore-export-"));
   const temporaryOutput = join(
     dirname(output),
     `.${basename(output)}.${crypto.randomUUID()}.tmp`,
@@ -108,7 +108,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
 export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<ImportCharacterResult> {
   const archive = requiredAbsolutePath(args["archive"], "archive");
   if (!await exists(archive)) throw notFound(`Archive not found: ${archive}`);
-  const stage = await mkdtemp(join(tmpdir(), "shore-import-"));
+  const stage = await mkdtemp(join(ctx.limits?.temporaryDirectory ?? tmpdir(), "shore-import-"));
   try {
     await extractArchive(archive, stage, ctx.limits);
     const manifest = await readManifest(stage);
