@@ -401,7 +401,7 @@ describe("coming up", () => {
     ];
     const outcomes: unknown[][] = [];
     for (const transport of ["tcp", "web"] as const) {
-      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled_tools = []\nenabled_subagents = []\n[tools.config.bash]\nmax_result_chars = 64\n[subagents.worker]\ndescription = "Inspect the fixture workspace"\nprompt = "Read the workspace"\nmodel = "anthropic:claude-opus-4-8"\ntools = ["bash"]\n[mcp.tool_fixture]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["run", ${JSON.stringify(join(import.meta.dir, "support/mcp_tool_fixture.ts"))}]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = []\n[tools.bash]\nmax_result_chars = 64\n[subagents]\nenabled = []\n[subagents.worker]\ndescription = "Inspect the fixture workspace"\nprompt = "Read the workspace"\nmodel = "anthropic:claude-opus-4-8"\ntools = ["bash"]\n[mcp.tool_fixture]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["run", ${JSON.stringify(join(import.meta.dir, "support/mcp_tool_fixture.ts"))}]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
       const daemon = await start(place, [], { anthropic: { stream: toolFixture, generate: cacheFixture } }, false);
       const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
       const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
@@ -450,7 +450,7 @@ describe("coming up", () => {
       { request: command("segments", { action: "show", index: 9999 }), error: true }, { request: command("clear", { exclude: true, note: "manual archive" }), report: "clear" },
       { request: message("pause memory once") }, { request: command("compact", { keep_turns: 0 }), report: "paused" }, { request: command("compact"), report: "compacted" },
       { request: message("truncate memory once") }, { request: command("compact", { keep_turns: 0 }), report: "truncated" }, { request: command("compact", { restart: true, keep_turns: 0 }), report: "compacted" },
-      { request: command("config", { key: "memory.compaction.write_memory", value: "false" }) }, { request: message("archive-only fact") },
+      { request: command("config", { key: "compaction.write_memory", value: "false" }) }, { request: message("archive-only fact") },
       { request: command("compact", { dry_run: true, keep_turns: 0 }), report: "rotated" }, { request: command("compact", { keep_turns: 0 }), report: "rotated" },
       { request: command("create_thread", { name: "side" }) }, { request: command("switch_thread", { name: "side", resync: true }) },
       { request: command("segments") }, { request: message("side thread fact") }, { request: command("clear", { note: null }), report: "clear" }, { request: command("segments", { action: "show", index: 0 }) },

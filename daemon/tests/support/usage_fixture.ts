@@ -6,12 +6,12 @@ import { nanoGptSubscriptionPath, writeNanoGptSubscription } from "../../src/llm
 export const USAGE_FIXTURE_CONFIG = `
 [usage]
 timezone = "utc"
-[[usage.budgets]]
+[[budgets]]
 name = "Nova monthly"
 period = "month"
 cost_usd = 2.0
-warn_at = [0.5, 1.0]
-limit = "warn"
+warn_fractions = [0.5, 1.0]
+limit_action = "warn"
 character = "nova"
 pace_period = "day"
 `;
