@@ -11,6 +11,8 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import { buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
 import { OpenAIProvider } from "../src/llm/providers/openai.ts";
+import { ledgerFor } from "../src/ledger/record.ts";
+import { NANOGPT_MODELS_URL } from "../src/llm/providers/nanogpt_config.ts";
 import type { Sdk } from "../src/llm/types.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { required } from "../src/util/required.ts";
@@ -63,6 +65,9 @@ async function chat(modelId: string, sdk: Sdk, cacheTtl?: string, reasoningEffor
   const env = { SHORE_NANOGPT_WIRE_KEY: "fixture-key" };
   const runtime = await createRuntime({ config, providers: { [sdk]: new OpenAIProvider() }, env });
   try {
+    required(ledgerFor(join(config.dirs.data, "shore.db"))).database.query(
+      "INSERT INTO pricing_catalog_checks (url, fetched_at) VALUES (?1, ?2)",
+    ).run(NANOGPT_MODELS_URL, Date.now());
     const autonomy = new TurnAutonomyBridge(runtime.autonomy);
     const deps = buildGenerationDeps({
       runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {},
