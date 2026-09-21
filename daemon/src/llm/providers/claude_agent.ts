@@ -322,6 +322,7 @@ function buildOptions(
 
   return {
     model: req.model,
+    thinking: { type: "adaptive", display: req.provider_options?.thinking_display ?? "summarized" },
     ...(effort === undefined ? {} : { effort }),
     ...(system === "" ? {} : { systemPrompt: { type: "custom" as const, prompt: system, snapshot: false } }),
     settingSources: [],
