@@ -3,11 +3,12 @@ use super::ui::scenario_tests::Harness;
 use super::{ServerMessage, handle_server_message};
 use crossterm::event::KeyCode;
 
-fn read_flow() -> serde_json::Value {
+fn read_flow(markdown: bool) -> serde_json::Value {
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../daemon/tests/support/read_image_preview.ts");
     let output = std::process::Command::new("bun")
         .arg(script)
+        .arg(if markdown { "markdown" } else { "image" })
         .output()
         .unwrap();
     assert!(
@@ -20,7 +21,16 @@ fn read_flow() -> serde_json::Value {
 
 #[test]
 fn read_image_is_visible_when_the_result_arrives_and_after_reload() {
-    let flow = read_flow();
+    assert_read_preview(false);
+}
+
+#[test]
+fn markdown_read_images_are_visible_when_the_result_arrives_and_after_reload() {
+    assert_read_preview(true);
+}
+
+fn assert_read_preview(markdown: bool) {
+    let flow = read_flow(markdown);
     for live in [false, true] {
         let mut h = Harness::new();
         let frames = if live {
@@ -54,6 +64,12 @@ fn read_image_is_visible_when_the_result_arrives_and_after_reload() {
             "remote clients need embedded image bytes"
         );
         let screen = h.render_quiet();
+        if markdown {
+            assert!(
+                screen.contains("![Chart](../chart.png)"),
+                "the Markdown source remains visible beside its image: {screen}"
+            );
+        }
         assert!(
             !screen.contains("[Image attached]"),
             "image must not be flattened: {screen}"
@@ -106,7 +122,7 @@ fn read_image_is_visible_when_the_result_arrives_and_after_reload() {
 
 #[test]
 fn read_image_stays_in_its_subagent_or_compaction_result() {
-    let flow = read_flow();
+    let flow = read_flow(false);
     for lane in ["research", "compaction"] {
         let mut h = Harness::new();
         for frame in flow.get("live").unwrap().as_array().unwrap() {

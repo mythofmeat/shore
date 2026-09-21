@@ -41,6 +41,11 @@ function resultText(run: Awaited<ReturnType<typeof runToolUse>>): string {
   return toolResultText(run.block.content);
 }
 
+function resultImages(run: Awaited<ReturnType<typeof runToolUse>>) {
+  if (run.block.type !== "tool_result") throw new Error("missing tool result");
+  return toolResultImages(run.block.content);
+}
+
 test("read pages text with line numbers, CRLF, EOF, and no fabricated trailing line", async () => {
   const { put, run } = await world();
   await put("note", "one\r\ntwo\r\nthree\n");
@@ -120,6 +125,130 @@ test("read image previews travel even when a media copy cannot be saved", async 
   expect(frame.images).toHaveLength(1);
   expect(required(frame.images?.[0]).data).toBe(PNG);
   expect(required(frame.images?.[0]).path).toStartWith("tool-image:");
+});
+
+test("Markdown read expands local images beside the numbered source text", async () => {
+  const { put, run, ctx, exec } = await world();
+  await mkdir(join(ctx.workspaceDir, "docs", "images"), { recursive: true });
+  await put("docs/images/chart one.png", Buffer.from(PNG, "base64"));
+  await put("docs/guide.md", "# Guide\n\n![Chart](images/chart%20one.png)\n");
+  const frames: ServerMessage[] = [];
+  exec.sendDirect = (frame) => { frames.push(frame); };
+  const result = await run("read", { file_path: "docs/guide.md" });
+  expect(result.isError).toBe(false);
+  expect(resultText(result)).toContain("3\t![Chart](images/chart%20one.png)");
+  if (result.block.type !== "tool_result") throw new Error("missing result");
+  expect(toolResultImages(result.block.content)).toHaveLength(1);
+  expect(required(toolResultImages(result.block.content)[0]).source.data).toBe(PNG);
+  const frame = required(frames.find((candidate) => candidate.type === "tool_result"));
+  expect(frame.images).toHaveLength(1);
+  expect(required(frame.images?.[0]).caption).toContain("Chart");
+});
+
+test("Markdown read resolves reference definitions outside the requested page and deduplicates paths", async () => {
+  const { put, run } = await world();
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  await put("guide.markdown", "[Earlier]: chart.png\n\n![First][earlier]\n![Later][]\n![Later]\n\n[later]: ./chart.png#preview\n[later]: absent.png\n");
+  const result = await run("read", { file_path: "guide.markdown", offset: 3, limit: 3 });
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(1);
+  expect(resultText(result)).toContain("lines 3–5");
+  expect(resultText(result)).not.toContain("1\t[Earlier]");
+  expect(resultText(result)).not.toContain("absent.png");
+});
+
+test("Markdown read ignores image examples in code, escapes, and HTML", async () => {
+  const { put, run } = await world();
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  const source = "```md\n![fenced](chart.png)\n```\n\n    ![indented](chart.png)\n\n`![inline](chart.png)`\n\\![escaped](chart.png)\n<!-- ![comment](chart.png) -->\n<img src=\"chart.png\">\n";
+  await put("examples.md", source);
+  expect(resultImages(await run("read", { file_path: "examples.md" }))).toHaveLength(0);
+  expect(resultImages(await run("read", { file_path: "examples.md", offset: 2, limit: 1 }))).toHaveLength(0);
+});
+
+test("Markdown read does not expand images outside the visible page or truncated line", async () => {
+  const { put, run, exec } = await world();
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  await put("paged.md", "![before](chart.png)\ntext only\n![after](chart.png)\n");
+  expect(resultImages(await run("read", { file_path: "paged.md", offset: 2, limit: 1 }))).toHaveLength(0);
+  await put("truncated.md", "a".repeat(1995) + "![hidden](chart.png)\n![shown](chart.png)\n");
+  expect(resultImages(await run("read", { file_path: "truncated.md", limit: 1 }))).toHaveLength(0);
+  expect(resultImages(await run("read", { file_path: "truncated.md", offset: 2 }))).toHaveLength(1);
+  exec.limits = { max_result_chars: 1000, timeout_ms: 5000 };
+  await put("budget.md", "text ".repeat(90) + "\n" + "text ".repeat(90) + "\n![hidden](chart.png)\n");
+  const bounded = await run("read", { file_path: "budget.md" });
+  expect(resultImages(bounded)).toHaveLength(0);
+  expect(resultText(bounded)).not.toContain("![hidden]");
+});
+
+test("Markdown read keeps source offsets correct for BOM, Unicode, CRLF, and multiline image syntax", async () => {
+  const { put, run } = await world();
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  await put("unicode.MD", "\uFEFF🌊 heading\r\n\r\n![a\r\nchart](chart.png)\r\n");
+  expect(resultImages(await run("read", { file_path: "unicode.MD", offset: 3, limit: 2 }))).toHaveLength(1);
+  expect(resultImages(await run("read", { file_path: "unicode.MD", offset: 3, limit: 1 }))).toHaveLength(0);
+  expect(resultImages(await run("read", { file_path: "unicode.MD", offset: 4, limit: 1 }))).toHaveLength(0);
+});
+
+test("Markdown read decodes local destinations and accepts absolute paths", async () => {
+  const { put, run, ctx } = await world();
+  const absolute = await put("chart #1.png", Buffer.from(PNG, "base64"));
+  await put("a(b)&c.png", Buffer.from(PNG, "base64"));
+  await put("paths.md", `![Absolute](<${absolute.replace("#", "%23")}> "title")\n![Escaped](a\\(b\\)&amp;c.png?raw=1#preview)\n`);
+  const result = await run("read", { file_path: join(ctx.workspaceDir, "paths.md") });
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(2);
+});
+
+test("Markdown read leaves remote and data references as text without fetching them", async () => {
+  const { put, run } = await world();
+  let requests = 0;
+  const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => { requests += 1; return new Response(Buffer.from(PNG, "base64")); } });
+  try {
+    await put("remote.md", `![http](${server.url.toString()}chart.png)\n![relative](//127.0.0.1:${String(server.port)}/chart.png)\n![data](data:image/png;base64,${PNG})\n![file](file:///tmp/chart.png)\n`);
+    const result = await run("read", { file_path: "remote.md" });
+    expect(result.isError).toBe(false);
+    expect(resultImages(result)).toHaveLength(0);
+    expect(resultText(result)).toContain("![http]");
+    expect(requests).toBe(0);
+  } finally { await server.stop(true); }
+});
+
+test("Markdown read preserves text when local images are missing, invalid, or too large", async () => {
+  const { put, run } = await world();
+  await put("bad.png", "not an image");
+  await put("large.png", Buffer.concat([Buffer.from(PNG, "base64"), Buffer.alloc(5 * 1024 * 1024)]));
+  for (const ref of ["missing.png", "bad.png", "large.png", "bad%GG.png", ".", "image%00.png"]) {
+    await put("broken.md", `Keep this text\n![broken](${ref})\n`);
+    const result = await run("read", { file_path: "broken.md" });
+    expect(result.isError).toBe(false);
+    expect(resultText(result)).toContain("1\tKeep this text");
+    expect(resultText(result)).toContain("not attached");
+    expect(resultImages(result)).toHaveLength(0);
+  }
+});
+
+test("Markdown read bounds expansion and explains additional images", async () => {
+  const { put, run } = await world();
+  for (const name of ["a", "b", "c"]) await put(`${name}.png`, Buffer.from(PNG, "base64"));
+  await put("many.md", "![a](a.png)\n![same](./a.png)\n![b](b.png)\n![c](c.png)\n");
+  const result = await run("read", { file_path: "many.md" });
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(2);
+  expect(resultText(result)).toContain("1 additional local image reference(s) omitted");
+  await put("huge.md", "![a](a.png)\n" + "a".repeat(1024 * 1024));
+  const huge = await run("read", { file_path: "huge.md", limit: 1 });
+  expect(huge.isError).toBe(false);
+  expect(resultImages(huge)).toHaveLength(0);
+  expect(resultText(huge)).toContain("1\t![a](a.png)");
+  expect(resultText(huge)).toContain("Markdown images not expanded");
+});
+
+test("read does not expand Markdown syntax in other text files", async () => {
+  const { put, run } = await world();
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  await put("notes.txt", "![chart](chart.png)\n");
+  expect(resultImages(await run("read", { file_path: "notes.txt" }))).toHaveLength(0);
 });
 
 test("read and edit follow absolute paths, parent paths and symlinks like bash", async () => {

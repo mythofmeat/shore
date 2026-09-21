@@ -22,3 +22,19 @@ export async function openRegularFile(path: string): Promise<FileHandle> {
     throw error;
   }
 }
+
+export async function readBoundedFile(file: FileHandle, path: string, maxBytes: number, kind: string, signal?: AbortSignal): Promise<Buffer> {
+  signal?.throwIfAborted();
+  const size = (await file.stat()).size;
+  if (size > maxBytes) throw new ToolIoError(`${path}: ${kind} exceeds the ${maxBytes}-byte input limit`);
+  const bytes = Buffer.alloc(size + 1);
+  let length = 0;
+  while (length < bytes.length) {
+    signal?.throwIfAborted();
+    const read = await file.read(bytes, length, bytes.length - length, length);
+    if (read.bytesRead === 0) break;
+    length += read.bytesRead;
+  }
+  if (length > size) throw new ToolIoError(`${path}: ${kind} changed while reading; retry the read`);
+  return bytes.subarray(0, length);
+}

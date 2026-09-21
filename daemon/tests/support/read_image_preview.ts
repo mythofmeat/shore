@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runToolUse, type ToolExecution } from "../../src/tools/execute.ts";
@@ -9,7 +9,12 @@ const root = await mkdtemp(join(tmpdir(), "shore-read-preview-"));
 try {
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
   await writeFile(join(root, "chart.png"), Buffer.from(png, "base64"));
-  const call = { id: "read-1", name: "read", input: { file_path: "chart.png" } };
+  const markdown = process.argv.includes("markdown");
+  if (markdown) {
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "docs", "guide.md"), "# Guide\n\n![Chart](../chart.png)\n");
+  }
+  const call = { id: "read-1", name: "read", input: { file_path: markdown ? "docs/guide.md" : "chart.png" } };
   const live: ServerMessage[] = [];
   const exec: ToolExecution = {
     ctx: {

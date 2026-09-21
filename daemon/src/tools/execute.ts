@@ -22,6 +22,7 @@ import {
   type ToolResultWindow,
 } from "./dispatch.ts";
 import {
+  MAX_INLINE_TOOL_IMAGES,
   base64Bytes,
   toolMediaOf,
   type ToolMediaItem,
@@ -139,7 +140,6 @@ export async function runToolUse(
   };
 }
 
-const MAX_INLINE_TOOL_IMAGES = 2;
 const MAX_INLINE_TOOL_IMAGE_BYTES = 1024 * 1024;
 
 const EXTENSION_BY_MIME: Record<string, string> = {

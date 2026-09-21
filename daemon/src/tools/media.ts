@@ -1,5 +1,7 @@
 const CARRIER = Symbol("shore.tool_media");
 
+export const MAX_INLINE_TOOL_IMAGES = 2;
+
 export interface ToolMediaItem {
   mime_type: string;
   data: string;

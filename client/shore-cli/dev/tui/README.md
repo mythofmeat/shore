@@ -34,8 +34,9 @@ Useful env vars:
 - `SHORE_TUI_DEBUG_NO_IMAGE_PROBE`: set to `1`/`true`/`yes`/`on` to skip
   terminal image-protocol probing.
 
-Tool-result image tests execute the daemon's real `read` tool, then render its
-live frames and saved history. From `client/`, run the graphics checks in a
+Tool-result image tests execute the daemon's real `read` tool on images and
+Markdown files containing local image references, then render its live frames
+and saved history. From `client/`, run the graphics checks in a
 terminal with Kitty graphics support:
 
 ```sh
