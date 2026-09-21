@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::error::ErrorCode;
-use crate::protocol::types::{CharacterInfo, ContentBlock, Message, StreamMetadata};
+use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, StreamMetadata};
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
@@ -188,6 +188,9 @@ pub struct ToolResult {
     pub tool_id: String,
     pub tool_name: String,
     pub output: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<ImageRef>>", optional)]
+    pub images: Vec<ImageRef>,
     #[serde(default)]
     pub is_error: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

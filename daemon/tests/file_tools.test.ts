@@ -9,6 +9,7 @@ import { BUILTIN_TOOL_SCHEMAS, renderToolDefs } from "../src/tools/registry.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import { wideImage } from "./support/oversized_image.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -81,7 +82,9 @@ test("read rejects directories, binaries, invalid UTF-8, corrupt and oversized i
 });
 
 test("read returns real image blocks and prepares large dimensions", async () => {
-  const { put, run } = await world();
+  const { put, run, exec } = await world();
+  const frames: ServerMessage[] = [];
+  exec.sendDirect = (frame) => { frames.push(frame); };
   const image = await wideImage();
   await put("wide.png", Buffer.from(image.source.data, "base64"));
   const result = await run("read", { file_path: "wide.png" });
@@ -94,7 +97,29 @@ test("read returns real image blocks and prepares large dimensions", async () =>
   expect((await new Bun.Image(Buffer.from(source.data, "base64")).metadata()).width).toBeLessThanOrEqual(2000);
   expect(resultText(result)).toContain("resized or converted");
   expect(resultText(result)).not.toContain(source.data);
+  const frame = required(frames.find((candidate) => candidate.type === "tool_result"));
+  expect(frame.tool_name).toBe("read");
+  expect(frame.images).toHaveLength(1);
+  const preview = required(frame.images?.[0]);
+  expect(preview.data).toBe(source.data);
+  expect(preview.caption).toEndWith("wide.png");
+  expect((await readFile(preview.path)).toString("base64")).toBe(image.source.data);
+  expect(frame.output).not.toContain(source.data);
   expect((await run("read", { file_path: "wide.png", offset: 1 })).isError).toBe(true);
+});
+
+test("read image previews travel even when a media copy cannot be saved", async () => {
+  const { put, run, exec } = await world();
+  exec.ctx.imageDir = "";
+  const frames: ServerMessage[] = [];
+  exec.sendDirect = (frame) => { frames.push(frame); };
+  await put("chart.png", Buffer.from(PNG, "base64"));
+  const result = await run("read", { file_path: "chart.png" });
+  expect(result.isError).toBe(false);
+  const frame = required(frames.find((candidate) => candidate.type === "tool_result"));
+  expect(frame.images).toHaveLength(1);
+  expect(required(frame.images?.[0]).data).toBe(PNG);
+  expect(required(frame.images?.[0]).path).toStartWith("tool-image:");
 });
 
 test("read and edit follow absolute paths, parent paths and symlinks like bash", async () => {

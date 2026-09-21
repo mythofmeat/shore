@@ -468,6 +468,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                     tool_id,
                     tool_name,
                     output,
+                    images: Vec::new(),
                     is_error,
                 })
             }),

@@ -113,8 +113,8 @@ MUTANTS = [
      "      content: toolResultContent(output, attached.blocks),",
      "      content: toolResultContent(rawOutput, attached.blocks),"),
     ("the frame carries the uncapped result",
-     "  emitToolResult(exec, toolUse, output, isError);",
-     "  emitToolResult(exec, toolUse, rawOutput, isError);"),
+     "  emitToolResult(exec, toolUse, output, isError, attached.images);",
+     "  emitToolResult(exec, toolUse, rawOutput, isError, attached.images);"),
     ("the deadline is ignored",
      "      timeoutFor(exec.limits, toolUse.name),",
      "      undefined,"),
@@ -139,7 +139,7 @@ MUTANTS = [
        "  });\n\n"
        "  const clock = exec.monotonicMs ?? Date.now;",
        "  const clock = exec.monotonicMs ?? Date.now;"),
-      ("  emitToolResult(exec, toolUse, output, isError);",
+      ("  emitToolResult(exec, toolUse, output, isError, attached.images);",
        "  exec.sendDirect({\n"
        '    type: "tool_call",\n'
        "    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),\n"
@@ -147,7 +147,7 @@ MUTANTS = [
        "    tool_name: toolUse.name,\n"
        "    input: toolUse.input,\n"
        "  });\n"
-       "  emitToolResult(exec, toolUse, output, isError);")]),
+       "  emitToolResult(exec, toolUse, output, isError, attached.images);")]),
     ("an absent rid is sent as null on the tool_call frame",
      "    type: \"tool_call\",\n    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),",
      "    type: \"tool_call\",\n    rid: exec.rid ?? null,"),
@@ -161,8 +161,8 @@ MUTANTS = [
      "    tool_id: toolUse.id,\n    tool_name: toolUse.name,\n    output,",
      "    tool_id: toolUse.id,\n    tool_name: toolUse.id,\n    output,"),
     ("the tool_result frame reports is_error as false",
-     "    output,\n    is_error: isError,",
-     "    output,\n    is_error: false,"),
+     "    ...(images.length > 0 ? { images } : {}),\n    is_error: isError,",
+     "    ...(images.length > 0 ? { images } : {}),\n    is_error: false,"),
     ("the returned block defaults is_error to false",
      "      content: toolResultContent(output, attached.blocks),\n      is_error: isError,",
      "      content: toolResultContent(output, attached.blocks),\n      is_error: false,"),

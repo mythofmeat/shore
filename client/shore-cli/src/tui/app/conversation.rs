@@ -17,6 +17,7 @@ pub(crate) enum Block {
         tool_id: String,
         tool_name: String,
         output: String,
+        images: Vec<ImageRef>,
         is_error: bool,
     },
     SubagentBegin(String),

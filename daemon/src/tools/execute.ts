@@ -121,7 +121,7 @@ export async function runToolUse(
     attachGeneratedImage(okValue, intermediateMessages, exec);
   }
 
-  emitToolResult(exec, toolUse, output, isError);
+  emitToolResult(exec, toolUse, output, isError, attached.images);
 
   return {
     block: {
@@ -151,6 +151,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 
 interface AttachedMedia {
   blocks: ContentBlock[];
+  images: ImageRef[];
   notes: string[];
   failed: boolean;
 }
@@ -169,7 +170,7 @@ async function attachToolMedia(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
 ): Promise<AttachedMedia> {
-  const attached: AttachedMedia = { blocks: [], notes: [], failed: false };
+  const attached: AttachedMedia = { blocks: [], images: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
 
   for (const [index, item] of payload.media.entries()) {
@@ -197,6 +198,11 @@ async function attachToolMedia(
       if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
+      attached.images.push({
+        path: saved ?? `tool-image:${toolUse.id}:${String(index)}`,
+        caption: item.label,
+        data: block.source.data,
+      });
     } catch (error) {
       attached.failed = true;
       attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
@@ -297,6 +303,7 @@ function emitToolResult(
   toolUse: ToolUseEvent,
   output: string,
   isError: boolean,
+  images: ImageRef[] = [],
 ): void {
   exec.sendDirect({
     type: "tool_result",
@@ -304,6 +311,7 @@ function emitToolResult(
     tool_id: toolUse.id,
     tool_name: toolUse.name,
     output,
+    ...(images.length > 0 ? { images } : {}),
     is_error: isError,
   });
 }

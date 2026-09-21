@@ -3,6 +3,41 @@ use std::io::Write;
 
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
+use shore_common::protocol::types::{ContentBlock, ImageRef, ImageSource, ToolResultContent};
+
+pub(crate) fn tool_result_parts(
+    content: &ToolResultContent,
+    tool_name: &str,
+) -> (String, Vec<ImageRef>) {
+    use sha2::{Digest as _, Sha256};
+
+    let ToolResultContent::Blocks(blocks) = content else {
+        return (content.display_text(), Vec::new());
+    };
+    let mut text_blocks = Vec::new();
+    let mut images = Vec::new();
+    for block in blocks {
+        if let ContentBlock::Image {
+            source: ImageSource::Base64 { data, .. },
+        } = block
+        {
+            images.push(ImageRef {
+                path: format!(
+                    "tool-image:{}",
+                    base64_encode(Sha256::digest(data.as_bytes()).as_slice())
+                ),
+                caption: Some(format!("{tool_name} image")),
+                data: Some(data.clone()),
+            });
+        } else {
+            text_blocks.push(block.clone());
+        }
+    }
+    (
+        ToolResultContent::Blocks(text_blocks).display_text(),
+        images,
+    )
+}
 
 pub(crate) use shore_common::image_protocol::ImageProtocol;
 pub(crate) use shore_common::image_protocol::detect_protocol as detect_protocol_from_env;

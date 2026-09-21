@@ -135,6 +135,7 @@ mod tests {
             tool_id: "t1".into(),
             tool_name: "edit".into(),
             output: "written".into(),
+            images: Vec::new(),
             is_error: false,
         });
         assert_eq!(run.tool_name, None);

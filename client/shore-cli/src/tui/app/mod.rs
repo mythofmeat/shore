@@ -787,12 +787,14 @@ impl App {
         tool_id: String,
         tool_name: String,
         output: String,
+        images: Vec<ImageRef>,
         is_error: bool,
     ) {
         self.ensure_streaming_turn().blocks.push(Block::ToolResult {
             tool_id,
             tool_name,
             output,
+            images,
             is_error,
         });
     }

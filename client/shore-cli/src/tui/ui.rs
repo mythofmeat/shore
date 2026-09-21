@@ -280,11 +280,28 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
 
 const SUBAGENT_COLOR: Color = Color::Cyan;
 
+struct ImageRenderer<'view> {
+    cache: &'view images::ImageCache,
+    show_inline: bool,
+    index: &'view mut Vec<crate::tui::app::ImageEntry>,
+}
+
+impl ImageRenderer<'_> {
+    fn render(
+        &mut self,
+        lines: &mut Vec<Line<'static>>,
+        refs: &[shore_common::protocol::types::ImageRef],
+    ) {
+        render_images(lines, refs, self.cache, self.show_inline, self.index);
+    }
+}
+
 fn render_tool_block(
     lines: &mut Vec<Line<'static>>,
     block: &TurnBlock,
     subagent: bool,
     wrap_width: u16,
+    image_renderer: &mut ImageRenderer<'_>,
 ) {
     let bar_style = Style::default().fg(Color::DarkGray);
     let text_width = usize::from(wrap_width.saturating_sub(4));
@@ -318,6 +335,7 @@ fn render_tool_block(
         TurnBlock::ToolResult {
             tool_name,
             output,
+            images,
             is_error,
             ..
         } => {
@@ -345,6 +363,7 @@ fn render_tool_block(
                 Style::default().fg(Color::DarkGray),
                 text_width,
             );
+            image_renderer.render(lines, images);
             lines.push(Line::from(""));
         }
         TurnBlock::Text(_)
@@ -361,6 +380,7 @@ fn render_blocks(
     show_tools: bool,
     show_subagent: bool,
     wrap_width: u16,
+    image_renderer: &mut ImageRenderer<'_>,
 ) {
     let mut in_subagent = false;
     let mut i = 0;
@@ -449,7 +469,7 @@ fn render_blocks(
                     show_tools
                 };
                 if visible && let Some(tool_block) = blocks.get(i) {
-                    render_tool_block(lines, tool_block, in_subagent, wrap_width);
+                    render_tool_block(lines, tool_block, in_subagent, wrap_width, image_renderer);
                 }
                 i = i.saturating_add(1);
             }
@@ -565,7 +585,17 @@ pub(crate) fn compaction_status_text(run: &CompactionRun, spinner: &str) -> Stri
     format!("{} {spinner}", parts.join(" · "))
 }
 
-fn render_compaction(lines: &mut Vec<Line<'static>>, app: &App, content_width: u16) {
+fn render_compaction(
+    lines: &mut Vec<Line<'static>>,
+    app: &App,
+    content_width: u16,
+    image_index: &mut Vec<crate::tui::app::ImageEntry>,
+) {
+    let mut image_renderer = ImageRenderer {
+        cache: &app.image_cache,
+        show_inline: app.show_images,
+        index: image_index,
+    };
     let Some(run) = app.compaction.as_ref() else {
         return;
     };
@@ -600,7 +630,7 @@ fn render_compaction(lines: &mut Vec<Line<'static>>, app: &App, content_width: u
                     lines.push(Line::from(""));
                 }
                 TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
-                    render_tool_block(lines, block, true, content_width);
+                    render_tool_block(lines, block, true, content_width, &mut image_renderer);
                 }
                 TurnBlock::Text(_)
                 | TurnBlock::Thinking(_)
@@ -826,6 +856,11 @@ fn render_turn(
     content_width: u16,
     image_index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
+    let mut image_renderer = ImageRenderer {
+        cache: &app.image_cache,
+        show_inline: app.show_images,
+        index: image_index,
+    };
     match turn.role {
         Role::User => {
             push_entry_header(
@@ -843,14 +878,9 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
+                &mut image_renderer,
             );
-            render_images(
-                lines,
-                &turn.images,
-                &app.image_cache,
-                app.show_images,
-                image_index,
-            );
+            image_renderer.render(lines, &turn.images);
             lines.push(Line::from(""));
         }
         Role::Assistant => {
@@ -878,14 +908,9 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
+                &mut image_renderer,
             );
-            render_images(
-                lines,
-                &turn.images,
-                &app.image_cache,
-                app.show_images,
-                image_index,
-            );
+            image_renderer.render(lines, &turn.images);
             if turn.is_streaming() {
                 render_streaming_content(lines, app, content_width);
             } else {
@@ -915,6 +940,7 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
+                &mut image_renderer,
             );
         }
     }
@@ -1015,7 +1041,7 @@ fn build_conversation_lines(
     }
 
     if app.compaction.is_some() {
-        render_compaction(&mut lines, app, content_width);
+        render_compaction(&mut lines, app, content_width, &mut image_index);
     }
 
     if lines.is_empty() && !app.stream.active && app.compaction.is_none() {
@@ -1508,7 +1534,21 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         }
         lines.push(Line::from(""));
     }
-    render_blocks(&mut lines, &task.blocks, true, true, true, body_area.width);
+    let mut panel_images = Vec::new();
+    let mut image_renderer = ImageRenderer {
+        cache: &app.image_cache,
+        show_inline: app.show_images,
+        index: &mut panel_images,
+    };
+    render_blocks(
+        &mut lines,
+        &task.blocks,
+        true,
+        true,
+        true,
+        body_area.width,
+        &mut image_renderer,
+    );
     if !task.is_running()
         && let Some(detail) = &task.detail
     {
@@ -1552,6 +1592,9 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         Paragraph::new(Text::from(lines)).scroll((scroll, 0)),
         body_area,
     );
+    if !panel_images.is_empty() {
+        images::fixup_placeholder_cells(frame.buffer_mut(), body_area);
+    }
 
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -1658,6 +1701,7 @@ mod compaction_tests {
                 tool_id: id.into(),
                 tool_name: name.into(),
                 output: output.into(),
+                images: Vec::new(),
                 is_error: false,
                 subagent: Some("compaction".into()),
                 task_id: None,
@@ -1879,6 +1923,7 @@ mod subagent_panel_tests {
                 tool_id: task_id.into(),
                 tool_name: format!("ask_{name}"),
                 output: format!("{name} reported back"),
+                images: Vec::new(),
                 is_error: true,
                 subagent: None,
                 task_id: None,
@@ -1894,6 +1939,7 @@ mod subagent_panel_tests {
                 tool_id: task_id.into(),
                 tool_name: format!("ask_{name}"),
                 output: format!("{name} reported back"),
+                images: Vec::new(),
                 is_error: false,
                 subagent: None,
                 task_id: None,
@@ -1938,6 +1984,7 @@ mod subagent_panel_tests {
                 tool_id: "t1".into(),
                 tool_name: tool_name.into(),
                 output: "high tide at 14:05".into(),
+                images: Vec::new(),
                 is_error: false,
                 subagent: Some(name.into()),
                 task_id: Some(task_id.into()),
@@ -2150,6 +2197,7 @@ mod subagent_panel_tests {
                 tool_id: tool_id.into(),
                 tool_name: format!("ask_{name}"),
                 output: output.into(),
+                images: Vec::new(),
                 is_error,
                 subagent: None,
                 task_id: None,
@@ -3065,6 +3113,7 @@ pub(crate) mod scenario_tests {
             tool_id: id.into(),
             tool_name: name.into(),
             output: output.into(),
+            images: Vec::new(),
             is_error,
         }
     }
@@ -5249,6 +5298,7 @@ pub(crate) mod scenario_tests {
             "call-1".into(),
             "read_file".into(),
             "line one\nline two\nline three".into(),
+            Vec::new(),
             false,
         );
         let after_tools = h.render_with_blank_rows("tool loop advanced while scrolled up");
@@ -5921,6 +5971,7 @@ pub(crate) mod scenario_tests {
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
                 output: "{}".into(),
+                images: Vec::new(),
                 is_error: false,
             }),
         );
@@ -6613,6 +6664,7 @@ pub(crate) mod scenario_tests {
                     tool_id: "toolu_1".into(),
                     tool_name: "long_tool".into(),
                     output: long_tool_output,
+                    images: Vec::new(),
                     is_error: false,
                 },
                 Block::Text(format!("summary line\n{tail}")),

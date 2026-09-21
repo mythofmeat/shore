@@ -383,6 +383,7 @@ mod tests {
             tool_id: "t1".into(),
             tool_name: "search".into(),
             output: "found 5 results".into(),
+            images: Vec::new(),
             is_error: false,
         });
         let (json, _back) = round_trip(&msg);

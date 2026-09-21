@@ -10,6 +10,8 @@ mod keymap;
 mod markdown;
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod tool_image_tests;
 mod ui;
 
 use std::io;
@@ -1822,10 +1824,12 @@ fn blocks_from_content(
                 is_error,
             } => {
                 let name = tool_names.get(tool_use_id.as_str()).unwrap_or(&"tool");
+                let (output, images) = images::tool_result_parts(content, name);
                 blocks.push(Block::ToolResult {
                     tool_id: tool_use_id.clone(),
                     tool_name: (*name).to_owned(),
-                    output: content.display_text(),
+                    output,
+                    images,
                     is_error: *is_error,
                 });
             }
@@ -1947,6 +1951,13 @@ fn transmit_entry_images_from(app: &mut App, start: usize) {
         };
         for img in &turn.images {
             transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
+        }
+        for block in &turn.blocks {
+            if let Block::ToolResult { images, .. } = block {
+                for img in images {
+                    transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
+                }
+            }
         }
     }
 }
@@ -2073,12 +2084,17 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
             );
         }
         ServerMessage::ToolResult(tr) => {
+            let (max_cols, max_rows) = image_max_cells();
+            for img in &tr.images {
+                transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
+            }
             app.subagent_task_push_block(
                 idx,
                 Block::ToolResult {
                     tool_id: tr.tool_id,
                     tool_name: tr.tool_name,
                     output: tr.output,
+                    images: tr.images,
                     is_error: tr.is_error,
                 },
             );
@@ -2287,10 +2303,15 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
             });
         }
         ServerMessage::ToolResult(tr) => {
+            let (max_cols, max_rows) = image_max_cells();
+            for img in &tr.images {
+                transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
+            }
             run.push_block(Block::ToolResult {
                 tool_id: tr.tool_id,
                 tool_name: tr.tool_name,
                 output: tr.output,
+                images: tr.images,
                 is_error: tr.is_error,
             });
         }
@@ -2526,9 +2547,19 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::ToolResult(tr) => {
+            let (max_cols, max_rows) = image_max_cells();
+            for img in &tr.images {
+                transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
+            }
             app.stream.tool_name = None;
             app.settle_subagent_task(&tr.tool_id, &tr.output, tr.is_error);
-            app.stream_push_tool_result(tr.tool_id, tr.tool_name, tr.output, tr.is_error);
+            app.stream_push_tool_result(
+                tr.tool_id,
+                tr.tool_name,
+                tr.output,
+                tr.images,
+                tr.is_error,
+            );
             if app.auto_scroll {
                 app.scroll_to_bottom();
             }
@@ -2680,6 +2711,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "subagent_trace" => {
                     absorb_subagent_traces(app, &co.data);
+                    transmit_entry_images(app);
                     if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
                         app.push_command_text(&command, rendered);
                     }
@@ -4250,6 +4282,7 @@ mod redraw_tests {
                     tool_id: parent_id.into(),
                     tool_name: "ask_research".into(),
                     output: "June".into(),
+                    images: Vec::new(),
                     is_error: false,
                 },
             ],

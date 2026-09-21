@@ -33,3 +33,16 @@ Useful env vars:
   the given file.
 - `SHORE_TUI_DEBUG_NO_IMAGE_PROBE`: set to `1`/`true`/`yes`/`on` to skip
   terminal image-protocol probing.
+
+Tool-result image tests execute the daemon's real `read` tool, then render its
+live frames and saved history. From `client/`, run the graphics checks in a
+terminal with Kitty graphics support:
+
+```sh
+SHORE_IMAGES=kitty SHORE_TEST_REQUIRE_IMAGE_TRANSMISSION=1 \
+cargo test -p shore-cli tui::tool_image_tests -- --nocapture
+```
+
+The tests also cover sub-agent and compaction results, `p` to toggle previews,
+and `o` to open a preview in fullscreen. The ordinary workspace suite checks
+the text fallback when no image-capable terminal is available.
