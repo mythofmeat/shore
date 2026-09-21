@@ -188,6 +188,7 @@ export interface ConversationManager {
 }
 
 export interface ToolOutput {
+  content?: string | import("../../engine/types.ts").ContentBlock[];
   output: string;
   isError: boolean;
 }

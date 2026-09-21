@@ -134,6 +134,7 @@ export class StreamAccumulator {
           name: event.name,
           input: event.input,
           ...carried,
+          ...(event.thought_signature === undefined ? {} : { thought_signature: event.thought_signature }),
         });
         this.#toolUses.push({ id: event.id, name: event.name, input: event.input, ...carried });
         return { kind: "continue" };
@@ -260,7 +261,7 @@ function terminalBlocksForWire(blocks: readonly ContentBlock[]): WireContentBloc
           ...(block.signature === undefined ? {} : { signature: block.signature }),
         }];
       case "tool_use":
-        return [{ type: "tool_use", id: block.id, name: block.name, input: block.input }];
+        return [{ type: "tool_use", id: block.id, name: block.name, input: block.input, ...(block.thought_signature === undefined ? {} : { thought_signature: block.thought_signature }) }];
       case "redacted_thinking":
         return [{ type: "redacted_thinking", data: block.data }];
       case "tool_result":
@@ -270,11 +271,11 @@ function terminalBlocksForWire(blocks: readonly ContentBlock[]): WireContentBloc
           content:
             typeof block.content === "string"
               ? block.content
-              : (JSON.stringify(block.content) ?? ""),
+              : terminalBlocksForWire(block.content),
           is_error: block.is_error ?? false,
         }];
       case "image":
-        return [];
+        return [block];
     }
   });
 }

@@ -146,11 +146,11 @@ describe("mcp media reaches the model", () => {
     expect(saved).toHaveLength(3);
   });
 
-  test("an image over the inline limit is saved but not sent", async () => {
+  test("an oversized invalid image returns an explicit preparation error", async () => {
     const oversized = "A".repeat(1_400_004);
     const { block, saved } = await runMcpTool(imageResult(1, oversized));
 
-    expect(toolResult(block).content).toContain("over the 1048576-byte inline limit");
+    expect(toolResult(block).content).toContain("not sent to the model");
     expect(typeof toolResult(block).content).toBe("string");
     expect(saved).toHaveLength(1);
   });
@@ -195,7 +195,7 @@ describe("mcp media reaches the model", () => {
     );
 
     expect(run.isError).toBe(false);
-    expect(toolResult(run.block).content).toContain("could not be saved");
+    expect(textOf(run.block)).toContain("could not be saved");
     expect(frames.filter((f) => f.type === "send_image")).toHaveLength(0);
   });
 
@@ -237,7 +237,7 @@ describe("providers deliver tool result images", () => {
     });
     expect(out[1]).toEqual({
       role: "user",
-      content: [{ type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } }],
+      content: [{ type: "text", text: "Images from tool result (tool_call_id: toolu_1):" }, { type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } }],
     });
   });
 
@@ -250,7 +250,7 @@ describe("providers deliver tool result images", () => {
     expect(out[0]?.role).toBe("tool");
     expect(out[1]).toEqual({
       role: "user",
-      content: [{ type: "image", image: PNG, mediaType: "image/png" }],
+      content: [{ type: "text", text: "Images from tool shot (tool_call_id: toolu_1):" }, { type: "image", image: PNG, mediaType: "image/png" }],
     });
   });
 
@@ -258,9 +258,10 @@ describe("providers deliver tool result images", () => {
     const parts = translateMessages([{ role: "user", content: [IMAGE_TOOL_RESULT] }])[0]?.parts;
 
     expect(parts?.[0]).toEqual({
-      functionResponse: { name: "toolu_1", response: { result: "the screenshot" } },
+      functionResponse: { id: "toolu_1", name: "toolu_1", response: { result: "the screenshot" } },
     });
-    expect(parts?.[1]).toEqual({ inlineData: { mimeType: "image/png", data: PNG } });
+    expect(parts?.[1]).toEqual({ text: "Image from tool toolu_1 (tool_call_id: toolu_1):" });
+    expect(parts?.[2]).toEqual({ inlineData: { mimeType: "image/png", data: PNG } });
   });
 });
 

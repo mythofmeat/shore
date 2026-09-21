@@ -1,6 +1,8 @@
 import type { BashResult } from "./bash.ts";
 import { formatToolOutput } from "./output.ts";
 import { shoreLog } from "../log.ts";
+import { prepareImageBlock } from "../llm/prepare_images.ts";
+import { resolveImageBlock } from "../llm/images.ts";
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -96,21 +98,23 @@ export async function runToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     payload = toolMediaOf(value);
     okValue = payload === undefined ? value : payload.value;
     rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);
-    isError = toolUse.name === "bash" && (okValue as BashResult).exit_code !== 0;
+    isError = ["bash", "apply_patch"].includes(toolUse.name) && (okValue as BashResult).exit_code !== 0;
   } catch (e) {
     rawOutput = e instanceof Error ? e.message : String(e);
+    if (toolUse.name === "apply_patch") rawOutput += "\nNative patches apply sequentially; earlier changes may remain after failure or cancellation. Inspect affected files before retrying.";
     isError = true;
   }
   const dispatchMs = clock() - startedAt;
 
   const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
   const attached = await attachToolMedia(payload, exec, toolUse);
+  isError ||= attached.failed;
   const output = joinLines([windowed.output, ...attached.notes]);
 
   if (!isError && toolUse.name === "generate_image") {
@@ -148,6 +152,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 interface AttachedMedia {
   blocks: ContentBlock[];
   notes: string[];
+  failed: boolean;
 }
 
 function joinLines(parts: readonly string[]): string {
@@ -164,35 +169,38 @@ async function attachToolMedia(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
 ): Promise<AttachedMedia> {
-  const attached: AttachedMedia = { blocks: [], notes: [] };
+  const attached: AttachedMedia = { blocks: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse, index);
     if (saved === undefined) {
-      attached.notes.push(`[${item.label} could not be saved, and was not sent to the model]`);
-      continue;
+      attached.notes.push(`[${item.label}: a separate media copy could not be saved]`);
+    } else {
+      exec.sendDirect({
+        type: "send_image",
+        ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
+        path: saved,
+        caption: item.label,
+        data: item.data,
+      });
     }
-
-    exec.sendDirect({
-      type: "send_image",
-      ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
-      path: saved,
-      caption: item.label,
-      data: item.data,
-    });
-
-    const skipped = inlineRefusal(item, attached.blocks.length);
-    if (skipped !== undefined) {
-      attached.notes.push(`[${item.label} saved to ${saved}, not sent to the model: ${skipped}]`);
-      continue;
+    try {
+      const block = await prepareImageBlock({
+        type: "image", source: { type: "base64", media_type: item.mime_type, data: item.data },
+      });
+      if (block.type !== "image") throw new Error("image preparation returned no image");
+      const resolution = resolveImageBlock(block.source);
+      if ("omitted" in resolution) throw new Error(resolution.omitted);
+      const skipped = inlineRefusal({ ...item, data: block.source.data }, attached.blocks.length);
+      if (skipped !== undefined) throw new Error(skipped);
+      if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
+      attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
+      attached.blocks.push(block);
+    } catch (error) {
+      attached.failed = true;
+      attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
     }
-
-    attached.notes.push(`[${item.label} attached, saved to ${saved}]`);
-    attached.blocks.push({
-      type: "image",
-      source: { type: "base64", media_type: item.mime_type, data: item.data },
-    });
   }
 
   return attached;
@@ -243,7 +251,9 @@ export function argumentRejection(
   schemas: ToolSchemas | undefined,
 ): string | undefined {
   const reason =
-    toolUse.input_error ?? schemaViolation(schemas?.get(toolUse.name), toolUse.input);
+    toolUse.input_error ?? (schemas !== undefined && !schemas.has(toolUse.name)
+      ? "this tool is not available in the current tool set"
+      : schemaViolation(schemas?.get(toolUse.name), toolUse.input));
   if (reason === undefined) return undefined;
   return (
     `The call to ${toolUse.name} was not run because ${reason}. ` +

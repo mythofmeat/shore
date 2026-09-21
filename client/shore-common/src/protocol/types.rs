@@ -92,6 +92,42 @@ impl<'de> Deserialize<'de> for ThinkingSignature {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
+#[serde(untagged)]
+pub enum ToolResultContent {
+    Text(String),
+    Blocks(Vec<ContentBlock>),
+}
+
+impl From<String> for ToolResultContent {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<&str> for ToolResultContent {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_owned())
+    }
+}
+
+impl ToolResultContent {
+    pub fn display_text(&self) -> String {
+        match self {
+            Self::Text(text) => text.clone(),
+            Self::Blocks(blocks) => derive_content_from_blocks(blocks),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ImageSource {
+    Base64 { media_type: String, data: String },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text {
@@ -108,13 +144,19 @@ pub enum ContentBlock {
         name: String,
         #[ts(type = "unknown")]
         input: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        thought_signature: Option<String>,
     },
     RedactedThinking {
         data: String,
     },
+    Image {
+        source: ImageSource,
+    },
     ToolResult {
         tool_use_id: String,
-        content: String,
+        content: ToolResultContent,
         #[serde(default)]
         is_error: bool,
     },
@@ -235,22 +277,24 @@ pub fn derive_content_from_blocks_with(
     blocks: &[ContentBlock],
     include_tool_results: bool,
 ) -> String {
-    let mut parts: Vec<&str> = Vec::new();
+    let mut parts: Vec<String> = Vec::new();
 
     for block in blocks {
         match block {
             ContentBlock::Text { text } => {
                 let trimmed = text.trim();
                 if !trimmed.is_empty() {
-                    parts.push(trimmed);
+                    parts.push(trimmed.to_owned());
                 }
             }
             ContentBlock::ToolResult { content, .. } if include_tool_results => {
-                let trimmed = content.trim();
+                let text = content.display_text();
+                let trimmed = text.trim();
                 if !trimmed.is_empty() {
-                    parts.push(trimmed);
+                    parts.push(trimmed.to_owned());
                 }
             }
+            ContentBlock::Image { .. } => parts.push("[Image attached]".to_owned()),
             ContentBlock::Thinking { .. }
             | ContentBlock::ToolUse { .. }
             | ContentBlock::RedactedThinking { .. }
@@ -384,6 +428,7 @@ mod tests {
                 id: "t1".into(),
                 name: "check_time".into(),
                 input: serde_json::json!({}),
+                thought_signature: None,
             },
             ContentBlock::RedactedThinking {
                 data: "opaque".into(),
@@ -482,6 +527,22 @@ mod tests {
         assert_eq!(
             derive_content_from_blocks(&blocks),
             "tool output\nmore output"
+        );
+    }
+    #[test]
+    fn multimodal_tool_results_round_trip_without_displaying_image_data() {
+        let json = serde_json::json!({
+            "type": "tool_result", "tool_use_id": "read-1", "is_error": false,
+            "content": [
+                {"type": "text", "text": "chart.png"},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "cGljdHVyZQ=="}}
+            ]
+        });
+        let block: ContentBlock = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&block).unwrap(), json);
+        assert_eq!(
+            derive_content_from_blocks(&[block]),
+            "chart.png\n[Image attached]"
         );
     }
 }

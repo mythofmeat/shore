@@ -161,9 +161,9 @@ async function dispatchCompactionTool(
   tools: CompactionTools,
   workspaceDir: string,
   state: ToolLoopState,
-): Promise<{ output: string; isError: boolean }> {
-  if (name === "bash") {
-    if (state.dryRun) return { output: "bash blocked: dry-run compaction does not run commands", isError: true };
+): Promise<import("./types.ts").ToolOutput> {
+  if (["bash", "edit", "apply_patch"].includes(name)) {
+    if (state.dryRun) return { output: `${name} blocked: dry-run compaction does not modify files`, isError: true };
     const before = await snapshotWorkspace(workspaceDir);
     try {
       return await tools.dispatch(name, input);
@@ -189,7 +189,7 @@ async function dispatchCompactionTool(
     };
   }
 
-  const isWriteLike = name === "edit" || name === "delete";
+  const isWriteLike = name === "delete";
 
   if (isWriteLike) {
     const intent = extractMemoryWriteIntent(input);
@@ -243,24 +243,14 @@ async function dispatchCompactionTool(
 
     const result = await tools.dispatch(name, input);
     if (!result.isError) {
-      let resultingContent: string | undefined;
-      if (name === "edit") {
-        try {
-          resultingContent = await readFile(resolved, "utf8");
-        } catch {
-          resultingContent = intent.content;
-        }
-      }
       state.writesApplied.push({
         displayPath,
         resolvedPath: resolved,
         ...(previousContent === undefined ? {} : { previousContent }),
         ...(previousEncoding === undefined ? {} : { previousEncoding }),
         ...(previousSymlink === undefined ? {} : { previousSymlink }),
-        ...(resultingContent === undefined ? {} : { resultingContent }),
         ...(name === "delete" ? { deleted: true } : {}),
       });
-      if (name === "edit") await tools.deferEdit?.(displayPath);
     }
     return result;
   }
@@ -325,7 +315,7 @@ class CompactionDriver {
     if (index > this.state.pendingUseCount) throw new Error("Compaction tools must execute in checkpoint order");
     const previous = this.state.pendingResults[index];
     if (previous !== undefined) {
-      return { type: "tool_result", tool_use_id: use.id, content: previous.output, is_error: previous.isError };
+      return { type: "tool_result", tool_use_id: use.id, content: previous.content ?? previous.output, is_error: previous.isError };
     }
     this.state.toolsCalled.push(use.name);
     this.emit({
@@ -340,7 +330,7 @@ class CompactionDriver {
     this.state.pendingResults.push(result);
     this.state.pendingUseCount = index + 1;
     await this.persist(this.state, this.request);
-    return { type: "tool_result", tool_use_id: use.id, content: result.output, is_error: result.isError };
+    return { type: "tool_result", tool_use_id: use.id, content: result.content ?? result.output, is_error: result.isError };
   }
 
   async finishTools(): Promise<void> {
@@ -352,7 +342,7 @@ class CompactionDriver {
       role: "user",
       content: this.state.pendingResults.map((result, index) => ({
         type: "tool_result", tool_use_id: required(uses[index]).id,
-        content: result.output, is_error: result.isError,
+        content: result.content ?? result.output, is_error: result.isError,
       })),
     });
     this.state.toolRounds += 1;

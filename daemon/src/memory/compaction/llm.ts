@@ -104,18 +104,17 @@ export class RealCompactionLlm implements CompactionLlm {
       },
       this.#opts.cacheDir,
     );
-    if (support === false) this.#dropImages(request);
+    const outgoing = support === false ? this.#dropImages(request) : request;
 
     try {
-      return await this.#send(request, phase, options);
+      return await this.#send(outgoing, phase, options);
     } catch (e) {
       if (responseObserved || support === false || !isImageRejection(e) || countImageBlocks(request.messages) === 0) {
         throw CompactionError.llm(describeError(e), e);
       }
       recordImageRejection(this.#opts.cacheDir, model.provider_key, model.model_id);
-      this.#dropImages(request);
       try {
-        return await this.#send(request, phase, options);
+        return await this.#send(this.#dropImages(request), phase, options);
       } catch (retry) {
         throw CompactionError.llm(describeError(retry), retry);
       }
@@ -133,13 +132,14 @@ export class RealCompactionLlm implements CompactionLlm {
     );
   }
 
-  #dropImages(request: SidecarRequest): void {
-    if (countImageBlocks(request.messages) === 0) return;
+  #dropImages(request: SidecarRequest): SidecarRequest {
+    if (countImageBlocks(request.messages) === 0) return request;
     const reason = textOnlyReason(this.#opts.model.provider_key, this.#opts.model.model_id);
     const { messages, stripped } = stripImageBlocks(request.messages, reason);
-    request.messages = messages;
     shoreLog.warn(
       `shore: dropped ${String(stripped)} image(s) from the compaction request because ${reason}`,
     );
+    this.#opts.emit?.({ type: "provider_warning", message: `${reason}; ${stripped} image(s) omitted from this compaction request. Original images remain in history.` });
+    return { ...request, messages };
   }
 }

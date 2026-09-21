@@ -101,7 +101,11 @@ impl SWPConnection {
         let hello = ClientMessage::Hello(ClientHello {
             client_type,
             client_name,
-            capabilities: vec!["streaming".into(), "history-deltas".into()],
+            capabilities: vec![
+                "streaming".into(),
+                "history-deltas".into(),
+                "multimodal-tool-results".into(),
+            ],
             character,
             thread,
             token: Some(token),

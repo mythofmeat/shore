@@ -10,6 +10,10 @@ export async function prepareImageBlock(block: ContentBlock): Promise<ContentBlo
   }
   if (block.type !== "image") return block;
   const bytes = Buffer.from(block.source.data, "base64");
+  if (block.source.media_type === "image/gif") {
+    const data = await new Bun.Image(bytes).png().toBase64();
+    return await prepareImageBlock({ type: "image", source: { type: "base64", media_type: "image/png", data } });
+  }
   const metadata = await new Bun.Image(bytes).metadata().catch(() => undefined);
   if (block.source.data.length <= MAX_BASE64_BYTES && (
     metadata === undefined || Math.max(metadata.width, metadata.height) <= MAX_IMAGE_EDGE

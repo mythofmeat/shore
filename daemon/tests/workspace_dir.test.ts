@@ -151,7 +151,7 @@ describe("workspace preparation", () => {
 
     await ensureCharacterWorkspace(config, "ada", ws);
 
-    expect(readFileSync(join(ws, "ada", "TOOLS.md"), "utf8")).toContain("Read files before");
+    expect(readFileSync(join(ws, "ada", "TOOLS.md"), "utf8")).toContain("`read` returns bounded text or image input");
     expect(discoverCharacters(config, ws)).toEqual([]);
     expect(() => readFileSync(join(config, "characters/ada/workspace/TOOLS.md"))).toThrow();
   });

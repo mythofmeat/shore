@@ -17,7 +17,7 @@ export type ContentBlock =
       reasoning_details?: unknown[];
       reasoning_content?: string;
     }
-  | { type: "tool_use"; id: string; name: string; input: unknown; input_error?: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown; thought_signature?: string; input_error?: string }
   | { type: "redacted_thinking"; data: string }
   | {
       type: "tool_result";

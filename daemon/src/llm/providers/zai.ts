@@ -1,3 +1,5 @@
+import { coalesceToolResults } from "../tool_result_messages.ts";
+import { prepareRequestImages } from "../prepare_images.ts";
 import OpenAI from "openai";
 import type {
   ChatCompletionChunk,
@@ -36,7 +38,7 @@ export type ZaiChatCompletionCreateParams = Omit<
 
 export class ZaiProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, params } = buildZaiCall(req, true);
+    const { client, params } = buildZaiCall(await prepareRequestImages(req), true);
     const stream = (await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,
@@ -46,7 +48,7 @@ export class ZaiProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, params } = buildZaiCall(req, false);
+    const { client, params } = buildZaiCall(await prepareRequestImages(req), false);
     const completion = await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,
@@ -114,18 +116,20 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   const preserveThinking =
     req.provider_options?.thinking_enabled !== false &&
     req.provider_options?.zai_clear_thinking === false;
-  for (const turn of replayableMessages(req)) {
-    messages.push(...turnToZai(toTurn(turn), preserveThinking));
+  const toolNames = new Map<string, string>();
+  for (const turn of coalesceToolResults(replayableMessages(req))) {
+    for (const block of turn.content) if (block.type === "tool_use") toolNames.set(block.id, block.name);
+    messages.push(...turnToZai(toTurn(turn), preserveThinking, toolNames));
   }
   return messages;
 }
 
-function turnToZai(turn: TurnMessage, preserveThinking: boolean): ChatCompletionMessageParam[] {
+function turnToZai(turn: TurnMessage, preserveThinking: boolean, toolNames: ReadonlyMap<string, string>): ChatCompletionMessageParam[] {
   const msgs = turnToOpenAI({
     role: turn.role,
     content: turn.content.filter((b) => b.type !== "thinking"),
     ...(turn.images ? { images: turn.images } : {}),
-  });
+  }, toolNames);
   if (turn.role !== "assistant" || !preserveThinking || msgs.length === 0) return msgs;
   const thinking = turn.content.find(
     (b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking",

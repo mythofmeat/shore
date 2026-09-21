@@ -8,7 +8,7 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
@@ -701,6 +701,15 @@ class ReplayTools implements CompactionTools {
   }
 
   async dispatch(name: string, input: unknown): Promise<ToolOutput> {
+    if (name === "edit") {
+      const legacy = input as { path?: unknown };
+      if (typeof legacy.path !== "string") return { output: "edit blocked: missing required path", isError: true };
+      try {
+        const target = resolvePath(this.workspaceDir, legacy.path);
+        const existing = await stat(target).catch(() => undefined);
+        if (existing?.isDirectory()) return { output: "edit: target is a directory", isError: true };
+      } catch (error) { return { output: String(error), isError: true }; }
+    }
     const rec = this.records[this.#next];
     this.#next += 1;
     if (rec === undefined) {
@@ -890,33 +899,7 @@ function expectOutcomeShape(
       preview.map((f) => f.path),
     );
     expect(changed, `${where}: a dry run changes nothing on disk`).toEqual([]);
-    expect(
-      preview,
-      `${where}: it previews every whole-file write it was allowed to make, and no other call`,
-    ).toEqual(
-      served
-        .flatMap((r) => r.content_blocks)
-        .filter((b) => b.type === "tool_use" && b.name === "edit")
-        .map((b) => (b as { input: Record<string, unknown> }).input)
-        .filter(
-          (input) => {
-            if (typeof input["path"] !== "string") return false;
-            try {
-              resolvePath("/ws", input["path"]);
-              return true;
-            } catch {
-              return false;
-            }
-          },
-        )
-        .map((input) => ({
-          path: input["path"] as string,
-          content:
-            typeof input["content"] === "string"
-              ? input["content"]
-              : "<edit: in-place edits, no preview available>",
-        })),
-    );
+    expect(preview, `${where}: dry runs leave write tools inert`).toEqual([]);
     return;
   }
 

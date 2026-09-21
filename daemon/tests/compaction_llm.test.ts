@@ -348,8 +348,8 @@ describe("RealCompactionLlm.generate", () => {
 
     expect(sent.length).toBe(1);
     expect(countImageBlocks(required(sent[0]).messages)).toBe(0);
-    expect(countImageBlocks(request.messages)).toBe(0);
-    expect(JSON.stringify(request.messages)).toContain("image omitted");
+    expect(countImageBlocks(request.messages)).toBe(1);
+    expect(JSON.stringify(required(sent[0]).messages)).toContain("image omitted");
   });
 
   test("records the refusal and retries without images when the provider rejects one", async () => {
@@ -378,7 +378,7 @@ describe("RealCompactionLlm.generate", () => {
     expect(seen).toEqual([1, 0]);
     expect(resp.content).toBe("done");
     expect(readLearnedImageSupport(cacheDir, "zai-sub")["glm-5.3"]).toBe(false);
-    expect(countImageBlocks(request.messages)).toBe(0);
+    expect(countImageBlocks(request.messages)).toBe(1);
   });
 
   test("a rejection with no images left to drop is an llm error", async () => {

@@ -1,3 +1,4 @@
+import { coalesceToolResults } from "../tool_result_messages.ts";
 import { prepareRequestImages } from "../prepare_images.ts";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createMoonshotAI } from "@ai-sdk/moonshotai";
@@ -275,8 +276,8 @@ function buildMessages(req: SidecarRequest): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const toolNames = new Map<string, string>();
   const turns = translatesToAnthropic(req.model)
-    ? foldInlineSystemMessages(replayableMessages(req))
-    : replayableMessages(req);
+    ? foldInlineSystemMessages(coalesceToolResults(replayableMessages(req)))
+    : coalesceToolResults(replayableMessages(req));
   for (const turn of turns) {
     const norm = toTurn(turn);
     messages.push(...turnToVercel(norm, toolNames, req.sdk));
@@ -356,7 +357,9 @@ export function turnToVercel(
   for (const img of imageParts(turn.images)) userParts.push(img);
   for (const b of turn.content) {
     if (b.type === "tool_result") {
-      for (const image of toolResultImages(b.content)) {
+      const images = toolResultImages(b.content);
+      if (images.length > 0) userParts.push({ type: "text", text: `Images from tool ${toolNames.get(b.tool_use_id) ?? "result"} (tool_call_id: ${b.tool_use_id}):` });
+      for (const image of images) {
         const resolution = resolveImageBlock(image.source);
         if ("omitted" in resolution) {
           userParts.push({

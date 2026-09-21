@@ -1,0 +1,5 @@
+Read a file on the daemon host. Relative paths resolve from the workspace; absolute paths are accepted. Access is limited by the daemon user's OS permissions, as with Bash.
+
+UTF-8 text is returned with one-based line numbers. A page contains at most 2000 lines, with at most 2000 characters per line, and is bounded by the configured result limit. Partial views identify omitted content and the next line offset. Empty files and offsets beyond EOF are reported explicitly.
+
+PNG, JPEG, WebP, and GIF files up to 5 MiB are returned as actual image input. Large images are resized for transport; GIFs use the first frame. Image delivery requires a supported model and endpoint; failures are reported explicitly. Offset and limit apply only to text. Directories, special files, unsupported binary formats, and invalid UTF-8 are rejected.

@@ -147,6 +147,7 @@ export function buildRequestWithResolvedKey(
   const request: SidecarRequest = {
     sdk: model.sdk,
     model: model.model_id,
+    ...(model.supports_images === undefined ? {} : { supports_images: model.supports_images }),
     api_key: apiKey,
     ...(model.base_url !== undefined ? { base_url: model.base_url } : {}),
     messages: inputs.messages,

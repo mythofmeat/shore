@@ -163,6 +163,7 @@ export function stripImageBlocks(
       if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
       return {
         ...block,
+        is_error: block.content.some((b) => b.type === "image") || block.is_error === true,
         content: block.content.map((b) => (b.type === "image" ? notice("a tool result image") : b)),
       };
     });

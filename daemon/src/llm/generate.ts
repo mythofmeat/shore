@@ -1,3 +1,5 @@
+import { withToolImages } from "./tool_images.ts";
+import { imageSupportFor, recordImageRejection } from "./image_support.ts";
 import { withCallCapture, type CallRecorder } from "./capture.ts";
 import { toolLoopEvents } from "./tool_loop.ts";
 import type { ToolPhase } from "../tools/execute.ts";
@@ -148,7 +150,6 @@ export async function runGeneration(
   if ((request.tools?.length ?? 0) > 0 && options.tools === undefined) {
     throw new Error("Tool-capable generation requires a tool executor");
   }
-  const provider = providerFor(request, deps);
   if (options.signal?.aborted) throw new AbortError();
   ensureCallContext(request, deps);
   const retry = deps.retry ?? {
@@ -179,6 +180,17 @@ export async function runGeneration(
         message.type === "tool_result" || message.type === "send_image") replaySafe = false;
     options.sink?.(message);
   };
+  const model = resolveModelForRequest(deps.config, request);
+  const declaredImages = request.supports_images ?? model?.supportsImages;
+  const provider = withToolImages(providerFor(request, deps), {
+    support: (call) => imageSupportFor({
+      ...(declaredImages === undefined ? {} : { declared: declaredImages }),
+      ...(model?.discoveredSupportsImages === undefined ? {} : { discovered: model.discoveredSupportsImages }),
+      providerKey: call.provider_key ?? call.sdk, modelId: call.model,
+    }, deps.config.dirs.cache),
+    rejected: (call) => recordImageRejection(deps.config.dirs.cache, call.provider_key ?? call.sdk, call.model),
+    warn: (message) => sink({ type: "provider_warning", rid: options.rid ?? null, message }),
+  });
   const fallbacks: FallbackEvent[] = [];
   const attempt = async (apiKey: string, name: string): Promise<StreamResult> => {
     if (options.signal?.aborted) throw new AbortError();

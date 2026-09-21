@@ -1,3 +1,5 @@
+import editDesc from "../../prompts/tools/workspace/edit.md" with { type: "text" };
+import patchDesc from "../../prompts/tools/workspace/apply_patch.md" with { type: "text" };
 import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
@@ -10,6 +12,7 @@ import searchHistoryDesc from "../../prompts/tools/history/search_history.md" wi
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
 import webSearchDesc from "../../prompts/tools/web/web_search.md" with { type: "text" };
 import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
+import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
 export type ToolCategory = "web" | "other";
 
@@ -33,6 +36,48 @@ const TIME_BOUND_FORMAT =
   "RFC3339 timestamp with seconds and an explicit UTC offset or `Z`, for example 2026-05-13T09:00:00+10:00. The offset is interpreted as written.";
 
 export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
+  {
+    name: "read",
+    description: stripOneTrailingNewline(readDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", minLength: 1, description: "File to read. Absolute, or relative to the workspace root." },
+        offset: { type: "integer", minimum: 1, description: "First text line to return, numbered from 1. Default 1. Not accepted for images." },
+        limit: { type: "integer", minimum: 1, maximum: 2000, description: "Maximum text lines to return. Default 2000, maximum 2000. The result character budget can shorten the page." },
+      },
+      required: ["file_path"],
+      additionalProperties: false,
+    },
+    category: "other",
+  },
+  {
+    name: "edit",
+    description: stripOneTrailingNewline(editDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", minLength: 1, description: "Existing UTF-8 file. Absolute, or relative to the workspace root." },
+        old_string: { type: "string", minLength: 1, description: "Exact text to replace, including whitespace and line endings." },
+        new_string: { type: "string", description: "Replacement text. Empty string deletes the matched text." },
+        replace_all: { type: "boolean", description: "Replace all non-overlapping exact occurrences. Default false requires a unique match." },
+      },
+      required: ["file_path", "old_string", "new_string"],
+      additionalProperties: false,
+    },
+    category: "other",
+  },
+  {
+    name: "apply_patch",
+    description: stripOneTrailingNewline(patchDesc),
+    parameters: {
+      type: "object",
+      properties: { patch: { type: "string", minLength: 1, description: "Codex patch starting with *** Begin Patch and ending with *** End Patch." } },
+      required: ["patch"],
+      additionalProperties: false,
+    },
+    category: "other",
+  },
   {
     name: "bash",
     description: stripOneTrailingNewline(bashDesc),

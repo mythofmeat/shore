@@ -134,29 +134,29 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hi there"
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": "hi there"
           }
         ],
@@ -184,7 +184,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -388,7 +388,7 @@
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -421,9 +421,9 @@
                 "model": "claude-fixture"
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": "second answer"
           }
         ],
@@ -451,7 +451,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -544,14 +544,14 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content": "hello"
           }
         ],
@@ -579,7 +579,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -686,14 +686,14 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content": "hello"
           }
         ],
@@ -721,7 +721,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -881,16 +881,16 @@
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "answer"
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": "answer"
           }
         ],
@@ -918,7 +918,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -990,8 +990,8 @@
                   {
                     "type": "tool_result",
                     "tool_use_id": "tool_01",
-                    "content": "<recorded>",
-                    "is_error": false
+                    "content": "The call to activity was not run because this tool is not available in the current tool set. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.",
+                    "is_error": true
                   }
                 ]
               }
@@ -1041,7 +1041,7 @@
             "rid": "r-tool",
             "tool_id": "tool_01",
             "tool_name": "activity",
-            "output": "activity: not yet implemented",
+            "output": "The call to activity was not run because this tool is not available in the current tool set. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.",
             "is_error": true
           },
           {
@@ -1128,20 +1128,20 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "what time is it"
               }
             ],
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content": "what time is it"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "tool_use",
@@ -1150,39 +1150,39 @@
                 "input": {}
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": ""
           },
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "tool_result",
                 "tool_use_id": "tool_01",
-                "content": "<recorded>",
-                "is_error": false
+                "content": "The call to activity was not run because this tool is not available in the current tool set. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.",
+                "is_error": true
               }
             ],
-            "timestamp": "<minted_timestamp>",
-            "content": "<recorded>"
+            "version": "<minted_version>",
+            "content": "The call to activity was not run because this tool is not available in the current tool set. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments."
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "it is late"
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": "it is late"
           }
         ],
@@ -1210,7 +1210,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1218,6 +1218,9 @@
               }
             ],
             "tools": [
+              "read",
+              "edit",
+              "apply_patch",
               "bash",
               "generate_image",
               "web_search",
@@ -1392,29 +1395,29 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "version": "<minted_version>",
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "version": "<minted_version>",
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "no tools here"
               }
             ],
+            "version": "<minted_version>",
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture",
             "content": "no tools here"
           }
         ],
@@ -1442,7 +1445,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- Use `bash` for files, exact text searches, Git, and other command-line work. Read files before editing them and inspect the result afterward.\n- Prefer `shore-patch` through `bash` for targeted edits. It accepts a standard unified diff in a quoted heredoc and checks the existing context before writing. Run `shore-patch --help` for the format or use `--check` to preview a patch without changing files.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval and `search_chat_logs` for archived conversations. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",

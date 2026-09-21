@@ -94,13 +94,19 @@ fn arb_content_block() -> BoxedStrategy<ContentBlock> {
                 signature: signature.map(Into::into),
             },
         ),
-        (arb_ident(), arb_ident(), arb_json())
-            .prop_map(|(id, name, input)| { ContentBlock::ToolUse { id, name, input } }),
+        (arb_ident(), arb_ident(), arb_json()).prop_map(|(id, name, input)| {
+            ContentBlock::ToolUse {
+                id,
+                name,
+                input,
+                thought_signature: None,
+            }
+        }),
         arb_small_string().prop_map(|data| ContentBlock::RedactedThinking { data }),
         (arb_ident(), arb_small_string(), any::<bool>()).prop_map(
             |(tool_use_id, content, is_error)| ContentBlock::ToolResult {
                 tool_use_id,
-                content,
+                content: content.into(),
                 is_error,
             },
         ),

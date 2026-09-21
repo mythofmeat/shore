@@ -55,6 +55,9 @@
         "*"
       ],
       "offered": [
+        "read",
+        "edit",
+        "apply_patch",
         "bash",
         "generate_image",
         "web_search",
@@ -718,6 +721,9 @@
     }
   },
   "tool_names": [
+    "read",
+    "edit",
+    "apply_patch",
     "bash",
     "generate_image",
     "web_search",

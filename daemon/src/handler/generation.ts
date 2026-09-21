@@ -1,7 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { threadDataDir } from "../config/dirs.ts";
 import { resolveKeepaliveMaxSecs } from "../config/keepalive.ts";
-import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -12,8 +11,6 @@ import {
   imageSupportFor,
   isImageRejection,
   recordImageRejection,
-  stripImageBlocks,
-  textOnlyReason,
 } from "../llm/image_support.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { Message } from "../engine/types.ts";
@@ -139,22 +136,6 @@ const defaultMessageId = (): string => `m_${crypto.randomUUID()}`;
 
 export function makeRunGeneration(deps: GenerationDeps): RunGeneration {
   return (params: GenerationParams) => runGeneration(deps, params);
-}
-
-function droppedHistoryImages(
-  messages: WireMessage[],
-  support: boolean | undefined,
-  resolved: ResolvedModel,
-): WireMessage[] {
-  if (support !== false || countImageBlocks(messages) === 0) return messages;
-
-  const reason = textOnlyReason(resolved.providerKey, resolved.modelId);
-  const { messages: stripped, stripped: count } = stripImageBlocks(messages, reason);
-  shoreLog.warn(
-    `shore: dropped ${String(count)} image(s) from history because ${reason}; ` +
-      `the turn goes over the wire without them`,
-  );
-  return stripped;
 }
 
 export class OrderedDelivery {
@@ -284,8 +265,9 @@ async function runGenerationCore(
   });
   const request: SidecarRequest = {
     ...built.request,
+    ...(imageSupport === undefined ? {} : { supports_images: imageSupport }),
     messages: withRegenGuidance(
-      droppedHistoryImages(built.request.messages, imageSupport, resolved),
+      built.request.messages,
       regen ? params.body.guidance : undefined,
     ),
     context: callContext(deps, config, charName, engine.thread, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined

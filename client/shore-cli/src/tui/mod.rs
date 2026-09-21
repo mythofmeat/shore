@@ -1786,6 +1786,7 @@ fn tool_name_map(blocks: &[ContentBlock]) -> std::collections::HashMap<&str, &st
             ContentBlock::ToolUse { id, name, .. } => Some((id.as_str(), name.as_str())),
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
+            | ContentBlock::Image { .. }
             | ContentBlock::RedactedThinking { .. }
             | ContentBlock::ToolResult { .. } => None,
         })
@@ -1804,8 +1805,11 @@ fn blocks_from_content(
                     blocks.push(Block::Thinking(thinking.clone()));
                 }
             }
+            ContentBlock::Image { .. } => blocks.push(Block::Text("[Image attached]".to_owned())),
             ContentBlock::RedactedThinking { .. } => {}
-            ContentBlock::ToolUse { id, name, input } => {
+            ContentBlock::ToolUse {
+                id, name, input, ..
+            } => {
                 blocks.push(Block::ToolUse {
                     tool_id: id.clone(),
                     tool_name: name.clone(),
@@ -1821,7 +1825,7 @@ fn blocks_from_content(
                 blocks.push(Block::ToolResult {
                     tool_id: tool_use_id.clone(),
                     tool_name: (*name).to_owned(),
-                    output: content.clone(),
+                    output: content.display_text(),
                     is_error: *is_error,
                 });
             }
@@ -1845,6 +1849,7 @@ fn editable_text(msg: &Message) -> String {
             ContentBlock::Text { text } => Some(text.as_str()),
             ContentBlock::Thinking { .. }
             | ContentBlock::ToolUse { .. }
+            | ContentBlock::Image { .. }
             | ContentBlock::RedactedThinking { .. }
             | ContentBlock::ToolResult { .. } => None,
         })

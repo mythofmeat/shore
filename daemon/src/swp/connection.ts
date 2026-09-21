@@ -1,3 +1,4 @@
+import { contentForClient } from "./content_projection.ts";
 import { TOKEN_ENV, TOKEN_FILE } from "../config/token.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
@@ -185,9 +186,9 @@ export async function performHandshake(
     character: history.selectedCharacter,
     thread: history.selectedThread,
   };
-  ctx.router.registerSession(client, (msg) => writeMessage(sink, msg));
+  ctx.router.registerSession(client, (msg) => writeMessage(sink, contentForClient(msg, admitted.capabilities)));
 
-  await writeMessage(sink, historyMessage(history));
+  await writeMessage(sink, contentForClient(historyMessage(history), admitted.capabilities));
 
   return sessionMetaOf(client);
 }
@@ -279,7 +280,7 @@ export async function messageLoop(
           ctx.router.characterFor(session.sessionId),
         );
         if (outcome.action === "reply") {
-          await writeMessage(sink, outcome.reply);
+          await writeMessage(sink, contentForClient(outcome.reply, session.capabilities));
         } else {
           await ctx.route(outcome.routed);
         }
@@ -333,7 +334,7 @@ export async function messageLoop(
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !session.capabilities.includes("history-deltas")
             ? historyMessage(await (ctx.handshake ?? DEFAULT_HANDSHAKE).history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
             : result.msg;
-          await writeMessage(sink, message);
+          await writeMessage(sink, contentForClient(message, session.capabilities));
         }
         break;
       }

@@ -143,6 +143,7 @@ class TurnBuilder {
           id: event.id,
           name: event.name,
           input: event.input,
+          ...(event.thought_signature === undefined ? {} : { thought_signature: event.thought_signature }),
         });
         break;
       case "done":

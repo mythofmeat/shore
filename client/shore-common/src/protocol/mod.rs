@@ -665,6 +665,7 @@ mod tests {
             id: "tu_123".into(),
             name: "check_time".into(),
             input: json!({"timezone": "UTC"}),
+            thought_signature: None,
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(field(&json, "type"), "tool_use");
@@ -730,6 +731,7 @@ mod tests {
                     id: "tu_1".into(),
                     name: "check_time".into(),
                     input: json!({}),
+                    thought_signature: None,
                 },
                 ContentBlock::Text {
                     text: "The time is noon.".into(),

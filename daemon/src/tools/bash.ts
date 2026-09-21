@@ -1,6 +1,5 @@
 import { mkdir, readFile } from "node:fs/promises";
-import { delimiter, join, resolve } from "node:path";
-import { bashCommandsDir } from "./bash_commands.ts";
+import { join, resolve } from "node:path";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { characterGitIdentity, envWithoutInheritedGitRepo, runProcess, type ToolInput } from "./workspace.ts";
 
@@ -14,7 +13,7 @@ export interface BashResult {
 
 const PROMPT_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
 
-async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
+export async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
   return await Promise.all(PROMPT_FILES.map(async (path) => {
     try {
       return await readFile(join(workspaceDir, path));
@@ -52,12 +51,10 @@ export async function handleBash(
   delete env["BASH_ENV"];
   const execute = async () => {
     try {
-      const commandsDir = await bashCommandsDir();
       return await runProcess("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", command], {
         cwd: workdir,
         env: {
           ...env, PWD: workdir, SHORE_WORKSPACE_DIR: root,
-          PATH: `${commandsDir}${delimiter}${env["PATH"] ?? "/usr/local/bin:/usr/bin:/bin"}`,
           GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
           GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
         },
@@ -82,4 +79,19 @@ export async function handleBash(
     }
   }
   return { workdir, exit_code: output.code, stdout: output.stdout, stderr: output.stderr, prompt_files_changed: changed };
+}
+
+export async function withPromptChanges<T>(workspaceDir: string, write: () => Promise<T>, deferEdit?: (path: string) => Promise<void> | void): Promise<T> {
+  const root = resolve(workspaceDir);
+  const before = await promptContents(root);
+  try { return await write(); }
+  finally {
+    const after = await promptContents(root);
+    for (const [index, path] of PROMPT_FILES.entries()) {
+      const old = before[index];
+      const current = after[index];
+      if (old === undefined ? current === undefined : current !== undefined && old.equals(current)) continue;
+      await deferEdit?.(path);
+    }
+  }
 }

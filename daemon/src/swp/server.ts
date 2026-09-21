@@ -1,3 +1,4 @@
+import { contentForClient } from "./content_projection.ts";
 import { HistoryMediaDelivery } from "./history_media.ts";
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
@@ -193,10 +194,10 @@ export class Server {
     const inbox = new Inbox();
     const media = new HistoryMediaDelivery();
     this.#router.registerSession(client, (msg) => {
-      inbox.push(media.prepare(msg));
+      inbox.push(media.prepare(contentForClient(msg, capabilities)));
       return Promise.resolve();
     });
-    inbox.push(media.prepare(historyMessage(history)));
+    inbox.push(media.prepare(contentForClient(historyMessage(history), capabilities)));
 
     const subscription = this.#events.subscribe();
     const relay = (async () => {
@@ -223,7 +224,7 @@ export class Server {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
             : result.msg;
-          inbox.push(media.prepare(message));
+          inbox.push(media.prepare(contentForClient(message, capabilities)));
         }
       }
       inbox.close();

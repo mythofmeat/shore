@@ -1,3 +1,4 @@
+import { coalesceToolResults } from "../tool_result_messages.ts";
 import { prepareRequestImages } from "../prepare_images.ts";
 import OpenAI from "openai";
 import type {
@@ -194,13 +195,15 @@ export function buildOpenAIMessagesWithTail(req: SidecarRequest): OpenAIMessages
     transientTail.push(0);
   }
 
-  const replayable = replayableMessages(req);
+  const replayable = coalesceToolResults(replayableMessages(req));
   const folded = translatesToAnthropic(req.model)
     ? foldInlineSystemMessagesWithTail(replayable)
     : { turns: replayable, transientTail: replayable.map((turn) => turn.transient_tail ?? 0) };
 
+  const toolNames = new Map<string, string>();
   folded.turns.forEach((turn, i) => {
-    const emitted = turnToOpenAI(toTurn(turn));
+    for (const block of turn.content) if (block.type === "tool_use") toolNames.set(block.id, block.name);
+    const emitted = turnToOpenAI(toTurn(turn), toolNames);
     emitted.forEach((m, j) => {
       messages.push(m);
       const foldedBlocksLandHere = j === emitted.length - 1 && m.role === "user";
@@ -287,7 +290,7 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[
   }));
 }
 
-export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
+export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, string> = new Map()): ChatCompletionMessageParam[] {
   if (turn.role === "system") {
     const text = turn.content
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
@@ -333,7 +336,9 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
         content: toolResultText(b.content),
       };
       out.push(toolMsg);
-      for (const image of toolResultImages(b.content)) {
+      const images = toolResultImages(b.content);
+      if (images.length > 0) parts.push({ type: "text", text: `Images from tool ${toolNames.get(b.tool_use_id) ?? "result"} (tool_call_id: ${b.tool_use_id}):` });
+      for (const image of images) {
         const resolution = resolveImageBlock(image.source);
         if ("omitted" in resolution) {
           parts.push({ type: "text", text: omissionNotice("a tool result image", resolution.omitted) });

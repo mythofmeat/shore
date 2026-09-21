@@ -61,6 +61,6 @@ api_key_env = "ANTHROPIC_API_KEY"
 model = "anthropic:claude-opus-4-8"
 
 [tools]
-enabled = ["bash", "search", "search_chat_logs"]
+enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs"]
 `;
 }

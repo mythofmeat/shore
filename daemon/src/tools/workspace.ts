@@ -655,7 +655,7 @@ interface ProcessOutput {
 export function runProcess(
   program: string,
   args: string[],
-  options: { cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; signal?: AbortSignal | undefined },
+  options: { stdin?: string; cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; signal?: AbortSignal | undefined },
 ): Promise<ProcessOutput> {
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
@@ -663,7 +663,7 @@ export function runProcess(
     const child = spawn(program, args, {
       cwd: options.cwd,
       env: options.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       detached: grouped,
     });
     const stdout = boundedProcessOutput();
@@ -684,8 +684,10 @@ export function runProcess(
     };
     options.signal?.addEventListener("abort", cancel, { once: true });
     if (options.signal?.aborted === true) cancel();
-    child.stdout.on("data", stdout.accept);
-    child.stderr.on("data", stderr.accept);
+    child.stdin?.on("error", (error) => { if ((error as NodeJS.ErrnoException).code !== "EPIPE") failure = error; });
+    if (options.stdin !== undefined) child.stdin?.end(options.stdin);
+    child.stdout?.on("data", stdout.accept);
+    child.stderr?.on("data", stderr.accept);
     child.on("error", (error) => { failure = error; });
     child.on("close", (code) => {
       options.signal?.removeEventListener("abort", cancel);

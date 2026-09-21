@@ -84,7 +84,7 @@ export function buildGeminiParams(
   const config = buildGeminiConfig(req, signal);
   return {
     model: req.model,
-    contents: translateMessages(replayableMessages(req)),
+    contents: translateMessages(replayableMessages(req), req.provider_options?.gemini_generation ?? Number(/gemini-([0-9]+)/.exec(req.model)?.[1] ?? "2")),
     config,
   };
 }
@@ -128,7 +128,7 @@ export async function* geminiStreamEvents(
 
   yield { type: "start", model };
 
-  const functionCalls: Array<{ name: string; args: unknown }> = [];
+  const functionCalls: Array<{ id?: string; thought_signature?: string; name: string; args: unknown }> = [];
   let textAccum = "";
   let finishReason = "end_turn";
   let usage = emptyUsage();
@@ -149,6 +149,8 @@ export async function* geminiStreamEvents(
         }
       } else if (part.functionCall !== undefined) {
         functionCalls.push({
+          ...(part.thoughtSignature === undefined ? {} : { thought_signature: part.thoughtSignature }),
+          ...(part.functionCall.id === undefined ? {} : { id: part.functionCall.id }),
           name: part.functionCall.name ?? "",
           args: part.functionCall.args ?? {},
         });
@@ -165,14 +167,14 @@ export async function* geminiStreamEvents(
 
   for (const [idx, call] of functionCalls.entries()) {
     markFirst();
-    yield { type: "tool_use", id: `gemini_call_${idx}`, name: call.name, input: call.args };
+    yield { type: "tool_use", id: call.id ?? `gemini_call_${idx}`, name: call.name, input: call.args, ...(call.thought_signature === undefined ? {} : { thought_signature: call.thought_signature }) };
   }
 
   const total = now() - startedAt;
   yield {
     type: "done",
     content: textAccum,
-    finish_reason: finishReason,
+    finish_reason: finishReason === "end_turn" && functionCalls.length > 0 ? "tool_use" : finishReason,
     usage,
     timing: {
       total_ms: total,
@@ -207,9 +209,10 @@ export function geminiGenerateResponse(
       const name = part.functionCall.name ?? "";
       content_blocks.push({
         type: "tool_use",
-        id: `gemini_call_${toolCallIdx++}`,
+        id: part.functionCall.id ?? `gemini_call_${toolCallIdx++}`,
         name,
         input: part.functionCall.args ?? {},
+        ...(part.thoughtSignature === undefined ? {} : { thought_signature: part.thoughtSignature }),
       });
     }
   }
@@ -217,22 +220,15 @@ export function geminiGenerateResponse(
   return {
     content: textAccum,
     content_blocks,
-    finish_reason: normalizeFinishReason(candidate?.finishReason),
+    finish_reason: normalizeFinishReason(candidate?.finishReason) === "end_turn" && content_blocks.some((block) => block.type === "tool_use") ? "tool_use" : normalizeFinishReason(candidate?.finishReason),
     usage: extractGeminiUsage(response.usageMetadata),
     timing: { total_ms: totalMs, time_to_first_token_ms: totalMs },
     model,
   };
 }
 
-export function translateMessages(messages: WireMessage[]): Content[] {
+export function translateMessages(messages: WireMessage[], generation = 2): Content[] {
   const toolIdToName = new Map<string, string>();
-  for (const msg of messages) {
-    if (!Array.isArray(msg.content)) continue;
-    for (const block of msg.content) {
-      if (block.type === "tool_use") toolIdToName.set(block.id, block.name);
-    }
-  }
-
   const contents: Content[] = [];
   for (const msg of messages) {
     if (msg.role === "system") {
@@ -241,8 +237,9 @@ export function translateMessages(messages: WireMessage[]): Content[] {
       continue;
     }
 
+    for (const block of msg.content) if (block.type === "tool_use") toolIdToName.set(block.id, block.name);
     const role = msg.role === "assistant" ? "model" : "user";
-    const parts = translateParts(msg.content, toolIdToName);
+    const parts = translateParts(msg.content, toolIdToName, generation);
     if (parts.length > 0) contents.push({ role, parts });
   }
 
@@ -250,7 +247,7 @@ export function translateMessages(messages: WireMessage[]): Content[] {
   return contents;
 }
 
-function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>): Part[] {
+function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, generation: number): Part[] {
   if (typeof content === "string") return content ? [{ text: content }] : [];
 
   const parts: Part[] = [];
@@ -260,21 +257,24 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         parts.push({ text: block.text });
         break;
       case "tool_use":
-        parts.push({ functionCall: { name: block.name, args: toRecord(block.input) } });
+        parts.push({ functionCall: { id: block.id, name: block.name, args: toRecord(block.input) }, ...(block.thought_signature === undefined ? {} : { thoughtSignature: block.thought_signature }) });
         break;
       case "tool_result": {
         const name = toolIdToName.get(block.tool_use_id) ?? block.tool_use_id;
         const images = toolResultImages(block.content);
-        const result = images.length === 0 ? block.content : toolResultText(block.content);
-        parts.push({ functionResponse: { name, response: { result } } });
+        const response: NonNullable<Part["functionResponse"]> = {
+          id: block.tool_use_id, name,
+          response: block.is_error === true ? { error: toolResultText(block.content) } : { result: toolResultText(block.content) },
+        };
+        parts.push({ functionResponse: response });
         for (const image of images) {
           const resolution = resolveImageBlock(image.source);
           if ("omitted" in resolution) {
-            parts.push({ text: omissionNotice("a tool result image", resolution.omitted) });
+            response.response = { error: `${toolResultText(block.content)}\n${omissionNotice("a tool result image", resolution.omitted)}` };
           } else {
-            parts.push({
-              inlineData: { mimeType: resolution.image.mediaType, data: resolution.image.base64 },
-            });
+            const inlineData = { mimeType: resolution.image.mediaType, data: resolution.image.base64 };
+            if (generation >= 3) (response.parts ??= []).push({ inlineData });
+            else parts.push({ text: `Image from tool ${name} (tool_call_id: ${block.tool_use_id}):` }, { inlineData });
           }
         }
         break;

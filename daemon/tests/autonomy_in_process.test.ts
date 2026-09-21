@@ -76,6 +76,7 @@ async function world(): Promise<LoadedConfig> {
       .join("\n") + "\n");
 
   const app = defaultAppConfig();
+  app.tools.enabled_tools = ["bash", "read", "edit", "apply_patch", "generate_image", "mcp__*"];
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
   const models = emptyCatalog();
@@ -246,6 +247,7 @@ describe("running a heartbeat", () => {
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
+      rebuild: { mcpRegistry: { toolDefsFiltered: () => ["shot", "slow"].map((name) => ({ name: `mcp__srv__${name}`, description: "fixture", input_schema: { type: "object" } })) } },
       tools: {
         mcpRegistry: {
           call: () =>
@@ -299,6 +301,7 @@ describe("running a heartbeat", () => {
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
+      rebuild: { mcpRegistry: { toolDefsFiltered: () => ["shot", "slow"].map((name) => ({ name: `mcp__srv__${name}`, description: "fixture", input_schema: { type: "object" } })) } },
       tools: {
         mcpRegistry: {
           call: async () => {
@@ -864,10 +867,10 @@ test("compaction edits files throughout the workspace through the normal tools",
   const seen: SidecarRequest[] = [];
   const provider = scriptedProvider([
     response(paths.map((path, i) => ({
-      type: "tool_use", id: `edit-${String(i)}`, name: "bash",
-      input: { command: path === "notes.md"
-        ? "shore-patch <<'PATCH'\n--- a/notes.md\n+++ b/notes.md\n@@ -1 +1 @@\n-old context\n\\ No newline at end of file\n+current context\n\\ No newline at end of file\nPATCH"
-        : `mkdir -p "$(dirname '${path}')" && printf 'current context' > '${path}'` },
+      type: "tool_use", id: `edit-${String(i)}`, name: path === "notes.md" ? "edit" : "bash",
+      input: path === "notes.md"
+        ? { file_path: path, old_string: "old context", new_string: "current context" }
+        : { command: `mkdir -p "$(dirname '${path}')" && printf 'current context' > '${path}'` },
     })), "tool_use"),
     response([{ type: "text", text: "Updated the workspace." }]),
   ], seen);
@@ -988,4 +991,26 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
     expect(second).toMatchObject({ reason: "workspace_conflict", detail: "notes.md" });
     expect(await readFile(path, "utf8")).toBe("new user context");
   }
+});
+
+test("compaction delivers structured read images to the next model round", async () => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  await writeFile(join(workspace, "image.png"), Buffer.from(png, "base64"));
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([
+    response([{ type: "tool_use", id: "read-image", name: "read", input: { file_path: "image.png" } }], "tool_use"),
+    response([{ type: "text", text: "nothing to save" }]),
+  ], seen);
+  const outcome = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }),
+  }, { keepTurnsOverride: 0 });
+  expect(outcome?.kind).toBe("compacted");
+  const result = seen.at(-1)?.messages.flatMap((turn) => turn.content).find((block) => block.type === "tool_result" && block.tool_use_id === "read-image");
+  expect(result).toMatchObject({ type: "tool_result", is_error: false });
+  if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("image result was flattened");
+  expect(result.content.find((block) => block.type === "image")).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: png } });
 });

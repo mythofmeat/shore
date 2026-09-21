@@ -1,7 +1,10 @@
 import { shoreLog } from "../log.ts";
 
 import { handleActivityHeatmap, type ActivityStatsLookup } from "./activity.ts";
-import { handleBash } from "./bash.ts";
+import { handleEdit } from "./edit.ts";
+import { handleApplyPatch } from "./apply_patch.ts";
+import { handleBash, withPromptChanges } from "./bash.ts";
+import { handleRead } from "./read.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleSearchHistory } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
@@ -24,6 +27,7 @@ export interface ToolContext {
   thread?: string;
   conversation?: readonly Message[];
   dryRun?: boolean;
+  maxResultChars?: number;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
@@ -137,14 +141,20 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
 
   switch (name) {
     case "read":
+      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars);
     case "edit":
+    case "apply_patch": {
+      const write = () => withPromptChanges(ctx.workspaceDir,
+        () => name === "edit" ? handleEdit(args, ctx.workspaceDir, ctx.signal) : handleApplyPatch(args, ctx.workspaceDir, ctx.signal), ctx.deferEdit);
+      return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
+    }
     case "delete":
     case "git":
     case "fetch_url":

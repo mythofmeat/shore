@@ -120,10 +120,12 @@ describe("request construction", () => {
 
     expect(contents[0]?.role).toBe("model");
     expect(contents[0]?.parts?.[0]?.functionCall).toEqual({
+      id: "call_1",
       name: "search",
       args: { q: "cats" },
     });
     expect(contents[1]?.parts?.[0]?.functionResponse).toEqual({
+      id: "call_1",
       name: "search",
       response: { result: "5 results" },
     });

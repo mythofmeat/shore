@@ -2,6 +2,6 @@ Run a command in a fresh, non-interactive Bash shell (pipefail enabled) on the d
 
 Returns the exit status, stdout, and stderr. Output is bounded. Shore's configured tool timeout applies, and cancellation stops the command's process group. Changes made before an error, timeout, or cancellation are not rolled back.
 
-Git commits are authored with your character identity. The `shore-patch` command applies unified diffs; run `shore-patch --help` for usage. Changes to SOUL.md, USER.md, AGENTS.md, TOOLS.md and MEMORY.md in the workspace are queued for prompt reload.
+Git commits are authored with your character identity. Changes to SOUL.md, USER.md, AGENTS.md, TOOLS.md and MEMORY.md in the workspace are queued for prompt reload.
 
 There is no sandbox: the working directory is only a default, and commands can reach the daemon's environment, network, and any files its user can access. In Docker, the container and its mounts define that access.
