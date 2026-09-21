@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/build/daemon/target \
 FROM alpine:latest
 RUN apk update
 RUN apk upgrade
-RUN apk add bash ca-certificates coreutils curl findutils git jq ripgrep sed libgcc libstdc++
+RUN apk add bash ca-certificates coreutils curl findutils git jq ripgrep sed libgcc libstdc++ file
 RUN apk add python3
 
 COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
