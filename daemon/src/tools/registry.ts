@@ -29,6 +29,9 @@ export interface SubagentConfigView {
   description: string;
 }
 
+const TIME_BOUND_FORMAT =
+  "RFC3339 timestamp with seconds and an explicit UTC offset or `Z`, for example 2026-05-13T09:00:00+10:00. The offset is interpreted as written.";
+
 export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   {
     name: "bash",
@@ -36,8 +39,15 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        command: { type: "string", minLength: 1, description: "Bash command or script to execute." },
-        workdir: { type: "string", description: "Working directory, relative to the workspace or absolute. Defaults to the workspace root." },
+        command: {
+          type: "string",
+          minLength: 1,
+          description: "Bash command or script to execute. May span multiple lines.",
+        },
+        workdir: {
+          type: "string",
+          description: "Working directory. Relative paths resolve from the workspace root; absolute paths are accepted. Defaults to the workspace root.",
+        },
       },
       required: ["command"],
       additionalProperties: false,
@@ -50,15 +60,17 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        prompt: { type: "string", description: "Text prompt for image generation." },
+        prompt: {
+          type: "string",
+          description: "Description of the image to generate: subject, mood, composition, and style.",
+        },
         size: {
           type: "string",
-          description: "Image dimensions (e.g. '1024x1024').",
-          default: "1024x1024",
+          description: "Requested dimensions as WIDTHxHEIGHT, for example '1024x1024'. Omit to use the configured default size. Which sizes work depends on the configured image model.",
         },
         caption: {
           type: "string",
-          description: "Optional caption to send with the generated image.",
+          description: "Optional caption sent with the image. Omit to send the image without one.",
         },
       },
       required: ["prompt"],
@@ -71,11 +83,10 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "The search query." },
+        query: { type: "string", description: "Web search query." },
         max_results: {
           type: "integer",
-          description: "Maximum number of results to return.",
-          default: 5,
+          description: "Number of results to return. Omit to use the configured default.",
         },
       },
       required: ["query"],
@@ -90,7 +101,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       properties: {
         days: {
           type: "integer",
-          description: "Number of days of history to include.",
+          description: "Number of most recent days to include, as a positive integer. Default 30. Up to 90 days are retained; larger values return what exists.",
           default: 30,
         },
       },
@@ -105,29 +116,29 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       properties: {
         query: {
           type: "string",
-          description: "Keyword, phrase, or natural-language description to search for.",
+          description: "What to search for: a keyword, phrase, or natural-language description. Must not be empty.",
         },
         mode: {
           type: "string",
           enum: ["hybrid", "lexical", "vector"],
           description:
-            "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity.",
+            "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring matching only, ordered by file recency. `vector` is semantic similarity only. Semantic modes fall back to lexical when embeddings are not configured, and the response says so.",
         },
         path: {
           type: "string",
           description:
-            "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index.",
+            "Restrict the search to this directory, relative to the workspace. Applies in every mode; semantic results are filtered to the subtree after ranking against the workspace-wide index. Omit to search the whole workspace.",
         },
         max_results: {
-          type: "number",
-          description: "Maximum matches to return. Defaults to 20, maximum 100.",
+          type: "integer",
+          description: "Maximum number of hits to return. Default 20; values above 100 are capped at 100.",
         },
         context: {
           type: "integer",
           minimum: 0,
           maximum: 10000,
           default: 500,
-          description: "Characters of context on each side of the match. Automatically shrinks to target a 12000-character response while retaining every result and the full match.",
+          description: "Characters of context on each side of a match. Default 500, range 0-10000. May be reduced automatically to keep the response near 12000 characters; every result and the full match are kept.",
         },
       },
       required: ["query"],
@@ -143,41 +154,39 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         query: {
           type: "string",
           description:
-            "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only.",
+            "Text to search for (case-insensitive). Omit to select messages by the other filters alone.",
         },
         match: {
           type: "string",
           enum: ["ranked", "phrase"],
-          description: "Use phrase for named artists/titles: requires the whole case-insensitive phrase with word boundaries and disables semantic expansion. Default ranked allows partial-term matches.",
+          description: "`ranked` (default) allows partial-term matches. `phrase` requires the whole phrase, case-insensitively and on word boundaries, with no semantic expansion; use it for names and titles. `phrase` requires `query`.",
         },
         compact: {
           type: "boolean",
-          description: "Return matching excerpts of up to 600 characters without neighboring messages. Use for focused fact lookup; default false returns full messages and neighbors.",
+          description: "Return matching excerpts of up to 600 characters without neighboring messages, for focused fact lookup. Default false returns full messages with their neighbors.",
         },
         start_time: {
           type: "string",
-          description:
-            "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00.",
+          description: `Inclusive lower bound on message time. ${TIME_BOUND_FORMAT}`,
         },
         end_time: {
           type: "string",
-          description:
-            "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00.",
+          description: `Inclusive upper bound on message time. ${TIME_BOUND_FORMAT}`,
         },
         max_results: {
-          type: "number",
-          description: "Maximum matching messages to return. Defaults to 3, maximum 50.",
+          type: "integer",
+          description: "Maximum number of matching messages to return, not counting neighboring context. Default 3; values above 50 are capped at 50.",
         },
         mode: {
           type: "string",
           enum: ["auto", "lexical", "hybrid", "vector"],
           description:
-            "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks.",
+            "Retrieval mode. `auto` uses hybrid when embeddings are configured and lexical otherwise. `lexical` matches text only. `hybrid` blends lexical and semantic matches. `vector` is semantic only and searches only chunks that are currently embedded, so messages awaiting indexing can be missed. Semantic modes fall back to lexical when embeddings are not configured, and without a `query` matching is always lexical. Defaults to the configured retrieval mode.",
         },
         model: {
           type: "string",
           description:
-            "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match.",
+            "Only return assistant messages generated by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. User messages and messages stored without a model never match, so an empty result can mean the messages are not attributable.",
         },
       },
       required: [],
@@ -192,13 +201,11 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       properties: {
         start_time: {
           type: "string",
-          description:
-            "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00.",
+          description: `Inclusive lower bound on when a model was used. Omit to start from the earliest recorded call. ${TIME_BOUND_FORMAT}`,
         },
         end_time: {
           type: "string",
-          description:
-            "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00.",
+          description: `Inclusive upper bound on when a model was used. Omit to include everything up to now. ${TIME_BOUND_FORMAT}`,
         },
       },
       required: [],

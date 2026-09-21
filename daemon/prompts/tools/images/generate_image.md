@@ -1,1 +1,1 @@
-Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to {{user}}. Be specific about subject, mood, and composition.
+Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to {{user}}. Returns the saved path and `revised_prompt`, which is any text the image model returned with the image (such as a rewritten prompt) and is empty when there is none.
