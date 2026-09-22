@@ -21,7 +21,7 @@ test.each([
   { model: "claude-opus-5", withTools: true, display: undefined, reasoningOff: true },
   { model: "claude-opus-5", withTools: false, display: undefined, noEffort: true },
 ])("the real SDK carries thinking through to client frames (%j)", async ({ model, withTools, display, reasoningOff, noEffort }) => {
-  const wanted = reasoningOff === true ? "omitted" : display ?? "summarized";
+  const wanted = reasoningOff === true ? undefined : display ?? "summarized";
   const options = reasoningOff === true
     ? { thinking_enabled: false }
     : { ...(noEffort === true ? {} : { reasoning_effort: "high" }), ...(display === undefined ? {} : { thinking_display: display }) };
@@ -71,14 +71,18 @@ test.each([
       } } : {}),
     });
     const thinkingText = frames.flatMap(frame => frame.type === "stream_chunk" && frame.content_type === "thinking" ? [frame.text] : []).join("");
-    expect(thinkingText).toBe(wanted === "omitted" ? "" : summary.repeat(withTools ? 2 : 1));
+    expect(thinkingText).toBe(wanted === "summarized" ? summary.repeat(withTools ? 2 : 1) : "");
     expect(result.content).toBe("Here is the answer.");
     expect(mock.requests).toHaveLength(withTools ? 2 : 1);
     for (const sent of mock.requests) {
+      if (reasoningOff === true) {
+        expect(sent.body.thinking).toEqual({ type: "disabled" });
+        continue;
+      }
       expect(sent.body.thinking).toMatchObject({ display: wanted });
       expect((sent.body.thinking as { type: string }).type).toBe(model.startsWith("claude-opus") ? "adaptive" : "enabled");
     }
-    if (wanted !== "omitted") {
+    if (wanted === "summarized") {
       expect(result.content_blocks).toContainEqual({ type: "thinking", thinking: summary, signature: "signed-thinking" });
       if (withTools) expect(recorded).toContainEqual({ type: "thinking", thinking: summary, signature: "signed-thinking" });
     }

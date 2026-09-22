@@ -322,7 +322,7 @@ function buildOptions(
 
   return {
     model: req.model,
-    thinking: { type: "adaptive", display: agentThinkingDisplay(req) },
+    thinking: agentThinking(req),
     ...(effort === undefined ? {} : { effort }),
     ...(system === "" ? {} : { systemPrompt: { type: "custom" as const, prompt: system, snapshot: false } }),
     settingSources: [],
@@ -357,9 +357,9 @@ function buildOptions(
   };
 }
 
-export function agentThinkingDisplay(req: SidecarRequest): "summarized" | "omitted" {
-  if (req.provider_options?.thinking_enabled === false) return "omitted";
-  return req.provider_options?.thinking_display ?? "summarized";
+export function agentThinking(req: SidecarRequest): NonNullable<Options["thinking"]> {
+  if (req.provider_options?.thinking_enabled === false) return { type: "disabled" };
+  return { type: "adaptive", display: req.provider_options?.thinking_display ?? "summarized" };
 }
 
 const AGENT_EFFORT = ["low", "medium", "high", "xhigh", "max"] as const;
