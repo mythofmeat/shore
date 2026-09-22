@@ -322,7 +322,7 @@ function buildOptions(
 
   return {
     model: req.model,
-    thinking: { type: "adaptive", display: req.provider_options?.thinking_display ?? "summarized" },
+    thinking: { type: "adaptive", display: agentThinkingDisplay(req) },
     ...(effort === undefined ? {} : { effort }),
     ...(system === "" ? {} : { systemPrompt: { type: "custom" as const, prompt: system, snapshot: false } }),
     settingSources: [],
@@ -355,6 +355,11 @@ function buildOptions(
     ...(plan.resumeSessionAt === undefined ? {} : { resumeSessionAt: plan.resumeSessionAt }),
     ...(plan.fork ? { forkSession: true } : {}),
   };
+}
+
+export function agentThinkingDisplay(req: SidecarRequest): "summarized" | "omitted" {
+  if (req.provider_options?.thinking_enabled === false) return "omitted";
+  return req.provider_options?.thinking_display ?? "summarized";
 }
 
 const AGENT_EFFORT = ["low", "medium", "high", "xhigh", "max"] as const;
