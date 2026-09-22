@@ -14,6 +14,7 @@ RUN apk update
 RUN apk upgrade
 RUN apk add bash ca-certificates coreutils curl findutils git jq ripgrep sed libgcc libstdc++ file
 RUN apk add python3
+RUN apk add yq-go
 
 COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
