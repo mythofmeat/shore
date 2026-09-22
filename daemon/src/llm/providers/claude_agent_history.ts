@@ -9,19 +9,15 @@ import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
 import { prepareImageBlocks } from "../prepare_images.ts";
 
-function modelIdentityOf(entry: SessionStoreEntry): string | undefined {
-  const record = entry as { type?: unknown; attachment?: { type?: unknown; identity?: { modelId?: unknown } } };
-  if (record.type !== "attachment" || record.attachment?.type !== "model") return undefined;
-  const id = record.attachment.identity?.modelId;
-  return typeof id === "string" ? id : "";
+function isModelIdentity(entry: SessionStoreEntry): boolean {
+  const record = entry as { type?: unknown; attachment?: { type?: unknown } };
+  return record.type === "attachment" && record.attachment?.type === "model";
 }
 
-export function withoutStaleModelIdentity(entries: SessionStoreEntry[], model: string): SessionStoreEntry[] {
-  const latest = entries.findLastIndex((entry) => modelIdentityOf(entry) !== undefined);
-  const stale = (entry: SessionStoreEntry, index: number) => {
-    const identity = modelIdentityOf(entry);
-    return identity !== undefined && (index !== latest || identity !== model);
-  };
+export function withoutStaleModelIdentity(entries: SessionStoreEntry[], keepLatest: boolean): SessionStoreEntry[] {
+  const latest = entries.findLastIndex(isModelIdentity);
+  const stale = (entry: SessionStoreEntry, index: number) =>
+    isModelIdentity(entry) && (index !== latest || !keepLatest);
   if (!entries.some(stale)) return entries;
   const parents = new Map<string, string | null>();
   const kept: SessionStoreEntry[] = [];
@@ -38,7 +34,7 @@ export function withoutStaleModelIdentity(entries: SessionStoreEntry[], model: s
   return kept;
 }
 
-export function nativeHistoryStore(book: string, conversation: string, model: string): SessionStore {
+export function nativeHistoryStore(book: string, conversation: string, sameModel: boolean): SessionStore {
   const data = dirname(book);
   const character = sessionKeyOwner(conversation) ?? "";
   const prefix = `sdk_transcripts/${basename(book)}/${Buffer.from(character).toString("base64url")}/`;
@@ -49,7 +45,7 @@ export function nativeHistoryStore(book: string, conversation: string, model: st
       const path = pathOf(key);
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
-      return withoutStaleModelIdentity(JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[], model);
+      return withoutStaleModelIdentity(JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[], sameModel);
     })())),
     append: (key, added) => {
       withStorage(data, (db) => db.transaction(() => {

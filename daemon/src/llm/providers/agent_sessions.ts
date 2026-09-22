@@ -24,6 +24,7 @@ export interface SessionRecord {
   pendingAssistantUuids?: string[];
   pendingAssistantHashes?: string[];
   storedTranscript?: true;
+  model?: string;
 }
 
 export type SessionBook = Record<string, SessionRecord>;

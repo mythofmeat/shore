@@ -184,9 +184,9 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
   const current = remaining[0];
   if ((plan.resume === undefined || record?.storedTranscript === true) && acknowledged && remaining.length === 1 && current?.role === "user" &&
     !current.content.some((block) => block.type === "tool_use" || block.type === "tool_result")) {
-    return { ...plan, content: current.content, sessionStore: nativeHistoryStore(path, key, req.model) };
+    return { ...plan, content: current.content, sessionStore: nativeHistoryStore(path, key, record?.model === req.model) };
   }
-  const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key, req.model));
+  const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key, record?.model === req.model));
   shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
   return {
     content: seeded.promptContent,
@@ -669,6 +669,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
           sessionId: seen.sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuids),
           storedTranscript: true,
+          model: req.model,
           ...(seen.assistantUuids.length === 0
             ? {}
             : {
@@ -1026,6 +1027,7 @@ export async function* claudeAgentToolLoopEvents(
           ...round.nativeEntries(seen.assistantUuids),
         ],
         storedTranscript: true,
+        model: req.model,
         ...(pendingAssistantUuids.length === 0
           ? {}
           : {

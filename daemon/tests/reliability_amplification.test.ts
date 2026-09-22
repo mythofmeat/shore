@@ -16,7 +16,7 @@ const message = (id: string) => ({ msg_id: id, role: "user" as const, content: i
 
 test("a tiny SDK append writes only the new entry, irrespective of the saved transcript", async () => {
   const data = await mkdtemp(testTmp("transcript-amplification-"));
-  const store = nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", "", "main"), "claude-opus-5");
+  const store = nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", "", "main"), true);
   const key = { projectKey: "", sessionId: "session" };
   await store.append(key, [{ type: "user", uuid: "big", content: randomBytes(1024 * 1024).toString("base64") }]);
   withStorage(data, (db) => {
@@ -76,7 +76,7 @@ test("history deltas reconstruct the same display through tool results and tail 
 
 test("SDK rows preserve idempotent updates and unkeyed entries after legacy migration", async () => {
   const data = await mkdtemp(testTmp("transcript-migration-"));
-  const store = nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", "", "main"), "claude-opus-5");
+  const store = nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", "", "main"), true);
   const key = { projectKey: "", sessionId: "session" };
   await store.append(key, [{ type: "user", uuid: "first", content: "old" }]);
   withStorage(data, db => {
@@ -99,12 +99,12 @@ test("archive export and import retain row-backed active messages and SDK transc
   await engine.appendMessage(message("saved"));
   const owner = sessionKey("ada", "", "main");
   const key = { projectKey: "", sessionId: "session" };
-  await nativeHistoryStore(join(data, "sessions.json"), owner, "claude-opus-5").append(key, [{ type: "user", uuid: "saved" }]);
+  await nativeHistoryStore(join(data, "sessions.json"), owner, true).append(key, [{ type: "user", uuid: "saved" }]);
   const archive = join(data, "export.db");
   exportUnifiedDatabase(databasePath(data), "ada", archive);
   importUnifiedDatabase(databasePath(target), archive, "ada");
   expect((await ConversationEngine.load("ada", target)).messages().map(entry => entry.msg_id)).toEqual(["saved"]);
-  expect(await nativeHistoryStore(join(target, "sessions.json"), owner, "claude-opus-5").load(key)).toEqual([{ type: "user", uuid: "saved" }]);
+  expect(await nativeHistoryStore(join(target, "sessions.json"), owner, true).load(key)).toEqual([{ type: "user", uuid: "saved" }]);
 });
 
 test("delta-capable clients receive suffixes while legacy clients receive full snapshots", async () => {
