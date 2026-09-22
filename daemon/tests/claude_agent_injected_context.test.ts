@@ -12,13 +12,26 @@ import { withoutStaleModelIdentity } from "../src/llm/providers/claude_agent_his
 import type { AnthropicRequestRecord } from "../src/testing/mock_anthropic.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
+import type { WireMessage } from "../src/llm/types.ts";
 
 function identitiesIn(sent: AnthropicRequestRecord): string[] {
   const wire = JSON.stringify(sent.body.messages);
   return [...wire.matchAll(/The exact model ID is ([a-z0-9-]+)\./g)].map(match => required(match[1]));
 }
 
-test("a mid-conversation model switch leaves one model identity in context", async () => {
+function blocksOf(message: unknown): unknown {
+  const { role, content } = message as { role: string; content: unknown };
+  const blocks = typeof content === "string" ? [{ type: "text", text: content }] : content;
+  return JSON.stringify({ role, blocks }, (key, value: unknown) => key === "cache_control" ? undefined : value);
+}
+
+function keepsCachedPrefix(earlier: AnthropicRequestRecord, later: AnthropicRequestRecord): boolean {
+  const before = earlier.body.messages.map(blocksOf);
+  const after = later.body.messages.map(blocksOf);
+  return before.every((message, index) => message === after[index]);
+}
+
+test("each turn carries one identity for its model, and same-model turns keep the cached prefix", async () => {
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-injected-"));
   const mock = await startMockAnthropic({ fallback: () => ({ text: "Here is the answer." }) });
   const provider = new ClaudeAgentProvider({
@@ -41,22 +54,23 @@ test("a mid-conversation model switch leaves one model identity in context", asy
     context: { character: "qifei", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
     max_tokens: 1024, replay_prior_thinking: "all" as const,
   };
+  const say = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }] });
+  const reply = { role: "assistant" as const, content: [{ type: "text" as const, text: "Here is the answer." }] };
+  const turn = (model: string, messages: WireMessage[]) => runGeneration({ ...base, model, messages },
+    { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(20_000), sink: () => {} });
   try {
-    await runGeneration({ ...base, model: "claude-opus-5",
-      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-    }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(20_000), sink: () => {} });
+    const models = ["claude-opus-5", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-8", "claude-opus-5"];
+    const history: WireMessage[] = [];
+    for (const [index, model] of models.entries()) {
+      history.push(say(`turn ${String(index + 1)}`));
+      await turn(model, [...history]);
+      history.push(reply);
+    }
 
-    await runGeneration({ ...base, model: "claude-opus-4-8",
-      messages: [
-        { role: "user", content: [{ type: "text", text: "hi" }] },
-        { role: "assistant", content: [{ type: "text", text: "Here is the answer." }] },
-        { role: "user", content: [{ type: "text", text: "how are you?" }] },
-      ],
-    }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(20_000), sink: () => {} });
-
-    expect(mock.requests).toHaveLength(2);
-    expect(identitiesIn(required(mock.requests[0]))).toEqual(["claude-opus-5"]);
-    expect(identitiesIn(required(mock.requests[1]))).toEqual(["claude-opus-4-8"]);
+    expect(mock.requests).toHaveLength(models.length);
+    expect(mock.requests.map(identitiesIn)).toEqual(models.map(model => [model]));
+    expect(keepsCachedPrefix(required(mock.requests[0]), required(mock.requests[1]))).toBe(true);
+    expect(keepsCachedPrefix(required(mock.requests[2]), required(mock.requests[3]))).toBe(true);
     expect(JSON.stringify(required(mock.requests[1]).body.system)).toContain("YOU ARE QIFEI");
   } finally {
     await mock.stop();
@@ -64,25 +78,33 @@ test("a mid-conversation model switch leaves one model identity in context", asy
   }
 }, 60_000);
 
-test("withoutStaleModelIdentity drops identity entries and relinks the chain", () => {
+const identity = (uuid: string, parentUuid: string, modelId: string) =>
+  ({ type: "attachment", uuid, parentUuid, attachment: { type: "model", identity: { modelId, marketingName: null, knowledgeCutoff: null } } });
+
+test("withoutStaleModelIdentity keeps only the latest identity when it names the current model", () => {
   const entries = [
     { type: "user", uuid: "u1", parentUuid: null },
     { type: "attachment", uuid: "a1", parentUuid: "u1", attachment: { type: "environment" } },
-    { type: "attachment", uuid: "a2", parentUuid: "a1", attachment: { type: "model" } },
+    identity("a2", "a1", "claude-opus-5"),
     { type: "assistant", uuid: "s1", parentUuid: "a2" },
-    { type: "attachment", uuid: "a3", parentUuid: "s1", attachment: { type: "model" } },
+    identity("a3", "s1", "claude-opus-4-8"),
     { type: "user", uuid: "u2", parentUuid: "a3" },
   ] as unknown as Parameters<typeof withoutStaleModelIdentity>[0];
 
-  const kept = withoutStaleModelIdentity(entries) as unknown as { uuid: string; parentUuid: string | null }[];
-  expect(kept.map(entry => entry.uuid)).toEqual(["u1", "a1", "s1", "u2"]);
-  expect(kept.map(entry => entry.parentUuid)).toEqual([null, "u1", "a1", "s1"]);
+  const current = withoutStaleModelIdentity(entries, "claude-opus-4-8") as unknown as { uuid: string; parentUuid: string | null }[];
+  expect(current.map(entry => entry.uuid)).toEqual(["u1", "a1", "s1", "a3", "u2"]);
+  expect(current.map(entry => entry.parentUuid)).toEqual([null, "u1", "a1", "s1", "a3"]);
+
+  const switched = withoutStaleModelIdentity(entries, "claude-opus-5") as unknown as { uuid: string; parentUuid: string | null }[];
+  expect(switched.map(entry => entry.uuid)).toEqual(["u1", "a1", "s1", "u2"]);
+  expect(switched.map(entry => entry.parentUuid)).toEqual([null, "u1", "a1", "s1"]);
 });
 
-test("withoutStaleModelIdentity leaves an untouched transcript alone", () => {
+test("withoutStaleModelIdentity leaves a transcript with only the current identity alone", () => {
   const entries = [
     { type: "user", uuid: "u1", parentUuid: null },
-    { type: "assistant", uuid: "s1", parentUuid: "u1" },
+    identity("a1", "u1", "claude-opus-5"),
+    { type: "assistant", uuid: "s1", parentUuid: "a1" },
   ] as unknown as Parameters<typeof withoutStaleModelIdentity>[0];
-  expect(withoutStaleModelIdentity(entries)).toBe(entries);
+  expect(withoutStaleModelIdentity(entries, "claude-opus-5")).toBe(entries);
 });
