@@ -9,6 +9,28 @@ import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
 import { prepareImageBlocks } from "../prepare_images.ts";
 
+function isModelIdentity(entry: SessionStoreEntry): boolean {
+  const record = entry as { type?: unknown; attachment?: { type?: unknown } };
+  return record.type === "attachment" && record.attachment?.type === "model";
+}
+
+export function withoutStaleModelIdentity(entries: SessionStoreEntry[]): SessionStoreEntry[] {
+  if (!entries.some(isModelIdentity)) return entries;
+  const parents = new Map<string, string | null>();
+  const kept: SessionStoreEntry[] = [];
+  for (const entry of entries) {
+    const record = entry as { uuid?: string; parentUuid?: string | null };
+    const parent = record.parentUuid ?? null;
+    const resolved = parent === null ? null : parents.get(parent) ?? parent;
+    if (isModelIdentity(entry)) {
+      if (record.uuid !== undefined) parents.set(record.uuid, resolved);
+      continue;
+    }
+    kept.push(resolved === parent ? entry : { ...entry, parentUuid: resolved });
+  }
+  return kept;
+}
+
 export function nativeHistoryStore(book: string, conversation: string): SessionStore {
   const data = dirname(book);
   const character = sessionKeyOwner(conversation) ?? "";
@@ -20,7 +42,7 @@ export function nativeHistoryStore(book: string, conversation: string): SessionS
       const path = pathOf(key);
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
-      return JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
+      return withoutStaleModelIdentity(JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[]);
     })())),
     append: (key, added) => {
       withStorage(data, (db) => db.transaction(() => {
