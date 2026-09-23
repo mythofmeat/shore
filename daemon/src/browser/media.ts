@@ -4,7 +4,7 @@ import type { SendImage } from "../protocol/SendImage.ts";
 import type { LiveTurn } from "./workspace.ts";
 
 export const MAX_LIVE_IMAGES = 128;
-export interface LiveImage extends SendImage { toolId?: string; previewData?: string | null | undefined; messageId?: string }
+export interface LiveImage extends SendImage { manual?: boolean; toolId?: string; previewData?: string | null | undefined; messageId?: string }
 export interface GalleryImage { id: string; caption: string; data: string | null | undefined; mime: string | undefined }
 export type OpenImage = (source: string, caption?: string) => void;
 
@@ -36,7 +36,7 @@ export function reconcileImages(images: readonly LiveImage[], messages: readonly
   return images.flatMap((image) => {
     if (storedPaths.has(image.path)) return [];
     if (image.messageId !== undefined) return messages.some((message) => message.msg_id === image.messageId && ownsToolImage(message.content_blocks, image)) ? [image] : [];
-    if (image.toolId === undefined) return [image];
+    if (image.manual === true || image.toolId === undefined) return [image];
     const owner = messages.find((message) => ownsToolImage(message.content_blocks, image) && !previous.some((old) => old.msg_id === message.msg_id && ownsToolImage(old.content_blocks, image)));
     return [owner === undefined ? image : { ...image, messageId: owner.msg_id }];
   });

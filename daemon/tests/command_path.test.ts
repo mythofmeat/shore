@@ -515,7 +515,9 @@ test("progress frames from a command reach the session that asked, stamped with 
     task_id: null,
   });
 
-  expect(sent).toHaveLength(2);
+  emit({ type: "send_image", path: "image.png", data: "bytes", caption: "Image", subagent: "worker" });
+  expect(sent).toHaveLength(3);
+  expect(sent[2]?.[1]).toMatchObject({ type: "send_image", path: "image.png", subagent: "worker", rid: "r-compact" });
   expect(sent[0]?.[0]).toBe(7);
   expect(sent[0]?.[1]).toMatchObject({ phase: "compacting round 1", rid: "r-compact" });
   expect(sent[1]?.[1]).toMatchObject({

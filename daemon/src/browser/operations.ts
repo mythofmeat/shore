@@ -1,4 +1,5 @@
 import type { OperationInput, OperationName, OperationResult } from "../operations/types.ts";
+import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { BrowserConnection } from "./connection.ts";
 import { isOperationName, validOperationInput, validOperationResult } from "./operation_validators.generated.js";
@@ -14,6 +15,8 @@ export class OperationClient {
   #output: { name: OperationName; data: OperationResult<OperationName>; context: string } | undefined;
   #listeners = new Set<() => void>();
   #epoch = 0;
+  #requests = new Map<string, OperationName>();
+  pendingOperation(rid: string | null | undefined): OperationName | undefined { return rid === undefined || rid === null ? undefined : this.#requests.get(rid); }
   constructor(readonly connection: BrowserConnection, readonly context: () => string = () => "") {}
   getOutput = () => this.#output;
   subscribeOutput = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
@@ -24,7 +27,7 @@ export class OperationClient {
     return this.run(name, input);
   }
 
-  async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { remember?: boolean } = {}): Promise<OperationResult<N>> {
+  async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { remember?: boolean; observe?: (message: ServerMessage) => void } = {}): Promise<OperationResult<N>> {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
     let rid: string | undefined;
     let result: unknown;
@@ -33,7 +36,9 @@ export class OperationClient {
     const epoch = this.#epoch;
     const context = this.context();
     const unsubscribe = this.connection.subscribe((update) => {
-      if (update.kind !== "frame" || update.message.type !== "command_output" || update.message.rid !== rid) return;
+      if (update.kind !== "frame" || !("rid" in update.message) || update.message.rid !== rid) return;
+      options.observe?.(update.message);
+      if (update.message.type !== "command_output") return;
       if (received || update.message.name !== name) invalid = true;
       received = true;
       result = update.message.data;
@@ -41,6 +46,7 @@ export class OperationClient {
     try {
       const ticket = this.connection.submit({ type: "command", name, args: input });
       rid = ticket.rid;
+      this.#requests.set(rid, name);
       const completion = await ticket.finished;
       if (completion.outcome !== "completed") throw new OperationFailure(name, completion);
       if (invalid || !received || !validOperationResult(name, result)) throw new Error(`Invalid result for ${name}`);
@@ -49,6 +55,6 @@ export class OperationClient {
         for (const listener of this.#listeners) listener();
       }
       return result;
-    } finally { unsubscribe(); }
+    } finally { if (rid !== undefined) this.#requests.delete(rid); unsubscribe(); }
   }
 }

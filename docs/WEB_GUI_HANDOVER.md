@@ -4,6 +4,55 @@ Updated 2026-09-23. Work continues toward the full issue. Conversation image gal
 configurable keyboard shortcuts, display preferences, core conversation controls and request recovery.
 Full terminal workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
 
+## Current shared manual-tool work — 2026-09-23
+
+The local-workflow batch is committed as `515aa230`; its full verification is recorded below.
+The next required refresh produced no manifest/lockfile changes: Bun 1.4.2, Rust/Cargo 1.98.1,
+rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0, sccache 0.18.0 and actionlint 1.7.12 remain
+current. Rustup needed an approved metadata write outside the worktree; Bun's read-only temporary
+cache was resolved with `BUN_TMPDIR=/tmp` and `BUN_INSTALL_CACHE_DIR=/tmp/shore-214-bun-cache`.
+Cargo-edit and cargo-sweep were reinstalled under `/tmp/shore-214-tools`. The combined installation
+reported a pre-existing sccache binary; its installed version matches the official latest release,
+so no overwrite was necessary. The existing generic-array pin remains the upstream constraint.
+The fresh manual-tool baseline passed 45 unit tests, the existing independently reset TCP/web
+conformance journey, and the browser tool-workbench journey. The actual browser reproduction then
+failed because a successful manual read of an image had no image control in its result.
+
+The verified implementation forwards existing manual tool frames through the shared session
+emitter and stamps image frames with the originating request ID. Rust-canonical `ToolRunReport` now
+has optional image references; original live bytes take precedence over prepared model copies.
+Bindings and operation/web schemas were regenerated. The browser renders those images in the
+workbench, generic action results, reopened output and retained request history, using the existing
+safe image gallery and downloads. Per-run progress is correlated by `OperationClient`, with up to
+64 recent activity entries and 16,000 characters per entry. Manual root tool frames do not create a
+phantom active chat response; completed manual requests clear their live subagent stream entries.
+Manual media is marked separately so later chat history does not adopt it through reused tool IDs.
+
+The new browser journey passes exact-byte downloads from the workbench, reopened output and request
+history after reload, as well as a live tool-start update before completion. The existing workbench
+journey also passed. Focused unit/transport checks passed 97 tests. Both independently reset TCP/web manual-tool conformance tests pass, with fixture roots normalized
+and actual request IDs, tool IDs and image bytes checked. The new media-ownership test also passes. The shared SDK's installed `Client.callTool` result path and
+matching [MCP tools schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2025-11-25/schema.ts)
+were inspected; this fixes Shore's frame capture, without replacing the SDK's existing media parsing.
+
+Conformance, ownership/lifecycle tests, targeted mutation probes and all required verification passed.
+Review retained-image/result limits honestly: request history retains
+at most 64 KiB per result, so a larger result is explicitly marked omitted; original images are not
+promised to persist without limit. The manual runner now retains only tool/image frames needed for its result, while forwarding all
+progress; it no longer keeps stream chunks in that private list. The broader aggregate
+media/stream/activity memory bounds remain part of the pending audit.
+All 14 targeted manual-tool mutation cases were killed. The cross-tab sign-out browser audit
+reproduced an old shortcut-result dialog reappearing after a new sign-in. Private dialog state now
+clears on sign-out, an epoch prevents late shortcut results reopening it, and workspace errors clear.
+That browser journey and both manual-tool journeys passed together. All three required Rust checks
+passed: 1,493 tests, 15 explicitly ignored, formatting clean, and Clippy completed with existing warnings.
+All eight daemon checks passed: 7,928 tests across 286 files and 104,861 assertions, 71 current mutation
+passes, three unchanged independent capture groups, and the compiled build. Generation/assets and
+inventory checks passed. All 49 browser journeys passed together in 3.2 minutes. The daemon Docker
+image also built successfully; container runtime and actual stale-tab UI checks follow in the acceptance
+audit. No PR has been published, and the wider field/event/resource audit remains open.
+Logs for this batch begin with `manual-` under `out/issue-214/resume-2026-09-23/`.
+
 ## Local editing, output and navigation checkpoint — 2026-09-23
 
 This checkpoint follows `6a1380d5`. Follow [the acceptance checklist](WEB_GUI_ACCEPTANCE.md)

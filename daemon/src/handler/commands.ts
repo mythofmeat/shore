@@ -259,6 +259,7 @@ function frameWithRid(frame: ServerMessage, rid: string | undefined): ServerMess
     case "phase":
     case "tool_call":
     case "tool_result":
+    case "send_image":
       return { ...frame, rid };
     default:
       return frame;

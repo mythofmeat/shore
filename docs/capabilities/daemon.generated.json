@@ -3403,7 +3403,7 @@
     "ToolKind": "\"builtin\" | \"subagent\" | \"mcp\"",
     "ToolResult": "{ rid?: string | null, tool_id: string, tool_name: string, output: string, images?: Array<ImageRef>, is_error: boolean, subagent?: string | null, task_id?: string | null, }",
     "ToolResultContent": "string | Array<ContentBlock>",
-    "ToolRunReport": "{ tool: string, character: string, kind: ToolKind, enabled: boolean, input: { [key: string]: unknown }, ok: boolean, rejected: boolean, duration_ms: number, output: string, truncated: boolean, result_chars: number, raw: string | null, calls: Array<NestedToolCall>, }",
+    "ToolRunReport": "{ tool: string, character: string, kind: ToolKind, enabled: boolean, input: { [key: string]: unknown }, ok: boolean, rejected: boolean, duration_ms: number, output: string, truncated: boolean, result_chars: number, raw: string | null, calls: Array<NestedToolCall>, images?: Array<ImageRef>, }",
     "TranscriptArgs": "{ source?: TranscriptSource | null, count?: number | null, }",
     "TranscriptResult": "{ enabled: boolean, source: TranscriptSource, character?: string, entries: Array<TranscriptRow>, }",
     "TranscriptRow": "{ id: number, ts: string, source: string, character: string | null, call_type: string | null, iteration: number, model: string | null, provider: string | null, finish_reason: string | null, usage: DiagnosticUsage, entry: unknown, }",

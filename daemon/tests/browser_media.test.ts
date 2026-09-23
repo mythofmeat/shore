@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test, spyOn } from "bun:test";
 import { BrowserConnection, type ConnectionUpdate } from "../src/browser/connection.ts";
 import { Workspace, type LiveTurn } from "../src/browser/workspace.ts";
 import { conversationImages, imageFilename, MAX_LIVE_IMAGES, mediaSource } from "../src/browser/media.ts";
@@ -118,4 +118,29 @@ test("live image retention is bounded and conversation changes and sign-out clea
   image("private.png"); connection.emit({ kind: "status", status: "signed_out", detail: "" });
   expect(workspace.getSnapshot().media).toHaveLength(0);
   expect(workspace.getSnapshot().messages).toHaveLength(0);
+});
+
+
+test("manual tool activity stays outside chat and its images cannot be adopted by later tool messages", () => {
+  const { workspace, connection, history, image } = fixture();
+  history([]);
+  const pending = spyOn(workspace.actions, "pendingOperation").mockReturnValue("run_tool");
+  try {
+    image("manual.png", png, "manual");
+    connection.emit({ kind: "frame", message: { type: "tool_call", rid: "manual", tool_id: "shared", tool_name: "read", input: {} } });
+    connection.emit({ kind: "frame", message: { type: "tool_result", rid: "manual", tool_id: "shared", tool_name: "read", output: "done", is_error: false, images: [{ path: "manual.png", data: png + "bmVzdGVk" }] } });
+    expect(workspace.getSnapshot().streams).toHaveLength(0);
+    expect(workspace.getSnapshot().media[0]?.manual).toBe(true);
+    expect(workspace.getSnapshot().media[0]?.data).toBe(png);
+    connection.emit({ kind: "frame", message: { type: "stream_start", regen: false, rid: "manual", subagent: "worker", task_id: "work" } });
+    expect(workspace.getSnapshot().streams).toHaveLength(1);
+    connection.emit({ kind: "frame", message: { type: "request_finished", rid: "manual", outcome: "completed" } });
+    expect(workspace.getSnapshot().streams).toHaveLength(0);
+    history([{ ...message("later"), content_blocks: [{ type: "tool_result", tool_use_id: "shared", content: [block] }] }]);
+    expect(workspace.getSnapshot().media[0]?.messageId).toBeUndefined();
+    history([]);
+    expect(workspace.getSnapshot().media).toHaveLength(1);
+    history([], "other");
+    expect(workspace.getSnapshot().media).toHaveLength(0);
+  } finally { pending.mockRestore(); }
 });

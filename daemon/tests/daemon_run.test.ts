@@ -497,6 +497,46 @@ describe("coming up", () => {
     } finally { client.close(); daemon.stop(); await daemon.done; }
   });
 
+  test("manual tool progress and image results are correlated through both native and browser sessions", async () => {
+    const data = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==";
+    const observed: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], { anthropic: scriptedProvider("Fixture") }, false);
+      const config = daemon.runtime.registry.globalConfig();
+      await writeFile(join(characterWorkspaceDir(config.dirs.config, "ada", config.dirs.workspace), "manual.png"), Buffer.from(data, "base64"));
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Manual image browser did not connect"); }
+        const seen = tcp?.frames ?? frames;
+        seen.length = 0;
+        const command = { type: "command" as const, name: "run_tool", args: { tool: "read", input: { file_path: "manual.png" } } };
+        let rid = "manual-image";
+        if (tcp !== undefined) tcp.send({ ...command, rid });
+        else if (browser !== undefined) { const ticket = browser.client.submit(command); rid = ticket.rid; await ticket.finished; }
+        await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), "Manual image did not finish");
+        const activity = seen.filter((frame) => ["tool_call", "send_image", "tool_result"].includes(String(frame["type"])));
+        expect(activity.map((frame) => frame["type"])).toEqual(["tool_call", "send_image", "tool_result"]);
+        expect(activity.every((frame) => frame["rid"] === rid)).toBe(true);
+        expect(activity[0]?.["tool_id"]).toBe(activity[2]?.["tool_id"]);
+        expect(activity[1]?.["data"]).toBe(data);
+        const output = seen.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+        expect(validOperationResult("run_tool", output)).toBe(true);
+        if (!validOperationResult("run_tool", output) || "mode" in output) throw new Error("Missing tool report");
+        expect(output.images).toHaveLength(1);
+        expect(output.images?.[0]?.data).toBe(data);
+        expect(output.images?.[0]?.path).toBe(activity[1]?.["path"] as string);
+        observed.push([output.ok, output.images?.map((image) => [image.caption?.replaceAll(place.root, "<root>"), image.data]), activity.map((frame) => [frame["type"], frame["tool_name"], frame["is_error"]])]);
+        expect(seen.findIndex((frame) => frame["type"] === "tool_call")).toBeLessThan(seen.findIndex((frame) => frame["type"] === "request_finished"));
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(observed[0]).toEqual(observed[1]);
+  });
+
   test("manual tools agree across independent TCP and browser workspaces, schemas and nested results", async () => {
     const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown>; file: string | null }[] = [
       { args: { tool: "bash", describe: true }, check: { mode: "tool_definition", enabled: false }, file: null },
