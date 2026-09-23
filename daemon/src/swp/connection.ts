@@ -16,10 +16,10 @@ import {
   type ByteSink,
 } from "./framing";
 import {
-  eventMatchesSession,
   msgTypeName,
   resolveHandshakeCharacter,
   routeClientMessage,
+  sessionReceives,
 } from "./routing";
 import { sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
 
@@ -352,15 +352,7 @@ async function runMessageLoop(
           break;
         }
         consecutiveLags = 0;
-        if (
-          eventMatchesSession(
-            result.msg,
-            ctx.router.characterFor(session.sessionId),
-            ctx.router.has(session.sessionId),
-            ctx.router.receivesAllCharacters(session.sessionId),
-            ctx.router.threadFor(session.sessionId),
-          )
-        ) {
+        if (sessionReceives(ctx.router, session.sessionId, result.msg)) {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !session.capabilities.includes("history-deltas")
             ? historyMessage(await (ctx.handshake ?? DEFAULT_HANDSHAKE).history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
             : result.msg;

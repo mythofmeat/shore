@@ -359,7 +359,7 @@ describe("what a connection produces", () => {
         socket.once("connect", resolve);
         socket.once("error", reject);
       });
-      socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], selected_character: "ada" })}\n`);
+      socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
       const arrived = async (predicate: (frame: Record<string, unknown>) => boolean): Promise<void> => {
         while (!frames.some(predicate)) await Bun.sleep(5);
       };

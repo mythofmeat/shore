@@ -17,9 +17,9 @@ import {
   type Logger,
 } from "./connection";
 import {
-  eventMatchesSession,
   resolveHandshakeCharacter,
   routeClientMessage,
+  sessionReceives,
 } from "./routing";
 import {
   isControlRoutedMessage,
@@ -314,7 +314,7 @@ export class Server {
           }
           continue;
         }
-        if (this.#matchesSession(clientId, result.msg)) {
+        if (sessionReceives(this.#router, clientId, result.msg)) {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;
@@ -464,18 +464,8 @@ export class Server {
     this.#connections.add(work);
   }
 
-  #matchesSession(clientId: number, msg: ServerMessage): boolean {
-    return eventMatchesSession(
-      msg,
-      this.#router.characterFor(clientId),
-      this.#router.has(clientId),
-      this.#router.receivesAllCharacters(clientId),
-      this.#router.threadFor(clientId),
-    );
-  }
-
   #queuedFor(clientId: number): (msg: ServerMessage) => boolean {
-    return (msg) => !this.#router.has(clientId) || this.#matchesSession(clientId, msg);
+    return (msg) => !this.#router.has(clientId) || sessionReceives(this.#router, clientId, msg);
   }
 
   async #route(msg: RoutedMessage): Promise<void> {

@@ -1,7 +1,7 @@
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ServerMessage } from "../protocol/ServerMessage";
-import type { RequestKind, RequestMeta, RoutedMessage, SessionMeta } from "./session";
+import type { RequestKind, RequestMeta, RoutedMessage, SessionMeta, SessionRouter } from "./session";
 import { withSelectedCharacter } from "./session";
 
 export function msgTypeName(msg: ClientMessage): string {
@@ -84,6 +84,16 @@ export function eventMatchesSession(
   }
   if (msg.type === "new_message") return msg.character === selectedCharacter && threadMatches(msg.thread ?? "main", selectedThread);
   return true;
+}
+
+export function sessionReceives(router: SessionRouter, sessionId: number, msg: ServerMessage): boolean {
+  return eventMatchesSession(
+    msg,
+    router.characterFor(sessionId),
+    router.has(sessionId),
+    router.receivesAllCharacters(sessionId),
+    router.threadFor(sessionId),
+  );
 }
 
 function threadMatches(broadcast: string | null | undefined, selected: string | null): boolean {
