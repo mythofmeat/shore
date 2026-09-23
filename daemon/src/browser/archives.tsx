@@ -45,6 +45,7 @@ export function Archives({ operations, characters, character, ready, changed, cl
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<WebArchiveInfo>();
   const [upload, setUpload] = useState<AbortController>();
+  const [downloading, setDownloading] = useState<AbortController>();
   const [notice, setNotice] = useState("");
   const supported = operations.some((item) => item.name === "import_character" && item.available !== false);
   const refresh = async () => {
@@ -81,15 +82,22 @@ export function Archives({ operations, characters, character, ready, changed, cl
     } finally { setUpload(undefined); }
   };
   const download = async (archive: WebArchiveInfo) => {
-    const response = await transfer(`/${archive.id}/download`);
-    const blob = await response.blob();
-    if (blob.size !== archive.bytes) throw new Error("Archive download was incomplete; prepare another export");
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = url; link.download = archive.filename; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    setNotice(`Downloaded ${archive.filename}. The temporary export was removed.`);
+    const controller = new AbortController(); setDownloading(controller);
+    try {
+      const response = await transfer(`/${archive.id}/download`, undefined, undefined, controller.signal);
+      const blob = await response.blob();
+      if (blob.size !== archive.bytes) throw new Error("Archive download was incomplete; prepare another export");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = archive.filename; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setNotice(`Downloaded ${archive.filename}. The temporary export was removed.`);
+    } catch (failure) {
+      if (!controller.signal.aborted) throw failure;
+      setNotice("Download cancelled.");
+    } finally { setDownloading(undefined); }
   };
   return <Modal title="Character archives" close={close}><p>Move a character between Shore installations using a file on this computer. Archives include its configuration, workspace, history, media, usage and stored diagnostics.</p>
+    {downloading === undefined ? null : <p role="status">Downloading archive… <button onClick={() => downloading.abort()}>Cancel download</button></p>}
     {!ready ? <p role="status">Reconnect to check transfer outcomes. Imports are not automatically repeated.</p> : null}
     {!supported ? <p>Character archives are unavailable on this daemon.</p> : null}
     {listing === undefined ? null : <p className="muted">Upload/download limit: {mib(listing.max_upload_bytes)}. Processing limit: {mib(listing.max_expanded_bytes)}, including the database snapshot. Browser transfers support regular files and directories.</p>}

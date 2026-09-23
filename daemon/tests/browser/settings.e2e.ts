@@ -16,7 +16,10 @@ test("settings use live types, preserve collections and secrets, validate writes
     await dialog.getByRole("button").filter({ has: page.locator("span", { hasText: new RegExp(`^${key.replaceAll(".", "\\.")}$`) }) }).click();
     return dialog.getByRole("region", { name: `Setting ${key}`, exact: true });
   };
-  let setting = await choose("compaction.enabled");
+  let setting = await choose('chat."anthropic:fast-fixture".max_output_tokens');
+  await expect(setting.locator(".setting-values")).toContainText("4096");
+  await expect(setting.getByLabel("Value", { exact: true })).toHaveValue("4096");
+  setting = await choose("compaction.enabled");
   await expect(setting.getByRole("heading", { name: "Default", exact: true })).toBeVisible();
   await setting.getByLabel("Value", { exact: true }).uncheck();
   await setting.getByRole("button", { name: "Save setting" }).click();

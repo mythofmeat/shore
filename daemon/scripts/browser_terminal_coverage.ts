@@ -100,7 +100,7 @@ export const TERMINAL_ADAPTERS: Record<string, Adapter> = {
   tools: adapter("Tool content is a persistent display preference.", "app.tsx", 'display.option("tools")'),
   subagents: adapter("Live nested streams and stored subagent traces have browser views.", "activity.tsx", "stream.subagent"),
   character_info: adapter("Character information uses the canonical action form.", "app.tsx", "workspace.actions.runDiscovered(operation.name, values)"),
-  archives: adapter("Browser upload/download adapters complement explicitly labelled daemon paths.", "archives.tsx", 'transfer("", file, { "content-type": "application/octet-stream", "x-shore-filename": encodeURIComponent(file.name) }, controller.signal)', "transfer(`/${archive.id}/download`)", "URL.createObjectURL(blob)"),
+  archives: adapter("Browser upload/download adapters complement explicitly labelled daemon paths.", "archives.tsx", 'transfer("", file, { "content-type": "application/octet-stream", "x-shore-filename": encodeURIComponent(file.name) }, controller.signal)', "transfer(`/${archive.id}/download`, undefined, undefined, controller.signal)", "URL.createObjectURL(blob)"),
   confirmation: adapter("Reviewed forms replace terminal yes flags; destructive confirmation remains mandatory.", "app.tsx", "policy.confirmation", "setConfirming"),
   status_section: adapter("Status sections are selected from the actual status response.", "diagnostics.tsx", "status.sections.map", "Inspect:value=status"),
   subagent_tool: adapter("Discovered subagent tools expose their structured query fields.", "tool_workbench.tsx", "toolNames(access)", "toolControl(response.input_schema)"),

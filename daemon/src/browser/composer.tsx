@@ -35,18 +35,9 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   const [saved, setSaved] = useState<StoredDraft[]>();
   const [discarding, setDiscarding] = useState<StoredDraft>();
   const textRef = useRef<HTMLTextAreaElement>(null);
-  const sequence = useRef(0);
   const perform = (work: () => Promise<unknown>) => { void work().catch((error: unknown) => workspace.report(error)); };
   const remember = async (next: DraftContent): Promise<void> => {
-    const revision = ++sequence.current;
-    setStatus("Saving draft…");
-    try {
-      await store.save(next);
-      if (revision === sequence.current) { setStatus("Draft saved on this device"); setStorageFailed(false); }
-    } catch (error) {
-      if (revision === sequence.current) { setStatus("Draft not saved. Keep this page open."); setStorageFailed(true); }
-      workspace.report(error);
-    }
+    try { await store.save(next); } catch (error) { workspace.report(error); }
   };
   const change = (next: DraftContent, edit?: { snapshot: TextSnapshot; inputType?: string }, restoring = false): Promise<void> => {
     if (!restoring && next.text !== current.current.text) textHistory.change(edit?.snapshot ?? textSnapshot(next.text), edit?.inputType);
@@ -99,12 +90,19 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   useEffect(() => {
     let active = true;
     mounted.current = true;
+    const receive = (value: DraftContent) => {
+      if (value.text !== current.current.text) textHistory.change(textSnapshot(value.text));
+      current.current = value; setDraft(value);
+      setStorageFailed(store.unsaved && !store.saving);
+      setStatus(store.saving ? "Saving draft…" : store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device");
+    };
+    const unsubscribe = store.subscribe(receive);
     void store.load().then((value) => {
-      if (active) { textHistory.reset(value.text); current.current = value; setDraft(value); setLoaded(true); setStorageFailed(store.unsaved); setStatus(store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device"); }
+      if (active) { const latest = store.current ?? value; textHistory.reset(latest.text); receive(latest); setLoaded(true); }
     }).catch((error: unknown) => {
       if (active) { workspace.report(error); setLoaded(true); setStorageFailed(true); setStatus("Draft storage unavailable. Keep this page open."); }
     });
-    return () => { active = false; mounted.current = false; };
+    return () => { active = false; mounted.current = false; unsubscribe(); };
   }, [store, workspace, textHistory]);
   const send = async () => {
     if (!loaded || busy || attaching || current.current.pending || state.status !== "ready" || state.character === null || request?.available !== true) return;
@@ -116,7 +114,7 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
     const connection = workspace.connection;
     const generation = connection.generation;
     const retain = async (): Promise<void> => {
-      const retained = { ...current.current, pending: false };
+      const retained = { ...(store.current ?? current.current), pending: false };
       if (mounted.current) await change(retained);
       else await store.save(retained).catch(() => {});
     };
@@ -136,7 +134,7 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
       try { finished = connection.submit(message).finished; } catch (error) { await retain(); throw error; }
       const result = await finished;
       if (result.outcome === "completed") {
-        const value = current.current;
+        const value = store.current ?? current.current;
         await change({ ...(value.options === undefined ? {} : { options: remainingMessageOptions(value.options, submitted.options ?? {}) }), text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false });
       } else workspace.report(result.error?.message ?? `Request ${result.outcome}. Inspect the conversation before sending the retained draft again.`);
     } catch (error) { workspace.report(error); } finally { setBusy(false); }
