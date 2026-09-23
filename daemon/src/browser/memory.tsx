@@ -1,3 +1,4 @@
+import type { OpenImage } from "./media.ts";
 import { COMPACTION_SUBAGENT } from "../memory/compaction/labels.ts";
 import { useDisplay } from "./display_state.tsx";
 import { useEffect, useState } from "react";
@@ -30,7 +31,7 @@ type ContextAction = { name: "compact"; args: CompactArgs } | { name: "clear"; a
 
 export function Memory({ actions, operations, ready, character, thread, streams, close, changed, openImage }: {
   actions: OperationClient; operations: OperationDescriptor[]; ready: boolean; character: string; thread: string | null;
-  streams: LiveTurn[]; close: () => void; changed: () => Promise<void>; openImage: (source: string) => void;
+  streams: LiveTurn[]; close: () => void; changed: () => Promise<void>; openImage: OpenImage;
 }) {
   const display = useDisplay();
   const [listing, setListing] = useState<SegmentsListing>();

@@ -1,5 +1,7 @@
 import { accumulateMetadata } from "./metadata.ts";
 import type { StreamMetadata } from "../protocol/StreamMetadata.ts";
+import type { SendImage } from "../protocol/SendImage.ts";
+import { MAX_LIVE_IMAGES, reconcileImages, type LiveImage } from "./media.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
 import type { ContentBlock } from "../protocol/ContentBlock.ts";
 import type { History } from "../protocol/History.ts";
@@ -19,7 +21,7 @@ export interface LiveTurn { key: string; rid: string | null; subagent: string | 
 export interface Activity { id: number; type: string; data: unknown }
 export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
-  messages: Message[]; metadata: Record<string, StreamMetadata>; activeStart: number; streams: LiveTurn[]; activity: Activity[];
+  messages: Message[]; metadata: Record<string, StreamMetadata>; activeStart: number; streams: LiveTurn[]; media: LiveImage[]; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; hasEarlier: boolean; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
 }
@@ -41,8 +43,8 @@ export function mergeHistory(previous: readonly Message[], activeStart: number, 
   return [...previous.slice(0, index + 1), ...retainImages(history.messages, previous)];
 }
 
-function retainImages(messages: readonly Message[], previous: readonly Message[]): Message[] {
-  const images = new Map(previous.flatMap((message) => message.images).filter((image) => image.data !== undefined && image.data !== null).map((image) => [image.path, image.data]));
+function retainImages(messages: readonly Message[], previous: readonly Message[], live: readonly SendImage[] = []): Message[] {
+  const images = new Map([...previous.flatMap((message) => message.images), ...live].filter((image) => image.data !== undefined && image.data !== null).map((image) => [image.path, image.data]));
   return messages.map((message) => ({ ...message, images: message.images.map((image) => {
     const data = image.data ?? images.get(image.path);
     return data === undefined || data === null ? image : { ...image, data };
@@ -57,7 +59,7 @@ export class Workspace {
   #historyEpoch = 0;
   #before: number | "active" = "active";
   #loadingEarlier = false;
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], media: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
   constructor(readonly connection: BrowserConnection) {
     this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
@@ -104,6 +106,7 @@ export class Workspace {
     const key = JSON.stringify([message.rid ?? null, message.subagent ?? null, message.task_id ?? null]);
     const current = this.#state.streams.find((stream) => stream.key === key) ?? { key, rid: message.rid ?? null, subagent: message.subagent ?? null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null };
     const next = { ...current };
+    let media = this.#state.media;
     switch (message.type) {
       case "stream_start": next.final = false; break;
       case "stream_chunk":
@@ -118,16 +121,23 @@ export class Workspace {
         next.blocks = message.terminal_content_blocks ?? next.blocks;
         break;
       case "tool_call": next.blocks = [...next.blocks, { type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }]; break;
-      case "tool_result": next.blocks = [...next.blocks, { type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }]; break;
+      case "tool_result":
+        next.blocks = [...next.blocks, { type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }];
+        for (const image of message.images ?? []) {
+          const original = media.find((item) => item.path === image.path);
+          const sameRequest = (original?.rid ?? null) === (message.rid ?? null);
+          media = [...media.filter((item) => item.path !== image.path), { ...image, rid: message.rid ?? null, subagent: message.subagent ?? null, task_id: message.task_id ?? null, toolId: message.tool_id, previewData: image.data, ...(sameRequest && original?.toolId === message.tool_id && original.messageId !== undefined ? { messageId: original.messageId } : {}), data: sameRequest ? original?.data ?? image.data ?? null : image.data ?? null }].slice(-MAX_LIVE_IMAGES);
+        }
+        break;
     }
     const metadata = message.type === "stream_end" && message.is_final && next.subagent === null && next.msgId !== null && next.metadata !== null
       ? Object.fromEntries([...Object.entries(this.#state.metadata).filter(([id]) => id !== next.msgId), [next.msgId, next.metadata] as const].slice(-256)) : this.#state.metadata;
-    this.#patch({ metadata, streams: [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
+    this.#patch({ metadata, media, streams: [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], metadata: {}, config: {}, streams: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], metadata: {}, config: {}, streams: [], media: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -143,7 +153,7 @@ export class Workspace {
         const thread = message.selected_thread ?? null;
         const changed = character !== this.#state.character || thread !== this.#state.thread;
         if (message.delta === undefined || message.delta === null) { this.#historyEpoch += 1; this.#before = "active"; }
-        this.#patch({ messages, activeStart: message.delta === undefined || message.delta === null ? message.active_start ?? 0 : this.#state.activeStart,
+        this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), activeStart: message.delta === undefined || message.delta === null ? message.active_start ?? 0 : this.#state.activeStart,
           character, thread, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void this.refreshNavigation();
         return;
@@ -151,7 +161,7 @@ export class Workspace {
       case "new_message": {
         const exists = this.#state.messages.some((item) => item.msg_id === message.msg_id);
         const messages = exists ? this.#state.messages.map((item) => item.msg_id === message.msg_id ? message : item) : [...this.#state.messages, message];
-        this.#patch({ messages: retainImages(messages, this.#state.messages) }); return;
+        this.#patch({ messages: retainImages(messages, this.#state.messages, this.#state.media), media: reconcileImages(this.#state.media, messages, this.#state.messages) }); return;
       }
       case "stream_start": case "stream_chunk": case "stream_end": case "tool_call": case "tool_result":
         this.#stream(message);
@@ -161,7 +171,13 @@ export class Workspace {
       case "request_finished":
         if (message.outcome !== "completed") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
         this.#activity(message.type, message); return;
-      case "command_output": case "phase": case "send_image": case "cache_warning": case "provider_warning":
+      case "send_image": {
+        const previous = this.#state.media.find((image) => image.path === message.path);
+        const sameRequest = (previous?.rid ?? null) === (message.rid ?? null);
+        this.#patch({ media: [...this.#state.media.filter((image) => image.path !== message.path), { ...(sameRequest ? previous : {}), ...message, data: message.data ?? (sameRequest ? previous?.data : null) ?? null }].slice(-MAX_LIVE_IMAGES) });
+        this.#activity(message.type, message); return;
+      }
+      case "command_output": case "phase": case "cache_warning": case "provider_warning":
       case "provider_fallback_warning": case "usage_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "ping": break;

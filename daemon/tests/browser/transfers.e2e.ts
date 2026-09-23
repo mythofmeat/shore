@@ -89,7 +89,7 @@ test("browser-picked archives preserve history and media across download, collis
     await expect(page.getByRole("article", { name: "assistant message" })).toContainText("Remember this archived picture");
     const picture = page.getByRole("article", { name: "user message" }).getByRole("img");
     await expect(picture).toBeVisible(); await picture.click();
-    await expect(dialog.getByRole("img", { name: "Full-size conversation image" })).toBeVisible(); await close();
+    await expect(dialog.getByRole("img", { name: /archived\.png$/ })).toBeVisible(); await close();
     await page.getByLabel("Message", { exact: true }).fill("Continue after browser restore");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByRole("article", { name: "assistant message" }).filter({ hasText: "Continue after browser restore" })).toBeVisible();

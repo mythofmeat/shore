@@ -1,8 +1,49 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-23. Work continues toward the full issue. Configurable keyboard shortcuts now join
-browser display preferences, core conversation controls and ordinary-request recovery. Full terminal
-workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+Updated 2026-09-23. Work continues toward the full issue. Conversation image galleries now join
+configurable keyboard shortcuts, display preferences, core conversation controls and request recovery.
+Full terminal workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+
+## Conversation image gallery checkpoint — 2026-09-23
+
+This continuation began at `4977bfcf`. Required Bun/Rust/tooling and dependency updates ran again before
+investigation, with no version or manifest changes. The focused post-refresh baseline passed. The actual
+browser reproduction failed at the missing Next image control. Two later real-flow reproductions exposed
+duplicate tool image representations and an image remaining after deletion of its tool-result message.
+
+The Images toolbar action and configurable local shortcut open a conversation gallery. Inline image
+buttons open the corresponding entry, with captions, previous/next, Left/Right, Home/End, Escape,
+downloads, a position count and earlier-history loading. The selected entry survives history updates;
+standalone diagnostic/archive images remain viewable. The existing raster MIME/base64 restrictions
+remain in place, unavailable/undecodable data has a visible notice, and download names are sanitized.
+
+The workspace now consumes `send_image` and `tool_result.images` as visible media. Original image bytes received live
+remain available alongside any differently prepared model copy; byte-identical inline copies use the
+named caption, while distinct named attachments remain distinct. Live named media retains at most 128
+entries. Attachments merge into canonical history without losing bytes in byte-free updates. Tool images
+bind to newly arriving canonical tool-result content, and deletion or replacement removes their cached
+original. Reused tool IDs cannot attach a new image to old history. Conversation switches and sign-out
+clear the live media cache and close the gallery. Reload restores canonical message images; an original
+tool image that exists only in the live event cache is not persisted by this change. These changes are browser-only; the wire contract and
+shared tool implementation are unchanged.
+
+The real browser journeys cover two attachments, exact downloaded bytes, mouse/keyboard navigation,
+reload, earlier-history completion, a real read-tool image, inline/gallery reconciliation, deleting its
+tool loop, another image-producing request, character switching and sign-out. All 17 targeted media
+mutants were killed, and the mobile gallery was visually inspected. All eight required daemon checks
+passed: 7,916 tests across 283 files, 69 current mutation passes, three unchanged independent capture
+groups and the compiled build. Browser generation/assets and inventory checks passed. All 41 browser
+journeys passed together after updating two older full-size image assertions to check their actual
+captions. Lint and type checks passed again after those test updates. No Rust source or dependencies
+changed in this checkpoint; the preceding dependency baseline passed all three Rust checks. Logs use
+`gallery-` under `out/issue-214/resume-2026-09-23/`. GitHub currently has no PR for `feat/web-ui`.
+
+Next, finish expanded draft editing and undo after send/editor handoff, reopening action output, and the
+remaining focus/scroll/help equivalents. The manual Tool workbench still captures progress/media frames
+inside `run_tool` instead of forwarding them; its report does not include images. That is a separate
+confirmed gap. Broader media/event/concurrency and resource-limit auditing remains open, including
+ownership of a `send_image` frame when no corresponding tool-result image is produced. This checkpoint
+does not complete issue #214 or establish actual GitHub CI/required merge gates.
 
 ## Configurable keyboard checkpoint — 2026-09-23
 

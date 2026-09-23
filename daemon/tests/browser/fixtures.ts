@@ -2,11 +2,12 @@ import { test as base, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
 
 export { expect };
-export const test = base.extend<{ usageSeed: boolean; calmBudget: boolean }>({
+export const test = base.extend<{ usageSeed: boolean; calmBudget: boolean; galleryMedia: boolean }>({
   usageSeed: [false, { option: true }],
   calmBudget: [false, { option: true }],
-  baseURL: async ({ browserName, usageSeed, calmBudget }, use) => {
-    const child = spawn("bun", ["run", "tests/browser/server.ts"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SHORE_BROWSER_USAGE_SEED: usageSeed ? "true" : "false", SHORE_BROWSER_CALM_BUDGET: calmBudget ? "true" : "false" } });
+  galleryMedia: [false, { option: true }],
+  baseURL: async ({ browserName, usageSeed, calmBudget, galleryMedia }, use) => {
+    const child = spawn("bun", ["run", "tests/browser/server.ts"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SHORE_BROWSER_USAGE_SEED: usageSeed ? "true" : "false", SHORE_BROWSER_CALM_BUDGET: calmBudget ? "true" : "false", SHORE_BROWSER_MEDIA_FIXTURE: galleryMedia ? "true" : "false" } });
     let errors = "";
     child.stderr.on("data", (chunk: Buffer) => { errors = (errors + chunk.toString()).slice(-4000); });
     const stopped = new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });

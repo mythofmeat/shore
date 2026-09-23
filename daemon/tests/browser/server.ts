@@ -24,7 +24,7 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 await writeFile(configPath, `[chat]
 model = "anthropic:claude-opus-4-8"
 [tools]
-enabled = ["bash"]
+enabled = ${JSON.stringify(process.env["SHORE_BROWSER_MEDIA_FIXTURE"] === "true" ? ["bash", "read"] : ["bash"])}
 [tools.bash]
 max_result_chars = 1024
 [mcp.tool_fixture]
@@ -74,6 +74,17 @@ const provider: SidecarProvider = {
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
     yield { type: "start", model: request.model };
     yield { type: "thinking", text: "Considering the question" };
+    const galleryRead = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "gallery-read-image") === true;
+    if (question.includes("show gallery image fixture") || galleryRead) {
+      if (!galleryRead) {
+        yield { type: "tool_use", id: "gallery-read-image", name: "read", input: { file_path: "tool-image.png" } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      } else {
+        yield { type: "text", text: "Tool image ready" };
+        await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+      }
+      return;
+    }
     if (question.includes("run worker display fixture")) {
       yield { type: "tool_use", id: "display-worker", name: "ask_worker", input: { query: "Inspect the tool fixture" } };
       yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };

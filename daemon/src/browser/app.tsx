@@ -1,3 +1,5 @@
+import { Gallery } from "./gallery.tsx";
+import { conversationImages, type OpenImage } from "./media.ts";
 import { KeyboardControls, useBindings } from "./keyboard_controls.tsx";
 import { bindingId, keyFromEvent, matchingBinding, validateBinding, validateSavedConfig, type Binding, type LocalShortcut } from "./keyboard.ts";
 import type { ViewKey } from "./preferences.ts";
@@ -9,7 +11,7 @@ import { DisplayProvider, useDisplay } from "./display_state.tsx";
 import { BudgetReadout, useBudgets } from "./budget_readout.tsx";
 import { RequestFields } from "./request_fields.tsx";
 import { conversationRequest } from "./request_forms.ts";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Composer, type ComposerHandle } from "./composer.tsx";
 import type { Message } from "../protocol/Message.ts";
@@ -107,12 +109,12 @@ function Action({ operation, state, close, preset = {}, review = false }: { revi
   </Modal>;
 }
 
-function MessageCard({ message, metadata, reasoning, tools, openImage, action }: { message: Message; metadata: StreamMetadata | undefined; reasoning: boolean; tools: boolean; openImage: (source: string) => void; action: (name: string, preset?: Record<string, unknown>) => void }) {
+function MessageCard({ message, metadata, reasoning, tools, openImage, action }: { message: Message; metadata: StreamMetadata | undefined; reasoning: boolean; tools: boolean; openImage: OpenImage; action: (name: string, preset?: Record<string, unknown>) => void }) {
   const display = useDisplay();
   return <article className={`message ${message.role}`} aria-label={`${message.role} message`}>
     <div className="message-heading"><strong>{message.role}</strong>{display.option("timestamps") === "on" ? <time dateTime={message.timestamp}>{message.timestamp ? new Date(message.timestamp).toLocaleString() : ""}</time> : null}</div>
     {message.content_blocks.length === 0 ? <div className="message-text">{message.content}</div> : <Blocks blocks={message.content_blocks} reasoning={reasoning} tools={tools} openImage={openImage} />}
-    {message.images.map((image, index) => <ImageView key={index} data={image.data ?? null} caption={image.caption ?? image.path.split("/").at(-1) ?? "Attached image"} open={openImage} />)}
+    {message.images.map((image, index) => <ImageView key={index} data={image.data ?? null} caption={image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Attached image"} open={openImage} />)}
     {display.option("metadata") === "on" ? <p className="message-metadata" aria-label="Message metadata">{[metadata === undefined ? message.provider_key : "", metadata === undefined ? message.model : metadataLabel(metadata), message.alt_count === undefined || message.alt_count === null ? "" : `Response ${String((message.alt_index ?? 0) + 1)} of ${String(message.alt_count)}`].filter(Boolean).join(" · ") || `Message ${message.msg_id}`}</p> : null}
     <div className="message-actions"><button onClick={() => perform(() => navigator.clipboard.writeText(message.content))}>Copy</button><button onClick={() => action("edit", { ref: message.msg_id, content: message.content })}>Edit</button><button onClick={() => action("delete", { refs: message.msg_id })}>Delete</button>{message.role === "assistant" ? <><button onClick={() => action("list_alternatives", { ref: message.msg_id })}>Alternatives</button><button onClick={() => action("alt", { ref: message.msg_id })}>Choose response</button></> : null}<Inspect label="Message details" value={message} /></div>
   </article>;
@@ -125,7 +127,12 @@ function App() {
   const [palette, setPalette] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedAction, setSelectedAction] = useState<{ name: string; preset: Record<string, unknown>; review?: boolean }>();
-  const [image, setImage] = useState<string>();
+  const [image, setImage] = useState<{ source: string; caption: string } | null>();
+  const imageOpen = image !== undefined;
+  const galleryImages = useMemo(() => imageOpen ? conversationImages(state.messages, state.streams, state.media) : [], [imageOpen, state.messages, state.streams, state.media]);
+  const openImage: OpenImage = (source, caption = "Conversation image") => setImage({ source, caption });
+  const privateView = state.status !== "signed_out" && state.status !== "stopped";
+  useEffect(() => { setImage(undefined); }, [state.character, state.thread, privateView]);
   const [activity, setActivity] = useState(false);
   const [providers, setProviders] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -174,7 +181,7 @@ function App() {
   useEffect(() => { if (follow) tail.current?.scrollIntoView({ block: "end" }); }, [state.messages, state.streams, follow]);
   useEffect(() => { if (state.character !== null) history.replaceState(null, "", `/workspace/${encodeURIComponent(state.character)}/${encodeURIComponent(state.thread ?? "main")}`); }, [state.character, state.thread]);
   const localShortcuts: Record<LocalShortcut, () => void | Promise<void>> = {
-    palette: () => setPalette(true), keyboard: () => setKeyboardOpen(true), display: () => setDisplayOpen(true), activity: () => setActivity((open) => !open),
+    images: () => setImage(null), palette: () => setPalette(true), keyboard: () => setKeyboardOpen(true), display: () => setDisplayOpen(true), activity: () => setActivity((open) => !open),
     settings: () => setSettings(true), models: () => setModels(true), providers: () => setProviders(true), diagnostics: () => setDiagnostics(true),
     memory: () => setMemory(true), tools: () => setToolWorkbench(true), usage: () => setUsage(true), archives: () => setArchives(true),
     focus: () => composer.current?.focus(), send: () => composer.current?.send(), follow: () => setFollow((value) => !value),
@@ -248,28 +255,28 @@ function App() {
       {keyboardOpen || bindings.getSnapshot().error === "" ? null : <div role="alert" className="notice error">{bindings.getSnapshot().error}<button onClick={() => setKeyboardOpen(true)}>Review keyboard shortcuts</button></div>}
       <RequestRecovery workspace={workspace} ready={ready} />
       {warnings.map((item) => <div className="notice" key={item.id}><Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
-      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { display.change("thinking", event.target.checked ? "on" : "off"); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { display.change("tools", event.target.checked ? "on" : "off"); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
+      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { display.change("thinking", event.target.checked ? "on" : "off"); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { display.change("tools", event.target.checked ? "on" : "off"); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button onClick={() => setImage(null)}>Images</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
       <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
-        {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} metadata={state.metadata[message.msg_id]} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
-        {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><LiveResponse stream={stream} openImage={setImage} /></article>)}<div ref={tail} />
+        {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} metadata={state.metadata[message.msg_id]} reasoning={reasoning} tools={tools} openImage={openImage} action={action} /></div>)}
+        {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><LiveResponse stream={stream} openImage={openImage} /></article>)}{state.media.filter((item) => item.subagent === undefined || item.subagent === null).map((item) => <section className="message" aria-label="Live image" key={item.path}><ImageView data={item.data ?? null} caption={item.caption ?? item.path.split(/[\\/]/).at(-1) ?? "Live image"} open={openImage} /></section>)}<div ref={tail} />
       </div><BudgetReadout budgets={budgets.budgets} error={budgets.error} refresh={budgets.refresh} open={() => setUsage(true)} /><Composer ref={composer} key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
     </main>
-    {activity ? <ActivityPanel state={state} openImage={setImage} /> : null}
+    {activity ? <ActivityPanel state={state} openImage={openImage} /> : null}
     {keyboardOpen ? <KeyboardControls store={bindings} operations={state.operations} requests={state.requests} actions={workspace.actions} close={() => setKeyboardOpen(false)} /> : null}
     {shortcutResult === undefined ? null : <Modal title="Shortcut result" close={() => setShortcutResult(undefined)}><h3>{shortcutResult.label}</h3><Inspect value={shortcutResult.data} label="Complete shortcut result" /></Modal>}
     {template === undefined ? null : <Modal title={template.request.label} close={() => setTemplate(undefined)}><form onSubmit={(event) => { event.preventDefault(); const pending = template; setTemplate(undefined); perform(() => runConversation(pending.request.name, pending.values)); }}><RequestFields request={template.request} values={template.values} change={(values) => setTemplate({ ...template, values })} /><button type="submit">Run conversation action</button></form></Modal>}
     {displayOpen ? <DisplayControls budgets={budgets.budgets.map((budget) => budget.name)} close={() => setDisplayOpen(false)} /> : null}
-    {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
+    {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={openImage} /> : null}
     {archives ? <Archives operations={state.operations} characters={state.characters} character={state.character} ready={ready} changed={() => workspace.refreshNavigation()} close={() => setArchives(false)} advanced={(name, args) => { setArchives(false); action(name, args); }} /> : null}
     {usage ? <Usage key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} close={() => setUsage(false)} advanced={(args) => { setUsage(false); action("usage", args); }} /> : null}
     {toolWorkbench && state.character !== null ? <ToolWorkbench key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} close={() => setToolWorkbench(false)} advanced={(args) => { setToolWorkbench(false); action("run_tool", args); }} /> : null}
-    {diagnostics && state.character !== null ? <Diagnostics key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} characters={state.characters.map((item) => item.name)} changed={() => workspace.refreshNavigation()} advanced={(name) => { setDiagnostics(false); action(name); }} close={() => setDiagnostics(false)} openImage={setImage} /> : null}
+    {diagnostics && state.character !== null ? <Diagnostics key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} characters={state.characters.map((item) => item.name)} changed={() => workspace.refreshNavigation()} advanced={(name) => { setDiagnostics(false); action(name); }} close={() => setDiagnostics(false)} openImage={openImage} /> : null}
     {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}
     {providers ? <Providers actions={workspace.actions} ready={ready} close={() => setProviders(false)} /> : null}
     {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.requests.filter((item) => `${item.label} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={!ready || item.available === false} onClick={() => openRequest(item.name)}><strong>{item.label}</strong><small>Conversation</small></button>)}{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
     {operation === undefined || selectedAction === undefined ? null : <Action key={`${operation.name}.${JSON.stringify(selectedAction.preset)}`} operation={operation} state={state} preset={selectedAction.preset} review={selectedAction.review ?? false} close={() => setSelectedAction(undefined)} />}
-    {image === undefined ? null : <Modal title="Image" close={() => setImage(undefined)}><img className="full-image" alt="Full-size conversation image" src={image} /><a href={image} download="shore-image">Download image</a></Modal>}
+    {image === undefined ? null : <Gallery images={galleryImages} {...(image === null ? {} : { opened: image })} earlier={() => workspace.loadEarlier()} canLoadEarlier={ready && state.character !== null && state.hasEarlier} close={() => setImage(undefined)} />}
     {guidance === undefined || regenRequest === undefined ? null : <Modal title="Regenerate response" close={() => setGuidance(undefined)}><form onSubmit={(event) => { event.preventDefault(); const values = guidance; setGuidance(undefined); perform(async () => { const completion = await workspace.connection.submit(conversationRequest("regen", values)).finished; if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Regeneration ${completion.outcome}`); }); }}><RequestFields request={regenRequest} values={guidance} change={setGuidance} /><button className="primary">Regenerate</button></form></Modal>}
   </div>;
 }

@@ -1,3 +1,4 @@
+import type { OpenImage } from "./media.ts";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { OperationClient } from "./operations.ts";
@@ -30,7 +31,7 @@ function Result({ value, label = "Complete diagnostic result" }: { value: unknow
 
 export function Diagnostics({ actions, operations, ready, character, characters, changed, advanced, close, openImage }: {
   actions: OperationClient; operations: OperationDescriptor[]; ready: boolean; character: string; characters: string[];
-  changed: () => Promise<void>; advanced: (name: string) => void; close: () => void; openImage: (source: string) => void;
+  changed: () => Promise<void>; advanced: (name: string) => void; close: () => void; openImage: OpenImage;
 }) {
   const [view, setView] = useState<View>("status");
   const [status, setStatus] = useState<StatusReport>();
