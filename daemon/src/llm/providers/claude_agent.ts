@@ -42,6 +42,7 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
+import { claudeAgentCacheTtl } from "../cache_capability.ts";
 import { hostZone } from "../../ledger/zoned.ts";
 import {
   REASONING_OFF,
@@ -279,7 +280,7 @@ function discardMissingAnchor(
 
 export function conversationKey(req: SidecarRequest): string {
   const callType = req.context?.call_type;
-  const scope = callType === undefined || callType === "message" || callType === "tool_loop"
+  const scope = callType === undefined || callType === "message" || callType === "tool_loop" || callType === "keepalive"
     ? undefined : callType === "heartbeat_tool_loop" ? "heartbeat" : callType;
   return sessionKey(
     req.context?.character ?? "default",
@@ -325,6 +326,7 @@ function buildOptions(
 
   const system = systemToText(req.system);
   const effort = agentEffort(req.provider_options?.reasoning_effort);
+  const cacheTtl = claudeAgentCacheTtl(req.provider_options?.cache_ttl);
 
   return {
     model: req.model,
@@ -337,7 +339,7 @@ function buildOptions(
     skills: [],
     allowedTools: [],
     disallowedTools: NESTED_LOOP_TOOLS,
-    settings: { autoCompactEnabled: false },
+    settings: { autoCompactEnabled: false, ...(cacheTtl === undefined ? {} : { promptCacheTtl: cacheTtl }) },
     includePartialMessages: true,
     cwd: req.context?.workspace_dir ?? tmpdir(),
     env,
@@ -620,6 +622,50 @@ function agentPrompt(plan: NativeTurnPlan, instructions: ContentBlock[] = []): A
   return oneUserTurn([...plan.content, ...instructions]);
 }
 
+const KEEPALIVE_REFUSAL = "a keepalive ping runs no tools";
+
+export function keepalivePlan(record: SessionRecord | undefined, path: string, key: string, model: string): NativeTurnPlan {
+  if (record?.version !== SESSION_BOOK_VERSION || record.storedTranscript !== true) {
+    throw new Error("claude_agent: no stored session to keep warm; the next real turn creates one");
+  }
+  const kept = record.pendingAssistantUuids?.at(-1);
+  const store = nativeHistoryStore(path, key, record.model === model);
+  return {
+    resume: record.sessionId,
+    ...(kept === undefined ? {} : { resumeSessionAt: kept }),
+    fork: true,
+    keptEntries: [],
+    delivered: [],
+    content: [{ type: "text", text: "." }],
+    sessionStore: { ...store, append: () => Promise.resolve() },
+  };
+}
+
+function keepaliveSurface(req: SidecarRequest): AgentToolSurface | undefined {
+  const defs = req.tools ?? [];
+  if (defs.length === 0) return undefined;
+  return {
+    instance: shoreToolServer(defs, new ToolNames(defs), () => Promise.reject(new Error(KEEPALIVE_REFUSAL))),
+    canUseTool: () => Promise.resolve({ behavior: "deny", message: KEEPALIVE_REFUSAL }),
+    maxTurns: 1,
+    timeoutMs: MCP_TOOL_TIMEOUT_MS,
+  };
+}
+
+async function keepaliveUsage(run: AsyncIterable<SDKMessage>): Promise<Usage> {
+  for await (const msg of run) {
+    captureAgentEvent(msg);
+    if (msg.type === "stream_event" && !isNestedFrame(msg) && msg.event.type === "message_start") {
+      return usageFrom(msg.event.message.usage);
+    }
+    if (msg.type === "result") {
+      if (msg.subtype !== "success") throw new Error(`claude_agent: keepalive ping failed (${msg.subtype})`);
+      return usageFrom(msg.usage);
+    }
+  }
+  throw new Error("claude_agent: keepalive ping ended before the API reported usage");
+}
+
 export interface ClaudeAgentDeps {
   runQuery?: AgentQuery;
   bookPath?: () => string;
@@ -714,7 +760,36 @@ export class ClaudeAgentProvider implements SidecarProvider {
     );
   }
 
+  async #keepalive(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
+    const startedAt = Date.now();
+    const path = this.#bookPath();
+    const key = conversationKey(req);
+    const plan = keepalivePlan(readBook(path)[key], path, key, req.model);
+    const abort = new AbortController();
+    if (signal?.aborted) abort.abort();
+    signal?.addEventListener("abort", () => abort.abort(), { once: true });
+    try {
+      const run = this.#runQuery({
+        prompt: agentPrompt(plan),
+        options: buildOptions(req, plan, abort, keepaliveSurface(req)),
+      });
+      const usage = await keepaliveUsage(run);
+      const total = Date.now() - startedAt;
+      return {
+        content: "",
+        content_blocks: [],
+        finish_reason: "keepalive",
+        usage,
+        timing: { total_ms: total, time_to_first_token_ms: total },
+        model: req.model,
+      };
+    } finally {
+      abort.abort();
+    }
+  }
+
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
+    if (req.context?.call_type === "keepalive") return await this.#keepalive(req, signal);
     const blocks = new BlockAssembler();
     let content = "";
     let finish_reason = "end_turn";

@@ -1,10 +1,6 @@
 import { ConfigDuration, rustTrim, type ParseResult } from "./duration.ts";
 
-export const DEFAULT_KEEPALIVE_MAX_SECS = 12 * 60 * 60;
-
-export function resolveKeepaliveMaxSecs(model: number | undefined, configured?: number): number {
-  return model ?? configured ?? DEFAULT_KEEPALIVE_MAX_SECS;
-}
+export const DEFAULT_KEEPALIVE_PINGS = 1;
 
 export type CacheKeepaliveSetting =
   | { kind: "off" }
@@ -23,15 +19,21 @@ export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSett
   return { ok: { kind: "every", interval: interval.ok } };
 }
 
-export function parseCacheKeepaliveMax(raw: string): ParseResult<ConfigDuration> {
+export function parsePositiveDuration(name: string, raw: string): ParseResult<ConfigDuration> {
   const parsed = ConfigDuration.parse(rustTrim(raw));
   if ("err" in parsed) return parsed;
-  if (parsed.ok.asMillisExact() === 0n) {
-    return {
-      err: 'cache_keepalive_max must be > 0; use cache_keepalive = "off" to stop pinging entirely',
-    };
-  }
+  if (parsed.ok.asMillisExact() === 0n) return { err: `${name} must be > 0` };
   return { ok: parsed.ok };
+}
+
+export function parseKeepalivePings(raw: unknown): ParseResult<number> {
+  const parsed = typeof raw === "number"
+    ? raw
+    : typeof raw === "string" && raw.trim() !== "" ? Number(raw.trim()) : Number.NaN;
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 0xff_ff_ff_ff) {
+    return { err: `cache_keepalive_pings must be a whole number >= 1; got ${JSON.stringify(raw) ?? "null"}` };
+  }
+  return { ok: parsed };
 }
 
 export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | undefined {
@@ -40,4 +42,9 @@ export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | un
 
 export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
+}
+
+export function keepaliveWindowSecs(intervalMs: number | undefined, pings: number | undefined): number {
+  if (intervalMs === undefined) return 0;
+  return Math.trunc((intervalMs * (pings ?? DEFAULT_KEEPALIVE_PINGS)) / 1000);
 }

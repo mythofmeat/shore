@@ -1135,8 +1135,14 @@ pub(crate) enum ModelCommand {
     /// settings rather than carrying the old ones over.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
-    /// max_output_tokens, cache_ttl, cache_keepalive, sdk,
+    /// max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk,
     /// reasoning_replay and max_tool_rounds.
+    ///
+    /// cache_keepalive is the interval between cache keepalive pings, or off.
+    /// Any model can have one. After each reply, the model gets
+    /// cache_keepalive_pings pings (default 1) spaced by that interval; the
+    /// next message starts the count over. Only the model you are chatting
+    /// with is pinged.
     ///
     /// sdk takes anthropic, openai, openrouter, gemini, zai, deepseek or
     /// moonshot, which forces a wire shape on a discovered model whose
@@ -1384,7 +1390,7 @@ pub(crate) enum ConfigCommand {
     /// `shore config set tools.enabled bash,search`
     #[command(verbatim_doc_comment)]
     Set {
-        /// Dotted key, e.g. heartbeat.enabled, cache.keepalive_for
+        /// Dotted key, e.g. heartbeat.enabled, compaction.idle_after
         key: String,
 
         /// New value. Lists take a comma-separated string

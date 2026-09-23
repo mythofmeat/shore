@@ -61,6 +61,8 @@ function toPersisted(s: KeepaliveSnapshot | undefined): PersistedKeepalive | und
         intervalMs: s.interval,
         lastWarmAt: s.last_warm_at,
         lastActiveAt: s.last_active_at,
+        ...(s.pings_sent === undefined ? {} : { pingsSent: s.pings_sent }),
+        ...(s.max_pings === undefined ? {} : { maxPings: s.max_pings }),
       };
 }
 
@@ -70,6 +72,8 @@ function toSnapshot(p: PersistedKeepalive): KeepaliveSnapshot {
     interval: p.intervalMs,
     last_warm_at: p.lastWarmAt,
     last_active_at: p.lastActiveAt,
+    ...(p.pingsSent === undefined ? {} : { pings_sent: p.pingsSent }),
+    ...(p.maxPings === undefined ? {} : { max_pings: p.maxPings }),
   };
 }
 

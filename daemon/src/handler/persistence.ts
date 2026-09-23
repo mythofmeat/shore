@@ -54,7 +54,7 @@ export interface PersistParams {
   result: StreamResult;
   request: WireRequest;
   keepaliveIntervalMs: number | undefined;
-  keepaliveMaxSecs?: number | undefined;
+  keepalivePings?: number | undefined;
   toolIntermediateMessages: Message[];
   replaceGeneratedTail?: boolean;
   wallClockMs: number;
@@ -73,7 +73,7 @@ export async function persistAndNotify(
   ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
     intervalMs: result.usage.cache_read_tokens > 0 || result.usage.cache_creation_tokens > 0
       ? params.keepaliveIntervalMs : undefined,
-    maxSecs: params.keepaliveMaxSecs,
+    pings: params.keepalivePings,
   });
   const notifyContent = notifyContentFromResponseMessages(completedMessages);
 

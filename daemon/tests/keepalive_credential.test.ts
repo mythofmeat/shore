@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
+import { catalogFromSections, parseCacheKeepalive, toRequestModel } from "../src/config/models.ts";
+import { applySamplerOverlay } from "../src/config/preferences.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
@@ -21,7 +22,6 @@ const T0 = Date.UTC(2026, 7, 8, 12, 0, 0);
 
 const CHAT_TOML = `
 ["anthropic:claude-opus-4-6"]
-cache_keepalive = "55m"
 `;
 
 function configWithKey(): LoadedConfig {
@@ -92,8 +92,11 @@ function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined }
     undefined,
     undefined,
   );
-  const model = catalog.chat.get("anthropic:claude-opus-4-6");
-  if (model === undefined) throw new Error("the fixture catalog lost its model");
+  const listed = catalog.chat.get("anthropic:claude-opus-4-6");
+  if (listed === undefined) throw new Error("the fixture catalog lost its model");
+  const cadence = parseCacheKeepalive("55m");
+  if ("err" in cadence) throw new Error(cadence.err);
+  const model = applySamplerOverlay(listed, { cacheKeepalive: cadence.ok });
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "", {
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],

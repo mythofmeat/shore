@@ -635,12 +635,12 @@ mod tests {
     #[test]
     fn a_subtable_that_is_entirely_default_is_collapsed_away() {
         let data = json!({
-            "config": {"cache": {"keepalive_max": "20h"}, "notifications": {"enabled": true}},
+            "config": {"compaction": {"idle_after": "20h"}, "notifications": {"enabled": true}},
             "defaults": {"notifications": {"enabled": true}}
         });
         let out = render(&data, false);
         assert!(
-            out.contains("keepalive_max"),
+            out.contains("idle_after"),
             "a changed key must survive: {out}"
         );
         assert!(
@@ -676,7 +676,7 @@ mod tests {
 
     fn set_payload() -> Value {
         json!({
-            "set": "cache.keepalive_max",
+            "set": "compaction.idle_after",
             "value": "6h",
             "previous": "12h",
             "file": "/home/eve/.config/shore/config.toml",
@@ -772,7 +772,7 @@ mod tests {
 
     fn schema_payload() -> Value {
         json!({"schema": [
-            {"key": "cache.keepalive_max", "type": "duration", "settable": true, "restart_required": false},
+            {"key": "compaction.idle_after", "type": "duration", "settable": true, "restart_required": false},
             {"key": "daemon.addr", "type": "string", "settable": true, "restart_required": true},
             {"key": "defaults.stream", "type": "boolean", "settable": true, "restart_required": false},
             {"key": "memory.compaction", "type": "table", "settable": false, "restart_required": false}
@@ -782,7 +782,7 @@ mod tests {
     #[test]
     fn the_key_listing_shows_types_and_hides_what_cannot_be_set() {
         let out = render_schema(&schema_payload(), None);
-        assert!(out.contains("cache.keepalive_max"), "{out}");
+        assert!(out.contains("compaction.idle_after"), "{out}");
         assert!(out.contains("duration"), "the type is the point: {out}");
         assert!(
             !out.contains("memory.compaction"),
@@ -802,8 +802,8 @@ mod tests {
 
     #[test]
     fn the_key_listing_filters_by_substring() {
-        let out = render_schema(&schema_payload(), Some("cache"));
-        assert!(out.contains("cache.keepalive_max"), "{out}");
+        let out = render_schema(&schema_payload(), Some("idle"));
+        assert!(out.contains("compaction.idle_after"), "{out}");
         assert!(!out.contains("daemon.addr"), "{out}");
     }
 

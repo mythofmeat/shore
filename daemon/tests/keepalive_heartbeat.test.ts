@@ -47,7 +47,7 @@ function recordingProvider(seen: SidecarRequest[]): SidecarProvider {
   return { generate: async (request) => reply(request), stream: (request) => eventsForResponse(reply(request)) };
 }
 
-test("idle heartbeat tool rounds preserve the chat keepalive and its idle ceiling", async () => {
+test("idle heartbeat tool rounds preserve the chat keepalive and its ping count", async () => {
   setTestEnv(KEY_ENV, "fixture-key");
   setSystemTime(new Date(T0));
   const root = await mkdtemp(testTmp("shore-keepalive-heartbeat-"));
@@ -64,7 +64,7 @@ test("idle heartbeat tool rounds preserve the chat keepalive and its idle ceilin
     maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolIterations: 3,
     cacheTtl: "1h",
     cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(55 * 60) },
-    cacheKeepaliveMax: ConfigDuration.fromSecs(90 * 60),
+    cacheKeepalivePings: 1,
   });
   const config: LoadedConfig = {
     app, models, providers: ProviderRegistry.empty(), rawTable: undefined,

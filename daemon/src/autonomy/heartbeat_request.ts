@@ -139,7 +139,7 @@ export async function prepareHeartbeatRequest(
   if (deps.cache.get(character) === undefined) {
     deps.cache.set(character, source, {
       intervalMs: rebuilt.keepalive_interval_ms,
-      maxSecs: rebuilt.keepalive_max_secs,
+      pings: rebuilt.keepalive_pings,
     }, false);
   }
 

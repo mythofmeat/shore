@@ -21,7 +21,7 @@ import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
 import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_config";
 import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "./providers/nanogpt_config";
-import { keepalivePolicyError } from "./cache_capability.ts";
+import { DEFAULT_KEEPALIVE_PINGS } from "../config/keepalive.ts";
 
 const DEFAULT_MAX_TOKENS = 32768;
 
@@ -42,7 +42,7 @@ export interface ResolvedModel {
   budget_tokens?: number;
   cache_ttl?: string;
   cache_keepalive?: string;
-  cache_keepalive_max?: string;
+  cache_keepalive_pings?: number;
   openrouter_provider?: unknown;
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
@@ -54,7 +54,7 @@ export interface BuiltRequest {
   request: SidecarRequest;
   api_key_name?: string;
   keepalive_interval_ms?: number;
-  keepalive_max_secs?: number;
+  keepalive_pings?: number;
 }
 
 export class MissingApiKey extends Error {
@@ -164,22 +164,13 @@ export function buildRequestWithResolvedKey(
     replay_prior_thinking: inputs.replay,
   };
 
-  const requestedInterval = keepaliveIntervalMs(model.cache_keepalive);
-  const intervalMs = requestedInterval !== undefined &&
-    keepalivePolicyError(request.sdk, request.model, request.provider_options?.cache_ttl, requestedInterval) === undefined
-    ? requestedInterval : undefined;
-  const maxSecs = keepaliveMaxSecs(model.cache_keepalive_max);
+  const intervalMs = keepaliveIntervalMs(model.cache_keepalive);
   return {
     request,
-    ...(intervalMs !== undefined ? { keepalive_interval_ms: intervalMs } : {}),
-    ...(maxSecs !== undefined ? { keepalive_max_secs: maxSecs } : {}),
+    ...(intervalMs === undefined
+      ? {}
+      : { keepalive_interval_ms: intervalMs, keepalive_pings: model.cache_keepalive_pings ?? DEFAULT_KEEPALIVE_PINGS }),
   };
-}
-
-function keepaliveMaxSecs(setting: string | undefined): number | undefined {
-  if (setting === undefined) return undefined;
-  const ms = parseDurationMs(setting);
-  return ms === undefined ? undefined : Math.trunc(ms / 1000);
 }
 
 function keepaliveIntervalMs(setting: string | undefined): number | undefined {

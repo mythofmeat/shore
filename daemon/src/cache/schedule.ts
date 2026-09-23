@@ -7,6 +7,8 @@ export interface KeepaliveSnapshot {
   interval: number;
   last_warm_at: number;
   last_active_at: number;
+  pings_sent?: number;
+  max_pings?: number;
 }
 
 const SECOND_MS = 1000;
@@ -25,7 +27,9 @@ export class CacheKeepalive {
 
   #targetModel: string | undefined;
 
-  readonly #maxIdle: number;
+  #maxPings: number;
+
+  #pingsSent = 0;
 
   #nextPingAt: number | undefined;
 
@@ -37,8 +41,20 @@ export class CacheKeepalive {
 
   #failureCount = 0;
 
-  constructor(maxIdleMs: number) {
-    this.#maxIdle = maxIdleMs;
+  constructor(maxPings: number) {
+    this.#maxPings = maxPings;
+  }
+
+  get pingsSent(): number {
+    return this.#pingsSent;
+  }
+
+  get maxPings(): number {
+    return this.#maxPings;
+  }
+
+  setMaxPings(maxPings: number): void {
+    this.#maxPings = maxPings;
   }
 
   get nextPingAt(): number | undefined {
@@ -94,10 +110,12 @@ export class CacheKeepalive {
     this.#lastActiveAt = now;
     this.#lastWarmAt = now;
     this.#failureCount = 0;
+    this.#pingsSent = 0;
     this.#nextPingAt = this.#deadline(now);
   }
 
   onPingSucceeded(now: number): void {
+    this.#pingsSent += 1;
     this.#failureCount = 0;
     this.#lastWarmAt = now;
     this.#prefixWarmAt = now;
@@ -110,6 +128,7 @@ export class CacheKeepalive {
     this.#lastWarmAt = undefined;
     this.#prefixWarmAt = undefined;
     this.#failureCount = 0;
+    this.#pingsSent = 0;
   }
 
   snapshot(): KeepaliveSnapshot | undefined {
@@ -126,6 +145,8 @@ export class CacheKeepalive {
       interval: this.#interval,
       last_warm_at: this.#lastWarmAt,
       last_active_at: this.#lastActiveAt,
+      pings_sent: this.#pingsSent,
+      max_pings: this.#maxPings,
     };
   }
 
@@ -140,6 +161,8 @@ export class CacheKeepalive {
     this.#lastActiveAt = snapshot.last_active_at;
     this.#nextPingAt = snapshot.last_warm_at + snapshot.interval;
     this.#failureCount = 0;
+    this.#pingsSent = snapshot.pings_sent ?? 0;
+    if (snapshot.max_pings !== undefined) this.#maxPings = snapshot.max_pings;
     return true;
   }
 
@@ -152,11 +175,9 @@ export class CacheKeepalive {
       return "none";
     }
 
-    if (this.#lastActiveAt !== undefined) {
-      if (now - this.#lastActiveAt >= this.#maxIdle) {
-        this.#nextPingAt = undefined;
-        return "none";
-      }
+    if (this.#pingsSent >= this.#maxPings) {
+      this.#nextPingAt = undefined;
+      return "none";
     }
 
     return "ping";

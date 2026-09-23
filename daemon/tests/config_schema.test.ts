@@ -121,7 +121,7 @@ describe("configSchema", () => {
   test("the keys that need a daemon restart say so", () => {
     expect(byKey.get("daemon.listen_addr")?.restart_required).toBe(true);
     expect(byKey.get("daemon.cache_forensics")?.restart_required).toBe(true);
-    expect(byKey.get("cache.keepalive_for")?.restart_required).toBe(false);
+    expect(byKey.get("compaction.idle_after")?.restart_required).toBe(false);
     expect(byKey.get("heartbeat.enabled")?.restart_required).toBe(false);
   });
 
@@ -163,10 +163,10 @@ describe("schemaValueLiteral", () => {
   });
 
   test("durations are normalised to their largest whole unit", () => {
-    expect(schemaValueLiteral(at("cache.keepalive_for"), "90m")).toBe('"90m"');
-    expect(schemaValueLiteral(at("cache.keepalive_for"), "120m")).toBe('"2h"');
-    expect(schemaValueLiteral(at("cache.keepalive_for"), "3600s")).toBe('"1h"');
-    expect(() => schemaValueLiteral(at("cache.keepalive_for"), "soon")).toThrow(SchemaValueError);
+    expect(schemaValueLiteral(at("compaction.idle_after"), "90m")).toBe('"90m"');
+    expect(schemaValueLiteral(at("compaction.idle_after"), "120m")).toBe('"2h"');
+    expect(schemaValueLiteral(at("compaction.idle_after"), "3600s")).toBe('"1h"');
+    expect(() => schemaValueLiteral(at("compaction.idle_after"), "soon")).toThrow(SchemaValueError);
   });
 
   test("integers reject overflow and junk", () => {
@@ -313,8 +313,8 @@ describe("config set on disk", () => {
     const ctx = await world("[heartbeat]\nenabled = true\n", [
       ["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"],
     ]);
-    const result = config(ctx, { key: "cache.keepalive_for", value: "6h" }) as { file: string };
+    const result = config(ctx, { key: "compaction.idle_after", value: "6h" }) as { file: string };
     expect(result.file).toBe(ctx.configPath);
-    expect(await readFile(ctx.configPath, "utf8")).toContain('keepalive_for = "6h"');
+    expect(await readFile(ctx.configPath, "utf8")).toContain('idle_after = "6h"');
   });
 });

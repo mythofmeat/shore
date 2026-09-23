@@ -27,7 +27,7 @@ interface Step {
 
 interface Case {
   name: string;
-  max_idle_ms: number;
+  max_pings: number;
   steps: Step[];
 }
 
@@ -46,7 +46,7 @@ test("each boundary case decides what it says it should", () => {
   expect(cases.length).toBeGreaterThan(0);
 
   for (const c of cases) {
-    const ka = new CacheKeepalive(c.max_idle_ms);
+    const ka = new CacheKeepalive(c.max_pings);
     let restored: CacheKeepalive | undefined;
 
     c.steps.forEach((step, i) => {
@@ -83,7 +83,7 @@ test("each boundary case decides what it says it should", () => {
           break;
         }
         case "restore": {
-          restored = new CacheKeepalive(c.max_idle_ms);
+          restored = new CacheKeepalive(c.max_pings);
           const armed = restored.restore(
             toSnapshot(required(step.snapshot)),
             required(step.at_ms),
@@ -104,11 +104,11 @@ test("each boundary case decides what it says it should", () => {
 });
 
 const HOUR = 3_600_000;
-const MAX_IDLE = 12 * HOUR;
+const MAX_PINGS = 12;
 const INTERVAL = 55 * 60_000;
 
 function armedKeepalive(now = 0): CacheKeepalive {
-  const ka = new CacheKeepalive(MAX_IDLE);
+  const ka = new CacheKeepalive(MAX_PINGS);
   ka.setInterval(INTERVAL, "opus", now);
   ka.onCacheWarmed("opus", now);
   return ka;
@@ -134,16 +134,30 @@ describe("an armed keepalive", () => {
     expect(ka.tick(INTERVAL * 3)).toBe("ping");
   });
 
-  test("stops entirely once the conversation has been idle past the ceiling", () => {
+  test("stops entirely once it has sent every ping it was allowed", () => {
     const ka = armedKeepalive(0);
-    expect(ka.tick(MAX_IDLE)).toBe("none");
-    expect(ka.tick(MAX_IDLE + INTERVAL)).toBe("none");
+    for (let sent = 1; sent <= MAX_PINGS; sent += 1) {
+      expect(ka.tick(sent * INTERVAL), `ping ${sent}`).toBe("ping");
+      ka.onPingSucceeded(sent * INTERVAL);
+    }
+    expect(ka.tick((MAX_PINGS + 1) * INTERVAL)).toBe("none");
+    expect(ka.tick((MAX_PINGS + 2) * INTERVAL)).toBe("none");
+  });
+
+  test("a failed ping is retried without spending the count", () => {
+    const ka = new CacheKeepalive(1);
+    ka.setInterval(INTERVAL, "opus", 0);
+    ka.onCacheWarmed("opus", 0);
+    expect(ka.tick(INTERVAL)).toBe("ping");
+    ka.onPingFailed(INTERVAL);
+    expect(ka.pingsSent).toBe(0);
+    expect(ka.tick(required(ka.nextPingAt))).toBe("ping");
   });
 });
 
 describe("a keepalive with nothing to keep warm", () => {
   test("does nothing when no interval is configured", () => {
-    const ka = new CacheKeepalive(MAX_IDLE);
+    const ka = new CacheKeepalive(MAX_PINGS);
     ka.setInterval(undefined, "opus", 0);
     ka.onCacheWarmed("opus", 0);
     expect(ka.tick(10 * HOUR)).toBe("none");
@@ -151,7 +165,7 @@ describe("a keepalive with nothing to keep warm", () => {
   });
 
   test("does nothing until a turn has actually warmed the cache", () => {
-    const ka = new CacheKeepalive(MAX_IDLE);
+    const ka = new CacheKeepalive(MAX_PINGS);
     ka.setInterval(INTERVAL, "opus", 0);
     expect(ka.tick(10 * HOUR)).toBe("none");
   });
@@ -171,7 +185,7 @@ describe("a keepalive with nothing to keep warm", () => {
   });
 
   test("a warm for a model that is not the target is ignored", () => {
-    const ka = new CacheKeepalive(MAX_IDLE);
+    const ka = new CacheKeepalive(MAX_PINGS);
     ka.setInterval(INTERVAL, "opus", 0);
     ka.onCacheWarmed("sonnet", 0);
     expect(ka.tick(10 * HOUR)).toBe("none");
@@ -210,7 +224,7 @@ describe("a keepalive restored from a snapshot", () => {
   test("comes back armed when the warmth it recorded is still good", () => {
     const ka = armedKeepalive(0);
     const snap = required(ka.snapshot());
-    const restored = new CacheKeepalive(MAX_IDLE);
+    const restored = new CacheKeepalive(MAX_PINGS);
     expect(restored.restore(snap, INTERVAL - 1)).toBe(true);
     expect(restored.tick(INTERVAL)).toBe("ping");
   });
@@ -218,7 +232,7 @@ describe("a keepalive restored from a snapshot", () => {
   test("refuses when the warmth it recorded has already lapsed", () => {
     const ka = armedKeepalive(0);
     const snap = required(ka.snapshot());
-    const restored = new CacheKeepalive(MAX_IDLE);
+    const restored = new CacheKeepalive(MAX_PINGS);
     expect(restored.restore(snap, INTERVAL)).toBe(false);
     expect(restored.tick(INTERVAL)).toBe("none");
   });
@@ -226,7 +240,7 @@ describe("a keepalive restored from a snapshot", () => {
   test("round-trips: a snapshot restored and re-snapshotted is the same snapshot", () => {
     const ka = armedKeepalive(0);
     const snap = required(ka.snapshot());
-    const restored = new CacheKeepalive(MAX_IDLE);
+    const restored = new CacheKeepalive(MAX_PINGS);
     restored.restore(snap, 1);
     expect(restored.snapshot()).toEqual(snap);
   });
@@ -241,7 +255,7 @@ describe("over a long randomised run of events", () => {
         return state % n;
       };
 
-      const ka = new CacheKeepalive(MAX_IDLE);
+      const ka = new CacheKeepalive(MAX_PINGS);
       let now = 0;
 
       for (let step = 0; step < 300; step += 1) {
@@ -278,6 +292,10 @@ describe("over a long randomised run of events", () => {
 
         if (ka.interval === undefined) {
           expect(action, `${where}: no cadence means no ping`).toBe("none");
+        }
+
+        if (ka.pingsSent >= MAX_PINGS) {
+          expect(action, `${where}: a spent count means no ping`).toBe("none");
         }
 
         const snap = ka.snapshot();

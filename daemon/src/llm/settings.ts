@@ -7,9 +7,8 @@ import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
 import type { SamplerSettings } from "../config/preferences.ts";
 import { canonicalSettingKey, geminiMode, internalSettingKey } from "../config/surface.ts";
-import { ConfigDuration } from "../config/duration.ts";
-import { parseCacheKeepalive, parseCacheKeepaliveMax } from "../config/keepalive.ts";
-import { honorsCacheTtl } from "./cache_capability.ts";
+import { parseCacheKeepalive, parseKeepalivePings, parsePositiveDuration } from "../config/keepalive.ts";
+import { acceptsCacheTtl } from "./cache_capability.ts";
 import type { DiscoveredModelSupport } from "./discovery.ts";
 import { REASONING_OFF, SDK_VARIANTS, sdkFromWire, type Sdk } from "./types.ts";
 
@@ -136,19 +135,22 @@ const parseReplay = (value: unknown): Parsed => {
   return { error: `replay_prior_thinking must be "all" or "none"; got ${show(value)}` };
 };
 
-const parseDuration = (name: string, orOff: boolean) => (value: unknown): Parsed => {
-  const raw = parseString(name)(value);
+const parseKeepalive = (value: unknown): Parsed => {
+  const raw = parseString("cache_keepalive")(value);
   if ("error" in raw) return raw;
-  const parsed = orOff
-    ? parseCacheKeepalive(raw.value as string)
-    : parseCacheKeepaliveMax(raw.value as string);
-  return "err" in parsed ? { error: `${name}: ${parsed.err}` } : { value: parsed.ok };
+  const parsed = parseCacheKeepalive(raw.value as string);
+  return "err" in parsed ? { error: `cache_keepalive: ${parsed.err}` } : { value: parsed.ok };
+};
+
+const parsePings = (value: unknown): Parsed => {
+  const parsed = parseKeepalivePings(value);
+  return "err" in parsed ? { error: parsed.err } : { value: parsed.ok };
 };
 
 const parseCacheTtl = (value: unknown): Parsed => {
   const raw = parseString("cache_ttl")(value);
   if ("error" in raw) return raw;
-  const parsed = parseCacheKeepaliveMax(raw.value as string);
+  const parsed = parsePositiveDuration("cache_ttl", raw.value as string);
   return "err" in parsed
     ? { error: `cache_ttl: ${parsed.err}` }
     : { value: parsed.ok.toString() };
@@ -256,7 +258,7 @@ function vendor(owner: Sdk) {
 }
 
 function cacheTtlApplicability(sdk: Sdk): SettingApplicability {
-  return honorsCacheTtl(sdk) ? "honored" : "ignored";
+  return acceptsCacheTtl(sdk) ? "honored" : "ignored";
 }
 
 function budgetApplicability(sdk: Sdk, support?: DiscoveredModelSupport): SettingApplicability {
@@ -280,8 +282,6 @@ const serializeKeepalive = (value: unknown): unknown => {
   const keepalive = value as { kind: string; interval?: { toString(): string } };
   return keepalive.kind === "off" ? "off" : keepalive.interval?.toString();
 };
-const serializeDuration = (value: unknown): unknown =>
-  value instanceof ConfigDuration ? value.toString() : value;
 
 const INTERNAL_SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "temperature", field: "temperature", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 2, step: 0.1 }, applicability: (_sdk, support) => wireParameter(support, "temperature"), parse: parseNumber("temperature") },
@@ -290,8 +290,8 @@ const INTERNAL_SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "budget_tokens", field: "budgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("budget_tokens") },
   { key: "max_output_tokens", field: "maxOutputTokens", kind: "u32", suggestions: ["16384", "32768", "65536"], allowCustom: true, applicability: always, parse: parseU32("max_output_tokens") },
   { key: "cache_ttl", field: "cacheTtl", kind: "duration", suggestions: ["5m", "1h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseCacheTtl },
-  { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "55m"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseDuration("cache_keepalive", true), serialize: serializeKeepalive },
-  { key: "cache_keepalive_max", field: "cacheKeepaliveMax", kind: "duration", suggestions: ["90m", "12h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseDuration("cache_keepalive_max", false), serialize: serializeDuration },
+  { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "4m", "55m"], allowCustom: true, applicability: always, parse: parseKeepalive, serialize: serializeKeepalive },
+  { key: "cache_keepalive_pings", field: "cacheKeepalivePings", kind: "u32", suggestions: ["1", "2", "3"], allowCustom: true, applicability: always, parse: parsePings },
   { key: "sdk", field: "sdk", kind: "string", suggestions: SDK_VARIANTS, allowCustom: false, applicability: always, parse: (value) => { const raw = parseString("sdk")(value); if ("error" in raw) return raw; const sdk = sdkFromWire(raw.value as string); return sdk === undefined ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(", ")}; got ${show(raw.value)}` } : { value: raw.value }; } },
   { key: "replay_prior_thinking", field: "replayPriorThinking", kind: "string", suggestions: ["all", "none"], allowCustom: false, applicability: always, parse: parseReplay },
   { key: "max_tool_iterations", field: "maxToolIterations", kind: "u32", suggestions: ["8", "16", "32", "64"], allowCustom: true, applicability: always, parse: (value) => { const parsed = parseU32("max_tool_iterations")(value); return "error" in parsed || parsed.value !== 0 ? parsed : { error: "max_tool_iterations must be >= 1; unset it (null) for unlimited" }; } },
@@ -345,9 +345,7 @@ export function parsedSettingValue(key: string, value: unknown): Parsed {
 
 export function settingApplicability(sdk: Sdk, key: string, support?: DiscoveredModelSupport, modelId?: string): SettingApplicability {
   key = internalSettingKey(key);
-  if (key === "cache_ttl" || key === "cache_keepalive" || key === "cache_keepalive_max") {
-    return honorsCacheTtl(sdk, modelId) ? "honored" : "ignored";
-  }
+  if (key === "cache_ttl") return acceptsCacheTtl(sdk, modelId) ? "honored" : "ignored";
   return BY_KEY.get(key)?.applicability(sdk, support) ?? "always";
 }
 

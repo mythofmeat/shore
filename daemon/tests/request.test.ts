@@ -183,17 +183,22 @@ describe("keepalive settings ride alongside the request, never inside it", () =>
     expect(Object.keys(built.request)).not.toContain("cache_keepalive");
   });
 
-  test("an idle ceiling is returned in seconds and stays off the wire", () => {
-    const built = buildRequestWithResolvedKey(model({ cache_keepalive_max: "90m" }), "k", INPUTS);
-    expect(built.keepalive_max_secs).toBe(5400);
-    expect(Object.keys(built.request)).not.toContain("keepalive_max_secs");
-    expect(Object.keys(built.request)).not.toContain("cache_keepalive_max");
+  test("a ping count rides beside the cadence and stays off the wire", () => {
+    const built = buildRequestWithResolvedKey(model({ cache_keepalive: "10m", cache_keepalive_pings: 4 }), "k", INPUTS);
+    expect(built.keepalive_pings).toBe(4);
+    expect(Object.keys(built.request)).not.toContain("keepalive_pings");
+    expect(Object.keys(built.request)).not.toContain("cache_keepalive_pings");
   });
 
-  test("a model with neither leaves both absent rather than zero", () => {
-    const built = buildRequestWithResolvedKey(model(), "k", INPUTS);
+  test("a cadence with no count takes one ping", () => {
+    const built = buildRequestWithResolvedKey(model({ cache_keepalive: "10m" }), "k", INPUTS);
+    expect(built.keepalive_pings).toBe(1);
+  });
+
+  test("a count without a cadence arms nothing", () => {
+    const built = buildRequestWithResolvedKey(model({ cache_keepalive_pings: 4 }), "k", INPUTS);
     expect(built.keepalive_interval_ms).toBeUndefined();
-    expect(built.keepalive_max_secs).toBeUndefined();
+    expect(built.keepalive_pings).toBeUndefined();
   });
 });
 

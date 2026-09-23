@@ -138,7 +138,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
     keepalive_halted:
       halt === undefined
         ? null
-        : { character: halt.character, reason: halt.reason, at: rfc3339(halt.at) },
+        : { character: halt.character, model: halt.model, reason: halt.reason, at: rfc3339(halt.at) },
     message_count: ctx.turnCount,
     turn_count: ctx.turnCount,
     ...(ctx.contextTokens === undefined ? {} : { context_tokens: ctx.contextTokens }),

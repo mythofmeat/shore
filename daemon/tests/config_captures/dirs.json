@@ -269,22 +269,22 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"one.toml\", \"two.toml\"]\ncache.keepalive_for = \"0s\""
+          "content": "include = [\"one.toml\", \"two.toml\"]\ntools.max_result_chars = 10"
         },
         {
           "path": "one.toml",
-          "content": "cache.keepalive_for = \"1s\""
+          "content": "tools.max_result_chars = 11"
         },
         {
           "path": "two.toml",
-          "content": "cache.keepalive_for = \"2s\""
+          "content": "tools.max_result_chars = 12"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "cache": {
-            "keepalive_max": "2s"
+          "tools": {
+            "max_result_chars": 12
           }
         },
         "config_dir_rel": ""
@@ -339,26 +339,26 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "include = [\"inc.toml\"]\ncache.keepalive_for = \"0s\""
+          "content": "include = [\"inc.toml\"]\ntools.max_result_chars = 10"
         },
         {
           "path": "inc.toml",
-          "content": "cache.keepalive_for = \"1s\""
+          "content": "tools.max_result_chars = 11"
         },
         {
           "path": "conf.d/20-b.toml",
-          "content": "cache.keepalive_for = \"3s\""
+          "content": "tools.max_result_chars = 13"
         },
         {
           "path": "conf.d/10-a.toml",
-          "content": "cache.keepalive_for = \"2s\""
+          "content": "tools.max_result_chars = 12"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "cache": {
-            "keepalive_max": "3s"
+          "tools": {
+            "max_result_chars": 13
           }
         },
         "config_dir_rel": ""
@@ -369,11 +369,11 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "cache.keepalive_for = \"0s\""
+          "content": "tools.max_result_chars = 10"
         },
         {
           "path": "conf.d/a.toml",
-          "content": "cache.keepalive_for = \"1s\""
+          "content": "tools.max_result_chars = 11"
         },
         {
           "path": "conf.d/b.txt",
@@ -403,10 +403,8 @@
       "config_path": null,
       "ok": {
         "table": {
-          "cache": {
-            "keepalive_max": "1s"
-          },
           "tools": {
+            "max_result_chars": 11,
             "timeout": "5s"
           }
         },
@@ -418,19 +416,19 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "cache.keepalive_for = \"0s\""
+          "content": "tools.max_result_chars = 10"
         },
         {
           "path": "conf.d/z.toml",
-          "content": "cache.keepalive_for = \"1s\""
+          "content": "tools.max_result_chars = 11"
         },
         {
           "path": "conf.d/a.toml",
-          "content": "cache.keepalive_for = \"2s\""
+          "content": "tools.max_result_chars = 12"
         },
         {
           "path": "conf.d/🎵.toml",
-          "content": "compaction.max_turns = 1\ncache.keepalive_for = \"9s\""
+          "content": "compaction.max_turns = 1\ntools.max_result_chars = 19"
         },
         {
           "path": "conf.d/ﬀ.toml",
@@ -445,8 +443,8 @@
               "max_turns": 1
             }
           },
-          "cache": {
-            "keepalive_max": "9s"
+          "tools": {
+            "max_result_chars": 19
           }
         },
         "config_dir_rel": ""
@@ -457,7 +455,7 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "cache.keepalive_for = \"0s\""
+          "content": "tools.max_result_chars = 10"
         },
         {
           "path": "conf.d",
@@ -472,7 +470,7 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "cache.keepalive_for = \"0s\""
+          "content": "tools.max_result_chars = 10"
         },
         {
           "path": "conf.d/bad.toml",

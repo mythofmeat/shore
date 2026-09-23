@@ -633,7 +633,7 @@ describe("runGeneration", () => {
           context: {
             ...(rest["context"] as Record<string, unknown>),
             ledger: join(run.dataDir, "shore.db"),
-            keepalive_max_secs: 43200,
+            keepalive_window_secs: 0,
             usage: { budgets: [], timezone: "local" },
           },
         }),

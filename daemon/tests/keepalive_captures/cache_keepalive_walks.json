@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "boundary_tick_exactly_on_deadline",
-      "max_idle_ms": 43200000,
+      "max_pings": 12,
       "steps": [
         {
           "op": "set_interval",
@@ -28,8 +28,8 @@
       ]
     },
     {
-      "name": "boundary_idle_ceiling_exact",
-      "max_idle_ms": 7200000,
+      "name": "boundary_ping_count_spent",
+      "max_pings": 1,
       "steps": [
         {
           "op": "set_interval",
@@ -64,8 +64,8 @@
       ]
     },
     {
-      "name": "boundary_idle_ceiling_headroom",
-      "max_idle_ms": 7260000,
+      "name": "boundary_ping_count_headroom",
+      "max_pings": 2,
       "steps": [
         {
           "op": "set_interval",
@@ -96,7 +96,7 @@
     },
     {
       "name": "boundary_giveup_inside_window",
-      "max_idle_ms": 43200000,
+      "max_pings": 12,
       "steps": [
         {
           "op": "set_interval",
@@ -122,7 +122,7 @@
     },
     {
       "name": "boundary_giveup_exact",
-      "max_idle_ms": 43200000,
+      "max_pings": 12,
       "steps": [
         {
           "op": "set_interval",
@@ -153,7 +153,7 @@
     },
     {
       "name": "boundary_retry_backoff_ladder",
-      "max_idle_ms": 43200000,
+      "max_pings": 12,
       "steps": [
         {
           "op": "set_interval",

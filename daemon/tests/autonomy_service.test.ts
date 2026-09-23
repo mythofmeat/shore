@@ -113,7 +113,7 @@ function build(clock?: { value: number }) {
 }
 
 describe("registering", () => {
-  test("restoring a keepalive uses the configured global ceiling", async () => {
+  test("a keepalive restored from a state file with no ping count still gets its one ping", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
       writeDurable(join(dir, STATE_FILENAME), encodeState({
@@ -125,7 +125,7 @@ describe("registering", () => {
       const { service } = build(clock);
       const events: KeepaliveEvent[] = [];
       const keepalive = new KeepaliveService(async () => { throw new Error("no prefix restored"); },
-        () => clock.value, { maxIdleSecs: () => 20 * 3600 });
+        () => clock.value);
       service.attachKeepalive(keepalive);
       keepalive.onEvent((event) => events.push(event));
       await service.register(registration("nova", dir));

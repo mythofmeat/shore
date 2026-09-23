@@ -518,8 +518,12 @@ pub(crate) fn render(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?")
         )),
+        "set_model_setting" => data
+            .get("warning")
+            .and_then(serde_json::Value::as_str)
+            .map(|warning| format!("Warning: {warning}.")),
         "log" | "list_characters" | "switch_character" | "switch_model" | "reset_model"
-        | "set_model_setting" | "delete" | "list_alternatives" | "alt" => None,
+        | "delete" | "list_alternatives" | "alt" => None,
         _ => Some(json(data)),
     }
 }
@@ -589,5 +593,33 @@ mod tests {
         assert!(text.contains("call log"));
         assert!(text.contains("message"));
         assert!(!text.contains("\"entries\""));
+    }
+
+    #[test]
+    fn a_setting_is_saved_quietly_unless_the_daemon_warns() {
+        let saved =
+            serde_json::json!({"key": "cache_keepalive", "value": "55m", "scope": "character"});
+        assert_eq!(
+            render(
+                "model setting cache_keepalive 55m",
+                "set_model_setting",
+                &saved,
+                "ada"
+            ),
+            None
+        );
+
+        let warned = serde_json::json!({
+            "key": "cache_keepalive", "value": "1h", "scope": "character",
+            "warning": "cache_keepalive is not shorter than this model's 1h cache TTL"
+        });
+        let rendered = render(
+            "model setting cache_keepalive 1h",
+            "set_model_setting",
+            &warned,
+            "ada",
+        )
+        .expect("a warning is shown");
+        assert!(rendered.contains("1h cache TTL"), "{rendered}");
     }
 }

@@ -1,7 +1,6 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
-import { DEFAULT_KEEPALIVE_MAX_SECS } from "./keepalive.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
@@ -363,12 +362,10 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
 };
 
 export interface CacheConfig {
-  keepalive_max: ConfigDuration;
   forensics: boolean;
 }
 
 export const defaultCacheConfig = (): CacheConfig => ({
-  keepalive_max: ConfigDuration.fromSecs(DEFAULT_KEEPALIVE_MAX_SECS),
   forensics: false,
 });
 
@@ -376,7 +373,6 @@ const CACHE: StructSpec<CacheConfig> = {
   name: "CacheConfig",
   make: defaultCacheConfig,
   fields: {
-    keepalive_max: readDuration,
     forensics: readBool,
   },
 };

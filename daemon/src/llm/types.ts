@@ -99,7 +99,7 @@ export interface CallContext {
   thinking_enabled: boolean;
   cache_ttl?: string;
   reasoning_effort?: string;
-  keepalive_max_secs?: number;
+  keepalive_window_secs?: number;
   forensics_dir?: string;
   rid?: string;
   usage?: UsageConfig;

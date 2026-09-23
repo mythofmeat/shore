@@ -74,8 +74,6 @@ user_timestamps = "always"
 model = "local:embed"
 [image]
 model = "openrouter:image"
-[cache]
-keepalive_for = "20h"
 [heartbeat]
 enabled = true
 interval = "6h"

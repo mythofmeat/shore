@@ -20,7 +20,8 @@ const minutes = (m: number) => m * 60_000;
 const hours = (h: number) => h * 3_600_000;
 
 const INTERVAL_MS = 55 * 60_000;
-const MAX_IDLE_SECS = 12 * 3600;
+const PINGS = 12;
+const WINDOW_SECS = (PINGS * INTERVAL_MS) / 1000;
 
 const T0 = Date.UTC(2026, 6, 30, 12, 0, 0);
 
@@ -69,11 +70,12 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
     provider_options: { cache_ttl: "1h" },
     replay_prior_thinking: "all",
     keepalive_interval_ms: INTERVAL_MS,
+    keepalive_pings: PINGS,
     context: {
       character: CHARACTER,
       call_type: "message",
       thinking_enabled: true,
-      keepalive_max_secs: MAX_IDLE_SECS,
+      keepalive_window_secs: WINDOW_SECS,
       rid: "rid_live",
     },
     ...overrides,
@@ -279,7 +281,7 @@ describe("what counts as a warm", () => {
     const deadline = h.service.nextPingAt(CHARACTER);
 
     h.clock.advance(minutes(50));
-    h.service.observe(CHARACTER, MODEL, callType, undefined, "heartbeat-prefix", { cache_read_tokens: 4096 });
+    h.service.observe(CHARACTER, MODEL, callType, "heartbeat-prefix", { cache_read_tokens: 4096 });
     expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
     expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
 
@@ -377,19 +379,67 @@ describe("arming and disarming", () => {
     expect(h.service.scheduleFor(CHARACTER)).toBeUndefined();
   });
 
-  test("a changed idle ceiling carries the schedule across", async () => {
+  test("a changed ping count carries the schedule across", async () => {
     const h = harness();
     armWarm(h);
     const before = h.service.scheduleFor(CHARACTER);
 
-    h.service.arm(
-      prefix({ context: { ...required(prefix().context), keepalive_max_secs: 6 * 3600 } }),
-    );
-    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
+    h.service.arm(prefix({ keepalive_pings: 3 }));
+    expect(h.service.scheduleFor(CHARACTER)).toEqual({ ...required(before), max_pings: 3 });
 
     h.clock.advance(minutes(56));
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
+  });
+});
+
+describe("only the selected chat model is kept warm", () => {
+  function switchTo(h: ReturnType<typeof harness>, model: string) {
+    h.service.disarm(CHARACTER);
+    h.service.arm(prefix({ model }));
+  }
+
+  test("switching away stops the old model's pings before any message", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    for (let i = 0; i < 6; i += 1) {
+      h.clock.advance(INTERVAL_MS);
+      await h.service.tick();
+    }
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  test("switching back without a message does not resume the old model's pings", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    h.clock.advance(minutes(10));
+    switchTo(h, MODEL);
+    h.clock.advance(hours(3));
+    await h.service.tick();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  test("the first message on the new model arms it, and only it", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    h.clock.advance(minutes(10));
+    h.service.observe(CHARACTER, OTHER_MODEL, "message");
+    h.service.arm(prefix({ model: OTHER_MODEL }), true);
+    h.clock.advance(INTERVAL_MS);
+    await h.service.tick();
+
+    expect(h.sent.map((req) => req.model)).toEqual([OTHER_MODEL]);
   });
 });
 
@@ -489,14 +539,14 @@ describe("what reaches the heartbeat log and the state file", () => {
     const fresh = harness();
     fresh.clock.advance(minutes(10));
     expect(
-      fresh.service.restore(CHARACTER, persisted, MAX_IDLE_SECS),
+      fresh.service.restore(CHARACTER, persisted),
       "a prefix warmed 10m ago is still inside the 55m interval",
     ).toBe(true);
 
     const stale = harness();
     stale.clock.advance(hours(3));
     expect(
-      stale.service.restore(CHARACTER, persisted, MAX_IDLE_SECS),
+      stale.service.restore(CHARACTER, persisted),
       "a prefix warmed 3h ago is past any plausible TTL",
     ).toBe(false);
   });

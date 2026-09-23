@@ -1,7 +1,7 @@
 import { canonicalSettingKey, geminiMode } from "../config/surface.ts";
 import { required } from "../util/required.ts";
 import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
-import { keepalivePolicyError } from "../llm/cache_capability.ts";
+import { keepaliveTtlWarning } from "../llm/cache_capability.ts";
 import { parseCacheKeepalive } from "../config/keepalive.ts";
 
 import {
@@ -10,7 +10,7 @@ import {
   listEffectiveModels,
   type EffectiveModel,
 } from "../config/effective_catalog.ts";
-import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel } from "../config/models.ts";
+import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel, type Sdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   characterPreferencesPath,
@@ -459,7 +459,7 @@ const INFO_SCOPE_FIELDS = [
   ["max_output_tokens", "maxOutputTokens"],
   ["cache_ttl", "cacheTtl"],
   ["cache_keepalive", "cacheKeepalive"],
-  ["cache_keepalive_for", "cacheKeepaliveMax"],
+  ["cache_keepalive_pings", "cacheKeepalivePings"],
   ["sdk", "sdk"],
   ["reasoning_replay", "replayPriorThinking"],
   ["max_tool_rounds", "maxToolIterations"],
@@ -788,13 +788,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
     const error = nanogptTransportError(model.providerKey, value);
     if (error !== undefined) throw invalidRequest(error);
   }
-  if (key === "cache_keepalive" && typeof value === "string") {
-    const parsed = parseCacheKeepalive(value);
-    if ("ok" in parsed && parsed.ok.kind === "every") {
-      const error = keepalivePolicyError(sdk, model.modelId, current.cacheTtl, parsed.ok.interval.asMillis());
-      if (error !== undefined) throw invalidRequest(error);
-    }
-  }
+  const warning = keepaliveWarningAfter(sdk, model.modelId, current, key, value);
 
   const slot =
     target.kind === "subagent"
@@ -823,7 +817,24 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
     ...aliasedRolesJson(ctx, args, model),
     key,
     value,
+    ...(warning === undefined ? {} : { warning }),
   };
+}
+
+function keepaliveWarningAfter(
+  sdk: Sdk,
+  modelId: string,
+  current: SamplerSettings,
+  key: string,
+  value: unknown,
+): string | undefined {
+  if (key !== "cache_keepalive" && key !== "cache_ttl") return undefined;
+  const cadence = key === "cache_keepalive"
+    ? typeof value === "string" ? parseCacheKeepalive(value) : undefined
+    : current.cacheKeepalive === undefined ? undefined : { ok: current.cacheKeepalive };
+  if (cadence === undefined || "err" in cadence || cadence.ok.kind === "off") return undefined;
+  const ttl = key === "cache_ttl" ? (typeof value === "string" ? value : undefined) : current.cacheTtl;
+  return keepaliveTtlWarning(sdk, modelId, ttl, cadence.ok.interval.asMillis());
 }
 
 const SAMPLER_ROLES = ["chat", "heartbeat", "compaction", "sub-agents"];
