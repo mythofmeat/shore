@@ -71,7 +71,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const { runtime } = a;
   const dataDir = runtime.config.dirs.data;
   const ledgerPath = rustJoin(dataDir, "shore.db");
-  const global = () => runtime.registry.globalConfig();
   const usage = (character: string) =>
     usageConfigView(runtime.registry.effectiveConfig(character).app.usage);
 
@@ -91,8 +90,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     compaction: chatCompactionRunner(a),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
     ledgerPath,
-    keepaliveMaxSecs: () =>
-      Number(global().app.cache.keepalive_max.asSecs()),
     tools: (charName, turn) => chatToolDeps(a, charName, turn),
     ...(a.env === undefined ? {} : { env: a.env }),
   };

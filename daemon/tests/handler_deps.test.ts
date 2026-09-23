@@ -474,7 +474,7 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
       intervalMs: 55 * 60_000,
-      maxSecs: undefined,
+      pings: undefined,
     });
 
     expect(cached, "the cadence rides along, or the armed prefix has none").toEqual([
@@ -483,7 +483,7 @@ describe("the autonomy surface a turn drives", () => {
     release();
   });
 
-  test("the ceiling rides along with the cadence, not just the cadence", () => {
+  test("the ping count rides along with the cadence, not just the cadence", () => {
     const cached: Array<KeepaliveArming | undefined> = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -498,10 +498,10 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
       intervalMs: 10 * 60_000,
-      maxSecs: 5400,
+      pings: 3,
     });
 
-    expect(cached).toEqual([{ intervalMs: 10 * 60_000, maxSecs: 5400 }]);
+    expect(cached).toEqual([{ intervalMs: 10 * 60_000, pings: 3 }]);
     release();
   });
 
@@ -647,36 +647,6 @@ describe("what the assembly hands the driver", () => {
       expect(deps.notifier).toBe(runtime.notifier);
       expect(await routesToCurrentRegistry(runtime, deps.mcpRegistry)).toBe(true);
       expect(deps.mcpRegistry.toolDefsFiltered(["*"])).toEqual([]);
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("the keepalive ceiling is read live, not copied", async () => {
-    const { root, config, runtime } = await runtimeUnder("shore-deps-live-", (app) => {
-      app.cache.keepalive_max = ConfigDuration.fromSecs(3600);
-    });
-    try {
-      const deps = buildGenerationDeps({
-        runtime,
-        providers: {},
-        autonomy: new TurnAutonomyBridge(recordingService()),
-        emitEvent: () => {},
-        diagnostics: { api_calls: { push: () => {} } } as never,
-      });
-
-      expect(deps.keepaliveMaxSecs?.()).toBe(3600);
-
-      runtime.registry.setGlobalConfig({
-        ...config,
-        app: {
-          ...config.app,
-          cache: { ...config.app.cache, keepalive_max: ConfigDuration.fromSecs(60) },
-        },
-      });
-
-      expect(deps.keepaliveMaxSecs?.()).toBe(60);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -1104,7 +1074,7 @@ describe("the command path", () => {
           max_tokens: 128,
           replay_prior_thinking: "all",
         },
-        { intervalMs: 55 * 60_000, maxSecs: undefined },
+        { intervalMs: 55 * 60_000, pings: undefined },
       );
       expect(runtime.keepalive.nextPingAt("ada")).toBeDefined();
 
@@ -1167,17 +1137,20 @@ describe("the command path", () => {
         ...before,
         app: {
           ...before.app,
-          cache: { ...before.app.cache, keepalive_max: ConfigDuration.fromSecs(4242) },
+          memory: {
+            ...before.app.memory,
+            compaction: { ...before.app.memory.compaction, idle_trigger: ConfigDuration.fromSecs(4242) },
+          },
         },
       };
 
       deps.runtime.adoptGlobalConfig(fresh);
 
       expect(
-        Number(runtime.registry.globalConfig().app.cache.keepalive_max.asSecs()),
+        Number(runtime.registry.globalConfig().app.memory.compaction.idle_trigger.asSecs()),
       ).toBe(4242);
       expect(
-        Number(runtime.registry.effectiveConfig("ada").app.cache.keepalive_max.asSecs()),
+        Number(runtime.registry.effectiveConfig("ada").app.memory.compaction.idle_trigger.asSecs()),
       ).toBe(4242);
     } finally {
       await runtime.shutdown();
@@ -1424,7 +1397,7 @@ describe("the shape of what is cached", () => {
       model: "m",
       provider_key: "anthropic",
       messages: [{ role: "user", content: "hi" } as never],
-    }, { intervalMs: undefined, maxSecs: undefined });
+    }, { intervalMs: undefined, pings: undefined });
 
     expect(seen[0]?.provider_key).toBe("anthropic");
     expect(seen[0]?.messages).toHaveLength(1);

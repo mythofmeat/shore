@@ -6,6 +6,8 @@ import { closeLedgers } from "../src/ledger/record.ts";
 import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
+import { applySamplerOverlay, type SamplerSettings } from "../src/config/preferences.ts";
+import { parseCacheKeepalive } from "../src/config/keepalive.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
 import { persistAndNotify, type PersistContext } from "../src/handler/persistence.ts";
 import { buildRequestWithResolvedKey } from "../src/llm/request.ts";
@@ -37,18 +39,19 @@ function response(): GenerateResponse {
   } as unknown as GenerateResponse;
 }
 
-function turnFor(chatToml: string): {
+function turnFor(sampler: SamplerSettings): {
   request: SidecarRequest;
   intervalMs: number | undefined;
-  maxSecs: number | undefined;
+  pings: number | undefined;
 } {
   const catalog = catalogFromSections(
-    Bun.TOML.parse(chatToml) as Record<string, unknown>,
+    Bun.TOML.parse(`["anthropic:claude-opus-4-6"]`) as Record<string, unknown>,
     undefined,
     undefined,
   );
-  const model = catalog.chat.get("anthropic:claude-opus-4-6");
-  if (model === undefined) throw new Error("the fixture catalog lost its model");
+  const listed = catalog.chat.get("anthropic:claude-opus-4-6");
+  if (listed === undefined) throw new Error("the fixture catalog lost its model");
+  const model = applySamplerOverlay(listed, sampler);
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "sk-test", {
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
@@ -61,7 +64,7 @@ function turnFor(chatToml: string): {
       context: { character: CHARACTER, call_type: "message", thinking_enabled: false },
     },
     intervalMs: built.keepalive_interval_ms,
-    maxSecs: built.keepalive_max_secs,
+    pings: built.keepalive_pings,
   };
 }
 
@@ -101,9 +104,9 @@ function streamResult(): StreamResult {
 }
 
 async function turnPersisted(
-  chatToml: string,
+  sampler: SamplerSettings,
   clock: ReturnType<typeof fakeClock>,
-  opts: { ledgerPath?: string; maxIdleSecs?: () => number } = {},
+  opts: { ledgerPath?: string } = {},
   cacheReadTokens = 4096,
 ) {
   const sent: SidecarRequest[] = [];
@@ -127,7 +130,7 @@ async function turnPersisted(
     onAssistantMessage: () => {},
   } as never);
 
-  const { request, intervalMs, maxSecs } = turnFor(chatToml);
+  const { request, intervalMs, pings } = turnFor(sampler);
   const { context: _perCall, ...sentBody } = request;
 
   const ctx = {
@@ -149,32 +152,27 @@ async function turnPersisted(
     result,
     request: sentBody,
     keepaliveIntervalMs: intervalMs,
-    keepaliveMaxSecs: maxSecs,
+    keepalivePings: pings,
     toolIntermediateMessages: [],
     wallClockMs: 10,
   });
 
-  return { service, sent, intervalMs, maxSecs };
+  return { service, sent, intervalMs, pings };
 }
 
-const DEFAULTED = `
-["anthropic:claude-opus-4-6"]`;
+function every(raw: string): NonNullable<SamplerSettings["cacheKeepalive"]> {
+  const parsed = parseCacheKeepalive(raw);
+  if ("err" in parsed) throw new Error(parsed.err);
+  return parsed.ok;
+}
 
-const CONFIGURED = `
-["anthropic:claude-opus-4-6"]
-cache_keepalive = "55m"
-`;
+const DEFAULTED: SamplerSettings = {};
 
-const MODEL_CEILING = `
-["anthropic:claude-opus-4-6"]
-cache_keepalive = "55m"
-cache_keepalive_max = "90m"
-`;
+const CONFIGURED: SamplerSettings = { cacheKeepalive: every("55m") };
 
-const EXPLICIT_OFF = `
-["anthropic:claude-opus-4-6"]
-cache_keepalive = "off"
-`;
+const THREE_PINGS: SamplerSettings = { cacheKeepalive: every("55m"), cacheKeepalivePings: 3 };
+
+const EXPLICIT_OFF: SamplerSettings = { cacheKeepalive: every("off") };
 
 describe("a ping is a call the ledger knows about", () => {
   afterEach(() => {
@@ -206,7 +204,7 @@ describe("a ping is a call the ledger knows about", () => {
     const ledger = freshLedger();
     try {
       const clock = fakeClock();
-      const { service } = await turnPersisted(CONFIGURED, clock, { ledgerPath: ledger.path });
+      const { service } = await turnPersisted(THREE_PINGS, clock, { ledgerPath: ledger.path });
 
       clock.advance(55 * MINUTE);
       await service.tick();
@@ -221,122 +219,91 @@ describe("a ping is a call the ledger knows about", () => {
   });
 });
 
-describe("the configured idle ceiling reaches the schedule", () => {
-  const TWENTY_HOURS = 20 * 60 * 60;
-
-  async function armedWithCeiling(secs: number, clock: ReturnType<typeof fakeClock>) {
-    const armed = await turnPersisted(CONFIGURED, clock, { maxIdleSecs: () => secs });
-    armed.service.observe(CHARACTER, "claude-opus-4-6", "message", undefined);
-    return armed;
+describe("the ping count bounds the schedule", () => {
+  async function pingsOver(sampler: SamplerSettings, intervals: number) {
+    const clock = fakeClock();
+    const armed = await turnPersisted(sampler, clock);
+    for (let i = 0; i < intervals; i += 1) {
+      clock.advance(55 * MINUTE);
+      await armed.service.tick();
+    }
+    return armed.sent.length;
   }
 
-  test("a 20h ceiling still pings at 13h idle, where the 12h default gave up", async () => {
+  test("a model that names no count sends one ping after each turn", async () => {
+    expect(await pingsOver(CONFIGURED, 6)).toBe(1);
+  });
+
+  test("three pings are sent one interval apart, and then it stops", async () => {
+    expect(await pingsOver(THREE_PINGS, 3)).toBe(3);
+    expect(await pingsOver(THREE_PINGS, 6)).toBe(3);
+  });
+
+  test("a real turn gives the count back", async () => {
     const clock = fakeClock();
-    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
+    const { service, sent } = await turnPersisted(CONFIGURED, clock);
 
-    clock.advance(13 * 60 * MINUTE);
+    clock.advance(55 * MINUTE);
     await service.tick();
+    expect(sent).toHaveLength(1);
 
+    clock.advance(5 * MINUTE);
+    service.observe(CHARACTER, "claude-opus-4-6", "message");
+    clock.advance(55 * MINUTE);
+    await service.tick();
+    expect(sent).toHaveLength(2);
+  });
+
+  test("a heartbeat is not a real turn, and gives nothing back", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await turnPersisted(CONFIGURED, clock);
+
+    clock.advance(55 * MINUTE);
+    await service.tick();
+    clock.advance(5 * MINUTE);
+    service.observe(CHARACTER, "claude-opus-4-6", "heartbeat");
+    clock.advance(55 * MINUTE);
+    await service.tick();
     expect(sent).toHaveLength(1);
   });
 
-  test("past the configured ceiling it stops, rather than pinging a dead prefix", async () => {
+  test("the ping carries the window its schedule covers", async () => {
     const clock = fakeClock();
-    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
-
-    clock.advance(21 * 60 * MINUTE);
-    await service.tick();
-
-    expect(sent).toHaveLength(0);
-  });
-
-  test("the ping carries the ceiling it was judged against", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
+    const { service, sent } = await turnPersisted(THREE_PINGS, clock);
 
     clock.advance(55 * MINUTE);
     await service.tick();
 
-    expect(sent[0]?.context?.keepalive_max_secs).toBe(TWENTY_HOURS);
+    expect(sent[0]?.context?.keepalive_window_secs).toBe(3 * 55 * 60);
   });
-});
-
-describe("a model brings its own idle ceiling", () => {
-  const NINETY_MINUTES = 90 * 60;
-  const TWENTY_HOURS = 20 * 60 * 60;
-
-  async function armedFrom(chatToml: string, clock: ReturnType<typeof fakeClock>) {
-    const armed = await turnPersisted(chatToml, clock, { maxIdleSecs: () => TWENTY_HOURS });
-    armed.service.observe(CHARACTER, "claude-opus-4-6", "message", undefined);
-    return armed;
-  }
 
   test.each([
-    [CONFIGURED, 1],
-    [MODEL_CEILING, 0],
+    [THREE_PINGS, 1],
+    [CONFIGURED, 0],
     [EXPLICIT_OFF, 0],
-  ] as const)("current configuration is reapplied to a restored schedule: %s", async (chatToml, expectedPings) => {
+  ] as const)("a restored schedule keeps its count and takes the current setting: %o", async (sampler, expectedPings) => {
     const clock = fakeClock();
-    const before = await armedFrom(CONFIGURED, clock);
+    const before = await turnPersisted(THREE_PINGS, clock);
+    before.service.observe(CHARACTER, "claude-opus-4-6", "message");
     clock.advance(55 * MINUTE);
     await before.service.tick();
     const snapshot = before.service.scheduleFor(CHARACTER);
     if (snapshot === undefined) throw new Error("missing persisted schedule");
+    expect(snapshot.pings_sent).toBe(1);
+
     const sent: SidecarRequest[] = [];
     const restored = new KeepaliveService(async (request) => {
       sent.push(request);
       return response();
-    }, clock.now, { maxIdleSecs: () => TWENTY_HOURS });
+    }, clock.now);
     expect(restored.restore(CHARACTER, snapshot)).toBe(true);
-    const current = turnFor(chatToml);
+    const current = turnFor(sampler);
     new LastRequestCache(restored).set(CHARACTER, current.request, {
-      intervalMs: current.intervalMs, maxSecs: current.maxSecs,
+      intervalMs: current.intervalMs, pings: current.pings,
     }, false);
     clock.advance(55 * MINUTE);
     await restored.tick();
     expect(sent).toHaveLength(expectedPings);
-  });
-
-  test("the model's 90m stops the pinging that the global 20h would have allowed", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
-
-    clock.advance(2 * 60 * MINUTE);
-    await service.tick();
-
-    expect(sent).toHaveLength(0);
-  });
-
-  test("inside the model's own ceiling it still pings", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
-
-    clock.advance(80 * MINUTE);
-    await service.tick();
-
-    expect(sent).toHaveLength(1);
-  });
-
-  test("the ping carries the model's ceiling, not the global one", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
-
-    clock.advance(55 * MINUTE);
-    await service.tick();
-
-    expect(sent[0]?.context?.keepalive_max_secs).toBe(NINETY_MINUTES);
-  });
-
-  test("a model that sets no ceiling of its own still takes the global one", async () => {
-    const clock = fakeClock();
-    const { service, sent, maxSecs } = await armedFrom(CONFIGURED, clock);
-    expect(maxSecs, "the producer's half").toBeUndefined();
-
-    clock.advance(13 * 60 * MINUTE);
-    await service.tick();
-
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.context?.keepalive_max_secs).toBe(TWENTY_HOURS);
   });
 });
 
@@ -350,32 +317,34 @@ describe("the cadence reaches the schedule", () => {
     expect(sent).toEqual([]);
   });
 
-  test.each(["5m", "1h"])("a cadence as long as the %s TTL never arms", async (ttl) => {
+  test.each(["5m", "1h"])("a cadence as long as the %s TTL still arms; only setting it warns", async (ttl) => {
     const built = buildRequestWithResolvedKey({
       name: "claude", qualified_name: "nanogpt:anthropic/claude-opus-4-6", category: "chat", provider_key: "nanogpt",
       sdk: "nanogpt", model_id: "anthropic/claude-opus-4-6", cache_keepalive: ttl, cache_ttl: ttl,
     }, "fixture-key", { messages: [], replay: "all" });
-    expect(built.keepalive_interval_ms).toBeUndefined();
+    expect(built.keepalive_interval_ms).toBe(ttl === "5m" ? 5 * MINUTE : 60 * MINUTE);
+    expect(built.keepalive_pings).toBe(1);
   });
 
   test.each([
     { sdk: "openai", model: "gpt-test", ttl: "1h" },
+    { sdk: "claude_agent", model: "claude-opus-4-6", ttl: undefined },
     { sdk: "nanogpt", model: "google/gemini-flash-latest", ttl: "1h" },
     { sdk: "nanogpt", model: "deepseek/deepseek-v4.1-flash", ttl: "1h" },
     { sdk: "nanogpt", model: "anthropic/claude-opus-4-6", ttl: undefined },
-  ] as const)("unsupported or absent explicit cache never arms: %s", async ({ sdk, model, ttl }) => {
+  ] as const)("any model arms, whatever cache control it has: %o", async ({ sdk, model, ttl }) => {
     const built = buildRequestWithResolvedKey({
       name: model, qualified_name: `nanogpt:${model}`, category: "chat", provider_key: "nanogpt",
       sdk, model_id: model, cache_keepalive: "55m", ...(ttl === undefined ? {} : { cache_ttl: ttl }),
     }, "fixture-key", { messages: [], replay: "all" });
-    expect(built.keepalive_interval_ms).toBeUndefined();
+    expect(built.keepalive_interval_ms).toBe(55 * MINUTE);
     const clock = fakeClock();
     const sent: SidecarRequest[] = [];
     const service = new KeepaliveService(async (request) => { sent.push(request); return response(); }, clock.now);
-    new LastRequestCache(service).set(CHARACTER, built.request, { intervalMs: built.keepalive_interval_ms, maxSecs: undefined });
+    new LastRequestCache(service).set(CHARACTER, built.request, { intervalMs: built.keepalive_interval_ms, pings: built.keepalive_pings });
     clock.advance(55 * MINUTE);
     await service.tick();
-    expect(sent).toEqual([]);
+    expect(sent).toHaveLength(1);
   });
 
   test("a model that asks for 55m pings at 55m", async () => {

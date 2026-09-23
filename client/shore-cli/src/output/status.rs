@@ -113,7 +113,10 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
             out,
             &format!(
                 "keepalive halted for {}{}",
-                text(halt, "character"),
+                match text(halt, "model") {
+                    "" => text(halt, "character").to_owned(),
+                    halted => format!("{halted} on {}", text(halt, "character")),
+                },
                 if reason.is_empty() {
                     String::new()
                 } else {
@@ -471,10 +474,13 @@ mod tests {
     fn a_halted_keepalive_is_surfaced_not_buried() {
         let mut data = payload();
         if let Some(slot) = data.get_mut("keepalive_halted") {
-            *slot = json!({"character": "qifei", "reason": "budget exhausted"});
+            *slot = json!({"character": "qifei", "model": "anthropic:claude-opus-5", "reason": "budget exhausted"});
         }
         let out = render(&data);
-        assert!(out.contains("keepalive halted for qifei"), "{out}");
+        assert!(
+            out.contains("keepalive halted for anthropic:claude-opus-5 on qifei"),
+            "{out}"
+        );
         assert!(out.contains("budget exhausted"), "{out}");
     }
 

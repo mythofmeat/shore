@@ -249,7 +249,9 @@ export class CharacterAutonomy {
         current.model === schedule.model &&
         current.intervalMs === schedule.intervalMs &&
         current.lastWarmAt === schedule.lastWarmAt &&
-        current.lastActiveAt === schedule.lastActiveAt);
+        current.lastActiveAt === schedule.lastActiveAt &&
+        current.pingsSent === schedule.pingsSent &&
+        current.maxPings === schedule.maxPings);
     if (same) return;
     this.#state.keepalive = schedule;
     this.#state.dirty = true;

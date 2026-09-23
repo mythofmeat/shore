@@ -13,8 +13,10 @@ const hours = (h: number) => h * 3_600_000;
 
 const now = minutes(1000);
 
+const PLENTY = 12;
+
 function armed(at: number): CacheKeepalive {
-  const ka = new CacheKeepalive(hours(12));
+  const ka = new CacheKeepalive(PLENTY);
   ka.setInterval(minutes(55), MODEL, at);
   ka.onCacheWarmed(MODEL, at);
   return ka;
@@ -22,11 +24,11 @@ function armed(at: number): CacheKeepalive {
 
 describe("arming and cadence", () => {
   test("new returns no action", () => {
-    expect(new CacheKeepalive(hours(12)).tick(now)).toBe("none");
+    expect(new CacheKeepalive(PLENTY).tick(now)).toBe("none");
   });
 
   test("off interval never pings", () => {
-    const ka = new CacheKeepalive(hours(12));
+    const ka = new CacheKeepalive(PLENTY);
     ka.onCacheWarmed(MODEL, now);
     expect(ka.tick(now + hours(2))).toBe("none");
     ka.setInterval(undefined, MODEL, now);
@@ -71,7 +73,7 @@ describe("arming and cadence", () => {
 
 describe("the ping deadline", () => {
   function pushed(at: number): CacheKeepalive {
-    const ka = new CacheKeepalive(hours(12));
+    const ka = new CacheKeepalive(PLENTY);
     ka.setInterval(minutes(55), MODEL, at);
     ka.onCacheWarmed(MODEL, at);
     ka.onPrefixWarmed(at);
@@ -111,7 +113,7 @@ describe("the ping deadline", () => {
   });
 
   test("with nothing confirmed, the plain cadence still arms", () => {
-    const ka = new CacheKeepalive(hours(12));
+    const ka = new CacheKeepalive(PLENTY);
     ka.setInterval(minutes(55), MODEL, now);
     ka.onCacheWarmed(MODEL, now);
     expect(ka.tick(now + minutes(54))).toBe("none");
@@ -132,18 +134,21 @@ describe("the ping deadline", () => {
     expect(real.tick(now + minutes(60))).toBe("ping");
   });
 
-  test("the idle ceiling is untouched by a push", () => {
-    const ka = pushed(now);
-    for (let m = 55; m <= 60 * 12; m += 55) {
+  test("a push spends none of the count", () => {
+    const ka = new CacheKeepalive(1);
+    ka.setInterval(minutes(55), MODEL, now);
+    ka.onCacheWarmed(MODEL, now);
+    for (let m = 50; m <= 60 * 12; m += 50) {
       ka.onPrefixWarmed(now + minutes(m));
     }
-    expect(ka.tick(now + hours(12) + minutes(1))).toBe("none");
+    expect(ka.pingsSent).toBe(0);
+    expect(ka.tick(now + minutes(700 + 55))).toBe("ping");
   });
 });
 
-describe("the idle ceiling", () => {
-  test("ping succeeded does not reset idle clock", () => {
-    const ka = new CacheKeepalive(hours(2));
+describe("the ping count", () => {
+  test("each successful ping spends one, and a spent count stops the schedule", () => {
+    const ka = new CacheKeepalive(2);
     ka.setInterval(minutes(55), MODEL, now);
     ka.onCacheWarmed(MODEL, now);
 
@@ -155,12 +160,16 @@ describe("the idle ceiling", () => {
     expect(ka.tick(now + minutes(166))).toBe("none");
   });
 
-  test("real activity resets idle clock and resumes", () => {
-    const ka = new CacheKeepalive(hours(2));
+  test("real activity gives the count back and resumes", () => {
+    const ka = new CacheKeepalive(1);
     ka.setInterval(minutes(55), MODEL, now);
     ka.onCacheWarmed(MODEL, now);
+    expect(ka.tick(now + minutes(55))).toBe("ping");
+    ka.onPingSucceeded(now + minutes(55));
+    expect(ka.tick(now + minutes(110))).toBe("none");
 
     ka.onCacheWarmed(MODEL, now + minutes(115));
+    ka.onPrefixWarmed(now + minutes(115));
     expect(ka.tick(now + minutes(120))).toBe("none");
     expect(ka.tick(now + minutes(170))).toBe("ping");
   });
@@ -173,8 +182,8 @@ describe("off-model warms", () => {
     expect(ka.tick(now + minutes(55))).toBe("ping");
   });
 
-  test("warm on different model does not reset idle ceiling", () => {
-    const ka = new CacheKeepalive(hours(2));
+  test("warm on different model does not give the count back", () => {
+    const ka = new CacheKeepalive(2);
     ka.setInterval(minutes(55), MODEL, now);
     ka.onCacheWarmed(MODEL, now);
 
@@ -252,7 +261,7 @@ describe("snapshot and restore", () => {
     expect(required(snapshot).model).toBe(MODEL);
     expect(required(snapshot).interval).toBe(minutes(55));
 
-    const restored = new CacheKeepalive(hours(12));
+    const restored = new CacheKeepalive(PLENTY);
     expect(restored.restore(required(snapshot), now + minutes(20))).toBe(true);
     expect(restored.tick(now + minutes(54))).toBe("none");
     expect(restored.tick(now + minutes(55))).toBe("ping");
@@ -263,13 +272,13 @@ describe("snapshot and restore", () => {
     const snapshot = ka.snapshot();
     expect(snapshot).toBeDefined();
 
-    const restored = new CacheKeepalive(hours(12));
+    const restored = new CacheKeepalive(PLENTY);
     expect(restored.restore(required(snapshot), now + minutes(56))).toBe(false);
     expect(restored.tick(now + hours(2))).toBe("none");
   });
 
   test("snapshot absent when unarmed or invalidated", () => {
-    expect(new CacheKeepalive(hours(12)).snapshot()).toBeUndefined();
+    expect(new CacheKeepalive(PLENTY).snapshot()).toBeUndefined();
 
     const ka = armed(now);
     ka.onCacheInvalidated();

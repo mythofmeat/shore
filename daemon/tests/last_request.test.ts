@@ -394,7 +394,7 @@ describe("LastRequestCache", () => {
   test("caching arms the keepalive from the body, with the cadence beside it", () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
-    cache.set("ada", body("claude-fixture"), { intervalMs: 3_300_000, maxSecs: undefined });
+    cache.set("ada", body("claude-fixture"), { intervalMs: 3_300_000, pings: undefined });
 
     expect(cache.get("ada")).toEqual(body("claude-fixture"));
     expect(k.armed).toHaveLength(1);
@@ -489,7 +489,7 @@ describe("LastRequestCache", () => {
     expect("keepalive_interval_ms" in (k.armed[0] ?? {})).toBe(false);
   });
 
-  test("the ceiling the rebuilt model asks for is armed with it", async () => {
+  test("the ping count the rebuilt model asks for is armed with it", async () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
     const { config, dataDir } = await world([
@@ -499,15 +499,16 @@ describe("LastRequestCache", () => {
     config.models.chat.set("chat.fixture", {
       ...(FIXTURE_MODEL as object),
       cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(600) },
-      cacheKeepaliveMax: ConfigDuration.fromSecs(5400),
+      cacheKeepalivePings: 9,
     } as never);
 
     const decision = await cache.reprimeFromDisk("ada", dataDir, config);
-    expect(decision.kind === "push" && decision.keepalive.maxSecs).toBe(5400);
-    expect(k.armed[0]?.context?.keepalive_max_secs).toBe(5400);
+    expect(decision.kind === "push" && decision.keepalive.pings).toBe(9);
+    expect(k.armed[0]?.keepalive_pings).toBe(9);
+    expect(k.armed[0]?.context?.keepalive_window_secs).toBe(5400);
   });
 
-  test("a rebuilt model that names no ceiling arms with no ceiling key at all", async () => {
+  test("a rebuilt model with no keepalive arms with an empty window", async () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
     const { config, dataDir } = await world([
@@ -516,7 +517,8 @@ describe("LastRequestCache", () => {
     ]);
 
     await cache.reprimeFromDisk("ada", dataDir, config);
-    expect("keepalive_max_secs" in (k.armed[0]?.context ?? {})).toBe(false);
+    expect(k.armed[0]?.context?.keepalive_window_secs).toBe(0);
+    expect("keepalive_pings" in (k.armed[0] ?? {})).toBe(false);
   });
 
   test("the armed prefix names the home thread, so the warm session is the live one", async () => {

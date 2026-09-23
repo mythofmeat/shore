@@ -873,14 +873,13 @@ describe("a config.toml sets what it says and nothing else", () => {
 
 
   test("autonomy and heartbeat durations", () => {
-    const cfg = parsed("[behavior.autonomy]\nenabled = true\n\n[behavior.autonomy.heartbeat]\nfallback_heartbeat_interval = \"90m\"\ndormant_after_heartbeat_turns = 7\ndormant_after_idle_time = \"1d\"\nminimum_heartbeat_latency = \"500ms\"\nwrap_up_grace_rounds = 1\n\n[cache]\nkeepalive_max = \"6h\"\n");
+    const cfg = parsed("[behavior.autonomy]\nenabled = true\n\n[behavior.autonomy.heartbeat]\nfallback_heartbeat_interval = \"90m\"\ndormant_after_heartbeat_turns = 7\ndormant_after_idle_time = \"1d\"\nminimum_heartbeat_latency = \"500ms\"\nwrap_up_grace_rounds = 1\n");
     expect(at(cfg, "behavior.autonomy.enabled"), "behavior.autonomy.enabled").toEqual(true);
     expect(at(cfg, "behavior.autonomy.heartbeat.fallback_heartbeat_interval"), "behavior.autonomy.heartbeat.fallback_heartbeat_interval").toEqual("90m");
     expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns"), "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns").toEqual(7);
     expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_idle_time"), "behavior.autonomy.heartbeat.dormant_after_idle_time").toEqual("1d");
     expect(at(cfg, "behavior.autonomy.heartbeat.minimum_heartbeat_latency"), "behavior.autonomy.heartbeat.minimum_heartbeat_latency").toEqual("500ms");
     expect(at(cfg, "behavior.autonomy.heartbeat.wrap_up_grace_rounds"), "behavior.autonomy.heartbeat.wrap_up_grace_rounds").toEqual(1);
-    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("6h");
   });
 
 
@@ -1026,11 +1025,11 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
   });
 
   test("an unparseable duration is rejected", () => {
-    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = \"6 hours\"\n")).not.toBe("");
+    expect(rejected("[memory.compaction]\nidle_trigger = \"6 hours\"\n")).not.toBe("");
   });
 
   test("a negative duration is rejected", () => {
-    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = -5\n")).not.toBe("");
+    expect(rejected("[memory.compaction]\nidle_trigger = -5\n")).not.toBe("");
   });
 
   test("an unknown user_message_timestamps variant does not parse", () => {
@@ -1232,7 +1231,11 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
   });
 
   test("a boolean where a duration is expected", () => {
-    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = true\n")).toContain("true");
+    expect(rejected("[memory.compaction]\nidle_trigger = true\n")).toContain("true");
+  });
+
+  test("a global keepalive ceiling is no longer a config key", () => {
+    expect(rejected("[cache]\nkeepalive_max = \"6h\"\n")).toContain("unknown field `keepalive_max`");
   });
 
   test("an integer where replay_prior_thinking is expected", () => {

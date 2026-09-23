@@ -1,6 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { threadDataDir } from "../config/dirs.ts";
-import { resolveKeepaliveMaxSecs } from "../config/keepalive.ts";
+import { keepaliveWindowSecs } from "../config/keepalive.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -117,7 +117,6 @@ export interface GenerationDeps {
   compaction: CompactionRunner;
   newlyCrossedUsageBudgetWarnings: PersistContext["newlyCrossedUsageBudgetWarnings"];
   ledgerPath?: string;
-  keepaliveMaxSecs?: () => number | undefined;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   now?: () => string;
   newMessageId?: () => string;
@@ -270,7 +269,7 @@ async function runGenerationCore(
       built.request.messages,
       regen ? params.body.guidance : undefined,
     ),
-    context: callContext(deps, config, charName, engine.thread, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
+    context: callContext(deps, config, charName, engine.thread, params.rid, keepaliveWindowSecs(built.keepalive_interval_ms, built.keepalive_pings), (built.request.provider_options === undefined
         ? {}
         : { options: built.request.provider_options })),
   };
@@ -341,7 +340,7 @@ async function runGenerationCore(
       ...(params.rid === null ? {} : { rid: params.rid }),
     },
     keepaliveIntervalMs: built.keepalive_interval_ms,
-    keepaliveMaxSecs: built.keepalive_max_secs,
+    keepalivePings: built.keepalive_pings,
     toolIntermediateMessages: intermediate,
     replaceGeneratedTail: intermediatePersisted,
     wallClockMs: clock() - startedAt,
@@ -522,10 +521,9 @@ function callContext(
   charName: string,
   thread: string,
   rid: string | null,
-  modelKeepaliveMaxSecs: number | undefined,
+  keepaliveWindow: number,
   call: { options?: ProviderOptions },
 ): CallContext {
-  const ceiling = resolveKeepaliveMaxSecs(modelKeepaliveMaxSecs, deps.keepaliveMaxSecs?.());
   const usage = usageConfigView(config.app.usage);
   const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);
@@ -537,7 +535,7 @@ function callContext(
     thinking_enabled: thinkingEnabled(call.options),
     ...(call.options?.cache_ttl === undefined ? {} : { cache_ttl: call.options.cache_ttl }),
     ...(effort === undefined ? {} : { reasoning_effort: effort }),
-    ...(ceiling === undefined || ceiling === 0 ? {} : { keepalive_max_secs: ceiling }),
+    keepalive_window_secs: keepaliveWindow,
     ...(forensics === undefined ? {} : { forensics_dir: forensics }),
     ...(rid === null ? {} : { rid }),
     ...((usage.budgets ?? []).length === 0 ? {} : { usage }),

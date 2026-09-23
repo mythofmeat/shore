@@ -338,7 +338,7 @@ describe("config set", () => {
   const cases: [string, string, unknown][] = [
     ["chat.model", "anthropic_secondary:claude-secondary", "anthropic_secondary:claude-secondary"],
     ["heartbeat.enabled", "false", false],
-    ["cache.keepalive_for", "90m", "90m"],
+    ["compaction.idle_after", "90m", "90m"],
     ["chat.display_name", "Ellie", "Ellie"],
     ["subagents.enabled", "researcher,idle", ["researcher", "idle"]],
   ];
@@ -354,6 +354,7 @@ describe("config set", () => {
     ["chat.model", "ghost", "not found"],
     ["heartbeat.enabled", "maybe", "expected true or false"],
     ["memory.mode", "x", "not found"],
+    ["cache.keepalive_for", "90m", "not found"],
     ["compaction", "x", "table"],
     ["chat.user_timestamps", "sometimes", "not one of"],
     ["defaults.stream", "true", "not found"],

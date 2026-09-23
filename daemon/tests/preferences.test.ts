@@ -9,8 +9,7 @@ import { join } from "node:path";
 import rawFixture from "./config_captures/preferences.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
-import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";
-import { ConfigDuration } from "../src/config/duration.ts";
+import { catalogFromSections, defaultSdk, keepaliveToString, type ResolvedModel } from "../src/config/models.ts";
 import {
   ProviderRegistry,
   ProviderRegistryError,
@@ -551,24 +550,20 @@ describe("resolveSamplerSettings", () => {
     expect(resolveSamplerSettings(ok, undefined, "p", "m", undefined).maxToolIterations).toBe(1);
   });
 
-  test("the registry carries a model's keepalive ceiling into effective settings", () => {
-    const cacheKeepaliveMax = ConfigDuration.parse("12h");
-    expect("ok" in cacheKeepaliveMax).toBe(true);
-    if (!("ok" in cacheKeepaliveMax)) return;
-    const model: ResolvedModel = {
-      name: "ceiling",
-      qualifiedName: "openai:ceiling",
-      category: "chat",
-      providerKey: "openai",
-      sdk: "openai",
-      modelId: "ceiling",
-      cacheKeepaliveMax: cacheKeepaliveMax.ok,
-    };
+  test("a character's keepalive overrides the global one for that model, field by field", () => {
+    const global = prefsFrom(
+      '[models."openai:gpt-test"]\ncache_keepalive = "4m"\ncache_keepalive_pings = 2\n',
+    );
+    const character = prefsFrom('[models."openai:gpt-test"]\ncache_keepalive_pings = 5\n');
+    const settings = resolveSamplerSettings(global, character, "openai", "gpt-test", undefined);
+    expect(settings.cacheKeepalive?.kind).toBe("every");
+    expect(keepaliveToString(settings.cacheKeepalive as never)).toBe("4m");
+    expect(settings.cacheKeepalivePings).toBe(5);
+    expect(resolveSamplerSettings(global, undefined, "openai", "gpt-test", undefined).cacheKeepalivePings).toBe(2);
+  });
 
-    expect(
-      resolveSamplerSettings(emptyPreferences(), undefined, "openai", "ceiling", model)
-        .cacheKeepaliveMax?.toString(),
-    ).toBe("12h");
+  test("a stored keepalive duration ceiling is refused like any unknown key", () => {
+    expect(() => prefsFrom('[models."openai:gpt-test"]\ncache_keepalive_for = "12h"\n')).toThrow("unknown field `cache_keepalive_for`");
   });
 
   test("explicit discovered claims drop unsupported persisted sampler values", () => {

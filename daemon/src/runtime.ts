@@ -196,8 +196,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     () => Date.now(),
     {
       ledgerPath: rustJoin(config.dirs.data, "shore.db"),
-      maxIdleSecs: () =>
-        Number(registry.globalConfig().app.cache.keepalive_max.asSecs()),
       runActivity: async (run) => await snapshotGate.withActivity(run),
     },
   );
@@ -295,7 +293,6 @@ export function startRuntimeClocks(
       ctx.character,
       model,
       callType,
-      ctx.keepalive_max_secs,
       prefixFingerprint(req),
       usage,
     );

@@ -2430,7 +2430,7 @@ mod tests {
                 {"key":"budget_tokens","kind":"u32","applicability":"ignored","suggestions":[],"allow_custom":true},
                 {"key":"zai_clear_thinking","kind":"boolean","applicability":"rejected","suggestions":[],"allow_custom":false},
                 {"key":"cache_keepalive","kind":"duration_or_off","applicability":"honored","suggestions":[],"allow_custom":true},
-                {"key":"cache_keepalive_max","kind":"duration","applicability":"always","suggestions":[],"allow_custom":true},
+                {"key":"cache_keepalive_pings","kind":"u32","applicability":"always","suggestions":[],"allow_custom":true},
                 {"key":"max_tool_iterations","kind":"u32","applicability":"always","suggestions":[],"allow_custom":true},
                 {"key":"supports_images","kind":"boolean","applicability":"always","suggestions":["true","false"],"allow_custom":false}
             ]
@@ -2459,7 +2459,7 @@ mod tests {
         assert!(visible.contains(&"temperature"));
         assert!(visible.contains(&"sdk"));
         assert!(visible.contains(&"cache_keepalive"));
-        assert!(visible.contains(&"cache_keepalive_max"));
+        assert!(visible.contains(&"cache_keepalive_pings"));
         assert!(visible.contains(&"max_tool_iterations"));
         assert!(visible.contains(&"supports_images"));
         assert!(!visible.contains(&"budget_tokens"));

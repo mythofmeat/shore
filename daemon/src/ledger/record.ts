@@ -178,7 +178,7 @@ function record(
   if (ctx.ledger === undefined) return;
   const ledger = attempt?.ledger ?? ledgerFor(ctx.ledger);
   if (ledger === null) return;
-  if (ctx.keepalive_max_secs !== undefined) ledger.setMaxIdleSecs(ctx.keepalive_max_secs);
+  if (ctx.keepalive_window_secs !== undefined) ledger.setMaxIdleSecs(ctx.keepalive_window_secs);
   const ttl = cacheTtlSeconds(ctx.cache_ttl);
   if (ttl !== undefined) ledger.setCacheTtlSecs(ttl);
 

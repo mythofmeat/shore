@@ -24,7 +24,7 @@ const EXPECTED_KEYS = [
   "max_output_tokens",
   "cache_ttl",
   "cache_keepalive",
-  "cache_keepalive_for",
+  "cache_keepalive_pings",
   "sdk",
   "reasoning_replay",
   "max_tool_rounds",
@@ -105,11 +105,11 @@ describe("authoritative coercion", () => {
   test("parses durations and JSON-object strings into persisted types", () => {
     const sampler: SamplerSettings = {};
     applySamplerValue(sampler, "cache_keepalive", "55m");
-    applySamplerValue(sampler, "cache_keepalive_for", "12h");
+    applySamplerValue(sampler, "cache_keepalive_pings", "3");
     applySamplerValue(sampler, "openrouter_routing", '{"order":["Anthropic"]}');
     expect(samplerToWire(sampler)).toMatchObject({
       cache_keepalive: "55m",
-      cache_keepalive_for: "12h",
+      cache_keepalive_pings: 3,
       openrouter_routing: { order: ["Anthropic"] },
     });
   });
@@ -136,6 +136,9 @@ describe("authoritative coercion", () => {
     expect(sampler.temperature).toBe(0.7);
     expect(() => applySamplerValue(sampler, "max_tool_rounds", "0")).toThrow(/>= 1/);
     expect(() => applySamplerValue(sampler, "reasoning_effort", " ")).toThrow(/non-empty/);
+    expect(() => applySamplerValue(sampler, "cache_keepalive_pings", "0")).toThrow(/>= 1/);
+    expect(() => applySamplerValue(sampler, "cache_keepalive_pings", "1.5")).toThrow(/whole number/);
+    expect(() => applySamplerValue(sampler, "cache_keepalive_for", "12h")).toThrow(/unknown setting key/);
   });
 });
 
@@ -153,13 +156,20 @@ describe("applicability", () => {
     }
   });
 
-  test.each(["cache_ttl", "cache_keepalive", "cache_keepalive_for"])("%s is offered only on adapters that carry explicit cache controls", (key) => {
-    const carriers = new Set(["anthropic", "nanogpt"]);
+  test("cache_ttl is offered only on adapters that carry a cache lifetime", () => {
+    const carriers = new Set(["anthropic", "nanogpt", "claude_agent"]);
     for (const sdk of SDK_VARIANTS) {
-      const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
+      const entry = settingSchema(sdk).find((candidate) => candidate.key === "cache_ttl");
       expect(entry?.applicability, `cache_ttl/${sdk}`).toBe(
         carriers.has(sdk) ? "honored" : "ignored",
       );
+    }
+  });
+
+  test.each(["cache_keepalive", "cache_keepalive_pings"])("%s is offered on every adapter", (key) => {
+    for (const sdk of SDK_VARIANTS) {
+      const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
+      expect(entry?.applicability, `${key}/${sdk}`).toBe("always");
     }
   });
 

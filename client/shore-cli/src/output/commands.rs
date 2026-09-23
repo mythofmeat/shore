@@ -1250,6 +1250,9 @@ fn print_set_model_setting(data: &serde_json::Value) {
         );
     }
     cli_out!("[{scope}] {key} = {value}  ({})", abbreviate_model(model));
+    if let Some(warning) = data["warning"].as_str() {
+        cli_out!("warning: {warning}");
+    }
 }
 
 fn print_provider_refresh(data: &serde_json::Value) {

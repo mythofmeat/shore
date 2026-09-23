@@ -355,7 +355,7 @@ describe("preparing a heartbeat body", () => {
     expect(now?.messages.at(-1)?.role).not.toBe("system");
   });
 
-  test("the cold rebuild arms with the model's own ceiling, not a bare cadence", async () => {
+  test("the cold rebuild arms with the model's own ping count, not a bare cadence", async () => {
     const config = await baseConfig();
     await withConversation(config);
     const sonnet = config.models.chat.get("chat.anthropic.sonnet") as unknown as Record<
@@ -363,7 +363,7 @@ describe("preparing a heartbeat body", () => {
       unknown
     >;
     sonnet["cacheKeepalive"] = { kind: "every", interval: ConfigDuration.fromSecs(600) };
-    sonnet["cacheKeepaliveMax"] = ConfigDuration.fromSecs(5400);
+    sonnet["cacheKeepalivePings"] = 9;
     sonnet["cacheTtl"] = "1h";
 
     const armed: KeepalivePrefix[] = [];
@@ -376,7 +376,8 @@ describe("preparing a heartbeat body", () => {
     await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
-    expect(armed[0]?.context?.keepalive_max_secs).toBe(5400);
+    expect(armed[0]?.keepalive_pings).toBe(9);
+    expect(armed[0]?.context?.keepalive_window_secs).toBe(5400);
     expect(warmed).toEqual([false]);
   });
 

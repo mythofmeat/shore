@@ -100,7 +100,7 @@ describe("scalar mirrors carry exactly the declared fields", () => {
         "thinking_enabled",
         "cache_ttl",
         "reasoning_effort",
-        "keepalive_max_secs",
+        "keepalive_window_secs",
         "forensics_dir",
         "rid",
         "usage",
