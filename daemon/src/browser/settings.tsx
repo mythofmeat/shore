@@ -58,7 +58,7 @@ export function Settings({ actions, ready, character, close }: { actions: Operat
     let current = true;
     if (ready) {
       setBusy(true);
-      void Promise.all([actions.run("config_schema", {}), actions.run("config", {})]).then(([nextSchema, nextView]) => {
+      void Promise.all([actions.run("config_schema", {}, { remember: false }), actions.run("config", {}, { remember: false })]).then(([nextSchema, nextView]) => {
         if (!current) return;
         if (!("config" in nextView)) throw new Error("Expected configuration values");
         setSchema(nextSchema); setView(nextView); setError("");
@@ -72,9 +72,9 @@ export function Settings({ actions, ready, character, close }: { actions: Operat
     finally { setBusy(false); }
   };
   const refresh = async () => {
-    const next = await actions.run("config", {});
+    const next = await actions.run("config", {}, { remember: false });
     if (!("config" in next)) throw new Error("Expected configuration values");
-    setView(next); setSchema(await actions.run("config_schema", {}));
+    setView(next); setSchema(await actions.run("config_schema", {}, { remember: false }));
   };
   const entry = schema?.schema.find((item) => item.key === selected);
   const entries = schema?.schema.filter((item) => `${item.key} ${item.type}`.toLowerCase().includes(query.toLowerCase())) ?? [];

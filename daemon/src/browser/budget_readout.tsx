@@ -18,7 +18,7 @@ export function useBudgets(workspace: Workspace, state: WorkspaceSnapshot, enabl
       if (busy) return;
       busy = true;
       try {
-        const report = await workspace.actions.run("usage", { budget: true });
+        const report = await workspace.actions.run("usage", { budget: true }, { remember: false });
         if (report.mode !== "budget") throw new Error("Expected the budget report");
         if (active) setResult({ budgets: report.budgets, error: "", key });
       } catch (error) { if (active) setResult((previous) => ({ budgets: previous.key === key ? previous.budgets : [], error: error instanceof Error ? error.message : String(error), key })); }

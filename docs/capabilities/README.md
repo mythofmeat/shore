@@ -113,3 +113,22 @@ The generated examples exercise `to_swp_command`; they do not execute these spec
 null mappings must be replaced by real workflow evidence in the final parity gate, not accepted as
 covered. Known events require exhaustive policies tied to handlers; a generic unknown-frame fallback
 may only serve genuinely future events.
+
+### Executable local-workflow coverage
+
+`daemon/tests/browser_local_workflows.test.ts` compares every `shore ui` command, argument and
+finite choice from the Rust-generated inventory with the browser mapping. The gate reads the actual
+shortcut-handler syntax trees and the controls/readers used by the composer, keyboard editor and
+retained-output viewer. Removing a handler, its implementation or the scroll-amount reader fails;
+adding a terminal command, field or choice without an equivalent also fails. Quick-palette entries
+must resolve to the canonical operation/request catalogue. These structural checks complement actual
+browser journeys in `local_workflows.e2e.ts`, `editor.e2e.ts`, `keyboard.e2e.ts`, `gallery.e2e.ts`, `transfers.e2e.ts`,
+`drafts.e2e.ts` and the conversation workflow tests; presence checks alone do not establish behavior.
+
+Workspace help links to All actions, Conversation shortcuts, Settings, the editor, image gallery,
+activity and keyboard controls. The normal-mode equivalent is a focused transcript; insert/home/end
+focus the composer at its current/start/end-of-line position. Scroll amounts are whole lines, from
+0 through 65535, with the terminal default of one line for shortcuts. The help control initially
+chooses ten lines. Native arrows, Page Up/Down and Home/End operate the focused transcript. Closing
+or cancelling an edit discards that form while preserving the separate draft. Image picking and
+pasting use the device; message options identify daemon paths. Sign out detaches the browser session.

@@ -35,3 +35,9 @@
 
 .shortcut-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.5rem 0;border-bottom:1px solid var(--line)}.shortcut-row span{flex:1;min-width:12rem}.shortcut-row kbd{display:inline;float:none;overflow-wrap:anywhere}
 .gallery figure{margin:1rem 0}.gallery figcaption{overflow-wrap:anywhere;margin-bottom:.75rem}.gallery .actions{justify-content:space-between}.gallery .actions p{margin:0}.gallery:focus{outline:none}
+
+.draft-editor textarea{width:100%;min-height:35vh;resize:vertical}.draft-editor section{border-top:1px solid var(--line);margin-top:1rem;padding-top:1rem}.draft-editor .message-text{max-height:25vh;overflow:auto;overflow-wrap:anywhere}
+
+.action-output{max-height:60vh;overflow:auto}.action-output pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.help-actions{display:flex;flex-wrap:wrap;gap:.5rem}.messages:focus-visible{outline:3px solid #81ad97;outline-offset:-3px}

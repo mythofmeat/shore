@@ -9,10 +9,16 @@ export const LOCAL_SHORTCUTS = {
   images: "Conversation images", palette: "All actions", keyboard: "Keyboard shortcuts", display: "Display preferences", activity: "Activity panel",
   settings: "Settings", models: "Models & roles", providers: "Providers", diagnostics: "Diagnostics",
   memory: "Memory & segments", tools: "Tool workbench", usage: "Usage & budgets", archives: "Character archives",
-  focus: "Focus composer", send: "Send current draft", follow: "Toggle following responses",
+  help: "Workspace help", quick: "Conversation shortcuts", transcript: "Focus transcript", focus_home: "Start of input line", focus_end: "End of input line", sign_out: "Sign out", attach: "Choose image attachments", clear_images: "Clear image attachments",
+  edit_cancel: "Cancel message edit", output: "Last action output", editor: "Expand draft editor", undo: "Undo draft text", redo: "Redo draft text", focus: "Focus composer", send: "Send current draft", follow: "Toggle following responses",
   top: "Scroll to first message", bottom: "Scroll to latest message", up: "Scroll up", down: "Scroll down",
 } as const;
 export type LocalShortcut = keyof typeof LOCAL_SHORTCUTS;
+export function scrollAmount(args: Record<string, unknown>): number {
+  const amount = args["amount"] ?? 1;
+  if (typeof amount !== "number" || !Number.isInteger(amount) || amount < 0 || amount > 65535) throw new Error("Scroll amount must be a whole number from 0 to 65535");
+  return amount;
+}
 export interface Binding { key: string; scope: "normal" | "global"; target: string; args: Record<string, unknown>; mode: "open" | "run" }
 export const KEYBOARD_STORAGE = "shore.keyboard.v1.";
 export const MAX_BINDINGS = 128;
@@ -58,7 +64,10 @@ export function bindingValue(value: unknown): Binding {
 export function validateBinding(binding: Binding, operations: readonly OperationDescriptor[], requests: readonly OperationDescriptor[]): void {
   const [kind, name = ""] = binding.target.split(":");
   switch (kind) {
-    case "local": if (!Object.hasOwn(LOCAL_SHORTCUTS, name)) throw new Error("This browser action is unavailable"); break;
+    case "local":
+      if (!Object.hasOwn(LOCAL_SHORTCUTS, name)) throw new Error("This browser action is unavailable");
+      if (name === "up" || name === "down") scrollAmount(binding.args);
+      break;
     case "view": if (!Object.hasOwn(VIEW_PREFERENCES, name) || typeof binding.args["value"] !== "string" || (binding.args["value"] !== "toggle" && !viewValue(name as ViewKey, binding.args["value"]))) throw new Error("Choose a valid display preference value"); break;
     case "operation": {
       const operation = operations.find((item) => item.name === name);
@@ -94,7 +103,7 @@ export function shortcutTargets(operations: readonly OperationDescriptor[], requ
 export function matchingBinding(bindings: readonly Binding[], key: string, editing: boolean, modal: boolean): Binding | undefined {
   const candidates = bindings.filter((item) => item.key === key && (item.scope === "global" || !editing));
   const binding = candidates.find((item) => item.scope === "global") ?? candidates[0];
-  return modal && binding?.target !== "request:cancel" ? undefined : binding;
+  return modal && binding?.target !== "request:cancel" && binding?.target !== "local:edit_cancel" ? undefined : binding;
 }
 
 type StorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
