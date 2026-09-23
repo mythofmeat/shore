@@ -1,13 +1,15 @@
 import { RequestFields } from "./request_fields.tsx";
 import { checkAttachments, conversationRequest, imageUpload, remainingMessageOptions } from "./request_forms.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../swp/limits.ts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, type Ref } from "react";
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
 import type { Workspace, WorkspaceSnapshot } from "./workspace.ts";
 import { browserDraft, discardDraft, readDraft, storedDrafts, type DraftContent, type StoredDraft } from "./drafts.ts";
 import { Modal } from "./components.tsx";
 
-export function Composer({ state, workspace }: { state: WorkspaceSnapshot; workspace: Workspace }) {
+export interface ComposerHandle { send(): Promise<void>; focus(): void }
+
+export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; workspace: Workspace; ref?: Ref<ComposerHandle> }) {
   const conversation = JSON.stringify([state.character, state.thread]);
   const [store] = useState(() => browserDraft(conversation));
   const [draft, setDraft] = useState<DraftContent>({ text: "", images: [], pending: false });
@@ -45,9 +47,7 @@ export function Composer({ state, workspace }: { state: WorkspaceSnapshot; works
     }).catch((error: unknown) => {
       if (mounted) { workspace.report(error); setLoaded(true); setStorageFailed(true); setStatus("Draft storage unavailable. Keep this page open."); }
     });
-    const focus = (event: KeyboardEvent) => { if (event.altKey && event.key === "m") { event.preventDefault(); textRef.current?.focus(); } };
-    window.addEventListener("keydown", focus);
-    return () => { mounted = false; window.removeEventListener("keydown", focus); };
+    return () => { mounted = false; };
   }, [store, workspace]);
   const send = async () => {
     if (!loaded || busy || attaching || current.current.pending || state.status !== "ready" || state.character === null || request?.available !== true) return;
@@ -66,6 +66,7 @@ export function Composer({ state, workspace }: { state: WorkspaceSnapshot; works
       } else workspace.report(result.error?.message ?? `Request ${result.outcome}. Inspect the conversation before sending the retained draft again.`);
     } catch (error) { workspace.report(error); } finally { setBusy(false); }
   };
+  useImperativeHandle(ref, () => ({ send, focus: () => textRef.current?.focus() }));
   const attach = async (files: readonly File[]) => {
     if (files.length === 0) return;
     setAttaching(true);
@@ -99,11 +100,11 @@ export function Composer({ state, workspace }: { state: WorkspaceSnapshot; works
       <textarea id="message-composer" ref={textRef} rows={3} disabled={!loaded} placeholder={state.character === null ? "Create or select a character to begin" : `Message ${state.character}…`} value={draft.text} onChange={(event) => { void change({ ...current.current, text: event.target.value }); }} onPaste={(event) => {
         const images = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));
         if (images.length > 0) { event.preventDefault(); perform(() => attach(images)); }
-      }} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); perform(send); } }} />
+      }} />
       {draft.images.length === 0 ? null : <div className="attachments">{draft.images.map((image, index) => <button type="button" key={index} onClick={() => { void change({ ...current.current, images: current.current.images.filter((_, position) => position !== index) }); }}>Remove {image.filename}</button>)}<button type="button" onClick={() => { void change({ ...current.current, images: [] }); }}>Clear attachments</button></div>}
       {draft.pending && !busy ? <div className="notice"><strong>Previous send needs review</strong><p>This draft may already be in the conversation. Check the history before sending it again.</p><button type="button" onClick={() => { void change({ ...current.current, pending: false }); }}>I checked the conversation</button></div> : null}
       <div className="composer-footer"><label className="attach">Attach images<input aria-label="Attach images" className="sr-only" type="file" disabled={!loaded || attaching} accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; perform(() => attach(files)); }} /></label><button type="button" disabled={!loaded || request === undefined} onClick={() => setOptionsOpen(true)}>Message options</button><small role="status">{attaching ? "Adding images…" : status}</small><button type="button" onClick={() => perform(refresh)} disabled={!loaded}>Saved drafts</button>{storageFailed ? <button type="button" onClick={() => { void remember(current.current); }}>Retry saving</button> : null}<button type="button" onClick={() => workspace.connection.cancel()} disabled={state.status !== "ready"}>Stop</button><button type="submit" className="primary" disabled={!loaded || busy || attaching || draft.pending || state.status !== "ready" || state.character === null || request?.available !== true || (draft.text.trim() === "" && draft.images.length === 0 && imagePaths.length === 0)}>{busy ? "Sending…" : "Send"}</button></div>
-      <small>Ctrl/⌘ Enter to send · Text and attachments stay on this device until sent or discarded. Clearing browser data removes saved drafts.</small>
+      <small>Keyboard shortcuts are configurable · Text and attachments stay on this device until sent or discarded. Clearing browser data removes saved drafts.</small>
     </form>
     {optionsOpen && request !== undefined ? <Modal title="Message options" close={() => setOptionsOpen(false)}><RequestFields request={request} values={options} omit={["text", "image_data"]} change={(values) => { void change({ ...current.current, options: values }); }} /></Modal> : null}
     {saved === undefined ? null : <Modal title="Saved drafts" close={() => { setSaved(undefined); setDiscarding(undefined); }}>

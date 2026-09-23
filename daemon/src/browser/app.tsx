@@ -1,3 +1,6 @@
+import { KeyboardControls, useBindings } from "./keyboard_controls.tsx";
+import { bindingId, keyFromEvent, matchingBinding, validateBinding, validateSavedConfig, type Binding, type LocalShortcut } from "./keyboard.ts";
+import type { ViewKey } from "./preferences.ts";
 import type { StreamMetadata } from "../protocol/StreamMetadata.ts";
 import { metadataLabel } from "./metadata.ts";
 import { ActivityPanel, LiveResponse } from "./activity.tsx";
@@ -8,7 +11,7 @@ import { RequestFields } from "./request_fields.tsx";
 import { conversationRequest } from "./request_forms.ts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { Composer } from "./composer.tsx";
+import { Composer, type ComposerHandle } from "./composer.tsx";
 import type { Message } from "../protocol/Message.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { Providers } from "./providers.tsx";
@@ -35,11 +38,11 @@ const route = location.pathname.startsWith("/workspace/") ? location.pathname.sl
 const workspace = new Workspace(new BrowserConnection({ origin: location.origin, contract: SHORE_WEB_CONTRACT, protocol: SHORE_WEB_PROTOCOL, character: route[0] ?? null, thread: route[1] ?? null }));
 const perform = (work: () => Promise<unknown>) => { void work().catch((error: unknown) => workspace.report(error)); };
 
-function Action({ operation, state, close, preset = {} }: { operation: OperationDescriptor; state: WorkspaceSnapshot; close: () => void; preset?: Record<string, unknown> }) {
+function Action({ operation, state, close, preset = {}, review = false }: { review?: boolean; operation: OperationDescriptor; state: WorkspaceSnapshot; close: () => void; preset?: Record<string, unknown> }) {
   const control = actionControl(operation);
   const [values, setValues] = useState<Record<string, unknown>>(() => ({ ...record(initialValue(control)), ...preset }));
   const policy = operationPolicy(operation, values);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState(review);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<unknown>();
   const [error, setError] = useState("");
@@ -121,7 +124,7 @@ function App() {
   const [signingIn, setSigningIn] = useState(false);
   const [palette, setPalette] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedAction, setSelectedAction] = useState<{ name: string; preset: Record<string, unknown> }>();
+  const [selectedAction, setSelectedAction] = useState<{ name: string; preset: Record<string, unknown>; review?: boolean }>();
   const [image, setImage] = useState<string>();
   const [activity, setActivity] = useState(false);
   const [providers, setProviders] = useState(false);
@@ -135,6 +138,13 @@ function App() {
   const [navigation, setNavigation] = useState(false);
   const display = useDisplay();
   const [displayOpen, setDisplayOpen] = useState(false);
+  const bindings = useBindings();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [shortcutResult, setShortcutResult] = useState<{ label: string; data: unknown }>();
+  const [template, setTemplate] = useState<{ request: OperationDescriptor; values: Record<string, unknown> }>();
+  const composer = useRef<ComposerHandle>(null);
+  const runningKeys = useRef(new Set<string>());
+
   const reasoning = display.option("thinking") === "on";
   const tools = display.option("tools") === "on";
   const budgets = useBudgets(workspace, state, displayOpen || display.option("usage") !== "off");
@@ -163,10 +173,64 @@ function App() {
   useEffect(() => { workspace.connection.connect(); return () => { workspace.connection.stop(); }; }, []);
   useEffect(() => { if (follow) tail.current?.scrollIntoView({ block: "end" }); }, [state.messages, state.streams, follow]);
   useEffect(() => { if (state.character !== null) history.replaceState(null, "", `/workspace/${encodeURIComponent(state.character)}/${encodeURIComponent(state.thread ?? "main")}`); }, [state.character, state.thread]);
+  const localShortcuts: Record<LocalShortcut, () => void | Promise<void>> = {
+    palette: () => setPalette(true), keyboard: () => setKeyboardOpen(true), display: () => setDisplayOpen(true), activity: () => setActivity((open) => !open),
+    settings: () => setSettings(true), models: () => setModels(true), providers: () => setProviders(true), diagnostics: () => setDiagnostics(true),
+    memory: () => setMemory(true), tools: () => setToolWorkbench(true), usage: () => setUsage(true), archives: () => setArchives(true),
+    focus: () => composer.current?.focus(), send: () => composer.current?.send(), follow: () => setFollow((value) => !value),
+    top: () => { setFollow(false); document.querySelector(".messages")?.scrollTo({ top: 0 }); },
+    bottom: () => { setFollow(true); tail.current?.scrollIntoView({ block: "end" }); },
+    up: () => { setFollow(false); document.querySelector(".messages")?.scrollBy({ top: -200 }); },
+    down: () => { setFollow(false); document.querySelector(".messages")?.scrollBy({ top: 200 }); },
+  };
+  async function runConversation(name: string, values: Record<string, unknown>) {
+    if (name === "cancel") { workspace.connection.cancel(); return; }
+    if (name !== "message" && name !== "regen") throw new Error("Unsupported conversation action");
+    const completion = await workspace.connection.submit(conversationRequest(name, values)).finished;
+    if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Conversation action ${completion.outcome}`);
+  }
+  async function runBinding(binding: Binding) {
+    const current = workspace.getSnapshot();
+    validateBinding(binding, current.operations, current.requests);
+    const [kind, name = ""] = binding.target.split(":");
+    switch (kind) {
+      case "local":
+        if (["diagnostics", "memory", "tools"].includes(name) && current.character === null) throw new Error("Select a character first");
+        await localShortcuts[name as LocalShortcut](); return;
+      case "view": display.change(name as ViewKey, String(binding.args["value"]), budgets.budgets.map((budget) => budget.name)); return;
+      case "operation": {
+        const selected = current.operations.find((item) => item.name === name);
+        if (current.status !== "ready" || (selected === undefined || selected.available === false)) throw new Error("This operation is unavailable for the current connection or conversation");
+        if (name === "config" && Object.hasOwn(binding.args, "value")) validateSavedConfig(binding, (await workspace.actions.run("config_schema", {})).schema);
+        if (binding.mode === "open" || operationPolicy(selected, binding.args).confirmation !== "none") {
+          setSelectedAction({ name, preset: binding.args, review: binding.mode === "run" }); return;
+        }
+        const result = await workspace.actions.runDiscovered(name, binding.args);
+        setShortcutResult({ label: selected.label, data: result }); await workspace.refreshNavigation(); return;
+      }
+      case "request": {
+        const request = current.requests.find((item) => item.name === name);
+        if (current.status !== "ready" || (request === undefined || request.available === false)) throw new Error("This conversation action is unavailable");
+        if (binding.mode === "open" && name !== "cancel") { setTemplate({ request, values: binding.args }); return; }
+        await runConversation(name, binding.args); return;
+      }
+      default: throw new Error("Unsupported shortcut target");
+    }
+  }
   useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key === "k") { event.preventDefault(); setPalette((open) => !open); } };
-    window.addEventListener("keydown", shortcut); return () => { window.removeEventListener("keydown", shortcut); };
-  }, []);
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing || event.getModifierState("AltGraph") || state.status === "signed_out" || state.status === "stopped") return;
+      const key = keyFromEvent(event); if (key === undefined) return;
+      const editing = event.target instanceof Element && event.target.closest('input,textarea,select,button,a,summary,[role="button"],[role="textbox"],[contenteditable]:not([contenteditable="false"])') !== null;
+      const binding = matchingBinding(bindings.getSnapshot().bindings, key, editing, document.querySelector("dialog[open]") !== null);
+      if (binding === undefined) return;
+      event.preventDefault(); const id = bindingId(binding);
+      if (runningKeys.current.has(id)) return;
+      runningKeys.current.add(id);
+      void runBinding(binding).catch((error: unknown) => workspace.report(error)).finally(() => runningKeys.current.delete(id));
+    };
+    window.addEventListener("keydown", shortcut); return () => window.removeEventListener("keydown", shortcut);
+  }, [bindings, state.status, runBinding]);
   const ready = state.status === "ready";
   const warnings = state.activity.filter((item) => item.type.endsWith("warning")).slice(-3);
   if (state.status === "signed_out" || state.status === "stopped") return <main className="signin"><div className="brand">SHORE <span>WORKSPACE</span></div><h1>Your conversations,<br />where you need them.</h1><p>Sign in with your Shore daemon token.</p><form onSubmit={(event) => { event.preventDefault(); setSigningIn(true); perform(async () => { try { await workspace.connection.signIn(token); setToken(""); } finally { setSigningIn(false); } }); }}><label className="field">Daemon token<input autoFocus type="password" autoComplete="current-password" value={token} onChange={(event) => setToken(event.target.value)} /></label><button className="primary" disabled={signingIn || token === ""}>{signingIn ? "Connecting…" : "Open workspace"}</button></form><p role="alert">{state.error || state.detail}</p></main>;
@@ -175,21 +239,25 @@ function App() {
     <aside className="sidebar"><div className="brand">SHORE <span>WORKSPACE</span></div><div className="section-heading"><h2>Characters</h2><button disabled={!ready} onClick={() => action("create_character")}>New</button></div>
       <nav aria-label="Characters">{state.characters.map((character) => <button key={character.name} aria-current={state.character === character.name ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(character.name))}><span className="avatar">{character.name.slice(0, 1).toUpperCase()}</span>{character.name}</button>)}</nav>
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
-      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setArchives(true); setNavigation(false); }}>Character archives</button><button disabled={!ready} onClick={() => { setUsage(true); setNavigation(false); }}>Usage &amp; budgets</button><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
+      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setArchives(true); setNavigation(false); }}>Character archives</button><button disabled={!ready} onClick={() => { setUsage(true); setNavigation(false); }}>Usage &amp; budgets</button><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions</button><button onClick={() => { setKeyboardOpen(true); setNavigation(false); }}>Keyboard shortcuts</button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
     <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setDisplayOpen(true)}>Display preferences</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
       {state.error === "" ? null : <div role="alert" className="notice error">{state.error}<button aria-label="Dismiss error" onClick={() => workspace.dismissError()}>Dismiss</button></div>}
       {displayOpen || display.getSnapshot().error === "" ? null : <div role="alert" className="notice error">{display.getSnapshot().error}<button onClick={() => setDisplayOpen(true)}>Review display preferences</button></div>}
+      {keyboardOpen || bindings.getSnapshot().error === "" ? null : <div role="alert" className="notice error">{bindings.getSnapshot().error}<button onClick={() => setKeyboardOpen(true)}>Review keyboard shortcuts</button></div>}
       <RequestRecovery workspace={workspace} ready={ready} />
       {warnings.map((item) => <div className="notice" key={item.id}><Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
       <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { display.change("thinking", event.target.checked ? "on" : "off"); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { display.change("tools", event.target.checked ? "on" : "off"); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
       <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
         {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} metadata={state.metadata[message.msg_id]} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
         {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><LiveResponse stream={stream} openImage={setImage} /></article>)}<div ref={tail} />
-      </div><BudgetReadout budgets={budgets.budgets} error={budgets.error} refresh={budgets.refresh} open={() => setUsage(true)} /><Composer key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
+      </div><BudgetReadout budgets={budgets.budgets} error={budgets.error} refresh={budgets.refresh} open={() => setUsage(true)} /><Composer ref={composer} key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
     </main>
     {activity ? <ActivityPanel state={state} openImage={setImage} /> : null}
+    {keyboardOpen ? <KeyboardControls store={bindings} operations={state.operations} requests={state.requests} actions={workspace.actions} close={() => setKeyboardOpen(false)} /> : null}
+    {shortcutResult === undefined ? null : <Modal title="Shortcut result" close={() => setShortcutResult(undefined)}><h3>{shortcutResult.label}</h3><Inspect value={shortcutResult.data} label="Complete shortcut result" /></Modal>}
+    {template === undefined ? null : <Modal title={template.request.label} close={() => setTemplate(undefined)}><form onSubmit={(event) => { event.preventDefault(); const pending = template; setTemplate(undefined); perform(() => runConversation(pending.request.name, pending.values)); }}><RequestFields request={template.request} values={template.values} change={(values) => setTemplate({ ...template, values })} /><button type="submit">Run conversation action</button></form></Modal>}
     {displayOpen ? <DisplayControls budgets={budgets.budgets.map((budget) => budget.name)} close={() => setDisplayOpen(false)} /> : null}
     {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
     {archives ? <Archives operations={state.operations} characters={state.characters} character={state.character} ready={ready} changed={() => workspace.refreshNavigation()} close={() => setArchives(false)} advanced={(name, args) => { setArchives(false); action(name, args); }} /> : null}
@@ -200,7 +268,7 @@ function App() {
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}
     {providers ? <Providers actions={workspace.actions} ready={ready} close={() => setProviders(false)} /> : null}
     {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.requests.filter((item) => `${item.label} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={!ready || item.available === false} onClick={() => openRequest(item.name)}><strong>{item.label}</strong><small>Conversation</small></button>)}{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
-    {operation === undefined || selectedAction === undefined ? null : <Action key={`${operation.name}.${JSON.stringify(selectedAction.preset)}`} operation={operation} state={state} preset={selectedAction.preset} close={() => setSelectedAction(undefined)} />}
+    {operation === undefined || selectedAction === undefined ? null : <Action key={`${operation.name}.${JSON.stringify(selectedAction.preset)}`} operation={operation} state={state} preset={selectedAction.preset} review={selectedAction.review ?? false} close={() => setSelectedAction(undefined)} />}
     {image === undefined ? null : <Modal title="Image" close={() => setImage(undefined)}><img className="full-image" alt="Full-size conversation image" src={image} /><a href={image} download="shore-image">Download image</a></Modal>}
     {guidance === undefined || regenRequest === undefined ? null : <Modal title="Regenerate response" close={() => setGuidance(undefined)}><form onSubmit={(event) => { event.preventDefault(); const values = guidance; setGuidance(undefined); perform(async () => { const completion = await workspace.connection.submit(conversationRequest("regen", values)).finished; if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Regeneration ${completion.outcome}`); }); }}><RequestFields request={regenRequest} values={guidance} change={setGuidance} /><button className="primary">Regenerate</button></form></Modal>}
   </div>;
