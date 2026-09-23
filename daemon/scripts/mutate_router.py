@@ -71,22 +71,21 @@ MUTANTS = [
     ("an unresolvable character launches anyway",
      '    if ("error" in resolved) {',
      "    if (false as boolean) {\n      const resolved = { name: \"\" };"),
-    ("a cancel falls through (EQUIVALENT — the next guard catches it, and "
-     "keeping both is what makes the intent readable)",
-     '    if (msg.type === "cancel") {\n'
+    ("a cancel falls through into generation",
+     '    if (plan.kind === "cancel") {\n'
      '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
      "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
      "      return;\n"
      "    }",
-     '    if (msg.type === "cancel") {\n'
+     '    if (plan.kind === "cancel") {\n'
      '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
      "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
      "    }"),
     ("a regen is dropped instead of launched",
-     '    if (msg.type !== "message" && msg.type !== "regen") return;',
-     '    if (msg.type !== "message") return;'),
+     '    if (msg.type === "hello" || msg.type === "command") return;',
+     '    if (msg.type === "hello" || msg.type === "command" || msg.type === "regen") return;'),
     ("a hello or command is treated as a message",
-     '    if (msg.type !== "message" && msg.type !== "regen") return;',
+     '    if (msg.type === "hello" || msg.type === "command") return;',
      "    if (false) return;"),
     ("a request from a vanished session still launches",
      "    const issuerSend = this.#deps.router.senderFor(meta.session.sessionId);\n"
@@ -95,16 +94,13 @@ MUTANTS = [
      "      this.#deps.router.senderFor(meta.session.sessionId) ?? (() => Promise.resolve());"),
 
     # ── the regen body ──────────────────────────────────────────────────
-    ("a regen carries the frame's text through",
-     '          rid: msg.rid ?? null,\n          text: "",\n          stream: msg.stream,',
-     '          rid: msg.rid ?? null,\n          text: (msg as { text?: string }).text ?? "x",\n'
-     "          stream: msg.stream,"),
-    ("a regen forces streaming on",
-     '          text: "",\n          stream: msg.stream,',
-     '          text: "",\n          stream: true,'),
-    ("a regen drops its rid",
-     '      ? {\n          rid: msg.rid ?? null,\n          text: "",',
-     '      ? {\n          rid: null,\n          text: "",'),
+    ("a regen carries the frame's text through", "src/operations/requests.ts",
+     'rid: request.rid ?? null, text: "", stream: request.stream,',
+     'rid: request.rid ?? null, text: (request as { text?: string }).text ?? "x", stream: request.stream,'),
+    ("a regen forces streaming on", "src/operations/requests.ts",
+     'text: "", stream: request.stream,', 'text: "", stream: true,'),
+    ("a regen drops its rid", "src/operations/requests.ts",
+     'rid: request.rid ?? null, text: "",', 'rid: null, text: "",'),
 
     # ── the lease ───────────────────────────────────────────────────────
     ("every engine message takes the lease",
@@ -117,7 +113,7 @@ MUTANTS = [
      '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
      '    this.#deps.leases.observe(String(meta.session.sessionId), meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);'),
     ("the stream goes to the issuer alone, not the fanout",
-     '    const send = this.#deps.leases.fanout(\n      charName,\n      meta.session.sessionId,\n      async (msg) => { if (inSelectedThread()) await issuerSend(msg); },\n      this.#deps.router,\n      undefined,\n      thread,\n    );',
+     '    const send = this.#deps.leases.fanout(\n      charName,\n      meta.session.sessionId,\n      async (msg) => {\n        if (!inSelectedThread()) return;\n        if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) return;\n        await issuerSend(msg);\n      },\n      this.#deps.router,\n      undefined,\n      thread,\n    );',
      '    const send = issuerSend;'),
     ("the disconnect sweep leaves the leases in place",
      "    this.#deps.leases.clear();",

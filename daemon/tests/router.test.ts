@@ -1078,3 +1078,34 @@ test("different threads can generate in one session without cancelling or mixing
   expect(main.signal.aborted).toBe(true);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "main", finish_reason: "cancelled" });
 });
+
+test("the shared engine handler preserves all conversation fields from its executable registrations", async () => {
+  const h = harness(["Alice"], 1);
+  const request: ClientMessage = { type: "message", rid: "all-fields", text: "hello", stream: false, images: ["original.png"], image_data: [{ filename: "upload.png", data: "YWJj", mime_type: "image/png" }], absence_seconds: 120 };
+  await h.handler.handleEngine(request, meta("Alice", 1, "all-fields", "message"));
+  expect(h.started[0]?.body).toEqual({ rid: "all-fields", text: "hello", stream: false, images: ["original.png"], image_data: [{ filename: "upload.png", data: "YWJj", mime_type: "image/png" }], absence_seconds: 120 });
+  expect(h.started[0]?.regen).toBe(false);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+  expect(h.started[0]?.signal.aborted).toBe(true);
+  await h.handler.handleEngine({ type: "regen", rid: "regen-fields", stream: false, guidance: "new perspective" }, meta("Alice", 1, "regen-fields", "regen"));
+  expect(h.started[1]?.body).toEqual({ rid: "regen-fields", text: "", stream: false, images: [], image_data: [], guidance: "new perspective" });
+  expect(h.started[1]?.regen).toBe(true);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+});
+
+test("non-streaming requests wait for the completed response while spectators still receive progress", async () => {
+  const h = harness(["Alice"], 2);
+  h.leases.observe("Alice", 2, "message");
+  await h.handler.handleEngine({ type: "regen", rid: "quiet", stream: false }, meta("Alice", 1, "quiet", "regen"));
+  const generation = required(h.started[0]);
+  const frames: ServerMessage[] = [
+    { type: "stream_start", rid: "quiet", regen: true },
+    { type: "stream_chunk", rid: "quiet", content_type: "thinking", text: "thinking" },
+    { type: "stream_chunk", rid: "quiet", content_type: "text", text: "partial" },
+    { type: "stream_end", rid: "quiet", content: "completed", is_final: true, metadata: { model: "fixture", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } },
+  ];
+  for (const frame of frames) await generation.send(frame);
+  expect(h.frames.get(1)).toEqual([required(frames[3])]);
+  expect(h.frames.get(2)).toEqual(frames);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+});

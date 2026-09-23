@@ -1,8 +1,45 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-23. Work continues toward the full issue. The ordinary-request recovery patch has
-now been integrated; see the new checkpoint below. Full parity, release/security auditing and actual
-GitHub CI/merge-gate evidence remain outstanding.
+Updated 2026-09-23. Work continues toward the full issue. Core conversation request discovery and
+controls now join ordinary-request recovery; see the checkpoints below. Full parity, release/security
+auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+
+## Core conversation controls checkpoint — 2026-09-23
+
+This continuation began at `b248e154`. Bun upgrade, daemon latest dependency update/install,
+Rust stable update, Cargo incompatible upgrade/update and current build-tool release checks found
+no new updates. The previous full baseline remains applicable; the focused browser/workspace and
+inventory baseline passed. The actual browser reproduction then failed at the absent Message
+options control.
+
+`OperationCatalogue.requests` now discovers message, regeneration and cancellation from the same
+registrations used by the shared engine handler. Payload schemas come from the canonical Rust wire
+types; metadata covers every user field and each request describes its completion contract.
+Cancellation stays on the existing control path. The source inventory and browser coverage tests
+reject missing registrations, actions, input fields and nested renderer kinds.
+
+The composer exposes streaming, the compatibility absence-time field and original image paths.
+The absence field is explicitly labeled as currently unused by this daemon. Streaming now suppresses
+start/chunk frames for the issuing client when disabled, while keeping completed responses and
+spectator progress. The real browser reproduction caught the previously ignored stream flag.
+Original image paths retain the existing protocol meaning: unmatched names create omitted-upload notices; they do not read
+files on the daemon host. The existing image picker supplies upload bytes, filenames and MIME types.
+Message options persist with the per-tab draft through reload and recovery; successful sends clear
+submitted one-shot options while retaining streaming preference. Regeneration exposes both streaming
+and guidance; the action palette includes all three core requests. Browser submissions validate
+against the generated canonical client-message schema.
+
+Picker and shared admission limits now import the same constants: 16 uploaded images, 5 MiB each,
+20 MiB decoded total and UTF-8 filename/media-type bounds. A real browser journey checks complete
+payloads, draft reload, rendered uploads and omission notices, non-streamed send/regeneration,
+composer focus and active cancellation. Another checks picker rejection without draft loss.
+
+Final verification passed all eight required daemon commands: 7,880 tests across 280 files,
+66 mutation passes free of stale patterns, three unchanged independent capture groups, and the
+compiled build. All three Rust checks passed: 1,492 tests, 15 existing ignored tests and existing
+Clippy warnings. All 31 Playwright journeys passed, as did browser generation/assets and inventory
+checks. The 16 core-request and 32 router mutation cases were all killed. Logs use `core-` under
+`out/issue-214/resume-2026-09-23/`. This is a checkpoint within the full issue.
 
 ## Verified checkpoint — ordinary request recovery, 2026-09-23
 
@@ -85,7 +122,7 @@ still require substantial verification.
 - Optional, default-off web serving, authenticated same-origin transport, shared local sessions,
   bounded connections/queues, and frontend assets embedded into the daemon executable.
 - Rust-canonical schemas and generated bindings/validators; all 56 named operations registered for
-  execution and discovery. Separate message/regen/cancel variants still need complete integration.
+  execution and discovery. Core message/regen/cancel requests now use executable registrations, discovered schemas and browser controls.
 - Conversation/navigation, structured generated actions, schema-backed settings, providers/models,
   diagnostics, memory/segments, a manual tool workbench, usage reports, and character archives.
   Screen presence does not prove every terminal option/event/local workflow is covered.
@@ -203,7 +240,7 @@ is implemented in the current continuation; archive recovery and draft/attachmen
 separate verified mechanisms. Do not treat these checkpoints as full parity or GitHub CI evidence.
 
 `docs/capabilities/README.md` now accurately records 56 registered operations and zero legacy named
-operations. That does not close core request variants or exhaustive terminal preferences/events.
+operations. Core request controls are now integrated, but exhaustive terminal preferences/events remain open.
 Inspect the extra `}` in the daemon Dockerfile's `COPY --chown` argument during container verification.
 No container build, actual PR CI run, or merge-policy change has been completed in this continuation.
 

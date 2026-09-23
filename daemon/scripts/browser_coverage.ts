@@ -58,14 +58,31 @@ export function assertRequestPhaseCoverage(renderers: ReadonlySet<string>): void
   }
 }
 
-export function assertBrowserCoverage(operations: OperationDescriptor[], renderers: ReadonlySet<string>, events: ReadonlySet<string>, policies: Readonly<Record<string, string>> = EVENT_POLICIES): void {
+function assertControls(operation: OperationDescriptor, renderers: ReadonlySet<string>): void {
   const check = (control: Control): void => {
     if (!renderers.has(control.kind)) throw new Error(`Missing GUI control renderer: ${control.kind}`);
     if (control.kind === "array") check(control.item);
     if (control.kind === "union") control.options.forEach(check);
     if (control.kind === "object") { Object.values(control.fields).forEach(check); if (control.additional !== undefined) check(control.additional); }
   };
-  for (const operation of operations) check(actionControl(operation));
+  check(actionControl(operation));
+}
+
+export function assertCoreRequestCoverage(requests: OperationDescriptor[], renderers: ReadonlySet<string>, routes: ReadonlySet<string>): void {
+  for (const variant of wire.client.oneOf) {
+    const name = variant.properties.type.const;
+    if (name === "hello" || name === "command") continue;
+    const request = requests.find((item) => item.name === name);
+    if (request === undefined || !routes.has(name)) throw new Error(`Missing GUI conversation action: ${name}`);
+    const definitions: Record<string, { type: string; properties?: Record<string, unknown> }> = wire.client.$defs;
+    const fields = Object.keys(definitions[variant.$ref.slice("#/$defs/".length)]?.properties ?? {}).filter((key) => key !== "rid").sort();
+    if (fields.join(",") !== Object.keys(actionControl(request).fields).sort().join(",")) throw new Error(`Missing GUI conversation field: ${name}`);
+    assertControls(request, renderers);
+  }
+}
+
+export function assertBrowserCoverage(operations: OperationDescriptor[], renderers: ReadonlySet<string>, events: ReadonlySet<string>, policies: Readonly<Record<string, string>> = EVENT_POLICIES): void {
+  for (const operation of operations) assertControls(operation, renderers);
   for (const variant of wire.server.oneOf) {
     const name = variant.properties.type.const;
     if (!events.has(name) || policies[name] === undefined) throw new Error(`Missing GUI event handling: ${name}`);

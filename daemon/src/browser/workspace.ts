@@ -16,7 +16,7 @@ export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "u
 export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null }
 export interface Activity { id: number; type: string; data: unknown }
 export interface WorkspaceSnapshot {
-  characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[];
+  characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
   messages: Message[]; activeStart: number; streams: LiveTurn[]; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; hasEarlier: boolean; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
@@ -55,7 +55,7 @@ export class Workspace {
   #historyEpoch = 0;
   #before: number | "active" = "active";
   #loadingEarlier = false;
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], messages: [], activeStart: 0, streams: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], activeStart: 0, streams: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
   constructor(readonly connection: BrowserConnection) {
     this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
@@ -95,7 +95,7 @@ export class Workspace {
       const catalogue = await this.actions.run("discover_operations", {});
       const characters = await this.actions.run("list_characters", {});
       const threads = catalogue.operations.find((operation) => operation.name === "list_threads")?.available === true ? (await this.actions.run("list_threads", {})).threads : [];
-      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, characters: characters.characters, threads });
+      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters, threads });
     } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
@@ -122,7 +122,7 @@ export class Workspace {
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], config: {}, streams: [], activity: [], operations: [], threads: [], characters: [], uncertain: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], config: {}, streams: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }

@@ -153,7 +153,11 @@ wire_types! {
         pub available: Option<bool>,
     }
 
-    pub struct OperationCatalogue { pub operations: Vec<OperationDescriptor> }
+    pub struct OperationCatalogue {
+        pub operations: Vec<OperationDescriptor>,
+        #[serde(default)]
+        pub requests: Vec<OperationDescriptor>,
+    }
 
     #[serde(rename_all = "snake_case")]
     pub enum ConfigKind { Boolean, String, Integer, Float, Duration, Enum, List, Map, Table, Unknown }

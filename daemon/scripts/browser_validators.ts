@@ -11,6 +11,7 @@ export function browserValidators(): Record<string, string> {
   const validator = contractValidator({ source: true, esm: true, formats: _`require("../operations/number_formats.ts").numberFormats` });
   const contracts = {
     ServerMessage: wire.server,
+    ClientMessage: wire.client,
     WebSessionInfo: web.session,
     WebProblem: web.problem,
     WebArchiveInfo: web.archive_info,

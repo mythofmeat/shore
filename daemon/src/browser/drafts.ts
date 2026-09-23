@@ -1,9 +1,9 @@
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
 
-export interface DraftContent { text: string; images: ImageUpload[]; pending: boolean }
+export interface DraftContent { text: string; images: ImageUpload[]; pending: boolean; options?: Record<string, unknown> }
 export interface StoredDraft {
   id: string; conversation: string; revision: number; text: string; attachment: string | null;
-  imageCount: number; bytes: number; updated: number; pending: boolean;
+  imageCount: number; bytes: number; updated: number; pending: boolean; options?: Record<string, unknown>;
 }
 const MAX_DRAFTS = 64;
 const MAX_BYTES = 128 * 1024 * 1024;
@@ -86,7 +86,7 @@ export async function readDraft(id: string, conversation: string): Promise<{ rec
   if (record === undefined || record.conversation !== conversation) return undefined;
   const images = record.attachment === null ? [] : await result(tx.objectStore("attachments").get(record.attachment)) as ImageUpload[] | undefined;
   if (images === undefined) throw new Error("Saved attachments are missing. The draft was kept for recovery.");
-  return { record, content: { text: record.text, images, pending: record.pending } };
+  return { record, content: { text: record.text, images, pending: record.pending, ...(record.options === undefined ? {} : { options: record.options }) } };
 }
 
 function cleanAttachments(tx: IDBTransaction, records: StoredDraft[]): void {
@@ -169,7 +169,7 @@ export class BrowserDraft {
 
   async #write(content: DraftContent): Promise<void> {
     const db = await open();
-    const bytes = content.text.length * 2 + content.images.reduce((sum, image) => sum + (image.data.length + image.filename.length + (image.mime_type?.length ?? 0)) * 2, 0);
+    const bytes = JSON.stringify(content.options ?? {}).length * 2 + content.text.length * 2 + content.images.reduce((sum, image) => sum + (image.data.length + image.filename.length + (image.mime_type?.length ?? 0)) * 2, 0);
     if (bytes > MAX_BYTES) throw new Error("This draft exceeds the 128 MiB browser storage limit");
     const saved = await new Promise<StoredDraft | undefined>((resolve, reject) => {
       const tx = db.transaction(["drafts", "attachments"], "readwrite", { durability: "strict" });
@@ -183,7 +183,7 @@ export class BrowserDraft {
           const conflict = (previous?.revision ?? 0) !== this.#revision;
           const id = conflict ? crypto.randomUUID() : this.#id;
           const remaining = rows.filter((row) => row.id !== id);
-          if (content.text !== "" || content.images.length > 0 || content.pending) {
+          if (content.text !== "" || content.images.length > 0 || content.pending || Object.keys(content.options ?? {}).length > 0) {
             if (remaining.length >= MAX_DRAFTS || remaining.reduce((sum, row) => sum + row.bytes, bytes) > MAX_BYTES) {
               throw new Error("Draft storage is full. Discard a saved draft to save this one; your current text and attachments remain open.");
             }
@@ -191,7 +191,7 @@ export class BrowserDraft {
               ? this.#attachment : crypto.randomUUID();
             if (attachment !== null && attachment !== this.#attachment) tx.objectStore("attachments").put(content.images, attachment);
             next = { id, conversation: this.conversation, revision: conflict ? 1 : this.#revision + 1,
-              text: content.text, attachment, imageCount: content.images.length, bytes, updated: Date.now(), pending: content.pending };
+              text: content.text, attachment, imageCount: content.images.length, bytes, updated: Date.now(), pending: content.pending, ...(content.options === undefined ? {} : { options: content.options }) };
             tx.objectStore("drafts").put(next);
             remaining.push(next);
           } else if (!conflict) tx.objectStore("drafts").delete(id);

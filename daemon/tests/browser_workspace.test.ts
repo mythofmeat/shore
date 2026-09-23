@@ -141,3 +141,27 @@ test("request outcome renderers cover every canonical phase and reject an omitte
   const omitted = await switchCases(source.replace('case "uncertain":', ''), "RequestStatus", "request.phase");
   expect(() => assertRequestPhaseCoverage(omitted)).toThrow("Missing request phase renderer: uncertain");
 });
+
+test("every core request and nested field reaches a browser route and control, with omissions rejected", async () => {
+  const { requestCatalogue } = await import("../src/operations/requests.ts");
+  const { assertCoreRequestCoverage } = await import("../scripts/browser_coverage.ts");
+  const [components, app] = await Promise.all([
+    readFile(new URL("../src/browser/components.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/browser/app.tsx", import.meta.url), "utf8"),
+  ]);
+  const controls = await switchCases(components, "Field", "control.kind");
+  const routes = await switchCases(app, "openRequest", "name");
+  const requests = requestCatalogue();
+  expect(() => assertCoreRequestCoverage(requests, controls, routes)).not.toThrow();
+  for (const request of requests) {
+    expect(() => assertCoreRequestCoverage(requests.filter((item) => item !== request), controls, routes)).toThrow(`Missing GUI conversation action: ${request.name}`);
+    expect(() => assertCoreRequestCoverage(requests, controls, new Set([...routes].filter((name) => name !== request.name)))).toThrow(`Missing GUI conversation action: ${request.name}`);
+    for (const key of Object.keys(request.fields)) {
+      const omitted = { ...request, fields: Object.fromEntries(Object.entries(request.fields).filter(([name]) => name !== key)) };
+      expect(() => assertCoreRequestCoverage(requests.map((item) => item === request ? omitted : item), controls, routes)).toThrow("Unaccounted GUI fields");
+    }
+  }
+  for (const kind of ["string", "boolean", "array", "object", "integer", "union", "null"]) {
+    expect(() => assertCoreRequestCoverage(requests, new Set([...controls].filter((item) => item !== kind)), routes)).toThrow(`Missing GUI control renderer: ${kind}`);
+  }
+});

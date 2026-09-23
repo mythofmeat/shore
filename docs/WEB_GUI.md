@@ -846,8 +846,8 @@ copies preserve the source until it is discarded. Existing text-only drafts migr
 successful save. Nothing is sent during restoration.
 
 The store admits at most 64 drafts and 128 MiB of accounted text/image data. It refuses new writes
-when full and retains other drafts for explicit cleanup. Individual picker/paste attachments keep
-the 8 MiB file and 16 MiB combined encoded-image limits, with a 32-image count bound. Clipboard
+when full and retains other drafts for explicit cleanup. The later core-request checkpoint aligns picker/paste validation with shared admission:
+5 MiB per file, 20 MiB decoded total and a 16-image count bound. Clipboard
 images now use the same picker validation and persistence. Removing images deletes unreferenced
 stored attachment bytes transactionally. Drafts remain on this device across sign-out.
 
@@ -918,3 +918,38 @@ captures and a compiled build. All three Rust workspace checks passed (1,492 tes
 existing warnings remain). All 29 browser journeys passed together. Browser generation/assets and
 capability inventory checks passed. Logs are under `out/issue-214/resume-2026-09-23/`. These results
 do not establish actual GitHub CI or merge-policy enforcement. Full issue #214 acceptance remains open.
+
+
+### Core conversation request discovery and controls, 2026-09-23
+
+The canonical operation catalogue now has a separate `requests` collection for message,
+regeneration and cancellation. Rust wire schemas define the fields and completion events. The
+executable registrations describe those fields and construct the plans consumed by the shared
+engine handler, preserving the cancellation control path. Source inventory and executable browser
+coverage include these request schemas; deliberate omission of a request, field, action route or
+required nested control fails verification.
+
+Message options expose streaming, the reserved absence-time field and original image names. The
+absence field is explicitly labeled as having no response effect in this daemon. Disabling streaming
+suppresses start/chunk frames for the requester while preserving completed results and spectator
+progress; real browser verification reproduced the previously ignored flag. Original paths are
+omission labels when uploads are unavailable, as in the terminal clients; they do not open daemon
+files. File selection and clipboard paste supply actual image bytes, names and MIME types. Both
+use the server's admission constants: 16 images, 5 MiB each, 20 MiB decoded total and bounded UTF-8
+metadata. The browser also validates outgoing requests with generated client-message validators.
+
+Options are stored with each tab's draft and survive reload and recovery. Confirmed completion
+clears unchanged text, uploads and one-shot options while retaining the streaming preference;
+changes made during a request remain intact. The regeneration dialog includes streaming and
+guidance. The action palette now reaches the composer, regeneration and active cancellation.
+Actual browser verification covers these controls, sent payloads, rendered uploads and omitted
+image notices, reload, focus restoration, cancellation and picker limits. Full CLI/TUI local
+presentation coverage and the broader issue acceptance audit remain open.
+
+
+Verification passed all eight required daemon commands (7,880 tests in 280 files, 66 mutation
+passes free of stale patterns, three unchanged capture groups and the compiled build), all three
+Rust workspace commands (1,492 tests; 15 existing ignored tests), all 31 Playwright journeys and
+browser generation/assets/inventory checks. All 48 targeted core-request/router mutants were
+killed. Clippy reports existing warnings. The working logs use the `core-` prefix in
+`out/issue-214/resume-2026-09-23/`. No actual PR CI run or merge-policy change is claimed.

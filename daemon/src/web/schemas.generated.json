@@ -5318,10 +5318,18 @@
             "items": {
               "$ref": "#/$defs/OperationDescriptor"
             }
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/OperationDescriptor"
+            },
+            "default": []
           }
         },
         "required": [
-          "operations"
+          "operations",
+          "requests"
         ]
       },
       "OperationDescriptor": {
@@ -13175,10 +13183,18 @@
             "items": {
               "$ref": "#/$defs/OperationDescriptor"
             }
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/OperationDescriptor"
+            },
+            "default": []
           }
         },
         "required": [
-          "operations"
+          "operations",
+          "requests"
         ]
       },
       "OperationDescriptor": {
