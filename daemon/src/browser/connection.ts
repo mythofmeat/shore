@@ -188,7 +188,7 @@ export class BrowserConnection {
       this.#sync = new SyncState(0, selected.character, selected.thread);
       socket.addEventListener("open", () => {
         if (generation !== this.#generation) return;
-        socket.send(JSON.stringify({ type: "hello", client_type: "web", client_name: "shore-browser", capabilities: ["streaming", "history-deltas", "request-lifecycle"], character: selected.character, thread: selected.thread } satisfies ClientMessage));
+        socket.send(JSON.stringify({ type: "hello", client_type: "web", client_name: "shore-browser", capabilities: ["streaming", "history-deltas", "request-lifecycle", "multimodal-tool-results"], character: selected.character, thread: selected.thread } satisfies ClientMessage));
       });
       socket.addEventListener("message", (event) => {
         if (generation !== this.#generation) return;
