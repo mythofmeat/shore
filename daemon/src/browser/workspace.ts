@@ -1,3 +1,5 @@
+import { accumulateMetadata } from "./metadata.ts";
+import type { StreamMetadata } from "../protocol/StreamMetadata.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
 import type { ContentBlock } from "../protocol/ContentBlock.ts";
 import type { History } from "../protocol/History.ts";
@@ -13,11 +15,11 @@ export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "u
   return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, "value") ? { value: "<redacted>" } : {}) } };
 }
 
-export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null }
+export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null; metadata: StreamMetadata | null }
 export interface Activity { id: number; type: string; data: unknown }
 export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
-  messages: Message[]; activeStart: number; streams: LiveTurn[]; activity: Activity[];
+  messages: Message[]; metadata: Record<string, StreamMetadata>; activeStart: number; streams: LiveTurn[]; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; hasEarlier: boolean; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
 }
@@ -55,7 +57,7 @@ export class Workspace {
   #historyEpoch = 0;
   #before: number | "active" = "active";
   #loadingEarlier = false;
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], activeStart: 0, streams: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
   constructor(readonly connection: BrowserConnection) {
     this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
@@ -100,7 +102,7 @@ export class Workspace {
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
     const key = JSON.stringify([message.rid ?? null, message.subagent ?? null, message.task_id ?? null]);
-    const current = this.#state.streams.find((stream) => stream.key === key) ?? { key, rid: message.rid ?? null, subagent: message.subagent ?? null, text: "", reasoning: "", blocks: [], final: false, msgId: null };
+    const current = this.#state.streams.find((stream) => stream.key === key) ?? { key, rid: message.rid ?? null, subagent: message.subagent ?? null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null };
     const next = { ...current };
     switch (message.type) {
       case "stream_start": next.final = false; break;
@@ -112,17 +114,20 @@ export class Workspace {
         next.text = message.content;
         next.final = message.is_final;
         next.msgId = message.msg_id ?? null;
+        next.metadata = accumulateMetadata(next.metadata, message.metadata);
         next.blocks = message.terminal_content_blocks ?? next.blocks;
         break;
       case "tool_call": next.blocks = [...next.blocks, { type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }]; break;
       case "tool_result": next.blocks = [...next.blocks, { type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }]; break;
     }
-    this.#patch({ streams: [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
+    const metadata = message.type === "stream_end" && message.is_final && next.subagent === null && next.msgId !== null && next.metadata !== null
+      ? Object.fromEntries([...Object.entries(this.#state.metadata).filter(([id]) => id !== next.msgId), [next.msgId, next.metadata] as const].slice(-256)) : this.#state.metadata;
+    this.#patch({ metadata, streams: [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], config: {}, streams: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], metadata: {}, config: {}, streams: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -139,7 +144,7 @@ export class Workspace {
         const changed = character !== this.#state.character || thread !== this.#state.thread;
         if (message.delta === undefined || message.delta === null) { this.#historyEpoch += 1; this.#before = "active"; }
         this.#patch({ messages, activeStart: message.delta === undefined || message.delta === null ? message.active_start ?? 0 : this.#state.activeStart,
-          character, thread, config: message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
+          character, thread, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void this.refreshNavigation();
         return;
       }

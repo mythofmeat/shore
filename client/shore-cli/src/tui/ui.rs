@@ -4037,6 +4037,91 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
+    fn shared_browser_budget_fixtures_match_terminal_selection_and_rendering() {
+        use crate::tui::app::{BudgetFocus, UsageBudget, UsageDisplay, UsageLevel};
+        let fixtures: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/display_budgets.json"
+        )))
+        .unwrap();
+        let level = |value: &serde_json::Value| UsageLevel {
+            percent_used: value["percent_used"].as_f64().unwrap(),
+            crossed_warn_at: serde_json::from_value(value["crossed_warn_at"].clone()).unwrap(),
+            over_limit: value["over_limit"].as_bool().unwrap(),
+        };
+        for fixture in fixtures.get("metadata").unwrap().as_array().unwrap() {
+            let mut accumulated = serde_json::from_value(fixture["previous"].clone()).unwrap();
+            let incoming = serde_json::from_value(fixture["incoming"].clone()).unwrap();
+            super::super::accumulate_metadata(&mut accumulated, &incoming);
+            assert_eq!(
+                serde_json::to_value(accumulated).unwrap(),
+                fixture["expected"]
+            );
+        }
+        for fixture in fixtures.get("parsers").unwrap().as_array().unwrap() {
+            let focus = BudgetFocus::from_token(fixture["input"].as_str().unwrap()).unwrap();
+            assert_eq!(focus.name.as_deref(), fixture["name"].as_str());
+            assert_eq!(
+                focus.scope.map_or("auto", |scope| scope.as_token()),
+                fixture["scope"].as_str().unwrap()
+            );
+        }
+        for value in fixtures.get("invalid").unwrap().as_array().unwrap() {
+            assert!(BudgetFocus::from_token(value.as_str().unwrap()).is_none());
+        }
+        for fixture in fixtures.get("cases").unwrap().as_array().unwrap() {
+            let mut h = Harness::new();
+            h.app.connection_status = ConnectionStatus::Connected;
+            h.app.input.mode = InputMode::Insert;
+            h.app.usage_display =
+                UsageDisplay::from_token(fixture["mode"].as_str().unwrap()).unwrap();
+            h.app.budget_focus =
+                BudgetFocus::from_token(fixture["focus"].as_str().unwrap()).unwrap();
+            h.app.usage_budgets = fixture["budgets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| {
+                    let cap = level(value);
+                    UsageBudget {
+                        name: value["name"].as_str().unwrap().to_owned(),
+                        percent_used: cap.percent_used,
+                        crossed_warn_at: cap.crossed_warn_at,
+                        over_limit: cap.over_limit,
+                        pace: value.get("pace").map(level),
+                    }
+                })
+                .collect();
+            let expected = &fixture["expected"];
+            let label = fixture["label"].as_str().unwrap();
+            if expected.is_null() {
+                assert!(h.app.focused_budget().is_none(), "{label}");
+                assert!(!h.render_quiet().contains('%'), "{label}");
+                continue;
+            }
+            let selected = h.app.focused_budget().unwrap();
+            assert_eq!(selected.name, expected["name"].as_str().unwrap(), "{label}");
+            assert_eq!(
+                selected.level_percent(h.app.budget_focus.scope),
+                expected["percent_used"].as_f64().unwrap(),
+                "{label}"
+            );
+            assert_eq!(
+                selected.level_is_pace(h.app.budget_focus.scope),
+                expected["scope"].as_str().unwrap() == "pace",
+                "{label}"
+            );
+            let frame = h.render_quiet();
+            let visible = expected["visible"].as_bool().unwrap();
+            assert_eq!(frame.contains('%'), visible, "{label}: {frame}");
+            if visible {
+                let pct = (expected["percent_used"].as_f64().unwrap() * 100.0).round();
+                assert!(frame.contains(&format!("{pct}%")), "{label}: {frame}");
+            }
+        }
+    }
+
+    #[test]
     fn usage_chip_shows_on_input_border_when_enabled() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;

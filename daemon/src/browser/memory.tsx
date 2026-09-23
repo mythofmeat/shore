@@ -1,3 +1,5 @@
+import { COMPACTION_SUBAGENT } from "../memory/compaction/labels.ts";
+import { useDisplay } from "./display_state.tsx";
 import { useEffect, useState } from "react";
 import type { OperationClient } from "./operations.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
@@ -30,6 +32,7 @@ export function Memory({ actions, operations, ready, character, thread, streams,
   actions: OperationClient; operations: OperationDescriptor[]; ready: boolean; character: string; thread: string | null;
   streams: LiveTurn[]; close: () => void; changed: () => Promise<void>; openImage: (source: string) => void;
 }) {
+  const display = useDisplay();
   const [listing, setListing] = useState<SegmentsListing>();
   const [detail, setDetail] = useState<SegmentInspection>();
   const [index, setIndex] = useState("");
@@ -108,7 +111,7 @@ export function Memory({ actions, operations, ready, character, thread, streams,
       <form onSubmit={(event) => { event.preventDefault(); request({ name: "clear", args: { exclude, note: archiveNote } }); }}><fieldset disabled={disabled}><legend>Archive without summarizing</legend><label className="field">Archive note<textarea rows={2} value={archiveNote} onChange={(event) => setArchiveNote(event.target.value)} /></label><label className="check"><input type="checkbox" checked={exclude} onChange={(event) => setExclude(event.target.checked)} />Exclude new segment from history search</label><p className="muted">Archived messages stay inspectable. You can include the segment in search again later.</p><button type="submit">Clear active context</button></fieldset></form>
     </section>
     {pending === undefined ? null : <section className="confirmation" aria-label="Review context archive"><h3>Review context archive</h3><p>{character} / {thread ?? "home"}</p><p>{pending.name === "clear" ? "Archive the active conversation and start with an empty context, without summarizing it." : "Summarize and archive older turns according to the selected retention setting."}</p><pre>{JSON.stringify(pending.args, null, 2)}</pre><div className="actions"><button disabled={busy} onClick={() => setPending(undefined)}>Go back</button><button className="danger" disabled={busy || !ready} onClick={() => { void execute(pending); }}>Confirm archive</button></div></section>}
-    {streams.filter((stream) => stream.subagent === "compaction").map((stream) => <details key={stream.key} open={busy}><summary>Compaction progress{stream.final ? " · finished" : ""}</summary>{stream.reasoning === "" ? null : <pre>{stream.reasoning}</pre>}<Blocks blocks={stream.blocks} reasoning tools openImage={openImage} />{stream.blocks.length === 0 ? <pre>{stream.text}</pre> : null}</details>)}
+    {streams.filter((stream) => stream.subagent === COMPACTION_SUBAGENT && display.option("compaction") === "on").map((stream) => <details key={stream.key} open={busy}><summary>Compaction progress{stream.final ? " · finished" : ""}</summary>{stream.reasoning === "" || display.option("thinking") !== "on" ? null : <pre>{stream.reasoning}</pre>}<Blocks blocks={stream.blocks} reasoning tools openImage={openImage} />{stream.blocks.length === 0 ? <pre>{stream.text}</pre> : null}</details>)}
     {compaction === undefined ? null : <CompactionResult result={compaction} />}
     {result === undefined ? null : <section role="status"><h3>Memory action completed</h3><Inspect value={result} label="Complete memory action result" /></section>}
     <section aria-label="Archived segments"><div className="section-heading"><h3>Archived segments</h3><button disabled={disabled} onClick={() => { void run(refresh); }}>Refresh segments</button></div>

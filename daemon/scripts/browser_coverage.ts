@@ -7,6 +7,34 @@ import wire from "../src/protocol/wire.generated.json" with { type: "json" };
 import operationSchemas from "../src/operations/schemas.generated.json" with { type: "json" };
 import webSchemas from "../src/web/schemas.generated.json" with { type: "json" };
 import { parseInventorySources } from "./capability_inventory.ts";
+import terminal from "../../docs/capabilities/terminal.generated.json" with { type: "json" };
+
+export async function displayReaders(texts: string[]): Promise<Set<string>> {
+  const readers = new Set<string>();
+  for (const source of await parseInventorySources(texts, "tsx")) {
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.getText(source) === "display.option") {
+        const argument = node.arguments[0];
+        if (argument !== undefined && ts.isStringLiteral(argument)) readers.add(argument.text);
+      }
+      node.forEachChild(visit);
+    };
+    visit(source);
+  }
+  return readers;
+}
+
+export function assertDisplayCoverage(choices: Readonly<Record<string, readonly string[]>>, controls: Readonly<Record<string, unknown>>, readers: ReadonlySet<string>, modes: Readonly<Record<string, ReadonlySet<string>>>): void {
+  for (const preference of terminal.view_preferences) {
+    const key = preference.key;
+    if (JSON.stringify(choices[key]) !== JSON.stringify(preference.values)) throw new Error(`Missing GUI display choices: ${key}`);
+    if (controls[key] === undefined) throw new Error(`Missing GUI display control: ${key}`);
+    if (!readers.has(key)) throw new Error(`Missing GUI display reader: ${key}`);
+    if (!preference.values.includes("on")) for (const value of preference.values) {
+      if (value !== "toggle" && !modes[key]?.has(value)) throw new Error(`Missing GUI display mode: ${key}:${value}`);
+    }
+  }
+}
 
 export async function switchCases(text: string, functionName: string, expression: string): Promise<Set<string>> {
   const source = (await parseInventorySources([text], "tsx")).at(0);

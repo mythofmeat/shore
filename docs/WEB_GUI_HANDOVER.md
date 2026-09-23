@@ -1,8 +1,60 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-23. Work continues toward the full issue. Core conversation request discovery and
-controls now join ordinary-request recovery; see the checkpoints below. Full parity, release/security
-auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+Updated 2026-09-23. Work continues toward the full issue. Browser display preferences now join core
+conversation controls and ordinary-request recovery; see the checkpoints below. Full parity,
+release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+
+## Display preferences checkpoint — 2026-09-23
+
+This continuation began at `96a3eb6f`. Required Bun/Rust toolchain and dependency updates ran before
+investigation and found no manifest or lockfile changes. Current build-tool releases were checked;
+sccache 0.18.0 was restored from the official release with its published SHA-256 verified. In this
+environment use `PATH=/tmp/shore-214-tools/bin:$PATH` and `RUSTC_WRAPPER=` for Cargo checks; the system
+sccache remains 0.17.0 and `~/.cargo/bin` is absent. The focused post-refresh baseline passed. The
+actual browser reproduction failed at the missing Display preferences control before implementation.
+
+All nine terminal view keys now have browser controls: timestamps, thinking, tools, subagent,
+compaction, images, metadata, usage and budget. Choice lists are generated from the Rust-produced
+terminal capability inventory. Coverage checks read actual rendering calls and enum branches and
+reject deliberately omitted choices, controls, readers or modes. The browser preserves its existing
+visible-content defaults, with usage off and budget focus automatic. Boolean controls toggle directly;
+usage and budget also expose the terminal's cycle order, including named budgets when several exist.
+
+Preferences persist per field in browser local storage and synchronize between tabs without
+replacing unrelated changes. Legacy reasoning/tool choices migrate. Failed writes retain the open
+tab's choices, report the failure inside and outside the dialog, and support retry/reset; remote changes preserve
+unsaved local choices. Display settings remain browser-local. Keyboard customization and other local-workflow
+parity still require separate work.
+
+Hidden inline images retain an explicit full-size action. Reasoning/tool choices affect completed
+and live blocks; subagent and compaction choices filter activity and compaction progress while
+keeping action results inspectable. Message metadata includes available provider/model details and
+live token/timing totals. Stream totals follow TUI accumulation, including first-token timing and
+numeric bounds. Up to 256 completed message metadata records remain in the open workspace; history
+reconciliation retains matching records, selection changes/sign-out clear them. Reloaded history does
+not contain token/timing metadata in the canonical protocol, so it shows available message details.
+
+The usage readout requests the shared budget operation on enable, conversation/message changes,
+warnings and a 30-second refresh. Failed refreshes mark retained readings stale. Off/always/warn,
+automatic/cap/pace, case-insensitive names and named scopes follow terminal behavior. Shared fixtures
+exercise the browser policy and actual terminal renderer, including warning priority, pace fallback,
+ties, unavailable names and metadata accumulation. Four browser journeys exercise every control's
+visible effect, multiple tabs, reload, write failure/retry, subagent/tool streams, compaction,
+explicit image opening, named budgets and quiet warning-only behavior.
+
+Verification passed all eight required daemon commands: 7,902 tests in 281 files, 67 current
+mutation passes, three unchanged independent capture groups and the compiled build. All 26 new
+mutation cases were killed. All three Rust checks passed: 1,493 tests, 15 existing ignored tests and
+existing Clippy warnings. All 35 Playwright journeys passed together, including the final reproduction
+and fix for a save-failure notice disappearing when its dialog closed. Browser generation/assets,
+capability inventory and workflow lint checks passed, and the mobile layout was inspected. The build
+used local compilation when the cache server was unavailable. Logs use `preferences-` under
+`out/issue-214/resume-2026-09-23/`. This checkpoint does not complete issue #214.
+
+Next, compare the actual `UiCommand`/keymap inventory with browser-local workflows and keyboard
+handling. The browser currently has the action-palette and send shortcuts but no binding editor.
+The broader presentation audit should also exercise budget-name edge cases and consecutive spectator
+responses, alongside the remaining event/media/concurrency, security, packaging and CI acceptance work.
 
 ## Core conversation controls checkpoint — 2026-09-23
 

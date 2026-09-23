@@ -1,3 +1,9 @@
+import type { StreamMetadata } from "../protocol/StreamMetadata.ts";
+import { metadataLabel } from "./metadata.ts";
+import { ActivityPanel, LiveResponse } from "./activity.tsx";
+import { DisplayControls } from "./display.tsx";
+import { DisplayProvider, useDisplay } from "./display_state.tsx";
+import { BudgetReadout, useBudgets } from "./budget_readout.tsx";
 import { RequestFields } from "./request_fields.tsx";
 import { conversationRequest } from "./request_forms.ts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -28,13 +34,6 @@ declare const SHORE_WEB_PROTOCOL: number;
 const route = location.pathname.startsWith("/workspace/") ? location.pathname.slice(11).split("/").map(decodeURIComponent) : [];
 const workspace = new Workspace(new BrowserConnection({ origin: location.origin, contract: SHORE_WEB_CONTRACT, protocol: SHORE_WEB_PROTOCOL, character: route[0] ?? null, thread: route[1] ?? null }));
 const perform = (work: () => Promise<unknown>) => { void work().catch((error: unknown) => workspace.report(error)); };
-
-function saved(key: string): string {
-  try { return localStorage.getItem(key) ?? ""; } catch { return ""; }
-}
-function save(key: string, value: string): void {
-  try { localStorage.setItem(key, value); } catch { workspace.report("Browser storage is unavailable. Keep this page open to retain your draft."); }
-}
 
 function Action({ operation, state, close, preset = {} }: { operation: OperationDescriptor; state: WorkspaceSnapshot; close: () => void; preset?: Record<string, unknown> }) {
   const control = actionControl(operation);
@@ -105,11 +104,13 @@ function Action({ operation, state, close, preset = {} }: { operation: Operation
   </Modal>;
 }
 
-function MessageCard({ message, reasoning, tools, openImage, action }: { message: Message; reasoning: boolean; tools: boolean; openImage: (source: string) => void; action: (name: string, preset?: Record<string, unknown>) => void }) {
+function MessageCard({ message, metadata, reasoning, tools, openImage, action }: { message: Message; metadata: StreamMetadata | undefined; reasoning: boolean; tools: boolean; openImage: (source: string) => void; action: (name: string, preset?: Record<string, unknown>) => void }) {
+  const display = useDisplay();
   return <article className={`message ${message.role}`} aria-label={`${message.role} message`}>
-    <div className="message-heading"><strong>{message.role}</strong><time>{message.timestamp ? new Date(message.timestamp).toLocaleString() : ""}</time></div>
+    <div className="message-heading"><strong>{message.role}</strong>{display.option("timestamps") === "on" ? <time dateTime={message.timestamp}>{message.timestamp ? new Date(message.timestamp).toLocaleString() : ""}</time> : null}</div>
     {message.content_blocks.length === 0 ? <div className="message-text">{message.content}</div> : <Blocks blocks={message.content_blocks} reasoning={reasoning} tools={tools} openImage={openImage} />}
     {message.images.map((image, index) => <ImageView key={index} data={image.data ?? null} caption={image.caption ?? image.path.split("/").at(-1) ?? "Attached image"} open={openImage} />)}
+    {display.option("metadata") === "on" ? <p className="message-metadata" aria-label="Message metadata">{[metadata === undefined ? message.provider_key : "", metadata === undefined ? message.model : metadataLabel(metadata), message.alt_count === undefined || message.alt_count === null ? "" : `Response ${String((message.alt_index ?? 0) + 1)} of ${String(message.alt_count)}`].filter(Boolean).join(" · ") || `Message ${message.msg_id}`}</p> : null}
     <div className="message-actions"><button onClick={() => perform(() => navigator.clipboard.writeText(message.content))}>Copy</button><button onClick={() => action("edit", { ref: message.msg_id, content: message.content })}>Edit</button><button onClick={() => action("delete", { refs: message.msg_id })}>Delete</button>{message.role === "assistant" ? <><button onClick={() => action("list_alternatives", { ref: message.msg_id })}>Alternatives</button><button onClick={() => action("alt", { ref: message.msg_id })}>Choose response</button></> : null}<Inspect label="Message details" value={message} /></div>
   </article>;
 }
@@ -132,8 +133,11 @@ function App() {
   const [usage, setUsage] = useState(false);
   const [archives, setArchives] = useState(false);
   const [navigation, setNavigation] = useState(false);
-  const [reasoning, setReasoning] = useState(() => saved("shore.reasoning") !== "false");
-  const [tools, setTools] = useState(() => saved("shore.tools") !== "false");
+  const display = useDisplay();
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const reasoning = display.option("thinking") === "on";
+  const tools = display.option("tools") === "on";
+  const budgets = useBudgets(workspace, state, displayOpen || display.option("usage") !== "off");
   const [guidance, setGuidance] = useState<Record<string, unknown>>();
   const tail = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
@@ -173,18 +177,20 @@ function App() {
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
       <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setArchives(true); setNavigation(false); }}>Character archives</button><button disabled={!ready} onClick={() => { setUsage(true); setNavigation(false); }}>Usage &amp; budgets</button><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions <kbd>⌘ K</kbd></button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
-    <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
+    <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setDisplayOpen(true)}>Display preferences</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
       {state.error === "" ? null : <div role="alert" className="notice error">{state.error}<button aria-label="Dismiss error" onClick={() => workspace.dismissError()}>Dismiss</button></div>}
+      {displayOpen || display.getSnapshot().error === "" ? null : <div role="alert" className="notice error">{display.getSnapshot().error}<button onClick={() => setDisplayOpen(true)}>Review display preferences</button></div>}
       <RequestRecovery workspace={workspace} ready={ready} />
       {warnings.map((item) => <div className="notice" key={item.id}><Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
-      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { setReasoning(event.target.checked); save("shore.reasoning", String(event.target.checked)); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { setTools(event.target.checked); save("shore.tools", String(event.target.checked)); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
+      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { display.change("thinking", event.target.checked ? "on" : "off"); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { display.change("tools", event.target.checked ? "on" : "off"); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
       <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
-        {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
-        {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><div className="message-text">{stream.text}</div>{reasoning && stream.reasoning !== "" ? <details><summary>Reasoning</summary><pre>{stream.reasoning}</pre></details> : null}<Blocks blocks={stream.blocks.filter((block) => block.type !== "text")} reasoning={reasoning} tools={tools} openImage={setImage} /></article>)}<div ref={tail} />
-      </div><Composer key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
+        {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} metadata={state.metadata[message.msg_id]} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
+        {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><LiveResponse stream={stream} openImage={setImage} /></article>)}<div ref={tail} />
+      </div><BudgetReadout budgets={budgets.budgets} error={budgets.error} refresh={budgets.refresh} open={() => setUsage(true)} /><Composer key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
     </main>
-    {activity ? <aside className="activity"><h2>Activity & details</h2><Inspect label="Conversation configuration" value={state.config} />{state.streams.filter((stream) => stream.subagent !== null).map((stream) => <section key={stream.key}><h3>{stream.subagent}</h3><div className="message-text">{stream.text}</div><Blocks blocks={stream.blocks} reasoning={reasoning} tools={tools} openImage={setImage} /></section>)}{state.activity.slice().reverse().map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}</aside> : null}
+    {activity ? <ActivityPanel state={state} openImage={setImage} /> : null}
+    {displayOpen ? <DisplayControls budgets={budgets.budgets.map((budget) => budget.name)} close={() => setDisplayOpen(false)} /> : null}
     {memory && state.character !== null ? <Memory key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} thread={state.thread} streams={state.streams} changed={() => workspace.refreshNavigation()} close={() => setMemory(false)} openImage={setImage} /> : null}
     {archives ? <Archives operations={state.operations} characters={state.characters} character={state.character} ready={ready} changed={() => workspace.refreshNavigation()} close={() => setArchives(false)} advanced={(name, args) => { setArchives(false); action(name, args); }} /> : null}
     {usage ? <Usage key={`${state.character}.${state.thread}`} actions={workspace.actions} operations={state.operations} ready={ready} character={state.character} close={() => setUsage(false)} advanced={(args) => { setUsage(false); action("usage", args); }} /> : null}
@@ -202,4 +208,4 @@ function App() {
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("Missing Shore application root");
-createRoot(root).render(<App />);
+createRoot(root).render(<DisplayProvider><App /></DisplayProvider>);
