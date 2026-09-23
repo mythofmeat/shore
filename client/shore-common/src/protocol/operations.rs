@@ -1622,6 +1622,7 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub file: Option<String>,
         pub reset_to: String,
+        pub roles: Vec<ModelRole>,
     }
 
     #[serde(tag = "target", rename_all = "snake_case")]
@@ -2697,9 +2698,9 @@ mod tests {
             )
             .is_err()
         );
-        let reset = serde_json::json!({"target":"role","active":null,"role":"heartbeat","cleared":[],"source":null,"file":null,"reset_to":"inherited"});
+        let reset = serde_json::json!({"target":"role","active":null,"role":"heartbeat","cleared":[],"source":null,"file":null,"reset_to":"inherited","roles":[{"role":"heartbeat","model":null,"source":null}]});
         assert!(serde_json::from_value::<ModelResetResult>(reset.clone()).is_ok());
-        for key in ["active", "source", "file"] {
+        for key in ["active", "source", "file", "roles"] {
             let mut incomplete = reset.clone();
             assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
             assert!(serde_json::from_value::<ModelResetResult>(incomplete).is_err());

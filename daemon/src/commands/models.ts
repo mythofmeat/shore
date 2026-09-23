@@ -577,17 +577,21 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationRe
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const task = selector === "all" ? "heartbeat" : backgroundTask(selector);
-  const role = backgroundRole(ctx, task);
+  const tasks = selector === "all" ? BACKGROUND_TASKS : [backgroundTask(selector)];
+  const inherits = { thread: chatRole(ctx), character: inheritedChatRole(ctx) };
+  const roles = tasks.map((task) => backgroundRole(ctx, task, inherits));
+  const [first] = roles as [ModelRole, ...ModelRole[]];
+  const shared = roles.every((role) => role.model === first.model && role.source === first.source);
 
   return {
     target: "role",
-    active: role.model,
+    active: shared ? first.model : null,
     role: selector === "all" ? "background" : selector,
     cleared,
-    source: role.source,
+    source: shared ? first.source : null,
     file: file ?? null,
-    reset_to: role.source ?? "config default",
+    reset_to: shared ? first.source ?? "config default" : "per-task defaults",
+    roles,
   };
 }
 
@@ -661,6 +665,7 @@ function unpinSubagentModel(ctx: ModelsContext, selector: string): OperationResu
     source: role.source,
     file: file ?? null,
     reset_to: role.source ?? "config default",
+    roles: [role],
   };
 }
 

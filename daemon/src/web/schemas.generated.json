@@ -6290,6 +6290,12 @@
           },
           "reset_to": {
             "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ModelRole"
+            }
           }
         },
         "required": [
@@ -6298,7 +6304,8 @@
           "cleared",
           "source",
           "file",
-          "reset_to"
+          "reset_to",
+          "roles"
         ]
       },
       "ModelSettingsResult": {
@@ -14161,6 +14168,12 @@
           },
           "reset_to": {
             "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ModelRole"
+            }
           }
         },
         "required": [
@@ -14169,7 +14182,8 @@
           "cleared",
           "source",
           "file",
-          "reset_to"
+          "reset_to",
+          "roles"
         ]
       },
       "ModelSettingsResult": {
