@@ -29,7 +29,7 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   await expect(user).toContainText("Edited <img src=x onerror=alert(1)> question");
   await expect(user.locator("img")).toHaveCount(0);
   await page.getByRole("button", { name: "Regenerate", exact: true }).click();
-  await dialog.getByLabel("Guidance").fill("Answer again with more detail");
+  await dialog.getByLabel("Guidance", { exact: true }).fill("Answer again with more detail");
   await dialog.getByRole("button", { name: "Regenerate", exact: true }).click();
   await expect(assistant).toContainText("Answer 2:");
   await assistant.getByRole("button", { name: "Choose response" }).click();

@@ -226,6 +226,2932 @@
       "scope:optional_character"
     ]
   },
+  "requests": [
+    {
+      "name": "message",
+      "input": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "image_data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ImageUpload"
+            }
+          },
+          "absence_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "ClientHello": {
+            "type": "object",
+            "properties": {
+              "client_type": {
+                "type": "string"
+              },
+              "client_name": {
+                "type": "string"
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "client_type",
+              "client_name"
+            ]
+          },
+          "ImageUpload": {
+            "type": "object",
+            "properties": {
+              "filename": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "filename",
+              "data"
+            ]
+          },
+          "ClientMessageBody": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "image_data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageUpload"
+                }
+              },
+              "absence_seconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "Regen": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "guidance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "Command": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "args": {
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "Cancel": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "request_finished"
+          }
+        },
+        "$ref": "#/$defs/RequestFinished",
+        "required": [
+          "type"
+        ],
+        "$defs": {
+          "CharacterInfo": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "avatar": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CharacterAvatar"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "CharacterAvatar": {
+            "type": "object",
+            "properties": {
+              "mime_type": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mime_type",
+              "data"
+            ]
+          },
+          "ServerHello": {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "server_name": {
+                "type": "string"
+              },
+              "characters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/CharacterInfo"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "v",
+              "server_name",
+              "characters"
+            ]
+          },
+          "HistoryDelta": {
+            "type": "object",
+            "properties": {
+              "base_revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "base_revision",
+              "after"
+            ]
+          },
+          "Message": {
+            "type": "object",
+            "properties": {
+              "msg_id": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "alt_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alt_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageAlternative"
+                }
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MessageOrigin"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "msg_id",
+              "role",
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "Role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ]
+          },
+          "ImageRef": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "caption": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "data": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "ContentBlock": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "text"
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "thinking": {
+                    "type": "string"
+                  },
+                  "signature": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "thinking"
+                  }
+                },
+                "required": [
+                  "type",
+                  "thinking"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "input": true,
+                  "thought_signature": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tool_use"
+                  }
+                },
+                "required": [
+                  "type",
+                  "id",
+                  "name",
+                  "input"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "redacted_thinking"
+                  }
+                },
+                "required": [
+                  "type",
+                  "data"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/$defs/ImageSource"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "image"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "tool_use_id": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "$ref": "#/$defs/ToolResultContent"
+                  },
+                  "is_error": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tool_result"
+                  }
+                },
+                "required": [
+                  "type",
+                  "tool_use_id",
+                  "content"
+                ]
+              }
+            ]
+          },
+          "ImageSource": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "media_type": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "base64"
+                  }
+                },
+                "required": [
+                  "type",
+                  "media_type",
+                  "data"
+                ]
+              }
+            ]
+          },
+          "ToolResultContent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              }
+            ]
+          },
+          "MessageAlternative": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "timestamp": {
+                "type": "string",
+                "default": ""
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "MessageOrigin": {
+            "type": "string",
+            "enum": [
+              "user_input",
+              "assistant_reply",
+              "autonomous"
+            ]
+          },
+          "History": {
+            "type": "object",
+            "properties": {
+              "delta": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/HistoryDelta"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Message"
+                }
+              },
+              "active_start": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              },
+              "config": {
+                "default": null
+              },
+              "selected_character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "selected_thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 0
+              }
+            },
+            "required": [
+              "messages",
+              "config",
+              "revision"
+            ]
+          },
+          "Shutdown": {
+            "type": "object"
+          },
+          "Ping": {
+            "type": "object"
+          },
+          "CommandOutput": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "data": true
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          "ErrorCode": {
+            "type": "string",
+            "enum": [
+              "protocol_error",
+              "invalid_request",
+              "not_found",
+              "busy",
+              "provider_error",
+              "timeout",
+              "internal_error",
+              "unauthorized"
+            ]
+          },
+          "Error": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "$ref": "#/$defs/ErrorCode"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retry_after_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "StreamStart": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "regen": {
+                "type": "boolean",
+                "default": false
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "regen"
+            ]
+          },
+          "StreamChunk": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string",
+                "default": "text"
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "text",
+              "content_type"
+            ]
+          },
+          "StreamMetadata": {
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "$ref": "#/$defs/TokenCounts"
+              },
+              "timing": {
+                "$ref": "#/$defs/TimingInfo"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "tokens",
+              "timing",
+              "model"
+            ]
+          },
+          "TokenCounts": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "output": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "cache_read": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "cache_write": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "input",
+              "output",
+              "cache_read",
+              "cache_write"
+            ]
+          },
+          "TimingInfo": {
+            "type": "object",
+            "properties": {
+              "total_ms": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "ttft_ms": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "total_ms",
+              "ttft_ms"
+            ]
+          },
+          "StreamEnd": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "msg_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "content": {
+                "type": "string"
+              },
+              "terminal_content_blocks": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "metadata": {
+                "$ref": "#/$defs/StreamMetadata"
+              },
+              "finish_reason": {
+                "type": "string"
+              },
+              "is_final": {
+                "type": "boolean",
+                "default": true
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "content",
+              "metadata",
+              "is_final"
+            ]
+          },
+          "Phase": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "phase": {
+                "type": "string"
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "phase"
+            ]
+          },
+          "NewMessage": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 0
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "msg_id": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "alt_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alt_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageAlternative"
+                }
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MessageOrigin"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "revision",
+              "msg_id",
+              "role",
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "ToolCall": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tool_id": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "input": true,
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "tool_id",
+              "tool_name",
+              "input"
+            ]
+          },
+          "ToolResult": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tool_id": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "output": {
+                "type": "string"
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                }
+              },
+              "is_error": {
+                "type": "boolean",
+                "default": false
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "tool_id",
+              "tool_name",
+              "output",
+              "is_error"
+            ]
+          },
+          "SendImage": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "caption": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "data": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "CacheWarning": {
+            "type": "object",
+            "properties": {
+              "expected_tokens": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_tokens",
+              "message"
+            ]
+          },
+          "ProviderWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          },
+          "ProviderFallbackWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "from_key": {
+                "type": "string"
+              },
+              "to_key": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "from_key",
+              "to_key",
+              "kind",
+              "message"
+            ]
+          },
+          "UsageWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "budget": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "current_cost": {
+                "type": "number",
+                "format": "double"
+              },
+              "cost_limit": {
+                "type": "number",
+                "format": "double"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "period": {
+                "type": "string"
+              },
+              "period_start": {
+                "type": "string"
+              },
+              "reset_at": {
+                "type": "string"
+              },
+              "reset_at_display": {
+                "type": "string",
+                "default": ""
+              },
+              "scope": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "budget",
+              "message",
+              "current_cost",
+              "cost_limit",
+              "percent_used",
+              "crossed_warn_at",
+              "period",
+              "period_start",
+              "reset_at",
+              "reset_at_display"
+            ]
+          },
+          "ConfigWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "message"
+            ]
+          },
+          "RequestOutcome": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled",
+              "superseded"
+            ]
+          },
+          "RequestFinished": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": "string"
+              },
+              "outcome": {
+                "$ref": "#/$defs/RequestOutcome"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Error"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "rid",
+              "outcome"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "regen",
+      "input": {
+        "type": "object",
+        "properties": {
+          "stream": {
+            "type": "boolean",
+            "default": false
+          },
+          "guidance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "$defs": {
+          "ClientHello": {
+            "type": "object",
+            "properties": {
+              "client_type": {
+                "type": "string"
+              },
+              "client_name": {
+                "type": "string"
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "client_type",
+              "client_name"
+            ]
+          },
+          "ImageUpload": {
+            "type": "object",
+            "properties": {
+              "filename": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "filename",
+              "data"
+            ]
+          },
+          "ClientMessageBody": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "image_data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageUpload"
+                }
+              },
+              "absence_seconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "Regen": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "guidance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "Command": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "args": {
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "Cancel": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "request_finished"
+          }
+        },
+        "$ref": "#/$defs/RequestFinished",
+        "required": [
+          "type"
+        ],
+        "$defs": {
+          "CharacterInfo": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "avatar": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CharacterAvatar"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "CharacterAvatar": {
+            "type": "object",
+            "properties": {
+              "mime_type": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mime_type",
+              "data"
+            ]
+          },
+          "ServerHello": {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "server_name": {
+                "type": "string"
+              },
+              "characters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/CharacterInfo"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "v",
+              "server_name",
+              "characters"
+            ]
+          },
+          "HistoryDelta": {
+            "type": "object",
+            "properties": {
+              "base_revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "base_revision",
+              "after"
+            ]
+          },
+          "Message": {
+            "type": "object",
+            "properties": {
+              "msg_id": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "alt_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alt_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageAlternative"
+                }
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MessageOrigin"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "msg_id",
+              "role",
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "Role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ]
+          },
+          "ImageRef": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "caption": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "data": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "ContentBlock": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "text"
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "thinking": {
+                    "type": "string"
+                  },
+                  "signature": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "thinking"
+                  }
+                },
+                "required": [
+                  "type",
+                  "thinking"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "input": true,
+                  "thought_signature": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tool_use"
+                  }
+                },
+                "required": [
+                  "type",
+                  "id",
+                  "name",
+                  "input"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "redacted_thinking"
+                  }
+                },
+                "required": [
+                  "type",
+                  "data"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/$defs/ImageSource"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "image"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "tool_use_id": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "$ref": "#/$defs/ToolResultContent"
+                  },
+                  "is_error": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "tool_result"
+                  }
+                },
+                "required": [
+                  "type",
+                  "tool_use_id",
+                  "content"
+                ]
+              }
+            ]
+          },
+          "ImageSource": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "media_type": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "base64"
+                  }
+                },
+                "required": [
+                  "type",
+                  "media_type",
+                  "data"
+                ]
+              }
+            ]
+          },
+          "ToolResultContent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              }
+            ]
+          },
+          "MessageAlternative": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "timestamp": {
+                "type": "string",
+                "default": ""
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "MessageOrigin": {
+            "type": "string",
+            "enum": [
+              "user_input",
+              "assistant_reply",
+              "autonomous"
+            ]
+          },
+          "History": {
+            "type": "object",
+            "properties": {
+              "delta": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/HistoryDelta"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Message"
+                }
+              },
+              "active_start": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              },
+              "config": {
+                "default": null
+              },
+              "selected_character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "selected_thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 0
+              }
+            },
+            "required": [
+              "messages",
+              "config",
+              "revision"
+            ]
+          },
+          "Shutdown": {
+            "type": "object"
+          },
+          "Ping": {
+            "type": "object"
+          },
+          "CommandOutput": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "data": true
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          "ErrorCode": {
+            "type": "string",
+            "enum": [
+              "protocol_error",
+              "invalid_request",
+              "not_found",
+              "busy",
+              "provider_error",
+              "timeout",
+              "internal_error",
+              "unauthorized"
+            ]
+          },
+          "Error": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "$ref": "#/$defs/ErrorCode"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retry_after_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "StreamStart": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "regen": {
+                "type": "boolean",
+                "default": false
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "regen"
+            ]
+          },
+          "StreamChunk": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string",
+                "default": "text"
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "text",
+              "content_type"
+            ]
+          },
+          "StreamMetadata": {
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "$ref": "#/$defs/TokenCounts"
+              },
+              "timing": {
+                "$ref": "#/$defs/TimingInfo"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "tokens",
+              "timing",
+              "model"
+            ]
+          },
+          "TokenCounts": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "output": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "cache_read": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "cache_write": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "input",
+              "output",
+              "cache_read",
+              "cache_write"
+            ]
+          },
+          "TimingInfo": {
+            "type": "object",
+            "properties": {
+              "total_ms": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "ttft_ms": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "total_ms",
+              "ttft_ms"
+            ]
+          },
+          "StreamEnd": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "msg_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "content": {
+                "type": "string"
+              },
+              "terminal_content_blocks": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "metadata": {
+                "$ref": "#/$defs/StreamMetadata"
+              },
+              "finish_reason": {
+                "type": "string"
+              },
+              "is_final": {
+                "type": "boolean",
+                "default": true
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "content",
+              "metadata",
+              "is_final"
+            ]
+          },
+          "Phase": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "phase": {
+                "type": "string"
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "phase"
+            ]
+          },
+          "NewMessage": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 0
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "msg_id": {
+                "type": "string"
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "content": {
+                "type": "string",
+                "default": ""
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                },
+                "default": []
+              },
+              "content_blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentBlock"
+                }
+              },
+              "alt_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alt_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageAlternative"
+                }
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "provider_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MessageOrigin"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "revision",
+              "msg_id",
+              "role",
+              "content",
+              "images",
+              "content_blocks",
+              "timestamp"
+            ]
+          },
+          "ToolCall": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tool_id": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "input": true,
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "tool_id",
+              "tool_name",
+              "input"
+            ]
+          },
+          "ToolResult": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tool_id": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "output": {
+                "type": "string"
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageRef"
+                }
+              },
+              "is_error": {
+                "type": "boolean",
+                "default": false
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "tool_id",
+              "tool_name",
+              "output",
+              "is_error"
+            ]
+          },
+          "SendImage": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "caption": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "data": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subagent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "CacheWarning": {
+            "type": "object",
+            "properties": {
+              "expected_tokens": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_tokens",
+              "message"
+            ]
+          },
+          "ProviderWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          },
+          "ProviderFallbackWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "from_key": {
+                "type": "string"
+              },
+              "to_key": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "from_key",
+              "to_key",
+              "kind",
+              "message"
+            ]
+          },
+          "UsageWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "budget": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "current_cost": {
+                "type": "number",
+                "format": "double"
+              },
+              "cost_limit": {
+                "type": "number",
+                "format": "double"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "period": {
+                "type": "string"
+              },
+              "period_start": {
+                "type": "string"
+              },
+              "reset_at": {
+                "type": "string"
+              },
+              "reset_at_display": {
+                "type": "string",
+                "default": ""
+              },
+              "scope": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "budget",
+              "message",
+              "current_cost",
+              "cost_limit",
+              "percent_used",
+              "crossed_warn_at",
+              "period",
+              "period_start",
+              "reset_at",
+              "reset_at_display"
+            ]
+          },
+          "ConfigWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "message"
+            ]
+          },
+          "RequestOutcome": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled",
+              "superseded"
+            ]
+          },
+          "RequestFinished": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": "string"
+              },
+              "outcome": {
+                "$ref": "#/$defs/RequestOutcome"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Error"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "rid",
+              "outcome"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "cancel",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false,
+        "$defs": {
+          "ClientHello": {
+            "type": "object",
+            "properties": {
+              "client_type": {
+                "type": "string"
+              },
+              "client_name": {
+                "type": "string"
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "character": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "client_type",
+              "client_name"
+            ]
+          },
+          "ImageUpload": {
+            "type": "object",
+            "properties": {
+              "filename": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "filename",
+              "data"
+            ]
+          },
+          "ClientMessageBody": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "image_data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ImageUpload"
+                }
+              },
+              "absence_seconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "Regen": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stream": {
+                "type": "boolean",
+                "default": false
+              },
+              "guidance": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "Command": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "args": {
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "Cancel": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "null",
+        "description": "Cancellation has no separate acknowledgement. Observe the interrupted requests and their completion events."
+      }
+    }
+  ],
   "legacy_operations": [],
   "protocol": {
     "ActivatedHeartbeat": "{ state: AutonomyHeartbeatState, next_wake_at?: string, seconds_until_wake?: number, }",
@@ -380,7 +3306,7 @@
     "NanoGptWeeklyInputTokens": "{ used: number, remaining: number, limit: number, resetAt: string, }",
     "NestedToolCall": "{ tool: string, subagent: string | null, ok: boolean, input: string, output: string, }",
     "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
-    "OperationCatalogue": "{ operations: Array<OperationDescriptor>, }",
+    "OperationCatalogue": "{ operations: Array<OperationDescriptor>, requests: Array<OperationDescriptor>, }",
     "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\" | \"Providers\" | \"Configuration\" | \"Models\" | \"Diagnostics\" | \"Memory\" | \"Tools\" | \"Usage\"",
     "OperationChoices": "\"characters\" | \"threads\" | \"models\" | \"providers\" | \"config_keys\" | \"subagents\" | \"model_settings\" | \"tools\"",
     "OperationCondition": "{ \"kind\": \"equals\", field: string, value: OperationScalar, } | { \"kind\": \"absent\", field: string, }",

@@ -1,3 +1,5 @@
+import { RequestFields } from "./request_fields.tsx";
+import { conversationRequest } from "./request_forms.ts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Composer } from "./composer.tsx";
@@ -132,10 +134,22 @@ function App() {
   const [navigation, setNavigation] = useState(false);
   const [reasoning, setReasoning] = useState(() => saved("shore.reasoning") !== "false");
   const [tools, setTools] = useState(() => saved("shore.tools") !== "false");
-  const [guidance, setGuidance] = useState<string>();
+  const [guidance, setGuidance] = useState<Record<string, unknown>>();
   const tail = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
   const action = (name: string, preset: Record<string, unknown> = {}) => { setPalette(false); setSelectedAction({ name, preset }); };
+  const regenRequest = state.requests.find((item) => item.name === "regen");
+  function openRequest(name: string) {
+    setPalette(false);
+    switch (name) {
+      case "message": requestAnimationFrame(() => document.getElementById("message-composer")?.focus()); break;
+      case "regen": setGuidance({ stream: true, guidance: "" }); break;
+      case "cancel":
+        try { workspace.connection.cancel(); } catch (error) { workspace.report(error); }
+        break;
+      default: workspace.report(`Unsupported conversation action: ${name}`);
+    }
+  }
   const operation = state.operations.find((item) => item.name === selectedAction?.name);
   const select = async (name: string, thread = false) => {
     if (thread) await workspace.actions.run("switch_thread", { name, resync: true });
@@ -164,7 +178,7 @@ function App() {
       {state.error === "" ? null : <div role="alert" className="notice error">{state.error}<button aria-label="Dismiss error" onClick={() => workspace.dismissError()}>Dismiss</button></div>}
       <RequestRecovery workspace={workspace} ready={ready} />
       {warnings.map((item) => <div className="notice" key={item.id}><Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
-      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { setReasoning(event.target.checked); save("shore.reasoning", String(event.target.checked)); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { setTools(event.target.checked); save("shore.tools", String(event.target.checked)); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0} onClick={() => setGuidance("")}>Regenerate</button></div>
+      <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { setReasoning(event.target.checked); save("shore.reasoning", String(event.target.checked)); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { setTools(event.target.checked); save("shore.tools", String(event.target.checked)); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
       <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
         {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} reasoning={reasoning} tools={tools} openImage={setImage} action={action} /></div>)}
         {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><div className="message-text">{stream.text}</div>{reasoning && stream.reasoning !== "" ? <details><summary>Reasoning</summary><pre>{stream.reasoning}</pre></details> : null}<Blocks blocks={stream.blocks.filter((block) => block.type !== "text")} reasoning={reasoning} tools={tools} openImage={setImage} /></article>)}<div ref={tail} />
@@ -179,10 +193,10 @@ function App() {
     {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}
     {providers ? <Providers actions={workspace.actions} ready={ready} close={() => setProviders(false)} /> : null}
-    {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
+    {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.requests.filter((item) => `${item.label} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={!ready || item.available === false} onClick={() => openRequest(item.name)}><strong>{item.label}</strong><small>Conversation</small></button>)}{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
     {operation === undefined || selectedAction === undefined ? null : <Action key={`${operation.name}.${JSON.stringify(selectedAction.preset)}`} operation={operation} state={state} preset={selectedAction.preset} close={() => setSelectedAction(undefined)} />}
     {image === undefined ? null : <Modal title="Image" close={() => setImage(undefined)}><img className="full-image" alt="Full-size conversation image" src={image} /><a href={image} download="shore-image">Download image</a></Modal>}
-    {guidance === undefined ? null : <Modal title="Regenerate response" close={() => setGuidance(undefined)}><form onSubmit={(event) => { event.preventDefault(); const text = guidance; setGuidance(undefined); perform(async () => { const completion = await workspace.connection.submit({ type: "regen", stream: true, guidance: text }).finished; if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Regeneration ${completion.outcome}`); }); }}><label className="field">Guidance<textarea rows={4} value={guidance} onChange={(event) => setGuidance(event.target.value)} /></label><button className="primary">Regenerate</button></form></Modal>}
+    {guidance === undefined || regenRequest === undefined ? null : <Modal title="Regenerate response" close={() => setGuidance(undefined)}><form onSubmit={(event) => { event.preventDefault(); const values = guidance; setGuidance(undefined); perform(async () => { const completion = await workspace.connection.submit(conversationRequest("regen", values)).finished; if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Regeneration ${completion.outcome}`); }); }}><RequestFields request={regenRequest} values={guidance} change={setGuidance} /><button className="primary">Regenerate</button></form></Modal>}
   </div>;
 }
 

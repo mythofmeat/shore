@@ -1,3 +1,4 @@
+import { requestCatalogue } from "../src/operations/requests.ts";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as ts from "typescript/unstable/ast";
@@ -63,11 +64,13 @@ export function assertRegisteredDispatch(source: ts.SourceFile): void {
   if (legacy.length > 0) throw new Error(`Unregistered production dispatch paths: ${legacy.join(", ")}`);
 }
 
-export function registryInventory(source: ts.SourceFile): string[] {
+export function registryInventory(source: ts.SourceFile, binding = "commandOperations"): string[] {
   const names: string[] = [];
   visit(source, (node) => {
-    if (!ts.isVariableDeclaration(node) || node.name.getText(source) !== "commandOperations" || node.initializer === undefined || !ts.isObjectLiteralExpression(node.initializer)) return;
-    for (const property of node.initializer.properties) {
+    if (!ts.isVariableDeclaration(node) || node.name.getText(source) !== binding || node.initializer === undefined) return;
+    const initializer = ts.isSatisfiesExpression(node.initializer) ? node.initializer.expression : node.initializer;
+    if (!ts.isObjectLiteralExpression(initializer)) return;
+    for (const property of initializer.properties) {
       if (!ts.isPropertyAssignment(property) || !ts.isCallExpression(property.initializer) || property.initializer.expression.getText(source) !== "register") throw new Error("Every command handler must use register");
       const name = property.initializer.arguments[0];
       if (name === undefined || !ts.isStringLiteral(name) || property.name.getText(source) !== name.text) throw new Error("Registration key must match its canonical operation");
@@ -91,13 +94,16 @@ export function protocolInventory(sources: readonly ts.SourceFile[]): Record<str
 
 export async function currentDaemonInventory(): Promise<object> {
   const protocolDir = join(ROOT, "src/protocol");
-  const [dispatch, registry, ...protocol] = await parseInventorySources([
+  const [dispatch, registry, requests, ...protocol] = await parseInventorySources([
     readFileSync(join(ROOT, "src/commands/dispatch.ts"), "utf8"),
     readFileSync(join(ROOT, "src/commands/registry.ts"), "utf8"),
+    readFileSync(join(ROOT, "src/operations/requests.ts"), "utf8"),
     ...readdirSync(protocolDir).filter((name) => name.endsWith(".ts")).sort().map((name) => readFileSync(join(protocolDir, name), "utf8")),
   ]);
   if (dispatch === undefined) throw new Error("Missing parsed dispatcher");
   if (registry === undefined) throw new Error("Missing parsed operation registry");
+  if (requests === undefined) throw new Error("Missing parsed core request registry");
+  assertInventoryCurrent(registryInventory(requests, "coreRequests"), requestCatalogue().map((request) => request.name).sort());
   assertRegisteredDispatch(dispatch);
   assertInventoryCurrent(registryInventory(registry), commandCatalogue().map((operation) => operation.name).sort());
   const legacy = dispatchInventory(dispatch);
@@ -109,6 +115,7 @@ export async function currentDaemonInventory(): Promise<object> {
   return {
     format: 1,
     operations: Object.fromEntries(Object.entries(operations).sort(([a], [b]) => a.localeCompare(b))),
+    requests: requestCatalogue().map((request) => ({ name: request.name, input: request.input, output: request.output })),
     legacy_operations: Object.keys(legacy),
     protocol: protocolInventory(protocol),
   };

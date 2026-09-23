@@ -1,3 +1,4 @@
+import { coreRequests } from "../operations/requests.ts";
 import { CharacterConfigError } from "../characters.ts";
 import { isTimeoutError } from "../llm/abort.ts";
 import { describeError, toLlmError } from "../llm/errors.ts";
@@ -290,12 +291,13 @@ export class MessageHandler {
   }
 
   async handleEngine(msg: ClientMessage, meta: RequestMeta): Promise<void> {
-    if (msg.type === "cancel") {
+    if (msg.type === "hello" || msg.type === "command") return;
+    const plan = coreRequests[msg.type].invoke(msg);
+    if (plan.kind === "cancel") {
       this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");
       await this.cancelGeneration(meta.session.sessionId, meta.rid, "user cancelled");
       return;
     }
-    if (msg.type !== "message" && msg.type !== "regen") return;
 
     const resolved = this.#deps.registry.resolveCharacter(meta.session.selectedCharacter);
     if ("error" in resolved) {
@@ -310,32 +312,9 @@ export class MessageHandler {
       return;
     }
 
-    const regen = msg.type === "regen";
-    const body: EngineBody = regen
-      ? {
-          rid: msg.rid ?? null,
-          text: "",
-          stream: msg.stream,
-          images: [],
-          image_data: [],
-          ...(msg.guidance === undefined || msg.guidance === null
-            ? {}
-            : { guidance: msg.guidance }),
-        }
-      : {
-          rid: msg.rid ?? null,
-          text: msg.text,
-          stream: msg.stream,
-          images: msg.images ?? [],
-          image_data: msg.image_data ?? [],
-          ...(msg.absence_seconds !== undefined
-            ? { absence_seconds: msg.absence_seconds }
-            : {}),
-        };
-
     this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);
 
-    await this.launchGeneration(meta, body, regen, resolved.name);
+    await this.launchGeneration(meta, plan.body, plan.regen, resolved.name);
   }
 
   async launchGeneration(
@@ -357,7 +336,11 @@ export class MessageHandler {
     const send = this.#deps.leases.fanout(
       charName,
       meta.session.sessionId,
-      async (msg) => { if (inSelectedThread()) await issuerSend(msg); },
+      async (msg) => {
+        if (!inSelectedThread()) return;
+        if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) return;
+        await issuerSend(msg);
+      },
       this.#deps.router,
       undefined,
       thread,

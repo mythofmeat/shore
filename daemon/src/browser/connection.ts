@@ -2,7 +2,7 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
-import { validWebProblem, validWebSessionInfo } from "./validators.generated.js";
+import { validClientMessage, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
 import { SyncState, type SyncSnapshot } from "./sync.ts";
 import { parseServerFrame } from "./wire.ts";
 
@@ -247,6 +247,7 @@ export class BrowserConnection {
     const session = this.#session;
     if (this.#status !== "ready" || socket === undefined || session === undefined) throw new Error("Wait for Shore to reconnect before sending");
     if (this.#pending.size >= Math.min(session.max_pending_requests, 32)) throw new Error("Wait for a pending request to finish");
+    if (!validClientMessage(request)) throw new Error("Invalid conversation request fields");
     const rid = crypto.randomUUID();
     const text = JSON.stringify({ ...request, rid });
     const bytes = new TextEncoder().encode(text).byteLength;

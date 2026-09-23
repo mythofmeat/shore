@@ -3,16 +3,8 @@ import type { ImageUpload } from "../protocol/ImageUpload";
 import { base64Rejection } from "../tools/images.ts";
 import { base64Bytes } from "../util/base64.ts";
 
-export const MAX_CAPABILITIES = 32;
-export const MAX_ATTACHMENTS = 16;
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
-export const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-export const MAX_TEXT_BYTES = 1024 * 1024;
-
-const MAX_CAPABILITY_BYTES = 128;
-const MAX_FILENAME_BYTES = 255;
-const MAX_MIME_TYPE_BYTES = 255;
-const MAX_IMAGE_PATH_BYTES = 4096;
+import { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES, MAX_CAPABILITY_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_IMAGE_PATH_BYTES } from "./limits.ts";
+export { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES } from "./limits.ts";
 
 export class AdmissionError extends Error {
   override readonly name = "AdmissionError";

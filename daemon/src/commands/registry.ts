@@ -1,3 +1,4 @@
+import { requestCatalogue } from "../operations/requests.ts";
 import { compact } from "./compact.ts";
 import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "./archive.ts";
 import { usage } from "./usage.ts";
@@ -243,7 +244,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     (context) => refreshAllProviderModels(providersContext(context))),
   discover_operations: register("discover_operations", {
     category: "Application", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Browse available actions", fields: {},
-  }, (context) => ({ operations: commandCatalogue(context) })),
+  }, (context) => ({ operations: commandCatalogue(context), requests: requestCatalogue(context.engine !== undefined) })),
   log: register("log", { ...conversationPresentation, label: "Read conversation history", fields: historyFields },
     (context, args) => log(engineOf(context), args)),
   history_page: register("history_page", { ...conversationPresentation, label: "Read earlier history", fields: { ...historyFields, before: { label: "Before cursor", hint: "A message cursor, or active for the start of the active context" } } },
