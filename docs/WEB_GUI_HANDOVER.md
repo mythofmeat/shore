@@ -20,8 +20,10 @@ configuration or another test initializing one. Running those tests with `SHORE_
 empty XDG configuration reproduced both exact failures. They now initialize the same fixture token
 as the existing handshake tests. The isolated reproduction passes all three lifecycle tests; all three
 Rust workspace checks passed again before committing this test-only correction. Logs use
-`ci-lifecycle-*`; no daemon source changed in this follow-up. The daemon CI job was still running
-when this evidence was recorded; consult the PR for its final result.
+`ci-lifecycle-*`; no daemon source changed in this follow-up. The daemon CI job remained at the native-helper build after more than 12 minutes. Its 25-minute
+budget left insufficient room for the remaining full suites, so the timeout is now 45 minutes.
+The verified token-fixture correction and timeout change are published together for a new full run;
+consult the PR for its final result.
 
 The first actual CI run, `35831202015`, failed on missing job prerequisites: daemon tests required the
 native patch helper before `bun test`; three Rust image tests launch Bun, absent from that job. The
