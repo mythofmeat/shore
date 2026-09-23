@@ -4,6 +4,7 @@ import { checkAttachments, conversationRequest, imageUpload, remainingMessageOpt
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../swp/limits.ts";
 import { useEffect, useRef, useState, useImperativeHandle, type Ref, type KeyboardEvent, type ChangeEvent, type ClipboardEvent } from "react";
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
+import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { Workspace, WorkspaceSnapshot } from "./workspace.ts";
 import { browserDraft, discardDraft, readDraft, storedDrafts, type DraftContent, type StoredDraft } from "./drafts.ts";
 import { Modal } from "./components.tsx";
@@ -114,17 +115,26 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
     checkAttachments(submitted.images);
     const connection = workspace.connection;
     const generation = connection.generation;
+    const retain = async (): Promise<void> => {
+      const retained = { ...current.current, pending: false };
+      if (mounted.current) await change(retained);
+      else await store.save(retained).catch(() => {});
+    };
     setBusy(true);
     try {
       await change({ ...submitted, pending: true });
       const selected = workspace.getSnapshot();
-      if (!mounted.current || workspace.connection !== connection || generation !== connection.generation || connection.status !== "ready" ||
+      const synced = connection.selection;
+      if (!mounted.current || generation !== connection.generation || connection.status !== "ready" ||
         selected.character !== state.character || selected.thread !== state.thread ||
-        connection.selection.character !== state.character || connection.selection.thread !== state.thread) {
+        synced.character !== state.character || synced.thread !== state.thread) {
+        await retain();
         workspace.report("Conversation changed before sending. Your draft was retained.");
         return;
       }
-      const result = await connection.submit(message).finished;
+      let finished: Promise<RequestFinished>;
+      try { finished = connection.submit(message).finished; } catch (error) { await retain(); throw error; }
+      const result = await finished;
       if (result.outcome === "completed") {
         const value = current.current;
         await change({ ...(value.options === undefined ? {} : { options: remainingMessageOptions(value.options, submitted.options ?? {}) }), text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false });

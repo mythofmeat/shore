@@ -132,9 +132,11 @@ export class BrowserDraft {
   async load(): Promise<DraftContent> {
     await this.#queue;
     if (this.#latest !== undefined) return this.#latest;
+    const sequence = this.#sequence;
     const cloned = await separateClonedTab();
     const id = sessionStorage.getItem(this.#key);
     const saved = id === null ? undefined : await readDraft(id, this.conversation);
+    if (sequence !== this.#sequence) return await this.load();
     if (saved !== undefined) {
       if (cloned && !claimedDrafts.has(saved.record.id)) await this.save(saved.content);
       else {
