@@ -1076,3 +1076,24 @@ inside `run_tool` instead of forwarding them; its report does not include images
 confirmed gap. Broader media/event/concurrency and resource-limit auditing remains open, including
 ownership of a `send_image` frame when no corresponding tool-result image is produced. This checkpoint
 does not complete issue #214 or establish actual GitHub CI/required merge gates.
+
+### Live previews and completed tool-image ownership, 2026-09-23
+
+The browser bounds transient previews independently from canonical conversation history. Each live
+stream retains at most 512 Ki UTF-16 characters of text and reasoning, and 64 recent tool blocks
+within a combined 512 Ki-character serialized budget. Activity keeps 100 entries with 64 Ki-character
+inspection previews. Live originals are capped at 128 entries and a conservative 16 Mi-character
+payload budget, including original and prepared bytes. The existing stream count limit is 32. Notices
+identify shortened previews or released images; saved messages and complete action results remain
+unchanged. These limits do not promise unlimited persistence of images available only in live events.
+
+Tool originals omitted from model input or failing preparation remain associated with the existing
+correlated tool result. Only prepared images enter the model's content blocks. Exact tool-result
+blocks can transfer their image ownership when provisional history merges under the completed
+message ID. Raw duplicate completion notifications no longer overwrite a richer saved history entry.
+Deleting the corresponding result clears its owned originals, and reused tool IDs do not adopt old
+history. The actual three-image browser flow verifies viewing all originals and deleting their owner.
+The large-stream flow verifies the visible preview limit and responsive cancellation. Focused tests
+and deliberate mutations additionally check aggregate media/activity/tool-block limits, Unicode
+boundaries, canonical history preservation, ownership migration and sign-out/selection cleanup.
+See the current acceptance record for final verification and actual PR CI status.

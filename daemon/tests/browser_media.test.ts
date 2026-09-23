@@ -120,6 +120,26 @@ test("live image retention is bounded and conversation changes and sign-out clea
   expect(workspace.getSnapshot().messages).toHaveLength(0);
 });
 
+test("omitted originals follow merged tool history and duplicate completion events cannot replace its richer content", () => {
+  const { connection, workspace, image, history } = fixture();
+  const stored = (id: string): Message => ({ ...message(id), content_blocks: [{ type: "tool_result", tool_use_id: "omitted", content: "Image not sent to the model", is_error: true }] });
+  history([stored("old")]);
+  image("omitted.png", png, "run");
+  connection.emit({ kind: "frame", message: { type: "tool_result", rid: "run", tool_id: "omitted", tool_name: "mcp", output: "Image not sent to the model", images: [{ path: "omitted.png", data: png }], is_error: true } });
+  history([stored("old")]);
+  expect(workspace.getSnapshot().media[0]?.messageId).toBeUndefined();
+  history([stored("old"), stored("provisional")]);
+  expect(workspace.getSnapshot().media[0]?.messageId).toBe("provisional");
+  const final = { ...stored("final"), content: "Complete", content_blocks: [...stored("final").content_blocks, { type: "text" as const, text: "Complete" }] };
+  history([stored("old"), final]);
+  expect(workspace.getSnapshot().media[0]?.messageId).toBe("final");
+  connection.emit({ kind: "frame", message: { ...message("final"), type: "new_message", revision: 4, content: "Complete", content_blocks: [{ type: "text", text: "Complete" }] } });
+  expect(workspace.getSnapshot().messages.at(-1)?.content_blocks).toEqual(final.content_blocks);
+  expect(workspace.getSnapshot().media[0]?.data).toBe(png);
+  history([stored("old")]);
+  expect(workspace.getSnapshot().media).toEqual([]);
+});
+
 
 test("manual tool activity stays outside chat and its images cannot be adopted by later tool messages", () => {
   const { workspace, connection, history, image } = fixture();

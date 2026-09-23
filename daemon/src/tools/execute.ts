@@ -219,6 +219,7 @@ async function attachToolMedia(
       });
     } catch (error) {
       attached.failed = true;
+      attached.images.push({ path: saved ?? `tool-image:${toolUse.id}:${String(index)}`, caption: item.label, data: item.data });
       attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
     }
   }

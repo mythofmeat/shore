@@ -151,12 +151,16 @@ describe("mcp media reaches the model", () => {
 
   test("the byte budget allows an exact fit and notes skipped images without failing", async () => {
     const bytes = Buffer.from(PNG, "base64").length;
-    const { block, saved } = await runMcpTool(imageResult(3), { ...LIMITS, max_inline_image_bytes: 2 * bytes });
+    const { block, saved, frames } = await runMcpTool(imageResult(3), { ...LIMITS, max_inline_image_bytes: 2 * bytes });
 
     expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(2);
     expect(toolResult(block).is_error).toBe(false);
     expect(textOf(block)).toContain(`not sent to the model: at most 20 images and ${2 * bytes} bytes`);
     expect(saved).toHaveLength(3);
+    expect(frames.filter((frame) => frame.type === "send_image")).toHaveLength(3);
+    const result = frames.find((frame) => frame.type === "tool_result");
+    expect(result?.images).toHaveLength(3);
+    expect(result?.images?.[2]?.data).toBe(PNG);
   });
 
   test("at most twenty images are sent, and one note names the rest", async () => {
@@ -213,11 +217,12 @@ describe("mcp media reaches the model", () => {
 
   test("an oversized invalid image returns an explicit preparation error", async () => {
     const oversized = "A".repeat(1_400_004);
-    const { block, saved } = await runMcpTool(imageResult(1, oversized));
+    const { block, saved, frames } = await runMcpTool(imageResult(1, oversized));
 
     expect(toolResult(block).content).toContain("not sent to the model");
     expect(typeof toolResult(block).content).toBe("string");
     expect(saved).toHaveLength(1);
+    expect(frames.find((frame) => frame.type === "tool_result")?.images?.[0]?.data).toBe(oversized);
   });
 
   test("an unreadable image directory degrades to a note, not a thrown tool", async () => {
