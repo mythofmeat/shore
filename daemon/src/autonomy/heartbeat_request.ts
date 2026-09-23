@@ -178,7 +178,7 @@ export async function prepareHeartbeatRequest(
     template,
     formatWallClock(nowMs, deps.timeZone ?? hostZone()),
     resolveDisplayName(config.app.defaults, deps.env),
-    fallbackIntervalPhrase(config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval.asSecs()),
+    fallbackIntervalPhrase(config.app.behavior.autonomy.heartbeat.default_interval.asSecs()),
   );
 
   pushInlineSystem(request, prompt);

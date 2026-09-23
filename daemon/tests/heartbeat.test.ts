@@ -2,22 +2,53 @@ import { describe, expect, test } from "bun:test";
 
 import {
   HeartbeatClock,
-  MAX_WAKE_INTERVAL_MS,
-  MIN_WAKE_INTERVAL_MS,
   type HeartbeatClockConfig,
 } from "../src/autonomy/heartbeat.ts";
 
 const HOUR = 3_600_000;
+const CONFIG_MIN = HOUR;
+const CONFIG_MAX = 48 * HOUR;
 
 function config(overrides: Partial<HeartbeatClockConfig> = {}): HeartbeatClockConfig {
   return {
     defaultIntervalMs: HOUR,
     maxIdleTicks: 100,
     maxSilentMs: 48 * HOUR,
-    minWakeIntervalMs: HOUR,
+    minIntervalMs: HOUR,
+    maxIntervalMs: 48 * 3_600_000,
     ...overrides,
   };
 }
+
+describe("the configured bounds apply to every wake, whoever set it", () => {
+  test("a wake the character asks for is held inside min_interval and max_interval", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 10 * 60_000, maxIntervalMs: 3 * HOUR }), 0);
+    expect(clock.schedule(60_000, 0)).toBe(10 * 60_000);
+    expect(clock.nextWakeAt).toBe(10 * 60_000);
+    expect(clock.schedule(10 * HOUR, 0)).toBe(3 * HOUR);
+    expect(clock.nextWakeAt).toBe(3 * HOUR);
+    expect(clock.schedule(2 * HOUR, 0)).toBe(2 * HOUR);
+  });
+
+  test("a default_interval below min_interval waits for the floor", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 10 * 60_000, minIntervalMs: HOUR }), 0);
+    expect(clock.tick(0)).toBe("none");
+    expect(clock.nextWakeAt).toBe(HOUR);
+  });
+
+  test("a default_interval above max_interval is cut to the ceiling", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 72 * HOUR }), 0);
+    expect(clock.tick(0)).toBe("none");
+    expect(clock.nextWakeAt).toBe(48 * HOUR);
+  });
+
+  test("a user message pushes any sooner wake back to the floor", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 2 * HOUR }), 0);
+    clock.schedule(2 * HOUR, 0);
+    clock.onUserMessage(HOUR);
+    expect(clock.nextWakeAt).toBe(3 * HOUR);
+  });
+});
 
 describe("the abandonment guards trip at the threshold, not past it", () => {
   test("silence: exactly at the ceiling is already too silent", () => {
@@ -51,7 +82,7 @@ describe("the abandonment guards trip at the threshold, not past it", () => {
   });
 
   test("tick count: reaching the ceiling is already abandoned", () => {
-    const clock = new HeartbeatClock(config({ maxIdleTicks: 2, defaultIntervalMs: 60_000 }), 0);
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 2, defaultIntervalMs: 60_000, minIntervalMs: 60_000 }), 0);
     let now = 0;
     const fire = () => {
       now += 61_000;
@@ -72,13 +103,13 @@ describe("the clamp", () => {
   test("a wake sooner than the floor is pushed out to it", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.schedule(1_000, 0);
-    expect(clock.nextWakeAt).toBe(MIN_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(CONFIG_MIN);
   });
 
   test("a wake beyond the ceiling is pulled back to it", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.schedule(365 * 24 * HOUR, 0);
-    expect(clock.nextWakeAt).toBe(MAX_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(CONFIG_MAX);
   });
 
   test("a wake in the past clamps to the floor rather than firing immediately", () => {
@@ -93,7 +124,7 @@ describe("a user message", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.schedule(HOUR, 0);
     clock.onUserMessage(30 * 60_000);
-    expect(clock.nextWakeAt).toBe(30 * 60_000 + MIN_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(30 * 60_000 + CONFIG_MIN);
   });
 
   test("preserves a deadline the character set further out", () => {
@@ -112,7 +143,7 @@ describe("a user message", () => {
     clock.onUserMessage(HOUR);
     expect(clock.ticksWithoutUser).toBe(0);
     expect(clock.stateAt(HOUR)).toBe("Active");
-    expect(clock.nextWakeAt).toBe(HOUR + MIN_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(HOUR + CONFIG_MIN);
   });
 });
 
@@ -207,7 +238,7 @@ describe("deferring the wake to the minimum latency", () => {
   });
 
   test("the minimum comes from config, not the default interval", () => {
-    const clock = new HeartbeatClock(config({ minWakeIntervalMs: 5 * HOUR }), 0);
+    const clock = new HeartbeatClock(config({ minIntervalMs: 5 * HOUR }), 0);
     clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: 0 });
     clock.deferWakeToMinimumLatency(2 * HOUR);
 

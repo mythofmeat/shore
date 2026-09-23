@@ -58,8 +58,9 @@ model = "local:embed"
 model = "openrouter:image"
 [heartbeat]
 enabled = true
-interval = "6h"
+default_interval = "6h"
 min_interval = "4h"
+max_interval = "12h"
 max_idle_turns = 20
 [compaction]
 write_memory = true
@@ -107,7 +108,9 @@ base_url = "http://localhost:1/v1"
 `);
     expect(cfg.app.defaults).toMatchObject({ display_name: "Alex", embedding: "local:embed", image_generation: "openrouter:image" });
     expect(cfg.app.behavior.autonomy.enabled).toBe(true);
-    expect(cfg.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval.toString()).toBe("6h");
+    expect(cfg.app.behavior.autonomy.heartbeat.default_interval.toString()).toBe("6h");
+    expect(cfg.app.behavior.autonomy.heartbeat.min_interval.toString()).toBe("4h");
+    expect(cfg.app.behavior.autonomy.heartbeat.max_interval.toString()).toBe("12h");
     expect(cfg.app.memory.compaction.idle_trigger.toString()).toBe("50m");
     expect(cfg.app.memory.compaction.keep_recent_turns).toBe(0);
     expect(cfg.app.memory.git_push).toBe(true);
@@ -156,6 +159,7 @@ temperature = 0.25
 
   test("unknown fields and malformed canonical containers fail", () => {
     expect(() => read('[heartbeat]\nintervall="1h"')).toThrow();
+    expect(() => read('[heartbeat]\ninterval="1h"')).toThrow("unknown field");
     expect(() => read('chat=[]')).toThrow("must be a table");
     expect(() => read('notifications=[]')).toThrow("must be a table");
     expect(() => read('[[budgets]]\ncost_usd=1\n[tools]\nbash=[]')).toThrow("tools.bash must be a table");

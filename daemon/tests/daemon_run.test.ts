@@ -287,7 +287,7 @@ describe("coming up", () => {
 
     expect(state).toBeDefined();
     expect(state?.next_wake_at).toBeGreaterThanOrEqual(
-      startedAt + (state?.min_wake_interval_ms ?? 0),
+      startedAt + (state?.min_interval_ms ?? 0),
     );
   });
 });

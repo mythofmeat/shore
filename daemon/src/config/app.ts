@@ -314,29 +314,42 @@ export type UserTimestampMode = "auto" | "always" | "never";
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
 export interface HeartbeatConfig {
-  fallback_heartbeat_interval: ConfigDuration;
+  default_interval: ConfigDuration;
   dormant_after_heartbeat_turns: number;
   dormant_after_idle_time: ConfigDuration;
-  minimum_heartbeat_latency: ConfigDuration;
+  min_interval: ConfigDuration;
+  max_interval: ConfigDuration;
   wrap_up_grace_rounds: number;
 }
 
 const defaultHeartbeatConfig = (): HeartbeatConfig => ({
-  fallback_heartbeat_interval: ConfigDuration.fromSecs(3600),
+  default_interval: ConfigDuration.fromSecs(3600),
   dormant_after_heartbeat_turns: 3,
   dormant_after_idle_time: ConfigDuration.fromSecs(172_800),
-  minimum_heartbeat_latency: ConfigDuration.fromSecs(3600),
+  min_interval: ConfigDuration.fromSecs(3600),
+  max_interval: ConfigDuration.fromSecs(172_800),
   wrap_up_grace_rounds: 3,
 });
+
+export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
+  if (heartbeat.min_interval.asMillisExact() > heartbeat.max_interval.asMillisExact()) {
+    return (
+      `heartbeat.min_interval (${heartbeat.min_interval.toString()}) must not exceed ` +
+      `heartbeat.max_interval (${heartbeat.max_interval.toString()})`
+    );
+  }
+  return undefined;
+}
 
 const HEARTBEAT: StructSpec<HeartbeatConfig> = {
   name: "HeartbeatConfig",
   make: defaultHeartbeatConfig,
   fields: {
-    fallback_heartbeat_interval: readDuration,
+    default_interval: readDuration,
     dormant_after_heartbeat_turns: readU32,
     dormant_after_idle_time: readDuration,
-    minimum_heartbeat_latency: readDuration,
+    min_interval: readDuration,
+    max_interval: readDuration,
     wrap_up_grace_rounds: readU32,
   },
 };

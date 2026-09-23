@@ -2,17 +2,12 @@ export type HeartbeatAction =
   | "none"
   | "run_tick";
 
-const HOUR_MS = 3_600_000;
-
-export const MIN_WAKE_INTERVAL_MS = HOUR_MS;
-
-export const MAX_WAKE_INTERVAL_MS = 48 * HOUR_MS;
-
 export interface HeartbeatClockConfig {
   defaultIntervalMs: number;
   maxIdleTicks: number;
   maxSilentMs: number;
-  minWakeIntervalMs: number;
+  minIntervalMs: number;
+  maxIntervalMs: number;
 }
 
 export interface HeartbeatSnapshot {
@@ -96,7 +91,7 @@ export class HeartbeatClock {
     const wakeAt = this.#nextWakeAt;
     if (wakeAt === undefined) {
       if (this.#isAbandoned(now)) return "none";
-      this.#nextWakeAt = this.#lastAnchor + this.#config.defaultIntervalMs;
+      this.#nextWakeAt = this.#lastAnchor + this.#bounded(this.#config.defaultIntervalMs);
       return "none";
     }
 
@@ -119,18 +114,22 @@ export class HeartbeatClock {
     return "run_tick";
   }
 
-  schedule(when: number, now: number): void {
-    const delta = Math.max(0, when - now);
-    const clamped = Math.min(Math.max(delta, MIN_WAKE_INTERVAL_MS), MAX_WAKE_INTERVAL_MS);
+  #bounded(delayMs: number): number {
+    return Math.min(Math.max(delayMs, this.#config.minIntervalMs), this.#config.maxIntervalMs);
+  }
+
+  schedule(when: number, now: number): number {
+    const clamped = this.#bounded(Math.max(0, when - now));
     this.#nextWakeAt = now + clamped;
     this.#lastAnchor = now;
+    return clamped;
   }
 
   onUserMessage(now: number): void {
     this.#ticksWithoutUser = 0;
     this.#lastUserAt = now;
 
-    const floor = now + this.#config.minWakeIntervalMs;
+    const floor = now + this.#config.minIntervalMs;
     const existing = this.#nextWakeAt;
     this.#nextWakeAt = existing !== undefined && existing > floor ? existing : floor;
   }
@@ -138,7 +137,7 @@ export class HeartbeatClock {
   deferWakeToMinimumLatency(now: number, ensureScheduled = false): void {
     const existing = this.#nextWakeAt;
     if (existing === undefined && !ensureScheduled) return;
-    const floor = now + this.#config.minWakeIntervalMs;
+    const floor = now + this.#config.minIntervalMs;
     if (existing !== undefined && existing >= floor) return;
     this.#nextWakeAt = floor;
     this.#lastAnchor = floor;

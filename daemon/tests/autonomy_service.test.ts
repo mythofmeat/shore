@@ -54,7 +54,8 @@ function clockConfig(): HeartbeatClockConfig {
     defaultIntervalMs: HOUR,
     maxIdleTicks: 100,
     maxSilentMs: 48 * HOUR,
-    minWakeIntervalMs: HOUR,
+    minIntervalMs: HOUR,
+    maxIntervalMs: 48 * 3_600_000,
   };
 }
 
@@ -169,7 +170,8 @@ describe("registering", () => {
         covered_turn_count: 0,
         default_interval_ms: HOUR,
         max_idle_ticks: 100,
-        min_wake_interval_ms: HOUR,
+        min_interval_ms: HOUR,
+        max_interval_ms: 48 * HOUR,
         max_silent_ms: 48 * HOUR,
         recent_events: [],
       });

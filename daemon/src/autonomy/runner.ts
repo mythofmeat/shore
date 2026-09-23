@@ -14,8 +14,6 @@ import {
   type PersistedKeepalive,
 } from "./state_file.ts";
 
-const MIN_WAKE_HOURS = 1;
-const MAX_WAKE_HOURS = 48;
 
 export interface CompactionRunnerConfig {
   readonly compactionEnabled: boolean;
@@ -191,8 +189,7 @@ export class CharacterAutonomy {
   }
 
   scheduleNextWake(hoursFromNow: number, reason: string, now: number): number {
-    const hours = Math.min(Math.max(hoursFromNow, MIN_WAKE_HOURS), MAX_WAKE_HOURS);
-    this.#clock.schedule(now + hours * 3_600_000, now);
+    const hours = this.#clock.schedule(now + hoursFromNow * 3_600_000, now) / 3_600_000;
     this.note("tool_use", `set_next_wake: ${hours.toFixed(1)}h - ${reason}`, now);
     this.#state.dirty = true;
     return hours;

@@ -27,8 +27,9 @@ export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
   ...Object.entries({
-    fallback_heartbeat_interval: "interval",
-    minimum_heartbeat_latency: "min_interval",
+    default_interval: "default_interval",
+    min_interval: "min_interval",
+    max_interval: "max_interval",
     dormant_after_heartbeat_turns: "max_idle_turns",
     dormant_after_idle_time: "idle_timeout",
     wrap_up_grace_rounds: "max_wrap_up_rounds",
