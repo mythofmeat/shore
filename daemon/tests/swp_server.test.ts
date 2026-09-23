@@ -334,4 +334,49 @@ describe("what a connection produces", () => {
       await stop();
     }
   });
+
+  test("broadcasts for another character do not count against a TCP client's queue", async () => {
+    const warnings: string[] = [];
+    const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN, log: { warn: (msg) => warnings.push(msg) } });
+    const { port } = await server.bind();
+    const running = server.serve();
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    try {
+      server.setHandshakeProvider({
+        hello: () => Promise.resolve({ characters: [{ name: "ada" }, { name: "bea" }] }),
+        history: () => Promise.resolve({ messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: null, revision: 0 }),
+      });
+      const frames: Record<string, unknown>[] = [];
+      let buffered = "";
+      socket.on("data", (chunk: Buffer) => {
+        buffered += chunk.toString("utf8");
+        for (let at = buffered.indexOf("\n"); at !== -1; at = buffered.indexOf("\n")) {
+          frames.push(JSON.parse(buffered.slice(0, at)) as Record<string, unknown>);
+          buffered = buffered.slice(at + 1);
+        }
+      });
+      await new Promise<void>((resolve, reject) => {
+        socket.once("connect", resolve);
+        socket.once("error", reject);
+      });
+      socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], selected_character: "ada" })}\n`);
+      const arrived = async (predicate: (frame: Record<string, unknown>) => boolean): Promise<void> => {
+        while (!frames.some(predicate)) await Bun.sleep(5);
+      };
+      await arrived((frame) => frame["type"] === "history");
+
+      for (let index = 0; index < 400; index += 1) {
+        server.broadcast({ type: "history", messages: [], config: {}, selected_character: "bea", revision: index });
+      }
+      server.broadcast({ type: "history", messages: [], config: {}, selected_character: "ada", revision: 999 });
+      await arrived((frame) => frame["revision"] === 999);
+
+      expect(warnings).not.toContain("Client lagged on broadcast");
+      expect(frames.filter((frame) => frame["selected_character"] === "bea")).toHaveLength(0);
+    } finally {
+      socket.destroy();
+      server.stop();
+      await running;
+    }
+  });
 });
