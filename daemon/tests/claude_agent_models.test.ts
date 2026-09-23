@@ -50,6 +50,8 @@ test("provider-only Claude Agent configuration discovers, selects, and uses SDK 
       qualified_name: "claude_agent:sonnet", provider: "claude_agent", model_id: "sonnet",
     });
     setModelSetting(ctx, { name: "claude_agent:sonnet", key: "reasoning_effort", value: "low" });
+    expect(() => setModelSetting(ctx, { name: "claude_agent:sonnet", key: "reasoning_effort", value: "off" }))
+      .toThrow("out of domain");
     expect(threadModel).toBe("claude_agent:sonnet");
     const selected = required(effectiveChatModel(config, "test", threadModel));
     expect(selected.sdk).toBe("claude_agent");
@@ -71,6 +73,7 @@ test("provider-only Claude Agent configuration discovers, selects, and uses SDK 
     expect(result.content).toBe("Reply from the selected SDK model.");
     expect(mock.requests).toHaveLength(1);
     expect(mock.requests[0]?.body.model).toBe(metadata.resolvedModel);
+    expect(mock.requests[0]?.body.thinking).toMatchObject({ type: "adaptive" });
     expect(warnings.mock.calls.flat().some(value => String(value).includes("deprecated"))).toBe(false);
   } finally {
     warnings.mockRestore();

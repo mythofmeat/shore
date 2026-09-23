@@ -446,6 +446,23 @@ describe("what a non-streaming call records", () => {
     });
   });
 
+  test("a Claude Agent call records thinking even with no reasoning level set", async () => {
+    await withLedger(async (path) => {
+      const result = {
+        content: "x",
+        content_blocks: [],
+        finish_reason: "end_turn",
+        usage: usage(0, 10),
+        timing: TIMING,
+        model: "claude-opus-5-5",
+      };
+      const agent = { ...REQ, sdk: "claude_agent", model: "claude-opus-5-5" } as SidecarRequest;
+      recordGenerate(ctx(path, { thinking_enabled: false }), agent, result);
+      recordGenerate(ctx(path, { thinking_enabled: false }), REQ, result);
+      expect(rowsIn(path).map((r) => r["thinking_enabled"])).toEqual([1, 0]);
+    });
+  });
+
   test("a failed generate leaves the warm baseline alone", async () => {
     await withLedger(async (path) => {
       recordGenerate(ctx(path), REQ, {

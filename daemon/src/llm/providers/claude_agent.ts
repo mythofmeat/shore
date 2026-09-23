@@ -364,7 +364,6 @@ function buildOptions(
 }
 
 export function agentThinking(req: SidecarRequest): NonNullable<Options["thinking"]> {
-  if (req.provider_options?.thinking_enabled === false) return { type: "disabled" };
   return { type: "adaptive", display: req.provider_options?.thinking_display ?? "summarized" };
 }
 

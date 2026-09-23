@@ -238,6 +238,20 @@ describe("reasoning behavior", () => {
     expect(capabilityCheck("anthropic", "reasoning_effort", "low", empty)).toBeInstanceOf(CommandError);
   });
 
+  test("Claude Agent always thinks, so off is neither suggested nor accepted", () => {
+    const opus = {
+      effort: { supported: true, levels: ["low", "medium", "high", "xhigh", "max"] },
+      thinking: { adaptive: true },
+    } as const;
+    expect(reasoningSuggestions("claude_agent", opus)).toEqual(["low", "medium", "high", "xhigh", "max", "adaptive"]);
+    expect(reasoningSuggestions("claude_agent")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    for (const support of [opus, undefined]) {
+      expect(capabilityCheck("claude_agent", "reasoning_effort", "off", support)).toBeInstanceOf(CommandError);
+      expect(capabilityCheck("claude_agent", "reasoning_effort", "disabled", support)).toBeInstanceOf(CommandError);
+      expect(capabilityCheck("claude_agent", "reasoning_effort", "high", support)).toBeUndefined();
+    }
+  });
+
   test("adaptive is an independently advertised pseudo-value", () => {
     const support = {
       effort: { supported: false, levels: [] },

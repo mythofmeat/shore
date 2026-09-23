@@ -209,7 +209,7 @@ const GEMINI_EFFORT = Object.values(ThinkingLevel)
   .filter((v) => !v.startsWith("thinking_level_"));
 
 function adapterSupportsOff(sdk: Sdk): boolean {
-  return sdk !== "gemini";
+  return sdk !== "gemini" && sdk !== "claude_agent";
 }
 
 function adapterEffortSuggestions(sdk: Sdk): readonly string[] {
@@ -242,7 +242,7 @@ export function reasoningSuggestions(sdk: Sdk, support?: DiscoveredModelSupport)
 
 function reasoningAllowsCustom(sdk: Sdk, support?: DiscoveredModelSupport): boolean {
   if (support?.effort !== undefined) return false;
-  return sdk !== "gemini";
+  return sdk !== "gemini" && sdk !== "claude_agent";
 }
 
 function wireParameter(support: DiscoveredModelSupport | undefined, name: string): SettingApplicability {

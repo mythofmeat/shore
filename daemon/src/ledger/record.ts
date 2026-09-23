@@ -192,7 +192,7 @@ function record(
     usage: call.usage,
     timing: call.timing,
     finish_reason: call.finish_reason,
-    thinking_enabled: ctx.thinking_enabled,
+    thinking_enabled: req.sdk === "claude_agent" || ctx.thinking_enabled,
     cache_ttl: ctx.cache_ttl,
     reasoning_effort: ctx.reasoning_effort,
     tool_surface: toolSurfaceFingerprint(req.tools),

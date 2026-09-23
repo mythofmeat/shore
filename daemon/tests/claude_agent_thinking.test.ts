@@ -17,14 +17,10 @@ test.each([
   { model: "claude-opus-4-8", withTools: false, display: undefined },
   { model: "claude-haiku-4-5-20251001", withTools: false, display: undefined },
   { model: "claude-opus-5", withTools: false, display: "omitted" as const },
-  { model: "claude-opus-5", withTools: false, display: undefined, reasoningOff: true },
-  { model: "claude-opus-5", withTools: true, display: undefined, reasoningOff: true },
   { model: "claude-opus-5", withTools: false, display: undefined, noEffort: true },
-])("the real SDK carries thinking through to client frames (%j)", async ({ model, withTools, display, reasoningOff, noEffort }) => {
-  const wanted = reasoningOff === true ? undefined : display ?? "summarized";
-  const options = reasoningOff === true
-    ? { thinking_enabled: false }
-    : { ...(noEffort === true ? {} : { reasoning_effort: "high" }), ...(display === undefined ? {} : { thinking_display: display }) };
+])("the real SDK carries thinking through to client frames (%j)", async ({ model, withTools, display, noEffort }) => {
+  const wanted = display ?? "summarized";
+  const options = { ...(noEffort === true ? {} : { reasoning_effort: "high" }), ...(display === undefined ? {} : { thinking_display: display }) };
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-thinking-"));
   const summary = "Checking the request.";
   let round = 0;
@@ -51,7 +47,7 @@ test.each([
       sdk: "claude_agent", model, api_key: "", base_url: mock.url,
       messages: [{ role: "user", content: [{ type: "text", text: "Look up a memory and explain it." }] }],
       provider_options: options,
-      context: { character: "test", workspace_dir: dir, thinking_enabled: reasoningOff !== true && noEffort !== true, call_type: "message" },
+      context: { character: "test", workspace_dir: dir, thinking_enabled: noEffort !== true, call_type: "message" },
       max_tokens: 4096, replay_prior_thinking: "all",
       ...(withTools ? { tools: [{ name: "ask_memory", description: "Look up a memory", input_schema: { type: "object" } }] } : {}),
     }, { providerKey: "claude-code" }, {
@@ -75,10 +71,6 @@ test.each([
     expect(result.content).toBe("Here is the answer.");
     expect(mock.requests).toHaveLength(withTools ? 2 : 1);
     for (const sent of mock.requests) {
-      if (reasoningOff === true) {
-        expect(sent.body.thinking).toEqual({ type: "disabled" });
-        continue;
-      }
       expect(sent.body.thinking).toMatchObject({ display: wanted });
       expect((sent.body.thinking as { type: string }).type).toBe(model.startsWith("claude-opus") ? "adaptive" : "enabled");
     }
