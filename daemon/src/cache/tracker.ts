@@ -11,7 +11,9 @@ export const KEEPALIVE_REWRITE_TOKENS = 1000;
 
 export interface Observation {
   ts: string;
+  provider?: string | undefined;
   model: string;
+  keepalive_window_secs?: number | undefined;
   thinking_enabled: boolean;
   cache_read_tokens: number;
   cache_write_tokens: number;
@@ -67,6 +69,7 @@ export class CacheTracker {
   #lastToolLoopCacheRead = 0;
   #ttlSecs: number;
   #maxIdleSecs: number;
+  readonly #keepaliveWindows = new Map<string, number>();
   #ttlExpiredSinceWarm = false;
 
   #lastKeepaliveMissed = false;
@@ -116,6 +119,11 @@ export class CacheTracker {
 
   observe(obs: Observation): ObservationResult {
     const obsTs = parseTs(obs.ts);
+    const modelKey = JSON.stringify([obs.provider, obs.model]);
+    if (obs.keepalive_window_secs !== undefined) {
+      this.#keepaliveWindows.set(modelKey, obs.keepalive_window_secs);
+    }
+    const maxIdleSecs = this.#keepaliveWindows.get(modelKey) ?? this.#maxIdleSecs;
 
     if (obs.call_type === "compaction") {
       this.#state = "cold";
@@ -181,9 +189,9 @@ export class CacheTracker {
       this.#ttlExpiredSinceWarm = false;
       if (obs.call_type !== "keepalive") {
         const withinKeepaliveWindow =
-          this.#lastActivityTs !== undefined && obsTs !== undefined
-            ? secondsBetween(obsTs, this.#lastActivityTs) <= this.#maxIdleSecs
-            : true;
+          maxIdleSecs > 0 && (this.#lastActivityTs !== undefined && obsTs !== undefined
+            ? secondsBetween(obsTs, this.#lastActivityTs) <= maxIdleSecs
+            : true);
         if (anomaly === undefined && withinKeepaliveWindow) anomaly = "keepalive_miss";
       }
     }

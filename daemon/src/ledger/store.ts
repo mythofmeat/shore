@@ -166,6 +166,7 @@ export interface RecordCall {
   finish_reason: string;
   thinking_enabled: boolean;
   cache_ttl?: string | undefined;
+  keepalive_window_secs?: number | undefined;
   reasoning_effort?: string | undefined;
   tool_surface?: string | undefined;
   output_tokens_estimated?: boolean | undefined;
@@ -455,7 +456,9 @@ export class Ledger {
 
     const observation: Observation = {
       ts,
+      provider: record.provider,
       model: record.model,
+      keepalive_window_secs: record.keepalive_window_secs,
       thinking_enabled: record.thinking_enabled,
       cache_read_tokens: record.usage.cache_read_tokens,
       cache_write_tokens: record.usage.cache_creation_tokens,

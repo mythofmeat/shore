@@ -52,6 +52,7 @@ type ServiceSlice = Pick<
   AutonomyService,
   | "register"
   | "setCompactionConfig"
+  | "setHeartbeatConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onAssistantMessage"
@@ -116,10 +117,12 @@ export class TurnAutonomyBridge {
   reloadConfig(effectiveConfig: (character: string) => LoadedConfig): void {
     for (const character of Array.from(this.#registered.keys())) {
       this.#after(character, () => {
+        const config = effectiveConfig(character);
         this.#service.setCompactionConfig(
           character,
-          compactionConfigFor(effectiveConfig(character)),
+          compactionConfigFor(config),
         );
+        this.#service.setHeartbeatConfig(character, clockConfigFor(config));
       });
     }
   }

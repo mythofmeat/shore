@@ -178,7 +178,6 @@ function record(
   if (ctx.ledger === undefined) return;
   const ledger = attempt?.ledger ?? ledgerFor(ctx.ledger);
   if (ledger === null) return;
-  if (ctx.keepalive_window_secs !== undefined) ledger.setMaxIdleSecs(ctx.keepalive_window_secs);
   const ttl = cacheTtlSeconds(ctx.cache_ttl);
   if (ttl !== undefined) ledger.setCacheTtlSecs(ttl);
 
@@ -194,6 +193,7 @@ function record(
     finish_reason: call.finish_reason,
     thinking_enabled: req.sdk === "claude_agent" || ctx.thinking_enabled,
     cache_ttl: ctx.cache_ttl,
+    keepalive_window_secs: ctx.keepalive_window_secs,
     reasoning_effort: ctx.reasoning_effort,
     tool_surface: toolSurfaceFingerprint(req.tools),
     ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),

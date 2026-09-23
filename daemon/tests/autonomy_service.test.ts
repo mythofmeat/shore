@@ -159,6 +159,29 @@ describe("registering", () => {
     });
   });
 
+  test("restarting under a smaller ceiling bounds and runs the restored wake", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const first = build();
+      await first.service.register(registration("nova", dir));
+      first.service.scheduleNextWake("nova", 47, "later");
+      await first.service.shutdown();
+
+      const restarted = build();
+      const request = registration("nova", dir);
+      request.clock.maxIntervalMs = 2 * HOUR;
+      await restarted.service.register(request);
+      expect(restarted.service.status("nova")?.next_wake_at).toBe(START + 2 * HOUR);
+      restarted.now.value += 2 * HOUR - 1;
+      await restarted.service.tick();
+      expect(restarted.executor.calls).toEqual([]);
+      restarted.now.value += 1;
+      await restarted.service.tick();
+      expect(restarted.executor.calls).toEqual(["nova:heartbeat"]);
+      await restarted.service.shutdown();
+    });
+  });
+
   test("a character with nothing on disk starts from defaults", async () => {
     await inTempDir(async (root) => {
       const { service } = build();

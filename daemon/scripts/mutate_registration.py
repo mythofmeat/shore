@@ -142,12 +142,12 @@ MUTANTS = [
     # --- the reload -----------------------------------------------------------
     ("reload: one character's config is pushed to all of them, as the Rust's shared copy was",
      R,
-     "        this.#service.setCompactionConfig(\n"
-     "          character,\n"
-     "          compactionConfigFor(effectiveConfig(character)),\n        );",
-     "        this.#service.setCompactionConfig(\n"
-     "          character,\n"
-     '          compactionConfigFor(effectiveConfig("ada")),\n        );'),
+     "        const config = effectiveConfig(character);",
+     '        const config = effectiveConfig("ada");'),
+    ("reload: heartbeat bounds still wait for a restart",
+     R,
+     "        this.#service.setHeartbeatConfig(character, clockConfigFor(config));",
+     "        void clockConfigFor(config);"),
     ("reload: nobody is told, so an edited threshold waits for a restart",
      R,
      "    for (const character of Array.from(this.#registered.keys())) {",
@@ -155,9 +155,9 @@ MUTANTS = [
     ("reload: the push runs before the registration it belongs to",
      R,
      "      this.#after(character, () => {\n"
-     "        this.#service.setCompactionConfig(",
+     "        const config = effectiveConfig(character);",
      "      ((fn: () => void) => fn())(() => {\n"
-     "        this.#service.setCompactionConfig("),
+     "        const config = effectiveConfig(character);"),
     ("user: the timestamp is taken when the queue drains, not when the user spoke",
      R,
      "    const localAt = localWallClock(this.#now(), this.#zone);\n    this.#after(character, () => {\n"

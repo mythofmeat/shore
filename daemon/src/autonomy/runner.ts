@@ -1,5 +1,5 @@
 import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
-import { HeartbeatClock, type HeartbeatAction } from "./heartbeat.ts";
+import { HeartbeatClock, type HeartbeatAction, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
 import {
   tickDecision,
@@ -101,7 +101,7 @@ export class CharacterAutonomy {
         next_wake_at: restored.nextWakeAt,
         last_user_at: restored.lastUserAt,
       });
-      this.#clock.deferWakeToMinimumLatency(opts.now());
+      this.#clock.boundWake(opts.now());
     }
     this.#state = {
       dirty: false,
@@ -135,7 +135,7 @@ export class CharacterAutonomy {
   }
 
   deferHeartbeat(now: number): void {
-    this.#clock.deferWakeToMinimumLatency(now, true);
+    this.#clock.boundWake(now, true);
     this.#state.lastActivityAt = now;
     this.#state.dirty = true;
   }
@@ -173,6 +173,11 @@ export class CharacterAutonomy {
       archiveAfterSecs: compaction.archiveAfterSecs,
       maxContextTokens: compaction.maxContextTokens,
     };
+  }
+
+  setHeartbeatConfig(clock: HeartbeatClockConfig, now: number): void {
+    this.#clock.setConfig(clock, now);
+    this.#state.dirty = true;
   }
 
   shouldCompactNow(turnCount: number, contextTokens: number): boolean {

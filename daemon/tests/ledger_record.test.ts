@@ -137,6 +137,34 @@ test("a failed NanoGPT state refresh leaves the call billable", async () => {
   }
 });
 
+describe("independent keepalive windows", () => {
+  test.each([
+    ["another character with keepalive off", "other", "claude-opus-4-6", 0, "keepalive_miss"],
+    ["another character with a longer window", "other", "claude-opus-4-6", 86400, null],
+    ["another model with keepalive off", "probe", "claude-sonnet-4-6", 0, "keepalive_miss"],
+    ["another model with a longer window", "probe", "claude-sonnet-4-6", 86400, null],
+  ] as const)("%s does not retune the original tracker", async (_label, character, model, otherWindow, anomaly) => {
+    await withLedger(async (path) => {
+      const ownWindow = anomaly === null ? 0 : 3600;
+      const completed = {
+        content: "ok", content_blocks: [], model: REQ.model, finish_reason: "end_turn",
+        usage: usage(5000, 0), timing: TIMING,
+      };
+      recordGenerate(ctx(path, { cache_ttl: "5m", keepalive_window_secs: ownWindow }), REQ, completed);
+      recordGenerate(ctx(path, { character, cache_ttl: "5m", keepalive_window_secs: otherWindow }),
+        { ...REQ, model }, completed);
+      recordGenerate(ctx(path, { cache_ttl: "5m" }), REQ, completed);
+      const ledger = required(ledgerFor(path));
+      const result = ledger.record({
+        provider: "anthropic", model: REQ.model, character: "probe", call_type: "message",
+        thinking_enabled: true, cache_ttl: "5m", finish_reason: "end_turn",
+        usage: usage(0, 5000), timing: TIMING,
+      }, () => new Date(Date.now() + 600_000));
+      expect(result.cache_anomaly).toBe(anomaly);
+    });
+  });
+});
+
 describe("what a stream records", () => {
   test("a call waits for its model price before the ledger row is written", async () => {
     const { path, cleanup } = freshLedger();

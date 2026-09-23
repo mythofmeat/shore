@@ -41,6 +41,8 @@ import {
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import { handleGenerateImage } from "../src/tools/images.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
+import { KeepaliveService } from "../src/cache/keepalive.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedValue } from "./support/rerecord.ts";
 
@@ -905,6 +907,111 @@ test("a sampler preference set for the character reaches the outgoing request", 
   );
 
   expect(requests[0]?.temperature).toBe(0.25);
+});
+
+test("a real reply without cache metrics still schedules the configured pings", async () => {
+  const root = await tempRoot("keepalive-no-metrics");
+  const config = await loadedConfig(root, { with_model: true });
+  setTestEnv(MODEL_KEY_ENV, "fixture-key");
+
+  await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
+  await mkdir(join(config.dirs.data, "ada", "preferences"), { recursive: true });
+  await writeFile(
+    join(config.dirs.data, "ada", "preferences", "models.toml"),
+    '[models."anthropic:claude-fixture"]\ncache_keepalive = "20s"\ncache_keepalive_pings = 2\n',
+  );
+
+  let now = Date.now();
+  const pings: SidecarRequest[] = [];
+  const keepalive = new KeepaliveService(async (request) => {
+    pings.push(request);
+    return {
+      content: "", content_blocks: [], model: request.model, finish_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 500, cache_creation_tokens: 0 },
+      timing: { total_ms: 1, time_to_first_token_ms: 1 },
+    };
+  }, () => now);
+  const cache = new LastRequestCache(keepalive);
+  const answer: StreamEvent[] = [
+    { type: "start", model: "claude-fixture" },
+    {
+      type: "done",
+      content: "ok",
+      finish_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+      timing: { total_ms: 1, time_to_first_token_ms: 1 },
+    },
+  ];
+  const provider: SidecarProvider = {
+    async *stream() {
+      yield* answer;
+    },
+    generate: () => {
+      throw new Error("unused");
+    },
+  };
+
+  const engine = generationEngine(
+    await ConversationEngine.load("ada", config.dirs.data, undefined),
+  );
+
+  await runGeneration(
+    {
+      registry: {
+        getOrCreate: async () => engine,
+        effectiveConfig: () => config,
+        listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
+      },
+      dataDir: config.dirs.data,
+      providers: { anthropic: provider },
+      autonomy: {
+        ensureState: () => false,
+        needsActivityBackfill: () => false,
+        backfillActivity: () => {},
+        onUserMessage: () => {},
+        shouldCompactNow: () => false,
+        onCompactionComplete: () => {},
+        onCompactionFailed: () => {},
+        notifyLastRequest: (character, request, arming) => cache.set(character, request as SidecarRequest, arming),
+        notifyAssistantMessage: () => {},
+      },
+      notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
+      diagnostics: { key_fallbacks: { push: () => {} } },
+      emitEvent: () => {},
+      mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
+      compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
+      newlyCrossedUsageBudgetWarnings: async () => [],
+      now: () => MINTED_TS,
+      newMessageId: () => `m_${crypto.randomUUID()}`,
+      monotonicMs: () => 0,
+      sleep: async () => {},
+    },
+    {
+      meta: { session: { sessionId: 1 } } as never,
+      body: { rid: null, text: "hello", stream: true, images: [], image_data: [] },
+      regen: false,
+      charName: "ada",
+      rid: null,
+      send: async () => {},
+      signal: new AbortController().signal,
+    },
+  );
+
+  expect(keepalive.nextPingAt("ada")).toBe(now + 20_000);
+  now += 19_999;
+  await keepalive.tick();
+  expect(pings).toHaveLength(0);
+  now += 1;
+  await keepalive.tick();
+  expect(pings).toHaveLength(1);
+  expect(pings[0]?.messages.at(-2)).toMatchObject({ role: "assistant", content: [{ type: "text", text: "ok" }] });
+  now += 20_000;
+  await keepalive.tick();
+  expect(pings).toHaveLength(2);
+  now += 20_000;
+  await keepalive.tick();
+  expect(pings).toHaveLength(2);
 });
 
 test("the turn tells the provider which thread it belongs to", async () => {
