@@ -8,7 +8,7 @@ import { assertSettingsCoverage, configAt, settingControl } from "../src/browser
 import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
 import { settingSchema } from "../src/llm/settings.ts";
 import { SDK_VARIANTS } from "../src/llm/types.ts";
-import { assertArchivePhaseCoverage, assertBrowserCoverage, assertCompactionResultCoverage, assertUsageResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
+import { assertRequestPhaseCoverage, assertArchivePhaseCoverage, assertBrowserCoverage, assertCompactionResultCoverage, assertUsageResultCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
@@ -132,4 +132,12 @@ test("history deltas retain image bytes omitted by the daemon's incremental fram
   const history = { messages: [{ ...message("image"), images: [{ path: "stable.png" }] }], config: {}, revision: 2, delta: { base_revision: 1, after: null } };
   expect(mergeHistory(previous, 0, history)?.at(0)?.images).toEqual([{ path: "stable.png", data: "aW1hZ2U=" }]);
   expect(mergeHistory(previous, 0, { ...history, messages: [{ ...message("image"), images: [{ path: "stable.png", data: "bmV3" }] }] })?.at(0)?.images).toEqual([{ path: "stable.png", data: "bmV3" }]);
+});
+
+test("request outcome renderers cover every canonical phase and reject an omitted uncertainty renderer", async () => {
+  const source = await readFile(new URL("../src/browser/requests.tsx", import.meta.url), "utf8");
+  const cases = await switchCases(source, "RequestStatus", "request.phase");
+  expect(() => assertRequestPhaseCoverage(cases)).not.toThrow();
+  const omitted = await switchCases(source.replace('case "uncertain":', ''), "RequestStatus", "request.phase");
+  expect(() => assertRequestPhaseCoverage(omitted)).toThrow("Missing request phase renderer: uncertain");
 });

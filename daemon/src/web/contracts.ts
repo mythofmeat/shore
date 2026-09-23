@@ -5,6 +5,8 @@ import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebArchiveExport } from "../protocol/WebArchiveExport.ts";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
+import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
+import type { WebRequestList } from "../protocol/WebRequestList.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
 const validator = contractValidator();
@@ -14,3 +16,5 @@ export const validWebProblem = validator.compile<WebProblem>(schemas.problem);
 export const validWebArchiveExport = validator.compile<WebArchiveExport>(schemas.archive_export);
 export const validWebArchiveInfo = validator.compile<WebArchiveInfo>(schemas.archive_info);
 export const validWebArchiveList = validator.compile<WebArchiveList>(schemas.archive_list);
+export const validWebRequestInfo = validator.compile<WebRequestInfo>(schemas.request_info);
+export const validWebRequestList = validator.compile<WebRequestList>(schemas.request_list);

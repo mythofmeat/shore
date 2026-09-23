@@ -218,7 +218,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   config: register("config", { ...configPresentation, label: "Read or edit configuration", effects: ["read", "config_write"], fields: {
     key: { label: "Configuration key", choices: "config_keys", hint: "Omit to inspect the complete configuration" },
     value: { label: "New value", multiline: true, hint: "Omit to read; setting a value also requires a key. Lists accept bracketed values." },
-  } }, ({ session }, args) => config(session, args)),
+  }, policies: [
+    { condition: { kind: "absent", field: "value" }, effects: ["read"], confirmation: "none" },
+    { condition: { kind: "equals", field: "value", value: null }, effects: ["read"], confirmation: "none" },
+  ] }, ({ session }, args) => config(session, args)),
   config_schema: register("config_schema", { ...configPresentation, label: "Browse configuration schema", fields: {} },
     ({ session }) => configSchemaCommand(session)),
   config_check: register("config_check", { ...configPresentation, label: "Check configuration", fields: {} },

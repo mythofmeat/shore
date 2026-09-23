@@ -516,6 +516,9 @@
     "WebLogin": "{ token: string, }",
     "WebProblem": "{ code: WebProblemCode, message: string, }",
     "WebProblemCode": "\"unauthorized\" | \"forbidden\" | \"invalid_request\" | \"too_many_requests\" | \"reload_required\" | \"unavailable\" | \"not_found\"",
+    "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, result?: OperationResponse, result_omitted: boolean, error?: Error, }",
+    "WebRequestList": "{ requests: Array<WebRequestInfo>, max_records: number, max_result_bytes: number, }",
+    "WebRequestPhase": "\"running\" | \"uncertain\" | \"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }",
     "WorkspaceIndexResult": "DiagnosticIndexError | WorkspaceIndexStatus",
     "WorkspaceIndexStatus": "{ path: string, unusable?: string, files: number, embedded: number, pending: number, skipped: number, skip_reasons: { [key in string]: number }, vectors: number, models: Array<string>, bytes: number, last_indexed_at: string | null, background: IndexBackgroundStatus, }"

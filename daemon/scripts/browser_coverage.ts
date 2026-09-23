@@ -52,6 +52,12 @@ export function assertArchivePhaseCoverage(renderers: ReadonlySet<string>): void
   }
 }
 
+export function assertRequestPhaseCoverage(renderers: ReadonlySet<string>): void {
+  for (const phase of webSchemas.request_info.$defs.WebRequestPhase.enum) {
+    if (!renderers.has(phase)) throw new Error(`Missing request phase renderer: ${phase}`);
+  }
+}
+
 export function assertBrowserCoverage(operations: OperationDescriptor[], renderers: ReadonlySet<string>, events: ReadonlySet<string>, policies: Readonly<Record<string, string>> = EVENT_POLICIES): void {
   const check = (control: Control): void => {
     if (!renderers.has(control.kind)) throw new Error(`Missing GUI control renderer: ${control.kind}`);

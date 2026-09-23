@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { WebRequestList } from "../src/protocol/WebRequestList.ts";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { tokenMatches } from "../src/config/token.ts";
 import { BrowserSocket } from "./support/browser.ts";
@@ -560,4 +565,79 @@ describe("web listener policy", () => {
     expect(webBinding({ ...defaultWebConfig(), public_origin: "https://shore.example" })).toMatchObject({ secure: true });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340", public_origin: "https://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
   });
+});
+
+
+test("request history authenticates, isolates owners, uses current selection and refuses duplicate mutation IDs across tabs", async () => {
+  const f = await fixture(); f.web.activate();
+  expect((await f.api("/api/requests/list")).status).toBe(401);
+  const owner = await f.login(); const other = await f.login();
+  expect((await f.api("/api/requests/list", owner.cookie, {}, { origin: "https://evil.example" })).status).toBe(403);
+  const first = connectBrowser(f.web.origin, owner.cookie); await first.attach();
+  const session = f.swp.sessionRouter.sessions().at(0)?.[0]; if (session === undefined) throw new Error("Missing session");
+  f.swp.sessionRouter.setSelectedCharacter(session, "bo"); f.swp.sessionRouter.setSelectedThread(session, "side");
+  const command = { type: "command", rid: "tracked-edit", name: "edit", args: { ref: "1", content: "secret input" } };
+  first.send(command); await until(() => f.routed.length === 1);
+  const listing = await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList;
+  const record = listing.requests[0]; if (record === undefined) throw new Error("Missing request record");
+  expect(record).toMatchObject({ rid: "tracked-edit", character: "bo", thread: "side", phase: "running" });
+  expect(JSON.stringify(listing)).not.toContain("secret input");
+  expect((await (await f.api("/api/requests/list", other.cookie)).json() as WebRequestList).requests).toEqual([]);
+  expect((await f.api(`/api/requests/${record.id}/acknowledge`, other.cookie)).status).toBe(404);
+  expect((await f.api(`/api/requests/${record.id}/acknowledge`, owner.cookie)).status).toBe(409);
+  const second = connectBrowser(f.web.origin, owner.cookie); await second.attach(); second.send(command);
+  const duplicate = await second.frame("request_finished", command.rid);
+  expect(duplicate).toMatchObject({ outcome: "failed" });
+  if (duplicate.type !== "request_finished") throw new Error("Missing duplicate rejection");
+  expect(duplicate.error?.message).toContain("already has an outcome");
+  expect(f.routed).toHaveLength(1);
+  await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid: command.rid, name: "edit", data: { ref: "1", edited: true } });
+  await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: command.rid, outcome: "completed" });
+  await first.frame("request_finished", command.rid);
+  expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]).toMatchObject({ phase: "completed", result: { name: "edit", data: { ref: "1", edited: true } } });
+  expect((await f.api(`/api/requests/${record.id}/acknowledge`, owner.cookie)).status).toBe(204);
+  expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests).toEqual([]);
+});
+
+test("disconnect records uncertainty and never dispatches again when history is read or another tab attaches", async () => {
+  const f = await fixture(); f.web.activate(); const owner = await f.login();
+  const first = connectBrowser(f.web.origin, owner.cookie); await first.attach();
+  first.send({ type: "command", rid: "lost-edit", name: "edit", args: { ref: "1", content: "new" } });
+  await until(() => f.routed.some((message) => message.kind === "command"));
+  await first.close(); await until(() => f.swp.sessionRouter.sessions().length === 0);
+  const listing = await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList;
+  expect(listing.requests[0]).toMatchObject({ phase: "uncertain", rid: "lost-edit" });
+  const second = connectBrowser(f.web.origin, owner.cookie); await second.attach();
+  await f.api("/api/requests/list", owner.cookie);
+  expect(f.routed.filter((message) => message.kind === "command")).toHaveLength(1);
+});
+
+test("failed durable admission never reaches dispatch, and failed completion storage closes with a recoverable uncertainty", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-request-admission-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data"); await mkdir(dataDir);
+  const f = await fixture({ recovery: { dataDir, cacheDir: join(root, "cache"), token: TOKEN } }); f.web.activate(); const owner = await f.login();
+  const namespace = (await readdir(join(root, "cache", "web")))[0]; if (namespace === undefined) throw new Error("Missing recovery namespace");
+  const db = new Database(join(root, "cache", "web", namespace, "recovery.sqlite"));
+  try {
+    const browser = connectBrowser(f.web.origin, owner.cookie); await browser.attach();
+    const session = f.swp.sessionRouter.sessions().at(0)?.[0]; if (session === undefined) throw new Error("Missing peer");
+    db.run("CREATE TRIGGER reject_admission BEFORE INSERT ON requests BEGIN SELECT RAISE(FAIL, 'secret database path'); END;");
+    browser.send({ type: "command", rid: "refused", name: "edit", args: { ref: "1", content: "new" } });
+    const refused = await browser.frame("request_finished", "refused");
+    expect(refused).toMatchObject({ outcome: "failed" });
+    if (refused.type !== "request_finished") throw new Error("Missing admission rejection");
+    expect(refused.error?.message).toContain("Nothing was dispatched");
+    expect(f.routed).toHaveLength(0);
+    db.run("DROP TRIGGER reject_admission");
+    browser.send({ type: "command", rid: "admitted", name: "edit", args: { ref: "1", content: "new" } });
+    await until(() => f.routed.length === 1);
+    db.run("CREATE TRIGGER reject_completion BEFORE UPDATE ON requests BEGIN SELECT RAISE(FAIL, 'secret database path'); END;");
+    await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: "admitted", outcome: "completed" });
+    await browser.closed;
+    expect(browser.messages.some((message) => message.type === "request_finished" && message.rid === "admitted")).toBe(false);
+    expect(JSON.stringify(browser.messages)).not.toContain("secret database path");
+    expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]?.phase).toBe("uncertain");
+    expect(db.query<{ info: string }, []>("SELECT info FROM requests").get()?.info).toContain('"phase":"running"');
+  } finally { db.run("DROP TRIGGER IF EXISTS reject_admission; DROP TRIGGER IF EXISTS reject_completion;"); db.close(); }
 });

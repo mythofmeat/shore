@@ -98,6 +98,49 @@ pub struct WebArchiveList {
     pub max_expanded_bytes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub enum WebRequestPhase {
+    Running,
+    Uncertain,
+    Completed,
+    Failed,
+    Cancelled,
+    Superseded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebRequestInfo {
+    pub id: String,
+    pub rid: String,
+    pub operation: String,
+    pub label: String,
+    pub character: Option<String>,
+    pub thread: Option<String>,
+    #[ts(type = "number")]
+    pub started_at: u64,
+    #[ts(type = "number")]
+    pub expires_at: u64,
+    pub phase: WebRequestPhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub result: Option<super::operations::OperationResponse>,
+    pub result_omitted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub error: Option<super::server_msg::Error>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebRequestList {
+    pub requests: Vec<WebRequestInfo>,
+    pub max_records: u32,
+    pub max_result_bytes: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,6 +155,8 @@ mod tests {
             "archive_export": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebArchiveExport>(),
             "archive_info": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebArchiveInfo>(),
             "archive_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebArchiveList>(),
+            "request_info": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestInfo>(),
+            "request_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestList>(),
         });
         let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../daemon/src/web/schemas.generated.json");

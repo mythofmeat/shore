@@ -75,5 +75,11 @@ test("settings use live types, preserve collections and secrets, validate writes
   setting = await choose("cache.keepalive_for");
   await expect(setting.getByLabel("Value", { exact: true })).toHaveValue("90m");
   expect(responses.join("\n")).not.toContain("settings-fixture-secret");
+  const history = await page.request.post("/api/requests/list", { headers: { origin: new URL(page.url()).origin } });
+  expect(history.ok()).toBe(true);
+  const retained = await history.text();
+  expect(retained).toContain("notifications.topic");
+  expect(retained).toContain("<redacted>");
+  expect(retained).not.toContain("settings-fixture-secret");
   expect(errors).toEqual([]);
 });

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { chmodSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
-import { validWebArchiveInfo } from "./contracts.ts";
+import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
+import { validWebArchiveInfo, validWebRequestInfo } from "./contracts.ts";
 
 export interface WebRecoveryOptions {
   readonly cacheDir: string;
@@ -40,7 +41,8 @@ export class WebRecovery {
       this.#db.run(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = EXTRA; PRAGMA foreign_keys = ON; PRAGMA max_page_count = 16384;
         CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id = 1), fingerprint TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS archives (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);`);
+        CREATE TABLE IF NOT EXISTS archives (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);`);
       const fingerprint = sessionDigest(JSON.stringify([1, origin, options.token]));
       this.#db.transaction(() => {
         const previous = this.#db.query<{ fingerprint: string }, []>("SELECT fingerprint FROM identity WHERE id = 1").get();
@@ -78,6 +80,20 @@ export class WebRecovery {
   }
 
   removeArchive(id: string): void { this.#db.query("DELETE FROM archives WHERE id = ?").run(id); }
+
+  requests(): { owner: string; info: WebRequestInfo }[] {
+    return this.#db.query<{ owner: string; info: string }, []>("SELECT owner, info FROM requests").all().map((row) => {
+      const info: unknown = JSON.parse(row.info);
+      if (!validWebRequestInfo(info) || !/^[a-f0-9-]{36}$/.test(info.id) || !Number.isSafeInteger(info.expires_at)) throw new Error("Invalid saved browser request outcome");
+      return { owner: row.owner, info };
+    });
+  }
+
+  saveRequest(owner: string, info: WebRequestInfo): void {
+    this.#db.query("INSERT INTO requests VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET info = excluded.info").run(info.id, owner, JSON.stringify(info));
+  }
+
+  removeRequest(id: string): void { this.#db.query("DELETE FROM requests WHERE id = ?").run(id); }
 
   close(): void { this.#db.close(); }
 }
