@@ -137,6 +137,7 @@ function recordingService(gate?: Promise<void>) {
     onUserMessage: () => calls.push("user"),
     onAssistantMessage: (_c: string, turns: number) => calls.push(`assistant:${turns}`),
     setCompactionConfig: () => calls.push("compaction"),
+    setHeartbeatConfig: () => {},
     shouldCompactNow: () => undefined,
     onCompactionComplete: () => calls.push("compacted"),
     onCompactionFailed: () => calls.push("failed"),
@@ -1037,6 +1038,49 @@ describe("the command path", () => {
 
       expect(summary.characterDiscoveryChanged).toBe(true);
       expect(runtime.registry.availableCharacters()).toEqual(["ada", "nova"]);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("applying config reload updates heartbeat status and existing schedules", async () => {
+    const hour = 3_600_000;
+    const { root, config, runtime } = await runtimeUnder("shore-heartbeat-reload-", () => {}, ["ada", "nova"]);
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      const deps = buildCommandPathDeps(commandAssembly(runtime, { autonomy: bridge }));
+      for (const character of ["ada", "nova"]) {
+        bridge.ensureState(character, config);
+        await bridge.settled(character);
+      }
+      runtime.autonomy.scheduleNextWake("ada", 47, "later");
+      const clock = required(runtime.autonomy.runnerFor("nova")).clock;
+      clock.tick(Date.now());
+      const before = Date.now();
+      const updated = configFor(root, (app) => {
+        const heartbeat = app.behavior.autonomy.heartbeat;
+        heartbeat.default_interval = ConfigDuration.fromSecs(90 * 60);
+        heartbeat.min_interval = ConfigDuration.fromSecs(20 * 60);
+        heartbeat.max_interval = ConfigDuration.fromSecs(2 * 3600);
+      });
+      await deps.dispatchRuntime.applyReloadedConfig(updated);
+      await bridge.settled("ada");
+      await bridge.settled("nova");
+      expect(runtime.autonomy.status("ada")).toMatchObject({
+        default_interval_ms: 1.5 * hour,
+        min_interval_ms: hour / 3,
+        max_interval_ms: 2 * hour,
+      });
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeGreaterThanOrEqual(before + 2 * hour);
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeLessThanOrEqual(Date.now() + 2 * hour);
+      expect(clock.nextWakeAt).toBeGreaterThan(before + 1.5 * hour - 1000);
+      expect(clock.nextWakeAt).toBeLessThanOrEqual(Date.now() + 1.5 * hour);
+      expect(runtime.autonomy.scheduleNextWake("ada", 0, "soon")).toBeCloseTo(1 / 3);
+      const deadline = runtime.autonomy.status("ada")?.next_wake_at;
+      await deps.dispatchRuntime.applyReloadedConfig(updated);
+      await bridge.settled("ada");
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(deadline);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

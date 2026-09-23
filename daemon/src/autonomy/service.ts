@@ -130,6 +130,10 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setCompactionConfig(compaction);
   }
 
+  setHeartbeatConfig(character: string, clock: HeartbeatClockConfig): void {
+    this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
+  }
+
   async unregister(character: string): Promise<void> {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;

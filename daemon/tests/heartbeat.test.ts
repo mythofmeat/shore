@@ -50,6 +50,43 @@ describe("the configured bounds apply to every wake, whoever set it", () => {
   });
 });
 
+describe("live heartbeat settings", () => {
+  test("changing the default interval keeps elapsed time and becomes due if it already elapsed", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 10 * HOUR }), 0);
+    clock.tick(0);
+    clock.setConfig(config({ defaultIntervalMs: 4 * HOUR }), HOUR);
+    expect(clock.nextWakeAt).toBe(4 * HOUR);
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR }), 3 * HOUR);
+    expect(clock.tick(3 * HOUR)).toBe("run_tick");
+  });
+
+  test("raising the floor delays an existing explicit wake and leaves later wakes intact", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.schedule(HOUR, 0);
+    clock.setConfig(config({ minIntervalMs: 2 * HOUR }), 30 * 60_000);
+    expect(clock.nextWakeAt).toBe(2.5 * HOUR);
+    clock.schedule(10 * HOUR, HOUR);
+    clock.setConfig(config({ defaultIntervalMs: 4 * HOUR }), 2 * HOUR);
+    expect(clock.nextWakeAt).toBe(10 * HOUR);
+  });
+
+  test("a reload preserves idle counters and does not schedule a dormant clock", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 2 }), 0);
+    clock.forceDormant();
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR, maxIdleTicks: 2 }), HOUR);
+    expect(clock.ticksWithoutUser).toBe(2);
+    expect(clock.nextWakeAt).toBeUndefined();
+    expect(clock.tick(HOUR)).toBe("none");
+  });
+
+  test("a clock with no wake uses the new bounds when it first schedules", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.setConfig(config({ defaultIntervalMs: 8 * HOUR, maxIntervalMs: 2 * HOUR }), 0);
+    clock.tick(0);
+    expect(clock.nextWakeAt).toBe(2 * HOUR);
+  });
+});
+
 describe("the abandonment guards trip at the threshold, not past it", () => {
   test("silence: exactly at the ceiling is already too silent", () => {
     const maxSilentMs = 2 * HOUR;
@@ -214,7 +251,7 @@ describe("deferring the wake to the minimum latency", () => {
   test("an overdue deadline is pushed out instead of firing at once", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: 0 });
-    clock.deferWakeToMinimumLatency(2 * HOUR);
+    clock.boundWake(2 * HOUR);
 
     expect(clock.nextWakeAt).toBe(3 * HOUR);
     expect(clock.tick(2 * HOUR)).toBe("none");
@@ -224,7 +261,7 @@ describe("deferring the wake to the minimum latency", () => {
   test("a deadline already past the minimum is left where it is", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.restore({ ticks_without_user: 0, next_wake_at: 9 * HOUR, last_user_at: 0 });
-    clock.deferWakeToMinimumLatency(2 * HOUR);
+    clock.boundWake(2 * HOUR);
 
     expect(clock.nextWakeAt).toBe(9 * HOUR);
   });
@@ -232,7 +269,7 @@ describe("deferring the wake to the minimum latency", () => {
   test("a clock with no deadline stays unarmed", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: 0 });
-    clock.deferWakeToMinimumLatency(2 * HOUR);
+    clock.boundWake(2 * HOUR);
 
     expect(clock.nextWakeAt).toBeUndefined();
   });
@@ -240,7 +277,7 @@ describe("deferring the wake to the minimum latency", () => {
   test("the minimum comes from config, not the default interval", () => {
     const clock = new HeartbeatClock(config({ minIntervalMs: 5 * HOUR }), 0);
     clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: 0 });
-    clock.deferWakeToMinimumLatency(2 * HOUR);
+    clock.boundWake(2 * HOUR);
 
     expect(clock.nextWakeAt).toBe(7 * HOUR);
   });

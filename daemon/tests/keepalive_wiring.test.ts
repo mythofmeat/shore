@@ -308,13 +308,13 @@ describe("the ping count bounds the schedule", () => {
 });
 
 describe("the cadence reaches the schedule", () => {
-  test("opting in does not schedule billable pings after a turn with no cache evidence", async () => {
+  test("opting in schedules the requested ping after a turn with no cache metrics", async () => {
     const clock = fakeClock();
     const { service, sent } = await turnPersisted(CONFIGURED, clock, {}, 0);
-    expect(service.nextPingAt(CHARACTER)).toBeUndefined();
+    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 55 * MINUTE);
     clock.advance(55 * MINUTE);
     await service.tick();
-    expect(sent).toEqual([]);
+    expect(sent).toHaveLength(1);
   });
 
   test.each(["5m", "1h"])("a cadence as long as the %s TTL still arms; only setting it warns", async (ttl) => {
