@@ -6183,6 +6183,31 @@
             "reset_to"
           ]
         },
+        "ModelRole": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "role",
+            "model",
+            "source"
+          ]
+        },
         "RoleModelReset": {
           "type": "object",
           "properties": {
@@ -6215,6 +6240,12 @@
             },
             "reset_to": {
               "type": "string"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ModelRole"
+              }
             }
           },
           "required": [
@@ -6223,7 +6254,8 @@
             "cleared",
             "source",
             "file",
-            "reset_to"
+            "reset_to",
+            "roles"
           ]
         }
       }

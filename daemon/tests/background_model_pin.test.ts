@@ -166,6 +166,31 @@ model = "kimi-id"
     expect(roleOf(ctx, "compaction")?.source).toBe("inherits chat");
   });
 
+  test("`all` reports each task's model when a thread pin makes them diverge", async () => {
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n\n[heartbeat]\nmodel = \"kimi-id\"\n");
+    ctx.threadModel = "anthropic:haiku-id";
+    ctx.thread = "side";
+
+    const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
+
+    expect(result["roles"]).toEqual([
+      { role: "heartbeat", model: "anthropic:opus-id", source: "inherits chat" },
+      { role: "compaction", model: "anthropic:haiku-id", source: "inherits chat" },
+    ]);
+    expect(result["active"]).toBeNull();
+    expect(result["source"]).toBeNull();
+    expect(result["reset_to"]).toBe("per-task defaults");
+  });
+
+  test("`all` reports the shared model when every task agrees", async () => {
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+    const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
+
+    expect(result["active"]).toBe("anthropic:opus-id");
+    expect(result["source"]).toBe("inherits chat");
+    expect(result["roles"]).toHaveLength(2);
+  });
+
   test("clearing a key that was never set is not an error", async () => {
     const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
     const result = resetModel(ctx, { background_task: "compaction" }) as Record<string, unknown>;

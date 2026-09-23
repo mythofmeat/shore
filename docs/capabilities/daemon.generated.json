@@ -3349,7 +3349,7 @@
     "RequestOutcome": "\"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "ResetModelArgs": "{ background_task?: BackgroundModelTarget | null, subagent?: string | null, }",
     "Role": "\"user\" | \"assistant\" | \"system\"",
-    "RoleModelReset": "{ active: string | null, role: string, cleared: Array<string>, source: string | null, file: string | null, reset_to: string, }",
+    "RoleModelReset": "{ active: string | null, role: string, cleared: Array<string>, source: string | null, file: string | null, reset_to: string, roles: Array<ModelRole>, }",
     "RoleModelSelected": "{ role: string, config_key: string, cleared: Array<string>, file: string, restart_required: Array<string>, active: string, qualified_name: string, provider: string, model_id: string, changed: boolean, invalidated?: ModelInvalidated, }",
     "RunToolArgs": "{ tool: string, input?: { [key: string]: unknown }, pairs?: { [key in string]: string }, raw?: boolean | null, describe?: boolean | null, }",
     "RunToolResult": "ToolDescription | ToolRunReport",
