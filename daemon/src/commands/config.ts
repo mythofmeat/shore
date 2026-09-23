@@ -36,6 +36,7 @@ import type { ConfigSetResult } from "../protocol/ConfigSetResult.ts";
 export type { ConfigSetResult } from "../protocol/ConfigSetResult.ts";
 
 export interface ConfigRuntime {
+  globalConfig?(): LoadedConfig;
   reloadRuntimeConfig(fresh: LoadedConfig): void;
   adoptGlobalConfig(fresh: LoadedConfig): void;
   notifyPromptSnapshotRefreshed(character: string): void;
@@ -349,7 +350,7 @@ function commitConfigKey(
     throw invalidRequest(`${rejection} was rejected: ${message(e)}`);
   }
 
-  const restart = restartRequiredChanges(ctx.config, fresh);
+  const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
   const previous = walkConfigKey(reportedConfig(ctx), key)?.value ?? null;
   adopt(ctx, fresh);
 
@@ -439,7 +440,7 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
     }
   }
 
-  const restart = restartRequiredChanges(ctx.config, fresh);
+  const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
   const character = ctx.characterName;
   const characterDataDir = character === undefined ? undefined : join(ctx.config.dirs.data, character);
   const changed = characterDataDir === undefined || character === undefined ? [] : await changedPromptFiles(

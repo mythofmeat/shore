@@ -109,18 +109,18 @@ MUTANTS = [
      "  let global = emptyPreferences();\n"
      "  let charPrefs = emptyPreferences();\n"
      "  try {\n"
-     "    [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n"
+     "    [global, charPrefs] = preferences ?? loadForCharacter(config.dirs.data, character);\n"
      "  } catch (e) {\n"
      "    shoreLog.warn(\n"
      "      `shore: preferences load failed for ${character} (${op}); ` +\n"
      "        `using empty defaults: ${(e as Error).message}`,\n"
      "    );\n"
      "  }\n",
-     "  const [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n"
+     "  const [global, charPrefs] = preferences ?? loadForCharacter(config.dirs.data, character);\n"
      "  void op;\n"),
     ("chain: preferences are loaded for the wrong character",
-     "    [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n  } catch (e) {",
-     '    [global, charPrefs] = loadForCharacter(config.dirs.data, "other");\n  } catch (e) {'),
+     "    [global, charPrefs] = preferences ?? loadForCharacter(config.dirs.data, character);\n  } catch (e) {",
+     '    [global, charPrefs] = preferences ?? loadForCharacter(config.dirs.data, "other");\n  } catch (e) {'),
 
     # --- the static default, which is the whole divergence --------------------
     ("overlay: the catalog is folded in, as the chat path does",

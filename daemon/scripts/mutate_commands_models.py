@@ -119,15 +119,15 @@ MUTANTS = [
 
     # --- resolveActiveModel -------------------------------------------------
     ("active: the character's saved model is ignored, so the config default wins",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);\n"
      "  if (resolved !== undefined) return resolved;",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);\n"
      "  void resolved;"),
     ("active: the thread's pin is dropped, so a side thread reports the character's model",
      "function resolveActiveModel(ctx: ModelsContext): ResolvedModel {\n"
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);",
      "function resolveActiveModel(ctx: ModelsContext): ResolvedModel {\n"
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);"),
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined, ctx.preferences);"),
     ("active: the config default is never consulted",
      "  const fallback = ctx.config.app.defaults.model;\n"
      "  if (fallback !== undefined) return resolve(ctx, fallback, true);",
@@ -147,7 +147,7 @@ MUTANTS = [
     ('background: the inherited model ignores the character preference',
      "    : resolveChatModelForCharacter(\n"
      "      configView(ctx.config), ctx.characterName, findEffective,\n"
-     "      task === \"compaction\" ? ctx.threadModel : undefined,\n"
+     "      task === \"compaction\" ? ctx.threadModel : undefined, ctx.preferences,\n"
      "    );",
      '    : resolve(ctx, ctx.config.app.defaults.model ?? "", true);'),
     ('background: "all" accepts differing models',
@@ -193,11 +193,11 @@ MUTANTS = [
      '    return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };',
      '    return { role: task, model: qualify(ctx, perTask), source: "defaults.background.model" };'),
     ("rows: the chat row hides the pin, so a side thread reads as the character's",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);\n"
      "  if (resolved !== undefined) {\n"
      "    return {\n"
      "      role: \"chat\",",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined, ctx.preferences);\n"
      "  if (resolved !== undefined) {\n"
      "    return {\n"
      "      role: \"chat\","),
@@ -206,9 +206,9 @@ MUTANTS = [
      "      source: \"character\","),
     ("active: the listing's active name ignores the thread's pin",
      "function activeName(ctx: ModelsContext): string | undefined {\n"
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);",
      "function activeName(ctx: ModelsContext): string | undefined {\n"
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);"),
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined, ctx.preferences);"),
     ("switch: a shadowed switch is reported as if it took effect",
      "    ...(ctx.threadModel === undefined ? {} : { shadowed_by_thread: ctx.thread ?? null }),",
      "    ...{},"),
@@ -218,10 +218,10 @@ MUTANTS = [
      '  return { role: task, model: chat.model, source: "inherits chat" };'),
     ("rows: a characterless session still inherits",
      "  if (character === undefined) return undefined;\n"
-     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);",
-     '  return resolveChatModelForCharacter(configView(config), character ?? "", findEffective, threadModel);'),
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel, preferences);",
+     '  return resolveChatModelForCharacter(configView(config), character ?? "", findEffective, threadModel, preferences);'),
     ("rows: the pin never reaches the resolver, so it can only ever be the character's",
-     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);",
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel, preferences);",
      "  return resolveChatModelForCharacter(configView(config), character, findEffective);"),
 
     # --- list_models --------------------------------------------------------
@@ -325,8 +325,8 @@ MUTANTS = [
      '  data["effective_sampler"] = settings.effective_sampler;',
      '  data["effective_sampler"] = {};'),
     ('info: a role is inspected as a plain model',
-     '  const settings = modelSettingsDetail(ctx, args);',
-     '  const settings = modelSettingsDetail(ctx, { name: resolved.qualifiedName });'),
+     '  const settings = modelSettingsDetail(ctx, args, target);',
+     '  const settings = modelSettingsDetail(ctx, { name: target.model.qualifiedName });'),
     ('roles: background and subagent inheritance follows a thread pin',
      '  const inherited = inheritedChatRole(ctx);',
      '  const inherited = chatRole(ctx);'),
@@ -341,7 +341,7 @@ MUTANTS = [
      '    return {\n'
      '      target: "current",\n'
      '      active:\n'
-     '        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,\n'
+     '        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences)?.qualifiedName ?? null,\n'
      '    };\n'
      '  }',
      '  const name = asStr(args["name"]);\n'
@@ -434,13 +434,8 @@ MUTANTS = [
 
     # --- model_settings -----------------------------------------------------
     ("settings: global model preferences disappear without a character",
-     "      : loadPreferencesFor(ctx.dataDir, character);\n"
-     "\n"
-     "  const subagentName =",
-     "      : loadPreferencesFor(ctx.dataDir, character);\n"
-     "\n"
-     "  if (character === undefined) global.models.clear();\n"
-     "  const subagentName ="),
+     "  const [global, savedCharacter] = prepared.preferences;",
+     "  const [global, savedCharacter] = prepared.preferences;\n  if (ctx.characterName === undefined) global.models.clear();"),
     ("overview: global model preferences disappear without a character",
      "      : loadPreferencesFor(ctx.dataDir, character);\n"
      "\n"

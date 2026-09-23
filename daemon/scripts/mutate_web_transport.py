@@ -10,8 +10,8 @@ AUTH = "src/web/auth.ts"
 
 MUTANTS = [
     ("sign-in accepts the wrong daemon token", SERVER,
-     'if (!options.authenticate(body.token)) return problem(401, "unauthorized", "The token was rejected");',
-     'void body.token;'),
+     'if (!options.authenticate(body.token)) {',
+     'if (false) {'),
     ("API requests accept a forged or missing origin", SERVER,
      'if (!sameOrigin(request, origin)) return problem(403, "forbidden", "Use the daemon\'s own browser origin");',
      'void request;'),

@@ -14,6 +14,7 @@ import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel, t
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   characterPreferencesPath,
+  emptyPreferences,
   configView,
   globalPreferencesPath,
   loadForCharacter,
@@ -64,6 +65,7 @@ import type { ModelSettingsDetail } from "../protocol/ModelSettingsDetail.ts";
 type Args = OperationInput<"model_info">;
 
 export interface ModelsContext {
+  preferences?: readonly [ModelPreferences, ModelPreferences];
   config: LoadedConfig;
   dataDir: string;
   characterName: string | undefined;
@@ -112,13 +114,14 @@ export function effectiveChatModel(
   config: LoadedConfig,
   character: string | undefined,
   threadModel?: string,
+  preferences?: readonly [ModelPreferences, ModelPreferences],
 ): ResolvedModel | undefined {
   if (character === undefined) return undefined;
-  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);
+  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel, preferences);
 }
 
 function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved;
 
   const fallback = ctx.config.app.defaults.model;
@@ -146,7 +149,7 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
     ? resolveActiveModel(ctx)
     : resolveChatModelForCharacter(
       configView(ctx.config), ctx.characterName, findEffective,
-      task === "compaction" ? ctx.threadModel : undefined,
+      task === "compaction" ? ctx.threadModel : undefined, ctx.preferences,
     );
   if (inherited === undefined) {
     throw notFound(
@@ -198,7 +201,7 @@ function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedMode
       configView(ctx.config),
       ctx.characterName,
       spec.model,
-      findEffective,
+      findEffective, ctx.preferences,
     );
   } catch (e) {
     throw catalogError(e);
@@ -270,7 +273,7 @@ function qualify(ctx: ModelsContext, name: string): string {
 }
 
 function chatRole(ctx: ModelsContext): ModelRole {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) {
     return {
       role: "chat",
@@ -376,7 +379,7 @@ function favoriteNames(ctx: ModelsContext): Set<string> {
 }
 
 function activeName(ctx: ModelsContext): string | undefined {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved.qualifiedName;
 
   const fallback = ctx.config.app.defaults.model;
@@ -500,14 +503,10 @@ export function modelInfo(ctx: ModelsContext, args: OperationInput<"model_info">
     throw invalidRequest("name a model or name a role, not both");
   }
 
-  const resolved = byRole
-    ? settingTarget(ctx, args).model
-    : name === undefined
-      ? resolveActiveModel(ctx)
-      : resolve(ctx, name, true);
-  const data = resolvedModelToWire(resolved);
-
-  const settings = modelSettingsDetail(ctx, args);
+  ctx = withPreferences(ctx);
+  const target = settingTarget(ctx, args);
+  const data = resolvedModelToWire(target.model);
+  const settings = modelSettingsDetail(ctx, args, target);
   data["effective_sampler"] = settings.effective_sampler;
   data["scopes"] = Object.fromEntries(INFO_SCOPE_FIELDS.map(([key]) => [key, settings.scopes[key] ?? null]));
   return data;
@@ -710,7 +709,7 @@ export function switchModel(ctx: ModelsContext, args: OperationInput<"switch_mod
     return {
       target: "current",
       active:
-        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,
+        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences)?.qualifiedName ?? null,
     };
   }
 
@@ -1083,15 +1082,20 @@ export function modelSettings(ctx: ModelsContext, args: OperationInput<"model_se
   return modelSettingsDetail(ctx, args);
 }
 
-function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_settings">): ModelSettingsDetail {
+function withPreferences(ctx: ModelsContext): ModelsContext & { preferences: readonly [ModelPreferences, ModelPreferences] } {
+  return { ...ctx, preferences: ctx.preferences ?? (ctx.characterName === undefined
+    ? [loadGlobalPreferences(ctx), emptyPreferences()]
+    : loadPreferencesFor(ctx.dataDir, ctx.characterName)) };
+}
+
+function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_settings">, selected?: SettingTarget): ModelSettingsDetail {
   const only = requestedKey(ctx, args);
-  const target = settingTarget(ctx, args);
+  const prepared = withPreferences(ctx);
+  const target = selected ?? settingTarget(prepared, args);
   const model = target.model;
   const character = ctx.characterName;
-  const [global, charPrefs] =
-    character === undefined
-      ? [loadGlobalPreferences(ctx), undefined]
-      : loadPreferencesFor(ctx.dataDir, character);
+  const [global, savedCharacter] = prepared.preferences;
+  const charPrefs = character === undefined ? undefined : savedCharacter;
 
   const subagentName = target.kind === "subagent" ? target.subagent : undefined;
   const sampler =

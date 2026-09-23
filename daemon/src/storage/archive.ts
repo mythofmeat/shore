@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { CallStore } from "../call_store.ts";
@@ -12,12 +12,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
   if (!existsSync(path)) openStorage(dirname(path)).close();
   const source = new Database(path, { readonly: true });
   try {
-    if (maxBytes !== undefined) {
-      const pageCount = source.query("PRAGMA page_count").get() as { page_count: number };
-      const pageSize = source.query("PRAGMA page_size").get() as { page_size: number };
-      if (pageCount.page_count * pageSize.page_size > maxBytes) throw new Error("Database snapshot exceeds the browser archive processing limit");
-    }
-    writeFileSync(output, source.serialize());
+    source.query("VACUUM INTO ?1").run(output);
   }
   finally { source.close(); }
   CallStore.open(output).close();
@@ -45,6 +40,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
   const compacted = new Database(output);
   try { compacted.run("PRAGMA journal_mode = DELETE; VACUUM;"); }
   finally { compacted.close(); }
+  if (maxBytes !== undefined && statSync(output).size > maxBytes) throw new Error("Database snapshot exceeds the browser archive processing limit");
 }
 
 export function importUnifiedDatabase(path: string, sourcePath: string, character: string, sourceData?: string, destinationData?: string): void {

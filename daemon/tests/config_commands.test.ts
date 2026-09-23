@@ -21,7 +21,7 @@ import {
   type ConfigRuntime,
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
-import { loadConfig } from "../src/config/loader.ts";
+import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
 import { modelInfo, modelRoles, resetModel, switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -558,4 +558,18 @@ Authorization = "Bearer hdr_do_not_leak"
     const w = await build(undefined, '[mcp.weather]\ncommand="weather-mcp"\n[mcp.weather.env]\nWEATHER_API_KEY=""');
     expect(config(w.ctx, { key: "mcp.weather.env.WEATHER_API_KEY" })).toMatchObject({ config: "" });
   });
+});
+
+
+test("config reload compares restart sections with the adopted global configuration", async () => {
+  const w = await build("ada", "[notifications]\nvia = \"off\"\n");
+  const global = w.ctx.config;
+  const overlay = join(global.dirs.config, "characters", "ada");
+  await mkdir(overlay, { recursive: true });
+  await writeFile(join(overlay, "config.toml"), "[notifications]\nvia = \"notify_send\"\n");
+  w.ctx.config = required(loadCharacterConfig(global, "ada"));
+  w.ctx.runtime.globalConfig = () => global;
+  expect((await configReload(w.ctx, {})).restart_required).toBeUndefined();
+  await writeFile(w.ctx.configPath, "[notifications]\nvia = \"notify_send\"\n");
+  expect((await configReload(w.ctx, {})).restart_required).toEqual(["[notifications]"]);
 });

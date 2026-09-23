@@ -38,6 +38,17 @@ interface Artifact {
   downloading: boolean;
 }
 
+class TransferDeadline {
+  readonly controller = new AbortController();
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  constructor(readonly milliseconds: number) { this.progress(); }
+  progress(): void {
+    clearTimeout(this.#timer);
+    this.#timer = setTimeout(() => this.controller.abort(new Error("Archive transfer stalled")), this.milliseconds);
+  }
+  close(): void { clearTimeout(this.#timer); }
+}
+
 export class ArchiveTransfers {
   readonly #records = new Map<string, Artifact>();
   readonly #cleanup = new Set<Promise<void>>();
@@ -149,7 +160,8 @@ export class ArchiveTransfers {
     record.work = (async () => {
       const file = await open(await this.#path(record), "wx", 0o600);
       const reader = request.body?.getReader();
-      const signal = AbortSignal.any([request.signal, record.abort.signal, AbortSignal.timeout(this.#limits.requestMs)]);
+      const deadline = new TransferDeadline(this.#limits.requestMs);
+      const signal = AbortSignal.any([request.signal, record.abort.signal, deadline.controller.signal]);
       const cancel = () => { void reader?.cancel().catch(() => {}); };
       signal.addEventListener("abort", cancel, { once: true });
       try {
@@ -162,6 +174,7 @@ export class ArchiveTransfers {
           if (next.done) break;
           const chunk: unknown = next.value;
           if (!(chunk instanceof Uint8Array)) throw new ArchiveTransferError(400, "Expected archive bytes");
+          if (chunk.byteLength > 0) deadline.progress();
           bytes += chunk.byteLength;
           if (bytes > this.#limits.uploadBytes) throw new ArchiveTransferError(413, "Archive exceeds the upload size limit");
           for (let offset = 0; offset < chunk.byteLength;) {
@@ -173,6 +186,7 @@ export class ArchiveTransfers {
         if (bytes === 0 || (declared !== 0 && bytes !== declared)) throw new ArchiveTransferError(400, "Archive upload is empty or incomplete");
         record.info.bytes = bytes; record.reserved = bytes;
       } finally {
+        deadline.close();
         signal.removeEventListener("abort", cancel);
         await reader?.cancel().catch(() => {}); reader?.releaseLock(); await file.close();
       }
@@ -289,11 +303,12 @@ export class ArchiveTransfers {
     })();
     let offset = 0;
     let finished = false;
-    const signal = AbortSignal.any([record.abort.signal, request.signal, AbortSignal.timeout(this.#limits.requestMs)]);
+    const deadline = new TransferDeadline(this.#limits.requestMs);
+    const signal = AbortSignal.any([record.abort.signal, request.signal, deadline.controller.signal]);
     let detach = () => {};
     const close = async (complete: boolean) => {
       if (finished) return;
-      finished = true; detach();
+      finished = true; detach(); deadline.close();
       try { await file.close(); } finally { release(); }
       if (complete) await this.#remove(record);
     };
@@ -311,6 +326,7 @@ export class ArchiveTransfers {
           if (buffer.byteLength === 0) { controller.close(); await close(true); return; }
           const read = await file.read(buffer, 0, buffer.byteLength, offset);
           if (read.bytesRead === 0) throw new Error("Archive download was incomplete");
+          deadline.progress();
           offset += read.bytesRead; controller.enqueue(buffer.subarray(0, read.bytesRead));
         } catch (error) { if (!finished) controller.error(error); await close(false); }
       },

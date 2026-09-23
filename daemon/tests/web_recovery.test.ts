@@ -95,8 +95,16 @@ test("restart expires old sessions and transfers and honors a reduced session ca
   await a.close();
   const b = open(config, origin, 1);
   expect(b.sessions.read(first.request)).toBeDefined(); expect(b.sessions.read(second.request)).toBeUndefined();
-  expect(b.sessions.create()).toBeUndefined(); expect(b.recovery.archives()).toEqual([]);
+  const previous = b.sessions.read(first.request);
+  const newest = signIn(b.sessions);
+  expect(previous?.signal.aborted).toBe(true);
+  expect(b.sessions.read(first.request)).toBeUndefined();
+  expect(b.recovery.archives()).toEqual([]);
   expect(b.recovery.sessions()).toHaveLength(1);
+  await b.close();
+  const c = open(config, origin, 1);
+  expect(c.sessions.read(newest.request)).toBeDefined();
+  expect(c.sessions.read(first.request)).toBeUndefined();
 });
 
 test("an expired recovered sign-in cannot retain outcomes or renew its original lifetime", async () => {

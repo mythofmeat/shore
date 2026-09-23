@@ -43,7 +43,7 @@ MUTANTS = [
     ("browser extraction ignores its expanded size budget", C,
      '(limits?.bytes ?? MAX_EXTRACTED_BYTES)', 'MAX_EXTRACTED_BYTES'),
     ("export skips its database snapshot budget", "src/storage/archive.ts",
-     'if (pageCount.page_count * pageSize.page_size > maxBytes)', 'if (false)'),
+     'if (maxBytes !== undefined && statSync(output).size > maxBytes)', 'if (false)'),
     ("shared dispatch drops trusted browser processing limits", "src/handler/commands.ts",
      'limits: meta.session.archiveLimits', 'limits: undefined'),
 ]

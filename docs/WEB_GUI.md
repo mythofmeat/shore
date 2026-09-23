@@ -138,9 +138,11 @@ The browser signs in by posting `{ "token": "…" }` to `/api/login` with the ex
 token. The response sets an opaque, host-only, HttpOnly, SameSite=Strict session cookie; HTTPS also
 sets Secure and uses the `__Host-` prefix. Tokens and cookies do not appear in returned JSON or URLs.
 Sessions expire after eight hours, including open sockets; logout immediately revokes the cookie
-and every socket using it. In-memory authentication sessions are bounded to twice the connection
-limit. Restarting the daemon invalidates them. All API routes require the exact browser Origin and
+and every socket using it. Authentication sessions are bounded to twice the connection limit; a new
+sign-in evicts the oldest session when necessary, including its persisted recovery state. Sessions
+restored after a daemon restart keep their original expiry. All API routes require the exact browser Origin and
 Host, reject cross-site/same-site fetches and query parameters, and return no-store security headers.
+Public static pages allow navigation from other sites; API origin checks and framing restrictions remain in force.
 
 `POST /api/session` reports the authenticated session and contract fingerprint. `GET /api/swp`
 upgrades only after authentication, origin checks and an exact `shore-web-1.<fingerprint>` subprotocol
@@ -159,9 +161,12 @@ request ID when a generation is cancelled or superseded.
 
 Default limits are 16 sockets, 32 pending requests per socket, 32 MiB incoming frame size, 32 MiB
 aggregate pending request bytes, 128 incoming messages per second (32 MiB total), and 32 MiB queued
-bytes at each outgoing stage. `max_connections` accepts 1–256 and `max_queued_bytes` accepts 1 KiB–128
-MiB. Local queues also cap at 128 frames. Login bodies cap at 4 KiB, sign-in attempts at 60 per minute,
-and hello messages at 64 KiB. Hello/attachment and network drain each have a ten-second deadline.
+bytes at each outgoing stage, plus one oversized history snapshot per queue so large conversations
+can still open. Snapshots retain their full image content. Compatible adjacent stream chunks are
+combined while waiting for delivery. `max_connections` accepts 1–256 and `max_queued_bytes` accepts
+1 KiB–128 MiB; session responses advertise the smaller of this value and the incoming frame limit.
+Local queues also cap at 128 frames. Login bodies cap at 4 KiB, failed sign-ins at 60 per minute per
+peer address (valid tokens remain accepted), and hello messages at 64 KiB. Hello/attachment and network drain each have a ten-second deadline.
 Binary messages are rejected. Overflow closes the affected peer with an explicit reconnect/resync
 reason; a partially buffered native send is never resent. Logout/expiry, stalled attachment, socket
 failure and daemon shutdown all detach the local peer. Existing shared image limits still apply.
@@ -674,13 +679,13 @@ ordinary local peers retain their existing automatic selection behavior.
 One archive command worker is permitted alongside the configured browser socket capacity. It has
 32-message/1-MiB delivery bounds and a five-minute operation deadline. Transfers accept at most 64 MiB
 compressed data each, reserve at most 256 MiB across stored uploads/exports, allow four records per
-sign-in and 32 overall, expire after 15 minutes, and bound request duration to one minute. These limits
+sign-in and 32 overall, expire after 15 minutes, and abort transfers after one minute without progress. These limits
 are enforced on the server, including counted streaming uploads and concurrent reservations.
 The shared archive implementation receives trusted internal processing limits: 256 MiB and 20,000
 entries, with regular files and directories only. Native daemon-path commands retain their existing
-limits and link handling. The database snapshot limit applies to the full shared database before its
-character filter, so browser export can refuse a small character in a larger database. The screen
-shows this processing limit; daemon-path export remains available for larger native workflows.
+limits and link handling. The database snapshot limit applies after filtering and compacting the
+selected character. The source is copied through SQLite without serializing the shared database
+into application memory. Other characters do not consume the exported character's size allowance.
 
 Successful imports remove their temporary upload; completed downloads remove the temporary export.
 Interrupted downloads release their file and can be retried until expiry. Failed operations remove

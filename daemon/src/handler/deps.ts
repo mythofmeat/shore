@@ -314,6 +314,7 @@ export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
 function configRuntime(a: CommandAssembly): ConfigRuntime {
   const { runtime } = a;
   return {
+    globalConfig: () => runtime.registry.globalConfig(),
     reloadRuntimeConfig: () => {
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
