@@ -164,3 +164,15 @@ test("manual tool activity stays outside chat and its images cannot be adopted b
     expect(workspace.getSnapshot().media).toHaveLength(0);
   } finally { pending.mockRestore(); }
 });
+
+test("an interrupted chat request retires its live images but an interrupted tool run keeps its only copy", () => {
+  const { workspace, connection, image } = fixture();
+  const selection = { character: "nova", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+  image("chat.png", png, "chat");
+  const pending = spyOn(workspace.actions, "pendingOperation").mockReturnValue("run_tool");
+  try { image("manual.png", png, "manual"); } finally { pending.mockRestore(); }
+  expect(workspace.getSnapshot().media.map((item) => item.path)).toEqual(["chat.png", "manual.png"]);
+  connection.emit({ kind: "uncertain", rid: "chat", request: { type: "message", text: "hello", stream: true, images: [] }, selection });
+  connection.emit({ kind: "uncertain", rid: "manual", request: { type: "command", name: "run_tool", args: {} }, selection });
+  expect(workspace.getSnapshot().media.map((item) => item.path)).toEqual(["manual.png"]);
+});
