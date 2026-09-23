@@ -49,11 +49,16 @@ export class WebSessions {
   }
 
   create(): WebSession | undefined {
-    if (this.#closed || this.#sessions.size >= this.#capacity) return undefined;
+    if (this.#closed || this.#capacity < 1) return undefined;
     const token = randomBytes(32).toString("base64url");
     const id = sessionDigest(token);
     const expiresAt = Date.now() + this.#lifetime;
     this.recovery?.saveSession(id, expiresAt);
+    while (this.#sessions.size >= this.#capacity) {
+      const oldest = this.#sessions.values().next().value;
+      if (oldest === undefined) break;
+      this.revoke(oldest);
+    }
     this.#cookies.set(id, token);
     return this.#restore(id, expiresAt);
   }

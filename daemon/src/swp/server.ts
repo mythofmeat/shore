@@ -1,3 +1,4 @@
+import { OutboundQueue, type QueueLimits } from "./outbound.ts";
 import { contentForClient } from "./content_projection.ts";
 import { HistoryMediaDelivery } from "./history_media.ts";
 import { abortRejection } from "../llm/abort.ts";
@@ -82,9 +83,8 @@ export interface LocalClientOptions {
   readonly thread?: string | undefined;
   readonly onLag?: (skipped: number) => void;
   readonly signal?: AbortSignal;
-  readonly outboundLimits?: {
-    readonly messages: number;
-    readonly bytes: number;
+  readonly prepareMessage?: (message: ServerMessage) => ServerMessage;
+  readonly outboundLimits?: QueueLimits & {
     readonly onOverflow: () => void;
   };
 }
@@ -93,7 +93,7 @@ export interface LocalPeer {
   readonly session: SessionMeta;
   readonly characters: readonly CharacterInfo[];
   readonly history: HistorySnapshot;
-  send(msg: ClientMessage): Promise<void>;
+  send(msg: ClientMessage, beforeDispatch?: () => void): Promise<void>;
   events(): AsyncGenerator<ServerMessage, void>;
   detach(): Promise<void>;
 }
@@ -112,26 +112,20 @@ async function whileAttached<T>(work: Promise<T>, signal: AbortSignal): Promise<
 }
 
 class Inbox {
-  readonly #queue: { message: ServerMessage; bytes: number }[] = [];
-  readonly #limits: LocalClientOptions["outboundLimits"];
-  #bytes = 0;
+  readonly #queue: OutboundQueue;
   #wake: (() => void) | null = null;
   #closed = false;
 
   constructor(limits: LocalClientOptions["outboundLimits"]) {
-    this.#limits = limits;
+    this.#queue = new OutboundQueue(limits);
   }
 
   push(msg: ServerMessage): boolean {
     if (this.#closed) return true;
-    const bytes = this.#limits === undefined ? 0 : Buffer.byteLength(JSON.stringify(msg));
-    if (this.#limits !== undefined &&
-      (this.#queue.length >= this.#limits.messages || this.#bytes + bytes > this.#limits.bytes)) {
+    if (!this.#queue.push(msg)) {
       this.close(true);
       return false;
     }
-    this.#queue.push({ message: msg, bytes });
-    this.#bytes += bytes;
     const wake = this.#wake;
     this.#wake = null;
     wake?.();
@@ -141,8 +135,7 @@ class Inbox {
   close(discard = false): void {
     this.#closed = true;
     if (discard) {
-      this.#queue.length = 0;
-      this.#bytes = 0;
+      this.#queue.clear();
     }
     const wake = this.#wake;
     this.#wake = null;
@@ -153,8 +146,7 @@ class Inbox {
     for (;;) {
       const next = this.#queue.shift();
       if (next !== undefined) {
-        this.#bytes -= next.bytes;
-        yield next.message;
+        yield next;
         continue;
       }
       if (this.#closed) return;
@@ -284,7 +276,8 @@ export class Server {
     };
     const deliver = (msg: ServerMessage): void => {
       if (detached) return;
-      if (!inbox.push(media.prepare(contentForClient(msg, capabilities)))) {
+      const prepared = options.prepareMessage?.(msg) ?? msg;
+      if (!inbox.push(media.prepare(contentForClient(prepared, capabilities)))) {
         aborted();
         limits?.onOverflow();
       }
@@ -314,12 +307,10 @@ export class Server {
           }
           continue;
         }
-        if (sessionReceives(this.#router, clientId, result.msg)) {
-          const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
+        const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;
-          deliver(message);
-        }
+        deliver(message);
       }
       inbox.close();
     })().catch((error: unknown) => {
@@ -336,7 +327,7 @@ export class Server {
       session: sessionMetaOf(client),
       characters: hello.characters,
       history,
-      send: async (msg) => {
+      send: async (msg, beforeDispatch) => {
         if (detached) throw new Error("Local peer is detached");
         let admitted: ClientMessage;
         try {
@@ -352,7 +343,7 @@ export class Server {
           this.#router.characterFor(clientId),
         );
         if (outcome.action === "reply") deliver(outcome.reply);
-        else await this.#route(outcome.routed);
+        else { beforeDispatch?.(); await this.#route(outcome.routed); }
       },
       events: () => inbox.drain(),
       detach,

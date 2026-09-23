@@ -528,9 +528,9 @@ describe("coming up", () => {
         expect(validOperationResult("run_tool", output)).toBe(true);
         if (!validOperationResult("run_tool", output) || "mode" in output) throw new Error("Missing tool report");
         expect(output.images).toHaveLength(1);
-        expect(output.images?.[0]?.data).toBe(data);
+        expect(output.images?.[0]?.data).toBe(transport === "tcp" ? data : undefined);
         expect(output.images?.[0]?.path).toBe(activity[1]?.["path"] as string);
-        observed.push([output.ok, output.images?.map((image) => [image.caption?.replaceAll(place.root, "<root>"), image.data]), activity.map((frame) => [frame["type"], frame["tool_name"], frame["is_error"]])]);
+        observed.push([output.ok, output.images?.map((image) => [image.caption?.replaceAll(place.root, "<root>"), image.data ?? activity[1]?.["data"]]), activity.map((frame) => [frame["type"], frame["tool_name"], frame["is_error"]])]);
         expect(seen.findIndex((frame) => frame["type"] === "tool_call")).toBeLessThan(seen.findIndex((frame) => frame["type"] === "request_finished"));
       } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
     }

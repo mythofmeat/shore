@@ -227,6 +227,9 @@ export class MessageHandler {
       outcome = controller.signal.aborted ? "cancelled" : "failed";
       failure = { code: "internal_error", message: describeError(error) };
       if (!controller.signal.aborted) throw error;
+      if (!meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) {
+        await this.#deps.router.sendToSession(sessionId, withRid({ type: "error", code: "invalid_request", message: "Command cancelled before completion" }, meta.rid));
+      }
     } finally {
       const live = this.#commandAborts.get(sessionId);
       if (live !== undefined) {

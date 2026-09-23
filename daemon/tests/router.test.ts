@@ -1109,3 +1109,14 @@ test("non-streaming requests wait for the completed response while spectators st
   expect(h.frames.get(2)).toEqual(frames);
   await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
 });
+
+
+test("cancel reports each skipped command to clients without request lifecycle", async () => {
+  const { dispatch, gate, started } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+  handler.enqueueRouted({ kind: "command", cmd: command("queued"), meta: meta("ada", 1, "queued-rid", "command") });
+  handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+  gate("queued").resolve(); await handler.drain();
+  expect(started).toEqual([]);
+  expect(frames.get(1)).toContainEqual({ type: "error", rid: "queued-rid", code: "invalid_request", message: "Command cancelled before completion" });
+});

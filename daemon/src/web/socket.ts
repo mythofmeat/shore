@@ -1,3 +1,5 @@
+import { parseOperationResult } from "../operations/contracts.ts";
+import { encodeServerMessage } from "../swp/outbound.ts";
 import type { ServerWebSocket } from "bun";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -13,6 +15,7 @@ import { RequestHistory, RequestHistoryError } from "./requests.ts";
 interface PendingRequest {
   bytes: number;
   historyId?: string;
+  images?: Map<string, string>;
 }
 
 export interface WebSocketState {
@@ -85,10 +88,38 @@ export class WebSocketPeers {
     if (state.peer !== undefined) this.#track(state.peer.detach().catch(() => {}));
   }
 
+  #prepare(socket: ServerWebSocket<WebSocketState>, message: ServerMessage): ServerMessage {
+    const state = socket.data;
+    const id = "rid" in message && typeof message.rid === "string" ? state.pending.get(message.rid)?.historyId : undefined;
+    try {
+      if (id !== undefined) this.history.observe(state.auth, id, message);
+      this.#complete(state, message);
+      const pending = "rid" in message && typeof message.rid === "string" ? socket.data.pending.get(message.rid) : undefined;
+      if (pending !== undefined) {
+        if (message.type === "send_image" && typeof message.data === "string") {
+          (pending.images ??= new Map()).set(message.path, message.data);
+        } else if (message.type === "tool_result") {
+          for (const image of message.images ?? []) if (typeof image.data === "string" && !pending.images?.has(image.path)) (pending.images ??= new Map()).set(image.path, image.data);
+        } else if (message.type === "command_output" && message.name === "run_tool" && pending.images !== undefined) {
+          const report = parseOperationResult("run_tool", message.data);
+          if (!("mode" in report) && report.images !== undefined) message = { ...message, data: { ...report, images: report.images.map(image => {
+            if (image.data !== pending.images?.get(image.path)) return image;
+            const { data: _data, ...reference } = image;
+            return reference;
+          }) } };
+        }
+      }
+      return message;
+    } catch {
+      this.close(socket, 1011, "Could not retain the request outcome");
+      return message;
+    }
+  }
+
   #send(socket: ServerWebSocket<WebSocketState>, message: ServerMessage): number {
     if (socket.data.phase === "closed") return 0;
-    const text = JSON.stringify(message);
-    if (Buffer.byteLength(text) + socket.getBufferedAmount() > this.#maxBytes) {
+    const { text, bytes } = encodeServerMessage(message);
+    if (message.type !== "history" && bytes + socket.getBufferedAmount() > this.#maxBytes) {
       this.close(socket, 1013, "Outgoing limit reached; reconnect to refresh history");
       return 0;
     }
@@ -125,7 +156,8 @@ export class WebSocketPeers {
         ...(hello.character === null || hello.character === undefined ? {} : { character: hello.character }),
         ...(hello.thread === null || hello.thread === undefined ? {} : { thread: hello.thread }),
         signal: state.abort.signal,
-        outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: this.#maxBytes,
+        prepareMessage: (message) => this.#prepare(socket, message),
+        outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: this.#maxBytes, largeHistory: true, coalesceStreams: true,
           onOverflow: () => { this.close(socket, 1013, "Outgoing limit reached; reconnect to refresh history"); } },
       });
       state.peer = peer;
@@ -135,9 +167,6 @@ export class WebSocketPeers {
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
       for await (const message of peer.events()) {
         if (state.abort.signal.aborted) break;
-        const id = "rid" in message && typeof message.rid === "string" ? state.pending.get(message.rid)?.historyId : undefined;
-        if (id !== undefined) this.history.observe(state.auth, id, message);
-        this.#complete(state, message);
         await this.#write(socket, message);
       }
     } catch {
@@ -180,32 +209,37 @@ export class WebSocketPeers {
       if (typeof rid !== "string" || rid.length === 0 || sanitiseRid(rid) === null || Buffer.byteLength(rid) > 128 || state.pending.has(rid)) {
         this.close(socket, 1008, "Requests need distinct correlation IDs"); return;
       }
-      if (state.pending.size >= WEB_LIMITS.pendingRequests || state.pendingBytes + bytes > this.#maxBytes) {
-        const error = { rid, code: "invalid_request", message: "Too many pending requests; wait for a result" } as const;
+      if (bytes > this.#maxBytes || state.pending.size >= WEB_LIMITS.pendingRequests || state.pendingBytes + bytes > this.#maxBytes) {
+        const error = { rid, code: "invalid_request", message: bytes > this.#maxBytes ? `Request is too large; maximum is ${Math.min(this.#maxBytes, WEB_LIMITS.messageBytes)} bytes` : "Too many pending requests; wait for a result" } as const;
         this.#send(socket, { type: "error", ...error });
         this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
         return;
       }
-      let historyId: string | undefined;
-      try {
-        const selected = this.#server.sessionRouter.client(state.peer.session.sessionId);
-        if (selected === undefined) throw new Error("Browser session detached");
-        historyId = this.history.begin(state.auth, sessionMetaOf(selected), message);
-      } catch (failure) {
-        const error = { rid, code: "invalid_request", message: failure instanceof RequestHistoryError ? failure.message : "Could not record this request. Nothing was dispatched; try again after recovery storage is available." } as const;
-        this.#send(socket, { type: "error", ...error });
-        this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
-        return;
-      }
-      state.pending.set(rid, { bytes, ...(historyId === undefined ? {} : { historyId }) });
+      state.pending.set(rid, { bytes });
       state.pendingBytes += bytes;
     } else {
       if (state.controls >= WEB_LIMITS.pendingRequests) { this.close(socket, 1008, "Too many control requests"); return; }
       state.controls += 1;
     }
     const control = message.type === "cancel";
-    this.#track(state.peer.send(message)
-      .catch(() => { this.close(socket, 1011, "Request delivery failed"); })
+    this.#track(state.peer.send(message, () => {
+      if (message.type === "cancel") return;
+      const selected = state.peer === undefined ? undefined : this.#server.sessionRouter.client(state.peer.session.sessionId);
+      if (selected === undefined || state.abort.signal.aborted) throw new Error("Browser session detached");
+      const historyId = this.history.begin(state.auth, sessionMetaOf(selected), message);
+      const pending = typeof message.rid === "string" ? state.pending.get(message.rid) : undefined;
+      if (pending !== undefined && historyId !== undefined) pending.historyId = historyId;
+    })
+      .catch((failure: unknown) => {
+        const rid = "rid" in message ? message.rid : undefined;
+        const pending = typeof rid === "string" ? state.pending.get(rid) : undefined;
+        if (typeof rid === "string" && pending !== undefined && pending.historyId === undefined) {
+          const error = { rid, code: "invalid_request", message: failure instanceof RequestHistoryError ? failure.message : "Could not deliver this request. Nothing was dispatched; try again after the connection and recovery storage are available." } as const;
+          this.#complete(state, { type: "request_finished", rid, outcome: "failed", error });
+          this.#send(socket, { type: "error", ...error });
+          this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
+        } else this.close(socket, 1011, "Request delivery failed");
+      })
       .finally(() => { if (control) state.controls -= 1; }));
   }
 

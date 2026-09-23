@@ -297,3 +297,34 @@ test("HTTP archive endpoints authenticate and enforce origin before attaching a 
   expect((await post("/logout", cookie)).status).toBe(204);
   expect((await post(`/archives/${info.id}/status`, cookie)).status).toBe(401);
 });
+
+
+test("progressing uploads can take longer than the transfer idle timeout", async () => {
+  const f = await fixture({ requestMs: 80 }); const a = owner();
+  let chunks = 0;
+  const stream = new ReadableStream<Uint8Array>({ async pull(controller) {
+    await Bun.sleep(25);
+    if (chunks++ === 8) controller.close(); else controller.enqueue(new Uint8Array([1]));
+  } });
+  const result = await f.transfers.upload(a.session, upload(stream));
+  expect(result).toMatchObject({ phase: "ready", bytes: 8 });
+});
+
+
+test("progressing downloads can take longer than the transfer idle timeout", async () => {
+  const f = await fixture({ requestMs: 80 }); const a = owner();
+  const info = f.transfers.export(a.session, "ada");
+  await f.finish(await f.next(), "completed", new Uint8Array(8 * 64 * 1024));
+  await until(() => f.transfers.get(a.session, info.id).downloadable);
+  const response = await f.transfers.download(a.session, info.id, upload());
+  const reader = response.body?.getReader(); if (reader === undefined) throw new Error("No download");
+  let bytes = 0;
+  for (;;) {
+    await Bun.sleep(25);
+    const chunk = await reader.read(); if (chunk.done) break;
+    const value: unknown = chunk.value;
+    if (!(value instanceof Uint8Array)) throw new Error("Expected archive bytes");
+    bytes += value.byteLength;
+  }
+  expect(bytes).toBe(8 * 64 * 1024);
+});

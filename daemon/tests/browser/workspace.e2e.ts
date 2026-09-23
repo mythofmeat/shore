@@ -98,3 +98,14 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   expect(errors).toEqual([]);
   expect(await page.evaluate<unknown[]>("window.shorePolicyViolations")).toEqual([]);
 });
+
+test("a link from another site opens the workspace sign-in page", async ({ page, baseURL }) => {
+  if (baseURL === undefined) throw new Error("Missing daemon origin");
+  await page.route("https://outside.test/shore-link", route => route.fulfill({
+    contentType: "text/html", body: `<a href="${baseURL}/workspace/ada/main">Open Shore</a>`,
+  }));
+  await page.goto("https://outside.test/shore-link");
+  await page.getByRole("link", { name: "Open Shore" }).click();
+  await expect(page.getByLabel("Daemon token")).toBeVisible();
+  await expect(page).toHaveURL(`${baseURL}/workspace/ada/main`);
+});

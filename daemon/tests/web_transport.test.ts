@@ -1,3 +1,4 @@
+import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
@@ -94,8 +95,10 @@ describe("browser connection state", () => {
       expect((await response.text()).length).toBeGreaterThan(100);
     }
     expect((await fetch(`${f.web.origin}/`, { method: "HEAD" })).status).toBe(200);
-    expect((await fetch(`${f.web.origin}/`, { headers: { origin: "https://outside.example" } })).status).toBe(403);
-    expect((await fetch(`${f.web.origin}/`, { headers: { "sec-fetch-site": "cross-site" } })).status).toBe(403);
+    expect((await fetch(`${f.web.origin}/`, { headers: { origin: "https://outside.example" } })).status).toBe(200);
+    for (const site of ["cross-site", "same-site"]) {
+      expect((await fetch(`${f.web.origin}/workspace/ada/main`, { headers: { "sec-fetch-site": site, "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } })).status).toBe(200);
+    }
     expect((await f.api("/api/session")).status).toBe(401);
     expect(f.histories()).toBe(0);
     expect(f.swp.sessionRouter.sessions()).toHaveLength(0);
@@ -305,14 +308,13 @@ describe("browser authentication boundary", () => {
   test("session storage and repeated failed sign-ins are bounded", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
     const first = await f.login(); await f.login();
-    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(429);
-    await f.api("/api/logout", first.cookie);
-    await f.login();
-    for (let i = 5; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) {
+    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(200);
+    expect((await f.api("/api/session", first.cookie)).status).toBe(401);
+    for (let i = 0; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) {
       expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
     }
-    expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
     expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(429);
+    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(200);
     expect(f.histories()).toBe(0);
   });
 
@@ -576,7 +578,8 @@ describe("browser resource limits", () => {
     expect(await browser.frame("ping")).toEqual({ type: "ping" });
     expect(f.swp.sessionRouter.sessions()).toHaveLength(1);
     f.swp.broadcast({ ...history, selected_character: "ada" });
-    expect((await browser.closed).code).toBe(1013);
+    await until(() => browser.messages.some(message => message.type === "history" && message.revision === 1));
+    expect(f.swp.sessionRouter.sessions()).toHaveLength(1);
   });
 
   test("archive-sized local queues route broadcasts using the current selection before counting bytes", async () => {
@@ -691,4 +694,117 @@ test("failed durable admission never reaches dispatch, and failed completion sto
     expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]?.phase).toBe("uncertain");
     expect(db.query<{ info: string }, []>("SELECT info FROM requests").get()?.info).toContain('"phase":"running"');
   } finally { db.run("DROP TRIGGER IF EXISTS reject_admission; DROP TRIGGER IF EXISTS reject_completion;"); db.close(); }
+});
+
+
+test("large snapshots open in the browser and matching full broadcasts refresh them", async () => {
+  let serializations = 0;
+  const config = { toJSON() { serializations += 1; return {}; } };
+  const messages = [{ msg_id: "large-image", role: "user" as const, content: "Photo", content_blocks: [], timestamp: "2026-09-24T00:00:00Z", images: [{ path: "large.png", data: "A".repeat(33 * 1024 * 1024) }] }];
+  const f = await fixture({}, {
+    hello: async () => ({ characters: [{ name: "ada" }] }),
+    history: async () => ({ messages, activeStart: 0, config, selectedCharacter: "ada", selectedThread: "main", revision: 0 }),
+  }); f.web.activate();
+  const b = browserConnection(f.web.origin);
+  try {
+    await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+    f.swp.broadcast({ type: "history", messages, config, selected_character: "ada", selected_thread: "main", revision: 1 });
+    await until(() => b.client.selection.snapshotRevision === 1);
+    expect(b.client.status).toBe("ready");
+    expect(serializations).toBe(2);
+  } finally { b.client.stop(); }
+});
+
+test("a short stalled stream preserves more than 128 chunks and their terminal event", async () => {
+  const f = await fixture(); f.web.activate();
+  const { cookie } = await f.login();
+  const browser = connectBrowser(f.web.origin, cookie); await browser.attach();
+  const entry = f.swp.sessionRouter.sessions()[0]; if (entry === undefined) throw new Error("No session");
+  browser.socket.pause();
+  try {
+    await f.swp.sessionRouter.sendToSession(entry[0], { type: "command_output", name: "status", data: "x".repeat(16 * 1024 * 1024) });
+    await Bun.sleep(10);
+    for (let i = 0; i < 512; i += 1) await f.swp.sessionRouter.sendToSession(entry[0], { type: "stream_chunk", rid: "stream", text: `${i},`, content_type: "text" });
+    await f.swp.sessionRouter.sendToSession(entry[0], { type: "request_finished", rid: "stream", outcome: "completed" });
+  } finally { browser.socket.resume(); }
+  await browser.frame("request_finished", "stream");
+  expect(browser.messages.flatMap(message => message.type === "stream_chunk" ? [message.text] : []).join("")).toBe(Array.from({ length: 512 }, (_, i) => `${i},`).join(""));
+  expect(f.swp.sessionRouter.has(entry[0])).toBe(true);
+});
+
+test("configured request size is advertised and a single oversized request fails without dispatch", async () => {
+  const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_queued_bytes: 1024 } }); f.web.activate();
+  const { cookie, info } = await f.login(); expect(info.max_message_bytes).toBe(1024);
+  expect((await (await f.api("/api/session", cookie)).json() as WebSessionInfo).max_message_bytes).toBe(1024);
+  const browser = connectBrowser(f.web.origin, cookie); await browser.attach();
+  browser.send({ type: "command", rid: "oversized", name: "edit", args: { ref: "1", content: "x".repeat(2048) } });
+  const error = await browser.frame("error", "oversized");
+  if (error.type !== "error") throw new Error("Missing size error");
+  expect(error.message).toContain("too large");
+  await browser.frame("request_finished", "oversized");
+  expect(f.routed).toEqual([]);
+  expect((await (await f.api("/api/requests/list", cookie)).json() as WebRequestList).requests).toEqual([]);
+});
+
+
+test("a peer detached before routing creates no uncertain request record", async () => {
+  const f = await fixture(); f.web.activate();
+  const attach = f.swp.attachLocal.bind(f.swp);
+  f.swp.attachLocal = async options => {
+    const peer = await attach(options);
+    return { ...peer, send: async (message, beforeDispatch) => {
+      await peer.detach();
+      await peer.send(message, beforeDispatch);
+    } };
+  };
+  const { cookie } = await f.login();
+  const browser = connectBrowser(f.web.origin, cookie); await browser.attach();
+  browser.send({ type: "command", rid: "never-routed", name: "edit", args: { ref: "1", content: "new" } });
+  await browser.closed;
+  expect(f.routed).toEqual([]);
+  expect((await (await f.api("/api/requests/list", cookie)).json() as WebRequestList).requests).toEqual([]);
+});
+
+test("manual tool image bytes cross the socket once while results and recovery retain them", async () => {
+  const f = await fixture(); f.web.activate();
+  const owner = await f.login();
+  const b = browserConnection(f.web.origin, {
+    fetch: async (url, options) => fetch(url, { ...options, headers: { origin: f.web.origin, cookie: owner.cookie, "content-type": "application/json" } }),
+    socket: (url, subprotocol) => new WebSocket(url, { protocols: [subprotocol], headers: { origin: f.web.origin, cookie: owner.cookie } }),
+  });
+  const actions = new OperationClient(b.client);
+  try {
+    b.client.connect(); await until(() => b.client.status === "ready");
+    const request = actions.run("run_tool", { tool: "read", input: { file_path: "image.png" } });
+    await until(() => f.routed.length === 1);
+    const route = f.routed[0]; if (route?.kind !== "command" || route.meta.rid === null) throw new Error("No request");
+    const rid = route.meta.rid;
+    const image = { path: "image.png", data: "iVBORw0KGgo=", caption: "Original image" };
+    const report = { tool: "read", character: "ada", kind: "builtin" as const, enabled: true, input: { file_path: "image.png" }, ok: true, rejected: false, duration_ms: 1, output: "Image", truncated: false, result_chars: 5, raw: null, calls: [], images: [image] };
+    const send = (message: ServerMessage) => f.swp.sessionRouter.sendToSession(route.meta.session.sessionId, message);
+    await send({ type: "send_image", rid, ...image });
+    await send({ type: "command_output", rid, name: "run_tool", data: report });
+    await send({ type: "request_finished", rid, outcome: "completed" });
+    expect(await request).toEqual(report);
+    const output = b.updates.find(update => update.kind === "frame" && update.message.type === "command_output");
+    expect(output).toMatchObject({ message: { data: { images: [{ path: image.path, caption: image.caption }] } } });
+    expect(JSON.stringify(output)).not.toContain(image.data);
+    const recovered = await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList;
+    expect(recovered.requests[0]?.result?.data).toEqual(report);
+  } finally { b.client.stop(); }
+});
+
+
+test("sign-in failures are isolated by peer address and ignore forwarded address claims", async () => {
+  const f = await fixture(); f.web.activate();
+  for (let i = 0; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) await f.api("/api/login", "", { token: "wrong" });
+  expect((await f.api("/api/login", "", { token: "wrong" }, { "x-forwarded-for": "127.0.0.2" })).status).toBe(429);
+  const status = await new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(`${f.web.origin}/api/login`, {
+      method: "POST", localAddress: "127.0.0.2", headers: { origin: f.web.origin, "content-type": "application/json" },
+    }, response => { response.resume(); resolve(response.statusCode); });
+    request.once("error", reject); request.end(JSON.stringify({ token: "wrong" }));
+  });
+  expect(status).toBe(401);
+  expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(200);
 });

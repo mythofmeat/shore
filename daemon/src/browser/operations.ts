@@ -31,6 +31,7 @@ export class OperationClient {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
     let rid: string | undefined;
     let result: unknown;
+    const images = new Map<string, string>();
     let received = false;
     let invalid = false;
     const epoch = this.#epoch;
@@ -38,6 +39,11 @@ export class OperationClient {
     const unsubscribe = this.connection.subscribe((update) => {
       if (update.kind !== "frame" || !("rid" in update.message) || update.message.rid !== rid) return;
       options.observe?.(update.message);
+      if (name === "run_tool") {
+        const message = update.message;
+        if (message.type === "send_image" && typeof message.data === "string") images.set(message.path, message.data);
+        if (message.type === "tool_result") for (const image of message.images ?? []) if (typeof image.data === "string" && !images.has(image.path)) images.set(image.path, image.data);
+      }
       if (update.message.type !== "command_output") return;
       if (received || update.message.name !== name) invalid = true;
       received = true;
@@ -49,6 +55,9 @@ export class OperationClient {
       this.#requests.set(rid, name);
       const completion = await ticket.finished;
       if (completion.outcome !== "completed") throw new OperationFailure(name, completion);
+      if (name === "run_tool" && validOperationResult("run_tool", result) && !("mode" in result) && result.images !== undefined) {
+        result = { ...result, images: result.images.map(image => ({ ...image, data: image.data ?? images.get(image.path) ?? null })) };
+      }
       if (invalid || !received || !validOperationResult(name, result)) throw new Error(`Invalid result for ${name}`);
       if (options.remember !== false && epoch === this.#epoch) {
         this.#output = { name, data: result, context };

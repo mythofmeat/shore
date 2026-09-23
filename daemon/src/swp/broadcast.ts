@@ -1,3 +1,4 @@
+import { OutboundQueue, type QueueLimits } from "./outbound.ts";
 import type { ServerMessage } from "../protocol/ServerMessage";
 
 export const BROADCAST_CAPACITY = 256;
@@ -8,37 +9,24 @@ export type RecvResult =
   | { readonly kind: "closed" };
 
 export class Subscription {
-  readonly #queue: { message: ServerMessage; bytes: number }[] = [];
-  readonly #capacity: number;
-  readonly #byteLimit: number | undefined;
+  readonly #queue: OutboundQueue;
   readonly #matches: ((msg: ServerMessage) => boolean) | undefined;
-  #bytes = 0;
   #skipped = 0;
   #closed = false;
   #wake: (() => void) | null = null;
   #detach: (() => void) | null = null;
 
-  constructor(capacity: number, detach: () => void, byteLimit?: number, matches?: (msg: ServerMessage) => boolean) {
-    this.#capacity = capacity;
+  constructor(capacity: number, detach: () => void, byteLimit?: number, matches?: (msg: ServerMessage) => boolean, options?: QueueLimits) {
+    this.#queue = new OutboundQueue({ ...options, messages: capacity, bytes: byteLimit ?? Infinity });
     this.#detach = detach;
-    this.#byteLimit = byteLimit;
     this.#matches = matches;
   }
 
   push(msg: ServerMessage): void {
     if (this.#closed || this.#matches?.(msg) === false) return;
-    const bytes = this.#byteLimit === undefined ? 0 : Buffer.byteLength(JSON.stringify(msg));
-    while (this.#queue.length > 0 &&
-      (this.#queue.length >= this.#capacity || this.#bytes + bytes > (this.#byteLimit ?? Infinity))) {
-      const removed = this.#queue.shift();
-      this.#bytes -= removed?.bytes ?? 0;
+    while (!this.#queue.push(msg)) {
       this.#skipped += 1;
-    }
-    if (bytes > (this.#byteLimit ?? Infinity)) {
-      this.#skipped += 1;
-    } else {
-      this.#queue.push({ message: msg, bytes });
-      this.#bytes += bytes;
+      if (this.#queue.shift() === undefined) break;
     }
     this.#signal();
   }
@@ -63,8 +51,7 @@ export class Subscription {
       }
       const next = this.#queue.shift();
       if (next !== undefined) {
-        this.#bytes -= next.bytes;
-        return { kind: "message", msg: next.message };
+        return { kind: "message", msg: next };
       }
       if (this.#closed) return { kind: "closed" };
       await new Promise<void>((resolve) => {
@@ -76,8 +63,7 @@ export class Subscription {
   unsubscribe(): void {
     this.#detach?.();
     this.#detach = null;
-    this.#queue.length = 0;
-    this.#bytes = 0;
+    this.#queue.clear();
     this.#skipped = 0;
     this.close();
   }
@@ -92,10 +78,10 @@ export class Broadcast {
     this.#capacity = capacity;
   }
 
-  subscribe(limits?: { messages: number; bytes: number }, matches?: (msg: ServerMessage) => boolean): Subscription {
+  subscribe(limits?: QueueLimits, matches?: (msg: ServerMessage) => boolean): Subscription {
     const sub: Subscription = new Subscription(Math.min(this.#capacity, limits?.messages ?? this.#capacity), () => {
       this.#subscribers.delete(sub);
-    }, limits?.bytes, matches);
+    }, limits?.bytes, matches, limits);
     this.#subscribers.add(sub);
     if (this.#closed) sub.close();
     return sub;

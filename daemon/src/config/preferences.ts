@@ -755,13 +755,14 @@ export function resolveSubagentBaseModel(
   character: string | undefined,
   specModel: string | undefined,
   findEffective: FindEffectiveModel,
+  preferences?: readonly [ModelPreferences, ModelPreferences],
 ): ResolvedModel | undefined {
   const configured = specModel ?? config.app.defaults.subagent_model;
   if (configured !== undefined) {
     return findEffective(config, config.dirs.cache, configured, true);
   }
   if (character === undefined) return undefined;
-  return activeSelection(config, character, findEffective, "resolve_subagent_model").resolved;
+  return activeSelection(config, character, findEffective, "resolve_subagent_model", undefined, preferences).resolved;
 }
 
 export function resolveSubagentModelSettings(
@@ -860,6 +861,7 @@ export function resolveChatModelForCharacter(
   character: string,
   findEffective: FindEffectiveModel,
   threadModel?: string,
+  preferences?: readonly [ModelPreferences, ModelPreferences],
 ): ResolvedModel | undefined {
   const { global, charPrefs, resolved } = activeSelection(
     config,
@@ -867,6 +869,7 @@ export function resolveChatModelForCharacter(
     findEffective,
     "resolve_chat_model",
     threadModel,
+    preferences,
   );
   if (resolved === undefined) return undefined;
 
@@ -913,11 +916,12 @@ function activeSelection(
   findEffective: FindEffectiveModel,
   op: string,
   threadModel?: string,
+  preferences?: readonly [ModelPreferences, ModelPreferences],
 ): { global: ModelPreferences; charPrefs: ModelPreferences; resolved: ResolvedModel | undefined } {
   let global = emptyPreferences();
   let charPrefs = emptyPreferences();
   try {
-    [global, charPrefs] = loadForCharacter(config.dirs.data, character);
+    [global, charPrefs] = preferences ?? loadForCharacter(config.dirs.data, character);
   } catch (e) {
     shoreLog.warn(
       `shore: preferences load failed for ${character} (${op}); ` +
