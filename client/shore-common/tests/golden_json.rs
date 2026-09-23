@@ -110,13 +110,13 @@ fn structured_image_history_preserves_nested_wire_data_and_display_images() {
     assert_variant!(frame, ServerMessage::History(history) => {
         let message = history.messages.first().unwrap();
         let ContentBlock::ToolResult { content, is_error, .. } = message.content_blocks.get(1).unwrap() else { panic!("Missing structured tool result"); };
-        assert_eq!(content.display_text(), "Image result");
+        assert_eq!(content.display_text(), "Image result\n[Image attached]");
         assert!(!is_error.unwrap_or(false));
         assert_eq!(inline_images(&message.content_blocks).len(), 1);
-        let images = message.display_images();
-        assert_eq!(images.len(), 1);
-        assert!(images.first().unwrap().path.starts_with("embedded/tool-answer/"));
-        assert!(images.first().unwrap().data.as_ref().unwrap().starts_with("iVBOR"));
+        assert!(message.display_images().is_empty());
+        let images = inline_images(&message.content_blocks);
+        let ImageSource::Base64 { data, .. } = images.first().unwrap();
+        assert!(data.starts_with("iVBOR"));
     });
 }
 

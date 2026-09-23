@@ -342,7 +342,10 @@ pub fn inline_images(blocks: &[ContentBlock]) -> Vec<&ImageSource> {
 
 pub fn append_inline_images(images: &mut Vec<ImageRef>, scope: &str, blocks: &[ContentBlock]) {
     use std::hash::{Hash, Hasher};
-    for source in inline_images(blocks) {
+    for block in blocks {
+        let ContentBlock::Image { source } = block else {
+            continue;
+        };
         let ImageSource::Base64 { media_type, data } = source;
         if images
             .iter()

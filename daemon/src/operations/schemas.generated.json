@@ -2086,6 +2086,12 @@
                   "type": "string"
                 },
                 "input": true,
+                "thought_signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "type": {
                   "type": "string",
                   "const": "tool_use"
@@ -2117,6 +2123,22 @@
             {
               "type": "object",
               "properties": {
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -2139,21 +2161,29 @@
                 "tool_use_id",
                 "content"
               ]
-            },
+            }
+          ]
+        },
+        "ImageSource": {
+          "oneOf": [
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/InlineImageSource"
+                "media_type": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
                 },
                 "type": {
                   "type": "string",
-                  "const": "image"
+                  "const": "base64"
                 }
               },
               "required": [
                 "type",
-                "source"
+                "media_type",
+                "data"
               ]
             }
           ]
@@ -2169,31 +2199,6 @@
                 "$ref": "#/$defs/ContentBlock"
               }
             }
-          ]
-        },
-        "InlineImageSource": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "$ref": "#/$defs/InlineImageEncoding"
-            },
-            "media_type": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "media_type",
-            "data"
-          ]
-        },
-        "InlineImageEncoding": {
-          "type": "string",
-          "enum": [
-            "base64"
           ]
         },
         "MessageAlternative": {
@@ -4352,6 +4357,12 @@
                   "type": "string"
                 },
                 "input": true,
+                "thought_signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "type": {
                   "type": "string",
                   "const": "tool_use"
@@ -4383,6 +4394,22 @@
             {
               "type": "object",
               "properties": {
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -4405,21 +4432,29 @@
                 "tool_use_id",
                 "content"
               ]
-            },
+            }
+          ]
+        },
+        "ImageSource": {
+          "oneOf": [
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/InlineImageSource"
+                "media_type": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
                 },
                 "type": {
                   "type": "string",
-                  "const": "image"
+                  "const": "base64"
                 }
               },
               "required": [
                 "type",
-                "source"
+                "media_type",
+                "data"
               ]
             }
           ]
@@ -4435,31 +4470,6 @@
                 "$ref": "#/$defs/ContentBlock"
               }
             }
-          ]
-        },
-        "InlineImageSource": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "$ref": "#/$defs/InlineImageEncoding"
-            },
-            "media_type": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "media_type",
-            "data"
-          ]
-        },
-        "InlineImageEncoding": {
-          "type": "string",
-          "enum": [
-            "base64"
           ]
         },
         "MessageAlternative": {
@@ -8070,6 +8080,12 @@
                   "type": "string"
                 },
                 "input": true,
+                "thought_signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "type": {
                   "type": "string",
                   "const": "tool_use"
@@ -8101,6 +8117,22 @@
             {
               "type": "object",
               "properties": {
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -8123,21 +8155,29 @@
                 "tool_use_id",
                 "content"
               ]
-            },
+            }
+          ]
+        },
+        "ImageSource": {
+          "oneOf": [
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/InlineImageSource"
+                "media_type": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
                 },
                 "type": {
                   "type": "string",
-                  "const": "image"
+                  "const": "base64"
                 }
               },
               "required": [
                 "type",
-                "source"
+                "media_type",
+                "data"
               ]
             }
           ]
@@ -8153,31 +8193,6 @@
                 "$ref": "#/$defs/ContentBlock"
               }
             }
-          ]
-        },
-        "InlineImageSource": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "$ref": "#/$defs/InlineImageEncoding"
-            },
-            "media_type": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "media_type",
-            "data"
-          ]
-        },
-        "InlineImageEncoding": {
-          "type": "string",
-          "enum": [
-            "base64"
           ]
         },
         "MessageAlternative": {
@@ -8515,6 +8530,12 @@
                   "type": "string"
                 },
                 "input": true,
+                "thought_signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "type": {
                   "type": "string",
                   "const": "tool_use"
@@ -8546,6 +8567,22 @@
             {
               "type": "object",
               "properties": {
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -8568,21 +8605,29 @@
                 "tool_use_id",
                 "content"
               ]
-            },
+            }
+          ]
+        },
+        "ImageSource": {
+          "oneOf": [
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/InlineImageSource"
+                "media_type": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
                 },
                 "type": {
                   "type": "string",
-                  "const": "image"
+                  "const": "base64"
                 }
               },
               "required": [
                 "type",
-                "source"
+                "media_type",
+                "data"
               ]
             }
           ]
@@ -8598,31 +8643,6 @@
                 "$ref": "#/$defs/ContentBlock"
               }
             }
-          ]
-        },
-        "InlineImageSource": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "$ref": "#/$defs/InlineImageEncoding"
-            },
-            "media_type": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "media_type",
-            "data"
-          ]
-        },
-        "InlineImageEncoding": {
-          "type": "string",
-          "enum": [
-            "base64"
           ]
         },
         "MessageAlternative": {
@@ -8875,6 +8895,12 @@
                   "type": "string"
                 },
                 "input": true,
+                "thought_signature": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "type": {
                   "type": "string",
                   "const": "tool_use"
@@ -8906,6 +8932,22 @@
             {
               "type": "object",
               "properties": {
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "image"
+                }
+              },
+              "required": [
+                "type",
+                "source"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -8928,21 +8970,29 @@
                 "tool_use_id",
                 "content"
               ]
-            },
+            }
+          ]
+        },
+        "ImageSource": {
+          "oneOf": [
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/InlineImageSource"
+                "media_type": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
                 },
                 "type": {
                   "type": "string",
-                  "const": "image"
+                  "const": "base64"
                 }
               },
               "required": [
                 "type",
-                "source"
+                "media_type",
+                "data"
               ]
             }
           ]
@@ -8958,31 +9008,6 @@
                 "$ref": "#/$defs/ContentBlock"
               }
             }
-          ]
-        },
-        "InlineImageSource": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "$ref": "#/$defs/InlineImageEncoding"
-            },
-            "media_type": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "media_type",
-            "data"
-          ]
-        },
-        "InlineImageEncoding": {
-          "type": "string",
-          "enum": [
-            "base64"
           ]
         },
         "MessageAlternative": {

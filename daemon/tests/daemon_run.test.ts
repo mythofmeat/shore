@@ -385,7 +385,7 @@ describe("coming up", () => {
   test("TCP and browser cancellation preserve tool effects and resumable compaction outcomes", async () => {
     const outcomes: unknown[] = [];
     for (const transport of ["tcp", "web"] as const) {
-      const place = await layout(`${MODEL_CONFIG}\n[tools.bash]\ntimeout = "6s"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n[tools.bash]\ntimeout = "6s"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
       const cleanup = new AbortController();
       const compactStream = compactionFixture(cleanup.signal);
       let compactionCalls = 0;
@@ -573,7 +573,7 @@ describe("coming up", () => {
     ];
     const outcomes: unknown[][] = [];
     for (const transport of ["tcp", "web"] as const) {
-      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
       const compactStream = compactionFixture();
       const chat = scriptedProvider("Stored fixture reply");
       const provider: SidecarProvider = { ...chat, async *stream(request, signal) {

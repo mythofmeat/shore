@@ -34,7 +34,7 @@ export function compactionFixture(cleanup?: AbortSignal): SidecarProvider["strea
       writes += 1;
       const hold = !toolCancelled && conversation.includes("cancel memory tool once");
       if (hold) toolCancelled = true;
-      yield { type: "tool_use", id: "memory-fixture-write", name: "bash", input: { command: hold
+      yield { type: "tool_use", id: "memory-fixture-write", name: "bash", input: { workdir: ".", command: hold
         ? `mkdir -p memory; printf '%s' "$$" > memory/cancel-pid; sleep 60; printf unexpected > memory/cancel-finished`
         : `mkdir -p memory && printf '# Retained fixture\\nMemory write ${String(writes)}\\n' > memory/fixture.md` } };
     } else yield { type: "text", text: stop ? "Incomplete memory summary" : "Memory summary completed" };

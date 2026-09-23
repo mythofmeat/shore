@@ -23,6 +23,8 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 } });
 await writeFile(configPath, `[chat]
 model = "anthropic:claude-opus-4-8"
+[tools]
+enabled = ["bash"]
 [tools.bash]
 max_result_chars = 1024
 [mcp.tool_fixture]

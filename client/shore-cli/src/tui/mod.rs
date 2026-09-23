@@ -3460,9 +3460,23 @@ mod redraw_tests {
         };
         let entries = build_history_entries(history.messages, 0);
         let turn = entries.first().unwrap().as_turn().unwrap();
-        assert_eq!(turn.images.len(), 1);
+        assert!(turn.images.is_empty());
+        let images: Vec<_> = turn
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::ToolResult { images, .. } => Some(images),
+                Block::Text(_)
+                | Block::Thinking(_)
+                | Block::ToolUse { .. }
+                | Block::SubagentBegin(_)
+                | Block::SubagentEnd(_) => None,
+            })
+            .flatten()
+            .collect();
+        assert_eq!(images.len(), 1);
         assert!(
-            turn.images
+            images
                 .first()
                 .unwrap()
                 .data
@@ -3498,7 +3512,12 @@ mod redraw_tests {
         );
         let _ = handle_server_message(&mut app, end);
         let turn = app.entries.last().unwrap().as_turn().unwrap();
-        assert_eq!(turn.images.len(), 1);
+        assert!(turn.images.is_empty());
+        assert!(
+            turn.blocks.iter().any(
+                |block| matches!(block, Block::ToolResult { images, .. } if images.len() == 1)
+            )
+        );
         assert!(turn.blocks.iter().any(
             |block| matches!(block, Block::ToolResult { output, .. } if output == "Image result")
         ));
