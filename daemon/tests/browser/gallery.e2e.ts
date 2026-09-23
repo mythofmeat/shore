@@ -141,3 +141,42 @@ test("real tool image events appear once in the gallery and stay in their conver
   await page.getByRole("button", { name: "Images", exact: true }).click();
   await expect(gallery.getByRole("status")).toContainText("No images loaded");
 });
+
+test("losing the connection retires live images from the interrupted request", async ({ page }) => {
+  await page.addInitScript(`window.shoreSockets = []; window.WebSocket = class extends WebSocket {
+    constructor(...args) { super(...args); window.shoreSockets.push(this); }
+  };`);
+  await page.goto("/workspace");
+  await page.getByLabel("Daemon token").fill("browser-test-token");
+  await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: "Create character", exact: true }).click();
+  const create = page.getByRole("dialog", { name: "Create character", exact: true });
+  await create.getByLabel("Character name", { exact: true }).fill("nova");
+  await create.getByRole("button", { name: "Run action" }).click();
+  await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
+  await create.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
+  await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
+  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
+  const selected = workbench.getByRole("region", { name: "Selected tool" });
+  await workbench.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true }).click();
+  await selected.getByLabel("command", { exact: true }).fill(`printf %s '${bytes.toString("base64")}' | base64 -d > tool-image.png`);
+  await selected.getByRole("button", { name: "Review tool run", exact: true }).click();
+  await workbench.getByRole("region", { name: "Review tool run" }).getByRole("button", { name: "Run tool now", exact: true }).click();
+  await expect(workbench.getByRole("region", { name: "Tool result" })).toContainText("Tool completed");
+  await workbench.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("show gallery image fixture");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toContainText("Tool image ready");
+  const liveImage = page.getByRole("region", { name: "Live image", exact: true });
+  await expect(liveImage).toHaveCount(1);
+  await page.evaluate("window.shoreSockets.at(-1).close()");
+  await expect.poll(() => page.evaluate("window.shoreSockets.length")).toBe(2);
+  await expect(page.locator(".connection.online")).toBeVisible();
+  await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toHaveCount(0);
+  await expect(liveImage).toHaveCount(0);
+  const readResult = page.getByRole("article", { name: "assistant message", exact: true }).filter({ hasText: "Tool · read" });
+  await readResult.getByText("Tool result", { exact: true }).click();
+  await expect(readResult.getByRole("button", { name: "View image: Inline image", exact: true })).toBeVisible();
+});

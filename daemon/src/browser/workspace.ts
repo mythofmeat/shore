@@ -159,7 +159,10 @@ export class Workspace {
       return;
     }
     if (update.kind === "future") { this.#activity(`Future event: ${update.message.type}`, update.message); return; }
-    if (update.kind === "uncertain") { this.#patch({ uncertain: [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request) }] }); return; }
+    if (update.kind === "uncertain") {
+      this.#patch({ uncertain: [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request) }], media: this.#state.media.filter((image) => image.rid !== update.rid) });
+      return;
+    }
     const message = update.message;
     switch (message.type) {
       case "hello": this.#patch({ characters: message.characters }); return;
