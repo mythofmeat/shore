@@ -81,9 +81,12 @@ for (const destination of ["character", "thread", "round trip", "reconnect"]) te
   if (destination === "character") await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Only send this draft to nova main");
   await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+  await expect(page.getByText("Previous send needs review")).toHaveCount(0);
   await page.reload();
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Only send this draft to nova main");
   await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+  await expect(page.getByText("Previous send needs review")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
 });
 
 test("reconnecting during generation retires the departed session's live response", async ({ page }) => {

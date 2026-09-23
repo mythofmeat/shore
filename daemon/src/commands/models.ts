@@ -289,13 +289,15 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-function backgroundRole(ctx: ModelsContext, task: BackgroundTask): ModelRole {
+interface ChatInheritance { thread: ModelRole; character: ModelRole }
+
+function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
   const bg = ctx.config.app.defaults.background;
   const perTask = bg[task];
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
-  const chat = task === "compaction" ? chatRole(ctx) : inheritedChatRole(ctx);
+  const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.character ?? inheritedChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
@@ -335,7 +337,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const inherited = inheritedChatRole(ctx);
   return [
     chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task)),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, { thread: chat, character: inherited })),
     subagentRole(ctx, inherited),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
@@ -973,6 +975,7 @@ function savedSettingsFor(
 
 function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   const chat = chatRole(ctx);
+  const characterChat = inheritedChatRole(ctx);
   const slots: OverviewSlot[] = [
     {
       role: "chat",
@@ -986,7 +989,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task).source,
+      source: backgroundRole(ctx, task, { thread: chat, character: characterChat }).source,
       resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
     });
   }
@@ -994,7 +997,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   slots.push({
     role: "sub-agents",
     flag: "--subagent",
-    source: subagentRole(ctx, chat).source,
+    source: subagentRole(ctx, characterChat).source,
     resolve: () => ({ kind: "subagent_model", model: sharedSubagentModel(ctx) }),
   });
 
