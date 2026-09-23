@@ -7,6 +7,18 @@ constraint determine the remaining acceptance status; this record does not claim
 
 ## Active PR and final retention work — 2026-09-23
 
+CI run `35834354211` at `78714bff` completed Rust verification successfully, including generated
+exports and dirty-diff enforcement. The daemon native helper, lint/type checks, browser generation
+and full tests passed, but mutation staleness failed under the runner's Python 3.12: probing a long
+mutant description as a filename raised `ENAMETOOLONG`. Local Python is 3.14.7; Python 3.14's
+[documented pathlib behavior](https://docs.python.org/3/library/pathlib.html#querying-file-type-and-status)
+already returns false for that probe. The daemon job now uses `actions/setup-python@v7`, `3.x` and
+`check-latest: true` to select the latest stable interpreter. Actionlint and all 72 mutation staleness
+passes succeeded before this workflow-only correction was committed. No application or mutation
+helper code changed. Logs are `ci-python-*`, `pr-232-third-daemon.log` and `pr-232-rust-verified.log`
+under the current output directory. The next complete CI run still needs to verify captures,
+packaging and browser journeys on the runner.
+
 The user explicitly approved publication to `git@github.com:mythofmeat/shore.git`; draft
 [PR #232](https://github.com/mythofmeat/shore/pull/232) is open. Verified merge `55dfd0cc` incorporates
 `origin/main` at `d1e5a16a`, including its Claude Agent reasoning fix. The React dependency conflicts
