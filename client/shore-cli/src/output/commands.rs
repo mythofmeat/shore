@@ -1218,17 +1218,44 @@ fn print_model_favorited(data: &serde_json::Value) {
 }
 
 fn print_model_reset(data: &serde_json::Value) {
+    for line in model_reset_lines(data) {
+        cli_out!("{line}");
+    }
+}
+
+fn model_reset_lines(data: &serde_json::Value) -> Vec<String> {
     let model = data["active"].as_str().unwrap_or("(none)");
     let Some(role) = data["role"].as_str() else {
-        cli_out!("Model reset to: {}", abbreviate_model(model));
-        return;
+        return vec![format!("Model reset to: {}", abbreviate_model(model))];
     };
-    let source = data["source"].as_str().unwrap_or("config default");
-    cli_out!(
-        "Unpinned {}; now {} ({source})",
-        role_label(role),
-        abbreviate_model(model)
-    );
+    let roles = data["roles"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let diverged = roles
+        .iter()
+        .any(|each| each["model"] != data["active"] || each["source"] != data["source"]);
+    if !diverged {
+        let source = data["source"].as_str().unwrap_or("config default");
+        return vec![format!(
+            "Unpinned {}; now {} ({source})",
+            role_label(role),
+            abbreviate_model(model)
+        )];
+    }
+    let mut lines = vec![format!(
+        "Unpinned {}; each now uses its own default:",
+        role_label(role)
+    )];
+    lines.extend(roles.iter().map(|each| {
+        format!(
+            "  {}: {} ({})",
+            each["role"].as_str().unwrap_or("?"),
+            abbreviate_model(each["model"].as_str().unwrap_or("(none)")),
+            each["source"].as_str().unwrap_or("config default")
+        )
+    }));
+    lines
 }
 
 fn print_set_model_setting(data: &serde_json::Value) {
@@ -1749,6 +1776,54 @@ mod tests {
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
+    }
+
+    #[test]
+    fn background_reset_lists_each_task_when_their_models_diverge() {
+        let lines = model_reset_lines(&serde_json::json!({
+            "target": "role",
+            "active": null,
+            "role": "background",
+            "cleared": ["heartbeat.model", "compaction.model"],
+            "source": null,
+            "file": null,
+            "reset_to": "per-task defaults",
+            "roles": [
+                {"role": "heartbeat", "model": "anthropic:opus-id", "source": "inherits chat"},
+                {"role": "compaction", "model": "anthropic:haiku-id", "source": "inherits chat"},
+            ],
+        }));
+
+        assert_eq!(
+            lines,
+            [
+                "Unpinned background tasks; each now uses its own default:",
+                "  heartbeat: anthropic:opus-id (inherits chat)",
+                "  compaction: anthropic:haiku-id (inherits chat)",
+            ]
+        );
+    }
+
+    #[test]
+    fn background_reset_keeps_one_line_when_every_task_agrees() {
+        let lines = model_reset_lines(&serde_json::json!({
+            "target": "role",
+            "active": "anthropic:opus-id",
+            "role": "background",
+            "cleared": [],
+            "source": "inherits chat",
+            "file": null,
+            "reset_to": "inherits chat",
+            "roles": [
+                {"role": "heartbeat", "model": "anthropic:opus-id", "source": "inherits chat"},
+                {"role": "compaction", "model": "anthropic:opus-id", "source": "inherits chat"},
+            ],
+        }));
+
+        assert_eq!(
+            lines,
+            ["Unpinned background tasks; now anthropic:opus-id (inherits chat)"]
+        );
     }
 
     #[test]
