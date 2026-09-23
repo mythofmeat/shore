@@ -1,8 +1,50 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-23. Work continues toward the full issue. Browser display preferences now join core
-conversation controls and ordinary-request recovery; see the checkpoints below. Full parity,
-release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+Updated 2026-09-23. Work continues toward the full issue. Configurable keyboard shortcuts now join
+browser display preferences, core conversation controls and ordinary-request recovery. Full terminal
+workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+
+## Configurable keyboard checkpoint — 2026-09-23
+
+This continuation began at `23b741ab`. Required toolchain and dependency updates ran first; Bun 1.4.2,
+Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0, sccache 0.18.0 and actionlint
+1.7.12 were current. Daemon dependencies were unchanged; Cargo updated lru 0.18.4 to 0.18.5.
+Dependency-only commit `29cc6049` followed all three Rust baseline checks. The focused daemon
+baseline passed, then the actual browser reproduction failed at the missing Keyboard shortcuts control.
+
+The browser now provides a binding editor, key recording, separate normal/global scopes, saved argument
+presets, open-form/run modes, edit/remove and reset. Its action choices derive from all current named
+operations, core requests, generated view preferences and existing browser-local destinations. Operation
+and conversation arguments use the canonical validators and existing request/dispatch paths; actions
+requiring confirmation still open a review before dispatch. Send-current-draft uses the existing composer
+persistence and admission path, while a saved message template leaves that draft intact.
+
+Bindings persist per key/scope, synchronize across tabs, retain unsaved local changes after storage
+failures and offer retry/reset with a workspace notice. There are at most 128 active bindings and 32 KiB
+of UTF-8 JSON per binding. Default removal persists; deleting custom bindings removes their records.
+Typing, native editing/navigation keys, repeated keydown, IME composition and modal controls are
+protected; an explicitly bound cancellation action remains available in dialogs. Ctrl and Command are
+separate browser modifiers. All defaults now use the same binding mechanism.
+
+Configuration presets consult the live schema: secret or unknown values cannot be persisted, and
+execution rechecks classification. Omitted/null values remain valid read/form presets. The value
+control is masked while its classification is unknown or secret. Tests also reject an injected secret
+preset at execution. Other arguments are local-device data; shortcuts do not promise encrypted storage.
+
+Verification passed all eight required daemon commands: 7,910 tests across 282 files, 68 current
+mutation passes, three unchanged independent capture groups and the compiled build. All 21 keyboard
+mutation cases were killed. All 39 Playwright journeys passed together. Browser generation/assets
+and capability inventory checks passed, and the mobile editor was visually inspected. The dependency
+refresh passed all three Rust checks (1,493 tests, 15 existing ignored tests, existing Clippy warnings).
+No Rust source changed in the keyboard feature. The build used local compilation when the cache
+server was unavailable. Logs use `keyboard-` under `out/issue-214/resume-2026-09-23/`.
+This checkpoint does not complete issue #214 or establish actual GitHub CI/required merge gates.
+
+This does not establish full terminal-local parity. Next, finish the actual UiCommand/input workflow
+audit: image galleries with navigation, reopening action output, expanded draft editing and undo
+after send/editor handoff, and the remaining focus/scroll/help equivalents. Existing image opening, message editing and
+activity screens need executable mappings and real-flow coverage of their terminal options. Broader
+event/media/concurrency, security, packaging and CI acceptance work remains open.
 
 ## Display preferences checkpoint — 2026-09-23
 

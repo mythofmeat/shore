@@ -992,3 +992,46 @@ closing the preferences dialog. The mobile layout was inspected. The build fell 
 compilation when its cache server was unavailable. Logs use `preferences-` under
 `out/issue-214/resume-2026-09-23/`. Full issue acceptance and actual GitHub CI/merge-gate evidence remain
 outstanding.
+
+
+### Configurable browser keyboard workflows, 2026-09-23
+
+The keyboard editor supports custom keys, key recording, outside-controls/while-typing scopes,
+argument presets, open-form and run modes, edit/remove, and restoring defaults. The target choices
+use the executable operation/request catalogue, generated view preferences and the browser's local
+workflow registrations. Canonical argument validators and existing dispatch/composer paths remain
+authoritative. Destructive or other confirmation-requiring actions open their review first; template
+messages leave the composer's unsent draft intact.
+
+Bindings persist independently by key and scope. Cross-tab updates preserve unrelated and unsaved
+local changes, failed writes remain usable in the current tab, and retry/reset are explicit. Active
+entries and serialized argument sizes are bounded. Standard editing/navigation keys remain reserved;
+normal bindings leave interactive controls alone, and repeat/composition events are ignored. Dialogs
+retain their keys except for a configured conversation cancellation shortcut. Ctrl/Command defaults
+are configurable through this same mechanism.
+
+The live configuration schema determines which preset values may be saved. Secret and unknown values
+are refused, controls mask them, and execution rechecks current classification. A preset can instead
+open the form with the value omitted for entry at use time. Null values retain the existing read
+semantics. Browser storage is not presented as encrypted storage for arbitrary saved arguments.
+
+Browser journeys exercise persistence/reload, independent tabs, default removal/reset, normal versus
+global input, repeated keys and composition, key recording, failed-write recovery, shared command
+execution, form presets, saved message templates, destructive confirmation and cancellation during
+a dialog. Secret presets are rejected both before saving and when injected into storage. The mobile
+review caught and fixed the inherited rule hiding shortcut labels.
+
+The executable target/route checks deliberately reject omitted operation, request, view and local
+actions. The keyboard mutation pass covers modifier normalization, reserved keys, typing/dialog
+scopes, canonical validation, secret classification, storage reconciliation, default removal and
+resource bounds. These checks cover the current binding feature; the full terminal-local workflow
+inventory, advanced event/media paths and actual CI/merge-gate evidence remain unfinished.
+
+Verification passed all eight required daemon commands: 7,910 tests across 282 files, 68 current
+mutation passes, three unchanged independent capture groups and the compiled build. All 21 keyboard
+mutation cases were killed. All 39 Playwright journeys passed together. Browser generation/assets
+and capability inventory checks passed, and the mobile editor was visually inspected. The dependency
+refresh passed all three Rust checks (1,493 tests, 15 existing ignored tests, existing Clippy warnings).
+No Rust source changed in the keyboard feature. The build used local compilation when the cache
+server was unavailable. Logs use `keyboard-` under `out/issue-214/resume-2026-09-23/`.
+This checkpoint does not complete issue #214 or establish actual GitHub CI/required merge gates.
