@@ -14,6 +14,15 @@ were resolved by preserving the web dependencies. Bun latest/install and Cargo u
 no new changes. All eight daemon checks, all three Rust checks, generation/inventory and all 51 browser
 journeys passed before that merge was committed and pushed. GitHub now reports the PR mergeable.
 
+The next actual CI run, `35833124915`, reached the Rust tests and exposed an independent fixture
+assumption: two connection-manager lifecycle tests had no explicit token and depended on local
+configuration or another test initializing one. Running those tests with `SHORE_TOKEN` unset and an
+empty XDG configuration reproduced both exact failures. They now initialize the same fixture token
+as the existing handshake tests. The isolated reproduction passes all three lifecycle tests; all three
+Rust workspace checks passed again before committing this test-only correction. Logs use
+`ci-lifecycle-*`; no daemon source changed in this follow-up. The daemon CI job was still running
+when this evidence was recorded; consult the PR for its final result.
+
 The first actual CI run, `35831202015`, failed on missing job prerequisites: daemon tests required the
 native patch helper before `bun test`; three Rust image tests launch Bun, absent from that job. The
 workflow now builds the helper before daemon tests with stable Rust, and installs Bun plus daemon
