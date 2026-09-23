@@ -55,14 +55,14 @@ export function Models({ actions, ready, character, changed, close }: { actions:
   const [error, setError] = useState("");
   const [result, setResult] = useState<unknown>();
   const targetArgs = (choice = target, model = named): ModelInfoArgs => choice === "background:all" ? { background_task: "all" } : choice === "background:heartbeat" ? { background_task: "heartbeat" } : choice === "background:compaction" ? { background_task: "compaction" } : choice.startsWith("subagent:") ? { subagent: choice.slice(9) } : choice === "named" ? { name: model } : {};
-  const refresh = async (includeHidden = hidden, favoritesOnly = favorites) => {
-    const [models, roles, tools] = await Promise.all([actions.run("list_models", { include_hidden: includeHidden, favorites_only: favoritesOnly }), actions.run("model_settings", { overview: true }), actions.run("tools", {})]);
+  const refresh = async (includeHidden = hidden, favoritesOnly = favorites, remember = true) => {
+    const [models, roles, tools] = await Promise.all([actions.run("list_models", { include_hidden: includeHidden, favorites_only: favoritesOnly }, { remember }), actions.run("model_settings", { overview: true }, { remember: false }), actions.run("tools", {}, { remember: false })]);
     if (!("overview" in roles)) throw new Error("Expected model role overview");
     setListing(models); setOverview(roles); setSubagents(tools.subagents.map((subagent) => subagent.name));
   };
-  const inspect = async (choice = target, model = named) => {
+  const inspect = async (choice = target, model = named, remember = true) => {
     const args = targetArgs(choice, model);
-    const [nextInfo, nextDetail] = await Promise.all([actions.run("model_info", args), actions.run("model_settings", args)]);
+    const [nextInfo, nextDetail] = await Promise.all([actions.run("model_info", args, { remember: false }), actions.run("model_settings", args, { remember })]);
     if (!("setting_schema" in nextDetail)) throw new Error("Expected model settings");
     setInfo(nextInfo); setDetail(nextDetail);
   };
@@ -75,7 +75,7 @@ export function Models({ actions, ready, character, changed, close }: { actions:
     let current = true;
     if (ready) {
       setBusy(true);
-      void Promise.all([actions.run("list_models", {}), actions.run("model_settings", { overview: true }), actions.run("tools", {})]).then(([models, roles, tools]) => {
+      void Promise.all([actions.run("list_models", {}, { remember: false }), actions.run("model_settings", { overview: true }, { remember: false }), actions.run("tools", {}, { remember: false })]).then(([models, roles, tools]) => {
         if (!current) return;
         if (!("overview" in roles)) throw new Error("Expected model role overview");
         setListing(models); setOverview(roles); setSubagents(tools.subagents.map((subagent) => subagent.name)); setError(""); setHidden(false); setFavorites(false);
@@ -98,14 +98,14 @@ export function Models({ actions, ready, character, changed, close }: { actions:
     </section>
     <label className="field">Target role<select disabled={disabled} value={target} onChange={(event) => selectTarget(event.target.value)}><option value="chat">Chat (current thread)</option><option value="background:all">All background tasks</option><option value="background:heartbeat">Heartbeat</option><option value="background:compaction">Compaction</option><option value="subagent:all">All subagents</option>{subagents.map((name) => <option key={name} value={`subagent:${name}`}>Subagent: {name}</option>)}{named === "" ? null : <option value="named">Named model: {named}</option>}</select></label>
     <div className="actions"><button disabled={disabled} onClick={() => { void run(() => inspect()); }}>Inspect target settings</button><button disabled={disabled || (!roleTarget && character === null) || target === "named"} onClick={() => { void run(async () => {
-      setResult(await actions.run("reset_model", targetArgs())); await refresh(); await inspect(); await changed();
+      setResult(await actions.run("reset_model", targetArgs())); await refresh(hidden, favorites, false); await inspect(target, named, false); await changed();
     }); }}>Reset model selection</button></div>
     <label className="field">Find a model<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
     <div className="actions"><label className="check"><input disabled={disabled} type="checkbox" checked={hidden} onChange={(event) => { const value = event.target.checked; setHidden(value); void run(async () => { try { await refresh(value, favorites); } catch (failure) { setHidden(hidden); throw failure; } }); }} />Include hidden models</label><label className="check"><input disabled={disabled} type="checkbox" checked={favorites} onChange={(event) => { const value = event.target.checked; setFavorites(value); void run(async () => { try { await refresh(hidden, value); } catch (failure) { setFavorites(favorites); throw failure; } }); }} />Favorites only</label></div>
     {listing === undefined ? null : <p className="muted">{String(listing.favorite_count)} favorites · {String(listing.hidden_count)} hidden models</p>}
     <div className="model-cards">{Object.entries(listing?.models ?? {}).flatMap(([provider, models]) => models.map((model) => ({ ...model, provider }))).filter((model) => `${model.name} ${model.qualified_name} ${model.model_id}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.qualified_name.localeCompare(b.qualified_name)).map((model) => <article className="provider-card" key={model.qualified_name} aria-label={`${model.qualified_name} model`}><h3>{model.name}</h3><p className="muted">{model.qualified_name} · {model.source}{model.hidden ? " · hidden" : ""}{model.qualified_name === listing?.active ? " · active" : ""}</p>
-      <div className="actions"><button disabled={disabled} aria-pressed={model.favorite} onClick={() => { void run(async () => { setResult(await actions.run("favorite_model", { name: model.qualified_name, favorite: !model.favorite })); await refresh(); }); }}>{model.favorite ? "Remove favorite" : "Favorite"}</button><button disabled={disabled} onClick={() => selectTarget("named", model.qualified_name)}>Inspect model</button><button disabled={disabled || (!roleTarget && character === null)} onClick={() => { void run(async () => {
-        setResult(await actions.run("switch_model", { ...(roleTarget ? targetArgs() : {}), name: model.qualified_name, include_hidden: hidden })); await refresh(); if (detail !== undefined) await inspect(); await changed();
+      <div className="actions"><button disabled={disabled} aria-pressed={model.favorite} onClick={() => { void run(async () => { setResult(await actions.run("favorite_model", { name: model.qualified_name, favorite: !model.favorite })); await refresh(hidden, favorites, false); }); }}>{model.favorite ? "Remove favorite" : "Favorite"}</button><button disabled={disabled} onClick={() => selectTarget("named", model.qualified_name)}>Inspect model</button><button disabled={disabled || (!roleTarget && character === null)} onClick={() => { void run(async () => {
+        setResult(await actions.run("switch_model", { ...(roleTarget ? targetArgs() : {}), name: model.qualified_name, include_hidden: hidden })); await refresh(hidden, favorites, false); if (detail !== undefined) await inspect(target, named, false); await changed();
       }); }}>Use for {roleTarget ? target.replace(":", " ") : "chat"}</button></div><Inspect value={model} label="Catalogue entry" />
     </article>)}</div>
     {result === undefined ? null : <section role="status"><h3>Model change completed</h3><Inspect value={result} label="Model change details" /></section>}
@@ -116,7 +116,7 @@ export function Models({ actions, ready, character, changed, close }: { actions:
         setBusy(true); setError("");
         try {
           const saved = await actions.run("set_model_setting", { ...targetArgs(), key, value, scope });
-          try { await refresh(); await inspect(); await changed(); } catch (failure) { setError(`Setting saved, but refreshing its view failed: ${failure instanceof Error ? failure.message : String(failure)}`); }
+          try { await refresh(hidden, favorites, false); await inspect(target, named, false); await changed(); } catch (failure) { setError(`Setting saved, but refreshing its view failed: ${failure instanceof Error ? failure.message : String(failure)}`); }
           return saved;
         } finally { setBusy(false); }
       }} />}

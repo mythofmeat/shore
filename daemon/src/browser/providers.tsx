@@ -43,7 +43,7 @@ export function Providers({ actions, ready, close }: { actions: OperationClient;
     let current = true;
     if (ready) {
       setBusy(true);
-      void actions.run("list_providers", {}).then((result) => { if (current) { setProviders(result.providers); setError(""); } }, (failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); }).finally(() => { if (current) setBusy(false); });
+      void actions.run("list_providers", {}, { remember: false }).then((result) => { if (current) { setProviders(result.providers); setError(""); } }, (failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); }).finally(() => { if (current) setBusy(false); });
     }
     return () => { current = false; };
   }, [actions, ready]);
@@ -62,8 +62,8 @@ export function Providers({ actions, ready, close }: { actions: OperationClient;
   const refresh = (provider?: string) => run(async () => {
     setRefreshResult(undefined);
     setRefreshResult(provider === undefined ? await actions.run("refresh_all_provider_models", {}) : await actions.run("refresh_provider_models", { provider }));
-    setProviders((await actions.run("list_providers", {})).providers);
-    if (listing !== undefined) setListing(await actions.run("list_provider_models", { provider: listing.provider, include_hidden: includeHidden }));
+    setProviders((await actions.run("list_providers", {}, { remember: false })).providers);
+    if (listing !== undefined) setListing(await actions.run("list_provider_models", { provider: listing.provider, include_hidden: includeHidden }, { remember: false }));
   });
   const matches = (value: string) => value.toLowerCase().includes(search.toLowerCase());
   const disabled = busy || !ready;

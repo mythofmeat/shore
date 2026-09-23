@@ -59,9 +59,9 @@ export function Diagnostics({ actions, operations, ready, character, characters,
     try { await work(); } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { setBusy(false); }
   };
-  const refresh = async (selected = view) => {
+  const refresh = async (selected = view, remember = true) => {
     switch (selected) {
-      case "status": case "controls": setStatus(await actions.run("status", {})); break;
+      case "status": case "controls": setStatus(await actions.run("status", {}, { remember })); break;
       case "calls": {
         const result = await actions.run("call_log", { count, ...(callType === "" ? {} : { call_type: callType }), character: callCharacter });
         if (!("entries" in result)) throw new Error("Expected a call listing");
@@ -83,7 +83,7 @@ export function Diagnostics({ actions, operations, ready, character, characters,
     let current = true;
     if (ready) {
       setBusy(true);
-      void actions.run("status", {}).then((result) => { if (current) { setStatus(result); setError(""); } })
+      void actions.run("status", {}, { remember: false }).then((result) => { if (current) { setStatus(result); setError(""); } })
         .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); })
         .finally(() => { if (current) setBusy(false); });
     }
@@ -115,7 +115,7 @@ export function Diagnostics({ actions, operations, ready, character, characters,
     {view === "subagents" && traces !== undefined ? <section aria-label="Stored subagent traces"><h3>Stored subagent traces</h3>{traces.entries.length === 0 ? <p>No stored subagent traces match these filters.</p> : traces.entries.map((entry, index) => <article className="diagnostic-entry" key={`${entry.parent_tool_use_id}.${String(index)}`}><h4>{entry.subagent} · {entry.model}</h4><p className="muted">{entry.ts} · parent {entry.parent_tool_use_id}{entry.rid === undefined ? "" : ` · request ${entry.rid}`}</p>{entry.messages_expired === true ? <p>Stored messages have expired. Retained metadata and result remain available.</p> : null}{entry.result === undefined ? null : <p className="message-text">{entry.result}</p>}{entry.error === undefined ? null : <p className="error">{entry.error}</p>}<details><summary>Messages ({String(entry.messages.length)})</summary>{entry.messages.map((message) => <article key={message.msg_id} className="message"><strong>{message.role}</strong>{message.content_blocks.length === 0 ? <p className="message-text">{message.content}</p> : <Blocks blocks={message.content_blocks} reasoning tools openImage={openImage} />}</article>)}</details><Inspect value={entry} label="Complete subagent trace" /></article>)}<Inspect value={traces} label="Complete stored subagents" /></section> : null}
     {view === "controls" ? <section aria-label="Runtime controls"><h3>Runtime controls</h3><p>Heartbeat: {status?.autonomy?.heartbeat_state ?? "Not registered"}</p><div className="action-list">{operations.filter((operation) => operation.category === "Diagnostics" && operation.effects.some((effect) => effect !== "read")).map((operation) => <button disabled={disabled || operation.available === false} key={operation.name} onClick={() => {
       if (Object.keys(operation.fields).length > 0 || operation.confirmation !== "none") { advanced(operation.name); return; }
-      void run(async () => { setActionResult(undefined); setActionResult(await actions.runDiscovered(operation.name, {})); await changed(); await refresh("controls"); });
+      void run(async () => { setActionResult(undefined); setActionResult(await actions.runDiscovered(operation.name, {})); await changed(); await refresh("controls", false); });
     }}><strong>{operation.label}</strong><small>{operation.available === false ? "Unavailable for this selection" : operation.effects.includes("provider_call") ? "May make a provider request" : "Updates runtime state"}</small></button>)}</div>{actionResult === undefined ? null : <section role="status"><h3>Runtime action completed</h3><Result value={actionResult} label="Complete runtime action result" /></section>}</section> : null}
   </div></Modal>;
 }

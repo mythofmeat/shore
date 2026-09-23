@@ -11,19 +11,27 @@ export class OperationFailure extends Error {
 }
 
 export class OperationClient {
-  constructor(readonly connection: BrowserConnection) {}
+  #output: { name: OperationName; data: OperationResult<OperationName>; context: string } | undefined;
+  #listeners = new Set<() => void>();
+  #epoch = 0;
+  constructor(readonly connection: BrowserConnection, readonly context: () => string = () => "") {}
+  getOutput = () => this.#output;
+  subscribeOutput = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
+  clearOutput(): void { this.#epoch += 1; this.#output = undefined; for (const listener of this.#listeners) listener(); }
 
   async runDiscovered(name: string, input: unknown): Promise<OperationResult<OperationName>> {
     if (!isOperationName(name) || !validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
     return this.run(name, input);
   }
 
-  async run<N extends OperationName>(name: N, input: OperationInput<N>): Promise<OperationResult<N>> {
+  async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { remember?: boolean } = {}): Promise<OperationResult<N>> {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
     let rid: string | undefined;
     let result: unknown;
     let received = false;
     let invalid = false;
+    const epoch = this.#epoch;
+    const context = this.context();
     const unsubscribe = this.connection.subscribe((update) => {
       if (update.kind !== "frame" || update.message.type !== "command_output" || update.message.rid !== rid) return;
       if (received || update.message.name !== name) invalid = true;
@@ -36,6 +44,10 @@ export class OperationClient {
       const completion = await ticket.finished;
       if (completion.outcome !== "completed") throw new OperationFailure(name, completion);
       if (invalid || !received || !validOperationResult(name, result)) throw new Error(`Invalid result for ${name}`);
+      if (options.remember !== false && epoch === this.#epoch) {
+        this.#output = { name, data: result, context };
+        for (const listener of this.#listeners) listener();
+      }
       return result;
     } finally { unsubscribe(); }
   }

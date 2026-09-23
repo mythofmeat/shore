@@ -4,6 +4,76 @@ Updated 2026-09-23. Work continues toward the full issue. Conversation image gal
 configurable keyboard shortcuts, display preferences, core conversation controls and request recovery.
 Full terminal workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
 
+## Local editing, output and navigation checkpoint — 2026-09-23
+
+This checkpoint follows `6a1380d5`. Follow [the acceptance checklist](WEB_GUI_ACCEPTANCE.md)
+for remaining work against all 12 issue criteria; do not infer completion from checkpoint counts.
+The user correctly challenged repeated time estimates. Do not repeat an ungrounded remaining-hours
+estimate. Continue toward the full original scope and report concrete evidence.
+
+The required refresh found no manifest or lockfile changes. It did expose an upstream constraint:
+`crypto-common` 0.1.7 pins transitive `generic-array` to 0.14.7 through optional `ratatui-termwiz`;
+an explicit update to 0.14.9 was rejected. Current top-level dependencies/toolchains were checked.
+The focused baseline passed 20 tests and all eight existing draft browser journeys. Actual browser
+reproductions then failed for undo after a successful send and the missing expanded editor.
+
+`text_history.ts` and composer changes add bounded text undo/redo shared by the composer
+and expanded editor, native history input events, keyboard controls, selection restoration, IME
+composition grouping and programmatic send/restore checkpoints. Text history is held only in the
+open composer, bounded to 200 snapshots and 8 MiB per stack; current text is not truncated. Attachments,
+request options and pending-send state remain separate from text undo. The expanded editor saves
+through existing draft storage, preserves edits on close/reload, and shows the latest saved assistant
+reply in a separate reference region. Editor/undo/redo are configurable local shortcut targets.
+
+All four new text-history unit tests and all three editor browser journeys pass. The preceding combined
+browser run passed the existing eight draft journeys and two editor journeys; its third editor test
+exposed focus/undo behavior and now passes after correction. Tests cover exact text/selection recovery,
+no extra send, no restored attachments, autosave/reload, last-reply separation, keyboard opening/closing,
+and native undo not changing an inactive composer behind another dialog. The mobile editor was
+visually inspected. Logs use `editor-` under `out/issue-214/resume-2026-09-23/`.
+
+The installed React DOM textarea implementation and the matching [React 19.3 documentation](https://react.dev/reference/react-dom/components/textarea)
+were inspected, along with [Input Events Level 2](https://www.w3.org/TR/input-events-2/). React assigns
+programmatic value changes; it does not provide application-level undo across send/editor transitions.
+Two further real-flow failures were fixed: editor opening initially focused the modal Close button,
+and native undo with another dialog open could reach the previously edited textarea. Focus now restores
+after the modal opens, and native history events act only on the focused editor.
+
+The rest of this local-workflow batch now includes last-action output reopening with original
+conversation context; automatic reads and post-action view refreshes do not replace it, and sign-out
+clears it even when a request completes late. A browser reproduction confirmed that opening the tool
+workbench previously replaced a deliberate action result with its background catalogue fetch; the
+corrected flow now passes. Workspace help exposes all/quick/config palettes, line-based transcript
+scrolling, composer start/end-of-line focus, transcript focus and the current keyboard reference.
+Quick actions derive from the generated terminal shortcuts. Scroll presets accept whole lines from
+0 to 65535. Configurable edit cancellation discards the edit form while preserving the saved message
+and separate draft. Attachment picking/clearing and sign-out are also shortcut targets.
+
+`browser_local_coverage.ts` and its tests account for every generated `shore ui` command, field and
+finite choice against actual browser handlers/readers. Representative omitted handlers, implementations,
+scroll controls and newly unaccounted terminal fields fail. This is structural enforcement paired with
+real browser journeys, not a usability proof. The focused suite passed 46 tests; all three editor and
+three local-workflow browser journeys pass. The mobile help layout was inspected. All 15 new local
+mutation cases and all 21 updated keyboard mutation cases were killed. All eight required daemon checks passed: 7,923 tests across 285 files and 104,790 assertions;
+70 mutation passes with current patterns; three unchanged independent capture groups; and the
+compiled build. Generation/assets and inventory checks passed. All 47 browser journeys passed
+together in 3.1 minutes, including the empty-directory compiled binary and disabled-web behavior.
+Logs are `local-*-final.log` under `out/issue-214/resume-2026-09-23/`. No Rust source or protocol contract changed in this batch.
+
+Next shared-operation work is confirmed at `commands/run_tool.ts`: its `send` callback stores frames
+in a private array, the registry does not pass `session.emit`, and canonical `ToolRunReport` has no
+images. Existing independently reset TCP/web tool conformance is in `tests/daemon_run.test.ts`; extend
+that fixture and `tests/browser/tools.e2e.ts`. Forwarding needs request-correlation review:
+`handler/commands.ts` currently stamps tool/stream frames but not `send_image`. Also check the browser
+stream lifecycle: a manual tool has tool frames without `stream_end`, while a completed
+`request_finished` currently leaves those entries alone. Avoid creating a permanently active chat
+response while showing workbench progress. Docker Engine 29.8.1 is reachable, so container verification
+can run in the final packaging group; it is not presently an environment blocker.
+
+GitHub required-status-check and ruleset API reads both returned HTTP 403, explicitly requiring GitHub
+Pro or public repository visibility. No billing, visibility or merge-policy change was attempted. This
+is an external constraint on final acceptance, not a reason to stop unaffected implementation.
+
 ## Conversation image gallery checkpoint — 2026-09-23
 
 This continuation began at `4977bfcf`. Required Bun/Rust/tooling and dependency updates ran again before

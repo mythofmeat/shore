@@ -1,7 +1,10 @@
+import { LocalHelp } from "./local_help.tsx";
+import { TERMINAL_SHORTCUTS } from "./preferences.generated.ts";
+import { ActionOutput } from "./action_output.tsx";
 import { Gallery } from "./gallery.tsx";
 import { conversationImages, type OpenImage } from "./media.ts";
 import { KeyboardControls, useBindings } from "./keyboard_controls.tsx";
-import { bindingId, keyFromEvent, matchingBinding, validateBinding, validateSavedConfig, type Binding, type LocalShortcut } from "./keyboard.ts";
+import { bindingId, keyFromEvent, scrollAmount, matchingBinding, validateBinding, validateSavedConfig, type Binding, type LocalShortcut } from "./keyboard.ts";
 import type { ViewKey } from "./preferences.ts";
 import type { StreamMetadata } from "../protocol/StreamMetadata.ts";
 import { metadataLabel } from "./metadata.ts";
@@ -57,22 +60,22 @@ function Action({ operation, state, close, preset = {}, review = false }: { revi
   useEffect(() => {
     let current = true;
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "tools")) {
-      void workspace.actions.run("tools", {}).then((access) => { if (current) setAvailableTools(toolNames(access)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+      void workspace.actions.run("tools", {}, { remember: false }).then((access) => { if (current) setAvailableTools(toolNames(access)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
     }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "providers")) {
-      void workspace.actions.run("list_providers", {}).then((catalogue) => { if (current) setProviderNames(catalogue.providers.map((provider) => provider.name)); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
+      void workspace.actions.run("list_providers", {}, { remember: false }).then((catalogue) => { if (current) setProviderNames(catalogue.providers.map((provider) => provider.name)); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "config_keys")) {
-      void workspace.actions.run("config_schema", {}).then((catalogue) => { if (current) setConfigSchema(catalogue.schema); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
+      void workspace.actions.run("config_schema", {}, { remember: false }).then((catalogue) => { if (current) setConfigSchema(catalogue.schema); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "models")) {
-      void workspace.actions.run("list_models", { include_hidden: true }).then((catalogue) => { if (current) setModelNames(Object.values(catalogue.models).flatMap((models) => models.map((model) => model.qualified_name))); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+      void workspace.actions.run("list_models", { include_hidden: true }, { remember: false }).then((catalogue) => { if (current) setModelNames(Object.values(catalogue.models).flatMap((models) => models.map((model) => model.qualified_name))); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
     }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "subagents")) {
-      void workspace.actions.run("tools", {}).then((access) => { if (current) setSubagentNames(["all", ...access.subagents.map((subagent) => subagent.name)]); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+      void workspace.actions.run("tools", {}, { remember: false }).then((access) => { if (current) setSubagentNames(["all", ...access.subagents.map((subagent) => subagent.name)]); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
     }
     if (state.status === "ready" && Object.values(operation.fields).some((field) => field.choices === "model_settings")) {
-      void workspace.actions.run("model_settings", {}).then((settings) => { if (current && "setting_schema" in settings) setModelSettingKeys(settings.setting_schema.map((entry) => entry.key)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
+      void workspace.actions.run("model_settings", {}, { remember: false }).then((settings) => { if (current && "setting_schema" in settings) setModelSettingKeys(settings.setting_schema.map((entry) => entry.key)); }).catch((failure: unknown) => { if (current) setError(String(failure)); });
     }
     return () => { current = false; };
   }, [operation, state.status]);
@@ -124,6 +127,11 @@ function App() {
   const state = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
   const [token, setToken] = useState("");
   const [signingIn, setSigningIn] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [quickOnly, setQuickOnly] = useState(false);
+  const transcript = useRef<HTMLDivElement>(null);
+  const quickNames = new Set<string>(TERMINAL_SHORTCUTS.map(([name]) => name));
+  const [outputOpen, setOutputOpen] = useState(false);
   const [palette, setPalette] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedAction, setSelectedAction] = useState<{ name: string; preset: Record<string, unknown>; review?: boolean }>();
@@ -180,15 +188,23 @@ function App() {
   useEffect(() => { workspace.connection.connect(); return () => { workspace.connection.stop(); }; }, []);
   useEffect(() => { if (follow) tail.current?.scrollIntoView({ block: "end" }); }, [state.messages, state.streams, follow]);
   useEffect(() => { if (state.character !== null) history.replaceState(null, "", `/workspace/${encodeURIComponent(state.character)}/${encodeURIComponent(state.thread ?? "main")}`); }, [state.character, state.thread]);
-  const localShortcuts: Record<LocalShortcut, () => void | Promise<void>> = {
-    images: () => setImage(null), palette: () => setPalette(true), keyboard: () => setKeyboardOpen(true), display: () => setDisplayOpen(true), activity: () => setActivity((open) => !open),
+  const scrollTranscript = (direction: "up" | "down" | "top" | "bottom", amount = 1) => {
+    const node = transcript.current; if (node === null) return;
+    setFollow(direction === "bottom");
+    const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 24;
+    if (direction === "top") { node.scrollTo({ top: 0 }); if (ready && state.character !== null && state.hasEarlier) perform(() => workspace.loadEarlier()); }
+    else if (direction === "bottom") node.scrollTo({ top: node.scrollHeight });
+    else node.scrollBy({ top: (direction === "up" ? -1 : 1) * amount * line });
+  };
+  const localShortcuts: Record<LocalShortcut, (args: Record<string, unknown>) => void | Promise<void>> = {
+    help: () => setHelpOpen(true), quick: () => { setQuickOnly(true); setSearch(""); setPalette(true); }, transcript: () => transcript.current?.focus(), focus_home: () => composer.current?.focus("home"), focus_end: () => composer.current?.focus("end"),
+    sign_out: () => workspace.connection.signOut(), attach: () => composer.current?.attach(), clear_images: () => composer.current?.clearImages(),
+    edit_cancel: () => { if (selectedAction?.name === "edit") setSelectedAction(undefined); }, output: () => setOutputOpen(true), images: () => setImage(null), palette: () => { setQuickOnly(false); setPalette(true); }, keyboard: () => setKeyboardOpen(true), display: () => setDisplayOpen(true), activity: () => setActivity((open) => !open),
     settings: () => setSettings(true), models: () => setModels(true), providers: () => setProviders(true), diagnostics: () => setDiagnostics(true),
     memory: () => setMemory(true), tools: () => setToolWorkbench(true), usage: () => setUsage(true), archives: () => setArchives(true),
-    focus: () => composer.current?.focus(), send: () => composer.current?.send(), follow: () => setFollow((value) => !value),
-    top: () => { setFollow(false); document.querySelector(".messages")?.scrollTo({ top: 0 }); },
-    bottom: () => { setFollow(true); tail.current?.scrollIntoView({ block: "end" }); },
-    up: () => { setFollow(false); document.querySelector(".messages")?.scrollBy({ top: -200 }); },
-    down: () => { setFollow(false); document.querySelector(".messages")?.scrollBy({ top: 200 }); },
+    editor: () => composer.current?.expand(), undo: () => composer.current?.undo(), redo: () => composer.current?.redo(), focus: () => composer.current?.focus(), send: () => composer.current?.send(), follow: () => setFollow((value) => !value),
+    top: () => scrollTranscript("top"), bottom: () => scrollTranscript("bottom"),
+    up: (args) => scrollTranscript("up", scrollAmount(args)), down: (args) => scrollTranscript("down", scrollAmount(args)),
   };
   async function runConversation(name: string, values: Record<string, unknown>) {
     if (name === "cancel") { workspace.connection.cancel(); return; }
@@ -203,12 +219,12 @@ function App() {
     switch (kind) {
       case "local":
         if (["diagnostics", "memory", "tools"].includes(name) && current.character === null) throw new Error("Select a character first");
-        await localShortcuts[name as LocalShortcut](); return;
+        await localShortcuts[name as LocalShortcut](binding.args); return;
       case "view": display.change(name as ViewKey, String(binding.args["value"]), budgets.budgets.map((budget) => budget.name)); return;
       case "operation": {
         const selected = current.operations.find((item) => item.name === name);
         if (current.status !== "ready" || (selected === undefined || selected.available === false)) throw new Error("This operation is unavailable for the current connection or conversation");
-        if (name === "config" && Object.hasOwn(binding.args, "value")) validateSavedConfig(binding, (await workspace.actions.run("config_schema", {})).schema);
+        if (name === "config" && Object.hasOwn(binding.args, "value")) validateSavedConfig(binding, (await workspace.actions.run("config_schema", {}, { remember: false })).schema);
         if (binding.mode === "open" || operationPolicy(selected, binding.args).confirmation !== "none") {
           setSelectedAction({ name, preset: binding.args, review: binding.mode === "run" }); return;
         }
@@ -246,7 +262,7 @@ function App() {
     <aside className="sidebar"><div className="brand">SHORE <span>WORKSPACE</span></div><div className="section-heading"><h2>Characters</h2><button disabled={!ready} onClick={() => action("create_character")}>New</button></div>
       <nav aria-label="Characters">{state.characters.map((character) => <button key={character.name} aria-current={state.character === character.name ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(character.name))}><span className="avatar">{character.name.slice(0, 1).toUpperCase()}</span>{character.name}</button>)}</nav>
       <div className="section-heading"><h2>Threads</h2><button disabled={!ready || state.character === null} onClick={() => action("create_thread")}>New</button></div><nav aria-label="Threads">{state.threads.map((thread) => <button key={thread.id} aria-current={state.thread === thread.id ? "page" : undefined} disabled={!ready} onClick={() => perform(() => select(thread.id, true))}>{thread.label ?? thread.id}<small>{thread.home ? "Home" : thread.turns === undefined ? "" : `${String(thread.turns)} turns`}</small></button>)}</nav>
-      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setArchives(true); setNavigation(false); }}>Character archives</button><button disabled={!ready} onClick={() => { setUsage(true); setNavigation(false); }}>Usage &amp; budgets</button><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => setPalette(true)}>All actions</button><button onClick={() => { setKeyboardOpen(true); setNavigation(false); }}>Keyboard shortcuts</button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
+      <div className="sidebar-footer"><button disabled={!ready} onClick={() => { setArchives(true); setNavigation(false); }}>Character archives</button><button disabled={!ready} onClick={() => { setUsage(true); setNavigation(false); }}>Usage &amp; budgets</button><button disabled={!ready || state.character === null} onClick={() => { setToolWorkbench(true); setNavigation(false); }}>Tool workbench</button><button disabled={!ready || state.character === null} onClick={() => { setMemory(true); setNavigation(false); }}>Memory &amp; segments</button><button disabled={!ready || state.character === null} onClick={() => { setDiagnostics(true); setNavigation(false); }}>Diagnostics</button><button disabled={!ready} onClick={() => { setModels(true); setNavigation(false); }}>Models &amp; roles</button><button disabled={!ready} onClick={() => { setSettings(true); setNavigation(false); }}>Settings</button><button disabled={!ready} onClick={() => { setProviders(true); setNavigation(false); }}>Providers</button><button disabled={!ready} onClick={() => { setQuickOnly(false); setPalette(true); }}>All actions</button><button onClick={() => { setHelpOpen(true); setNavigation(false); }}>Workspace help</button><button onClick={() => { setOutputOpen(true); setNavigation(false); }}>Last action output</button><button onClick={() => { setKeyboardOpen(true); setNavigation(false); }}>Keyboard shortcuts</button><button onClick={() => perform(() => workspace.connection.signOut())}>Sign out</button></div>
     </aside>
     <main className="conversation"><header className="topbar"><div><p className="eyebrow">CONVERSATION</p><h1>{state.character ?? "Welcome to Shore"}<span>{state.thread === null ? "" : ` / ${state.thread}`}</span></h1></div><div className="actions"><button className="mobile-navigation" onClick={() => setNavigation(!navigation)}>Navigation</button><span className={`connection ${ready ? "online" : ""}`} role="status">{state.status.replaceAll("_", " ")}</span><button disabled={!ready || state.character === null} onClick={() => action("fork_thread", { from: state.thread ?? "main" })}>Fork</button><button onClick={() => setDisplayOpen(true)}>Display preferences</button><button onClick={() => setActivity(!activity)} aria-pressed={activity}>Activity</button></div></header>
       {state.status === "reload_required" ? <div className="notice">Shore was upgraded. <button onClick={() => location.reload()}>Reload workspace</button></div> : !ready ? <div className="notice">{state.detail || "Connecting to Shore…"}<button onClick={() => workspace.connection.reconnect()}>Reconnect</button></div> : null}
@@ -256,13 +272,27 @@ function App() {
       <RequestRecovery workspace={workspace} ready={ready} />
       {warnings.map((item) => <div className="notice" key={item.id}><Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
       <div className="conversation-tools"><label className="check"><input type="checkbox" checked={reasoning} onChange={(event) => { display.change("thinking", event.target.checked ? "on" : "off"); }} />Reasoning</label><label className="check"><input type="checkbox" checked={tools} onChange={(event) => { display.change("tools", event.target.checked ? "on" : "off"); }} />Tools</label><label className="check"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />Follow</label><button disabled={!ready || state.character === null || !state.hasEarlier} onClick={() => perform(() => workspace.loadEarlier())}>Earlier history</button><button onClick={() => setImage(null)}>Images</button><button disabled={!ready || state.character === null} onClick={() => action("inject_system")}>System instruction</button><button disabled={!ready || state.messages.length === 0 || regenRequest?.available !== true} onClick={() => setGuidance({ stream: true, guidance: "" })}>Regenerate</button></div>
-      <div className="messages">{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
+      <div className="messages" ref={transcript} tabIndex={0} role="region" aria-label="Conversation transcript" onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.nativeEvent.isComposing) return;
+        const node = event.currentTarget;
+        const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 24;
+        switch (event.key) {
+          case "ArrowUp": event.preventDefault(); scrollTranscript("up"); break;
+          case "ArrowDown": event.preventDefault(); scrollTranscript("down"); break;
+          case "PageUp": event.preventDefault(); scrollTranscript("up", node.clientHeight / line); break;
+          case "PageDown": event.preventDefault(); scrollTranscript("down", node.clientHeight / line); break;
+          case "Home": event.preventDefault(); scrollTranscript("top"); break;
+          case "End": event.preventDefault(); scrollTranscript("bottom"); break;
+        }
+      }}>{state.messages.length === 0 && state.streams.length === 0 ? <section className="empty"><p className="eyebrow">A SPACE TO THINK</p><h2>{state.character === null ? "Start with a character" : "Start a conversation"}</h2><p>{state.character === null ? "Create a character or choose one from the sidebar." : "Write a message below. Your history and tools are shared with the terminal."}</p>{state.character === null ? <button className="primary" disabled={!ready} onClick={() => action("create_character")}>Create character</button> : null}</section> : null}
         {state.messages.map((message, index) => <div key={message.msg_id}>{index === state.activeStart && index > 0 ? <div className="boundary">Active context</div> : null}<MessageCard message={message} metadata={state.metadata[message.msg_id]} reasoning={reasoning} tools={tools} openImage={openImage} action={action} /></div>)}
         {state.streams.filter((stream) => stream.subagent === null && !(stream.final && state.messages.some((message) => message.msg_id === stream.msgId))).map((stream) => <article className="message streaming" key={stream.key} aria-label="Streaming response"><strong>{stream.final ? "Response" : "Responding…"}</strong><LiveResponse stream={stream} openImage={openImage} /></article>)}{state.media.filter((item) => item.subagent === undefined || item.subagent === null).map((item) => <section className="message" aria-label="Live image" key={item.path}><ImageView data={item.data ?? null} caption={item.caption ?? item.path.split(/[\\/]/).at(-1) ?? "Live image"} open={openImage} /></section>)}<div ref={tail} />
       </div><BudgetReadout budgets={budgets.budgets} error={budgets.error} refresh={budgets.refresh} open={() => setUsage(true)} /><Composer ref={composer} key={JSON.stringify([state.character, state.thread])} state={state} workspace={workspace} />
     </main>
     {activity ? <ActivityPanel state={state} openImage={openImage} /> : null}
     {keyboardOpen ? <KeyboardControls store={bindings} operations={state.operations} requests={state.requests} actions={workspace.actions} close={() => setKeyboardOpen(false)} /> : null}
+    {helpOpen ? <LocalHelp bindings={bindings.getSnapshot().bindings} operations={state.operations} requests={state.requests} close={() => setHelpOpen(false)} run={(target, args = {}) => { setHelpOpen(false); requestAnimationFrame(() => perform(async () => { await localShortcuts[target](args); })); }} /> : null}
+    {outputOpen ? <ActionOutput actions={workspace.actions} close={() => setOutputOpen(false)} /> : null}
     {shortcutResult === undefined ? null : <Modal title="Shortcut result" close={() => setShortcutResult(undefined)}><h3>{shortcutResult.label}</h3><Inspect value={shortcutResult.data} label="Complete shortcut result" /></Modal>}
     {template === undefined ? null : <Modal title={template.request.label} close={() => setTemplate(undefined)}><form onSubmit={(event) => { event.preventDefault(); const pending = template; setTemplate(undefined); perform(() => runConversation(pending.request.name, pending.values)); }}><RequestFields request={template.request} values={template.values} change={(values) => setTemplate({ ...template, values })} /><button type="submit">Run conversation action</button></form></Modal>}
     {displayOpen ? <DisplayControls budgets={budgets.budgets.map((budget) => budget.name)} close={() => setDisplayOpen(false)} /> : null}
@@ -274,7 +304,7 @@ function App() {
     {models ? <Models actions={workspace.actions} ready={ready} character={state.character} close={() => setModels(false)} changed={async () => { await workspace.refreshNavigation(); if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true }); }} /> : null}
     {settings ? <Settings actions={workspace.actions} ready={ready} character={state.character} close={() => setSettings(false)} /> : null}
     {providers ? <Providers actions={workspace.actions} ready={ready} close={() => setProviders(false)} /> : null}
-    {palette ? <Modal title="All actions" close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.requests.filter((item) => `${item.label} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={!ready || item.available === false} onClick={() => openRequest(item.name)}><strong>{item.label}</strong><small>Conversation</small></button>)}{state.operations.filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
+    {palette ? <Modal title={quickOnly ? "Conversation shortcuts" : "All actions"} close={() => setPalette(false)}><label className="field">Find an action<input autoFocus type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="action-list">{state.requests.filter((item) => (!quickOnly || quickNames.has(item.name))).filter((item) => `${item.label} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={!ready || item.available === false} onClick={() => openRequest(item.name)}><strong>{item.label}</strong><small>Conversation</small></button>)}{state.operations.filter((item) => (!quickOnly || quickNames.has(item.name))).filter((item) => `${item.label} ${item.category} ${item.name}`.toLowerCase().includes(search.toLowerCase())).map((item) => <button key={item.name} disabled={item.available === false} onClick={() => action(item.name)}><strong>{item.label}</strong><small>{item.category}{item.available === false ? " · unavailable for this selection" : ""}</small></button>)}</div></Modal> : null}
     {operation === undefined || selectedAction === undefined ? null : <Action key={`${operation.name}.${JSON.stringify(selectedAction.preset)}`} operation={operation} state={state} preset={selectedAction.preset} review={selectedAction.review ?? false} close={() => setSelectedAction(undefined)} />}
     {image === undefined ? null : <Gallery images={galleryImages} {...(image === null ? {} : { opened: image })} earlier={() => workspace.loadEarlier()} canLoadEarlier={ready && state.character !== null && state.hasEarlier} close={() => setImage(undefined)} />}
     {guidance === undefined || regenRequest === undefined ? null : <Modal title="Regenerate response" close={() => setGuidance(undefined)}><form onSubmit={(event) => { event.preventDefault(); const values = guidance; setGuidance(undefined); perform(async () => { const completion = await workspace.connection.submit(conversationRequest("regen", values)).finished; if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Regeneration ${completion.outcome}`); }); }}><RequestFields request={regenRequest} values={guidance} change={setGuidance} /><button className="primary">Regenerate</button></form></Modal>}

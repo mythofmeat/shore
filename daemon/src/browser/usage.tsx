@@ -84,7 +84,7 @@ export function Usage({ actions, operations, ready, character, close, advanced }
     if (ready && operation?.available === true) {
       const input: UsageArgs = character === null ? {} : { character };
       setBusy(true);
-      void actions.run("usage", input).then((response) => { if (current) { setResult(response); setLoaded(input); } }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); }).finally(() => { if (current) setBusy(false); });
+      void actions.run("usage", input, { remember: false }).then((response) => { if (current) { setResult(response); setLoaded(input); } }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); }).finally(() => { if (current) setBusy(false); });
     }
     return () => { current = false; };
   }, [actions, ready, operation?.available, character]);

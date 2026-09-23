@@ -1,13 +1,14 @@
+import { TextHistory, textSnapshot, type TextSnapshot } from "./text_history.ts";
 import { RequestFields } from "./request_fields.tsx";
 import { checkAttachments, conversationRequest, imageUpload, remainingMessageOptions } from "./request_forms.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../swp/limits.ts";
-import { useEffect, useRef, useState, useImperativeHandle, type Ref } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, type Ref, type KeyboardEvent, type ChangeEvent, type ClipboardEvent } from "react";
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
 import type { Workspace, WorkspaceSnapshot } from "./workspace.ts";
 import { browserDraft, discardDraft, readDraft, storedDrafts, type DraftContent, type StoredDraft } from "./drafts.ts";
 import { Modal } from "./components.tsx";
 
-export interface ComposerHandle { send(): Promise<void>; focus(): void }
+export interface ComposerHandle { send(): Promise<void>; focus(edge?: "home" | "end"): void; attach(): void; clearImages(): void; expand(): void; undo(): void; redo(): void }
 
 export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; workspace: Workspace; ref?: Ref<ComposerHandle> }) {
   const conversation = JSON.stringify([state.character, state.thread]);
@@ -19,6 +20,12 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   const [storageFailed, setStorageFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [textHistory] = useState(() => new TextHistory());
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const filesRef = useRef<HTMLInputElement>(null);
+  const selection = useRef<TextSnapshot | undefined>(undefined);
+  const historyCommand = useRef<(direction: "undo" | "redo") => void>(() => {});
   const [optionsOpen, setOptionsOpen] = useState(false);
   const request = state.requests.find((item) => item.name === "message");
   const options = draft.options ?? { stream: true, images: [] };
@@ -39,16 +46,63 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
       workspace.report(error);
     }
   };
-  const change = (next: DraftContent): Promise<void> => { current.current = next; setDraft(next); return remember(next); };
+  const change = (next: DraftContent, edit?: { snapshot: TextSnapshot; inputType?: string }, restoring = false): Promise<void> => {
+    if (!restoring && next.text !== current.current.text) textHistory.change(edit?.snapshot ?? textSnapshot(next.text), edit?.inputType);
+    current.current = next; setDraft(next); return remember(next);
+  };
+  const navigateHistory = (direction: "undo" | "redo") => {
+    if (!loaded) return;
+    const snapshot = textHistory.step(direction);
+    if (snapshot === undefined) return;
+    selection.current = snapshot;
+    void change({ ...current.current, text: snapshot.text }, undefined, true);
+  };
+  historyCommand.current = navigateHistory;
+  useEffect(() => {
+    const target = expanded ? editorRef.current : textRef.current;
+    const savedSelection = selection.current;
+    if (target !== null && savedSelection !== undefined) {
+      target.focus(); target.setSelectionRange(savedSelection.start, savedSelection.end, savedSelection.direction); selection.current = undefined;
+    }
+  }, [draft.text, expanded]);
+  useEffect(() => {
+    const elements = [textRef.current, editorRef.current].filter((element) => element !== null);
+    const before = (event: InputEvent) => {
+      const target = event.currentTarget as HTMLTextAreaElement;
+      if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
+        event.preventDefault();
+        if (document.activeElement === target) historyCommand.current(event.inputType === "historyUndo" ? "undo" : "redo");
+        return;
+      }
+      textHistory.select(target.selectionStart, target.selectionEnd, target.selectionDirection);
+    };
+    for (const element of elements) element.addEventListener("beforeinput", before);
+    return () => { for (const element of elements) element.removeEventListener("beforeinput", before); };
+  }, [expanded, textHistory]);
+  const openEditor = () => { if (loaded) { textHistory.breakGroup(); selection.current = textHistory.current; setExpanded(true); } };
+  const closeEditor = () => { textHistory.breakGroup(); selection.current = textHistory.current; setExpanded(false); };
+  const editText = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const target = event.currentTarget;
+    const inputType = event.nativeEvent instanceof InputEvent ? event.nativeEvent.inputType : "";
+    void change({ ...current.current, text: target.value }, { snapshot: textSnapshot(target.value, target.selectionStart, target.selectionEnd, target.selectionDirection), inputType });
+  };
+  const editKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.altKey || !(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    if (key !== "z" && key !== "y") return;
+    event.preventDefault(); event.stopPropagation();
+    navigateHistory(key === "y" || event.shiftKey ? "redo" : "undo");
+  };
+  const selectText = (target: HTMLTextAreaElement) => textHistory.select(target.selectionStart, target.selectionEnd, target.selectionDirection);
   useEffect(() => {
     let mounted = true;
     void store.load().then((value) => {
-      if (mounted) { current.current = value; setDraft(value); setLoaded(true); setStorageFailed(store.unsaved); setStatus(store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device"); }
+      if (mounted) { textHistory.reset(value.text); current.current = value; setDraft(value); setLoaded(true); setStorageFailed(store.unsaved); setStatus(store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device"); }
     }).catch((error: unknown) => {
       if (mounted) { workspace.report(error); setLoaded(true); setStorageFailed(true); setStatus("Draft storage unavailable. Keep this page open."); }
     });
     return () => { mounted = false; };
-  }, [store, workspace]);
+  }, [store, workspace, textHistory]);
   const send = async () => {
     if (!loaded || busy || attaching || current.current.pending || state.status !== "ready" || state.character === null || request?.available !== true) return;
     const submitted = current.current;
@@ -66,7 +120,17 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
       } else workspace.report(result.error?.message ?? `Request ${result.outcome}. Inspect the conversation before sending the retained draft again.`);
     } catch (error) { workspace.report(error); } finally { setBusy(false); }
   };
-  useImperativeHandle(ref, () => ({ send, focus: () => textRef.current?.focus() }));
+  const focus = (edge?: "home" | "end") => {
+    const target = textRef.current;
+    if (target === null) return;
+    const text = current.current.text;
+    const cursor = textHistory.current.start;
+    const end = text.indexOf("\n", cursor);
+    const next = edge === "home" ? text.slice(0, cursor).lastIndexOf("\n") + 1 : edge === "end" ? end < 0 ? text.length : end : undefined;
+    target.focus();
+    if (next !== undefined) { target.setSelectionRange(next, next); textHistory.select(next, next, "none"); }
+  };
+  useImperativeHandle(ref, () => ({ send, focus, attach: () => { if (loaded && !attaching) filesRef.current?.click(); }, clearImages: () => { if (loaded) void change({ ...current.current, images: [], options: { ...current.current.options, images: [] } }); }, expand: openEditor, undo: () => navigateHistory("undo"), redo: () => navigateHistory("redo") }));
   const attach = async (files: readonly File[]) => {
     if (files.length === 0) return;
     setAttaching(true);
@@ -88,6 +152,13 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
       await change({ ...current.current, images });
     } finally { setAttaching(false); }
   };
+  const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const images = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));
+    if (images.length > 0) { event.preventDefault(); perform(() => attach(images)); }
+  };
+  const historyButtons = <><button type="button" aria-label="Undo text change" disabled={!loaded || !textHistory.canUndo} onClick={() => navigateHistory("undo")}>Undo</button><button type="button" aria-label="Redo text change" disabled={!loaded || !textHistory.canRedo} onClick={() => navigateHistory("redo")}>Redo</button></>;
+  const lastReply = state.messages.findLast((message) => message.role === "assistant");
+  const replyText = lastReply === undefined ? "" : lastReply.content_blocks.filter((block) => block.type === "text").map((block) => block.text).join("\n") || lastReply.content;
   const refresh = async () => { setSaved(await storedDrafts()); };
   const restore = async (record: StoredDraft) => {
     const recovered = await readDraft(record.id, record.conversation);
@@ -97,15 +168,20 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   return <>
     <form className="composer" onSubmit={(event) => { event.preventDefault(); perform(send); }}>
       <label className="sr-only" htmlFor="message-composer">Message</label>
-      <textarea id="message-composer" ref={textRef} rows={3} disabled={!loaded} placeholder={state.character === null ? "Create or select a character to begin" : `Message ${state.character}…`} value={draft.text} onChange={(event) => { void change({ ...current.current, text: event.target.value }); }} onPaste={(event) => {
-        const images = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));
-        if (images.length > 0) { event.preventDefault(); perform(() => attach(images)); }
-      }} />
+      <textarea id="message-composer" ref={textRef} rows={3} disabled={!loaded} placeholder={state.character === null ? "Create or select a character to begin" : `Message ${state.character}…`} value={draft.text} onChange={editText} onKeyDown={editKey} onBlur={() => textHistory.breakGroup()} onCompositionStart={() => textHistory.beginComposition()} onCompositionEnd={() => textHistory.endComposition()} onSelect={(event) => selectText(event.currentTarget)} onPaste={paste} />
       {draft.images.length === 0 ? null : <div className="attachments">{draft.images.map((image, index) => <button type="button" key={index} onClick={() => { void change({ ...current.current, images: current.current.images.filter((_, position) => position !== index) }); }}>Remove {image.filename}</button>)}<button type="button" onClick={() => { void change({ ...current.current, images: [] }); }}>Clear attachments</button></div>}
       {draft.pending && !busy ? <div className="notice"><strong>Previous send needs review</strong><p>This draft may already be in the conversation. Check the history before sending it again.</p><button type="button" onClick={() => { void change({ ...current.current, pending: false }); }}>I checked the conversation</button></div> : null}
-      <div className="composer-footer"><label className="attach">Attach images<input aria-label="Attach images" className="sr-only" type="file" disabled={!loaded || attaching} accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; perform(() => attach(files)); }} /></label><button type="button" disabled={!loaded || request === undefined} onClick={() => setOptionsOpen(true)}>Message options</button><small role="status">{attaching ? "Adding images…" : status}</small><button type="button" onClick={() => perform(refresh)} disabled={!loaded}>Saved drafts</button>{storageFailed ? <button type="button" onClick={() => { void remember(current.current); }}>Retry saving</button> : null}<button type="button" onClick={() => workspace.connection.cancel()} disabled={state.status !== "ready"}>Stop</button><button type="submit" className="primary" disabled={!loaded || busy || attaching || draft.pending || state.status !== "ready" || state.character === null || request?.available !== true || (draft.text.trim() === "" && draft.images.length === 0 && imagePaths.length === 0)}>{busy ? "Sending…" : "Send"}</button></div>
+      <div className="composer-footer"><button type="button" disabled={!loaded} onClick={openEditor}>Expand editor</button>{historyButtons}<label className="attach">Attach images<input ref={filesRef} aria-label="Attach images" className="sr-only" type="file" disabled={!loaded || attaching} accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; perform(() => attach(files)); }} /></label><button type="button" disabled={!loaded || request === undefined} onClick={() => setOptionsOpen(true)}>Message options</button><small role="status">{attaching ? "Adding images…" : status}</small><button type="button" onClick={() => perform(refresh)} disabled={!loaded}>Saved drafts</button>{storageFailed ? <button type="button" onClick={() => { void remember(current.current); }}>Retry saving</button> : null}<button type="button" onClick={() => workspace.connection.cancel()} disabled={state.status !== "ready"}>Stop</button><button type="submit" className="primary" disabled={!loaded || busy || attaching || draft.pending || state.status !== "ready" || state.character === null || request?.available !== true || (draft.text.trim() === "" && draft.images.length === 0 && imagePaths.length === 0)}>{busy ? "Sending…" : "Send"}</button></div>
       <small>Keyboard shortcuts are configurable · Text and attachments stay on this device until sent or discarded. Clearing browser data removes saved drafts.</small>
     </form>
+    {expanded ? <Modal title="Draft editor" close={closeEditor}>
+      <div className="draft-editor"><label htmlFor="expanded-draft">Expanded draft</label><textarea id="expanded-draft" ref={editorRef} rows={16} value={draft.text} onChange={editText} onKeyDown={editKey} onBlur={() => textHistory.breakGroup()} onCompositionStart={() => textHistory.beginComposition()} onCompositionEnd={() => textHistory.endComposition()} onSelect={(event) => selectText(event.currentTarget)} onPaste={paste} />
+      <div className="actions">{historyButtons}<button onClick={closeEditor}>Return to composer</button></div><p role="status">{attaching ? "Adding images…" : status}</p>
+      {storageFailed ? <button onClick={() => { void remember(current.current); }}>Retry saving</button> : null}
+      <p>Changes save to this device as you type. Closing keeps your draft. Undo restores recent text changes, including sent text; it does not send a message or restore removed attachments.</p>
+      <p>{draft.images.length + imagePaths.length} queued image(s)</p>
+      <section aria-label="Last assistant reply"><h3>Last assistant reply</h3><p className="muted">Reference only. This reply is not included in your draft.</p><div className="message-text">{replyText || "No assistant reply yet."}</div></section></div>
+    </Modal> : null}
     {optionsOpen && request !== undefined ? <Modal title="Message options" close={() => setOptionsOpen(false)}><RequestFields request={request} values={options} omit={["text", "image_data"]} change={(values) => { void change({ ...current.current, options: values }); }} /></Modal> : null}
     {saved === undefined ? null : <Modal title="Saved drafts" close={() => { setSaved(undefined); setDiscarding(undefined); }}>
       <p>Each tab has its own draft. Copy a saved draft into an empty composer to recover it; the saved copy stays available until discarded.</p>

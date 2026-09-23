@@ -25,7 +25,7 @@ export function KeyboardControls({ store, operations, requests, actions, close }
   useEffect(() => {
     if (binding.target !== "operation:config") return;
     let current = true; setSchema(undefined);
-    void actions.run("config_schema", {}).then((result) => { if (current) setSchema(result.schema); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
+    void actions.run("config_schema", {}, { remember: false }).then((result) => { if (current) setSchema(result.schema); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     return () => { current = false; };
   }, [binding.target, actions]);
   const [kind, name = ""] = binding.target.split(":");
@@ -48,6 +48,7 @@ export function KeyboardControls({ store, operations, requests, actions, close }
       <label className="field">Shortcut action<select aria-label="Shortcut action" value={binding.target} onChange={(event) => choose(event.target.value)}>{targets.some((item) => item.id === binding.target) ? null : <option value={binding.target}>{binding.target} · unavailable</option>}{targets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
       {kind === "operation" || kind === "request" ? <><label className="field">When pressed<select aria-label="When pressed" value={binding.mode} onChange={(event) => setBinding({ ...binding, mode: event.target.value === "run" ? "run" : "open" })}><option value="open">Open the form with these arguments</option><option value="run">Run with these arguments</option></select></label><p>Actions that require confirmation still ask before running. Arguments use the conversation selected when the shortcut is pressed.</p>{descriptor === undefined ? <p>This action is currently unavailable.</p> : <RequestFields request={descriptor} values={binding.args} secret={binding.target === "operation:config" && schema?.find((entry) => entry.key === binding.args["key"])?.secret !== false ? ["value"] : []} change={(args) => setBinding({ ...binding, args })} />}</> : null}
       {view === undefined ? null : <label className="field">Display value<input aria-label="Display value" list="keyboard-view-values" value={typeof binding.args["value"] === "string" ? binding.args["value"] : "toggle"} onChange={(event) => setBinding({ ...binding, args: { value: event.target.value } })} /><datalist id="keyboard-view-values">{VIEW_PREFERENCES[view].map((value) => <option key={value} value={value} />)}</datalist></label>}
+      {kind === "local" && (name === "up" || name === "down") ? <label className="field">Lines per scroll<input type="number" min={0} max={65535} step={1} required value={typeof binding.args["amount"] === "number" ? Number.isFinite(binding.args["amount"]) ? binding.args["amount"] : "" : 1} onChange={(event) => setBinding({ ...binding, args: { amount: event.target.valueAsNumber } })} /></label> : null}
       {bindings.some((item) => bindingId(item) === bindingId(binding)) ? <p>This replaces the binding for that key and scope.</p> : null}
       <button type="submit">Save shortcut</button>
     </form>

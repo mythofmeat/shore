@@ -52,7 +52,7 @@ export function ToolWorkbench({ actions, operations, character, thread, ready, c
   };
   useEffect(() => {
     let current = true;
-    if (ready) void actions.run("tools", {}).then((access) => { if (current) setNames(toolNames(access)); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
+    if (ready) void actions.run("tools", {}, { remember: false }).then((access) => { if (current) setNames(toolNames(access)); }).catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
     return () => { current = false; };
   }, [actions, ready, character, thread]);
   return <Modal title="Tool workbench" close={close}><div className="tool-workbench"><p className="muted">{character} / {thread ?? "home"} · explicit tool calls</p>

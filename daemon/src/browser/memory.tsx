@@ -51,8 +51,8 @@ export function Memory({ actions, operations, ready, character, thread, streams,
   const disabled = busy || !ready || pending !== undefined;
   const compactOperation = operations.find((operation) => operation.name === "compact");
   const compactArgs = (): CompactArgs => ({ restart, ...(keep === "" ? {} : { keep_turns: Number(keep) }) });
-  const refresh = async () => {
-    const value = await actions.run("segments", {});
+  const refresh = async (remember = true) => {
+    const value = await actions.run("segments", {}, { remember });
     if (!("segments" in value)) throw new Error("Expected a segment listing");
     setListing(value);
   };
@@ -71,14 +71,14 @@ export function Memory({ actions, operations, ready, character, thread, streams,
     if (!("action" in value)) throw new Error("Expected a segment change");
     setResult(value);
     setDetail((old) => old?.segment.index === value.segment.index ? { ...old, segment: value.segment } : old);
-    await refresh();
+    await refresh(false);
   };
   const execute = async (action: ContextAction) => {
     await run(async () => {
       setResult(undefined); setCompaction(undefined);
       if (action.name === "compact") setCompaction(await actions.run("compact", action.args));
       else setResult(await actions.run("clear", action.args));
-      await refresh(); await changed();
+      await refresh(false); await changed();
     });
     setPending(undefined);
   };
@@ -92,7 +92,7 @@ export function Memory({ actions, operations, ready, character, thread, streams,
     let current = true;
     if (ready) {
       setBusy(true);
-      void actions.run("segments", {}).then((value) => {
+      void actions.run("segments", {}, { remember: false }).then((value) => {
         if (!current) return;
         if (!("segments" in value)) throw new Error("Expected a segment listing");
         setListing(value); setError("");

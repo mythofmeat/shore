@@ -39,6 +39,8 @@ test("typing, dialogs and modifier-specific bindings keep their own behavior", (
   expect(matchingBinding([global], "alt+k", true, false)).toBe(global);
   expect(matchingBinding([global], "alt+k", false, true)).toBeUndefined();
   expect(matchingBinding([cancel], "alt+c", true, true)).toBe(cancel);
+  const editCancel = binding("alt+x", "local:edit_cancel");
+  expect(matchingBinding([editCancel], "alt+x", true, true)).toBe(editCancel);
   expect(matchingBinding([global], "meta+k", false, false)).toBeUndefined();
   expect(matchingBinding([{ ...global, scope: "normal" }, global], "alt+k", false, false)).toBe(global);
 });
