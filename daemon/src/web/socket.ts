@@ -5,12 +5,14 @@ import { admitClientMessage, sanitiseRid } from "../swp/admission.ts";
 import { SWP_V1 } from "../swp/connection.ts";
 import { decodeClientMessage, rustTrim } from "../swp/framing.ts";
 import type { LocalPeer, Server } from "../swp/server.ts";
-import { REQUEST_LIFECYCLE_CAPABILITY } from "../swp/session.ts";
+import { REQUEST_LIFECYCLE_CAPABILITY, sessionMetaOf } from "../swp/session.ts";
 import type { WebSession } from "./auth.ts";
 import { WEB_LIMITS } from "./policy.ts";
+import { RequestHistory, RequestHistoryError } from "./requests.ts";
 
 interface PendingRequest {
   bytes: number;
+  historyId?: string;
 }
 
 export interface WebSocketState {
@@ -42,7 +44,7 @@ export class WebSocketPeers {
   readonly #helloTimeout: number;
   readonly #drainTimeout: number;
 
-  constructor(server: Server, maxBytes: number, helloTimeout: number, drainTimeout: number) {
+  constructor(server: Server, maxBytes: number, helloTimeout: number, drainTimeout: number, readonly history: RequestHistory) {
     this.#server = server;
     this.#maxBytes = maxBytes;
     this.#helloTimeout = helloTimeout;
@@ -73,6 +75,9 @@ export class WebSocketPeers {
     state.detachAuth?.();
     state.abort.abort();
     state.drain?.();
+    for (const pending of state.pending.values()) {
+      if (pending.historyId !== undefined) this.history.interrupt(state.auth, pending.historyId);
+    }
     state.pending.clear();
     state.pendingBytes = 0;
     this.#sockets.delete(socket);
@@ -130,6 +135,8 @@ export class WebSocketPeers {
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
       for await (const message of peer.events()) {
         if (state.abort.signal.aborted) break;
+        const id = "rid" in message && typeof message.rid === "string" ? state.pending.get(message.rid)?.historyId : undefined;
+        if (id !== undefined) this.history.observe(state.auth, id, message);
         this.#complete(state, message);
         await this.#write(socket, message);
       }
@@ -179,7 +186,18 @@ export class WebSocketPeers {
         this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
         return;
       }
-      state.pending.set(rid, { bytes });
+      let historyId: string | undefined;
+      try {
+        const selected = this.#server.sessionRouter.client(state.peer.session.sessionId);
+        if (selected === undefined) throw new Error("Browser session detached");
+        historyId = this.history.begin(state.auth, sessionMetaOf(selected), message);
+      } catch (failure) {
+        const error = { rid, code: "invalid_request", message: failure instanceof RequestHistoryError ? failure.message : "Could not record this request. Nothing was dispatched; try again after recovery storage is available." } as const;
+        this.#send(socket, { type: "error", ...error });
+        this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
+        return;
+      }
+      state.pending.set(rid, { bytes, ...(historyId === undefined ? {} : { historyId }) });
       state.pendingBytes += bytes;
     } else {
       if (state.controls >= WEB_LIMITS.pendingRequests) { this.close(socket, 1008, "Too many control requests"); return; }

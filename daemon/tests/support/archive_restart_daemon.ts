@@ -9,11 +9,11 @@ const daemon = await startDaemon({
   env: { SHORE_CONFIG_DIR: join(root, "config"), SHORE_DATA_DIR: join(root, "data"), SHORE_CACHE_DIR: join(root, "cache"), SHORE_RUNTIME_DIR: join(root, "runtime"), SHORE_TOKEN: "restart-fixture-token" },
   providers: {}, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false,
 });
-if (process.argv[3] === "hold-import") {
+if (process.argv[3] === "hold-import" || process.argv[3] === "hold-tool") {
   const send = daemon.server.sessionRouter.sendToSession.bind(daemon.server.sessionRouter);
   daemon.server.sessionRouter.sendToSession = async (session, message) => {
-    if (message.type === "command_output" && message.name === "import_character") {
-      await writeFile(join(root, "import-committed"), JSON.stringify(message));
+    if (message.type === "command_output" && ((process.argv[3] === "hold-import" && message.name === "import_character") || (process.argv[3] === "hold-tool" && message.name === "run_tool" && typeof message.data === "object" && message.data !== null && "duration_ms" in message.data))) {
+      await writeFile(join(root, process.argv[3] === "hold-import" ? "import-committed" : "tool-committed"), JSON.stringify(message));
       await new Promise<void>(() => {});
     }
     await send(session, message);

@@ -122,7 +122,7 @@ export class Workspace {
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], config: {}, streams: [], activity: [], operations: [], threads: [], characters: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], config: {}, streams: [], activity: [], operations: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }

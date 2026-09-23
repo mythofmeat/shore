@@ -5,12 +5,13 @@ import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { Server } from "../swp/server.ts";
 import { WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
-import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList } from "./contracts.ts";
+import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
 import { readSmallJson, sameOrigin, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
 import { WebRecovery, type WebRecoveryOptions } from "./recovery.ts";
+import { RequestHistory, RequestHistoryError } from "./requests.ts";
 
 export interface WebServerOptions {
   readonly config: WebConfig;
@@ -48,9 +49,8 @@ function sessionInfo(session: WebSession): WebSessionInfo {
 export function startWebServer(options: WebServerOptions): RunningWebServer {
   const config = options.config;
   const binding = webBinding(config);
-  const peers = new WebSocketPeers(options.server, config.max_queued_bytes,
-    options.handshakeTimeoutMs ?? WEB_LIMITS.handshakeTimeoutMs,
-    options.drainTimeoutMs ?? WEB_LIMITS.drainTimeoutMs);
+  let peers: WebSocketPeers;
+  let requests: RequestHistory;
   let origin = "";
   let sessions: WebSessions;
   let closeSessions: (() => void) | undefined;
@@ -115,6 +115,22 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
 
       const session = sessions.read(request);
       if (session === undefined) return problem(401, "unauthorized", "Sign in to connect to the daemon");
+      if (url.pathname.startsWith("/api/requests") && request.method === "POST") {
+        try {
+          if (url.pathname === "/api/requests/list") {
+            const result = requests.list(session);
+            if (!validWebRequestList(result)) throw new Error("Invalid request history");
+            return Response.json(result, { headers: securityHeaders() });
+          }
+          const match = /^\/api\/requests\/([a-f0-9-]{36})\/acknowledge$/.exec(url.pathname);
+          if (match?.[1] === undefined) return problem(404, "not_found", "Unknown request history endpoint");
+          requests.acknowledge(session, match[1]);
+          return new Response(null, { status: 204, headers: securityHeaders() });
+        } catch (error) {
+          if (error instanceof RequestHistoryError) return problem(error.status, error.status === 404 ? "not_found" : "invalid_request", error.message);
+          return problem(503, "unavailable", "Request recovery storage is unavailable; retain unreviewed outcomes and try again");
+        }
+      }
       if (url.pathname.startsWith("/api/archives") && request.method === "POST") {
         try {
           if (url.pathname === "/api/archives/list") {
@@ -187,6 +203,11 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     closeSessions = () => sessions.close();
     archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits, recovery);
     archives.restore(sessions);
+    requests = new RequestHistory(recovery);
+    requests.restore(sessions);
+    peers = new WebSocketPeers(options.server, config.max_queued_bytes,
+      options.handshakeTimeoutMs ?? WEB_LIMITS.handshakeTimeoutMs,
+      options.drainTimeoutMs ?? WEB_LIMITS.drainTimeoutMs, requests);
   } catch (error) { closeSessions?.(); recovery?.close(); void server.stop(true); throw error; }
   return {
     origin,

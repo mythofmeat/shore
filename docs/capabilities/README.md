@@ -16,7 +16,9 @@ verification are recorded in [WEB_GUI.md](../WEB_GUI.md); full parity remains un
   paths and every generated wire type. It includes characterless dispatch, core message/regen/cancel
   requests, results, images, tools, warnings, and all known server-event variants. Its
   `legacy_operations` list makes unmigrated contracts explicit. Registered operation schemas validate
-  the 37 migrated operation payloads; 19 legacy names remain. The inventory itself is not a runtime validator.
+  all 56 named operation payloads; no legacy names remain. Core request variants and exhaustive
+  terminal field/event/local-workflow coverage remain separate parity work. The inventory itself is
+  not a runtime validator.
 
 Regenerate from `client/`, then from `daemon/`:
 

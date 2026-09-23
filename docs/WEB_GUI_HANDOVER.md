@@ -1,9 +1,61 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-20. The user requested a wrap-up, commits and an updated handover. Work is paused
-at verified checkpoints; full issue completion remains outstanding.
+Updated 2026-09-23. Work continues toward the full issue. The ordinary-request recovery patch has
+now been integrated; see the new checkpoint below. Full parity, release/security auditing and actual
+GitHub CI/merge-gate evidence remain outstanding.
 
-## Checkpoint and estimate
+## Verified checkpoint — ordinary request recovery, 2026-09-23
+
+This continuation began at `92cea9ab` after the branch was reconciled with main. Required dependency
+updates ran first. Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13, cargo-sweep 0.8.0,
+sccache 0.18.0 and actionlint 1.7.12 are current. The refresh updated `ai` to 7.0.111, `openai` to
+7.22.0, and Rust's `instability` to 0.3.14. Commit `2d1291f1` contains only those dependency changes,
+after all eight daemon and all three Rust baseline checks passed (7,854 Bun tests; 1,489 Rust tests,
+15 ignored). The system sccache remains 0.17.0; the current installation is in `~/.cargo/bin`.
+
+The saved browser reproduction still failed after those updates: a Bash write happened, but page
+reload removed the uncertain-outcome notice. The integrated implementation records mutation
+admission before shared dispatch, retains bounded typed results before forwarding them, and exposes
+owner-scoped request history and acknowledgement routes. Messages and regeneration are included.
+Read-only operations and session selection do not consume history slots; configuration read policies
+are now explicit in the executable catalogue.
+
+Request outcomes use the existing private recovery database, origin/token binding and original
+sign-in expiry. There are at most 32 records per sign-in and 256 overall, with 64 KiB per retained
+result. Running and uncertain records are never evicted to admit another mutation; oldest terminal
+records may be removed. Inputs are not stored separately, but typed results can contain tool inputs
+and output. Configuration secrets remain redacted. Confirmed outcomes survive restart; running
+records become uncertain. Neither reload nor restart replays a mutation. This is outcome tracking,
+not an exactly-once/idempotent request protocol: dismissing or expiring a record removes its duplicate
+ID guard. Cache removal and signing out also remove recovery.
+
+The request-history dialog displays all outcomes and retained results, with a workspace notice for
+uncertainty. Review in one tab updates the others. Saving admission must succeed before execution;
+failure to save a completion closes the transport and leaves an uncertain record. Current selection
+comes from the live session router, not the peer's initial snapshot. The underlying command handlers,
+cancellation semantics and TCP transport remain shared.
+
+New actual browser journeys cover reload, repeated reload, second-tab review, compiled-daemon restart
+from an empty working directory, and SIGKILL after the real tool handler committed but before its
+result was delivered. All assert one file write and no automatic replay. HTTP/storage tests cover
+ownership, expiry, rotation, capacity, duplicate IDs, selection changes, typed/bounded results and
+persistence failures. Configuration browser checks include the retained HTTP results. The phase
+coverage check deliberately rejects an omitted uncertainty renderer. The new mutation pass kills
+15/15 mutants.
+
+Checkpoint verification: all eight required daemon checks passed (7,874 tests across 279 files,
+65/65 current mutation passes, three unchanged independent captures). All three Rust workspace
+checks passed (1,492 tests, 15 ignored; existing Clippy/ts-rs warnings remain). All 29 Playwright
+journeys passed together, including compiled-binary and process-crash recovery. Browser generation,
+embedded-assets reproducibility and capability inventory checks passed. Desktop/mobile review
+screenshots were inspected. This is local evidence, not an actual GitHub CI run or required merge gate.
+
+Logs for this continuation are in `out/issue-214/resume-2026-09-23/`. Chromium is restored under
+`/tmp/shore-214-tools/playwright`. Use `PATH="$HOME/.cargo/bin:/tmp/shore-214-tools/bin:$PATH"` for the
+current tools, and `PLAYWRIGHT_BROWSERS_PATH=/tmp/shore-214-tools/playwright` for browser verification.
+The older WIP patch is historical and must not be reapplied to this implementation.
+
+## Historical checkpoint and estimate — 2026-09-20
 
 - Objective: <https://github.com/mythofmeat/shore/issues/214>, including full CLI/TUI capability parity
   and enforced CI gates. A working chat UI or registration of named commands does not complete it.
@@ -19,6 +71,7 @@ at verified checkpoints; full issue completion remains outstanding.
   saved as an ignored local patch and removed from the working tree; see the resumption notes below.
 - The user wants verified commits as work progresses, with dependency updates kept separate.
 - GitHub checked on 2026-09-20: issue open, no comments, and no PR for `feat/web-ui`.
+  Issue status/comments and the absence of a branch PR were rechecked on 2026-09-23.
   No progress comment, acceptance-checkbox update, or merge-policy change has been published.
 
 Before these three checkpoints, the planning estimate was another 5–9 hours of active work plus
@@ -68,9 +121,9 @@ Logs are in `out/issue-214/resume-2026-09-20/`. Existing Clippy and ts-rs warnin
 
 These overlap and are not equal-sized tickets.
 
-1. **Recovery and cancellation:** archive restart recovery and session command/compaction cancellation
-   are implemented in this continuation, followed by local drafts/attachments. Finish visible
-   reconciliation of other uncertain mutations and the broader media recovery audit. Verify revision gaps, stale/duplicate events, thread
+1. **Recovery and cancellation:** archive restart recovery, ordinary request outcomes, session
+   command/compaction cancellation and local drafts/attachments are implemented. Continue the broader
+   media recovery audit. Verify revision gaps, stale/duplicate events, thread
    switches during streams, multiple tabs, and terminal/browser concurrency against actual outcomes.
 2. **Exhaustive capability coverage:** audit real CLI/TUI variants, options, special runners, core
    message/regen/cancel requests, input fields, meaningful results, known events and useful local
@@ -144,45 +197,18 @@ commit history; logs use the `drafts-` prefix in the continuation directory.
 
 ## Next work
 
-Continue the broader recovery audit: uncertain ordinary
-mutations across reload/restart, remaining media recovery, and real concurrent-client
-outcomes. Then close the capability/event/local-preference inventory and package/CI gaps listed above.
-Do not treat the restart checkpoint as full parity or as proof of GitHub CI/required merge gates.
+Continue the broader media and concurrency audit, then close the capability/event/local-preference
+inventory, advanced workflow and package/CI gaps listed above. Ordinary uncertain-command recovery
+is implemented in the current continuation; archive recovery and draft/attachment recovery remain
+separate verified mechanisms. Do not treat these checkpoints as full parity or GitHub CI evidence.
 
-The ordinary-request failure was reproduced through the actual browser tool workbench: Bash appended
-to a file, then remained running; reloading the page lost the visible uncertain-outcome notice even
-though the side effect had happened. The reproduction is saved in the local patch below, with its
-expected failing run in `out/issue-214/resume-2026-09-20/requests-reproduction.log`.
+`docs/capabilities/README.md` now accurately records 56 registered operations and zero legacy named
+operations. That does not close core request variants or exhaustive terminal preferences/events.
+Inspect the extra `}` in the daemon Dockerfile's `COPY --chown` argument during container verification.
+No container build, actual PR CI run, or merge-policy change has been completed in this continuation.
 
-Unfinished work is preserved locally at
-`out/issue-214/resume-2026-09-20/request-recovery-wip.patch`. This ignored file is **not committed or
-available in another clone**. It applies cleanly to `e0889d08` and contains preliminary Rust request
-contracts, generated bindings/schemas, validators, SQLite metadata helpers, a partial `RequestHistory`
-class, and the browser reproduction. Only the 13 Rust web-contract tests ran successfully for this
-partial work; it has no complete lint/typecheck/test verification and is not wired into HTTP,
-WebSocket dispatch or the browser. Review it before reuse; do not treat it as an implemented feature.
-
-After refreshing dependencies and establishing the baseline, restore it if useful with:
-
-```sh
-git apply --check out/issue-214/resume-2026-09-20/request-recovery-wip.patch
-git apply out/issue-214/resume-2026-09-20/request-recovery-wip.patch
-```
-
-The proposed direction reuses authenticated daemon recovery storage to record mutation admission
-before shared dispatch and retain bounded typed results through the existing Rust-canonical
-`OperationResponse`. Connection loss/restart must expose uncertainty without replay. Still needed:
-dispatch/result/disconnect wiring, authenticated owner-scoped list/acknowledgement routes, browser
-review/results UI, and ownership/expiry/redaction/bounds/persistence-failure/process-restart tests.
-Read current selection from the session router at admission: `LocalPeer.session` is an initial
-snapshot and can be stale. Review pruning, logout, duplicate IDs and storage-failure behavior in the
-partial class before integrating it. Existing archive recovery is the reference for crash tests.
-
-Additional audit leads, not completed fixes: `docs/capabilities/README.md` still describes 37 migrated
-and 19 legacy operations despite the current 56 registrations; compare actual terminal preferences
-and core request variants against browser coverage. Inspect the extra `}` in the daemon Dockerfile's
-`COPY --chown` argument during container verification. No container build or actual PR CI run was
-completed in this continuation.
+The old `out/issue-214/resume-2026-09-20/request-recovery-wip.patch` was reviewed and integrated. It is
+no longer a resumable patch against the current tree. Use current sources and tests as authoritative.
 
 Current archive limits: 64 MiB compressed per artifact, 256 MiB aggregate reserved artifact bytes,
 four records per sign-in, 32 overall, 15-minute expiry, one bounded worker, five-minute operation
@@ -197,7 +223,7 @@ Cargo tooling and both dependency sets, including major versions. In `daemon/`, 
 `cargo update`. Establish the updated baseline and reproduce the target failure before fixing it.
 Inspect installed upstream implementations and matching documentation before adding workarounds.
 
-At this continuation: Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13,
+At the historical 2026-09-20 continuation: Bun 1.4.2, Rust/Cargo 1.98.1, rustup 1.29.1, cargo-edit 0.13.13,
 cargo-sweep 0.8.0, sccache 0.18.0, actionlint 1.7.12. Both dependency update commands found no changes.
 The sccache update used the checksum-verified upstream binary in `/tmp/shore-214-tools/bin/`.
 Rustup is package-managed with self-update disabled; its installed version was current.
@@ -207,7 +233,7 @@ repeatedly reinstall an already-current sccache: a redundant rebuild previously 
 Previous local runs used these conveniences; re-establish them if the temporary paths disappear:
 
 ```sh
-export PATH="/tmp/shore-214-tools/bin:$PATH"
+export PATH="$HOME/.cargo/bin:/tmp/shore-214-tools/bin:$PATH"
 export BUN_TMPDIR=/tmp
 export BUN_INSTALL_CACHE_DIR=/tmp/shore-214-tools/bun-cache
 export PLAYWRIGHT_BROWSERS_PATH=/tmp/shore-214-tools/playwright
@@ -234,15 +260,12 @@ appropriate updates and commits are already authorized by the user's instruction
 
 ## Copyable resume prompt
 
-> Resume https://github.com/mythofmeat/shore/issues/214 on `feat/web-ui` in
-> `/home/eshen/dev/shore-feat-web-ui`. Read `AGENTS.md`, `docs/WEB_GUI_HANDOVER.md`,
-> `docs/WEB_GUI.md`, and the current GitHub issue. The latest verified feature commit is `e0889d08`;
-> read all three continuation checkpoints and the unverified local patch notes above.
-> Keep the full issue scope intact and make verified commits as you go, separating dependency
-> upgrades. Continue ordinary uncertain-command recovery and the remaining media/parity audit.
-> Archive restart recovery has been implemented and reproduced through actual process/browser journeys.
-> Preserve session ownership, authentication security,
-> shared dispatch and uncertain-mutation semantics. Continue through the remaining parity, recovery,
-> release/security and CI checklist. Do not treat the 56 named registrations or existing green tests
-> as proof of full parity. Coordinate merge-policy changes separately. Report concrete progress and
-> remaining gaps; only mark completion after verifying every acceptance criterion.
+> Continue https://github.com/mythofmeat/shore/issues/214 in `/home/eshen/dev/shore-feat-web-ui`.
+> Read current `AGENTS.md`, this handover, `WEB_GUI.md`, the GitHub issue and current git history.
+> Preserve the full CLI/TUI parity objective and required CI/merge-gate evidence. Ordinary request
+> recovery now joins archive recovery, responsive cancellation, and local draft/attachment recovery.
+> Do not reapply the old local WIP patch. Verify current checkpoint results, keep dependency updates
+> separate, and continue the remaining media/concurrency, exhaustive capability/event/local-workflow,
+> advanced workflow, security/release and actual CI workstreams. Coordinate merge-policy changes
+> separately. Only mark the issue complete after auditing every acceptance criterion against current
+> evidence of the appropriate scope.

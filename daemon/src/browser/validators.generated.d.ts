@@ -9,3 +9,5 @@ import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 export declare function validWebArchiveInfo(value: unknown): value is WebArchiveInfo;
 import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
 export declare function validWebArchiveList(value: unknown): value is WebArchiveList;
+import type { WebRequestList } from "../protocol/WebRequestList.ts";
+export declare function validWebRequestList(value: unknown): value is WebRequestList;

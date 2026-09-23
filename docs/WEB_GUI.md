@@ -1,6 +1,6 @@
 # Optional browser client — implementation record
 
-Implementation resumed on 2026-09-20. See [the handover and resume prompt](WEB_GUI_HANDOVER.md)
+Implementation resumed on 2026-09-23. See [the handover and resume prompt](WEB_GUI_HANDOVER.md)
 for the current checkpoint, verified results, remaining work and the next task.
 
 Full scope: [issue #214](https://github.com/mythofmeat/shore/issues/214). Completion means a usable
@@ -873,3 +873,48 @@ Final lint, typecheck, compiled build and browser/inventory generation checks pa
 browser-only; the preceding cancellation checkpoint's full Rust verification remains unchanged.
 Desktop and mobile screenshots were inspected, including visible saving status on mobile. Logs
 use the `drafts-` prefix in `out/issue-214/resume-2026-09-20/`.
+
+
+### Ordinary request outcome recovery, 2026-09-23
+
+Dependency refresh and a tested baseline preceded reproduction. `ai` 7.0.111, `openai` 7.22.0 and
+`instability` 0.3.14 were committed separately in `2d1291f1`; current stable toolchain versions are
+recorded in the handover. All eight daemon checks and three Rust checks passed for that baseline.
+The actual browser then reproduced a committed Bash effect whose uncertainty disappeared on reload.
+
+Rust-canonical request-history contracts now pair retained results with the existing
+`OperationResponse`. The WebSocket adapter uses the executable catalogue's effective operation policy
+to track mutations, plus core message/regeneration requests, before shared dispatch. It captures the
+live router selection and retains validated results before forwarding completion. The private
+recovery database stores sign-in-owned records; list/acknowledge routes use the same authentication,
+origin checks, redaction boundary and security headers as the existing transfer adapters. No command
+handler is duplicated and no input is automatically replayed.
+
+Completed, failed, cancelled and superseded outcomes retain their actual lifecycle meaning. Lost
+connections and restarts convert running requests to uncertainty. Results are limited to 64 KiB;
+invalid, duplicate, mismatched and oversized results are explicitly omitted. Inputs are not stored
+separately, though a result may itself include tool inputs or output. Configuration results remain
+redacted. At most 32 records per sign-in and 256 overall are retained. Admission may prune oldest
+terminal records, but never running or uncertain records. If only those records fill the history,
+new mutations are refused until space becomes available. Expiry never extends the sign-in lifetime;
+logout and token/origin rotation remove ownership. This is bounded outcome retention, not durable
+idempotency after dismissal, expiry or cache loss.
+
+The browser polls for owner-scoped outcomes across tabs and reloads, displays a persistent uncertainty
+notice, and provides a request-history dialog for results and explicit review. Failure to persist
+admission prevents dispatch. Failure to persist completion closes delivery and preserves uncertainty,
+including when the disconnect write also fails; an on-disk running record becomes uncertain at next
+startup. Read-only config calls now have explicit effect policies instead of filling mutation slots.
+The generated phase coverage test demonstrates failure when its uncertainty renderer is removed.
+
+Actual browser/process journeys exercise repeated reload, second-tab review, confirmed result recovery
+in a compiled daemon launched from an empty directory, and SIGKILL after a real Bash effect but before
+its handler result was delivered. They verify one file write and no replay. Storage and WebSocket tests
+cover current selection, authentication, cross-owner denial, duplicate IDs, retention bounds,
+acknowledgement, expiry, rotation, redaction and write failures. Desktop/mobile review layouts were
+inspected. The new mutation pass kills all 15 mutants. All eight required daemon checks passed:
+7,874 tests across 279 files, 65 current mutation-staleness passes, three unchanged independent
+captures and a compiled build. All three Rust workspace checks passed (1,492 tests, 15 ignored;
+existing warnings remain). All 29 browser journeys passed together. Browser generation/assets and
+capability inventory checks passed. Logs are under `out/issue-214/resume-2026-09-23/`. These results
+do not establish actual GitHub CI or merge-policy enforcement. Full issue #214 acceptance remains open.
