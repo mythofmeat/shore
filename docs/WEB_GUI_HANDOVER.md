@@ -1,8 +1,56 @@
 # Web GUI handover — issue #214
 
-Updated 2026-09-23. Work continues toward the full issue. Conversation image galleries now join
-configurable keyboard shortcuts, display preferences, core conversation controls and request recovery.
-Full terminal workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
+Updated 2026-09-23. Implementation and local verification cover the audited issue scope, including
+terminal command/options and local workflows, media/recovery, resource/security cases and packaging.
+Draft PR #232 carries the implementation. Its live CI results and the external required-merge-policy
+constraint determine the remaining acceptance status; this record does not claim that constraint is resolved.
+
+## Active PR and final retention work — 2026-09-23
+
+The user explicitly approved publication to `git@github.com:mythofmeat/shore.git`; draft
+[PR #232](https://github.com/mythofmeat/shore/pull/232) is open. Verified merge `55dfd0cc` incorporates
+`origin/main` at `d1e5a16a`, including its Claude Agent reasoning fix. The React dependency conflicts
+were resolved by preserving the web dependencies. Bun latest/install and Cargo upgrade/update found
+no new changes. All eight daemon checks, all three Rust checks, generation/inventory and all 51 browser
+journeys passed before that merge was committed and pushed. GitHub now reports the PR mergeable.
+
+The first actual CI run, `35831202015`, failed on missing job prerequisites: daemon tests required the
+native patch helper before `bun test`; three Rust image tests launch Bun, absent from that job. The
+workflow now builds the helper before daemon tests with stable Rust, and installs Bun plus daemon
+dependencies for Rust tests. The daemon timeout accommodates the cold helper build. Actionlint passes.
+All required local checks passed before committing the workflow correction separately from the
+source fixes. The PR displays the current CI results; the first failed run is retained as evidence of
+the corrected prerequisites.
+
+Stash `dc1c1a8e` was applied, retaining the stash as a backup. The three-image fixture now returns
+three distinct valid PNGs. Its real-browser reproduction exposed two additional causes beyond omitted
+media: live originals lost their owner when provisional tool history merged under the completed
+message ID; then the raw completion event overwrote the richer canonical history with only final
+text. The browser now transfers ownership only when the exact tool-result block moves into a newly
+arriving canonical message, and duplicate message IDs cannot overwrite already saved history.
+Omitted/preparation-failed original images remain in the existing correlated `tool_result.images`
+field without being added to model input. The three-image view/delete browser flow now passes.
+
+Live previews now retain up to 512 Ki UTF-16 characters each for text and reasoning, 64 tool blocks
+with a combined 512 Ki-character serialized budget, 100 activity entries with 64 Ki-character
+inspection previews, and 128 live images within a conservative 16 Mi-character payload budget.
+Existing streams remain capped at 32. Visible notices explain shortened previews or released images;
+canonical history and full operation results are unchanged. Private state and notices clear on
+sign-out/conversation changes as applicable. The large-response browser flow remains cancellable.
+Twenty-seven focused tests passed, and all 27 targeted resource/image mutation cases were killed.
+All eight daemon checks passed: 7,937 tests in 288 files, 104,909 assertions, 72 current mutation
+passes, three unchanged capture groups and the compiled build. All three Rust checks passed: 1,493
+tests, 15 ignored, clean formatting and existing Clippy warnings. Generation/assets and inventory
+checks passed, followed by all 54 browser journeys in 3.5 minutes, including the three new cases.
+The refreshed Docker build and enabled/disabled runtime checks passed. Actual compiled Rust CLI
+create/send/edit/fork/status/manual-tool/original-image workflows passed again. Logs begin with `retention-` in
+`out/issue-214/resume-2026-09-23/`; the first CI failure log uses `pr-232-first-ci-failures.log`.
+
+No known implementation gap remains from this audit. Actual PR CI must be assessed from the latest
+run linked on [PR #232](https://github.com/mythofmeat/shore/pull/232); local success is not a substitute
+for that evidence. The required-merge-policy API and rulesets API were both rechecked after the first
+CI run and still return the GitHub plan constraint below. No billing, visibility or policy changes
+were authorized or made. Do not mark the original issue complete while that requirement remains open.
 
 ## Current acceptance audit — 2026-09-23
 

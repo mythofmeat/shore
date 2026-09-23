@@ -24,7 +24,7 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 await writeFile(configPath, `[chat]
 model = "anthropic:claude-opus-4-8"
 [tools]
-enabled = ${JSON.stringify(process.env["SHORE_BROWSER_MEDIA_FIXTURE"] === "true" ? ["bash", "read"] : ["bash"])}
+enabled = ${JSON.stringify(process.env["SHORE_BROWSER_MEDIA_FIXTURE"] === "true" ? ["bash", "read", "mcp__tool_fixture__three_images"] : ["bash"])}
 [tools.bash]
 max_result_chars = 1024
 [mcp.tool_fixture]
@@ -74,6 +74,22 @@ const provider: SidecarProvider = {
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
     yield { type: "start", model: request.model };
     yield { type: "thinking", text: "Considering the question" };
+    if (question.includes("long live preview fixture")) {
+      yield { type: "text", text: "x".repeat(1024 * 1024) + "LIVE_PREVIEW_TAIL" };
+      await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+      return;
+    }
+    const omittedImages = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "omitted-images") === true;
+    if (question.includes("show omitted image fixture") || omittedImages) {
+      if (!omittedImages) {
+        yield { type: "tool_use", id: "omitted-images", name: "mcp__tool_fixture__three_images", input: {} };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      } else {
+        yield { type: "text", text: "Three original images returned; only two went to the model." };
+        yield { type: "done", content: "Three original images returned; only two went to the model.", finish_reason: "end_turn", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      }
+      return;
+    }
     const galleryRead = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "gallery-read-image") === true;
     if (question.includes("show gallery image fixture") || galleryRead) {
       if (!galleryRead) {

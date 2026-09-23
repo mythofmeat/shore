@@ -4,6 +4,9 @@ import { z } from "zod";
 import { appendFile, writeFile } from "node:fs/promises";
 
 const server = new McpServer({ name: "tool-fixture", version: "1.0.0" });
+server.registerTool("three_images", {
+  description: "Return three images, exceeding the model's inline image allowance.", inputSchema: {},
+}, () => ({ content: ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNg+M8AAAICAQB7CYF4AAAAAElFTkSuQmCC", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"].map((data) => ({ type: "image" as const, mimeType: "image/png", data })) }));
 server.registerTool("nested", {
   description: "Echo nested entries, nullable flags and a selected mode.",
   inputSchema: { entries: z.array(z.object({ text: z.string(), enabled: z.boolean().nullable() })), mode: z.enum(["single", "all"]), metadata: z.record(z.string(), z.string()).optional() },

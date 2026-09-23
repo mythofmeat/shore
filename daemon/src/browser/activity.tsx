@@ -7,7 +7,7 @@ import { useDisplay } from "./display_state.tsx";
 
 export function LiveResponse({ stream, openImage }: { stream: LiveTurn; openImage: OpenImage }) {
   const display = useDisplay();
-  return <><div className="message-text">{stream.text}</div>{display.option("thinking") === "on" && stream.reasoning !== "" ? <details><summary>Reasoning</summary><pre>{stream.reasoning}</pre></details> : null}<Blocks blocks={stream.blocks.filter((block) => block.type !== "text")} reasoning tools openImage={openImage} />{display.option("metadata") === "on" && stream.final && stream.metadata !== null ? <p className="message-metadata" aria-label="Stream metadata">{metadataLabel(stream.metadata)}</p> : null}</>;
+  return <>{stream.previewLimited === true ? <p className="muted">Live preview shortened to limit memory. Saved content is unchanged.</p> : null}<div className="message-text">{stream.text}</div>{display.option("thinking") === "on" && stream.reasoning !== "" ? <details><summary>Reasoning</summary><pre>{stream.reasoning}</pre></details> : null}<Blocks blocks={stream.blocks.filter((block) => block.type !== "text")} reasoning tools openImage={openImage} />{display.option("metadata") === "on" && stream.final && stream.metadata !== null ? <p className="message-metadata" aria-label="Stream metadata">{metadataLabel(stream.metadata)}</p> : null}</>;
 }
 
 export function ActivityPanel({ state, openImage }: { state: WorkspaceSnapshot; openImage: OpenImage }) {
@@ -21,6 +21,6 @@ export function ActivityPanel({ state, openImage }: { state: WorkspaceSnapshot; 
     {state.activity.slice().reverse().filter((item) => {
       const data = item.data;
       return typeof data !== "object" || data === null || !("subagent" in data) || typeof data.subagent !== "string" || visible(data.subagent);
-    }).map((item) => <Inspect key={item.id} label={item.type.replaceAll("_", " ")} value={item.data} />)}
+    }).map((item) => <div key={item.id}>{item.previewLimited ? <p className="muted">Activity preview shortened to limit memory.</p> : null}<Inspect label={item.type.replaceAll("_", " ")} value={item.data} /></div>)}
   </aside>;
 }
