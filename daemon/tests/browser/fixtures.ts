@@ -2,10 +2,16 @@ import { test as base, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
 
 export { expect };
-export const test = base.extend<{ usageSeed: boolean; calmBudget: boolean; galleryMedia: boolean }>({
+const tcpPorts = new Map<string, number>();
+export const test = base.extend<{ usageSeed: boolean; calmBudget: boolean; galleryMedia: boolean; tcpPort: number }>({
   usageSeed: [false, { option: true }],
   calmBudget: [false, { option: true }],
   galleryMedia: [false, { option: true }],
+  tcpPort: async ({ baseURL }, use) => {
+    const port = tcpPorts.get(baseURL ?? "");
+    if (port === undefined) throw new Error("Missing fixture TCP port");
+    await use(port);
+  },
   baseURL: async ({ browserName, usageSeed, calmBudget, galleryMedia }, use) => {
     const child = spawn("bun", ["run", "tests/browser/server.ts"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SHORE_BROWSER_USAGE_SEED: usageSeed ? "true" : "false", SHORE_BROWSER_CALM_BUDGET: calmBudget ? "true" : "false", SHORE_BROWSER_MEDIA_FIXTURE: galleryMedia ? "true" : "false" } });
     let errors = "";
@@ -19,13 +25,14 @@ export const test = base.extend<{ usageSeed: boolean; calmBudget: boolean; galle
         let output = "";
         child.stdout.on("data", (chunk: Buffer) => {
           output = (output + chunk.toString()).slice(-4000);
-          const match = /SHORE_BROWSER_READY (http:\/\/127\.0\.0\.1:\d+)\r?\n/.exec(output);
-          if (match?.[1] !== undefined) resolve(match[1]);
+          const match = /SHORE_BROWSER_READY (http:\/\/127\.0\.0\.1:\d+) (\d+)\r?\n/.exec(output);
+          if (match?.[1] !== undefined && match[2] !== undefined) { tcpPorts.set(match[1], Number(match[2])); resolve(match[1]); }
         });
         void stopped.then((code) => reject(new Error(`Browser daemon exited (${String(code)}): ${errors}`)), reject);
       });
       clearTimeout(deadline);
       await use(origin);
+      tcpPorts.delete(origin);
     } finally {
       clearTimeout(deadline);
       child.kill("SIGTERM");

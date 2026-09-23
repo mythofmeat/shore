@@ -4,6 +4,46 @@ Updated 2026-09-23. Work continues toward the full issue. Conversation image gal
 configurable keyboard shortcuts, display preferences, core conversation controls and request recovery.
 Full terminal workflow parity, release/security auditing and actual GitHub CI/merge-gate evidence remain outstanding.
 
+## Current acceptance audit — 2026-09-23
+
+The shared manual-tool batch is committed as `a044ffc0`. The same refreshed dependency/toolchain
+baseline and all its full-suite checks underpin this continuing audit. No dependencies changed.
+The daemon Docker image built successfully with current base images. Container runtime smoke checks
+passed in both enabled and disabled modes: native TCP handshake in both, embedded deep-link HTML,
+JavaScript and authenticated sign-in when enabled, no listener or web cache when disabled, and clean
+shutdown. Buildx needed a writable metadata directory (`BUILDX_CONFIG=/tmp/shore-214-buildx`); no
+credential or global Docker configuration was changed. Logs are `container-*` in the current output
+directory. The first smoke script used an incorrect entrypoint; the corrected run uses the actual
+`src/daemon/run.ts` package entrypoint and both modes pass.
+
+The command/option gate in `scripts/browser_terminal_coverage.ts` now links all 72 non-UI Clap commands
+(281 arguments including presentation/help, 102 wire examples) to canonical fields or explicitly
+justified browser adapters. It checks actual syntax trees,
+generated wire-example fields, finite choices and full result visibility. Four focused tests pass,
+including deliberately omitted commands, options, choices, operations, controls, results and defaults.
+The separate UI/display gates remain in effect. All eight required daemon checks passed: 7,932 tests
+across 287 files, 104,869 assertions, 71 current mutation passes, three unchanged independent captures
+and the compiled build. Generation/assets and inventory checks passed. All 51 browser journeys passed
+together in 3.4 minutes. No Rust source or shared behavior changed in this audit batch; the preceding
+shared batch passed all three Rust checks. Logs are `audit-*-final.log` in the current output directory.
+
+Two new real-browser journeys pass: incompatible session contracts show Reload workspace without
+opening a WebSocket, and the reload recovers; native TCP messages/edits and browser edits converge,
+while switching away from an active generation permits an independent side-thread conversation.
+The concurrency fixture negotiates the existing `request-lifecycle` capability; cancel has no request
+ID or completion of its own and applies to the browser's selected thread. The final cleanup now stops
+the held generation after returning to main. This does not change
+production cancellation semantics. The full browser suite passed with the common fixture exposing
+its TCP port. Remaining work: failed/preparation-omitted media ownership and aggregate live-state
+resource bounds, final verification,
+reviewable PR and actual CI; required merge policy still has the documented GitHub plan constraint.
+
+The compiled Rust CLI was rebuilt and exercised against a fresh real daemon fixture: create a character,
+send, edit, fork, inspect status, run bash, and read an image. All commands completed successfully, and
+the JSON manual-tool report contained the original PNG bytes. Logs are `audit-cli-build.log`,
+`audit-native-client.json` and `audit-native-daemon.log` in the current output directory. This complements
+the native TCP/browser concurrency journey with actual Rust frontend execution.
+
 ## Current shared manual-tool work — 2026-09-23
 
 The local-workflow batch is committed as `515aa230`; its full verification is recorded below.
