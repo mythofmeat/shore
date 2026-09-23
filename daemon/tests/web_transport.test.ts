@@ -115,7 +115,8 @@ describe("browser connection state", () => {
       expect(actions.run("edit", { ref: "1", content: "hi", typo: true })).rejects.toThrow("Invalid arguments");
       expect(b.client.pendingCount).toBe(0);
       for (const scenario of ["invalid", "missing", "wrong-name", "duplicate", "failed", "valid", "quiet", "cleared"] as const) {
-        const action = actions.run("edit", { ref: "1", content: "hi" }, { remember: scenario !== "quiet" });
+        const observed: string[] = [];
+        const action = actions.run("edit", { ref: "1", content: "hi" }, { remember: scenario !== "quiet", observe: (frame) => { observed.push(frame.type); } });
         if (scenario === "cleared") actions.clearOutput();
         const outcome = action.then((value) => ({ value }), (error: unknown) => ({ error }));
         await until(() => f.routed.length > 0);
@@ -123,6 +124,7 @@ describe("browser connection state", () => {
         if (route?.kind !== "command") throw new Error("Missing command route");
         const rid = route.meta.rid;
         if (rid === undefined || rid === null) throw new Error("Missing action request");
+        expect(actions.pendingOperation(rid)).toBe("edit");
         const data = { ref: "1", edited: true, future_metadata: scenario };
         await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid: "unrelated", name: "edit", data: {} });
         if (scenario !== "missing") await f.swp.sessionRouter.sendToSession(session, {
@@ -134,6 +136,8 @@ describe("browser connection state", () => {
           ...(scenario === "failed" ? { error: { code: "not_found" as const, message: "Message disappeared" } } : {}),
         });
         const result = await outcome;
+        expect(actions.pendingOperation(rid)).toBeUndefined();
+        expect(observed).toEqual(scenario === "missing" ? ["request_finished"] : scenario === "duplicate" ? ["command_output", "command_output", "request_finished"] : ["command_output", "request_finished"]);
         if (["valid", "quiet", "cleared"].includes(scenario)) expect(result).toEqual({ value: data });
         else if ("error" in result) {
           expect(result.error).toBeInstanceOf(scenario === "failed" ? OperationFailure : Error);

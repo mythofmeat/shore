@@ -599,6 +599,9 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub raw: Option<String>,
         pub calls: Vec<NestedToolCall>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<ImageRef>>", optional)]
+        pub images: Vec<ImageRef>,
     }
 
     #[serde(untagged)]

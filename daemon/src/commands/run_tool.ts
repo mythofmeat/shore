@@ -20,6 +20,7 @@ import type { OperationInput } from "../operations/types.ts";
 import type { ToolDescription } from "../protocol/ToolDescription.ts";
 import type { ToolRunReport } from "../protocol/ToolRunReport.ts";
 import type { NestedToolCall } from "../protocol/NestedToolCall.ts";
+import type { ImageRef } from "../protocol/ImageRef.ts";
 import type { ToolKind } from "../protocol/ToolKind.ts";
 export type { ToolKind } from "../protocol/ToolKind.ts";
 
@@ -41,6 +42,7 @@ export interface RunToolContext {
   newMessageId?: () => string;
   toolUseId?: () => string;
   signal?: AbortSignal;
+  emit?: (message: ServerMessage) => void;
 }
 
 export interface RunToolRequest {
@@ -237,7 +239,8 @@ export async function runTool(
 
   const frames: ServerMessage[] = [];
   const send = (message: ServerMessage): void => {
-    frames.push(message);
+    if (message.type === "tool_call" || message.type === "tool_result" || message.type === "send_image") frames.push(message);
+    ctx.emit?.(message);
   };
   const now = ctx.now ?? (() => new Date().toISOString());
   const newMessageId = ctx.newMessageId ?? (() => `m_${crypto.randomUUID()}`);
@@ -276,6 +279,7 @@ export async function runTool(
 
   const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec, []);
   const output = run.output;
+  const images = toolRunImages(frames);
 
   return {
     tool: request.tool,
@@ -291,7 +295,23 @@ export async function runTool(
     result_chars: run.window?.originalChars ?? Array.from(run.raw).length,
     raw: request.raw ? run.raw : null,
     calls: nestedCalls(frames, toolUseId, request.raw),
+    ...(images.length === 0 ? {} : { images }),
   };
+}
+
+export function toolRunImages(frames: readonly ServerMessage[]): ImageRef[] {
+  const images = new Map<string, ImageRef>();
+  for (const frame of frames) {
+    if (frame.type === "send_image") {
+      images.set(frame.path, { path: frame.path, caption: frame.caption ?? images.get(frame.path)?.caption ?? null, data: frame.data ?? images.get(frame.path)?.data ?? null });
+    } else if (frame.type === "tool_result") {
+      for (const image of frame.images ?? []) {
+        const original = images.get(image.path);
+        images.set(image.path, { ...image, caption: original?.caption ?? image.caption ?? null, data: original?.data ?? image.data ?? null });
+      }
+    }
+  }
+  return [...images.values()];
 }
 
 export function nestedCalls(

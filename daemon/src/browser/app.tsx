@@ -1,3 +1,4 @@
+import { OperationImages } from "./operation_images.tsx";
 import { LocalHelp } from "./local_help.tsx";
 import { TERMINAL_SHORTCUTS } from "./preferences.generated.ts";
 import { ActionOutput } from "./action_output.tsx";
@@ -108,7 +109,7 @@ function Action({ operation, state, close, preset = {}, review = false }: { revi
       <div className="actions"><button className={confirming ? "danger" : "primary"} disabled={busy || operation.available === false || state.status !== "ready"} type="submit">{busy ? "Working…" : confirming ? `Confirm ${policy.confirmation}` : "Run action"}</button></div>
     </form>
     <CancelWork active={busy} ready={state.status === "ready"} cancel={() => workspace.connection.cancel()} />
-    {result === undefined ? null : <div className="result"><h3>Action completed</h3><Inspect value={result} label="Complete action result" /></div>}
+    {result === undefined ? null : <div className="result"><h3>Action completed</h3><OperationImages name={operation.name} result={result} /><Inspect value={result} label="Complete action result" /></div>}
   </Modal>;
 }
 
@@ -159,6 +160,7 @@ function App() {
   const [template, setTemplate] = useState<{ request: OperationDescriptor; values: Record<string, unknown> }>();
   const composer = useRef<ComposerHandle>(null);
   const runningKeys = useRef(new Set<string>());
+  const privateEpoch = useRef(0);
 
   const reasoning = display.option("thinking") === "on";
   const tools = display.option("tools") === "on";
@@ -166,6 +168,14 @@ function App() {
   const [guidance, setGuidance] = useState<Record<string, unknown>>();
   const tail = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
+  useEffect(() => {
+    if (privateView) return;
+    privateEpoch.current += 1;
+    setSelectedAction(undefined); setShortcutResult(undefined); setTemplate(undefined); setGuidance(undefined); setImage(undefined);
+    setPalette(false); setHelpOpen(false); setOutputOpen(false); setActivity(false); setProviders(false); setSettings(false); setModels(false);
+    setDiagnostics(false); setMemory(false); setToolWorkbench(false); setUsage(false); setArchives(false); setNavigation(false); setDisplayOpen(false); setKeyboardOpen(false);
+    setSearch(""); setFollow(true);
+  }, [privateView]);
   const action = (name: string, preset: Record<string, unknown> = {}) => { setPalette(false); setSelectedAction({ name, preset }); };
   const regenRequest = state.requests.find((item) => item.name === "regen");
   function openRequest(name: string) {
@@ -213,6 +223,8 @@ function App() {
     if (completion.outcome !== "completed") throw new Error(completion.error?.message ?? `Conversation action ${completion.outcome}`);
   }
   async function runBinding(binding: Binding) {
+    const epoch = privateEpoch.current;
+    const active = () => epoch === privateEpoch.current && !["signed_out", "stopped"].includes(workspace.connection.status);
     const current = workspace.getSnapshot();
     validateBinding(binding, current.operations, current.requests);
     const [kind, name = ""] = binding.target.split(":");
@@ -225,11 +237,12 @@ function App() {
         const selected = current.operations.find((item) => item.name === name);
         if (current.status !== "ready" || (selected === undefined || selected.available === false)) throw new Error("This operation is unavailable for the current connection or conversation");
         if (name === "config" && Object.hasOwn(binding.args, "value")) validateSavedConfig(binding, (await workspace.actions.run("config_schema", {}, { remember: false })).schema);
+        if (!active()) return;
         if (binding.mode === "open" || operationPolicy(selected, binding.args).confirmation !== "none") {
           setSelectedAction({ name, preset: binding.args, review: binding.mode === "run" }); return;
         }
         const result = await workspace.actions.runDiscovered(name, binding.args);
-        setShortcutResult({ label: selected.label, data: result }); await workspace.refreshNavigation(); return;
+        if (active()) { setShortcutResult({ label: selected.label, data: result }); await workspace.refreshNavigation(); } return;
       }
       case "request": {
         const request = current.requests.find((item) => item.name === name);

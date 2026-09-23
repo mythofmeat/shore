@@ -1,3 +1,4 @@
+import { OperationImages } from "./operation_images.tsx";
 import { useEffect, useState } from "react";
 import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
 import type { WebRequestList } from "../protocol/WebRequestList.ts";
@@ -68,7 +69,7 @@ export function RequestRecovery({ workspace, ready }: { workspace: Workspace; re
       {listing === undefined ? <p>Waiting for request history…</p> : <p className="muted">Up to {listing.max_records} recent requests; results up to {Math.floor(listing.max_result_bytes / 1024)} KiB each.</p>}
       {records.length === 0 && listing !== undefined ? <p>No retained requests.</p> : null}
       {records.map((request) => <article className="provider-card" key={request.id} aria-label={`${request.label} request`}><h3>{request.label}</h3><RequestStatus request={request} /><p>{request.character ?? "Daemon"} / {request.thread ?? "main"} · {new Date(request.started_at).toLocaleString()} · expires {new Date(request.expires_at).toLocaleString()}</p>{request.error === undefined || request.error === null ? null : <p role="alert" className="error">{request.error.message}</p>}
-        {request.result === undefined || request.result === null ? null : <Inspect value={request.result} label="Retained result" />}{request.result_omitted ? <p>The complete result could not be retained. Inspect the affected state or diagnostics; do not repeat a mutation just to retrieve its output.</p> : null}
+        {request.result === undefined || request.result === null ? null : <><OperationImages name={request.result.name} result={request.result.data} /><Inspect value={request.result} label="Retained result" /></>}{request.result_omitted ? <p>The complete result could not be retained. Inspect the affected state or diagnostics; do not repeat a mutation just to retrieve its output.</p> : null}
         {request.phase === "running" ? null : <button disabled={!ready || busy} onClick={() => { void acknowledge(request); }}>{request.phase === "uncertain" ? "I checked the outcome" : "Dismiss request"}</button>}
       </article>)}
       <button disabled={!ready || busy} onClick={() => setRefreshKey((value) => value + 1)}>Refresh request history</button><button onClick={() => workspace.connection.reconnect()}>Refresh conversation</button>

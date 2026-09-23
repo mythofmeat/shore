@@ -81,6 +81,8 @@ test("the tool workbench discovers schemas and runs tools through the shared dae
   await execute();
   await expect(report).toContainText("Tool completed");
   await expect(report).toContainText("Inspected the fixture workspace");
+  await expect(dialog.getByRole("region", { name: "Tool activity", exact: true })).toContainText("Completed bash");
+  await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toHaveCount(0);
   await expect(report.getByRole("region", { name: "Nested tool calls" })).toContainText("bash · worker · completed");
   await report.getByText("bash · worker · completed", { exact: true }).click();
   await expect(report).toContainText("SOUL.md");

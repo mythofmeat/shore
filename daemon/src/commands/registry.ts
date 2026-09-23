@@ -126,7 +126,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     const engine = engineOf(context);
     const dependencies = context.deps.runTool;
     if (dependencies === undefined) throw internalError("run_tool is not available in this build");
-    const toolContext = { ...dependencies, config: context.session.config, dataDir: context.session.dataDir, conversation: engine.messages(), ...(context.session.signal === undefined ? {} : { signal: context.session.signal }) };
+    const toolContext = { ...dependencies, config: context.session.config, dataDir: context.session.dataDir, conversation: engine.messages(), ...(context.session.emit === undefined ? {} : { emit: context.session.emit }), ...(context.session.signal === undefined ? {} : { signal: context.session.signal }) };
     return args.describe === true ? describeTool(engine.characterName, toolContext, args) : runTool(engine.characterName, toolContext, args);
   }),
   compact: register("compact", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["history_write", "workspace_write", "provider_call"], confirmation: "archive", label: "Compact active context", fields: {

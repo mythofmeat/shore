@@ -1302,6 +1302,12 @@
               "items": {
                 "$ref": "#/$defs/NestedToolCall"
               }
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ImageRef"
+              }
             }
           },
           "required": [
@@ -1348,6 +1354,29 @@
             "ok",
             "input",
             "output"
+          ]
+        },
+        "ImageRef": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "path"
           ]
         }
       }

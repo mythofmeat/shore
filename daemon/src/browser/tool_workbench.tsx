@@ -1,3 +1,5 @@
+import { OperationImages } from "./operation_images.tsx";
+import { recordToolActivity, type ToolActivity } from "./tool_activity.ts";
 import { useEffect, useState } from "react";
 import type { OperationClient } from "./operations.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
@@ -26,6 +28,7 @@ export function ToolWorkbench({ actions, operations, character, thread, ready, c
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ToolRunReport>();
+  const [activity, setActivity] = useState<ToolActivity[]>([]);
   const operation = operations.find((item) => item.name === "run_tool");
   const disabled = !ready || busy || review || operation?.available === false;
   const args = (): RunToolArgs => ({ tool: definition?.tool ?? "", input, pairs, raw });
@@ -43,8 +46,9 @@ export function ToolWorkbench({ actions, operations, character, thread, ready, c
     catch (failure) { setControl(undefined); setInput({}); setSchemaError(failure instanceof Error ? failure.message : String(failure)); }
   };
   const execute = async () => {
+    setActivity([]); setResult(undefined);
     await run(async () => {
-      const response = await actions.run("run_tool", args());
+      const response = await actions.run("run_tool", args(), { observe: (message) => setActivity((previous) => recordToolActivity(previous, message)) });
       if ("mode" in response) throw new Error("Expected a tool execution result");
       setResult(response);
     });
@@ -74,9 +78,10 @@ export function ToolWorkbench({ actions, operations, character, thread, ready, c
       <Inspect value={definition} label="Complete tool definition" />
     </section>}
     {review ? <section aria-label="Review tool run" className="confirmation"><h3>Review tool run</h3><p>{character} / {thread ?? "home"} · {definition?.tool}</p><pre>{JSON.stringify(args(), null, 2)}</pre><div className="actions"><button disabled={busy} onClick={() => setReview(false)}>Go back</button><button className="danger" disabled={busy || !ready} onClick={() => { void execute(); }}>Run tool now</button></div></section> : null}
+    {activity.length === 0 ? null : <section aria-label="Tool activity"><h3>Tool activity</h3><p className="muted">Recent activity for this run; long updates show their latest text.</p>{activity.map((item) => <div key={item.id}><strong>{item.label}</strong>{item.text === "" ? null : <pre>{item.text}</pre>}</div>)}</section>}
     {result === undefined ? null : <section aria-label="Tool result"><h3>{result.rejected ? "Tool input rejected" : result.ok ? "Tool completed" : "Tool failed"}</h3><p>{result.tool} · {result.duration_ms.toFixed(1)} ms · {String(result.result_chars)} result characters</p><pre>{result.output}</pre>{result.truncated ? <p className="notice">The normal output window is truncated.{result.raw === null ? " Full output was not requested." : " The complete output is available below."}</p> : null}{result.raw === null ? null : <details><summary>Complete raw output</summary><pre>{result.raw}</pre></details>}
       {result.calls.length === 0 ? <p>No nested tool calls.</p> : <section aria-label="Nested tool calls"><h4>Nested calls</h4>{result.calls.map((call, index) => <details key={index}><summary>{call.tool} · {call.subagent ?? "main"} · {call.ok ? "completed" : "failed"}</summary><h5>Input</h5><pre>{call.input}</pre><h5>Output</h5><pre>{call.output}</pre></details>)}</section>}
-      <Inspect value={result} label="Complete tool result" />
+      <OperationImages name="run_tool" result={result} /><Inspect value={result} label="Complete tool result" />
     </section>}
   </div></Modal>;
 }

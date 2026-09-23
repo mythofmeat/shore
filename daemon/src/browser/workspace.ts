@@ -103,6 +103,7 @@ export class Workspace {
     } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
+    const manual = this.actions.pendingOperation(message.rid) === "run_tool";
     const key = JSON.stringify([message.rid ?? null, message.subagent ?? null, message.task_id ?? null]);
     const current = this.#state.streams.find((stream) => stream.key === key) ?? { key, rid: message.rid ?? null, subagent: message.subagent ?? null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null };
     const next = { ...current };
@@ -126,19 +127,19 @@ export class Workspace {
         for (const image of message.images ?? []) {
           const original = media.find((item) => item.path === image.path);
           const sameRequest = (original?.rid ?? null) === (message.rid ?? null);
-          media = [...media.filter((item) => item.path !== image.path), { ...image, rid: message.rid ?? null, subagent: message.subagent ?? null, task_id: message.task_id ?? null, toolId: message.tool_id, previewData: image.data, ...(sameRequest && original?.toolId === message.tool_id && original.messageId !== undefined ? { messageId: original.messageId } : {}), data: sameRequest ? original?.data ?? image.data ?? null : image.data ?? null }].slice(-MAX_LIVE_IMAGES);
+          media = [...media.filter((item) => item.path !== image.path), { ...image, ...(manual ? { manual: true } : {}), rid: message.rid ?? null, subagent: message.subagent ?? null, task_id: message.task_id ?? null, toolId: message.tool_id, previewData: image.data, ...(sameRequest && original?.toolId === message.tool_id && original.messageId !== undefined ? { messageId: original.messageId } : {}), data: sameRequest ? original?.data ?? image.data ?? null : image.data ?? null }].slice(-MAX_LIVE_IMAGES);
         }
         break;
     }
     const metadata = message.type === "stream_end" && message.is_final && next.subagent === null && next.msgId !== null && next.metadata !== null
       ? Object.fromEntries([...Object.entries(this.#state.metadata).filter(([id]) => id !== next.msgId), [next.msgId, next.metadata] as const].slice(-256)) : this.#state.metadata;
-    this.#patch({ metadata, media, streams: [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
+    this.#patch({ metadata, media, streams: manual && next.subagent === null ? this.#state.streams : [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status === "signed_out") this.actions.clearOutput();
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { messages: [], metadata: {}, config: {}, streams: [], media: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, streams: [], media: [], activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -170,12 +171,12 @@ export class Workspace {
         return;
       case "error": this.report(message.message); this.#activity(message.type, message); return;
       case "request_finished":
-        if (message.outcome !== "completed") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
+        if (message.outcome !== "completed" || this.actions.pendingOperation(message.rid) === "run_tool") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
         this.#activity(message.type, message); return;
       case "send_image": {
         const previous = this.#state.media.find((image) => image.path === message.path);
         const sameRequest = (previous?.rid ?? null) === (message.rid ?? null);
-        this.#patch({ media: [...this.#state.media.filter((image) => image.path !== message.path), { ...(sameRequest ? previous : {}), ...message, data: message.data ?? (sameRequest ? previous?.data : null) ?? null }].slice(-MAX_LIVE_IMAGES) });
+        this.#patch({ media: [...this.#state.media.filter((image) => image.path !== message.path), { ...(sameRequest ? previous : {}), ...message, ...(this.actions.pendingOperation(message.rid) === "run_tool" ? { manual: true } : {}), data: message.data ?? (sameRequest ? previous?.data : null) ?? null }].slice(-MAX_LIVE_IMAGES) });
         this.#activity(message.type, message); return;
       }
       case "command_output": case "phase": case "cache_warning": case "provider_warning":

@@ -1,0 +1,62 @@
+import { readFile } from "node:fs/promises";
+import { expect, test } from "./fixtures.ts";
+
+const image = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==";
+
+test("manual tools show correlated live activity and recover image results after reload", async ({ page }) => {
+  await page.goto("/workspace");
+  await page.getByLabel("Daemon token").fill("browser-test-token");
+  await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: "Create character", exact: true }).click();
+  const create = page.getByRole("dialog");
+  await create.getByLabel("Character name", { exact: true }).fill("nova");
+  await create.getByRole("button", { name: "Run action" }).click();
+  await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
+  await create.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
+  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
+  const selected = workbench.getByRole("region", { name: "Selected tool" });
+  const tools = workbench.getByRole("navigation", { name: "Available tools" });
+  const execute = async () => {
+    await selected.getByRole("button", { name: "Review tool run", exact: true }).click();
+    await workbench.getByRole("region", { name: "Review tool run" }).getByRole("button", { name: "Run tool now", exact: true }).click();
+  };
+  await tools.getByRole("button", { name: "bash", exact: true }).click();
+  await selected.getByLabel("command", { exact: true }).fill(`printf %s '${image}' | base64 -d > manual-image.png; sleep 1`);
+  await execute();
+  await expect(workbench.getByRole("region", { name: "Tool activity", exact: true })).toContainText("Running bash");
+  await expect(workbench.getByRole("region", { name: "Tool result" })).toContainText("Tool completed");
+  await expect(workbench.getByRole("region", { name: "Review tool run" })).toHaveCount(0);
+  await tools.getByRole("button", { name: "read", exact: true }).click();
+  await selected.getByLabel("file_path", { exact: true }).fill("manual-image.png");
+  await execute();
+  const report = workbench.getByRole("region", { name: "Tool result", exact: true });
+  await expect(report).toContainText("Tool completed");
+  await expect(report.getByRole("button", { name: /View image:.*manual-image.png/ })).toBeVisible();
+  await expect(workbench.getByRole("region", { name: "Tool activity", exact: true })).toContainText("Completed read");
+  const gallery = page.getByRole("dialog", { name: "Image", exact: true });
+  const checkDownload = async () => {
+    const downloading = page.waitForEvent("download");
+    await gallery.getByRole("link", { name: "Download image", exact: true }).click();
+    const file = await (await downloading).path();
+    if (file === null) throw new Error("Missing image download");
+    expect((await readFile(file)).toString("base64")).toBe(image);
+    await gallery.getByRole("button", { name: "Close dialog", exact: true }).click();
+  };
+  await report.getByRole("button", { name: /View image:.*manual-image.png/ }).click();
+  await checkDownload();
+  await workbench.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Last action output", exact: true }).click();
+  const output = page.getByRole("dialog", { name: "Last action output", exact: true });
+  await output.getByRole("button", { name: /View image:.*manual-image.png/ }).click();
+  await checkDownload();
+  await output.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Request history", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Request history", exact: true });
+  await history.getByRole("button", { name: /View image:.*manual-image.png/ }).click();
+  await checkDownload();
+  await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toHaveCount(0);
+});

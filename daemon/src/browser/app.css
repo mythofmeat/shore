@@ -41,3 +41,5 @@
 .action-output{max-height:60vh;overflow:auto}.action-output pre{white-space:pre-wrap;overflow-wrap:anywhere}
 
 .help-actions{display:flex;flex-wrap:wrap;gap:.5rem}.messages:focus-visible{outline:3px solid #81ad97;outline-offset:-3px}
+
+.operation-images{display:flex;flex-wrap:wrap;gap:12px}.operation-images .image-button{max-width:240px}
