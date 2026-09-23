@@ -114,6 +114,26 @@ null mappings must be replaced by real workflow evidence in the final parity gat
 covered. Known events require exhaustive policies tied to handlers; a generic unknown-frame fallback
 may only serve genuinely future events.
 
+### Executable command and option coverage
+
+`daemon/scripts/browser_terminal_coverage.ts` accounts for each non-UI command and argument from the
+actual Clap inventory. Each argument points to fields in canonical generated operation/request forms
+or a justified local adapter with syntax-tree evidence from its implementation. The companion test
+checks finite choices, all generated wire-example fields, the generated form execution path and full
+result inspection. Deliberate omissions prove that new commands/options/choices, missing operations
+and controls, missing result inspection and missing default-value readers fail the gate. The existing
+browser coverage gate additionally checks recursive control kinds and known event branches/policies.
+All these tests run in the normal daemon suite in PR CI. Required merge policy remains externally
+constrained as recorded in the acceptance checklist.
+
+The reviewed presentation mappings include JSON inspection/download in place of terminal JSON/TOML
+printing, effective and default settings together in place of `--all`, and full status inspection for
+the daemon configuration directory. Offline local directory discovery, shell script installation and
+TCP address discovery are narrow terminal-platform exceptions. Model-role selection, destructive
+confirmation, tool/subagent input, browser transfers, completion choices, editing and display options
+remain application capabilities with concrete browser paths. The mappings supplement real browser
+journeys; syntax-tree presence is not a claim of equivalent subjective usability.
+
 ### Executable local-workflow coverage
 
 `daemon/tests/browser_local_workflows.test.ts` compares every `shore ui` command, argument and

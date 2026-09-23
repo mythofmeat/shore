@@ -112,7 +112,7 @@ try {
   process.once("SIGTERM", () => { cleanup.abort(); daemon.stop(); });
   process.once("SIGINT", () => { cleanup.abort(); daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
-  console.log(`SHORE_BROWSER_READY ${daemon.web.origin}`);
+  console.log(`SHORE_BROWSER_READY ${daemon.web.origin} ${String(daemon.port)}`);
   await daemon.done;
 } finally {
   await discovery.stop(true);
