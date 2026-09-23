@@ -36,7 +36,8 @@ export interface AutonomyStatus {
   last_user_at?: number;
   default_interval_ms: number;
   max_idle_ticks: number;
-  min_wake_interval_ms: number;
+  min_interval_ms: number;
+  max_interval_ms: number;
   max_silent_ms: number;
   recent_events: HeartbeatEvent[];
 }
@@ -212,7 +213,8 @@ export class AutonomyService {
       covered_turn_count: snapshot.coveredTurnCount,
       default_interval_ms: bounds.defaultIntervalMs,
       max_idle_ticks: bounds.maxIdleTicks,
-      min_wake_interval_ms: bounds.minWakeIntervalMs,
+      min_interval_ms: bounds.minIntervalMs,
+      max_interval_ms: bounds.maxIntervalMs,
       max_silent_ms: bounds.maxSilentMs,
       recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
     };

@@ -271,7 +271,7 @@ describe("preparing a heartbeat body", () => {
 
   test("says the configured fallback interval, not the default one", async () => {
     const config = await baseConfig();
-    config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval =
+    config.app.behavior.autonomy.heartbeat.default_interval =
       ConfigDuration.fromSecs(10_800);
     await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
     await writeFile(

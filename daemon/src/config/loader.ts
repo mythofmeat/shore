@@ -9,6 +9,7 @@ import {
   budgetPeriodRank,
   parseAppConfig,
   validateCompaction,
+  validateHeartbeat,
   validateAppConfigLayer,
   type AppConfig,
   type UsageBudgetConfig,
@@ -489,6 +490,9 @@ function validateConfig(
 
   const compaction = validateCompaction(app.memory.compaction);
   if (compaction !== undefined) throw validationError(compaction);
+
+  const heartbeat = validateHeartbeat(app.behavior.autonomy.heartbeat);
+  if (heartbeat !== undefined) throw validationError(heartbeat);
 
 }
 

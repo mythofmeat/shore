@@ -36,14 +36,16 @@ const DEFAULT_CLOCK: HeartbeatClockConfig = {
   defaultIntervalMs: 3_600_000,
   maxIdleTicks: 3,
   maxSilentMs: 172_800_000,
-  minWakeIntervalMs: 3_600_000,
+  minIntervalMs: 3_600_000,
+  maxIntervalMs: 48 * 3_600_000,
 };
 
 const CUSTOM_CLOCK: HeartbeatClockConfig = {
   defaultIntervalMs: 2_700_000,
   maxIdleTicks: 7,
   maxSilentMs: 90_000_000,
-  minWakeIntervalMs: 1500,
+  minIntervalMs: 1500,
+  maxIntervalMs: 48 * 3_600_000,
 };
 
 const LOCAL_NOW = Date.UTC(2026, 7, 4, 14, 0, 0);
@@ -475,7 +477,8 @@ describe("the clock arithmetic", () => {
         ...(user === undefined ? {} : { last_user_at: user }),
         default_interval_ms: DEFAULT_CLOCK.defaultIntervalMs,
         max_idle_ticks: DEFAULT_CLOCK.maxIdleTicks,
-        min_wake_interval_ms: DEFAULT_CLOCK.minWakeIntervalMs,
+        min_interval_ms: DEFAULT_CLOCK.minIntervalMs,
+        max_interval_ms: DEFAULT_CLOCK.maxIntervalMs,
         max_silent_ms: DEFAULT_CLOCK.maxSilentMs,
         recent_events: [],
       },
@@ -510,7 +513,8 @@ test("the autonomy projection drops the fields the CLI does not read", async () 
   expect(keys).not.toContain("covered_turn_count");
   expect(keys).toContain("dormant_after_heartbeat_turns");
   expect(keys).not.toContain("max_idle_ticks");
-  expect(keys).toContain("effective_interval_secs");
+  expect(keys).toContain("default_interval_secs");
+  expect(keys).toContain("max_interval_secs");
   expect(keys).not.toContain("default_interval_ms");
 });
 

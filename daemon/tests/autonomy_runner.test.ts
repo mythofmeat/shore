@@ -71,7 +71,8 @@ function clockConfig(): HeartbeatClockConfig {
     defaultIntervalMs: HOUR,
     maxIdleTicks: 100,
     maxSilentMs: 48 * HOUR,
-    minWakeIntervalMs: HOUR,
+    minIntervalMs: HOUR,
+    maxIntervalMs: 48 * 3_600_000,
   };
 }
 

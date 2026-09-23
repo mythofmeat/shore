@@ -22,7 +22,7 @@ type is right, and the number is off. What the fixture has to catch:
   `undefined` one — hence the explicit key-set assertions.
 - **The renames.** The scheduler's vocabulary is not the CLI's:
   `max_idle_ticks` becomes `dormant_after_heartbeat_turns`,
-  `default_interval_ms` becomes `effective_interval_secs`, and `character` and
+  `default_interval_ms` becomes `default_interval_secs`, and `character` and
   `covered_turn_count` are dropped rather than carried.
 - **Two counts under four names.** `message_count`/`turn_count` appear in the
   envelope and again inside `activity`, and the two pairs are different
@@ -89,18 +89,23 @@ MUTANTS = [
      "const asSecs = (ms: number): number => Math.floor(ms / 1000);",
      "const asSecs = (ms: number): number => Math.floor(ms / 60000);"),
 
-    # --- effective_interval_secs / the bounds ---------------------------------
+    # --- default_interval_secs / the bounds ---------------------------------
     ("bounds: the effective interval reads the silence limit",
-     "    effective_interval_secs: asSecs(autonomy.default_interval_ms),",
-     "    effective_interval_secs: asSecs(autonomy.max_silent_ms),"),
+     "    default_interval_secs: asSecs(autonomy.default_interval_ms),",
+     "    default_interval_secs: asSecs(autonomy.max_silent_ms),"),
     ("bounds: the effective interval reads the wake floor",
-     "    effective_interval_secs: asSecs(autonomy.default_interval_ms),",
-     "    effective_interval_secs: asSecs(autonomy.min_wake_interval_ms),"),
+     "    default_interval_secs: asSecs(autonomy.default_interval_ms),",
+     "    default_interval_secs: asSecs(autonomy.min_interval_ms),"),
+    ("bounds: the floor reports the ceiling",
+     "    min_interval_secs: asSecs(autonomy.min_interval_ms),\n",
+     "    min_interval_secs: asSecs(autonomy.max_interval_ms),\n"),
     ("bounds: the latency floor and the idle limit are swapped",
-     "    minimum_heartbeat_latency_secs: asSecs(autonomy.min_wake_interval_ms),\n"
+     "    min_interval_secs: asSecs(autonomy.min_interval_ms),\n"
+     "    max_interval_secs: asSecs(autonomy.max_interval_ms),\n"
      "    dormant_after_idle_time_secs: asSecs(autonomy.max_silent_ms),",
-     "    minimum_heartbeat_latency_secs: asSecs(autonomy.max_silent_ms),\n"
-     "    dormant_after_idle_time_secs: asSecs(autonomy.min_wake_interval_ms),"),
+     "    min_interval_secs: asSecs(autonomy.max_silent_ms),\n"
+     "    max_interval_secs: asSecs(autonomy.max_interval_ms),\n"
+     "    dormant_after_idle_time_secs: asSecs(autonomy.min_interval_ms),"),
     ("bounds: the idle-tick cap reads the tick count",
      "    dormant_after_heartbeat_turns: autonomy.max_idle_ticks,",
      "    dormant_after_heartbeat_turns: autonomy.ticks_without_user,"),

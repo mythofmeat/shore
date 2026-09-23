@@ -70,14 +70,20 @@ MUTANTS = [
     # --- the clock ------------------------------------------------------------
     ("clock: the fallback interval is read in seconds, so a wake fires at once",
      R,
-     "    defaultIntervalMs: Number(heartbeat.fallback_heartbeat_interval.asMillisExact()),",
-     "    defaultIntervalMs: Number(heartbeat.fallback_heartbeat_interval.asSecs()),"),
+     "    defaultIntervalMs: Number(heartbeat.default_interval.asMillisExact()),",
+     "    defaultIntervalMs: Number(heartbeat.default_interval.asSecs()),"),
     ("clock: the silence bound and the wake floor are swapped",
      R,
      "    maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),\n"
-     "    minWakeIntervalMs: Number(heartbeat.minimum_heartbeat_latency.asMillisExact()),",
-     "    maxSilentMs: Number(heartbeat.minimum_heartbeat_latency.asMillisExact()),\n"
-     "    minWakeIntervalMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),"),
+     "    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),",
+     "    maxSilentMs: Number(heartbeat.min_interval.asMillisExact()),\n"
+     "    minIntervalMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),"),
+    ("clock: the floor and the ceiling are swapped",
+     R,
+     "    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),\n"
+     "    maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),",
+     "    minIntervalMs: Number(heartbeat.max_interval.asMillisExact()),\n"
+     "    maxIntervalMs: Number(heartbeat.min_interval.asMillisExact()),"),
     ("clock: the dormancy tick count comes from the wrong knob",
      R,
      "    maxIdleTicks: heartbeat.dormant_after_heartbeat_turns,",

@@ -207,8 +207,9 @@ function describeOption(path: readonly string[]): string {
   const descriptions: Record<string, string> = {
     model: "Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.",
     enabled: "Enable this feature or select the names granted access.",
-    keepalive_for: "Maximum idle period during which prompt-cache keepalive is allowed.",
-    cache_keepalive_for: "Per-model maximum idle period for prompt-cache keepalive.",
+    default_interval: "Time until the next heartbeat when the character does not schedule one.",
+    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat, message, or daemon start.",
+    max_interval: "Longest time the character may schedule its next heartbeat.",
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",
