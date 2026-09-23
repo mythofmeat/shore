@@ -11,8 +11,7 @@ if ! [ -n "$CHANGES" ]; then
     echo "No dependency updates!"
     exit 0
 elif ./test.sh; then
-    git switch -C "automated/$(date -I)"
     git commit -am "chore(deps): scheduled update"
     git push
-    gh pr create --dry-run -b '' -t "chore(deps): $(date -I)"
+    ./scheduled-release.sh patch
 fi
