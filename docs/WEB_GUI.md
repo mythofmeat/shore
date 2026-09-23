@@ -953,3 +953,42 @@ Rust workspace commands (1,492 tests; 15 existing ignored tests), all 31 Playwri
 browser generation/assets/inventory checks. All 48 targeted core-request/router mutants were
 killed. Clippy reports existing warnings. The working logs use the `core-` prefix in
 `out/issue-214/resume-2026-09-23/`. No actual PR CI run or merge-policy change is claimed.
+
+
+### Browser display preferences, 2026-09-23
+
+Display preferences expose every terminal view key using choices generated from the terminal's
+Rust inventory: timestamps, thinking, tools, subagents, compaction, images, metadata, usage and budget
+focus. Executable coverage checks require actual rendering readers and enum branches and demonstrate
+failure when a choice, control, reader or mode is removed. Browser defaults keep existing content
+visible; usage starts off with automatic budget focus.
+
+Each preference has its own local-storage entry. Tabs receive storage changes without overwriting
+unrelated fields, and legacy reasoning/tool choices migrate. Failed writes keep current choices in
+memory with a workspace notice and retry/reset controls; unsaved changes survive another tab's notification. These are
+browser preferences. Terminal keybinding customization and other local workflows remain open work.
+
+The toggles affect live/completed content, activity streams and compaction progress. Hidden inline
+images remain explicitly openable, and full action results stay inspectable. Metadata displays
+provider/model information and available live token/timing totals, using the terminal's accumulation
+rules. The open workspace retains at most 256 completed-message totals, reconciles them with history
+and clears them on selection changes/sign-out. Reloaded protocol history has no token/timing totals;
+the browser continues to show the metadata available on each stored message.
+
+Usage off/always/warn and automatic/cap/pace/named focus use the existing budget report operation.
+The readout refreshes when enabled, on conversation/message/warning changes and every 30 seconds,
+with stale/error feedback and manual retry. Warning-only mode hides calm readings. Names, scoped
+names, warning priority, pace fallback, ties and cycle ordering match terminal behavior. Independent
+fixtures run against both browser logic and the actual terminal renderer. Four actual browser
+journeys cover the visibility controls, images, cross-tab persistence, storage failure/retry,
+subagent/tool activity, active compaction and warning/named-budget modes.
+
+All eight required daemon checks passed: 7,902 tests across 281 files, 67 current mutation passes,
+three unchanged independent captures and the compiled build. All 26 new mutation cases were killed.
+All three Rust checks passed (1,493 tests; 15 existing ignored tests; existing Clippy warnings), as did
+all 35 Playwright journeys, browser generation/assets, capability inventory and workflow lint checks.
+The final browser run includes the reproduced and fixed loss of visible save-failure feedback when
+closing the preferences dialog. The mobile layout was inspected. The build fell back to local
+compilation when its cache server was unavailable. Logs use `preferences-` under
+`out/issue-214/resume-2026-09-23/`. Full issue acceptance and actual GitHub CI/merge-gate evidence remain
+outstanding.

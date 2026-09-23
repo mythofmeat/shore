@@ -1,3 +1,4 @@
+import { useDisplay } from "./display_state.tsx";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ContentBlock } from "../protocol/ContentBlock.ts";
@@ -37,11 +38,16 @@ export function mediaSource(data: string | null | undefined, mime?: string): str
 }
 
 export function ImageView({ data, caption, mime, open }: { data?: string | null; caption: string; mime?: string; open: (source: string) => void }) {
+  const display = useDisplay();
   const source = mediaSource(data, mime);
+  if (source !== undefined && display.option("images") === "off") return <button onClick={() => open(source)} aria-label={`View image: ${caption}`}>{caption} · Open image</button>;
   return source === undefined ? <p className="muted">{caption} · image data unavailable</p> : <button className="image-button" onClick={() => open(source)} aria-label={`View image: ${caption}`}><img loading="lazy" src={source} alt={caption} /></button>;
 }
 
 export function Blocks({ blocks, reasoning, tools, openImage }: { blocks: ContentBlock[]; reasoning: boolean; tools: boolean; openImage: (source: string) => void }) {
+  const display = useDisplay();
+  reasoning = reasoning && display.option("thinking") === "on";
+  tools = tools && display.option("tools") === "on";
   return <>{blocks.map((block, index) => {
     switch (block.type) {
       case "text": return <div key={index} className="message-text">{block.text}</div>;

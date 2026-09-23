@@ -24,3 +24,11 @@
 @media(max-width:600px){.usage-filters{grid-template-columns:minmax(0,1fr)}}
 
 .request-history-bar{padding:6px 12px;border-bottom:1px solid var(--line);font-size:12px}.request-history-bar button{padding:4px 7px;font-size:12px}.request-history-bar p{margin:6px 0}
+
+.preference-control { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin: .75rem 0; }
+.preference-control .field { flex: 1; }
+.preference-control button { flex-shrink: 0; }
+.message-metadata { font-size: .75rem; color: var(--muted); overflow-wrap: anywhere; }
+.budget-readout { padding: .4rem 1rem; border-top: 1px solid #deded8; font-size: .8rem; }
+.budget-readout meter { width: 5rem; vertical-align: middle; }
+@media (max-width: 600px) { .preference-control { flex-wrap: wrap; } .budget-readout button { text-align: left; white-space: normal; } }

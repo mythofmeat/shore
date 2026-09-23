@@ -2,7 +2,8 @@ import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
 import type { FrameSink } from "../../llm/stream";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 
-export const COMPACTION_SUBAGENT = "compaction";
+import { COMPACTION_SUBAGENT } from "./labels.ts";
+export { COMPACTION_SUBAGENT } from "./labels.ts";
 
 export function tagCompactionFrames(sink: FrameSink): FrameSink {
   return (message) => {
