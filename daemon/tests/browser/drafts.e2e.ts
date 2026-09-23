@@ -21,6 +21,93 @@ async function saved(page: Page): Promise<void> {
   await expect(page.getByRole("status").filter({ hasText: "Draft saved on this device" })).toBeVisible();
 }
 
+for (const destination of ["character", "thread", "round trip", "reconnect"]) test(`a delayed draft save cannot dispatch after a ${destination} change`, async ({ page }) => {
+  await page.addInitScript(`window.shoreSockets = []; window.WebSocket = class extends WebSocket {
+    constructor(...args) { super(...args); window.shoreSockets.push(this); }
+  };`);
+  let sends = 0;
+  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+    if ((JSON.parse(String(payload)) as { type: string }).type === "message") sends += 1;
+  }));
+  await openCharacter(page);
+  if (destination === "thread") {
+    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Threads", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("New thread ID", { exact: true }).fill("side");
+    await dialog.getByRole("button", { name: "Run action", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close dialog" }).click();
+  } else if (destination !== "reconnect") {
+    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Character name", { exact: true }).fill("other");
+    await dialog.getByRole("button", { name: "Run action", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close dialog" }).click();
+  }
+  await page.getByLabel("Message", { exact: true }).fill("Only send this draft to nova main");
+  await page.getByLabel("Attach images", { exact: true }).setInputFiles(picture);
+  await saved(page);
+  await page.evaluate(`{
+    const descriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, "oncomplete");
+    Object.defineProperty(IDBTransaction.prototype, "oncomplete", { ...descriptor, set(handler) {
+      if (this.mode !== "readwrite" || !this.objectStoreNames.contains("drafts")) return descriptor.set.call(this, handler);
+      Object.defineProperty(IDBTransaction.prototype, "oncomplete", descriptor);
+      descriptor.set.call(this, event => { window.shoreReleaseDraft = () => handler.call(this, event); });
+    } });
+  }`);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => page.evaluate('typeof window.shoreReleaseDraft')).toBe("function");
+  if (destination === "reconnect") {
+    await page.evaluate("window.shoreSockets.at(-1).close()");
+    await expect.poll(() => page.evaluate("window.shoreSockets.length")).toBe(2);
+    await expect(page.locator(".connection.online")).toBeVisible();
+  } else if (destination === "thread") {
+    await page.getByRole("navigation", { name: "Threads" }).getByRole("button", { name: /side/ }).click();
+    await expect(page.getByRole("heading", { name: "nova / side" })).toBeVisible();
+  } else {
+    await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "O other" }).click();
+    await expect(page.getByRole("heading", { name: "other / main" })).toBeVisible();
+    if (destination === "round trip") {
+      await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
+      await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
+    }
+  }
+  await page.evaluate("window.shoreReleaseDraft()");
+  await expect(page.getByRole("alert")).toContainText("Conversation changed before sending. Your draft was retained.");
+  expect(sends).toBe(0);
+  await expect(page.getByRole("article", { name: "user message" })).toHaveCount(0);
+  if (destination === "thread") await page.getByRole("navigation", { name: "Threads" }).getByRole("button", { name: /main/ }).click();
+  if (destination === "character") await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Only send this draft to nova main");
+  await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Only send this draft to nova main");
+  await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+});
+
+test("reconnecting during generation retires the departed session's live response", async ({ page }) => {
+  await page.addInitScript(`window.shoreSockets = []; window.WebSocket = class extends WebSocket {
+    constructor(...args) { super(...args); window.shoreSockets.push(this); }
+  };`);
+  await openCharacter(page);
+  await page.getByLabel("Message", { exact: true }).fill("hold this request");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const live = page.getByRole("article", { name: "Streaming response" });
+  await expect(live).toBeVisible();
+  await page.evaluate("window.shoreSockets.at(-1).close()");
+  await expect.poll(() => page.evaluate("window.shoreSockets.length")).toBe(2);
+  await expect(page.locator(".connection.online")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
+  await expect(live).toHaveCount(0);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "I checked the conversation", exact: true }).click();
+  await page.getByLabel("Message", { exact: true }).fill("A fresh request after reconnecting");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("article", { name: "assistant message" })).toContainText("A fresh request after reconnecting");
+  await expect(live).toHaveCount(0);
+});
+
 test("draft text and actual image attachments survive reload and send once", async ({ page }) => {
   await openCharacter(page);
   await page.getByLabel("Message", { exact: true }).fill("Saved picture question");

@@ -289,12 +289,13 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRole): ModelRole {
+function backgroundRole(ctx: ModelsContext, task: BackgroundTask): ModelRole {
   const bg = ctx.config.app.defaults.background;
   const perTask = bg[task];
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
+  const chat = task === "compaction" ? chatRole(ctx) : inheritedChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
@@ -334,7 +335,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const inherited = inheritedChatRole(ctx);
   return [
     chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, inherited)),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task)),
     subagentRole(ctx, inherited),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
@@ -574,9 +575,8 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationRe
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const chat = inheritedChatRole(ctx);
   const task = selector === "all" ? "heartbeat" : backgroundTask(selector);
-  const role = backgroundRole(ctx, task, chat);
+  const role = backgroundRole(ctx, task);
 
   return {
     target: "role",
@@ -986,7 +986,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task, chat).source,
+      source: backgroundRole(ctx, task).source,
       resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
     });
   }

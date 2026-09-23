@@ -59,6 +59,9 @@ test("model workflows preserve global settings before onboarding and expose role
   const roles = dialog.getByRole("region", { name: "Model roles", exact: true });
   const role = (name: string) => roles.getByRole("row").filter({ has: page.getByRole("cell", { name, exact: true }) });
   await expect(role("chat")).toContainText("anthropic:fast-fixture");
+  await expect(role("compaction")).toContainText("anthropic:fast-fixture");
+  await expect(role("heartbeat")).toContainText("anthropic:claude-opus-4-8");
+  await expect(role("sub-agents")).toContainText("anthropic:claude-opus-4-8");
   await dialog.getByRole("button", { name: "Inspect target settings" }).click();
   await dialog.getByRole("combobox", { name: "Model setting", exact: true }).selectOption("temperature");
   await expect(dialog.getByRole("combobox", { name: "Preference scope", exact: true })).toHaveValue("character");
@@ -76,6 +79,12 @@ test("model workflows preserve global settings before onboarding and expose role
   await dialog.getByRole("combobox", { name: "Target role", exact: true }).selectOption("background:compaction");
   await vendor.getByRole("button", { name: "Use for background compaction", exact: true }).click();
   await expect(role("compaction")).toContainText("openrouter:vendor-fixture");
+  await dialog.getByRole("button", { name: "Reset model selection", exact: true }).click();
+  await expect(role("compaction")).toContainText("anthropic:fast-fixture");
+  await expect(dialog.getByRole("region", { name: "Target model settings", exact: true })).toContainText("anthropic:fast-fixture");
+  await dialog.getByRole("status").filter({ hasText: "Model change completed" }).getByText("Model change details", { exact: true }).click();
+  await expect(dialog.getByRole("status").filter({ hasText: "Model change completed" })).toContainText('"active": "anthropic:fast-fixture"');
+  await vendor.getByRole("button", { name: "Use for background compaction", exact: true }).click();
   await dialog.getByRole("combobox", { name: "Target role", exact: true }).selectOption("background:all");
   await expect(dialog.getByRole("alert")).toContainText("background tasks use different models");
   await dialog.getByRole("button", { name: "Reset model selection", exact: true }).click();

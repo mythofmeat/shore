@@ -91,7 +91,7 @@ export function Models({ actions, ready, character, changed, close }: { actions:
   const roleTarget = target.startsWith("background:") || target.startsWith("subagent:");
   const entry = detail?.setting_schema.find((item) => item.key === setting);
   return <Modal title="Models & roles" close={close}><p className="muted">Active chat: {listing?.active ?? "No model selected"}. Favorites are global. Role selections update global configuration; chat selection pins the current thread.</p>
-    <p className="muted">Background and subagent models inherit the character default independently of thread pins.</p>
+    <p className="muted">Compaction inherits the current thread's chat model. Heartbeat and subagents inherit the character default.</p>
     {!ready ? <p role="status">Reconnect before changing models. Unsaved settings remain while this dialog stays open.</p> : null}{busy ? <p role="status">Loading models…</p> : null}{error === "" ? null : <p role="alert" className="error">{error}</p>}
     <section aria-label="Model roles"><h3>Roles and inheritance</h3><div className="table-scroll"><table><thead><tr><th>Role</th><th>Model</th><th>Source</th></tr></thead><tbody>{listing?.roles.map((role) => <tr key={role.role}><td>{role.role}</td><td>{role.model ?? "Not configured"}</td><td>{role.source ?? "None"}</td></tr>)}</tbody></table></div>
       {overview?.roles.map((role) => <details key={role.role}><summary>{role.role} · {role.model ?? "Unresolved"}{role.settings.length > 0 ? ` · ${String(role.settings.length)} saved settings` : ""}</summary>{role.error === null ? null : <p className="error">{role.error}</p>}<Inspect value={role} label="Role and saved settings" /></details>)}<Inspect value={overview} label="Complete role overview" />

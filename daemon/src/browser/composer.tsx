@@ -15,6 +15,7 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   const [store] = useState(() => browserDraft(conversation));
   const [draft, setDraft] = useState<DraftContent>({ text: "", images: [], pending: false });
   const current = useRef(draft);
+  const mounted = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Loading draft…");
   const [storageFailed, setStorageFailed] = useState(false);
@@ -95,13 +96,14 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
   };
   const selectText = (target: HTMLTextAreaElement) => textHistory.select(target.selectionStart, target.selectionEnd, target.selectionDirection);
   useEffect(() => {
-    let mounted = true;
+    let active = true;
+    mounted.current = true;
     void store.load().then((value) => {
-      if (mounted) { textHistory.reset(value.text); current.current = value; setDraft(value); setLoaded(true); setStorageFailed(store.unsaved); setStatus(store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device"); }
+      if (active) { textHistory.reset(value.text); current.current = value; setDraft(value); setLoaded(true); setStorageFailed(store.unsaved); setStatus(store.unsaved ? "Draft not saved. Keep this page open." : "Draft saved on this device"); }
     }).catch((error: unknown) => {
-      if (mounted) { workspace.report(error); setLoaded(true); setStorageFailed(true); setStatus("Draft storage unavailable. Keep this page open."); }
+      if (active) { workspace.report(error); setLoaded(true); setStorageFailed(true); setStatus("Draft storage unavailable. Keep this page open."); }
     });
-    return () => { mounted = false; };
+    return () => { active = false; mounted.current = false; };
   }, [store, workspace, textHistory]);
   const send = async () => {
     if (!loaded || busy || attaching || current.current.pending || state.status !== "ready" || state.character === null || request?.available !== true) return;
@@ -110,10 +112,19 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
     const message = conversationRequest("message", { ...values, text: submitted.text, image_data: submitted.images });
     if (submitted.text.trim() === "" && submitted.images.length === 0 && (message.images?.length ?? 0) === 0) return;
     checkAttachments(submitted.images);
+    const connection = workspace.connection;
+    const generation = connection.generation;
     setBusy(true);
-    await change({ ...submitted, pending: true });
     try {
-      const result = await workspace.connection.submit(message).finished;
+      await change({ ...submitted, pending: true });
+      const selected = workspace.getSnapshot();
+      if (!mounted.current || workspace.connection !== connection || generation !== connection.generation || connection.status !== "ready" ||
+        selected.character !== state.character || selected.thread !== state.thread ||
+        connection.selection.character !== state.character || connection.selection.thread !== state.thread) {
+        workspace.report("Conversation changed before sending. Your draft was retained.");
+        return;
+      }
+      const result = await connection.submit(message).finished;
       if (result.outcome === "completed") {
         const value = current.current;
         await change({ ...(value.options === undefined ? {} : { options: remainingMessageOptions(value.options, submitted.options ?? {}) }), text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false });

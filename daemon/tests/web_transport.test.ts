@@ -563,6 +563,47 @@ describe("browser resource limits", () => {
     await f.swp.sessionRouter.sendToSession(otherEntry[0], { type: "ping" });
     expect(await other.frame("ping")).toEqual({ type: "ping" });
   });
+
+  test("unrelated history broadcasts do not consume a browser peer's queue", async () => {
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_queued_bytes: 1024 } }); f.web.activate();
+    const { cookie } = await f.login();
+    const browser = connectBrowser(f.web.origin, cookie); await browser.attach("ada", "main");
+    const history = { type: "history", messages: [], config: { oversized: "x".repeat(2048) }, selected_character: "bo", selected_thread: "main", revision: 1 } satisfies ServerMessage;
+    f.swp.broadcast(history);
+    f.swp.broadcast({ ...history, selected_character: "ada", selected_thread: "side" });
+    for (let revision = 2; revision < 300; revision += 1) f.swp.broadcast({ ...history, config: {}, revision });
+    f.swp.broadcast({ type: "ping" });
+    expect(await browser.frame("ping")).toEqual({ type: "ping" });
+    expect(f.swp.sessionRouter.sessions()).toHaveLength(1);
+    f.swp.broadcast({ ...history, selected_character: "ada" });
+    expect((await browser.closed).code).toBe(1013);
+  });
+
+  test("archive-sized local queues route broadcasts using the current selection before counting bytes", async () => {
+    const f = await fixture();
+    let overflows = 0;
+    const peer = await f.swp.attachLocal({ clientType: "web", clientName: "archive-worker", character: "ada", thread: "main",
+      outboundLimits: { messages: 4, bytes: 1024 * 1024, onOverflow: () => { overflows += 1; } } });
+    try {
+      const events = peer.events();
+      expect((await events.next()).value).toMatchObject({ type: "history" });
+      const oversized = { type: "history", messages: [], config: { oversized: "x".repeat(1024 * 1024) }, selected_character: "bo", selected_thread: "side", revision: 1 } satisfies ServerMessage;
+      f.swp.broadcast(oversized);
+      f.swp.broadcast({ type: "ping" });
+      expect((await events.next()).value).toEqual({ type: "ping" });
+      expect(overflows).toBe(0);
+      f.swp.sessionRouter.setSelectedCharacter(peer.session.sessionId, "bo");
+      f.swp.sessionRouter.setSelectedThread(peer.session.sessionId, "side");
+      f.swp.broadcast({ ...oversized, selected_character: "ada", selected_thread: "main" });
+      const matching = { ...oversized, config: {} };
+      f.swp.broadcast(matching);
+      expect((await events.next()).value).toEqual(matching);
+      expect(overflows).toBe(0);
+      f.swp.broadcast(oversized);
+      expect((await events.next()).done).toBe(true);
+      expect(overflows).toBe(1);
+    } finally { await peer.detach(); }
+  });
 });
 
 describe("web listener policy", () => {

@@ -253,7 +253,14 @@ export class Server {
 
     const inbox = new Inbox(limits);
     const media = new HistoryMediaDelivery();
-    const subscription = this.#events.subscribe(limits);
+    const matchesSession = (msg: ServerMessage): boolean => eventMatchesSession(
+      msg,
+      this.#router.characterFor(clientId),
+      this.#router.has(clientId),
+      this.#router.receivesAllCharacters(clientId),
+      this.#router.threadFor(clientId),
+    );
+    const subscription = this.#events.subscribe(limits, matchesSession);
     let detached = false;
     let detachment: Promise<void> | undefined;
     let relay: Promise<void> = Promise.resolve();
@@ -314,15 +321,7 @@ export class Server {
           }
           continue;
         }
-        if (
-          eventMatchesSession(
-            result.msg,
-            this.#router.characterFor(clientId),
-            this.#router.has(clientId),
-            this.#router.receivesAllCharacters(clientId),
-            this.#router.threadFor(clientId),
-          )
-        ) {
+        if (matchesSession(result.msg)) {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;

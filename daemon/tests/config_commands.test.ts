@@ -22,7 +22,7 @@ import {
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { loadConfig } from "../src/config/loader.ts";
-import { switchModel } from "../src/commands/models.ts";
+import { modelInfo, modelRoles, resetModel, switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
 
 interface Row {
@@ -110,6 +110,18 @@ test("the background model command accepts an explicit SDK model absent from dis
   expect(selected).toMatchObject({ active: "claude_agent:claude-opus-4-8", role: "compaction" });
   expect(loadConfig(w.ctx.configPath, { env: required(w.ctx.env) }).app.defaults.background.compaction)
     .toBe("claude_agent:claude-opus-4-8");
+});
+
+test("resetting compaction inherits the thread model while heartbeat and subagents inherit the character model", async () => {
+  const w = await build("ada", '[chat]\nmodel = "anthropic:beta-id"\n[chat."anthropic:alpha-id"]\n[chat."anthropic:beta-id"]\n');
+  const ctx = { ...w.ctx, dataDir: w.ctx.config.dirs.data, thread: "side", threadModel: "anthropic:alpha-id" };
+  switchModel(ctx, { name: "anthropic:beta-id", background_task: "compaction" });
+  expect(modelRoles(ctx).find((role) => role.role === "compaction")).toMatchObject({ model: "anthropic:beta-id", source: "compaction.model" });
+  expect(resetModel(ctx, { background_task: "compaction" })).toMatchObject({ active: "anthropic:alpha-id", source: "inherits chat" });
+  expect(modelInfo(ctx, { background_task: "compaction" })).toMatchObject({ qualified_name: "anthropic:alpha-id" });
+  expect(modelRoles(ctx).find((role) => role.role === "compaction")).toMatchObject({ model: "anthropic:alpha-id", source: "inherits chat" });
+  expect(resetModel(ctx, { background_task: "heartbeat" })).toMatchObject({ active: "anthropic:beta-id" });
+  expect(resetModel(ctx, { subagent: "all" })).toMatchObject({ active: "anthropic:beta-id" });
 });
 
 const scrub = (value: unknown, root: string): unknown =>
