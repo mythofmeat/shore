@@ -490,6 +490,7 @@ test("a thread's pin is the active model, and switching the character's does not
     roles: { role: string; model: string | null; source: string | null }[];
   };
   expect(listed.active).toBe("anthropic:alpha-id");
+  expect(listed.roles.find((role) => role.role === "compaction")?.model).toBe("anthropic:alpha-id");
   expect(listed.roles.find((role) => role.role === "heartbeat")?.model).toBe("anthropic:beta-id");
   expect(listed.roles.find((role) => role.role === "sub-agents")?.model).toBe("anthropic:beta-id");
   expect(listed.roles.find((r) => r.role === "chat")).toEqual({

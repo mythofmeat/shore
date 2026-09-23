@@ -68,6 +68,7 @@ export class BrowserConnection {
   }
 
   get status(): ConnectionStatus { return this.#status; }
+  get generation(): number { return this.#generation; }
   get detail(): string { return this.#detail; }
   get selection(): Readonly<SyncSnapshot> { return this.#sync.snapshot; }
   get pendingCount(): number { return this.#pending.size; }

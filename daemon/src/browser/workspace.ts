@@ -154,7 +154,7 @@ export class Workspace {
     if (update.kind === "status") {
       if (update.status === "signed_out") this.actions.clearOutput();
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, streams: [], media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }

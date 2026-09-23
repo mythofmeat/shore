@@ -68,13 +68,15 @@ async function fixture(limits: Partial<ArchiveTransferLimits> = {}, singleCharac
   return { server, transfers, next, finish, count: () => count };
 }
 
-test("archive workers request an unselected session while ordinary local peers still select a sole character", async () => {
+test("archive workers stay unselected and complete exports despite oversized conversation broadcasts", async () => {
   const f = await fixture({}, true); const a = owner();
   const ordinary = await f.server.attachLocal({ clientType: "test", clientName: "Ordinary local client" });
   expect(ordinary.history.selectedCharacter).toBe("ada"); await ordinary.detach();
   const info = f.transfers.export(a.session, "ada");
   const route = await f.next(); expect(route.meta.session.selectedCharacter).toBeNull();
+  f.server.broadcast({ type: "history", messages: [], config: { oversized: "x".repeat(1024 * 1024) }, selected_character: "ada", selected_thread: "main", revision: 1 });
   await f.finish(route); await until(() => f.transfers.get(a.session, info.id).downloadable);
+  expect(await (await f.transfers.download(a.session, info.id, upload())).text()).toBe("download archive");
 });
 
 test("uploads belong to the sign-in, use private controlled paths and import once through the session dispatcher", async () => {

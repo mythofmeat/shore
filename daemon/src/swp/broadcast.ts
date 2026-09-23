@@ -11,20 +11,22 @@ export class Subscription {
   readonly #queue: { message: ServerMessage; bytes: number }[] = [];
   readonly #capacity: number;
   readonly #byteLimit: number | undefined;
+  readonly #matches: ((msg: ServerMessage) => boolean) | undefined;
   #bytes = 0;
   #skipped = 0;
   #closed = false;
   #wake: (() => void) | null = null;
   #detach: (() => void) | null = null;
 
-  constructor(capacity: number, detach: () => void, byteLimit?: number) {
+  constructor(capacity: number, detach: () => void, byteLimit?: number, matches?: (msg: ServerMessage) => boolean) {
     this.#capacity = capacity;
     this.#detach = detach;
     this.#byteLimit = byteLimit;
+    this.#matches = matches;
   }
 
   push(msg: ServerMessage): void {
-    if (this.#closed) return;
+    if (this.#closed || this.#matches?.(msg) === false) return;
     const bytes = this.#byteLimit === undefined ? 0 : Buffer.byteLength(JSON.stringify(msg));
     while (this.#queue.length > 0 &&
       (this.#queue.length >= this.#capacity || this.#bytes + bytes > (this.#byteLimit ?? Infinity))) {
@@ -90,10 +92,10 @@ export class Broadcast {
     this.#capacity = capacity;
   }
 
-  subscribe(limits?: { messages: number; bytes: number }): Subscription {
+  subscribe(limits?: { messages: number; bytes: number }, matches?: (msg: ServerMessage) => boolean): Subscription {
     const sub: Subscription = new Subscription(Math.min(this.#capacity, limits?.messages ?? this.#capacity), () => {
       this.#subscribers.delete(sub);
-    }, limits?.bytes);
+    }, limits?.bytes, matches);
     this.#subscribers.add(sub);
     if (this.#closed) sub.close();
     return sub;

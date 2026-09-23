@@ -18,6 +18,25 @@ function fixture() {
   return { connection, workspace, frame };
 }
 
+test("connection replacement retires main and subagent previews without discarding conversation history", () => {
+  const { connection, workspace, frame } = fixture();
+  const history = { type: "history", config: {}, revision: 2, selected_character: "nova", selected_thread: "main", messages: [
+    { msg_id: "saved", role: "user", content: "Saved question", content_blocks: [], images: [], timestamp: "" },
+  ] } satisfies ServerMessage;
+  frame(history);
+  frame({ type: "stream_start", rid: "main", regen: false });
+  frame({ type: "stream_start", rid: "main", subagent: "worker", task_id: "task", regen: false });
+  frame({ ...history, revision: 3 });
+  expect(workspace.getSnapshot().streams).toHaveLength(2);
+  connection.emit({ kind: "status", status: "reconnecting", detail: "Connection interrupted" });
+  expect(workspace.getSnapshot().streams).toEqual([]);
+  expect(workspace.getSnapshot().messages).toEqual(history.messages);
+  frame({ ...history, revision: 3 });
+  expect(workspace.getSnapshot().streams).toEqual([]);
+  frame({ type: "stream_start", rid: "fresh", regen: false });
+  expect(workspace.getSnapshot().streams).toHaveLength(1);
+});
+
 test("live text and reasoning retain bounded recent content without splitting a character; canonical results stay complete", () => {
   const { workspace, frame } = fixture();
   const long = "x".repeat(MAX_LIVE_TEXT) + "😀TAIL";
