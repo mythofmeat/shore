@@ -11,6 +11,60 @@ test("browser archive transfers are available before character selection", async
   await expect(page.getByLabel("Archive file", { exact: true })).toBeVisible();
 });
 
+for (const cancel of [false, true]) test(`archive downloads ${cancel ? "can be cancelled while reading the body" : "continue beyond the metadata request timeout"}`, async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Daemon token").fill("browser-test-token");
+  await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: "Create character", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Character name", { exact: true }).fill("nova");
+  await dialog.getByRole("button", { name: "Run action", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("button", { name: "Character archives", exact: true }).click();
+  await dialog.getByLabel("Character to export", { exact: true }).selectOption("nova");
+  await dialog.getByRole("button", { name: "Prepare archive", exact: true }).click();
+  await expect(dialog.getByText("Export ready to download.", { exact: true })).toBeVisible();
+  await page.evaluate(`{
+    const timeout = AbortSignal.timeout;
+    const deadlines = [];
+    AbortSignal.timeout = milliseconds => {
+      if (milliseconds !== 60000) return timeout(milliseconds);
+      const controller = new AbortController();
+      deadlines.push(controller);
+      return controller.signal;
+    };
+    window.shoreExpireArchiveDeadlines = () => deadlines.forEach(controller => controller.abort(new DOMException("Timed out", "TimeoutError")));
+    const original = window.fetch;
+    window.fetch = async (input, init) => {
+      const response = await original(input, init);
+      if (!String(input).endsWith("/download")) return response;
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const split = Math.floor(bytes.length / 2);
+      return new Response(new ReadableStream({ start(controller) {
+        controller.enqueue(bytes.subarray(0, split));
+        init.signal.addEventListener("abort", () => controller.error(init.signal.reason), { once: true });
+        window.shoreFinishDownload = () => { controller.enqueue(bytes.subarray(split)); controller.close(); };
+      } }), { headers: response.headers });
+    };
+  }`);
+  await dialog.getByRole("button", { name: "Download archive", exact: true }).click();
+  await expect.poll(() => page.evaluate("typeof window.shoreFinishDownload")).toBe("function");
+  if (cancel) {
+    await dialog.getByRole("button", { name: "Cancel download", exact: true }).click();
+    await expect(dialog.getByRole("status")).toContainText("Download cancelled.");
+    await expect(dialog.getByRole("button", { name: "Cancel download", exact: true })).toHaveCount(0);
+  } else {
+    await page.evaluate("window.shoreExpireArchiveDeadlines()");
+    const downloaded = page.waitForEvent("download");
+    await page.evaluate("window.shoreFinishDownload()");
+    const download = await downloaded;
+    expect(download.suggestedFilename()).toBe("nova.shore.tar.gz");
+    expect(await download.failure()).toBeNull();
+    await expect(dialog.getByRole("status")).toContainText("Downloaded nova.shore.tar.gz");
+  }
+});
+
 test("browser-picked archives preserve history and media across download, collision refusal, deletion and restoration", async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), "shore-browser-picked-archives-"));
   const picked = join(root, "downloaded-on-this-computer.tar.gz");

@@ -21,6 +21,58 @@ async function saved(page: Page): Promise<void> {
   await expect(page.getByRole("status").filter({ hasText: "Draft saved on this device" })).toBeVisible();
 }
 
+for (const edited of [false, true]) test(`send completion reconciles a remounted ${edited ? "edited" : "unchanged"} draft`, async ({ page }) => {
+  let messageRid: string | undefined;
+  let release: (() => void) | undefined;
+  await page.routeWebSocket("**/api/swp", (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((data) => {
+      const frame = JSON.parse(String(data)) as { type: string; rid?: string };
+      if (frame.type === "message") messageRid = frame.rid;
+      server.send(data);
+    });
+    server.onMessage((data) => {
+      const frame = JSON.parse(String(data)) as { type: string; rid?: string };
+      if (frame.type === "request_finished" && frame.rid === messageRid) release = () => socket.send(data);
+      else socket.send(data);
+    });
+  });
+  await openCharacter(page);
+  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Character name", { exact: true }).fill("other");
+  await dialog.getByRole("button", { name: "Run action", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("Original submitted draft");
+  await page.getByLabel("Attach images", { exact: true }).setInputFiles(picture);
+  await saved(page);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => typeof release).toBe("function");
+  await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "O other" }).click();
+  await expect(page.getByRole("heading", { name: "other / main" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Original submitted draft");
+  if (edited) {
+    await page.getByLabel("Message", { exact: true }).fill("New draft must survive completion");
+    await page.getByRole("button", { name: "Remove draft.png", exact: true }).click();
+    await page.getByLabel("Attach images", { exact: true }).setInputFiles({ ...picture, name: "next.png" });
+    await saved(page);
+  }
+  if (release === undefined) throw new Error("Missing held send completion");
+  release();
+  await expect(page.getByText("Previous send needs review", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(edited ? "New draft must survive completion" : "");
+  await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remove next.png", exact: true })).toHaveCount(edited ? 1 : 0);
+  await saved(page);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(edited ? "New draft must survive completion" : "");
+  await expect(page.getByRole("button", { name: "Remove next.png", exact: true })).toHaveCount(edited ? 1 : 0);
+  await expect(page.getByText("Previous send needs review", { exact: true })).toHaveCount(0);
+});
+
 for (const destination of ["character", "thread", "round trip", "reconnect"]) test(`a delayed draft save cannot dispatch after a ${destination} change`, async ({ page }) => {
   await page.addInitScript(`window.shoreSockets = []; window.WebSocket = class extends WebSocket {
     constructor(...args) { super(...args); window.shoreSockets.push(this); }

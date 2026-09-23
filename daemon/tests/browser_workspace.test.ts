@@ -4,6 +4,7 @@ import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, controlFor, initialValue } from "../src/browser/forms.ts";
 import { mergeHistory, EVENT_POLICIES, inspectableRequest } from "../src/browser/workspace.ts";
 import { configSchema } from "../src/config/schema.ts";
+import { formatConfigPath } from "../src/config/surface.ts";
 import { assertSettingsCoverage, configAt, settingControl } from "../src/browser/settings_forms.ts";
 import { assertModelSettingsCoverage } from "../src/browser/model_forms.ts";
 import { settingSchema } from "../src/llm/settings.ts";
@@ -87,6 +88,17 @@ test("all live settings reach controls, with explicit failure for missing render
   expect(() => settingControl({ ...secret, kind: "unknown" })).toThrow("Unsupported editable setting");
   expect(configAt({ tools: { enabled_tools: ["read"] } }, "tools.enabled_tools")).toEqual(["read"]);
   expect(configAt({}, "__proto__.polluted")).toBeNull();
+});
+
+test("setting lookup follows canonical quoted configuration components", () => {
+  for (const model of ["anthropic:fast-fixture", "vendor:model.v2", 'model."quoted"\\path', "", "unicode-模型", "line\nbreak"]) {
+    const config = { chat: { [model]: { max_output_tokens: 4096 } } };
+    const key = formatConfigPath(["chat", model, "max_output_tokens"]);
+    expect(configAt(config, key)).toBe(4096);
+    expect(configAt(config, formatConfigPath(["chat", model, "missing"]))).toBeNull();
+  }
+  expect(configAt({}, '"__proto__".polluted')).toBeNull();
+  for (const key of ["chat..model", 'chat."unterminated', ".chat", "chat."]) expect(configAt({}, key)).toBeNull();
 });
 
 test("uncertain configuration requests retain their key and hide submitted values", () => {

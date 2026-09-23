@@ -203,6 +203,52 @@ describe("what the peer sends", () => {
 });
 
 describe("what the peer receives", () => {
+  for (const selection of ["character", "thread"]) test(`queued history is filtered again after switching ${selection}`, async () => {
+    const { server } = await fixture();
+    const peer = await server.attachLocal({ clientType: "browser", clientName: "switching", character: "ada", capabilities: ["history-deltas"] });
+    const events = peer.events();
+    await events.next();
+    server.sessionRouter.setSelectedThread(peer.session.sessionId, "main");
+    server.broadcast({ type: "history", messages: [], config: {}, revision: 4, selected_character: "ada", selected_thread: "main" });
+    const character = selection === "character" ? "bee" : "ada";
+    const thread = selection === "thread" ? "side" : "main";
+    server.sessionRouter.setSelectedCharacter(peer.session.sessionId, character);
+    server.sessionRouter.setSelectedThread(peer.session.sessionId, thread);
+    await server.sessionRouter.sendToSession(peer.session.sessionId, {
+      type: "history", messages: [], config: {}, revision: 5, selected_character: character, selected_thread: thread,
+    });
+    server.broadcast({ type: "ping" });
+    expect((await events.next()).value).toMatchObject({ type: "history", selected_character: character, selected_thread: thread });
+    expect((await events.next()).value).toEqual({ type: "ping" });
+    expect(server.sessionRouter.characterFor(peer.session.sessionId)).toBe(character);
+    expect(server.sessionRouter.threadFor(peer.session.sessionId)).toBe(thread);
+  });
+
+  test("selection is checked again after loading a broadcast's full history", async () => {
+    const { server } = await fixture();
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let calls = 0;
+    server.setHandshakeProvider({
+      hello: async () => ({ characters: [{ name: "ada" }, { name: "bee" }] }),
+      history: async (character) => {
+        if (++calls > 1) { started.resolve(); await release.promise; }
+        return { messages: [], activeStart: 0, config: {}, selectedCharacter: character, selectedThread: "main", revision: 4 };
+      },
+    });
+    const peer = await server.attachLocal({ clientType: "bridge", clientName: "refreshing", character: "ada" });
+    const events = peer.events();
+    await events.next();
+    server.broadcast({ type: "history", messages: [], config: {}, revision: 4, selected_character: "ada", selected_thread: "main", delta: { base_revision: 3, after: null } });
+    await started.promise;
+    server.sessionRouter.setSelectedCharacter(peer.session.sessionId, "bee");
+    await server.sessionRouter.sendToSession(peer.session.sessionId, { type: "history", messages: [], config: {}, revision: 5, selected_character: "bee", selected_thread: "main" });
+    release.resolve();
+    server.broadcast({ type: "ping" });
+    expect((await events.next()).value).toMatchObject({ type: "history", selected_character: "bee" });
+    expect((await events.next()).value).toEqual({ type: "ping" });
+  });
+
   test("a slow peer is detached on queue overflow without affecting another peer", async () => {
     const { server, routed } = await fixture(["ada"]);
     let overflow = 0;

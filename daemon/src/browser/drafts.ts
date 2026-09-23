@@ -124,14 +124,16 @@ export class BrowserDraft {
   #attachment: string | null = null;
   #images: ImageUpload[] = [];
   #queue: Promise<void> = Promise.resolve();
-  #latest: DraftContent | undefined;
+  #current: DraftContent | undefined;
+  #saving = false;
+  readonly #listeners = new Set<(content: DraftContent) => void>();
   #sequence = 0;
   readonly #key: string;
   constructor(readonly conversation: string) { this.#key = `shore.draft.owner.v2.${conversation}`; }
 
   async load(): Promise<DraftContent> {
     await this.#queue;
-    if (this.#latest !== undefined) return this.#latest;
+    if (this.#current !== undefined) return this.#current;
     const sequence = this.#sequence;
     const cloned = await separateClonedTab();
     const id = sessionStorage.getItem(this.#key);
@@ -156,18 +158,35 @@ export class BrowserDraft {
   }
 
   save(content: DraftContent): Promise<void> {
-    this.#latest = content;
+    this.#current = content;
     const sequence = ++this.#sequence;
+    this.#saving = true;
     unsavedDrafts.add(this);
     const saved = this.#queue.then(async () => {
-      await this.#write(content);
-      if (sequence === this.#sequence) { this.#latest = undefined; unsavedDrafts.delete(this); }
+      try {
+        await this.#write(content);
+        if (sequence === this.#sequence) unsavedDrafts.delete(this);
+      } finally {
+        if (sequence === this.#sequence) {
+          this.#saving = false;
+          for (const listener of this.#listeners) listener(content);
+        }
+      }
     });
     this.#queue = saved.catch(() => {});
+    for (const listener of this.#listeners) listener(content);
     return saved;
   }
 
-  get unsaved(): boolean { return this.#latest !== undefined; }
+  get current(): DraftContent | undefined { return this.#current; }
+  get saving(): boolean { return this.#saving; }
+
+  subscribe(listener: (content: DraftContent) => void): () => void {
+    this.#listeners.add(listener);
+    return () => { this.#listeners.delete(listener); };
+  }
+
+  get unsaved(): boolean { return unsavedDrafts.has(this); }
 
   async #write(content: DraftContent): Promise<void> {
     const db = await open();

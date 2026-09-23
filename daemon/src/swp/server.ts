@@ -307,10 +307,11 @@ export class Server {
           }
           continue;
         }
+        if (!sessionReceives(this.#router, clientId, result.msg)) continue;
         const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;
-        deliver(message);
+        if (sessionReceives(this.#router, clientId, message)) deliver(message);
       }
       inbox.close();
     })().catch((error: unknown) => {

@@ -33,7 +33,10 @@ export function settingText(entry: ConfigSchemaEntry, value: unknown): string {
 
 export function configAt(value: unknown, key: string): unknown {
   let current = value;
-  for (const part of key.split(".")) {
+  const components = key.match(/"(?:[^"\\]|\\.)*"|[A-Za-z0-9_-]+/g);
+  if (components === null || components.join(".") !== key) return null;
+  for (const component of components) {
+    const part: string = component.startsWith('"') ? JSON.parse(component) as string : component;
     if (typeof current !== "object" || current === null || Array.isArray(current) || !Object.hasOwn(current, part)) return null;
     current = (current as Record<string, unknown>)[part];
   }
