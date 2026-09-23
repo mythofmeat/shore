@@ -6,7 +6,7 @@ import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
 
 export const LOCAL_SHORTCUTS = {
-  palette: "All actions", keyboard: "Keyboard shortcuts", display: "Display preferences", activity: "Activity panel",
+  images: "Conversation images", palette: "All actions", keyboard: "Keyboard shortcuts", display: "Display preferences", activity: "Activity panel",
   settings: "Settings", models: "Models & roles", providers: "Providers", diagnostics: "Diagnostics",
   memory: "Memory & segments", tools: "Tool workbench", usage: "Usage & budgets", archives: "Character archives",
   focus: "Focus composer", send: "Send current draft", follow: "Toggle following responses",

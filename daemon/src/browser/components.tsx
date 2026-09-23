@@ -1,3 +1,4 @@
+import { mediaSource, type OpenImage } from "./media.ts";
 import { useDisplay } from "./display_state.tsx";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -31,20 +32,14 @@ export function Modal({ title, close, children }: { title: string; close: () => 
   </dialog>;
 }
 
-export function mediaSource(data: string | null | undefined, mime?: string): string | undefined {
-  if (data === undefined || data === null || !/^[A-Za-z0-9+/=\r\n]+$/.test(data)) return undefined;
-  const type = mime ?? (data.startsWith("iVBOR") ? "image/png" : data.startsWith("/9j/") ? "image/jpeg" : data.startsWith("R0lGOD") ? "image/gif" : data.startsWith("UklGR") ? "image/webp" : undefined);
-  return type !== undefined && ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type) ? `data:${type};base64,${data}` : undefined;
-}
-
-export function ImageView({ data, caption, mime, open }: { data?: string | null; caption: string; mime?: string; open: (source: string) => void }) {
+export function ImageView({ data, caption, mime, open }: { data?: string | null; caption: string; mime?: string; open: OpenImage }) {
   const display = useDisplay();
   const source = mediaSource(data, mime);
-  if (source !== undefined && display.option("images") === "off") return <button onClick={() => open(source)} aria-label={`View image: ${caption}`}>{caption} · Open image</button>;
-  return source === undefined ? <p className="muted">{caption} · image data unavailable</p> : <button className="image-button" onClick={() => open(source)} aria-label={`View image: ${caption}`}><img loading="lazy" src={source} alt={caption} /></button>;
+  if (source !== undefined && display.option("images") === "off") return <button onClick={() => open(source, caption)} aria-label={`View image: ${caption}`}>{caption} · Open image</button>;
+  return source === undefined ? <p className="muted">{caption} · image data unavailable</p> : <button className="image-button" onClick={() => open(source, caption)} aria-label={`View image: ${caption}`}><img loading="lazy" src={source} alt={caption} /></button>;
 }
 
-export function Blocks({ blocks, reasoning, tools, openImage }: { blocks: ContentBlock[]; reasoning: boolean; tools: boolean; openImage: (source: string) => void }) {
+export function Blocks({ blocks, reasoning, tools, openImage }: { blocks: ContentBlock[]; reasoning: boolean; tools: boolean; openImage: OpenImage }) {
   const display = useDisplay();
   reasoning = reasoning && display.option("thinking") === "on";
   tools = tools && display.option("tools") === "on";

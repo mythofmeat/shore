@@ -85,7 +85,7 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   const picture = page.getByRole("article", { name: "user message" }).filter({ hasText: "Picture question" }).getByRole("img");
   await expect(picture).toBeVisible();
   await picture.click();
-  await expect(dialog.getByRole("img", { name: "Full-size conversation image" })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: /example\.png$/ })).toBeVisible();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Dismiss error" }).click();
   await page.screenshot({ path: "../out/issue-214/workspace-desktop.png", fullPage: true });

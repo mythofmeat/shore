@@ -34,3 +34,4 @@
 @media (max-width: 600px) { .preference-control { flex-wrap: wrap; } .budget-readout button { text-align: left; white-space: normal; } }
 
 .shortcut-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.5rem 0;border-bottom:1px solid var(--line)}.shortcut-row span{flex:1;min-width:12rem}.shortcut-row kbd{display:inline;float:none;overflow-wrap:anywhere}
+.gallery figure{margin:1rem 0}.gallery figcaption{overflow-wrap:anywhere;margin-bottom:.75rem}.gallery .actions{justify-content:space-between}.gallery .actions p{margin:0}.gallery:focus{outline:none}
