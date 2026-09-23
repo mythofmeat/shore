@@ -172,6 +172,8 @@ describe("unpinning a sub-agent's model", () => {
     const result = record(resetModel(ctx, { subagent: "music" }));
 
     expect(result["cleared"]).toEqual(["subagents.music.model"]);
+    expect(result["role"]).toBe("sub-agent: music");
+    expect(result["roles"]).toEqual([expect.objectContaining({ role: "sub-agent: music", model: "anthropic:haiku-id" })]);
     expect(ctx.config.app.subagents.get("music")?.model).toBeUndefined();
     expect(roleOf(ctx, "sub-agents")?.model).toBe("anthropic:haiku-id");
   });

@@ -578,8 +578,7 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationRe
   }
 
   const tasks = selector === "all" ? BACKGROUND_TASKS : [backgroundTask(selector)];
-  const inherits = { thread: chatRole(ctx), character: inheritedChatRole(ctx) };
-  const roles = tasks.map((task) => backgroundRole(ctx, task, inherits));
+  const roles = tasks.map((task) => backgroundRole(ctx, task));
   const [first] = roles as [ModelRole, ...ModelRole[]];
   const shared = roles.every((role) => role.model === first.model && role.source === first.source);
 
@@ -656,11 +655,11 @@ function unpinSubagentModel(ctx: ModelsContext, selector: string): OperationResu
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const role = subagentRole(ctx, inheritedChatRole(ctx));
+  const role = { ...subagentRole(ctx, inheritedChatRole(ctx)), role: subagentRoleName(selector) };
   return {
     target: "role",
     active: role.model,
-    role: subagentRoleName(selector),
+    role: role.role,
     cleared,
     source: role.source,
     file: file ?? null,
