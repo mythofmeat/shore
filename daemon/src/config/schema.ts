@@ -4,7 +4,7 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath } from "./surface.ts";
+import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath, TOOLS_SCALAR_KEYS } from "./surface.ts";
 
 export interface SchemaEntry {
   key: string;
@@ -136,7 +136,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const internal: SchemaEntry[] = [];
   const internalLive: LiveInstances = {
     instancesAt(key) {
-      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !["enabled", "timeout", "max_result_chars", "max_inline_image_bytes"].includes(name));
+      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !TOOLS_SCALAR_KEYS.includes(name));
       if (key === "subagents") return live.instancesAt(key).filter((name) => !["enabled", "model"].includes(name));
       return live.instancesAt(key);
     },
