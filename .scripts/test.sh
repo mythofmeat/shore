@@ -97,7 +97,8 @@ for group in "$@"; do
         ;;
     client)
         cd "$root/client"
-        run cargo-test hermetic cargo test --workspace --locked
+        run cargo-test hermetic cargo test --workspace --locked -- --skip cli_and_terminal_reliability_flows
+        run cargo-end-to-end hermetic cargo test -p shore-cli --test reliability --locked
         run cargo-fmt cargo fmt --all --check
         run cargo-clippy cargo clippy --workspace --all-targets --locked
         ;;
