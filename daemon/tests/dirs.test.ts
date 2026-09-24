@@ -62,7 +62,7 @@ describe("ShoreDirs.resolve", () => {
       const got = resolveShoreDirs(c.env, passwdHome);
       expect(got.config).toBe(c.config);
       expect(got.data).toBe(c.data);
-      expect(got.runtime).toBe(c.runtime);
+      expect(got.runtime).toBe(c.runtime.startsWith("/tmp/") ? join(tmpdir(), c.runtime.slice(5)) : c.runtime);
       expect(got.cache).toBe(c.cache);
     });
   }

@@ -37,7 +37,11 @@ afterAll(() => {
   rmSync(runRoot, { recursive: true, force: true });
 });
 
-export function testTmp(prefix: string): string {
+export function testRunRoot(): string {
   mkdirSync(runRoot, { recursive: true });
-  return join(runRoot, prefix);
+  return runRoot;
+}
+
+export function testTmp(prefix: string): string {
+  return join(testRunRoot(), prefix);
 }
