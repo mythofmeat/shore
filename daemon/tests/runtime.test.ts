@@ -142,6 +142,32 @@ describe("what assembly creates", () => {
     }
   });
 
+  test("a call a crash left pending reads as unresolved once the daemon is back up", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-recovery-");
+    try {
+      await mkdir(config.dirs.data, { recursive: true });
+      const path = join(config.dirs.data, "shore.db");
+      const { Ledger } = await import("../src/ledger/store.ts");
+      const before = Ledger.create(path, undefined, false);
+      before.database.run(
+        "INSERT INTO call_attempts(id, started_at, status, character, provider, model, call_type) " +
+          "VALUES ('crashed', '2026-09-24T00:00:00Z', 'pending', 'ada', 'anthropic', 'claude-opus-5', 'message')",
+      );
+      before.close();
+
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+
+      const after = Ledger.open(path);
+      expect(after.database.query("SELECT status FROM call_attempts WHERE id = 'crashed'").get())
+        .toEqual({ status: "unresolved" });
+      after.close();
+
+      await runtime.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("an inaccessible durable database refuses startup", async () => {
     const { root, config } = await dirsUnder("shore-runtime-store-");
     try {

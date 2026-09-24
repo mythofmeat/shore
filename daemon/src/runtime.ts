@@ -342,16 +342,11 @@ function createRuntimeDirs(config: LoadedConfig): void {
   }
 }
 
-function openCallStore(config: LoadedConfig): CallStore | undefined {
+function openCallStore(config: LoadedConfig): CallStore {
   const path = rustJoin(config.dirs.data, "shore.db");
-  try {
-    const store = CallStore.open(path);
-    shoreLog.info(`shore: call payload store enabled at ${path}`);
-    return store;
-  } catch (e) {
-    shoreLog.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);
-    return undefined;
-  }
+  const store = CallStore.open(path);
+  shoreLog.info(`shore: call payload store enabled at ${path}`);
+  return store;
 }
 
 function installCallStoreWireCapture(store: CallStore | undefined): () => void {

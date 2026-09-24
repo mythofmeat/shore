@@ -40,27 +40,18 @@ TESTS = ["tests/runtime.test.ts"]
 # (label, file, find, replace)
 MUTANTS = [
     # --- stores ---------------------------------------------------------------
-    ("ledger: opened instead of created, so a first run records nothing ever after",
+    ("ledger: opened instead of created, so calls a crash left pending stay pending after startup",
      R,
      '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
      '  Ledger.open(rustJoin(config.dirs.data, "shore.db")).close();'),
-    ("ledger: never touched at all",
+    ("ledger: never touched, so calls a crash left pending stay pending after startup",
      R,
      '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
      "  void config;"),
-    ("ledger: created somewhere other than the data dir the recorders read",
+    ("ledger: recovered somewhere other than the data dir the recorders read",
      R,
      '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
      '  Ledger.create(rustJoin(config.dirs.cache, "shore.db")).close();'),
-    ("call store: a failed open becomes fatal, trading the daemon for its telemetry",
-     R,
-     "  } catch (e) {\n"
-     "    shoreLog.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);\n"
-     "    return undefined;\n"
-     "  }",
-     "  } catch (e) {\n"
-     "    throw e;\n"
-     "  }"),
 
     # --- directories ----------------------------------------------------------
     ("dirs: the plugins root is not created, so relative [mcp.*] paths resolve nowhere",
