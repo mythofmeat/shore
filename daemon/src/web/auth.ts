@@ -24,7 +24,7 @@ export class WebSessions {
 
   constructor(origin: string, capacity: number, lifetime: number, readonly recovery?: WebRecovery) {
     this.#secure = origin.startsWith("https:");
-    this.#name = `${this.#secure ? "__Host-" : ""}shore_web_${createHash("sha256").update(origin).digest("hex").slice(0, 12)}`;
+    this.#name = `shore_web_${createHash("sha256").update(origin).digest("hex").slice(0, 12)}`;
     this.#capacity = capacity;
     this.#lifetime = lifetime;
     for (const saved of recovery?.sessions() ?? []) {
@@ -33,8 +33,8 @@ export class WebSessions {
     }
   }
 
-  read(request: Request): WebSession | undefined {
-    const id = new CookieMap(request.headers.get("cookie") ?? "").get(this.#name);
+  read(request: Request, secure = this.#secure): WebSession | undefined {
+    const id = new CookieMap(request.headers.get("cookie") ?? "").get(`${secure ? "__Host-" : ""}${this.#name}`);
     if (id === null || id === undefined || !/^[A-Za-z0-9_-]{43}$/.test(id)) return undefined;
     return this.get(sessionDigest(id));
   }
@@ -74,11 +74,11 @@ export class WebSessions {
     return session;
   }
 
-  cookie(session?: WebSession): string {
+  cookie(session?: WebSession, secure = this.#secure): string {
     const token = session === undefined ? "" : this.#cookies.get(session.id);
     if (token === undefined) throw new Error("Only a new browser sign-in can issue a cookie");
-    return new Cookie(this.#name, token, {
-      httpOnly: true, sameSite: "strict", secure: this.#secure, path: "/",
+    return new Cookie(`${secure ? "__Host-" : ""}${this.#name}`, token, {
+      httpOnly: true, sameSite: "strict", secure, path: "/",
       ...(session === undefined ? { maxAge: 0 } : { expires: new Date(session.expiresAt) }),
     }).toString();
   }

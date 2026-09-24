@@ -277,12 +277,14 @@ describe("browser connection state", () => {
 });
 
 describe("browser authentication boundary", () => {
-  test("LAN HTTP and alternate local hostnames and ports support login, session and WebSocket", async () => {
+  test("LAN, Tailscale and arbitrary DNS hostnames and ports support authenticated HTTP and WebSocket", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "0.0.0.0:0" } }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
-    for (const host of [`localhost:${String(f.web.port)}`, "localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", `${hostname()}:7340`]) {
+    for (const host of [`localhost:${String(f.web.port)}`, "localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", `${hostname()}:7340`, "100.101.102.103:7340", "shore.test-tailnet.ts.net:7340", "lab-box:7340", "alias.example:17340"]) {
       const origin = `http://${host}`;
       expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(200);
+      expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin } })).status).toBe(401);
+      expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: "wrong" }) })).status).toBe(401);
       const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")).not.toContain("Secure");
@@ -297,27 +299,34 @@ describe("browser authentication boundary", () => {
         expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin: foreign, cookie } })).status).toBe(403);
       }
     }
-    for (const host of ["evil.example", "localhost.evil.example"]) {
-      expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(403);
-      expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin: `http://${host}`, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) })).status).toBe(403);
-    }
   });
 
-  test("an explicit proxy origin stays pinned while supporting TLS termination", async () => {
+  test("HTTPS proxy configuration allows direct HTTP access with working cookies and logout for each", async () => {
     const origin = "https://shore.example";
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin } }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
-    const denied = await fetch(`${target}/workspace`);
-    expect(denied.status).toBe(403);
-    expect(await denied.text()).toContain("remove daemon.web.public_origin");
-    const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host: "shore.example", origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
-    expect(login.status).toBe(200);
-    expect(login.headers.get("set-cookie")).toContain("Secure");
-    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
-    if (cookie === undefined) throw new Error("Missing browser cookie");
-    const browser = connectBrowser(target, cookie, WEB_SUBPROTOCOL, { headers: { host: "shore.example", origin } });
-    await browser.attach();
-    expect(await browser.frame("history")).toMatchObject({ selected_character: "ada" });
+    for (const accessOrigin of [origin, target, "http://shore.test-tailnet.ts.net:17340"]) {
+      const headers = { host: new URL(accessOrigin).host, origin: accessOrigin };
+      const secure = accessOrigin.startsWith("https:");
+      expect((await fetch(`${target}/workspace`, { headers })).status).toBe(200);
+      expect((await fetch(`${target}/api/session`, { method: "POST", headers })).status).toBe(401);
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      expect(login.status).toBe(200);
+      expect(login.headers.get("set-cookie")?.includes("Secure")).toBe(secure);
+      expect(login.headers.get("set-cookie")?.startsWith("__Host-")).toBe(secure);
+      const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+      if (cookie === undefined) throw new Error("Missing browser cookie");
+      expect((await fetch(`${target}/api/session`, { method: "POST", headers: { ...headers, cookie } })).status).toBe(200);
+      const browser = connectBrowser(target, cookie, WEB_SUBPROTOCOL, { headers });
+      await browser.attach();
+      expect(await browser.frame("history")).toMatchObject({ selected_character: "ada" });
+      const logout = await fetch(`${target}/api/logout`, { method: "POST", headers: { ...headers, cookie } });
+      expect(logout.status).toBe(204);
+      expect(logout.headers.get("set-cookie")?.split("=", 1)[0]).toBe(cookie.split("=", 1)[0]);
+      expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+      expect((await browser.closed).code).toBe(4001);
+      expect((await fetch(`${target}/api/session`, { method: "POST", headers: { ...headers, cookie } })).status).toBe(401);
+    }
   });
 
   test("HTTPS serves a verified TLS connection and a host-only secure cookie for WSS", async () => {
@@ -386,7 +395,7 @@ describe("browser authentication boundary", () => {
     expect(f.swp.sessionRouter.sessions()).toEqual([]);
   });
 
-  test("cross-origin, missing-origin, spoofed-host and URL-token requests are refused", async () => {
+  test("cross-origin, missing-origin and mismatched-host requests are refused", async () => {
     const f = await fixture(); f.web.activate();
     const { cookie } = await f.login();
     for (const origin of ["https://evil.example", "null", ""]) {
@@ -395,11 +404,19 @@ describe("browser authentication boundary", () => {
     }
     expect((await f.api("/api/session", cookie, {}, { "sec-fetch-site": "same-site" })).status).toBe(403);
     expect((await f.api("/api/session", cookie, {}, { host: "evil.example" })).status).toBe(403);
-    expect((await f.api("/api/login?token=secret", "", { token: TOKEN })).status).toBe(403);
     expect((await f.api("/api/session", cookie)).status).toBe(200);
     const forged = connectBrowser(f.web.origin, cookie, WEB_SUBPROTOCOL, { headers: { origin: "https://evil.example" } });
     expect(forged.opened).rejects.toThrow("rejected"); await forged.closed;
     expect(f.histories()).toBe(0);
+  });
+
+  test("query parameters do not block navigation or replace token authentication", async () => {
+    const f = await fixture(); f.web.activate();
+    expect((await fetch(`${f.web.origin}/workspace?view=chat`)).status).toBe(200);
+    expect((await f.api(`/api/session?token=${TOKEN}`)).status).toBe(401);
+    expect((await f.api(`/api/login?token=${TOKEN}`)).status).toBe(400);
+    const { cookie } = await f.login();
+    expect((await f.api("/api/session?view=chat", cookie)).status).toBe(200);
   });
 
   test("logout revokes active sockets and prevents cookie reuse", async () => {
@@ -659,25 +676,24 @@ describe("web listener policy", () => {
     expect(webBinding(defaultWebConfig())).toEqual({ hostname: "127.0.0.1", port: 7340, secure: false });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340" })).toEqual({ hostname: "0.0.0.0", port: 7340, secure: false });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "[::]:7340" })).toEqual({ hostname: "::", port: 7340, secure: false });
+    expect(webBinding({ ...defaultWebConfig(), bind_addr: "shore.test-tailnet.ts.net:7340" })).toEqual({ hostname: "shore.test-tailnet.ts.net", port: 7340, secure: false });
     expect(() => webBinding({ ...defaultWebConfig(), public_origin: "https://shore.example/path" })).toThrow("exact");
     expect(webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example" })).toMatchObject({ secure: false });
     expect(webBinding({ ...defaultWebConfig(), public_origin: "https://shore.example" })).toMatchObject({ secure: true });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340", public_origin: "https://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
     expect(() => webBinding({ ...defaultWebConfig(), tls_cert: "cert.pem" })).toThrow("Set both");
-    expect(() => webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toThrow("HTTPS");
+    expect(webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
   });
 
-  test("local hostnames and numeric addresses work without allowing arbitrary DNS hosts", () => {
-    for (const host of ["localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", "[fd00::1]:7340", hostname(), `${hostname().split(".")[0]}.local`]) {
+  test("all hostnames and numeric addresses work with an optional proxy scheme", () => {
+    for (const host of ["localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", "[fd00::1]:7340", hostname(), "100.101.102.103:7340", "shore.test-tailnet.ts.net:7340", "lab-box:7340", "alias.example:17340"]) {
       const url = new URL(`http://${host}`);
       expect(webRequestOrigin(url, undefined)).toBe(url.origin);
     }
-    for (const host of ["evil.example", "localhost.evil.example", "127.0.0.1.evil.example"]) {
-      expect(webRequestOrigin(new URL(`http://${host}`), undefined)).toBeUndefined();
-    }
     expect(webRequestOrigin(new URL("http://shore.example/workspace"), "https://shore.example")).toBe("https://shore.example");
-    expect(webRequestOrigin(new URL("http://localhost:7340/workspace"), "https://shore.example")).toBeUndefined();
+    expect(webRequestOrigin(new URL("http://localhost:7340/workspace"), "https://shore.example")).toBe("http://localhost:7340");
+    expect(webRequestOrigin(new URL("https://shore.example/workspace"), "http://shore.example")).toBe("http://shore.example");
   });
 });
 

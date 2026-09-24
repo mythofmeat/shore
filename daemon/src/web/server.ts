@@ -71,10 +71,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     async fetch(request, http) {
       const url = new URL(request.url);
       const requestOrigin = webRequestOrigin(url, config.public_origin);
-      if (requestOrigin === undefined) return problem(403, "forbidden", config.public_origin === undefined
-        ? "Unrecognized browser hostname. Use the daemon's IP address or set daemon.web.public_origin for this hostname."
-        : `Use ${config.public_origin}, or remove daemon.web.public_origin for direct LAN access and SSH tunnels.`);
-      if (url.search !== "") return problem(403, "forbidden", "Browser URLs must not include query parameters");
+      const secureCookie = requestOrigin.startsWith("https:");
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
       if (request.method === "GET" || request.method === "HEAD") {
         const asset = browserAssets[url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname];
@@ -110,12 +107,12 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
             return problem(401, "unauthorized", "The token was rejected");
           }
           loginFailures.delete(client);
-          const previous = sessions.read(request);
+          const previous = sessions.read(request, secureCookie);
           if (previous !== undefined) sessions.revoke(previous);
           const session = sessions.create();
           if (session === undefined) return problem(429, "too_many_requests", "Browser session limit reached");
           const headers = securityHeaders();
-          headers.set("set-cookie", sessions.cookie(session));
+          headers.set("set-cookie", sessions.cookie(session, secureCookie));
           return Response.json(sessionInfo(session, config.max_queued_bytes), { headers });
         } catch (error) {
           if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
@@ -125,7 +122,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         }
       }
 
-      const session = sessions.read(request);
+      const session = sessions.read(request, secureCookie);
       if (session === undefined) return problem(401, "unauthorized", "Sign in to connect to the daemon");
       if (url.pathname.startsWith("/api/requests") && request.method === "POST") {
         try {
@@ -173,7 +170,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       if (url.pathname === "/api/logout" && request.method === "POST") {
         sessions.revoke(session);
         const headers = securityHeaders();
-        headers.set("set-cookie", sessions.cookie());
+        headers.set("set-cookie", sessions.cookie(undefined, secureCookie));
         return new Response(null, { status: 204, headers });
       }
       if (url.pathname === "/api/session" && request.method === "POST") {

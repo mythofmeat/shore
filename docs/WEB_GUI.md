@@ -8,7 +8,7 @@ graphical alternative for the union of CLI/TUI application workflows, with enfor
 checks. The generated action interface is a capability floor alongside designed conversation,
 navigation, settings, model, diagnostics, usage and memory workflows.
 
-## Local testing and SSH tunnels
+## LAN, Tailscale and SSH access
 
 For access from another device on your local network, add this to the daemon configuration and
 restart the daemon:
@@ -20,8 +20,14 @@ bind_addr = "0.0.0.0:7340"
 ```
 
 Open `http://<daemon-LAN-IP>:7340` and sign in with the same daemon token used by the CLI/TUI.
-No certificate or `public_origin` is needed. HTTP sends traffic without encryption; use this on a
-trusted network, or use an SSH tunnel or HTTPS when encryption is needed.
+Tailscale IPs, MagicDNS names and other DNS aliases work too, without a hostname allowlist,
+certificate or `public_origin`. To listen only on Tailscale, set `bind_addr` to your machine's
+Tailscale address, for example `"100.101.102.103:7340"`.
+
+Shore leaves network exposure and transport security to the operator. Choosing a bind address,
+firewall, Tailscale connection, SSH tunnel or reverse proxy is a deployment decision; the daemon
+does not require HTTPS or make exceptions based on whether an address is considered local.
+Token authentication applies to every connection.
 
 For an SSH tunnel, the daemon can keep `bind_addr = "127.0.0.1:7340"`. On the computer running
 your browser:
@@ -34,9 +40,9 @@ Open `http://localhost:17340`. The browser port may differ from the daemon port,
 `localhost` and `127.0.0.1` work. The web listener uses port **7340** by default; port **7320** is
 the CLI/TUI protocol and cannot serve a browser.
 
-Remove a previously configured `public_origin` for these setups: setting it deliberately pins
-access to that exact browser origin. Remove `tls_cert` and `tls_key` too if switching an existing
-HTTPS listener to HTTP. All web configuration changes require a daemon restart.
+`public_origin` is optional proxy configuration and does not prevent direct access through another
+hostname or port. Remove `tls_cert` and `tls_key` if switching an existing HTTPS listener to HTTP.
+All web configuration changes require a daemon restart.
 
 ## Schema ownership decision
 
@@ -157,14 +163,13 @@ bind_addr = "127.0.0.1:7340"
 ```
 
 All web settings are visible through the existing configuration schema and require restart. Bind
-addresses must use an IP literal or `localhost`. HTTP works for both loopback and LAN listeners.
-Without `public_origin`, browser URLs may use an IP literal, `localhost`, the daemon's hostname,
-its short hostname or its short hostname with `.local`, including a forwarded port.
-Other DNS names require an exact HTTP(S) `public_origin`; setting it pins the accepted Host and
-Origin. TLS is optional and requires both `tls_cert` and `tls_key`; a configured public origin must
-then use HTTPS. A listener can also sit behind a same-origin reverse proxy: configure the public
-origin and preserve the public Host header and WebSocket upgrades. Provider credentials are never
-part of this setup.
+addresses accept IP literals or resolvable hostnames. HTTP works on any listener, and browser URLs
+may use any hostname or forwarded port. TLS is optional and requires both `tls_cert` and `tls_key`.
+A listener can also sit behind a same-origin reverse proxy: configure the exact HTTP(S)
+`public_origin` and preserve the public Host header and WebSocket upgrades. For requests with that
+Host, the configured origin supplies the browser-facing scheme. Other hosts and ports use their
+request URL as usual. Session cookies use the browser-facing scheme for each connection, so HTTPS
+proxy access and direct HTTP access both work. Provider credentials are never part of this setup.
 
 The browser signs in by posting `{ "token": "…" }` to `/api/login` with the existing daemon client
 token. The response sets an opaque, host-only, HttpOnly, SameSite=Strict session cookie; HTTPS also
@@ -173,9 +178,10 @@ Sessions expire after eight hours, including open sockets; logout immediately re
 and every socket using it. Authentication sessions are bounded to twice the connection limit; a new
 sign-in evicts the oldest session when necessary, including its persisted recovery state. Sessions
 restored after a daemon restart keep their original expiry. All API routes require the browser Origin
-to match the accepted request URL (or the explicitly configured public origin), reject cross-site/same-site
-fetches and query parameters, and return no-store security headers. Arbitrary DNS hosts are rejected
-even when their Origin matches, to prevent DNS rebinding.
+to match its request URL (using the proxy scheme when applicable), reject cross-site/same-site
+fetches, and return no-store security headers. These browser checks prevent another website from
+using an existing signed-in session; they do not restrict which hosts can serve the UI. Query
+parameters are ignored and never used as authentication credentials.
 Public static pages allow navigation from other sites; API origin checks and framing restrictions remain in force.
 
 `POST /api/session` reports the authenticated session and contract fingerprint. `GET /api/swp`
