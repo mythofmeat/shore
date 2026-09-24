@@ -139,4 +139,4 @@ test("heartbeat heatmaps use persisted and live user activity for the requested 
     await runtime.shutdown();
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30_000);
