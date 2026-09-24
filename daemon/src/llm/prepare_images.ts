@@ -2,6 +2,7 @@ import type { SidecarRequest } from "./types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 
 const MAX_BASE64_BYTES = 1_000_000;
+export const MAX_PREPARED_IMAGE_BYTES = MAX_BASE64_BYTES / 4 * 3;
 const MAX_IMAGE_EDGE = 2000;
 
 export async function prepareImageBlock(block: ContentBlock): Promise<ContentBlock> {

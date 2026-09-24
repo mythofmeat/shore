@@ -6,7 +6,7 @@ import path from "node:path";
 import type { ContentBlock } from "../engine/types.ts";
 import { describeError } from "./errors.ts";
 import { omissionNotice } from "./images.ts";
-import type { WireMessage } from "./types.ts";
+import { toolResultImages, type WireMessage } from "./types.ts";
 
 const LEARNED_VERSION = 1;
 
@@ -119,17 +119,15 @@ function statusOf(error: unknown): number | undefined {
   return undefined;
 }
 
+type ImageBlock = Extract<ContentBlock, { type: "image" }>;
+
+function imagesOf(block: ContentBlock): ImageBlock[] {
+  if (block.type === "image") return [block];
+  return block.type === "tool_result" ? toolResultImages(block.content) : [];
+}
+
 export function countImageBlocks(messages: readonly WireMessage[]): number {
-  let total = 0;
-  for (const message of messages) {
-    for (const block of message.content) {
-      if (block.type === "image") total += 1;
-      else if (block.type === "tool_result" && Array.isArray(block.content)) {
-        total += block.content.filter((b) => b.type === "image").length;
-      }
-    }
-  }
-  return total;
+  return messages.reduce((total, message) => total + message.content.reduce((n, block) => n + imagesOf(block).length, 0), 0);
 }
 
 export interface StripOutcome {
@@ -137,39 +135,65 @@ export interface StripOutcome {
   stripped: number;
 }
 
-function carriesImage(block: ContentBlock): boolean {
-  if (block.type === "image") return true;
-  return (
-    block.type === "tool_result" &&
-    Array.isArray(block.content) &&
-    block.content.some((b) => b.type === "image")
-  );
-}
-
 export function stripImageBlocks(
   messages: readonly WireMessage[],
   reason: string,
+  dropOldest = Number.POSITIVE_INFINITY,
 ): StripOutcome {
+  const images = messages.flatMap((message) => message.content.flatMap(imagesOf));
+  const kept = images.map((_, i) => i >= dropOldest);
   let stripped = 0;
+  let position = 0;
   const notice = (label: string): ContentBlock => {
     stripped += 1;
     return { type: "text", text: omissionNotice(label, reason) };
   };
 
   const out = messages.map((message) => {
-    if (!message.content.some(carriesImage)) return message;
+    const start = position;
+    position += message.content.reduce((n, block) => n + imagesOf(block).length, 0);
+    if (kept.slice(start, position).every(Boolean)) return message;
+    let next = start;
+    const drops = (b: ContentBlock): boolean => b.type === "image" && !kept[next++];
     const content: ContentBlock[] = message.content.map((block) => {
-      if (block.type === "image") return notice("an attached image");
+      if (block.type === "image") return drops(block) ? notice("an attached image") : block;
       if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+      const dropped = block.content.map(drops);
       return {
         ...block,
-        is_error: block.content.some((b) => b.type === "image") || block.is_error === true,
-        content: block.content.map((b) => (b.type === "image" ? notice("a tool result image") : b)),
+        is_error: dropped.some(Boolean) || block.is_error === true,
+        content: block.content.map((b, i) => (dropped[i] === true ? notice("a tool result image") : b)),
       };
     });
     return { ...message, content };
   });
   return { messages: out, stripped };
+}
+
+export const MAX_REQUEST_IMAGES = 100;
+export const MAX_REQUEST_IMAGE_BASE64_CHARS = 20_000_000;
+export const REQUEST_IMAGE_DROP_STEP = 50;
+export const REQUEST_IMAGE_DROP_STEP_CHARS = 10_000_000;
+
+// Drops the oldest images in whole steps, so the cutoff stays put (and the prompt cache stays valid) until history grows by another step.
+export function capRequestImages(messages: readonly WireMessage[]): StripOutcome {
+  const sizes = messages.flatMap((message) => message.content.flatMap(imagesOf)).map((image) => image.source.data.length);
+  const excessImages = sizes.length - MAX_REQUEST_IMAGES;
+  const excessChars = sizes.reduce((total, size) => total + size, 0) - MAX_REQUEST_IMAGE_BASE64_CHARS;
+  let drop = excessImages > 0 ? Math.ceil(excessImages / REQUEST_IMAGE_DROP_STEP) * REQUEST_IMAGE_DROP_STEP : 0;
+  if (excessChars > 0) {
+    const target = Math.ceil(excessChars / REQUEST_IMAGE_DROP_STEP_CHARS) * REQUEST_IMAGE_DROP_STEP_CHARS;
+    let dropped = 0;
+    let count = 0;
+    while (count < sizes.length && dropped < target) dropped += sizes[count++] ?? 0;
+    drop = Math.max(drop, count);
+  }
+  if (drop === 0) return { messages: [...messages], stripped: 0 };
+  return stripImageBlocks(
+    messages,
+    `only the newest ${String(MAX_REQUEST_IMAGES)} images, up to ${String(MAX_REQUEST_IMAGE_BASE64_CHARS)} base64 characters in total, are sent per request; older ones are dropped in batches`,
+    drop,
+  );
 }
 
 export function textOnlyReason(providerKey: string, modelId: string): string {

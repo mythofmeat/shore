@@ -277,7 +277,7 @@ export async function runTool(
   };
 
   const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec, []);
-  const output = run.window?.output ?? run.raw;
+  const output = run.output;
 
   return {
     tool: request.tool,

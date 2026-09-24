@@ -479,7 +479,7 @@ function compactionTools(ctx: ToolContext, config: LoadedConfig, tools: readonly
           exec,
           [],
         );
-        return { output: run.window?.output ?? run.raw, isError: run.isError, ...(run.block.type === "tool_result" ? { content: run.block.content } : {}) };
+        return { output: run.output, isError: run.isError, ...(run.block.type === "tool_result" ? { content: run.block.content } : {}) };
       } finally {
         delete ctx.trackWorkspaceWrite;
       }

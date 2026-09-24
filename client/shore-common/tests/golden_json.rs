@@ -28,21 +28,36 @@ where
     let parsed: T = serde_json::from_str(fixture).expect("fixture deserializes into T");
     let reserialized = serde_json::to_value(&parsed).expect("re-serialize");
     assert_eq!(
-        numbers_as_floats(reserialized),
-        numbers_as_floats(expected),
+        whole_floats_as_integers(reserialized),
+        whole_floats_as_integers(expected),
         "re-serialized JSON does not match fixture"
     );
     parsed
 }
 
-fn numbers_as_floats(value: Value) -> Value {
+const MAX_EXACT_FLOAT_INTEGER: f64 = 9_007_199_254_740_992.0;
+
+fn whole_floats_as_integers(value: Value) -> Value {
     match value {
-        Value::Number(number) => number.as_f64().map_or(Value::Number(number), Value::from),
-        Value::Array(items) => Value::Array(items.into_iter().map(numbers_as_floats).collect()),
+        Value::Number(number) => match number.as_f64() {
+            Some(float)
+                if number.is_f64()
+                    && float.fract() == 0.0
+                    && float.abs() <= MAX_EXACT_FLOAT_INTEGER =>
+            {
+                format!("{float:.0}")
+                    .parse::<i64>()
+                    .map_or(Value::Number(number), Value::from)
+            }
+            _ => Value::Number(number),
+        },
+        Value::Array(items) => {
+            Value::Array(items.into_iter().map(whole_floats_as_integers).collect())
+        }
         Value::Object(fields) => Value::Object(
             fields
                 .into_iter()
-                .map(|(key, item)| (key, numbers_as_floats(item)))
+                .map(|(key, item)| (key, whole_floats_as_integers(item)))
                 .collect(),
         ),
         other @ (Value::Null | Value::Bool(_) | Value::String(_)) => other,

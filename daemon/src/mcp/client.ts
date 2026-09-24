@@ -5,13 +5,13 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import {
-  base64Bytes,
   carryToolMedia,
   deepEqual,
   renderPayload,
   type ToolMediaItem,
   type ToolResultPayload,
 } from "../tools/media.ts";
+import { base64Bytes } from "../util/base64.ts";
 
 export type Transport =
   | {

@@ -1,6 +1,10 @@
+import { MAX_IMAGE_BYTES } from "../llm/images.ts";
+
 const CARRIER = Symbol("shore.tool_media");
 
-export const MAX_INLINE_TOOL_IMAGES = 2;
+export const MAX_INLINE_TOOL_IMAGES = 20;
+export const MAX_LISTED_MEDIA_NOTES = 3;
+export const DEFAULT_MAX_INLINE_IMAGE_BYTES = MAX_IMAGE_BYTES;
 
 export interface ToolMediaItem {
   mime_type: string;
@@ -12,10 +16,11 @@ export interface ToolResultPayload {
   value: unknown;
   media: ToolMediaItem[];
   extra: string[];
+  notes?: string[];
 }
 
 export function carryToolMedia(payload: ToolResultPayload): unknown {
-  if (payload.media.length === 0 && payload.extra.length === 0) return payload.value;
+  if (payload.media.length === 0 && payload.extra.length === 0 && (payload.notes ?? []).length === 0) return payload.value;
   return { [CARRIER]: payload };
 }
 
@@ -51,7 +56,7 @@ export function payloadText(value: unknown): string {
 export function renderPayload(payload: ToolResultPayload): string {
   const head = payloadText(payload.value);
   const parts = head === "" ? [] : [head];
-  parts.push(...payload.extra);
+  parts.push(...payload.extra, ...(payload.notes ?? []));
   for (const item of payload.media) parts.push(`[${item.label} returned, not included here]`);
   return parts.join("\n");
 }
@@ -59,10 +64,4 @@ export function renderPayload(payload: ToolResultPayload): string {
 export function renderToolValue(value: unknown): string {
   const payload = toolMediaOf(value);
   return payload === undefined ? payloadText(value) : renderPayload(payload);
-}
-
-export function base64Bytes(data: string): number {
-  const normalized = data.replace(/\s+/g, "");
-  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
 }

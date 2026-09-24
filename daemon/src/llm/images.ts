@@ -2,8 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { ImageRef } from "../engine/types.ts";
+import { base64Bytes } from "../util/base64.ts";
 
-const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const MIME_BY_EXT: Record<string, string> = {
   ".png": "image/png",
@@ -30,19 +31,13 @@ export function omissionNotice(label: string, reason: string): string {
 
 const SUPPORTED_MIME = new Set(Object.values(MIME_BY_EXT));
 
-function base64Bytes(data: string): number {
-  const normalized = data.replace(/\s+/g, "");
-  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
-  return Math.floor((normalized.length * 3) / 4) - padding;
-}
-
 function tooLarge(bytes: number, maxBytes: number): string {
   return `it is ${String(bytes)} bytes, over the ${String(maxBytes)}-byte limit`;
 }
 
 export function resolveImageBlock(
   source: { media_type: string; data: string },
-  maxBytes: number = DEFAULT_MAX_IMAGE_BYTES,
+  maxBytes: number = MAX_IMAGE_BYTES,
 ): ImageResolution {
   const mediaType = source.media_type?.toLowerCase();
   if (!mediaType || !SUPPORTED_MIME.has(mediaType)) {
@@ -56,7 +51,7 @@ export function resolveImageBlock(
 
 export function resolveImage(
   ref: ImageRef,
-  maxBytes: number = DEFAULT_MAX_IMAGE_BYTES,
+  maxBytes: number = MAX_IMAGE_BYTES,
 ): ImageResolution {
   const mediaType = MIME_BY_EXT[path.extname(ref.path).toLowerCase()];
   if (!mediaType) {

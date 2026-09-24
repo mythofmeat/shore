@@ -14,6 +14,7 @@ import type { ToolUseEvent } from "../engine/tool_loop.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import {
   dispatchWithinDeadline,
+  inlineImageBytesFor,
   resultCharsFor,
   timeoutFor,
   windowToolResult,
@@ -23,12 +24,13 @@ import {
 } from "./dispatch.ts";
 import {
   MAX_INLINE_TOOL_IMAGES,
-  base64Bytes,
+  MAX_LISTED_MEDIA_NOTES,
   toolMediaOf,
   type ToolMediaItem,
   type ToolResultPayload,
 } from "./media.ts";
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
+import { base64Bytes } from "../util/base64.ts";
 
 export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
@@ -45,6 +47,7 @@ export interface ToolExecution {
 
 export interface ToolRun {
   block: ContentBlock;
+  output: string;
   raw: string;
   isError: boolean;
   rejected: boolean;
@@ -84,6 +87,7 @@ export async function runToolUse(
     emitToolResult(exec, toolUse, rejection, true);
     return {
       block: { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true },
+      output: rejection,
       raw: rejection,
       isError: true,
       rejected: true,
@@ -99,7 +103,7 @@ export async function runToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name) },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     payload = toolMediaOf(value);
@@ -116,7 +120,7 @@ export async function runToolUse(
   const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
   const attached = await attachToolMedia(payload, exec, toolUse);
   isError ||= attached.failed;
-  const output = joinLines([windowed.output, ...attached.notes]);
+  const output = joinLines([windowed.output, ...(payload?.notes ?? []), ...attached.notes]);
 
   if (!isError && toolUse.name === "generate_image") {
     attachGeneratedImage(okValue, intermediateMessages, exec);
@@ -131,6 +135,7 @@ export async function runToolUse(
       content: toolResultContent(output, attached.blocks),
       is_error: isError,
     },
+    output,
     raw: rawOutput,
     isError,
     rejected: false,
@@ -139,8 +144,6 @@ export async function runToolUse(
     value: okValue,
   };
 }
-
-const MAX_INLINE_TOOL_IMAGE_BYTES = 1024 * 1024;
 
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": "png",
@@ -172,6 +175,9 @@ async function attachToolMedia(
 ): Promise<AttachedMedia> {
   const attached: AttachedMedia = { blocks: [], images: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
+  const maxBytes = inlineImageBytesFor(exec.limits, toolUse.name);
+  let inlinedBytes = 0;
+  const skipped: string[] = [];
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse, index);
@@ -186,6 +192,10 @@ async function attachToolMedia(
         data: item.data,
       });
     }
+    if (attached.blocks.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
+      skipped.push(item.label);
+      continue;
+    }
     try {
       const block = await prepareImageBlock({
         type: "image", source: { type: "base64", media_type: item.mime_type, data: item.data },
@@ -193,11 +203,15 @@ async function attachToolMedia(
       if (block.type !== "image") throw new Error("image preparation returned no image");
       const resolution = resolveImageBlock(block.source);
       if ("omitted" in resolution) throw new Error(resolution.omitted);
-      const skipped = inlineRefusal({ ...item, data: block.source.data }, attached.blocks.length);
-      if (skipped !== undefined) throw new Error(skipped);
+      const bytes = base64Bytes(block.source.data);
+      if (bytes > maxBytes - inlinedBytes) {
+        skipped.push(item.label);
+        continue;
+      }
       if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
+      inlinedBytes += bytes;
       attached.images.push({
         path: saved ?? `tool-image:${toolUse.id}:${String(index)}`,
         caption: item.label,
@@ -209,21 +223,17 @@ async function attachToolMedia(
     }
   }
 
+  if (skipped.length > 0) attached.notes.push(skippedNote(skipped, maxBytes));
   return attached;
 }
 
-function inlineRefusal(item: ToolMediaItem, alreadyInlined: number): string | undefined {
-  if (alreadyInlined >= MAX_INLINE_TOOL_IMAGES) {
-    return `at most ${String(MAX_INLINE_TOOL_IMAGES)} images are sent per tool result`;
-  }
-  const bytes = base64Bytes(item.data);
-  if (bytes > MAX_INLINE_TOOL_IMAGE_BYTES) {
-    return (
-      `it is ${String(bytes)} bytes, over the ` +
-      `${String(MAX_INLINE_TOOL_IMAGE_BYTES)}-byte inline limit`
-    );
-  }
-  return undefined;
+function skippedNote(labels: readonly string[], maxBytes: number): string {
+  const listed = labels.slice(0, MAX_LISTED_MEDIA_NOTES).join(", ");
+  const more = labels.length > MAX_LISTED_MEDIA_NOTES ? ` and ${String(labels.length - MAX_LISTED_MEDIA_NOTES)} more` : "";
+  const reason = maxBytes === 0
+    ? "inline images are disabled for this tool"
+    : `at most ${String(MAX_INLINE_TOOL_IMAGES)} images and ${String(maxBytes)} bytes of prepared image data are sent per tool result`;
+  return `[${listed}${more} not sent to the model: ${reason}]`;
 }
 
 async function saveToolMedia(

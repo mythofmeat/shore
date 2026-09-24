@@ -5,7 +5,7 @@ import { Glob } from "bun";
 const ROOT = join(import.meta.dir, "..");
 const TESTS = join(ROOT, "tests");
 const OWNERS = new Set(["support/env.ts", "fixture_env.ts"]);
-const WRITE = /\bprocess\.env(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])\s*(?:=(?!=)|\+=)|\bdelete\s+process\.env\b|Object\.assign\(\s*process\.env\b/;
+const WRITE = /\bprocess\.env(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?\s*(?:(?:\?\?|\|\||&&)?=(?!=)|\+=)|\bdelete\s+process\.env\b|(?:Object\.assign|Reflect\.(?:set|deleteProperty|defineProperty))\(\s*process\.env\b/;
 
 const offenders: string[] = [];
 for (const rel of new Glob("**/*.ts").scanSync(TESTS)) {

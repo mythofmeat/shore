@@ -12,13 +12,6 @@ use crate::token::TokenSource;
 
 const HANDSHAKE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 
-fn handshake_timed_out(_: tokio::time::error::Elapsed) -> ClientError {
-    ClientError::Timeout {
-        message: "connection handshake timed out".into(),
-        retry_after_ms: None,
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub String);
 
@@ -87,7 +80,10 @@ impl SWPConnection {
             Ok((conn, server_hello, history))
         })
         .await
-        .map_err(handshake_timed_out)?
+        .map_err(|_| ClientError::Timeout {
+            message: "connection handshake timed out".into(),
+            retry_after_ms: None,
+        })?
     }
 
     async fn do_handshake(
@@ -408,18 +404,15 @@ impl SWPConnection {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
         let mut conn = Self::from_raw_stream(stream);
-        let (server_hello, history) = tokio::time::timeout(
-            HANDSHAKE_DEADLINE,
-            conn.do_handshake(
+        let (server_hello, history) = conn
+            .do_handshake(
                 client_type.into(),
                 client_name.into(),
                 character,
                 None,
                 token.resolve(None),
-            ),
-        )
-        .await
-        .map_err(handshake_timed_out)??;
+            )
+            .await?;
         Ok((conn, server_hello, history))
     }
 }
@@ -625,23 +618,39 @@ mod tests {
 
 #[cfg(test)]
 mod deadline_tests {
-    use super::{ClientError, SWPConnection};
+    use super::{ClientError, HANDSHAKE_DEADLINE, SWPConnection, ServerAddr};
     use crate::token::TokenSource;
 
     #[tokio::test(start_paused = true)]
-    async fn a_peer_that_never_sends_hello_reaches_the_handshake_deadline() {
-        let (client, _server) = tokio::io::duplex(64);
-        let result = SWPConnection::connect_raw(
-            client,
-            "test",
-            "test",
-            None,
-            &TokenSource::Given("test-token".into()),
-        )
-        .await;
+    async fn a_daemon_that_never_sends_hello_reaches_the_handshake_deadline() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = ServerAddr(listener.local_addr().unwrap().to_string());
+        let started = tokio::time::Instant::now();
+        let attempt = tokio::spawn(async move {
+            SWPConnection::connect_in_thread(
+                &address,
+                "test",
+                "test",
+                None,
+                None,
+                &TokenSource::Given("test-token".into()),
+            )
+            .await
+        });
+        let (_silent, _) = listener.accept().await.unwrap();
+        let result = tokio::time::timeout(HANDSHAKE_DEADLINE * 6, attempt)
+            .await
+            .expect("connect_in_thread must enforce its own deadline, not hang")
+            .unwrap();
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= HANDSHAKE_DEADLINE
+                && elapsed <= HANDSHAKE_DEADLINE + std::time::Duration::from_secs(1),
+            "the deadline is {HANDSHAKE_DEADLINE:?}, but the attempt ended after {elapsed:?}"
+        );
         assert!(
             matches!(result, Err(ClientError::Timeout { .. })),
-            "a silent peer must end in the handshake deadline, not a hang"
+            "a silent daemon must end in the handshake deadline"
         );
     }
 }

@@ -4,7 +4,7 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath } from "./surface.ts";
+import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath, TOOLS_SCALAR_KEYS } from "./surface.ts";
 
 export interface SchemaEntry {
   key: string;
@@ -136,7 +136,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const internal: SchemaEntry[] = [];
   const internalLive: LiveInstances = {
     instancesAt(key) {
-      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !["enabled", "timeout", "max_result_chars"].includes(name));
+      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !TOOLS_SCALAR_KEYS.includes(name));
       if (key === "subagents") return live.instancesAt(key).filter((name) => !["enabled", "model"].includes(name));
       return live.instancesAt(key);
     },
@@ -214,6 +214,7 @@ function describeOption(path: readonly string[]): string {
     discover: "Discover this provider's models; false by default.",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
+    max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
