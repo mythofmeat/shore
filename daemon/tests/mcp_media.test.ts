@@ -34,6 +34,7 @@ function imageResult(count: number, data = PNG): Record<string, unknown> {
 
 async function runMcpTool(
   raw: Record<string, unknown>,
+  limits: ToolLimitsView = LIMITS,
 ): Promise<{ block: ContentBlock; frames: ServerMessage[]; saved: string[] }> {
   const imageDir = await mkdtemp(join(tmpdir(), "shore-mcp-media-"));
   const frames: ServerMessage[] = [];
@@ -64,7 +65,7 @@ async function runMcpTool(
   const exec: ToolExecution = {
     sendDirect: (m) => frames.push(m),
     ctx,
-    limits: LIMITS,
+    limits,
     now: () => "2026-01-01T00:00:00-05:00",
     newMessageId: () => "m_test",
     monotonicMs: () => 0,
@@ -138,12 +139,42 @@ describe("mcp media reaches the model", () => {
     expect(saved).toEqual([]);
   });
 
-  test("only the first two images are sent, and the rest say why", async () => {
-    const { block, saved } = await runMcpTool(imageResult(3));
+  test("ten small images are sent with the default budget", async () => {
+    const { block, saved } = await runMcpTool(imageResult(10));
+
+    expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(10);
+    expect(toolResult(block).is_error).toBe(false);
+    expect(saved).toHaveLength(10);
+  });
+
+  test("the total source-byte budget allows an exact fit and reports omitted images", async () => {
+    const bytes = Buffer.from(PNG, "base64").length;
+    const { block, saved } = await runMcpTool(imageResult(3), { ...LIMITS, max_inline_image_bytes: 2 * bytes });
 
     expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(2);
-    expect(textOf(block)).toContain("at most 2 images are sent per tool result");
+    expect(toolResult(block).is_error).toBe(true);
+    expect(textOf(block)).toContain(`${2 * bytes}-byte inline image budget`);
     expect(saved).toHaveLength(3);
+  });
+
+  test("per-tool budgets override the global and zero disables inline images", async () => {
+    const bytes = Buffer.from(PNG, "base64").length;
+    const limits = { ...LIMITS, max_inline_image_bytes: bytes, config: { mcp__srv__shot: { max_inline_image_bytes: 3 * bytes } } };
+    const { block } = await runMcpTool(imageResult(3), limits);
+    expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(3);
+    limits.config.mcp__srv__shot.max_inline_image_bytes = 0;
+    const disabled = await runMcpTool(imageResult(1), limits);
+    expect(typeof toolResult(disabled.block).content).toBe("string");
+    expect(textOf(disabled.block)).toContain("0-byte inline image budget");
+  });
+
+  test("an image that does not fit leaves room for later smaller images", async () => {
+    const png = Buffer.from(PNG, "base64");
+    const larger = Buffer.concat([png, Buffer.alloc(1)]).toString("base64");
+    const { block } = await runMcpTool({ content: [PNG, larger, PNG].map((data) => ({ type: "image", data, mimeType: "image/png" })) },
+      { ...LIMITS, max_inline_image_bytes: 2 * png.length });
+    expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(2);
+    expect(textOf(block)).toContain("inline image budget");
   });
 
   test("an oversized invalid image returns an explicit preparation error", async () => {

@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCharacterConfig, loadConfig, parseConfigTable } from "../src/config/loader.ts";
+import { inlineImageBytesFor, toolLimitsFrom } from "../src/tools/dispatch.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { resolveShoreDirs } from "../src/config/dirs.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
@@ -25,6 +26,23 @@ describe("flat configuration", () => {
     expect(() => read('[heartbeat]\ninterval=60')).toThrow();
     expect(() => read('[heartbeat]\ninterval="60"')).toThrow();
     expect(() => read('[chat]\nreasoning_replay=true')).toThrow();
+  });
+
+  test("inline image byte budgets parse, resolve, and round-trip through public config", () => {
+    expect(inlineImageBytesFor(toolLimitsFrom(read("").app.tools), "read")).toBe(5 * 1024 * 1024);
+    const cfg = read("[tools]\nmax_inline_image_bytes=1000\n[tools.read]\nmax_inline_image_bytes=2000");
+    const limits = toolLimitsFrom(cfg.app.tools);
+    expect(inlineImageBytesFor(limits, "read")).toBe(2000);
+    expect(inlineImageBytesFor(limits, "mcp__srv__shot")).toBe(1000);
+    const config = publicConfig(serializeConfigValue(cfg.app) as Record<string, unknown>);
+    expect(config.tools).toMatchObject({ max_inline_image_bytes: 1000, read: { max_inline_image_bytes: 2000 } });
+    const disabled = read("[tools]\nmax_inline_image_bytes=1000\n[tools.read]\nmax_inline_image_bytes=0");
+    expect(inlineImageBytesFor(toolLimitsFrom(disabled.app.tools), "read")).toBe(0);
+    for (const section of ["tools", "tools.read"]) {
+      for (const value of ["-1", "1.5", '"5MB"']) {
+        expect(() => read(`[${section}]\nmax_inline_image_bytes=${value}`)).toThrow();
+      }
+    }
   });
 
   test("included and character settings override current fields", () => {

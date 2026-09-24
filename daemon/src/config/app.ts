@@ -2,6 +2,7 @@ import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_KEEPALIVE_MAX_SECS } from "./keepalive.ts";
+import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
 type TomlValue = unknown;
@@ -426,6 +427,7 @@ const SEARCH: StructSpec<SearchConfig> = {
 
 export interface ToolOverride {
   max_result_chars: number | undefined;
+  max_inline_image_bytes?: number;
   timeout: ConfigDuration | undefined;
 }
 
@@ -434,6 +436,7 @@ const TOOL_OVERRIDE: StructSpec<ToolOverride> = {
   make: () => ({ max_result_chars: undefined, timeout: undefined }),
   fields: {
     max_result_chars: optional(readUsize),
+    max_inline_image_bytes: optional(readUsize),
     timeout: optional(readDuration),
   },
 };
@@ -442,6 +445,7 @@ export interface ToolsConfig {
   enabled_tools: string[];
   enabled_subagents: string[];
   max_result_chars: number;
+  max_inline_image_bytes: number;
   timeout: ConfigDuration;
   web_search: SearchConfig;
   config: Map<string, ToolOverride>;
@@ -451,6 +455,7 @@ export const defaultToolsConfig = (): ToolsConfig => ({
   enabled_tools: [],
   enabled_subagents: [],
   max_result_chars: 50_000,
+  max_inline_image_bytes: DEFAULT_MAX_INLINE_IMAGE_BYTES,
   timeout: ConfigDuration.fromSecs(300),
   web_search: defaultSearchConfig(),
   config: new Map(),
@@ -463,6 +468,7 @@ const TOOLS: StructSpec<ToolsConfig> = {
     enabled_tools: readToolNameSeq,
     enabled_subagents: readSubagentNameSeq,
     max_result_chars: readUsize,
+    max_inline_image_bytes: readUsize,
     timeout: readDuration,
     web_search: struct(SEARCH),
     config: readMap(struct(TOOL_OVERRIDE), "tools"),

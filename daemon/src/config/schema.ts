@@ -136,7 +136,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const internal: SchemaEntry[] = [];
   const internalLive: LiveInstances = {
     instancesAt(key) {
-      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !["enabled", "timeout", "max_result_chars"].includes(name));
+      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !["enabled", "timeout", "max_result_chars", "max_inline_image_bytes"].includes(name));
       if (key === "subagents") return live.instancesAt(key).filter((name) => !["enabled", "model"].includes(name));
       return live.instancesAt(key);
     },
@@ -214,6 +214,7 @@ function describeOption(path: readonly string[]): string {
     discover: "Discover this provider's models; false by default.",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
+    max_inline_image_bytes: "Total source image bytes per tool result before resizing; defaults to 5 MiB. Zero disables inline images.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",

@@ -14,6 +14,7 @@ import type { ToolUseEvent } from "../engine/tool_loop.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import {
   dispatchWithinDeadline,
+  inlineImageBytesFor,
   resultCharsFor,
   timeoutFor,
   windowToolResult,
@@ -22,7 +23,6 @@ import {
   type ToolResultWindow,
 } from "./dispatch.ts";
 import {
-  MAX_INLINE_TOOL_IMAGES,
   base64Bytes,
   toolMediaOf,
   type ToolMediaItem,
@@ -99,7 +99,7 @@ export async function runToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name) },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     payload = toolMediaOf(value);
@@ -140,8 +140,6 @@ export async function runToolUse(
   };
 }
 
-const MAX_INLINE_TOOL_IMAGE_BYTES = 1024 * 1024;
-
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -172,6 +170,8 @@ async function attachToolMedia(
 ): Promise<AttachedMedia> {
   const attached: AttachedMedia = { blocks: [], images: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
+  const maxBytes = inlineImageBytesFor(exec.limits, toolUse.name);
+  let inlinedBytes = 0;
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse, index);
@@ -187,17 +187,19 @@ async function attachToolMedia(
       });
     }
     try {
+      const bytes = base64Bytes(item.data);
+      const skipped = inlineRefusal(bytes, inlinedBytes, maxBytes);
+      if (skipped !== undefined) throw new Error(skipped);
       const block = await prepareImageBlock({
         type: "image", source: { type: "base64", media_type: item.mime_type, data: item.data },
       });
       if (block.type !== "image") throw new Error("image preparation returned no image");
       const resolution = resolveImageBlock(block.source);
       if ("omitted" in resolution) throw new Error(resolution.omitted);
-      const skipped = inlineRefusal({ ...item, data: block.source.data }, attached.blocks.length);
-      if (skipped !== undefined) throw new Error(skipped);
       if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
+      inlinedBytes += bytes;
       attached.images.push({
         path: saved ?? `tool-image:${toolUse.id}:${String(index)}`,
         caption: item.label,
@@ -212,15 +214,11 @@ async function attachToolMedia(
   return attached;
 }
 
-function inlineRefusal(item: ToolMediaItem, alreadyInlined: number): string | undefined {
-  if (alreadyInlined >= MAX_INLINE_TOOL_IMAGES) {
-    return `at most ${String(MAX_INLINE_TOOL_IMAGES)} images are sent per tool result`;
-  }
-  const bytes = base64Bytes(item.data);
-  if (bytes > MAX_INLINE_TOOL_IMAGE_BYTES) {
+function inlineRefusal(bytes: number, alreadyInlinedBytes: number, maxBytes: number): string | undefined {
+  if (bytes > maxBytes - alreadyInlinedBytes) {
     return (
-      `it is ${String(bytes)} bytes, over the ` +
-      `${String(MAX_INLINE_TOOL_IMAGE_BYTES)}-byte inline limit`
+      `its ${String(bytes)} bytes would exceed the ${String(maxBytes)}-byte inline image budget ` +
+      `per tool result (${String(alreadyInlinedBytes)} bytes already attached)`
     );
   }
   return undefined;

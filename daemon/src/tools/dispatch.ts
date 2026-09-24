@@ -5,6 +5,7 @@ import { handleEdit } from "./edit.ts";
 import { handleApplyPatch } from "./apply_patch.ts";
 import { handleBash, withPromptChanges } from "./bash.ts";
 import { handleRead } from "./read.ts";
+import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleSearchHistory } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
@@ -28,6 +29,7 @@ export interface ToolContext {
   conversation?: readonly Message[];
   dryRun?: boolean;
   maxResultChars?: number;
+  maxInlineImageBytes?: number;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
@@ -148,7 +150,7 @@ export async function dispatchTool(
 
   switch (name) {
     case "read":
-      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars);
+      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars, ctx.maxInlineImageBytes);
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(ctx.workspaceDir,
@@ -240,8 +242,9 @@ export async function dispatchTool(
 
 export interface ToolLimitsView {
   max_result_chars: number;
+  max_inline_image_bytes?: number;
   timeout_ms: number;
-  config?: Record<string, { max_result_chars?: number; timeout_ms?: number }>;
+  config?: Record<string, { max_result_chars?: number; max_inline_image_bytes?: number; timeout_ms?: number }>;
 }
 
 export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3_600_000;
@@ -250,13 +253,14 @@ export function toolLimitsFrom(
   cfg: ToolsConfig,
   subagents?: ReadonlyMap<string, SubagentConfig>,
 ): ToolLimitsView {
-  const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
+  const overrides: NonNullable<ToolLimitsView["config"]> = {};
   for (const [name, override] of cfg.config) {
     overrides[name] = {
       ...(override.max_result_chars === undefined
         ? {}
         : { max_result_chars: override.max_result_chars }),
       ...(override.timeout === undefined ? {} : { timeout_ms: override.timeout.asMillis() }),
+      ...(override.max_inline_image_bytes === undefined ? {} : { max_inline_image_bytes: override.max_inline_image_bytes }),
     };
   }
   for (const [name, spec] of subagents ?? []) {
@@ -270,6 +274,7 @@ export function toolLimitsFrom(
   }
   return {
     max_result_chars: cfg.max_result_chars,
+    max_inline_image_bytes: cfg.max_inline_image_bytes,
     timeout_ms: cfg.timeout.asMillis(),
     config: overrides,
   };
@@ -277,6 +282,10 @@ export function toolLimitsFrom(
 
 export function resultCharsFor(cfg: ToolLimitsView, name: string): number {
   return cfg.config?.[name]?.max_result_chars ?? cfg.max_result_chars;
+}
+
+export function inlineImageBytesFor(cfg: ToolLimitsView, name: string): number {
+  return cfg.config?.[name]?.max_inline_image_bytes ?? cfg.max_inline_image_bytes ?? DEFAULT_MAX_INLINE_IMAGE_BYTES;
 }
 
 export function timeoutFor(cfg: ToolLimitsView, name: string): number | undefined {

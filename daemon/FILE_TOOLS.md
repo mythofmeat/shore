@@ -12,6 +12,7 @@ enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs"]
 
 [tools.read]
 max_result_chars = 50000
+max_inline_image_bytes = 5242880
 
 [tools.apply_patch]
 timeout = "1m"
@@ -29,7 +30,9 @@ Model settings accept `supports_images = false` for text-only models or endpoint
 
 Text is UTF-8, numbered from line 1. Defaults are offset 1 and at most 2,000 lines. Lines longer than 2,000 characters are explicitly shortened. The configured result-character budget can shorten the page further; the result states EOF or the next offset. Even a configured unlimited result budget retains a 50,000-character read budget. Empty files, offsets beyond EOF, unsupported binary data, invalid encodings, directories and access failures receive explicit results or errors.
 
-PNG, JPEG, WebP and GIF files become real model image content, not JSON or base64 text. Image reads do not accept offset or limit. Source images are capped at 5 MiB. Shared media preparation limits each delivered image to a 2,000-pixel longest edge and 1,000,000 base64 characters, resizing or converting as needed. GIF delivery uses the first frame. Generic tool results, including MCP results, may contain text and images; at most two images are delivered per result. Partial image-delivery failure marks the result as an error. A failure to save an auxiliary media copy does not prevent image delivery.
+PNG, JPEG, WebP and GIF files become real model image content, not JSON or base64 text. Image reads do not accept offset or limit. Source images are capped at 5 MiB. Shared media preparation limits each delivered image to a 2,000-pixel longest edge and 1,000,000 base64 characters, resizing or converting as needed. GIF delivery uses the first frame. Generic tool results, including MCP results, may contain text and images. `tools.max_inline_image_bytes` caps the total source image bytes per result, defaulting to 5 MiB (5,242,880 bytes), with no image-count cap. Override it per tool, for example with `tools.read.max_inline_image_bytes`; zero disables inline image delivery. The budget counts decoded source bytes before resizing or conversion, excluding base64 overhead. Partial image-delivery failure marks the result as an error. A failure to save an auxiliary media copy does not prevent image delivery.
+
+Markdown reads expand unique local image references fully visible on the returned page, within the same byte budget. Paths resolve relative to the Markdown file, and duplicate paths count only once. Images are considered in document order; missing, invalid, individually oversized, or over-budget images are reported without failing the text read or consuming the remaining budget, allowing later smaller images to fit. Markdown source scanning is capped at 1 MiB.
 
 PDF and notebook rendering are not implemented. Images consume model context and the API may impose additional limits.
 

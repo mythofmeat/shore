@@ -210,7 +210,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   const sourceTools = table.tools;
   if (isConfigTable(sourceTools)) {
     for (const [name, value] of Object.entries(sourceTools)) {
-      if (["enabled", "timeout", "max_result_chars"].includes(name)) continue;
+      if (["enabled", "timeout", "max_result_chars", "max_inline_image_bytes"].includes(name)) continue;
       delete sourceTools[name];
       putAt(table, ["tools", "config", name], value);
     }
@@ -273,7 +273,7 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     const original = valueAt(out, path);
     if (original === undefined) continue;
     const target = translatePath(path, rule.internal, rule.canonical) as string[];
-    if (path[0] === "tools" && path[1] === "config" && ["enabled", "timeout", "max_result_chars"].includes(path[2] ?? "")) continue;
+    if (path[0] === "tools" && path[1] === "config" && ["enabled", "timeout", "max_result_chars", "max_inline_image_bytes"].includes(path[2] ?? "")) continue;
     removeAt(out, path);
     const value = structuredClone(original);
     const existing = valueAt(out, target);

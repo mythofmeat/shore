@@ -84,6 +84,17 @@ describe("configSchema", () => {
     expect(untyped, "these readers carry no type descriptor").toEqual([]);
   });
 
+  test("inline image budgets are discoverable globally and per tool", () => {
+    const rows = configSchema({ instancesAt: (key) => key === "tools" ? ["max_inline_image_bytes", "read"] : [] });
+    for (const key of ["tools.max_inline_image_bytes", "tools.read.max_inline_image_bytes"]) {
+      expect(rows.find((row) => row.key === key)).toMatchObject({
+        kind: "integer", units: "bytes", settable: true, restart_required: false,
+        description: "Total source image bytes per tool result before resizing; defaults to 5 MiB. Zero disables inline images.",
+      });
+    }
+    expect(rows.some((row) => row.key.startsWith("tools.max_inline_image_bytes."))).toBe(false);
+  });
+
   test("booleans and enums carry their candidate values", () => {
     expect(byKey.get("heartbeat.enabled")?.values).toEqual(["true", "false"]);
     expect(byKey.get("chat.user_timestamps")?.values).toEqual([

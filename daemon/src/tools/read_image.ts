@@ -13,8 +13,9 @@ export function imageMime(header: Buffer): string | undefined {
   return undefined;
 }
 
-export async function readImage(file: FileHandle, path: string, mime: string, signal?: AbortSignal): Promise<{ description: string; image: ToolMediaItem }> {
-  const data = await readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal);
+export async function readImage(file: FileHandle, path: string, mime: string, signal?: AbortSignal, maxBytes = MAX_READ_IMAGE_BYTES): Promise<{ description: string; image: ToolMediaItem }> {
+  const kind = maxBytes < MAX_READ_IMAGE_BYTES ? "image (remaining inline image budget)" : "image";
+  const data = await readBoundedFile(file, path, Math.min(maxBytes, MAX_READ_IMAGE_BYTES), kind, signal);
   const metadata = await new Bun.Image(data).metadata().catch(() => undefined);
   if (metadata === undefined) throw new ToolIoError(`${path}: image could not be decoded`);
   return {
@@ -23,7 +24,7 @@ export async function readImage(file: FileHandle, path: string, mime: string, si
   };
 }
 
-export async function readImageAt(path: string, signal?: AbortSignal): Promise<ToolMediaItem> {
+export async function readImageAt(path: string, signal?: AbortSignal, maxBytes = MAX_READ_IMAGE_BYTES): Promise<ToolMediaItem> {
   signal?.throwIfAborted();
   const file = await openRegularFile(path);
   try {
@@ -31,7 +32,7 @@ export async function readImageAt(path: string, signal?: AbortSignal): Promise<T
     const head = await file.read(header, 0, header.length, 0);
     const mime = imageMime(header.subarray(0, head.bytesRead));
     if (mime === undefined) throw new ToolIoError(`${path}: invalid or unsupported image data`);
-    return (await readImage(file, path, mime, signal)).image;
+    return (await readImage(file, path, mime, signal, maxBytes)).image;
   } finally {
     await file.close();
   }
