@@ -1,0 +1,45 @@
+#!/bin/sh
+set -u
+
+root=$(git rev-parse --show-toplevel) || exit 1
+head=$(git rev-parse HEAD) || exit 1
+pushing=""
+
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    case "$local_sha" in
+    *[!0]*) ;;
+    *) continue ;;
+    esac
+    commit=$(git rev-parse --verify --quiet "$local_sha^{commit}") || commit=""
+    if [ "$commit" != "$head" ]; then
+        printf 'pre-push: %s is not the checked-out commit, so the working tree cannot vouch for it.\n' "$local_ref" >&2
+        printf 'Check it out and push from there, or skip the checks with git push --no-verify.\n' >&2
+        exit 1
+    fi
+    pushing=yes
+done
+
+[ -n "$pushing" ] || exit 0
+
+if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
+    printf 'pre-push: the working tree has uncommitted changes, so the checks would not test what is pushed:\n\n' >&2
+    git -C "$root" status --short --untracked-files=no >&2
+    printf '\nCommit or set them aside and push again, or skip the checks with git push --no-verify.\n' >&2
+    exit 1
+fi
+
+tree=$(git rev-parse "HEAD^{tree}") || exit 1
+verified="$(git rev-parse --path-format=absolute --git-common-dir)/shore-verified"
+if [ -f "$verified/$tree" ]; then
+    printf 'pre-push: this tree already passed the checks CI runs; pushing\n'
+    exit 0
+fi
+
+printf 'pre-push: running the checks CI runs (skip with git push --no-verify)\n'
+if ! (cd "$root/daemon" && bun install --frozen-lockfile); then
+    printf 'pre-push: daemon/bun.lock does not match package.json, which CI refuses too.\n' >&2
+    exit 1
+fi
+"$root/.scripts/test.sh" || exit 1
+mkdir -p "$verified" && : > "$verified/$tree"
+printf 'pre-push: recorded the tree as passing, so a push retried after a dropped connection skips the checks\n'
