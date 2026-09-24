@@ -198,7 +198,7 @@ function modelInfo(field: string): ConfigTypeInfo {
   if (field === "temperature" || field === "top_p") return { kind: "float", optional: true };
   if (["max_context_tokens", "max_output_tokens", "budget_tokens", "max_tool_iterations"].includes(field)) return { kind: "integer", width: "u32", optional: true };
   if (field === "openrouter_provider") return { kind: "table", optional: true };
-  if (field === "cache_ttl" || field === "cache_keepalive_max") return { kind: "duration", optional: true };
+  if (field === "cache_ttl") return { kind: "duration", optional: true };
   return { kind: "string", optional: true };
 }
 

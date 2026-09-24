@@ -160,6 +160,18 @@ describe("the ping count", () => {
     expect(ka.tick(now + minutes(166))).toBe("none");
   });
 
+  test("the last allowed ping leaves no next ping scheduled", () => {
+    const ka = new CacheKeepalive(1);
+    ka.setInterval(minutes(55), MODEL, now);
+    ka.onCacheWarmed(MODEL, now);
+    ka.onPingSucceeded(now + minutes(55));
+    expect(ka.nextPingAt).toBeUndefined();
+
+    const restored = new CacheKeepalive(1);
+    expect(restored.restore(required(ka.snapshot()), now + minutes(60))).toBe(true);
+    expect(restored.nextPingAt).toBeUndefined();
+  });
+
   test("real activity gives the count back and resumes", () => {
     const ka = new CacheKeepalive(1);
     ka.setInterval(minutes(55), MODEL, now);

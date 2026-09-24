@@ -288,6 +288,24 @@ describe("preparing a heartbeat body", () => {
     expect(text).toContain("next wake in 3 hours");
   });
 
+  test("says the wait the clock will actually use when the default is below the floor", async () => {
+    const config = await baseConfig();
+    config.app.behavior.autonomy.heartbeat.default_interval = ConfigDuration.fromSecs(600);
+    await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
+    await writeFile(
+      join(config.dirs.config, "prompts", "heartbeat.md"),
+      "[{{now}}]\n\nnext wake in {{default_interval}}\n",
+    );
+    await withConversation(config);
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
+    expect(text).toContain("next wake in 1 hour");
+  });
+
   test("uses a heartbeat.md override from the config prompts dir", async () => {
     const config = await baseConfig();
     await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
@@ -380,6 +398,7 @@ describe("preparing a heartbeat body", () => {
 
     expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
     expect(armed[0]?.keepalive_pings).toBe(9);
+    expect(armed[0]?.context?.thread, "the ping resumes the heartbeat's own thread").toBe("main");
     expect(armed[0]?.context?.keepalive_window_secs).toBe(5400);
     expect(warmed).toEqual([false]);
   });

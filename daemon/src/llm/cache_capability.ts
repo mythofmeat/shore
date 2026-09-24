@@ -16,19 +16,13 @@ export function acceptsCacheTtl(sdk: Sdk, model?: string): boolean {
   return sdk === "claude_agent" || honorsCacheTtl(sdk, model);
 }
 
-export function claudeAgentCacheTtl(ttl: string | undefined): "5m" | "1h" | undefined {
+export function cacheTtlTier(ttl: string | undefined): "5m" | "1h" | undefined {
   if (ttl === undefined || ttl === "") return undefined;
   return ttl === "1h" ? "1h" : "5m";
 }
 
-function knownCacheTtl(sdk: Sdk, model: string, ttl: string | undefined): "5m" | "1h" | undefined {
-  if (sdk === "claude_agent") return claudeAgentCacheTtl(ttl);
-  if (!honorsCacheTtl(sdk, model) || ttl === undefined || ttl === "") return undefined;
-  return ttl === "1h" ? "1h" : "5m";
-}
-
 export function keepaliveTtlWarning(sdk: Sdk, model: string, ttl: string | undefined, intervalMs: number): string | undefined {
-  const known = knownCacheTtl(sdk, model, ttl);
+  const known = acceptsCacheTtl(sdk, model) ? cacheTtlTier(ttl) : undefined;
   if (known === undefined) return undefined;
   const ttlMs = known === "1h" ? 3_600_000 : 300_000;
   if (intervalMs < ttlMs) return undefined;

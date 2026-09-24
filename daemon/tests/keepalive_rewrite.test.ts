@@ -345,6 +345,41 @@ describe("two misses in a row halt that model", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
+  test("a real call on a halted model cannot schedule another ping before it is re-armed", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    const sentWhenHalted = h.sends();
+
+    h.service.observe("Rhia", "claude-opus-5", "message", prefixFingerprint(prefix()), usage(0, 0));
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.sends()).toBe(sentWhenHalted);
+  });
+
+  test("a character's own halted model is reported over a later halt elsewhere", async () => {
+    const h = harness(0, 14_144);
+    const other: KeepalivePrefix = {
+      ...prefix(),
+      model: "claude-sonnet-5",
+      context: { character: "Ada", call_type: "message", thinking_enabled: false },
+    };
+    for (const armed of [prefix(), other]) {
+      for (let miss = 0; miss < 2; miss += 1) {
+        h.service.arm(armed, true);
+        h.advance(10_000);
+        await h.service.tick();
+      }
+    }
+    expect(h.service.halted?.model).toBe("anthropic:claude-sonnet-5");
+    expect(h.service.haltedFor("Rhia")?.model).toBe("anthropic:claude-opus-5");
+    expect(h.service.haltedFor("Ada")?.model).toBe("anthropic:claude-sonnet-5");
+  });
+
   test.each(["heartbeat", "heartbeat_tool_loop"])("a %s cache read does not clear chat keepalive misses", async (callType) => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);

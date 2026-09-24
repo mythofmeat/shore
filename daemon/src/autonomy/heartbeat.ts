@@ -59,11 +59,14 @@ export class HeartbeatClock {
     if (previous.defaultIntervalMs === config.defaultIntervalMs &&
         previous.minIntervalMs === config.minIntervalMs &&
         previous.maxIntervalMs === config.maxIntervalMs) return;
-    if (this.#nextWakeAt === undefined) return;
+    const existing = this.#nextWakeAt;
+    if (existing === undefined) return;
     if (this.#defaultWake) {
       this.#nextWakeAt = Math.max(now, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
-    } else {
+    } else if (config.minIntervalMs > previous.minIntervalMs) {
       this.boundWake(now);
+    } else if (existing > now + config.maxIntervalMs) {
+      this.#nextWakeAt = now + config.maxIntervalMs;
     }
   }
 

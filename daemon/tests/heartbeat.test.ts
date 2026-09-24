@@ -79,6 +79,22 @@ describe("live heartbeat settings", () => {
     expect(clock.tick(HOUR)).toBe("none");
   });
 
+  test("a reload that does not raise the floor never postpones a pending wake", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.onUserMessage(0);
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR }), 59 * 60_000);
+    expect(clock.nextWakeAt).toBe(HOUR);
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR, minIntervalMs: 30 * 60_000 }), 59 * 60_000);
+    expect(clock.nextWakeAt).toBe(HOUR);
+  });
+
+  test("lowering the ceiling pulls a far wake in to it", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.schedule(40 * HOUR, 0);
+    clock.setConfig(config({ maxIntervalMs: 3 * HOUR }), HOUR);
+    expect(clock.nextWakeAt).toBe(4 * HOUR);
+  });
+
   test("a clock with no wake uses the new bounds when it first schedules", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.setConfig(config({ defaultIntervalMs: 8 * HOUR, maxIntervalMs: 2 * HOUR }), 0);

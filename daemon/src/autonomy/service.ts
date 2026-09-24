@@ -97,8 +97,8 @@ export class AutonomyService {
     });
   }
 
-  keepaliveHalt(): KeepaliveHalt | undefined {
-    return this.#keepalive?.halted;
+  keepaliveHalt(character?: string): KeepaliveHalt | undefined {
+    return character === undefined ? this.#keepalive?.halted : this.#keepalive?.haltedFor(character);
   }
 
   async register(request: RegisterCharacter): Promise<void> {

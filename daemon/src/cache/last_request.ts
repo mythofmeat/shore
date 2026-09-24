@@ -65,9 +65,10 @@ export class LastRequestCache {
     request: SidecarRequest,
     keepalive?: KeepaliveArming,
     warm = true,
+    thread?: string,
   ): void {
     this.#bodies.set(character, request);
-    this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED), warm);
+    this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED, thread), warm);
   }
 
   invalidate(character: string, reason: InvalidationReason): void {

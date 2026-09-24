@@ -176,8 +176,9 @@ export class CharacterAutonomy {
   }
 
   setHeartbeatConfig(clock: HeartbeatClockConfig, now: number): void {
+    const before = this.#clock.nextWakeAt;
     this.#clock.setConfig(clock, now);
-    this.#state.dirty = true;
+    if (this.#clock.nextWakeAt !== before) this.#state.dirty = true;
   }
 
   shouldCompactNow(turnCount: number, contextTokens: number): boolean {

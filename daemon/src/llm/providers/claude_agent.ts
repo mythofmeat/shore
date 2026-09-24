@@ -42,7 +42,7 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
-import { claudeAgentCacheTtl } from "../cache_capability.ts";
+import { cacheTtlTier } from "../cache_capability.ts";
 import { hostZone } from "../../ledger/zoned.ts";
 import {
   REASONING_OFF,
@@ -326,7 +326,7 @@ function buildOptions(
 
   const system = systemToText(req.system);
   const effort = agentEffort(req.provider_options?.reasoning_effort);
-  const cacheTtl = claudeAgentCacheTtl(req.provider_options?.cache_ttl);
+  const cacheTtl = cacheTtlTier(req.provider_options?.cache_ttl);
 
   return {
     model: req.model,

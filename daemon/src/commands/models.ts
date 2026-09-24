@@ -42,7 +42,7 @@ import {
   type SamplerSettings,
 } from "../config/preferences.ts";
 import type { SubagentConfig } from "../config/app.ts";
-import { SETTING_STORAGE_FIELDS, samplerToWire, settingSchema } from "../llm/settings.ts";
+import { SETTING_STORAGE_FIELDS, parsedSettingValue, samplerToWire, settingSchema } from "../llm/settings.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
 import {
@@ -833,7 +833,10 @@ function keepaliveWarningAfter(
     ? typeof value === "string" ? parseCacheKeepalive(value) : undefined
     : current.cacheKeepalive === undefined ? undefined : { ok: current.cacheKeepalive };
   if (cadence === undefined || "err" in cadence || cadence.ok.kind === "off") return undefined;
-  const ttl = key === "cache_ttl" ? (typeof value === "string" ? value : undefined) : current.cacheTtl;
+  const parsedTtl = key === "cache_ttl" ? parsedSettingValue(key, value) : undefined;
+  const ttl = parsedTtl === undefined
+    ? current.cacheTtl
+    : "value" in parsedTtl && typeof parsedTtl.value === "string" ? parsedTtl.value : undefined;
   return keepaliveTtlWarning(sdk, modelId, ttl, cadence.ok.interval.asMillis());
 }
 

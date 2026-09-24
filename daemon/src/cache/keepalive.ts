@@ -195,6 +195,11 @@ export class KeepaliveService {
     return this.#halts.get(keepaliveModelKey(req));
   }
 
+  haltedFor(character: string): KeepaliveHalt | undefined {
+    const armed = this.#entries.get(character)?.prefix;
+    return (armed === undefined ? undefined : this.haltFor(armed)) ?? this.#lastHalt;
+  }
+
   #haltModel(character: string, prefix: KeepalivePrefix, usage: Usage): void {
     const sdk = prefix.sdk;
     const model = keepaliveModelKey(prefix);
@@ -393,6 +398,11 @@ export class KeepaliveService {
     const prefix = entry.prefix;
     if (prefix === undefined) {
       this.#skip(character, entry, "no cached request");
+      return;
+    }
+
+    if (this.haltFor(prefix) !== undefined) {
+      entry.keepalive.onCacheInvalidated();
       return;
     }
 

@@ -57,6 +57,13 @@ test("a keepalive needs no TTL, and only warns when it cannot beat a known one",
   expect(settings.effective_sampler["cache_keepalive"], "a warning never rewrites what was set").toBe("1h");
 });
 
+test("a TTL written in other units is judged by the value that gets stored", async () => {
+  const ctx = await context();
+  setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "55m" });
+  const hour = setModelSetting(ctx, { name: CLAUDE, key: "cache_ttl", value: "60m" }) as Record<string, unknown>;
+  expect(hour["warning"]).toBeUndefined();
+});
+
 test("implicit-cache models take a keepalive like any other", async () => {
   const ctx = await context({ cache_ttl: "1h" });
   expect(() => setModelSetting(ctx, { name: GEMINI, key: "cache_keepalive", value: "55m" })).not.toThrow();

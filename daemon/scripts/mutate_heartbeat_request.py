@@ -132,7 +132,7 @@ MUTANTS = [
      "    deps.cache.set(character, source, {\n"
      "      intervalMs: rebuilt.keepalive_interval_ms,\n"
      "      pings: rebuilt.keepalive_pings,\n"
-     "    }, false);",
+     "    }, false, thread);",
      "    void rebuilt.keepalive_interval_ms;"),
     ("prepare: the rebuilt body is armed without the model's ping count",
      H,

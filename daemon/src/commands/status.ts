@@ -119,7 +119,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
   const pending = await pendingDeferredEditPaths(characterDataDir, ctx.thread).catch(() => []);
 
   const tokens = ctx.conversationTokens;
-  const halt = ctx.autonomy.keepaliveHalt();
+  const halt = ctx.autonomy.keepaliveHalt(ctx.characterName);
   const mcp = ctx.mcpServers === undefined ? undefined : mcpWire(ctx.mcpServers);
   const sections = {
     tokens: {

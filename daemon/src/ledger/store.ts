@@ -301,10 +301,6 @@ export class Ledger {
     return this.#trackers;
   }
 
-  setMaxIdleSecs(secs: number): void {
-    this.#trackers.setMaxIdleSecs(secs);
-  }
-
   setCacheTtlSecs(secs: number): void {
     this.#ttlSecs = secs;
   }

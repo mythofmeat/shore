@@ -66,7 +66,7 @@ export class CacheKeepalive {
   }
 
   #deadline(now: number): number | undefined {
-    if (this.#interval === undefined) return undefined;
+    if (this.#interval === undefined || this.#pingsSent >= this.#maxPings) return undefined;
     const byCadence = now + this.#interval;
     if (this.#prefixWarmAt === undefined) return byCadence;
     return Math.min(byCadence, this.#prefixWarmAt + this.#interval);
@@ -159,10 +159,10 @@ export class CacheKeepalive {
     this.#lastWarmAt = snapshot.last_warm_at;
     this.#prefixWarmAt = snapshot.last_warm_at;
     this.#lastActiveAt = snapshot.last_active_at;
-    this.#nextPingAt = snapshot.last_warm_at + snapshot.interval;
     this.#failureCount = 0;
     this.#pingsSent = snapshot.pings_sent ?? 0;
     if (snapshot.max_pings !== undefined) this.#maxPings = snapshot.max_pings;
+    this.#nextPingAt = this.#pingsSent >= this.#maxPings ? undefined : snapshot.last_warm_at + snapshot.interval;
     return true;
   }
 
