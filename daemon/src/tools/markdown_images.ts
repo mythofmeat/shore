@@ -63,10 +63,9 @@ export async function expandMarkdownImages(file: FileHandle, path: string, page:
     const paths = new Set<string>();
     const failures: string[] = [];
     const overBudget: string[] = [];
-    // Preparation never yields more than MAX_PREPARED_IMAGE_BYTES, so only skip sources that cannot fit even after resizing.
     const budget = { remaining: maxImageBytes };
-    const cost = (size: number) => Math.min(size, MAX_PREPARED_IMAGE_BYTES);
-    const fits = (size: number) => cost(size) <= budget.remaining;
+    const bytesAfterResize = (size: number) => Math.min(size, MAX_PREPARED_IMAGE_BYTES);
+    const fits = (size: number) => bytesAfterResize(size) <= budget.remaining;
     for (const { node, url } of imageNodes(source, page)) {
       signal?.throwIfAborted();
       try {
@@ -79,7 +78,7 @@ export async function expandMarkdownImages(file: FileHandle, path: string, page:
           overBudget.push(url);
           continue;
         }
-        budget.remaining -= cost(base64Bytes(image.data));
+        budget.remaining -= bytesAfterResize(base64Bytes(image.data));
         if (node.alt) image.label = `${node.alt} (${imagePath})`;
         payload.media.push(image);
       } catch (error) {
