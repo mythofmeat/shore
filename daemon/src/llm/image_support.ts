@@ -119,17 +119,16 @@ function statusOf(error: unknown): number | undefined {
   return undefined;
 }
 
+type ImageBlock = Extract<ContentBlock, { type: "image" }>;
+
+function imagesOf(block: ContentBlock): ImageBlock[] {
+  if (block.type === "image") return [block];
+  if (block.type !== "tool_result" || !Array.isArray(block.content)) return [];
+  return block.content.filter((b): b is ImageBlock => b.type === "image");
+}
+
 export function countImageBlocks(messages: readonly WireMessage[]): number {
-  let total = 0;
-  for (const message of messages) {
-    for (const block of message.content) {
-      if (block.type === "image") total += 1;
-      else if (block.type === "tool_result" && Array.isArray(block.content)) {
-        total += block.content.filter((b) => b.type === "image").length;
-      }
-    }
-  }
-  return total;
+  return messages.reduce((total, message) => total + message.content.reduce((n, block) => n + imagesOf(block).length, 0), 0);
 }
 
 export interface StripOutcome {
@@ -137,39 +136,57 @@ export interface StripOutcome {
   stripped: number;
 }
 
-function carriesImage(block: ContentBlock): boolean {
-  if (block.type === "image") return true;
-  return (
-    block.type === "tool_result" &&
-    Array.isArray(block.content) &&
-    block.content.some((b) => b.type === "image")
-  );
-}
-
 export function stripImageBlocks(
   messages: readonly WireMessage[],
   reason: string,
+  keepNewest: (image: ImageBlock) => boolean = () => false,
 ): StripOutcome {
+  const images = messages.flatMap((message) => message.content.flatMap(imagesOf));
+  const kept = images.map(() => false);
+  for (let i = images.length - 1; i >= 0; i -= 1) kept[i] = keepNewest(images[i] as ImageBlock);
   let stripped = 0;
+  let position = 0;
   const notice = (label: string): ContentBlock => {
     stripped += 1;
     return { type: "text", text: omissionNotice(label, reason) };
   };
 
   const out = messages.map((message) => {
-    if (!message.content.some(carriesImage)) return message;
+    const start = position;
+    position += message.content.reduce((n, block) => n + imagesOf(block).length, 0);
+    if (kept.slice(start, position).every(Boolean)) return message;
+    let next = start;
+    const drops = (b: ContentBlock): boolean => b.type === "image" && !kept[next++];
     const content: ContentBlock[] = message.content.map((block) => {
-      if (block.type === "image") return notice("an attached image");
+      if (block.type === "image") return drops(block) ? notice("an attached image") : block;
       if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+      const dropped = block.content.map(drops);
       return {
         ...block,
-        is_error: block.content.some((b) => b.type === "image") || block.is_error === true,
-        content: block.content.map((b) => (b.type === "image" ? notice("a tool result image") : b)),
+        is_error: dropped.some(Boolean) || block.is_error === true,
+        content: block.content.map((b, i) => (dropped[i] === true ? notice("a tool result image") : b)),
       };
     });
     return { ...message, content };
   });
   return { messages: out, stripped };
+}
+
+export const MAX_REQUEST_IMAGES = 100;
+export const MAX_REQUEST_IMAGE_BASE64_CHARS = 20_000_000;
+
+export function capRequestImages(messages: readonly WireMessage[]): StripOutcome {
+  let count = 0;
+  let chars = 0;
+  return stripImageBlocks(
+    messages,
+    `only the newest ${String(MAX_REQUEST_IMAGES)} images, up to ${String(MAX_REQUEST_IMAGE_BASE64_CHARS)} base64 characters in total, are sent per request`,
+    (image) => {
+      count += 1;
+      chars += image.source.data.length;
+      return count <= MAX_REQUEST_IMAGES && chars <= MAX_REQUEST_IMAGE_BASE64_CHARS;
+    },
+  );
 }
 
 export function textOnlyReason(providerKey: string, modelId: string): string {

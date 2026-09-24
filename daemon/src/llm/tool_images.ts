@@ -1,6 +1,6 @@
 import type { ContentBlock } from "../engine/types.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent, WireMessage } from "./types.ts";
-import { countImageBlocks, isImageRejection, stripImageBlocks, textOnlyReason } from "./image_support.ts";
+import { capRequestImages, countImageBlocks, isImageRejection, stripImageBlocks, textOnlyReason } from "./image_support.ts";
 
 export interface ImagePolicy {
   support: (request: SidecarRequest) => boolean | undefined;
@@ -11,7 +11,12 @@ export interface ImagePolicy {
 export function withToolImages(provider: SidecarProvider, policy: ImagePolicy): SidecarProvider {
   let refused = false;
   const project = (req: SidecarRequest): SidecarRequest => {
-    if (!refused && policy.support(req) !== false) return req;
+    if (!refused && policy.support(req) !== false) {
+      const capped = capRequestImages(req.messages);
+      if (capped.stripped === 0) return req;
+      policy.warn(`${capped.stripped} older image(s) omitted from this request to stay within per-request image limits. Original images remain in conversation history.`);
+      return { ...req, messages: capped.messages };
+    }
     const reason = textOnlyReason(req.provider_key ?? req.sdk, req.model);
     const stripped = stripImageBlocks(req.messages, reason);
     if (stripped.stripped === 0) return req;

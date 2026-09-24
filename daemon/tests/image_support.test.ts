@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  capRequestImages,
   countImageBlocks,
+  MAX_REQUEST_IMAGE_BASE64_CHARS,
+  MAX_REQUEST_IMAGES,
   imageSupportFor,
   isImageRejection,
   learnedImageSupportPath,
@@ -192,5 +195,47 @@ describe("dropping images that are already in history", () => {
   test("every image across the whole history is counted", () => {
     expect(countImageBlocks([imageMessage(), imageMessage()])).toBe(2);
     expect(countImageBlocks([{ role: "user", content: [{ type: "text", text: "x" }] }])).toBe(0);
+  });
+});
+
+function toolImages(count: number, data = "AAAA"): WireMessage {
+  return {
+    role: "user",
+    content: [{
+      type: "tool_result",
+      tool_use_id: "t",
+      content: Array.from({ length: count }, () => ({ type: "image" as const, source: { type: "base64" as const, media_type: "image/png", data } })),
+    }],
+  };
+}
+
+describe("capping images per request", () => {
+  test("a request within the limits is returned untouched", () => {
+    const history = [toolImages(MAX_REQUEST_IMAGES)];
+    const { messages, stripped } = capRequestImages(history);
+
+    expect(stripped).toBe(0);
+    expect(messages[0]).toBe(history[0] as WireMessage);
+  });
+
+  test("the oldest images beyond the count are replaced with notices", () => {
+    const history = [imageMessage(), toolImages(MAX_REQUEST_IMAGES)];
+    const { messages, stripped } = capRequestImages(history);
+
+    expect(stripped).toBe(1);
+    expect(countImageBlocks(messages)).toBe(MAX_REQUEST_IMAGES);
+    const notice = messages[0]?.content[0];
+    expect(notice?.type === "text" && notice.text).toContain(`only the newest ${String(MAX_REQUEST_IMAGES)} images`);
+    expect(messages[1]).toBe(history[1] as WireMessage);
+  });
+
+  test("the oldest images beyond the base64 size limit are replaced with notices", () => {
+    const large = "A".repeat(MAX_REQUEST_IMAGE_BASE64_CHARS / 2);
+    const history = [toolImages(1, large), toolImages(2, large)];
+    const { messages, stripped } = capRequestImages(history);
+
+    expect(stripped).toBe(1);
+    expect(messages[1]).toBe(history[1] as WireMessage);
+    expect(messages[0]?.content[0]).toMatchObject({ is_error: true });
   });
 });

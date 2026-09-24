@@ -11,7 +11,7 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import { contentForClient, MULTIMODAL_TOOL_RESULTS } from "../src/swp/content_projection.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
-import { countImageBlocks } from "../src/llm/image_support.ts";
+import { countImageBlocks, MAX_REQUEST_IMAGES } from "../src/llm/image_support.ts";
 import { required } from "../src/util/required.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -70,6 +70,24 @@ test("Claude Agent uses native MCP image content", () => {
 });
 
 const done: StreamEvent = { type: "done", content: "done", finish_reason: "end_turn", usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 0, time_to_first_token_ms: 0 } };
+
+test("vision requests carry only the newest images within the per-request cap", async () => {
+  const sent: SidecarRequest[] = [];
+  const warnings: string[] = [];
+  const base: SidecarProvider = {
+    generate: () => Promise.reject(new Error("not used")),
+    async *stream(call) { sent.push(call); yield done; },
+  };
+  const provider = withToolImages(base, { support: () => true, rejected: () => {}, warn: (s) => warnings.push(s) });
+  const req = request();
+  req.messages = Array.from({ length: MAX_REQUEST_IMAGES + 1 }, (_, i) => ({ role: "user" as const, content: [{ type: "text" as const, text: String(i) }, image] }));
+  for await (const _event of provider.stream(req)) { void _event; }
+  expect(countImageBlocks(required(sent[0]).messages)).toBe(MAX_REQUEST_IMAGES);
+  expect(required(sent[0]).messages[0]?.content[1]).toMatchObject({ type: "text" });
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]).toContain("1 older image(s) omitted");
+  expect(countImageBlocks(req.messages)).toBe(MAX_REQUEST_IMAGES + 1);
+});
 
 test.each([false, true])("image policy applies to new results and retries only the failed continuation (reject: %s)", async (reject) => {
   const req = request();
