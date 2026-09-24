@@ -1,3 +1,4 @@
+import { openWorkspacePanel, openWorkspaceSettings } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 import { readFile } from "node:fs/promises";
 
@@ -7,7 +8,9 @@ test("memory workflows preview and archive context, preserve segment metadata an
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
+  const workspaceSettings = await openWorkspaceSettings(page);
   await expect(page.getByRole("button", { name: "Memory & segments", exact: true })).toBeDisabled();
+  await workspaceSettings.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Create character", exact: true }).click();
   const create = page.getByRole("dialog", { name: "Create character", exact: true });
   await create.getByLabel("Character name", { exact: true }).fill("nova");
@@ -16,7 +19,7 @@ test("memory workflows preview and archive context, preserve segment metadata an
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   const dialog = page.getByRole("dialog", { name: "Memory & segments", exact: true });
   await expect(dialog.getByText("No archived segments yet.")).toBeVisible();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
@@ -25,7 +28,7 @@ test("memory workflows preview and archive context, preserve segment metadata an
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByRole("article", { name: "assistant message" }).last()).toContainText(text);
   }
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await dialog.getByLabel("Retain recent turns", { exact: true }).fill("1");
   await dialog.getByRole("button", { name: "Preview compaction", exact: true }).click();
   await expect(dialog.getByRole("region", { name: "Compaction result" })).toContainText("Memory write preview");
@@ -76,7 +79,7 @@ test("memory workflows preview and archive context, preserve segment metadata an
     await page.getByLabel("Message", { exact: true }).fill(text);
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByRole("article", { name: "assistant message" }).last()).toContainText(text);
-    await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+    await openWorkspacePanel(page, "Memory & segments");
     await dialog.getByLabel("Retain recent turns", { exact: true }).fill("0");
     await dialog.getByRole("button", { name: "Compact context", exact: true }).click();
     await review.getByRole("button", { name: "Confirm archive" }).click();
@@ -91,7 +94,7 @@ test("memory workflows preview and archive context, preserve segment metadata an
   await page.getByLabel("Message", { exact: true }).fill("Archive this conversation without summarizing");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByRole("article", { name: "assistant message" }).last()).toContainText("Archive this conversation without summarizing");
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await dialog.getByLabel("Archive note", { exact: true }).fill("Manual archive");
   await dialog.getByLabel("Exclude new segment from history search").check();
   await dialog.getByRole("button", { name: "Clear active context", exact: true }).click();
@@ -106,7 +109,7 @@ test("memory workflows preview and archive context, preserve segment metadata an
   await expect(selected).toContainText("Excluded from history search");
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await dialog.getByRole("button", { name: "Inspect segment 0", exact: true }).click();
   await expect(selected.getByRole("textbox", { name: "Segment note", exact: true })).toHaveValue("Unsaved note survives lookup errors");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -126,14 +129,14 @@ test("archive-only previews obey shared confirmation rules", async ({ page }) =>
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "R recovery" }).click();
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   const memory = page.getByRole("dialog", { name: "Memory & segments", exact: true });
   await memory.getByRole("button", { name: "Inspect segment 0", exact: true }).click();
   const selected = memory.getByRole("region", { name: "Selected segment" });
   await selected.getByText("Archived messages (1)", { exact: true }).click();
   await expect(selected).toContainText("Archived message from an earlier session");
   await memory.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openWorkspacePanel(page, "Settings");
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
   await settings.getByLabel("Find a setting").fill("compaction.write_memory");
   await settings.getByRole("button").filter({ has: page.locator("span", { hasText: /^compaction\.write_memory$/ }) }).click();
@@ -158,7 +161,7 @@ test("archive-only previews obey shared confirmation rules", async ({ page }) =>
   await expect(action).toContainText('"dry_run": true');
   await expect(action.getByRole("button", { name: "Confirm archive" })).toHaveCount(0);
   await action.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await memory.getByLabel("Retain recent turns", { exact: true }).fill("0");
   await memory.getByRole("button", { name: "Preview compaction", exact: true }).click();
   await expect(memory.getByRole("region", { name: "Compaction result" })).toContainText("Archive preview");

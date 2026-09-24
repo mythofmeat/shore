@@ -1,3 +1,4 @@
+import { openWorkspacePanel, openWorkspaceSettings } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 import { readFile } from "node:fs/promises";
 
@@ -7,7 +8,9 @@ test("the tool workbench discovers schemas and runs tools through the shared dae
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
+  const workspaceSettings = await openWorkspaceSettings(page);
   await expect(page.getByRole("button", { name: "Tool workbench", exact: true })).toBeDisabled();
+  await workspaceSettings.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Create character", exact: true }).click();
   const create = page.getByRole("dialog", { name: "Create character", exact: true });
   await create.getByLabel("Character name", { exact: true }).fill("nova");
@@ -15,7 +18,7 @@ test("the tool workbench discovers schemas and runs tools through the shared dae
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
-  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  await openWorkspacePanel(page, "Tool workbench");
   const dialog = page.getByRole("dialog", { name: "Tool workbench", exact: true });
   const tools = dialog.getByRole("navigation", { name: "Available tools" });
   const selected = dialog.getByRole("region", { name: "Selected tool" });

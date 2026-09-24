@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,7 +25,7 @@ test("a browser can stop a running manual tool and inspect changes already made"
   const later = join(root, "finished");
   try {
     await openCharacter(page);
-    await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+    await openWorkspacePanel(page, "Tool workbench");
     const dialog = page.getByRole("dialog", { name: "Tool workbench", exact: true });
     await dialog.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true }).click();
     const selected = dialog.getByRole("region", { name: "Selected tool" });
@@ -54,7 +55,7 @@ test("compaction cancellation preserves its checkpoint, partial writes and activ
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByRole("article", { name: "assistant message" }).last()).toContainText(text);
   }
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   const dialog = page.getByRole("dialog", { name: "Memory & segments", exact: true });
   await dialog.getByLabel("Retain recent turns", { exact: true }).fill("1");
   await dialog.getByRole("button", { name: "Compact context", exact: true }).click();
@@ -66,7 +67,7 @@ test("compaction cancellation preserves its checkpoint, partial writes and activ
   await expect(dialog.getByText("No archived segments yet.")).toBeVisible();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("article", { name: "user message" })).toHaveCount(2);
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await dialog.getByLabel("Retain recent turns", { exact: true }).fill("1");
   await dialog.getByRole("button", { name: "Compact context", exact: true }).click();
   await dialog.getByRole("button", { name: "Confirm archive", exact: true }).click();
@@ -81,7 +82,7 @@ test("generated actions report unconfirmed MCP cancellation without repeating a 
   const marker = join(root, "effect");
   try {
     await openCharacter(page);
-    await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+    await openWorkspacePanel(page, "Tool workbench");
     const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
     await workbench.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "mcp__tool_fixture__cancel_late", exact: true }).click();
     await workbench.getByLabel("marker", { exact: true }).fill(marker);

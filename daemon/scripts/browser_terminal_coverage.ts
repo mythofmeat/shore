@@ -95,7 +95,7 @@ export const TERMINAL_ADAPTERS: Record<string, Adapter> = {
   attachments: adapter("Local image files and pasted images use browser uploads; daemon paths remain available in advanced controls.", "composer.tsx", "onPaste", "imageUpload(file, data)"),
   editor: adapter("Built-in editing replaces launching a local editor process.", "composer.tsx", "TextHistory", "editText", "textHistory.change"),
   follow: adapter("Conversation updates arrive live and automatic scrolling can be toggled.", "app.tsx", "setFollow", "tail.current?.scrollIntoView"),
-  content: adapter("Message details retain all text and structured blocks; Copy exports message text.", "app.tsx", "Inspect:value=message", "navigator.clipboard.writeText(message.content)"),
+  content: { reason: "Message details retain all text and structured blocks; Copy exports message text on secure and HTTP origins.", hooks: { "app.tsx": ["Inspect:value=message", "copyText(message.content)"], "clipboard.ts": ["navigator.clipboard.writeText(text)", 'document.execCommand("copy")'] } },
   thinking: adapter("Thinking is a persistent display preference.", "app.tsx", 'display.option("thinking")'),
   tools: adapter("Tool content is a persistent display preference.", "app.tsx", 'display.option("tools")'),
   subagents: adapter("Live nested streams and stored subagent traces have browser views.", "activity.tsx", "stream.subagent"),

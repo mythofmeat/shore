@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 
@@ -25,22 +26,22 @@ test("last action output can be reopened after its form closes and clears on sig
   await action.getByRole("button", { name: "Run action", exact: true }).click();
   await expect(action.getByRole("heading", { name: "Action completed", exact: true })).toBeVisible();
   await action.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: "Last action output", exact: true }).click();
+  await openWorkspacePanel(page, "Last action output");
   const output = page.getByRole("dialog", { name: "Last action output", exact: true });
   await expect(output).toContainText("character_info");
   await expect(output.getByRole("region", { name: "Complete action result", exact: true })).toContainText("nova");
   await output.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  await openWorkspacePanel(page, "Tool workbench");
   const tools = page.getByRole("dialog", { name: "Tool workbench", exact: true });
   await expect(tools.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true })).toBeVisible();
   await tools.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: "Last action output", exact: true }).click();
+  await openWorkspacePanel(page, "Last action output");
   await expect(output.getByRole("heading", { level: 3 })).toHaveText("character_info");
   await output.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await openWorkspacePanel(page, "Disconnect");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace", exact: true }).click();
-  await page.getByRole("button", { name: "Last action output", exact: true }).click();
+  await openWorkspacePanel(page, "Last action output");
   await expect(output).toContainText("No completed action yet");
 });
 
@@ -51,32 +52,32 @@ test("workspace help exposes input-line focus, transcript focus and configurable
   await input.press("Home");
   await input.press("ArrowUp");
   await input.press("ArrowRight");
-  await expect(page.getByRole("button", { name: "Workspace help", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Workspace settings", exact: true })).toBeVisible();
+  await openWorkspacePanel(page, "Workspace help");
   const help = page.getByRole("dialog", { name: "Workspace help", exact: true });
   await help.getByRole("button", { name: "Start of input line", exact: true }).click();
   await expect(input).toBeFocused();
   await expect.poll(() => page.evaluate<number>('document.getElementById("message-composer").selectionStart')).toBe(6);
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await openWorkspacePanel(page, "Workspace help");
   await help.getByRole("button", { name: "End of input line", exact: true }).click();
   await expect.poll(() => page.evaluate<number>('document.getElementById("message-composer").selectionStart')).toBe(17);
   await expect(input).toHaveValue("first\nsecond line\nlast");
   await input.fill("Long transcript\n".repeat(60));
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await openWorkspacePanel(page, "Workspace help");
   await help.getByRole("button", { name: "Focus transcript", exact: true }).click();
   const transcript = page.getByRole("region", { name: "Conversation transcript", exact: true });
   await expect(transcript).toBeFocused();
   await page.keyboard.press("Home");
   await expect.poll(() => page.evaluate<number>('document.querySelector(".messages").scrollTop')).toBe(0);
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await openWorkspacePanel(page, "Workspace help");
   await help.getByLabel("Lines per scroll", { exact: true }).fill("3");
   await help.getByRole("button", { name: "Scroll down", exact: true }).click();
   const expected = await page.evaluate<number>('3 * (parseFloat(getComputedStyle(document.querySelector(".messages")).lineHeight) || 24)');
   await expect.poll(() => page.evaluate<number>('document.querySelector(".messages").scrollTop')).toBeCloseTo(expected, -1);
-  await expect(page.getByRole("checkbox", { name: "Follow", exact: true })).not.toBeChecked();
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Follow", exact: true, includeHidden: true })).not.toBeChecked();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   const keyboard = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   await keyboard.getByLabel("Shortcut key", { exact: true }).fill("alt+j");
   await keyboard.getByLabel("Shortcut scope", { exact: true }).selectOption("global");
@@ -88,11 +89,11 @@ test("workspace help exposes input-line focus, transcript focus and configurable
   await page.keyboard.press("Alt+j");
   await expect.poll(() => page.evaluate<number>('document.querySelector(".messages").scrollTop')).toBeCloseTo(expected * 5 / 3, -1);
   await page.reload();
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   await keyboard.getByRole("button", { name: "Edit global:alt+j", exact: true }).click();
   await expect(keyboard.getByLabel("Lines per scroll", { exact: true })).toHaveValue("2");
   await keyboard.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await openWorkspacePanel(page, "Workspace help");
   await page.setViewportSize({ width: 390, height: 844 });
   await help.screenshot({ path: "../out/issue-214/help-mobile.png" });
   expect(await page.evaluate<boolean>("document.documentElement.scrollWidth <= innerWidth")).toBe(true);
@@ -101,7 +102,7 @@ test("workspace help exposes input-line focus, transcript focus and configurable
 
 test("conversation shortcuts, edit cancellation and attachment clearing use the current workspace", async ({ page }) => {
   await openCharacter(page);
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   const keyboard = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   for (const [key, target] of [["alt+x", "local:edit_cancel"], ["alt+i", "local:clear_images"]]) {
     await keyboard.getByLabel("Shortcut key", { exact: true }).fill(key ?? "");
@@ -116,7 +117,7 @@ test("conversation shortcuts, edit cancellation and attachment clearing use the 
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(input).toHaveValue("");
   await input.fill("Keep the unsent draft");
-  await page.getByRole("button", { name: "Workspace help", exact: true }).click();
+  await openWorkspacePanel(page, "Workspace help");
   await page.getByRole("dialog", { name: "Workspace help", exact: true }).getByRole("button", { name: "Conversation shortcuts", exact: true }).click();
   const quick = page.getByRole("dialog", { name: "Conversation shortcuts", exact: true });
   await expect(quick.locator(".action-list > button")).toHaveCount(8);

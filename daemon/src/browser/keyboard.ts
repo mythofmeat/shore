@@ -9,7 +9,7 @@ export const LOCAL_SHORTCUTS = {
   images: "Conversation images", palette: "All actions", keyboard: "Keyboard shortcuts", display: "Display preferences", activity: "Activity panel",
   settings: "Settings", models: "Models & roles", providers: "Providers", diagnostics: "Diagnostics",
   memory: "Memory & segments", tools: "Tool workbench", usage: "Usage & budgets", archives: "Character archives",
-  help: "Workspace help", quick: "Conversation shortcuts", transcript: "Focus transcript", focus_home: "Start of input line", focus_end: "End of input line", sign_out: "Sign out", attach: "Choose image attachments", clear_images: "Clear image attachments",
+  help: "Workspace help", quick: "Conversation shortcuts", transcript: "Focus transcript", focus_home: "Start of input line", focus_end: "End of input line", sign_out: "Disconnect", attach: "Choose image attachments", clear_images: "Clear image attachments",
   edit_cancel: "Cancel message edit", output: "Last action output", editor: "Expand draft editor", undo: "Undo draft text", redo: "Redo draft text", focus: "Focus composer", send: "Send current draft", follow: "Toggle following responses",
   top: "Scroll to first message", bottom: "Scroll to latest message", up: "Scroll up", down: "Scroll down",
 } as const;

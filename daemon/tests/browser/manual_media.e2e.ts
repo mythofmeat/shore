@@ -1,3 +1,4 @@
+import { conversationAction, openWorkspacePanel } from "./navigation.ts";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures.ts";
 
@@ -14,7 +15,7 @@ test("manual tools show correlated live activity and recover image results after
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
-  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  await openWorkspacePanel(page, "Tool workbench");
   const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
   const selected = workbench.getByRole("region", { name: "Selected tool" });
   const tools = workbench.getByRole("navigation", { name: "Available tools" });
@@ -48,13 +49,13 @@ test("manual tools show correlated live activity and recover image results after
   await checkDownload();
   await workbench.getByRole("button", { name: "Close dialog", exact: true }).click();
   await expect(page.getByRole("article", { name: "Streaming response", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Last action output", exact: true }).click();
+  await openWorkspacePanel(page, "Last action output");
   const output = page.getByRole("dialog", { name: "Last action output", exact: true });
   await output.getByRole("button", { name: /View image:.*manual-image.png/ }).click();
   await checkDownload();
   await output.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Request history", exact: true }).click();
+  await conversationAction(page, "Request history");
   const history = page.getByRole("dialog", { name: "Request history", exact: true });
   await history.getByRole("button", { name: /View image:.*manual-image.png/ }).click();
   await checkDownload();

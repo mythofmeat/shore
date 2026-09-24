@@ -5,6 +5,18 @@ import type { ReactNode } from "react";
 import type { ContentBlock } from "../protocol/ContentBlock.ts";
 import type { OperationField } from "../protocol/OperationField.ts";
 import { acceptsKind, initialValue, record, type Control } from "./forms.ts";
+import { Icon } from "./icons.tsx";
+
+export function Menu({ label, children, above = false }: { label: string; children: ReactNode; above?: boolean }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !ref.current?.contains(event.target)) ref.current?.removeAttribute("open"); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && ref.current?.open) { ref.current.removeAttribute("open"); ref.current.querySelector("summary")?.focus(); event.stopPropagation(); } };
+    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, []);
+  return <details ref={ref} className={`utility-menu ${above ? "above" : ""}`}><summary aria-label={label} title={label}><Icon name="more" /></summary><div className="utility-menu-content" onClick={(event) => { if (event.target instanceof Element && event.target.closest("button")) ref.current?.removeAttribute("open"); }}>{children}</div></details>;
+}
 
 export function CancelWork({ active, ready, cancel }: { active: boolean; ready: boolean; cancel: () => void }) {
   const [notice, setNotice] = useState("");
@@ -28,7 +40,7 @@ export function Modal({ title, close, children }: { title: string; close: () => 
   const heading = useId();
   useEffect(() => { dialog.current?.showModal(); }, []);
   return <dialog ref={dialog} aria-labelledby={heading} onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div className="modal-heading"><h2 id={heading}>{title}</h2><button aria-label="Close dialog" onClick={close}>Close</button></div>{children}
+    <div className="modal-heading"><h2 id={heading}>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={close}><Icon name="close" /></button></div>{children}
   </dialog>;
 }
 

@@ -1,3 +1,4 @@
+import { conversationAction, openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -56,7 +57,7 @@ for (const crash of [false, true]) test(`ordinary ${crash ? "unconfirmed tool ef
     await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close dialog" }).click();
     await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "R restart" }).click();
-    await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+    await openWorkspacePanel(page, "Tool workbench");
     await dialog.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true }).click();
     const marker = join(root, "effect");
     const selected = dialog.getByRole("region", { name: "Selected tool" });
@@ -69,7 +70,7 @@ for (const crash of [false, true]) test(`ordinary ${crash ? "unconfirmed tool ef
     await stop(crash); stop = undefined;
     stop = await start(root, origin, false);
     await page.reload();
-    await page.getByRole("button", { name: "Request history", exact: true }).click();
+    await conversationAction(page, "Request history");
     const history = page.getByRole("dialog", { name: "Request history", exact: true });
     const tool = history.getByRole("article").filter({ has: page.getByRole("heading", { name: "Run tool", exact: true }) });
     await expect(tool).toContainText(crash ? "Request outcome uncertain" : "Request completed.");
@@ -81,7 +82,7 @@ for (const crash of [false, true]) test(`ordinary ${crash ? "unconfirmed tool ef
     await expect(tool).toHaveCount(0);
     await history.getByRole("button", { name: "Close dialog" }).click();
     await page.reload();
-    await page.getByRole("button", { name: "Request history", exact: true }).click();
+    await conversationAction(page, "Request history");
     await expect(history.getByText("Run tool", { exact: true })).toHaveCount(0);
     expect(await readFile(marker, "utf8")).toBe("applied\n"); expect(toolRequests).toBe(1);
   } finally { try { await context.close(); } finally { try { await stop?.(); } finally { await rm(root, { recursive: true, force: true }); } } }

@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 
@@ -32,6 +33,10 @@ test("display preferences change the conversation, persist and merge across tabs
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await character(page);
+  const initialPreferences = await preferences(page);
+  await expect(initialPreferences.getByRole("checkbox", { name: "Message metadata", exact: true })).not.toBeChecked();
+  await initialPreferences.getByRole("checkbox", { name: "Message metadata", exact: true }).check();
+  await initialPreferences.getByRole("button", { name: "Close dialog" }).click();
   await page.getByLabel("Attach images", { exact: true }).setInputFiles(picture);
   await send(page, "Display the uploaded image");
   const user = page.getByRole("article", { name: "user message" });
@@ -72,7 +77,7 @@ test("display preferences change the conversation, persist and merge across tabs
   await dialog.getByRole("checkbox", { name: "Reasoning", exact: true }).uncheck();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await expect(live.getByText("Reasoning", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true, includeHidden: true })).not.toBeChecked();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await preferences(page);
@@ -102,7 +107,7 @@ test("subagent tool blocks and compaction progress obey their separate visibilit
   await expect(worker).toHaveCount(0);
   await send(page, "cancel memory once");
   await expect(page.getByRole("article", { name: "assistant message" }).last()).toContainText("cancel memory once");
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   const memory = page.getByRole("dialog", { name: "Memory & segments", exact: true });
   await memory.getByLabel("Retain recent turns", { exact: true }).fill("0");
   await memory.getByRole("button", { name: "Compact context", exact: true }).click();
@@ -115,7 +120,7 @@ test("subagent tool blocks and compaction progress obey their separate visibilit
   await dialog.getByRole("checkbox", { name: "Compaction activity", exact: true }).uncheck();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await expect(compaction).toHaveCount(0);
-  await page.getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await openWorkspacePanel(page, "Memory & segments");
   await expect(memory.getByText("Compaction progress", { exact: true })).toHaveCount(0);
   await memory.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
@@ -140,6 +145,7 @@ test("failed preference writes retain current choices and can be retried", async
   await expect(dialog.getByRole("checkbox", { name: "Inline images", exact: true })).not.toBeChecked();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Display preferences are not saved" })).toBeVisible();
+  await page.getByLabel("Conversation options", { exact: true }).click();
   await page.getByRole("checkbox", { name: "Reasoning", exact: true }).uncheck();
   await page.getByRole("button", { name: "Review display preferences", exact: true }).click();
   await expect(dialog.getByRole("checkbox", { name: "Reasoning", exact: true })).not.toBeChecked();

@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,7 +18,7 @@ test("reload and a second tab recover and review an interrupted tool request wit
     await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
     await create.getByRole("button", { name: "Close dialog", exact: true }).click();
     await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
-    await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+    await openWorkspacePanel(page, "Tool workbench");
     const dialog = page.getByRole("dialog", { name: "Tool workbench", exact: true });
     await dialog.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true }).click();
     const selected = dialog.getByRole("region", { name: "Selected tool" });
@@ -43,7 +44,7 @@ test("reload and a second tab recover and review an interrupted tool request wit
     await expect(tool).toHaveCount(0);
     await expect(page.getByText("Request outcome uncertain", { exact: true })).toHaveCount(0);
     await page.reload();
-    await expect(page.getByRole("button", { name: "Request history", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Conversation options", { exact: true })).toBeVisible();
     await expect(page.getByText("Request outcome uncertain", { exact: true })).toHaveCount(0);
     expect(await readFile(marker, "utf8")).toBe("applied\n");
     await second.close();

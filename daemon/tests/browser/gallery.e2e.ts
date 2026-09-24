@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 import { readFile } from "node:fs/promises";
 test.use({ galleryMedia: true });
@@ -78,7 +79,7 @@ test("real tool image events appear once in the gallery and stay in their conver
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  await openWorkspacePanel(page, "Tool workbench");
   const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
   const selected = workbench.getByRole("region", { name: "Selected tool" });
   const run = async () => {
@@ -124,7 +125,7 @@ test("real tool image events appear once in the gallery and stay in their conver
   expect(mediaEvents).toHaveLength(2);
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await page.getByRole("button", { name: "I checked the conversation", exact: true }).click();
-  await page.locator(".sidebar").getByRole("button", { name: "New", exact: true }).first().click();
+  await page.locator(".sidebar").getByRole("button", { name: "New character", exact: true }).first().click();
   await create.getByLabel("Character name", { exact: true }).fill("other");
   await create.getByRole("button", { name: "Run action" }).click();
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
@@ -134,7 +135,7 @@ test("real tool image events appear once in the gallery and stay in their conver
   await page.getByRole("button", { name: "Images", exact: true }).click();
   await expect(gallery.getByRole("status")).toContainText("No images loaded");
   await gallery.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await openWorkspacePanel(page, "Disconnect");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "O other" })).toBeVisible();
@@ -157,7 +158,7 @@ test("losing the connection retires live images from the interrupted request", a
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await page.getByRole("button", { name: "Tool workbench", exact: true }).click();
+  await openWorkspacePanel(page, "Tool workbench");
   const workbench = page.getByRole("dialog", { name: "Tool workbench", exact: true });
   const selected = workbench.getByRole("region", { name: "Selected tool" });
   await workbench.getByRole("navigation", { name: "Available tools" }).getByRole("button", { name: "bash", exact: true }).click();

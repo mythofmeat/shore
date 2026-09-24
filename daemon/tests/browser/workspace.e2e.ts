@@ -1,3 +1,4 @@
+import { conversationAction } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 
 test("a real browser creates, chats, edits, forks, confirms deletion and recovers its draft", async ({ page }) => {
@@ -28,7 +29,7 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await expect(user).toContainText("Edited <img src=x onerror=alert(1)> question");
   await expect(user.locator("img")).toHaveCount(0);
-  await page.getByRole("button", { name: "Regenerate", exact: true }).click();
+  await conversationAction(page, "Regenerate");
   await dialog.getByLabel("Guidance", { exact: true }).fill("Answer again with more detail");
   await dialog.getByRole("button", { name: "Regenerate", exact: true }).click();
   await expect(assistant).toContainText("Answer 2:");
@@ -42,7 +43,7 @@ test("a real browser creates, chats, edits, forks, confirms deletion and recover
   await page.getByLabel("Message", { exact: true }).fill("Fork only this recent turn");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(assistant.filter({ hasText: "Answer 3: Fork only this recent turn" })).toBeVisible();
-  await page.getByRole("button", { name: "Fork", exact: true }).click();
+  await conversationAction(page, "Fork");
   await dialog.getByLabel("New thread ID", { exact: true }).fill("branch");
   await dialog.getByLabel("Set recent turns").check();
   await dialog.getByLabel("Recent turns", { exact: true }).fill("1");

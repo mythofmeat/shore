@@ -1,3 +1,4 @@
+import { draftAction } from "./navigation.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { expect, test } from "./fixtures.ts";
@@ -23,7 +24,7 @@ test("conversation requests expose their complete options through the actual bro
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await create.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "C core", exact: true }).click();
-  await page.getByRole("button", { name: "Message options", exact: true }).click();
+  await draftAction(page, "Message options");
   const options = page.getByRole("dialog", { name: "Message options", exact: true });
   await expect(options.getByLabel("Stream response", { exact: true })).toBeChecked();
   await expect(options.getByText("Original image paths", { exact: true })).toBeVisible();
@@ -38,7 +39,7 @@ test("conversation requests expose their complete options through the actual bro
   await expect(page.getByText("Draft saved on this device", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("A request with complete options");
-  await page.getByRole("button", { name: "Message options", exact: true }).click();
+  await draftAction(page, "Message options");
   await expect(options.getByLabel("Stream response", { exact: true })).not.toBeChecked();
   await expect(options.getByLabel("Original image paths 1", { exact: true })).toHaveValue(hostPath);
   await expect(options.getByLabel("Time away in seconds", { exact: true })).toHaveValue("120");

@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 
@@ -7,7 +8,7 @@ async function open(page: Page) {
   await page.getByRole("button", { name: "Open workspace" }).click();
 }
 async function editor(page: Page, key: string, target: string, scope = "global", mode = "run") {
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   await dialog.getByLabel("Shortcut key", { exact: true }).fill(key);
   await dialog.getByLabel("Shortcut scope", { exact: true }).selectOption(scope);
@@ -41,26 +42,26 @@ test("bindings persist, follow typing scope, synchronize across tabs and can be 
   await page.getByLabel("Message", { exact: true }).fill("draft");
   await page.keyboard.press("j");
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("draftj");
-  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true, includeHidden: true })).toBeChecked();
   await page.getByRole("heading", { name: "nova / main" }).click();
   await page.keyboard.down("j"); await page.keyboard.down("j"); await page.keyboard.up("j");
-  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true, includeHidden: true })).not.toBeChecked();
   await page.evaluate('document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", isComposing: true, bubbles: true }))');
-  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Reasoning", exact: true, includeHidden: true })).not.toBeChecked();
   await page.reload();
   const other = await context.newPage(); await other.goto(page.url());
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   await dialog.getByRole("button", { name: "Remove normal:j", exact: true }).click();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await other.getByRole("heading", { name: "nova / main" }).click();
   await other.keyboard.press("j");
-  await expect(other.getByRole("checkbox", { name: "Reasoning", exact: true })).not.toBeChecked();
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await expect(other.getByRole("checkbox", { name: "Reasoning", exact: true, includeHidden: true })).not.toBeChecked();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   await dialog.getByRole("button", { name: "Remove global:ctrl+k", exact: true }).click();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.reload(); await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "All actions", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   await dialog.getByRole("button", { name: "Reset keyboard shortcuts", exact: true }).click();
   await dialog.getByRole("button", { name: "Confirm reset shortcuts", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });

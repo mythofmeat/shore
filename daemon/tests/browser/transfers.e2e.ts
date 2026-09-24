@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ test("browser archive transfers are available before character selection", async
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await page.getByRole("button", { name: "Character archives", exact: true }).click();
+  await openWorkspacePanel(page, "Character archives");
   await expect(page.getByLabel("Archive file", { exact: true })).toBeVisible();
 });
 
@@ -21,7 +22,7 @@ for (const cancel of [false, true]) test(`archive downloads ${cancel ? "can be c
   await dialog.getByRole("button", { name: "Run action", exact: true }).click();
   await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await dialog.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Character archives", exact: true }).click();
+  await openWorkspacePanel(page, "Character archives");
   await dialog.getByLabel("Character to export", { exact: true }).selectOption("nova");
   await dialog.getByRole("button", { name: "Prepare archive", exact: true }).click();
   await expect(dialog.getByText("Export ready to download.", { exact: true })).toBeVisible();
@@ -77,7 +78,7 @@ test("browser-picked archives preserve history and media across download, collis
     await page.getByRole("button", { name: "Open workspace" }).click();
     const dialog = page.getByRole("dialog");
     const openArchives = async () => {
-      await page.getByRole("button", { name: "Character archives", exact: true }).click();
+      await openWorkspacePanel(page, "Character archives");
       await expect(dialog.getByLabel("Archive file", { exact: true })).toBeEnabled();
     };
     const close = () => dialog.getByRole("button", { name: "Close dialog" }).click();

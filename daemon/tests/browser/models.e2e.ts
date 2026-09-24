@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 
 test("model workflows preserve global settings before onboarding and expose role selection and structured vendor settings", async ({ page }) => {
@@ -6,12 +7,12 @@ test("model workflows preserve global settings before onboarding and expose role
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await openWorkspacePanel(page, "Providers");
   const providers = page.getByRole("dialog", { name: "Providers", exact: true });
   await providers.getByRole("article", { name: "fixture provider", exact: true }).getByRole("button", { name: "Refresh models", exact: true }).click();
   await expect(providers.getByRole("region", { name: "Refresh results" })).toContainText("fixture: 2 models refreshed");
   await providers.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Models & roles", exact: true }).click();
+  await openWorkspacePanel(page, "Models & roles");
   const dialog = page.getByRole("dialog", { name: "Models & roles", exact: true });
   await dialog.getByLabel("Find a model", { exact: true }).fill("vendor/hidden");
   await expect(dialog.locator(".model-cards article")).toHaveCount(0);
@@ -38,7 +39,7 @@ test("model workflows preserve global settings before onboarding and expose role
   await expect(dialog.locator(".model-cards article")).toHaveCount(1);
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Models & roles", exact: true }).click();
+  await openWorkspacePanel(page, "Models & roles");
   await dialog.getByLabel("Find a model", { exact: true }).fill("fast-fixture");
   await fast.getByRole("button", { name: "Inspect model", exact: true }).click();
   await dialog.getByRole("combobox", { name: "Model setting", exact: true }).selectOption("temperature");
@@ -53,7 +54,7 @@ test("model workflows preserve global settings before onboarding and expose role
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await page.getByRole("button", { name: "Models & roles", exact: true }).click();
+  await openWorkspacePanel(page, "Models & roles");
   await dialog.getByLabel("Find a model", { exact: true }).fill("fast-fixture");
   await fast.getByRole("button", { name: "Use for chat", exact: true }).click();
   const roles = dialog.getByRole("region", { name: "Model roles", exact: true });

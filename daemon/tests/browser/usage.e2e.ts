@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 import { readFile } from "node:fs/promises";
 
@@ -9,8 +10,7 @@ test("usage reports expose filters, budgets, cache health, rate limits and expor
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await expect(page.getByRole("button", { name: "Usage & budgets", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Usage & budgets", exact: true }).click();
+  await openWorkspacePanel(page, "Usage & budgets");
   const dialog = page.getByRole("dialog", { name: "Usage & budgets", exact: true });
   const result = dialog.getByRole("region", { name: "Usage result" });
   const refresh = async () => {

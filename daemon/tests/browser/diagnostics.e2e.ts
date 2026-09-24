@@ -1,3 +1,4 @@
+import { openWorkspacePanel, openWorkspaceSettings } from "./navigation.ts";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures.ts";
 
@@ -8,7 +9,9 @@ test("diagnostic journeys inspect full captures, diffs, transcripts and stored m
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics", exact: true })).toBeDisabled();
+  const workspaceSettings = await openWorkspaceSettings(page);
+  await expect(workspaceSettings.getByRole("button", { name: "Diagnostics", exact: true })).toBeDisabled();
+  await workspaceSettings.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Create character", exact: true }).click();
   const create = page.getByRole("dialog", { name: "Create character", exact: true });
   await create.getByLabel("Character name", { exact: true }).fill("nova");
@@ -17,7 +20,7 @@ test("diagnostic journeys inspect full captures, diffs, transcripts and stored m
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
   await expect(page.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await page.getByRole("button", { name: "Diagnostics", exact: true }).click();
+  await openWorkspacePanel(page, "Diagnostics");
   const dialog = page.getByRole("dialog", { name: "Diagnostics", exact: true });
   const view = dialog.getByRole("combobox", { name: "Diagnostic view", exact: true });
   await expect(dialog.getByRole("region", { name: "Runtime status" })).toContainText("anthropic:claude-opus-4-8");
