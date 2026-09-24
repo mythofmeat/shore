@@ -1,5 +1,9 @@
 import { isIP } from "node:net";
+import { hostname as machineHostname } from "node:os";
 import type { WebConfig } from "../config/app.ts";
+
+const machineHost = machineHostname().toLowerCase();
+const localHosts = new Set(["localhost", machineHost, machineHost.split(".")[0], `${machineHost.split(".")[0]}.local`]);
 
 export const WEB_LIMITS = {
   loginBytes: 4096,
@@ -21,7 +25,6 @@ export function webBinding(config: WebConfig): { hostname: string; port: number;
   const port = Number(match[2]);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid daemon.web port");
   if (isIP(hostname) === 0 && hostname !== "localhost") throw new Error("Use an IP address or localhost for daemon.web.bind_addr");
-  const loopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
   const tls = config.tls_key !== undefined && config.tls_cert !== undefined;
   if ((config.tls_key === undefined) !== (config.tls_cert === undefined)) throw new Error("Set both daemon.web.tls_cert and daemon.web.tls_key");
   if (!Number.isSafeInteger(config.max_connections) || config.max_connections < 1 || config.max_connections > 256) {
@@ -36,14 +39,17 @@ export function webBinding(config: WebConfig): { hostname: string; port: number;
     if (origin.origin !== config.public_origin || !["http:", "https:"].includes(origin.protocol)) {
       throw new Error("daemon.web.public_origin must be an exact HTTP(S) origin without a path");
     }
-    if (origin.protocol !== "https:" && (tls || !loopback || !["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname))) {
-      throw new Error("Remote browser origins require HTTPS");
+    if (tls && origin.protocol !== "https:") {
+      throw new Error("daemon.web.public_origin must use HTTPS when TLS is enabled");
     }
   }
-  if (!loopback && (!tls || origin?.protocol !== "https:")) {
-    throw new Error("Remote web binding requires TLS and an explicit HTTPS public_origin");
-  }
   return { hostname, port, secure: tls || origin?.protocol === "https:" };
+}
+
+export function webRequestOrigin(url: URL, publicOrigin: string | undefined): string | undefined {
+  if (publicOrigin !== undefined) return url.host === new URL(publicOrigin).host ? publicOrigin : undefined;
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  return isIP(host) !== 0 || localHosts.has(host) ? url.origin : undefined;
 }
 
 export function sameOrigin(request: Request, origin: string): boolean {

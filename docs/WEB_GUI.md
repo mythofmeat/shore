@@ -8,6 +8,36 @@ graphical alternative for the union of CLI/TUI application workflows, with enfor
 checks. The generated action interface is a capability floor alongside designed conversation,
 navigation, settings, model, diagnostics, usage and memory workflows.
 
+## Local testing and SSH tunnels
+
+For access from another device on your local network, add this to the daemon configuration and
+restart the daemon:
+
+```toml
+[daemon.web]
+enabled = true
+bind_addr = "0.0.0.0:7340"
+```
+
+Open `http://<daemon-LAN-IP>:7340` and sign in with the same daemon token used by the CLI/TUI.
+No certificate or `public_origin` is needed. HTTP sends traffic without encryption; use this on a
+trusted network, or use an SSH tunnel or HTTPS when encryption is needed.
+
+For an SSH tunnel, the daemon can keep `bind_addr = "127.0.0.1:7340"`. On the computer running
+your browser:
+
+```sh
+ssh -N -L 17340:127.0.0.1:7340 user@daemon-host
+```
+
+Open `http://localhost:17340`. The browser port may differ from the daemon port, and both
+`localhost` and `127.0.0.1` work. The web listener uses port **7340** by default; port **7320** is
+the CLI/TUI protocol and cannot serve a browser.
+
+Remove a previously configured `public_origin` for these setups: setting it deliberately pins
+access to that exact browser origin. Remove `tls_cert` and `tls_key` too if switching an existing
+HTTPS listener to HTTP. All web configuration changes require a daemon restart.
+
 ## Schema ownership decision
 
 Rust remains canonical for SWP envelopes, events and existing wire value types, as specified in
@@ -127,12 +157,14 @@ bind_addr = "127.0.0.1:7340"
 ```
 
 All web settings are visible through the existing configuration schema and require restart. Bind
-addresses must use an IP literal or `localhost`. A non-loopback listener additionally requires
-`tls_cert`, `tls_key` and an exact HTTPS `public_origin`. For example, a listener on `0.0.0.0:7340`
-can use `public_origin = "https://shore.example:7340"` with certificate/key paths on the daemon host.
-A loopback listener can instead sit behind a same-origin HTTPS reverse proxy: configure the public
-HTTPS origin and preserve the public Host header and WebSocket upgrades. Direct remote plaintext
-listeners and remote HTTP origins are rejected. Provider credentials are never part of this setup.
+addresses must use an IP literal or `localhost`. HTTP works for both loopback and LAN listeners.
+Without `public_origin`, browser URLs may use an IP literal, `localhost`, the daemon's hostname,
+its short hostname or its short hostname with `.local`, including a forwarded port.
+Other DNS names require an exact HTTP(S) `public_origin`; setting it pins the accepted Host and
+Origin. TLS is optional and requires both `tls_cert` and `tls_key`; a configured public origin must
+then use HTTPS. A listener can also sit behind a same-origin reverse proxy: configure the public
+origin and preserve the public Host header and WebSocket upgrades. Provider credentials are never
+part of this setup.
 
 The browser signs in by posting `{ "token": "…" }` to `/api/login` with the existing daemon client
 token. The response sets an opaque, host-only, HttpOnly, SameSite=Strict session cookie; HTTPS also
@@ -140,8 +172,10 @@ sets Secure and uses the `__Host-` prefix. Tokens and cookies do not appear in r
 Sessions expire after eight hours, including open sockets; logout immediately revokes the cookie
 and every socket using it. Authentication sessions are bounded to twice the connection limit; a new
 sign-in evicts the oldest session when necessary, including its persisted recovery state. Sessions
-restored after a daemon restart keep their original expiry. All API routes require the exact browser Origin and
-Host, reject cross-site/same-site fetches and query parameters, and return no-store security headers.
+restored after a daemon restart keep their original expiry. All API routes require the browser Origin
+to match the accepted request URL (or the explicitly configured public origin), reject cross-site/same-site
+fetches and query parameters, and return no-store security headers. Arbitrary DNS hosts are rejected
+even when their Origin matches, to prevent DNS rebinding.
 Public static pages allow navigation from other sites; API origin checks and framing restrictions remain in force.
 
 `POST /api/session` reports the authenticated session and contract fingerprint. `GET /api/swp`

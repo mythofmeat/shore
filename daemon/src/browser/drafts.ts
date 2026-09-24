@@ -1,4 +1,5 @@
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
+import { randomUUID } from "./platform.ts";
 
 export interface DraftContent { text: string; images: ImageUpload[]; pending: boolean; options?: Record<string, unknown> }
 export interface StoredDraft {
@@ -27,7 +28,7 @@ export function browserDraft(conversation: string): BrowserDraft {
 function separateClonedTab(): Promise<boolean> {
   ownership ??= (async () => {
     const prior = sessionStorage.getItem("shore.draft.tab");
-    const owner = prior ?? crypto.randomUUID();
+    const owner = prior ?? randomUUID();
     if (navigator.locks === undefined) return true;
     const claim = async (id: string): Promise<boolean> => await new Promise((resolve, reject) => {
       void navigator.locks.request(`shore.draft.tab.${id}`, { ifAvailable: true }, async (lock) => {
@@ -36,7 +37,7 @@ function separateClonedTab(): Promise<boolean> {
       }).catch(reject);
     });
     if (await claim(owner)) { sessionStorage.setItem("shore.draft.tab", owner); return false; }
-    const fresh = crypto.randomUUID();
+    const fresh = randomUUID();
     await claim(fresh);
     sessionStorage.setItem("shore.draft.tab", fresh);
     return true;
@@ -119,7 +120,7 @@ export async function discardDraft(record: StoredDraft): Promise<void> {
 }
 
 export class BrowserDraft {
-  #id: string = crypto.randomUUID();
+  #id: string = randomUUID();
   #revision = 0;
   #attachment: string | null = null;
   #images: ImageUpload[] = [];
@@ -202,14 +203,14 @@ export class BrowserDraft {
           const rows = all.result as StoredDraft[];
           const previous = rows.find((row) => row.id === this.#id);
           const conflict = (previous?.revision ?? 0) !== this.#revision;
-          const id = conflict ? crypto.randomUUID() : this.#id;
+          const id = conflict ? randomUUID() : this.#id;
           const remaining = rows.filter((row) => row.id !== id);
           if (content.text !== "" || content.images.length > 0 || content.pending || Object.keys(content.options ?? {}).length > 0) {
             if (remaining.length >= MAX_DRAFTS || remaining.reduce((sum, row) => sum + row.bytes, bytes) > MAX_BYTES) {
               throw new Error("Draft storage is full. Discard a saved draft to save this one; your current text and attachments remain open.");
             }
             const attachment = content.images.length === 0 ? null : !conflict && content.images === this.#images && this.#attachment !== null
-              ? this.#attachment : crypto.randomUUID();
+              ? this.#attachment : randomUUID();
             if (attachment !== null && attachment !== this.#attachment) tx.objectStore("attachments").put(content.images, attachment);
             next = { id, conversation: this.conversation, revision: conflict ? 1 : this.#revision + 1,
               text: content.text, attachment, imageCount: content.images.length, bytes, updated: Date.now(), pending: content.pending, ...(content.options === undefined ? {} : { options: content.options }) };
@@ -222,7 +223,7 @@ export class BrowserDraft {
       tx.oncomplete = () => resolve(next);
       tx.onabort = () => reject(failure ?? tx.error ?? new Error("Could not save the draft"));
     });
-    this.#id = saved?.id ?? crypto.randomUUID(); this.#revision = saved?.revision ?? 0;
+    this.#id = saved?.id ?? randomUUID(); this.#revision = saved?.revision ?? 0;
     this.#attachment = saved?.attachment ?? null; this.#images = content.images;
     claimedDrafts.add(this.#id);
     sessionStorage.setItem(this.#key, this.#id);

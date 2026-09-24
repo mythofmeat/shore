@@ -13,7 +13,7 @@ MUTANTS = [
      'if (!options.authenticate(body.token)) {',
      'if (false) {'),
     ("API requests accept a forged or missing origin", SERVER,
-     'if (!sameOrigin(request, origin)) return problem(403, "forbidden", "Use the daemon\'s own browser origin");',
+     'if (!sameOrigin(request, requestOrigin)) return problem(403, "forbidden", "Use the daemon\'s own browser origin");',
      'void request;'),
     ("an incompatible tab reaches the shared peer", SERVER,
      'if (request.headers.get("sec-websocket-protocol") !== WEB_SUBPROTOCOL) {',

@@ -59,7 +59,7 @@ discover = true
 enabled = false
 [daemon.web]
 enabled = true
-bind_addr = "127.0.0.1:0"
+bind_addr = ${JSON.stringify(process.env["SHORE_BROWSER_WEB_BIND"] ?? "127.0.0.1:0")}
 ${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""}
 ${process.env["SHORE_BROWSER_CALM_BUDGET"] === "true" ? '[[budgets]]\nname = "Quiet"\nperiod = "month"\ncost_usd = 10\nwarn_fractions = [0.5]\ncharacter = "quiet"\n' : ""}
 `);
