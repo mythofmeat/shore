@@ -23,12 +23,12 @@ import {
   type ToolResultWindow,
 } from "./dispatch.ts";
 import {
-  base64Bytes,
   toolMediaOf,
   type ToolMediaItem,
   type ToolResultPayload,
 } from "./media.ts";
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
+import { base64Bytes } from "../util/base64.ts";
 
 export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;

@@ -3,7 +3,8 @@ import { dirname, resolve } from "node:path";
 import type { Definition, Image, ImageReference, Nodes } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { readBoundedFile } from "./file_access.ts";
-import { DEFAULT_MAX_INLINE_IMAGE_BYTES, base64Bytes, carryToolMedia, type ToolResultPayload } from "./media.ts";
+import { DEFAULT_MAX_INLINE_IMAGE_BYTES, carryToolMedia, type ToolResultPayload } from "./media.ts";
+import { base64Bytes } from "../util/base64.ts";
 import { readImageAt } from "./read_image.ts";
 
 export const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;

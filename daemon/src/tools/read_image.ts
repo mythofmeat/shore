@@ -2,8 +2,7 @@ import type { FileHandle } from "node:fs/promises";
 import { ToolIoError } from "./errors.ts";
 import { openRegularFile, readBoundedFile } from "./file_access.ts";
 import type { ToolMediaItem } from "./media.ts";
-
-export const MAX_READ_IMAGE_BYTES = 5 * 1024 * 1024;
+import { MAX_IMAGE_BYTES } from "../llm/images.ts";
 
 export function imageMime(header: Buffer): string | undefined {
   if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
@@ -13,9 +12,9 @@ export function imageMime(header: Buffer): string | undefined {
   return undefined;
 }
 
-export async function readImage(file: FileHandle, path: string, mime: string, signal?: AbortSignal, maxBytes = MAX_READ_IMAGE_BYTES): Promise<{ description: string; image: ToolMediaItem }> {
-  const kind = maxBytes < MAX_READ_IMAGE_BYTES ? "image (remaining inline image budget)" : "image";
-  const data = await readBoundedFile(file, path, Math.min(maxBytes, MAX_READ_IMAGE_BYTES), kind, signal);
+export async function readImage(file: FileHandle, path: string, mime: string, signal?: AbortSignal, maxBytes = MAX_IMAGE_BYTES): Promise<{ description: string; image: ToolMediaItem }> {
+  const kind = maxBytes < MAX_IMAGE_BYTES ? "image (remaining inline image budget)" : "image";
+  const data = await readBoundedFile(file, path, Math.min(maxBytes, MAX_IMAGE_BYTES), kind, signal);
   const metadata = await new Bun.Image(data).metadata().catch(() => undefined);
   if (metadata === undefined) throw new ToolIoError(`${path}: image could not be decoded`);
   return {
@@ -24,7 +23,7 @@ export async function readImage(file: FileHandle, path: string, mime: string, si
   };
 }
 
-export async function readImageAt(path: string, signal?: AbortSignal, maxBytes = MAX_READ_IMAGE_BYTES): Promise<ToolMediaItem> {
+export async function readImageAt(path: string, signal?: AbortSignal, maxBytes = MAX_IMAGE_BYTES): Promise<ToolMediaItem> {
   signal?.throwIfAborted();
   const file = await openRegularFile(path);
   try {

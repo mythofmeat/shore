@@ -1,6 +1,8 @@
+import { MAX_IMAGE_BYTES } from "../llm/images.ts";
+
 const CARRIER = Symbol("shore.tool_media");
 
-export const DEFAULT_MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_INLINE_IMAGE_BYTES = MAX_IMAGE_BYTES;
 
 export interface ToolMediaItem {
   mime_type: string;
@@ -59,10 +61,4 @@ export function renderPayload(payload: ToolResultPayload): string {
 export function renderToolValue(value: unknown): string {
   const payload = toolMediaOf(value);
   return payload === undefined ? payloadText(value) : renderPayload(payload);
-}
-
-export function base64Bytes(data: string): number {
-  const normalized = data.replace(/\s+/g, "");
-  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
 }

@@ -1,6 +1,7 @@
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ImageUpload } from "../protocol/ImageUpload";
 import { base64Rejection } from "../tools/images.ts";
+import { base64Bytes } from "../util/base64.ts";
 
 export const MAX_CAPABILITIES = 32;
 export const MAX_ATTACHMENTS = 16;
@@ -128,11 +129,6 @@ function uploadArray(value: unknown): ImageUpload[] {
       ...(mimeType === undefined ? {} : { mime_type: mimeType }),
     };
   });
-}
-
-function base64Bytes(data: string): number {
-  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
-  return (data.length / 4) * 3 - padding;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
