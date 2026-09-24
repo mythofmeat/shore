@@ -22,10 +22,11 @@ export async function readImage(file: FileHandle, path: string, mime: string, si
   };
 }
 
-export async function readImageAt(path: string, signal?: AbortSignal): Promise<ToolMediaItem> {
+export async function readImageAt(path: string, accept: (bytes: number) => boolean, signal?: AbortSignal): Promise<ToolMediaItem | undefined> {
   signal?.throwIfAborted();
   const file = await openRegularFile(path);
   try {
+    if (!accept((await file.stat()).size)) return undefined;
     const header = Buffer.alloc(12);
     const head = await file.read(header, 0, header.length, 0);
     const mime = imageMime(header.subarray(0, head.bytesRead));

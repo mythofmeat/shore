@@ -103,7 +103,7 @@ export async function runToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name) },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     payload = toolMediaOf(value);

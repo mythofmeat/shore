@@ -255,7 +255,7 @@ test("Markdown read shares the per-result image budget and skips images that do 
   expect(result.isError).toBe(false);
   expect(resultImages(result)).toHaveLength(2);
   expect(resultText(result)).toContain("Markdown image missing.png not attached");
-  expect(resultText(result)).toMatch(/b \(.*b\.png\) not sent to the model/);
+  expect(resultText(result)).toContain("Markdown image(s) b.png not read: they would not fit");
   expect(resultText(result)).toContain("5\t![c](c.png)");
   expect(resultText(result)).toContain("c.png) attached");
 
@@ -266,11 +266,26 @@ test("Markdown read shares the per-result image budget and skips images that do 
   expect(disabled.isError).toBe(false);
   expect(resultImages(disabled)).toHaveLength(0);
   expect(resultText(disabled)).toContain("5\t![c](c.png)");
-  expect(resultText(disabled)).toContain("not sent to the model: inline images are disabled for this tool");
+  expect(resultText(disabled)).toContain("Markdown image(s) a.png, b.png, c.png not read: inline images are disabled for this tool");
   const direct = await run("read", { file_path: "a.png" });
   expect(direct.isError).toBe(false);
   expect(resultImages(direct)).toHaveLength(0);
   expect(resultText(direct)).toContain("inline images are disabled for this tool");
+});
+
+test("Markdown read does not read, save, or show sources that cannot fit the budget", async () => {
+  const { put, run, exec } = await world();
+  const png = Buffer.from(PNG, "base64");
+  const names = Array.from({ length: 5 }, (_, i) => `i${String(i)}.png`);
+  for (const name of names) await put(name, png);
+  await put("five.md", names.map((name) => `![x](${name})`).join("\n"));
+  const sent: ServerMessage[] = [];
+  exec.sendDirect = (message) => sent.push(message);
+  exec.limits.max_inline_image_bytes = 2 * png.length;
+  const result = await run("read", { file_path: "five.md" });
+  expect(resultImages(result)).toHaveLength(2);
+  expect(sent.filter((message) => message.type === "send_image")).toHaveLength(2);
+  expect(resultText(result)).toContain("Markdown image(s) i2.png, i3.png, i4.png not read");
 });
 
 test("Markdown read budgets prepared bytes, so large sources are resized to fit", async () => {
@@ -305,6 +320,7 @@ test("Markdown image notes are bounded and follow the page without displacing it
   expect(text).not.toContain("tool_result truncated");
   expect(text.indexOf("Partial view. Continue with offset=")).toBeGreaterThan(-1);
   expect(text.indexOf("Partial view. Continue with offset=")).toBeLessThan(text.indexOf("Markdown image missing0.png"));
+  expect(result.output).toBe(text);
 });
 
 test("Markdown read bounds the document scanned for image references", async () => {
@@ -320,7 +336,6 @@ test("Markdown read bounds the document scanned for image references", async () 
 
 test("read does not expand Markdown syntax in other text files", async () => {
   const { put, run } = await world();
-  expect(result.output).toBe(text);
   await put("chart.png", Buffer.from(PNG, "base64"));
   await put("notes.txt", "![chart](chart.png)\n");
   expect(resultImages(await run("read", { file_path: "notes.txt" }))).toHaveLength(0);
