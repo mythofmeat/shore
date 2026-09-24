@@ -2,7 +2,7 @@
 set -eu
 
 usage() {
-    printf 'Usage: %s <major|minor|patch>\nBump the latest stable vMAJOR.MINOR.PATCH tag and tag the current commit locally.\n' "$0"
+    printf 'Usage: %s <major|minor|patch>\nBump the latest stable vMAJOR.MINOR.PATCH tag, tag the current commit, and push the tag with the current branch.\n' "$0"
 }
 
 case "${1:-}" in
@@ -49,5 +49,10 @@ esac
 
 tag="v$major.$minor.$patch"
 git tag "$tag"
-git push origin --tag
-printf 'Created local tag %s at %s.\n' "$tag" "$(git rev-parse --short HEAD)"
+# Push the branch with the tag so the tagged commit is never missing from it on the remote.
+if ! git push --atomic origin HEAD "refs/tags/$tag"; then
+    git tag -d "$tag" >/dev/null
+    printf 'Push failed; removed local tag %s.\n' "$tag" >&2
+    exit 1
+fi
+printf 'Released %s at %s.\n' "$tag" "$(git rev-parse --short HEAD)"

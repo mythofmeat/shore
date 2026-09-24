@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
+groups="lint daemon client"
+
 usage() {
-    printf 'Usage: %s\nRun every daemon and client verification check, reporting all failures.\n' "$0"
+    printf 'Usage: %s [group...]\nRun daemon and client verification checks, reporting all failures.\nGroups: %s (default: all). CI runs these same groups.\n' "$0" "$groups"
 }
 
 case "${1:-}" in
@@ -11,9 +13,17 @@ case "${1:-}" in
     exit 0
     ;;
 esac
-if [ "$#" -ne 0 ]; then
-    usage >&2
-    exit 2
+for group in "$@"; do
+    case " $groups " in
+    *" $group "*) ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+done
+if [ "$#" -eq 0 ]; then
+    set -- $groups
 fi
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -23,30 +33,54 @@ failed=""
 run() {
     name=$1
     shift
-    printf '\n>>> %s\n' "$name"
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        printf '::group::%s\n' "$name"
+    else
+        printf '\n>>> %s\n' "$name"
+    fi
     if "$@"; then
-        printf 'PASS: %s\n' "$name"
+        status=0
     else
         status=$?
+    fi
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        printf '::endgroup::\n'
+    fi
+    if [ "$status" -eq 0 ]; then
+        printf 'PASS: %s\n' "$name"
+    else
         printf 'FAIL: %s (exit %s)\n' "$name" "$status" >&2
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+            printf '::error title=%s failed::exit %s\n' "$name" "$status"
+        fi
         failed="$failed $name"
     fi
 }
 
-cd "$root/daemon"
-run bun-lint bun run lint
-run bun-lint-comments bun run lint:comments
-run bun-lint-citations bun run lint:citations
-run bun-typecheck bun run typecheck
-run bun-build bun run build
-run bun-test bun test
-run bun-mutate-stale bun run mutate --stale
-run bun-rerecord-check bun run rerecord:check
-
-cd "$root/client"
-run cargo-test cargo test --workspace
-run cargo-fmt cargo fmt --all --check
-run cargo-clippy cargo clippy --workspace --all-targets
+for group in "$@"; do
+    case "$group" in
+    lint)
+        cd "$root/daemon"
+        run bun-lint bun run lint
+        run bun-lint-comments bun run lint:comments
+        run bun-lint-citations bun run lint:citations
+        run bun-typecheck bun run typecheck
+        ;;
+    daemon)
+        cd "$root/daemon"
+        run bun-build bun run build
+        run bun-test bun test
+        run bun-mutate-stale bun run mutate --stale
+        run bun-rerecord-check bun run rerecord:check
+        ;;
+    client)
+        cd "$root/client"
+        run cargo-test cargo test --workspace --locked
+        run cargo-fmt cargo fmt --all --check
+        run cargo-clippy cargo clippy --workspace --all-targets --locked
+        ;;
+    esac
+done
 
 if [ -n "$failed" ]; then
     printf '\nFailed checks:%s\n' "$failed" >&2
