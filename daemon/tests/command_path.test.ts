@@ -125,6 +125,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
       refreshCachedRequest: async () => {},
       homeThread: () => MAIN_THREAD,
       cachedCharacters: () => [],
+      warmThread: () => undefined,
       applyReloadedConfig: async () => ({
         characterDiscoveryChanged: false,
         droppedEngines: 0,

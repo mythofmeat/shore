@@ -67,7 +67,8 @@ export class HeartbeatClock {
     const existing = this.#nextWakeAt;
     if (existing === undefined) return;
     if (this.#defaultWake) {
-      this.#nextWakeAt = Math.max(now, this.#defaultFloor ?? now, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
+      const floor = Math.min(this.#defaultFloor ?? now, now + config.maxIntervalMs);
+      this.#nextWakeAt = Math.max(now, floor, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
     } else if (config.minIntervalMs > previous.minIntervalMs) {
       this.boundWake(now);
     } else if (existing > now + config.maxIntervalMs) {

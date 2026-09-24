@@ -441,6 +441,7 @@ export class KeepaliveService {
     }
 
     const startedAt = this.#now();
+    const epoch = entry.keepalive.epoch;
     let attempt: CallAttempt | undefined;
     let response: GenerateResponse;
     try {
@@ -449,6 +450,7 @@ export class KeepaliveService {
     } catch (e) {
       await attempt?.pricingReady;
       recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
+      if (entry.keepalive.epoch !== epoch) return;
       entry.keepalive.onPingFailed(this.#now());
       this.#push({
         character,
@@ -461,6 +463,7 @@ export class KeepaliveService {
 
     await attempt?.pricingReady;
     recordGenerate(ping.context, ping, response, attempt);
+    if (entry.keepalive.epoch !== epoch) return;
 
     const usage = response.usage;
     if (pingLandedCold(usage, prefix.sdk)) {

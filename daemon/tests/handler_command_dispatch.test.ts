@@ -59,6 +59,7 @@ function fakes(
     rid?: string;
     home?: string;
     cached?: string[];
+    warm?: Record<string, string>;
   } = {},
 ): Fakes {
   const log: Log = {
@@ -99,6 +100,7 @@ function fakes(
     },
     homeThread: () => opts.home ?? "main",
     cachedCharacters: () => opts.cached ?? [],
+    warmThread: (character) => opts.warm?.[character],
     applyReloadedConfig: async (cfg) => {
       log.order.push("adopt");
       log.adopted.push(cfg);
@@ -279,7 +281,7 @@ describe("a chat model change", () => {
   });
 
   test("a global model setting refreshes every character with a cached request", async () => {
-    const f = fakes({ cached: ["nova", CHARACTER, "bo"] });
+    const f = fakes({ cached: ["nova", CHARACTER, "bo"], warm: { nova: "garden" } });
 
     await afterCommand(
       "set_model_setting",
@@ -290,7 +292,7 @@ describe("a chat model change", () => {
 
     expect(f.log.refreshArgs).toEqual([
       { character: CHARACTER, reason: "model_setting_change", thread: "main" },
-      { character: "nova", reason: "model_setting_change" },
+      { character: "nova", reason: "model_setting_change", thread: "garden" },
       { character: "bo", reason: "model_setting_change" },
     ]);
   });

@@ -44,8 +44,14 @@ export class CacheKeepalive {
 
   #failureCount = 0;
 
+  #epoch = 0;
+
   constructor(maxPings: number) {
     this.#maxPings = maxPings;
+  }
+
+  get epoch(): number {
+    return this.#epoch;
   }
 
   get pingsSent(): number {
@@ -116,7 +122,10 @@ export class CacheKeepalive {
     this.#lastActiveAt = now;
     this.#lastWarmAt = now;
     this.#failureCount = 0;
-    if (newReply) this.#pingsSent = 0;
+    if (newReply) {
+      this.#pingsSent = 0;
+      this.#epoch += 1;
+    }
     this.#nextPingAt = this.#deadline(now);
   }
 
@@ -129,6 +138,7 @@ export class CacheKeepalive {
   }
 
   onCacheInvalidated(): void {
+    this.#epoch += 1;
     this.#nextPingAt = undefined;
     this.#lastActiveAt = undefined;
     this.#lastWarmAt = undefined;

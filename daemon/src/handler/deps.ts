@@ -359,6 +359,8 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
 
     cachedCharacters: () => runtime.cache.cachedCharacters(),
 
+    warmThread: (character) => runtime.keepalive.warmThread(character),
+
     refreshCachedRequest: async (character, reason = "model_change", thread) => {
       runtime.keepalive.disarm(character);
       runtime.cache.invalidate(character, reason);

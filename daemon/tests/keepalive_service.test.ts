@@ -370,6 +370,35 @@ describe("what counts as a warm", () => {
     expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
   });
 
+  test("a ping still in flight when a new reply lands is not charged to that reply", async () => {
+    const clock = fakeClock();
+    let release!: (reply: GenerateResponse) => void;
+    const service = new KeepaliveService(
+      async () => await new Promise<GenerateResponse>((resolve) => {
+        release = resolve;
+      }),
+      clock.now,
+    );
+    service.arm(prefix({ keepalive_pings: 1 }));
+    service.observe(CHARACTER, MODEL, "message");
+
+    clock.advance(minutes(56));
+    const inFlight = service.tick();
+    await Promise.resolve();
+
+    clock.advance(minutes(1));
+    service.observe(CHARACTER, MODEL, "message");
+    service.arm(prefix({ keepalive_pings: 1 }), true);
+    const replyDeadline = service.nextPingAt(CHARACTER);
+    expect(replyDeadline).toBe(clock.now() + INTERVAL_MS);
+
+    release(response(2200, 0));
+    await inFlight;
+
+    expect(required(service.scheduleFor(CHARACTER)).pings_sent).toBe(0);
+    expect(service.nextPingAt(CHARACTER)).toBe(replyDeadline);
+  });
+
   test("an unknown character is ignored rather than armed", () => {
     const h = harness();
     h.service.observe("nobody", MODEL, "message");
