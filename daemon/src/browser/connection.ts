@@ -5,6 +5,7 @@ import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import { validClientMessage, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
 import { SyncState, type SyncSnapshot } from "./sync.ts";
 import { parseServerFrame } from "./wire.ts";
+import { randomUUID } from "./platform.ts";
 
 export type ConnectionStatus = "idle" | "connecting" | "ready" | "reconnecting" | "signed_out" | "reload_required" | "error" | "stopped";
 type RequestBody = Exclude<ClientMessage, { type: "hello" | "cancel" }>;
@@ -249,7 +250,7 @@ export class BrowserConnection {
     if (this.#status !== "ready" || socket === undefined || session === undefined) throw new Error("Wait for Shore to reconnect before sending");
     if (this.#pending.size >= Math.min(session.max_pending_requests, 32)) throw new Error("Wait for a pending request to finish");
     if (!validClientMessage(request)) throw new Error("Invalid conversation request fields");
-    const rid = crypto.randomUUID();
+    const rid = randomUUID();
     const text = JSON.stringify({ ...request, rid });
     const bytes = new TextEncoder().encode(text).byteLength;
     const byteLimit = Math.min(session.max_message_bytes, 32 * 1024 * 1024);

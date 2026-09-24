@@ -6,7 +6,7 @@ import type { Server } from "../swp/server.ts";
 import { WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
-import { readSmallJson, sameOrigin, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
+import { readSmallJson, sameOrigin, securityHeaders, webBinding, webRequestOrigin, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
@@ -70,7 +70,11 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     }),
     async fetch(request, http) {
       const url = new URL(request.url);
-      if (url.host !== new URL(origin).host || url.search !== "") return problem(403, "forbidden", "Unrecognized browser origin or URL");
+      const requestOrigin = webRequestOrigin(url, config.public_origin);
+      if (requestOrigin === undefined) return problem(403, "forbidden", config.public_origin === undefined
+        ? "Unrecognized browser hostname. Use the daemon's IP address or set daemon.web.public_origin for this hostname."
+        : `Use ${config.public_origin}, or remove daemon.web.public_origin for direct LAN access and SSH tunnels.`);
+      if (url.search !== "") return problem(403, "forbidden", "Browser URLs must not include query parameters");
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
       if (request.method === "GET" || request.method === "HEAD") {
         const asset = browserAssets[url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname];
@@ -79,7 +83,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           return new Response(request.method === "HEAD" ? null : asset.body, { headers });
         }
       }
-      if (!sameOrigin(request, origin)) return problem(403, "forbidden", "Use the daemon's own browser origin");
+      if (!sameOrigin(request, requestOrigin)) return problem(403, "forbidden", "Use the daemon's own browser origin");
 
       if (url.pathname === "/api/login" && request.method === "POST") {
         const now = Date.now();

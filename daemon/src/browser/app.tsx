@@ -1,4 +1,5 @@
 import { OperationImages } from "./operation_images.tsx";
+import { copyText } from "./clipboard.ts";
 import { LocalHelp } from "./local_help.tsx";
 import { TERMINAL_SHORTCUTS } from "./preferences.generated.ts";
 import { ActionOutput } from "./action_output.tsx";
@@ -120,7 +121,7 @@ function MessageCard({ message, metadata, reasoning, tools, openImage, action }:
     {message.content_blocks.length === 0 ? <div className="message-text">{message.content}</div> : <Blocks blocks={message.content_blocks} reasoning={reasoning} tools={tools} openImage={openImage} />}
     {message.images.map((image, index) => <ImageView key={index} data={image.data ?? null} caption={image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Attached image"} open={openImage} />)}
     {display.option("metadata") === "on" ? <p className="message-metadata" aria-label="Message metadata">{[metadata === undefined ? message.provider_key : "", metadata === undefined ? message.model : metadataLabel(metadata), message.alt_count === undefined || message.alt_count === null ? "" : `Response ${String((message.alt_index ?? 0) + 1)} of ${String(message.alt_count)}`].filter(Boolean).join(" · ") || `Message ${message.msg_id}`}</p> : null}
-    <div className="message-actions"><button onClick={() => perform(() => navigator.clipboard.writeText(message.content))}>Copy</button><button onClick={() => action("edit", { ref: message.msg_id, content: message.content })}>Edit</button><button onClick={() => action("delete", { refs: message.msg_id })}>Delete</button>{message.role === "assistant" ? <><button onClick={() => action("list_alternatives", { ref: message.msg_id })}>Alternatives</button><button onClick={() => action("alt", { ref: message.msg_id })}>Choose response</button></> : null}<Inspect label="Message details" value={message} /></div>
+    <div className="message-actions"><button onClick={() => perform(() => copyText(message.content))}>Copy</button><button onClick={() => action("edit", { ref: message.msg_id, content: message.content })}>Edit</button><button onClick={() => action("delete", { refs: message.msg_id })}>Delete</button>{message.role === "assistant" ? <><button onClick={() => action("list_alternatives", { ref: message.msg_id })}>Alternatives</button><button onClick={() => action("alt", { ref: message.msg_id })}>Choose response</button></> : null}<Inspect label="Message details" value={message} /></div>
   </article>;
 }
 

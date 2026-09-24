@@ -5,6 +5,7 @@ import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hostname } from "node:os";
 import type { WebRequestList } from "../src/protocol/WebRequestList.ts";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { tokenMatches } from "../src/config/token.ts";
@@ -18,7 +19,7 @@ import type { HandshakeProvider } from "../src/swp/connection.ts";
 import { Server } from "../src/swp/server.ts";
 import type { ControlRoutedMessage, RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
-import { WEB_LIMITS, webBinding } from "../src/web/policy.ts";
+import { WEB_LIMITS, webBinding, webRequestOrigin } from "../src/web/policy.ts";
 import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
 
 const TOKEN = "web-transport-test-token";
@@ -276,6 +277,49 @@ describe("browser connection state", () => {
 });
 
 describe("browser authentication boundary", () => {
+  test("LAN HTTP and alternate local hostnames and ports support login, session and WebSocket", async () => {
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "0.0.0.0:0" } }); f.web.activate();
+    const target = `http://127.0.0.1:${String(f.web.port)}`;
+    for (const host of [`localhost:${String(f.web.port)}`, "localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", `${hostname()}:7340`]) {
+      const origin = `http://${host}`;
+      expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(200);
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      expect(login.status).toBe(200);
+      expect(login.headers.get("set-cookie")).not.toContain("Secure");
+      const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+      if (cookie === undefined) throw new Error("Missing browser cookie");
+      expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin, cookie } })).status).toBe(200);
+      const browser = connectBrowser(target, cookie, WEB_SUBPROTOCOL, { headers: { host, origin } });
+      await browser.attach();
+      expect(await browser.frame("history")).toMatchObject({ selected_character: "ada" });
+      await browser.close();
+      for (const foreign of [target, "http://localhost:9999", "https://outside.example", "null", ""]) {
+        expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin: foreign, cookie } })).status).toBe(403);
+      }
+    }
+    for (const host of ["evil.example", "localhost.evil.example"]) {
+      expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(403);
+      expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin: `http://${host}`, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) })).status).toBe(403);
+    }
+  });
+
+  test("an explicit proxy origin stays pinned while supporting TLS termination", async () => {
+    const origin = "https://shore.example";
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin } }); f.web.activate();
+    const target = `http://127.0.0.1:${String(f.web.port)}`;
+    const denied = await fetch(`${target}/workspace`);
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).toContain("remove daemon.web.public_origin");
+    const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host: "shore.example", origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+    expect(login.status).toBe(200);
+    expect(login.headers.get("set-cookie")).toContain("Secure");
+    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    if (cookie === undefined) throw new Error("Missing browser cookie");
+    const browser = connectBrowser(target, cookie, WEB_SUBPROTOCOL, { headers: { host: "shore.example", origin } });
+    await browser.attach();
+    expect(await browser.frame("history")).toMatchObject({ selected_character: "ada" });
+  });
+
   test("HTTPS serves a verified TLS connection and a host-only secure cookie for WSS", async () => {
     const tls_cert = new URL("./fixtures/web-tls/cert.pem", import.meta.url).pathname;
     const tls_key = new URL("./fixtures/web-tls/key.pem", import.meta.url).pathname;
@@ -610,14 +654,30 @@ describe("browser resource limits", () => {
 });
 
 describe("web listener policy", () => {
-  test("remote listeners require TLS and an explicit HTTPS origin", () => {
+  test("LAN listeners allow HTTP and optional TLS without a public origin", () => {
     expect(defaultWebConfig().enabled).toBe(false);
     expect(webBinding(defaultWebConfig())).toEqual({ hostname: "127.0.0.1", port: 7340, secure: false });
-    expect(() => webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340" })).toThrow("requires TLS");
+    expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340" })).toEqual({ hostname: "0.0.0.0", port: 7340, secure: false });
+    expect(webBinding({ ...defaultWebConfig(), bind_addr: "[::]:7340" })).toEqual({ hostname: "::", port: 7340, secure: false });
     expect(() => webBinding({ ...defaultWebConfig(), public_origin: "https://shore.example/path" })).toThrow("exact");
-    expect(() => webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example" })).toThrow("HTTPS");
+    expect(webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example" })).toMatchObject({ secure: false });
     expect(webBinding({ ...defaultWebConfig(), public_origin: "https://shore.example" })).toMatchObject({ secure: true });
     expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340", public_origin: "https://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
+    expect(webBinding({ ...defaultWebConfig(), bind_addr: "0.0.0.0:7340", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
+    expect(() => webBinding({ ...defaultWebConfig(), tls_cert: "cert.pem" })).toThrow("Set both");
+    expect(() => webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toThrow("HTTPS");
+  });
+
+  test("local hostnames and numeric addresses work without allowing arbitrary DNS hosts", () => {
+    for (const host of ["localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", "[fd00::1]:7340", hostname(), `${hostname().split(".")[0]}.local`]) {
+      const url = new URL(`http://${host}`);
+      expect(webRequestOrigin(url, undefined)).toBe(url.origin);
+    }
+    for (const host of ["evil.example", "localhost.evil.example", "127.0.0.1.evil.example"]) {
+      expect(webRequestOrigin(new URL(`http://${host}`), undefined)).toBeUndefined();
+    }
+    expect(webRequestOrigin(new URL("http://shore.example/workspace"), "https://shore.example")).toBe("https://shore.example");
+    expect(webRequestOrigin(new URL("http://localhost:7340/workspace"), "https://shore.example")).toBeUndefined();
   });
 });
 
