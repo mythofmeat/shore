@@ -12,6 +12,7 @@ import {
   TOKEN_FILE,
 } from "../src/config/token.ts";
 import { Server } from "../src/swp/server.ts";
+import { until } from "./support/until.ts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -148,11 +149,7 @@ async function helloWith(
 }
 
 async function waitFor(done: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !done(); i += 1) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, 5);
-    });
-  }
+  await until(done, "the expected frames");
 }
 
 async function serving(): Promise<{ port: number; stop: () => Promise<void> }> {

@@ -15,6 +15,7 @@ import {
 import { Server } from "../src/swp/server.ts";
 import { testTmp } from "./support/tmp.ts";
 import { mkdtempSync } from "node:fs";
+import { until } from "./support/until.ts";
 
 const usable = (): MatrixConfig => ({
   ...defaultMatrixConfig(),
@@ -130,7 +131,7 @@ describe("supervising the bridge", () => {
   test("an unreachable homeserver is retried, not given up on", async () => {
     const { options, attempts } = supervisor([() => Promise.reject(new Error("ECONNREFUSED"))]);
     const bridge = superviseMatrixBridge(options);
-    await Bun.sleep(30);
+    await until(() => attempts() > 2, "a third login attempt");
     await bridge.stop();
     expect(attempts()).toBeGreaterThan(2);
   });
@@ -170,11 +171,11 @@ describe("supervising the bridge", () => {
     };
 
     const bridge = superviseMatrixBridge(options);
-    await Bun.sleep(20);
+    await until(() => bots.length === 1, "the first login");
     expect(bots.length).toBe(1);
 
     required(bots[0]).fault(new Error("the Matrix sync entered STOPPED"));
-    await Bun.sleep(30);
+    await until(() => bots.length === 2, "a second login after the fault");
     expect(bots.length).toBe(2);
 
     await bridge.stop();
@@ -196,7 +197,7 @@ describe("supervising the bridge", () => {
       retry: { baseMs: 1, capMs: 2, stableMs: 1_000, now: () => 0 },
     });
 
-    await Bun.sleep(20);
+    await until(() => bots.length === 1, "the first login");
     required(bots[0]).fault(unknownToken());
     await bridge.done;
     expect(bots.length).toBe(1);
@@ -204,12 +205,12 @@ describe("supervising the bridge", () => {
   });
 
   test("stopping cuts the backoff short rather than waiting it out", async () => {
-    const { options } = supervisor([() => Promise.reject(new Error("ECONNREFUSED"))]);
+    const { options, attempts } = supervisor([() => Promise.reject(new Error("ECONNREFUSED"))]);
     const bridge = superviseMatrixBridge({
       ...options,
       retry: { baseMs: 60_000, capMs: 60_000, stableMs: 1_000, now: () => 0 },
     });
-    await Bun.sleep(10);
+    await until(() => attempts() === 1, "the first failed login");
     const startedAt = performance.now();
     await bridge.stop();
     expect(performance.now() - startedAt).toBeLessThan(1_000);

@@ -6376,7 +6376,7 @@ mod conversation_reliability_tests {
         assert!(rendered.contains("PAGER_TAIL"));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn full_command_queue_does_not_block_input_or_leave_pending_navigation() {
         let mut app = App::default();
         let (tx, _rx) = tokio::sync::mpsc::channel(1);

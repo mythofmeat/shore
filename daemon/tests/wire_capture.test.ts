@@ -7,6 +7,7 @@ import { captureProviders } from "../src/llm/capture.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
 import { REDACTED } from "../src/llm/redact.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { until } from "./support/until.ts";
 import {
   installWireCapture,
   newWireScope,
@@ -31,10 +32,12 @@ function textOf(body: Uint8Array | null): string {
   return body === null ? "" : new TextDecoder().decode(body);
 }
 
-async function settle(): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 25);
-  });
+async function recorded(seen: readonly WireExchange[], count: number): Promise<void> {
+  await until(() => seen.length >= count, `${count} recorded exchange(s)`);
+}
+
+async function nothingMoreRecorded(): Promise<void> {
+  await Bun.sleep(25);
 }
 
 function scope(callId = "call-1") {
@@ -59,7 +62,7 @@ describe("wire capture", () => {
         body,
       });
     });
-    await settle();
+    await recorded(seen, 1);
     await server.stop(true);
 
     expect(seen).toHaveLength(1);
@@ -82,7 +85,7 @@ describe("wire capture", () => {
     await withWireScope(scope("call-42"), async () => {
       await fetch(`http://localhost:${server.port}/`);
     });
-    await settle();
+    await recorded(seen, 1);
     await server.stop(true);
 
     expect(seen[0]).toMatchObject({
@@ -111,7 +114,7 @@ describe("wire capture", () => {
         await fetch(`http://localhost:${server.port}/`, { method: "POST", body: "x" });
       }
     });
-    await settle();
+    await recorded(seen, 3);
     await server.stop(true);
 
     expect(seen.map((e) => e.seq)).toEqual([0, 1, 2]);
@@ -141,7 +144,7 @@ describe("wire capture", () => {
       const response = await fetch(`http://localhost:${server.port}/`);
       return await response.text();
     });
-    await settle();
+    await recorded(seen, 1);
     await server.stop(true);
 
     expect(received).toBe(chunks.join(""));
@@ -155,7 +158,7 @@ describe("wire capture", () => {
 
     const response = await fetch(`http://localhost:${server.port}/`);
     expect(await response.text()).toBe("mcp traffic");
-    await settle();
+    await nothingMoreRecorded();
     await server.stop(true);
 
     expect(seen).toHaveLength(0);
@@ -168,7 +171,7 @@ describe("wire capture", () => {
     await withWireScope(scope(), async () => {
       expect(fetch("http://127.0.0.1:1/unreachable")).rejects.toThrow();
     });
-    await settle();
+    await recorded(seen, 1);
 
     expect(seen).toHaveLength(1);
     expect(required(seen[0]).status).toBeNull();
@@ -189,7 +192,7 @@ describe("wire capture", () => {
 
     const out: number[] = [];
     for await (const value of wireScopedIteration(scope(), stream)) out.push(value);
-    await settle();
+    await recorded(seen, 2);
     await server.stop(true);
 
     expect(out).toEqual([1, 2]);
@@ -265,7 +268,7 @@ describe("wire capture", () => {
     for await (const event of required(providers.anthropic).stream(request)) {
       if (event.type === "text") text.push(event.text);
     }
-    await settle();
+    await until(() => store.queryCalls({ limit: 10 }).length >= 1, "the captured call");
     await server.stop(true);
 
     expect(text.join("")).toBe("hello");

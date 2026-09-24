@@ -11,6 +11,7 @@ import {
 import { REDACTED } from "../src/llm/redact.ts";
 import { installWireCapture, type WireExchange } from "../src/llm/wire_capture.ts";
 import { CallStore, type CallRecord } from "../src/call_store.ts";
+import { until } from "./support/until.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -287,9 +288,7 @@ describe("call capture", () => {
         yield DONE;
       }),
     );
-    await new Promise((resolve) => {
-      setTimeout(resolve, 25);
-    });
+    await until(() => exchanges.length >= 2, "both captured exchanges");
     await server.stop(true);
 
     expect(store.rows).toHaveLength(1);

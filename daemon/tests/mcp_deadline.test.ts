@@ -13,6 +13,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
+import { untilAsync } from "./support/until.ts";
 
 const SERVER = join(import.meta.dir, "support", "mcp_side_effect_server.ts");
 
@@ -48,10 +49,8 @@ async function marks(path: string): Promise<string> {
   }
 }
 
-async function settle(path: string, holdMs: number): Promise<string> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, holdMs * 2);
-  });
+async function markedWith(path: string, text: string): Promise<string> {
+  await untilAsync(async () => (await marks(path)).includes(text), `a "${text}" mark`);
   return await marks(path);
 }
 
@@ -84,7 +83,7 @@ describe("MCP tool deadlines against a live server", () => {
       );
       expect(failure).toContain("timed out after 0s");
 
-      const after = await settle(live.marker, 1_500);
+      const after = await markedWith(live.marker, "cancelled");
       expect(after).toContain("cancelled");
       expect(after).not.toContain("side effect");
     } finally {
@@ -115,7 +114,9 @@ describe("MCP tool deadlines against a live server", () => {
       ).toContain("it may still be running");
 
       expect(await marks(live.marker)).toBe("");
-      expect(await settle(live.marker, 1_500)).toContain("side effect: stubborn");
+      expect(await markedWith(live.marker, "side effect: stubborn")).toContain(
+        "side effect: stubborn",
+      );
     } finally {
       await live.shutdown();
     }

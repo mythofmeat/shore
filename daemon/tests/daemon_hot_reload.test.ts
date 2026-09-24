@@ -3,7 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { pathTriggersReload, startConfigWatcher } from "../src/daemon/hot_reload.ts";
+import {
+  type DebounceClock,
+  type DirectoryWatch,
+  pathTriggersReload,
+  startConfigWatcher,
+} from "../src/daemon/hot_reload.ts";
+import { until } from "./support/until.ts";
 
 const DIR = "/tmp/shore-test-config";
 const FILE = join(DIR, "config.toml");
@@ -22,14 +28,59 @@ async function tempRoot(): Promise<string> {
   return root;
 }
 
-async function until(check: () => boolean, timeoutMs = 3_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error("condition never held");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-  }
+interface FakeClock {
+  readonly clock: DebounceClock;
+  advance: (ms: number) => void;
+  armed: () => number;
+}
+
+function fakeClock(): FakeClock {
+  let now = 0;
+  let nextId = 0;
+  const timers = new Map<number, { at: number; fire: () => void }>();
+  return {
+    clock: {
+      set: (fire, ms) => {
+        nextId += 1;
+        timers.set(nextId, { at: now + ms, fire });
+        return nextId;
+      },
+      clear: (handle) => {
+        timers.delete(handle as number);
+      },
+    },
+    advance: (ms) => {
+      now += ms;
+      const due = [...timers].filter(([, t]) => t.at <= now).sort(([, a], [, b]) => a.at - b.at);
+      for (const [id, t] of due) {
+        timers.delete(id);
+        t.fire();
+      }
+    },
+    armed: () => timers.size,
+  };
+}
+
+interface FakeWatch {
+  readonly watchDirectory: DirectoryWatch;
+  change: (name: string) => void;
+}
+
+function fakeWatch(): FakeWatch {
+  const listeners: ((name: string) => void)[] = [];
+  return {
+    watchDirectory: (_dir, onChange) => {
+      listeners.push(onChange);
+      return { close: () => listeners.splice(listeners.indexOf(onChange), 1) };
+    },
+    change: (name) => {
+      for (const listener of listeners) listener(name);
+    },
+  };
+}
+
+async function settled(): Promise<void> {
+  await Bun.sleep(0);
 }
 
 describe("which paths are config", () => {
@@ -98,74 +149,153 @@ describe("which paths are config", () => {
 });
 
 describe("the watcher", () => {
-  test("a burst of edits is one reload, carrying every path", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
-    const reloads: string[][] = [];
-
+  function watched(
+    reload: (paths: readonly string[]) => Promise<void>,
+    debounceMs: number,
+  ): { time: FakeClock; fs: FakeWatch; watcher: { stop: () => Promise<void> } } {
+    const time = fakeClock();
+    const fs = fakeWatch();
     const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: (paths) => {
-        reloads.push([...paths]);
-        return Promise.resolve();
-      },
-      debounceMs: 60,
+      configPath: FILE,
+      configDir: DIR,
+      reload,
+      debounceMs,
+      clock: time.clock,
+      watchDirectory: fs.watchDirectory,
     });
-    expect(watcher).toBeDefined();
-    stoppers.push(async () => { await watcher?.stop(); });
+    if (watcher === undefined) throw new Error("the fake watch always starts");
+    stoppers.push(() => watcher.stop());
+    return { time, fs, watcher };
+  }
 
-    await writeFile(configPath, "a = 1\n");
-    await writeFile(join(dir, "models.toml"), "b = 2\n");
-    await writeFile(configPath, "a = 2\n");
+  test("a burst of edits is one reload, carrying every path", async () => {
+    const reloads: string[][] = [];
+    const { time, fs } = watched((paths) => {
+      reloads.push([...paths]);
+      return Promise.resolve();
+    }, 60);
 
-    await until(() => reloads.length > 0);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 150);
-    });
+    fs.change("config.toml");
+    fs.change("models.toml");
+    fs.change("config.toml");
+    time.advance(59);
+    await settled();
+    expect(reloads).toHaveLength(0);
 
-    expect(reloads).toHaveLength(1);
-    expect(reloads[0]).toEqual([configPath, join(dir, "models.toml")].sort());
+    time.advance(1);
+    await settled();
+    expect(reloads).toEqual([[FILE, join(DIR, "models.toml")].sort()]);
   });
 
   test("events spread across the window are still one reload", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
     const reloads: string[][] = [];
+    const { time, fs } = watched((paths) => {
+      reloads.push([...paths]);
+      return Promise.resolve();
+    }, 150);
 
-    const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: (paths) => {
-        reloads.push([...paths]);
-        return Promise.resolve();
-      },
-      debounceMs: 150,
-    });
-    stoppers.push(async () => { await watcher?.stop(); });
+    fs.change("config.toml");
+    time.advance(80);
+    fs.change("models.toml");
+    time.advance(80);
+    fs.change("config.toml");
+    time.advance(149);
+    await settled();
+    expect(reloads).toHaveLength(0);
 
-    await writeFile(configPath, "a = 1\n");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 80);
-    });
-    await writeFile(join(dir, "models.toml"), "b = 2\n");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 80);
-    });
-    await writeFile(configPath, "a = 2\n");
-
-    await until(() => reloads.length > 0);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 300);
-    });
-
-    expect(reloads).toHaveLength(1);
-    expect(reloads[0]).toEqual([configPath, join(dir, "models.toml")].sort());
+    time.advance(1);
+    await settled();
+    expect(reloads).toEqual([[FILE, join(DIR, "models.toml")].sort()]);
   });
 
-  test("scaffolding a first character reloads without a restart", async () => {
+  test("a reload queued behind a slow one is dropped when the watcher stops", async () => {
+    let calls = 0;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { time, fs, watcher } = watched(async () => {
+      calls += 1;
+      if (calls === 1) await gate;
+    }, 40);
+
+    fs.change("config.toml");
+    time.advance(40);
+    await settled();
+    expect(calls).toBe(1);
+
+    fs.change("models.toml");
+    time.advance(40);
+    const stopping = watcher.stop();
+    release();
+    await stopping;
+    await settled();
+
+    expect(calls).toBe(1);
+  });
+
+  test("stop waits for a reload already in flight", async () => {
+    let started = 0;
+    let finished = 0;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { time, fs, watcher } = watched(async () => {
+      started += 1;
+      await gate;
+      finished += 1;
+    }, 40);
+
+    fs.change("config.toml");
+    time.advance(40);
+    await settled();
+    expect(started).toBe(1);
+
+    let stopped = false;
+    const stopping = watcher.stop().then(() => {
+      stopped = true;
+    });
+    await settled();
+    expect(stopped).toBe(false);
+    expect(finished).toBe(0);
+
+    release();
+    await stopping;
+    expect(finished).toBe(1);
+  });
+
+  test("a workspace save does not wake it at all", () => {
+    let reloads = 0;
+    const { time, fs } = watched(() => {
+      reloads += 1;
+      return Promise.resolve();
+    }, 40);
+
+    fs.change("characters/ada/workspace/memory/facts.toml");
+    fs.change("characters/ada/workspace/SOUL.md");
+
+    expect(time.armed()).toBe(0);
+    expect(reloads).toBe(0);
+  });
+
+  test("stopping stops it, including a debounce already ticking", async () => {
+    let reloads = 0;
+    const { time, fs, watcher } = watched(() => {
+      reloads += 1;
+      return Promise.resolve();
+    }, 120);
+
+    fs.change("config.toml");
+    time.advance(30);
+    await watcher.stop();
+    time.advance(1_000);
+    await settled();
+
+    expect(reloads).toBe(0);
+  });
+
+  test("scaffolding a first character reloads on the real filesystem", async () => {
     const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
@@ -186,146 +316,11 @@ describe("the watcher", () => {
     await mkdir(join(dir, "characters", "ada", "workspace"), { recursive: true });
     await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "You are ada.\n");
 
-    await until(() => reloads.length > 0);
+    await until(() => reloads.length > 0, "a reload for the new character");
     expect(reloads[0]).toContain(join(dir, "characters"));
   });
 
-  test("a reload queued behind a slow one is dropped when the watcher stops", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
-    let calls = 0;
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-
-    const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: async () => {
-        calls += 1;
-        if (calls === 1) await gate;
-      },
-      debounceMs: 40,
-    });
-
-    await writeFile(configPath, "a = 1\n");
-    await until(() => calls === 1);
-
-    await writeFile(join(dir, "models.toml"), "b = 2\n");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 120);
-    });
-
-    const stopping = watcher?.stop();
-    release();
-    await stopping;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 150);
-    });
-
-    expect(calls).toBe(1);
-  });
-
-  test("stop waits for a reload already in flight", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
-    let started = 0;
-    let finished = 0;
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-
-    const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: async () => {
-        started += 1;
-        await gate;
-        finished += 1;
-      },
-      debounceMs: 40,
-    });
-
-    await writeFile(configPath, "a = 1\n");
-    await until(() => started === 1);
-
-    let stopped = false;
-    const stopping = (watcher?.stop() ?? Promise.resolve()).then(() => {
-      stopped = true;
-    });
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 60);
-    });
-    expect(stopped).toBe(false);
-    expect(finished).toBe(0);
-
-    release();
-    await stopping;
-    expect(finished).toBe(1);
-  });
-
-  test("a workspace save does not wake it at all", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
-    const workspace = join(dir, "characters", "ada", "workspace", "memory");
-    await mkdir(workspace, { recursive: true });
-    let reloads = 0;
-
-    const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: () => {
-        reloads += 1;
-        return Promise.resolve();
-      },
-      debounceMs: 40,
-    });
-    stoppers.push(async () => { await watcher?.stop(); });
-
-    await writeFile(join(workspace, "facts.toml"), "x = 1\n");
-    await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "hi\n");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 250);
-    });
-
-    expect(reloads).toBe(0);
-  });
-
-  test("stopping stops it, including a debounce already ticking", async () => {
-    const dir = await tempRoot();
-    const configPath = join(dir, "config.toml");
-    await writeFile(configPath, "");
-    let reloads = 0;
-
-    const watcher = startConfigWatcher({
-      configPath,
-      configDir: dir,
-      reload: () => {
-        reloads += 1;
-        return Promise.resolve();
-      },
-      debounceMs: 120,
-    });
-
-    await writeFile(configPath, "a = 1\n");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 30);
-    });
-    await watcher?.stop();
-    await new Promise((resolve) => {
-      setTimeout(resolve, 250);
-    });
-
-    expect(reloads).toBe(0);
-  });
-
-  test("a directory that is not there is a warning, not a failure", async () => {
+  test("a directory that is not there is a warning, not a failure", () => {
     const warnings: string[] = [];
     const watcher = startConfigWatcher({
       configPath: "/definitely/missing/config.toml",

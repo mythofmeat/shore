@@ -438,13 +438,17 @@ describe("hot reload", () => {
     await untilAdopted(
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
 
-    await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
-    await new Promise((resolve) => {
-      setTimeout(resolve, 900);
-    });
+      await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
+      await client.awaitFrame("config_warning");
 
-    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
+      expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
+    } finally {
+      client.close();
+    }
   });
 
   test("a broken per-character overlay keeps the running config", async () => {
@@ -455,16 +459,21 @@ describe("hot reload", () => {
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
-    await writeFile(
-      join(place.root, "config", "characters", "ada", "config.toml"),
-      "[behavior]\nnot_a_field = ",
-    );
-    await writeFile(place.configPath, `[tools]\nmax_result_chars = 9999\n`);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 900);
-    });
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
 
-    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
+      await writeFile(
+        join(place.root, "config", "characters", "ada", "config.toml"),
+        "[behavior]\nnot_a_field = ",
+      );
+      await writeFile(place.configPath, `[tools]\nmax_result_chars = 9999\n`);
+      await client.awaitFrame("config_warning");
+
+      expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
+    } finally {
+      client.close();
+    }
   });
 
   test("a character appearing on disk is picked up", async () => {

@@ -5,6 +5,37 @@ import { CHARACTER_WORKSPACE_DIR, SOUL_FILE } from "../config/dirs.ts";
 
 const DEBOUNCE_MS = 500;
 
+export interface DebounceClock {
+  readonly set: (fire: () => void, ms: number) => unknown;
+  readonly clear: (handle: unknown) => void;
+}
+
+export type DirectoryWatch = (
+  dir: string,
+  onChange: (name: string) => void,
+  onError: (error: unknown) => void,
+) => { close: () => void };
+
+const REAL_CLOCK: DebounceClock = {
+  set: (fire, ms) => {
+    const handle = setTimeout(fire, ms);
+    handle.unref?.();
+    return handle;
+  },
+  clear: (handle) => {
+    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  },
+};
+
+const REAL_WATCH: DirectoryWatch = (dir, onChange, onError) => {
+  const watcher: FSWatcher = watch(dir, { recursive: true }, (_event, name) => {
+    if (name === null || name === undefined) return;
+    onChange(name);
+  });
+  watcher.on("error", onError);
+  return watcher;
+};
+
 export interface ConfigWatcherOptions {
   readonly configPath: string;
   readonly configDir: string;
@@ -16,14 +47,18 @@ export interface ConfigWatcherOptions {
     warn?: (msg: string, fields?: Record<string, unknown>) => void;
   };
   readonly debounceMs?: number | undefined;
+  readonly clock?: DebounceClock | undefined;
+  readonly watchDirectory?: DirectoryWatch | undefined;
 }
 
 export function startConfigWatcher(
   options: ConfigWatcherOptions,
 ): { stop: () => Promise<void> } | undefined {
   const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
+  const clock = options.clock ?? REAL_CLOCK;
+  const watchDirectory = options.watchDirectory ?? REAL_WATCH;
   const pending = new Set<string>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: unknown;
   let stopped = false;
   let inFlight: Promise<void> = Promise.resolve();
 
@@ -44,19 +79,25 @@ export function startConfigWatcher(
 
   const note = (path: string) => {
     pending.add(path);
-    if (timer !== undefined) clearTimeout(timer);
-    timer = setTimeout(fire, debounceMs);
-    timer.unref?.();
+    if (timer !== undefined) clock.clear(timer);
+    timer = clock.set(fire, debounceMs);
   };
 
-  const start = (dir: string, triggers: (path: string) => boolean): FSWatcher | undefined => {
-    let w: FSWatcher;
+  const start = (
+    dir: string,
+    triggers: (path: string) => boolean,
+  ): { close: () => void } | undefined => {
     try {
-      w = watch(dir, { recursive: true }, (_event, name) => {
-        if (name === null || name === undefined) return;
-        const path = resolve(dir, name);
-        if (triggers(path)) note(path);
-      });
+      return watchDirectory(
+        dir,
+        (name) => {
+          const path = resolve(dir, name);
+          if (triggers(path)) note(path);
+        },
+        (e) => {
+          options.log?.warn?.("Config hot reload watcher error", { error: String(e) });
+        },
+      );
     } catch (e) {
       options.log?.warn?.("Config hot reload watcher could not start", {
         config_dir: dir,
@@ -64,10 +105,6 @@ export function startConfigWatcher(
       });
       return undefined;
     }
-    w.on("error", (e) => {
-      options.log?.warn?.("Config hot reload watcher error", { error: String(e) });
-    });
-    return w;
   };
 
   const watcher = start(options.configDir, (path) =>
@@ -95,7 +132,7 @@ export function startConfigWatcher(
   return {
     stop: async () => {
       stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) clock.clear(timer);
       watcher.close();
       workspaceWatcher?.close();
       await inFlight;

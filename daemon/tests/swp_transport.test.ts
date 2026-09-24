@@ -8,6 +8,7 @@ import {
   messageLoop,
   serialSink,
   type ConnectionContext,
+  type PingClock,
 } from "../src/swp/connection";
 import { MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, WireReader, type ByteSink } from "../src/swp/framing";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
@@ -191,6 +192,29 @@ describe("serialSink", () => {
   });
 });
 
+function fakePingClock(): { clock: PingClock; advance: (ms: number) => Promise<void> } {
+  let now = 0;
+  const sleepers: { at: number; wake: () => void }[] = [];
+  return {
+    clock: {
+      now: () => now,
+      sleepUntil: (deadline) =>
+        new Promise<void>((resolve) => {
+          if (deadline <= now) resolve();
+          else sleepers.push({ at: deadline, wake: resolve });
+        }),
+    },
+    advance: async (ms) => {
+      now += ms;
+      for (const sleeper of sleepers.filter((s) => s.at <= now)) {
+        sleepers.splice(sleepers.indexOf(sleeper), 1);
+        sleeper.wake();
+      }
+      await Bun.sleep(0);
+    },
+  };
+}
+
 interface LoopHarness {
   readonly ctx: ConnectionContext;
   readonly reader: WireReader;
@@ -225,7 +249,11 @@ interface Subscriptionish {
   unsubscribe(): void;
 }
 
-function harness(pingIntervalMs = 3_600_000, events?: Subscriptionish): LoopHarness {
+function harness(
+  pingIntervalMs = 3_600_000,
+  events?: Subscriptionish,
+  pingClock?: PingClock,
+): LoopHarness {
   const { source, send, close } = controlledSource();
   const { sink, frames } = collectingSink();
   const bus = new Broadcast(4);
@@ -254,6 +282,7 @@ function harness(pingIntervalMs = 3_600_000, events?: Subscriptionish): LoopHarn
       route: async (m) => void routed.push(m),
       shutdown: shutdownSignal,
       pingIntervalMs,
+      ...(pingClock === undefined ? {} : { pingClock }),
     },
     reader: new WireReader(source),
     sink,
@@ -538,31 +567,37 @@ describe("message loop", () => {
   });
 
   test("pings fire on the interval", async () => {
-    const h = harness(10);
+    const time = fakePingClock();
+    const h = harness(10, undefined, time.clock);
     const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 55);
-    });
+    const pings = () => h.frames().filter((f) => f.type === "ping").length;
+
+    await time.advance(9);
+    expect(pings()).toBe(0);
+    await time.advance(1);
+    expect(pings()).toBe(1);
+    await time.advance(10);
+    await time.advance(10);
+    expect(pings()).toBe(3);
+
     h.shutdown();
     await done;
-    const pings = h.frames().filter((f) => f.type === "ping");
-    expect(pings.length).toBeGreaterThanOrEqual(3);
-    expect(pings.length).toBeLessThanOrEqual(7);
   });
 
   test("a stalled loop does not burst missed pings", async () => {
-    const h = harness(5);
+    const time = fakePingClock();
+    const h = harness(5, undefined, time.clock);
     const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    const until = Date.now() + 60;
-    for (;;) {
-      if (Date.now() >= until) break;
-    }
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
+    const pings = () => h.frames().filter((f) => f.type === "ping").length;
+
+    await time.advance(60);
+    expect(pings()).toBe(1);
+    await time.advance(4);
+    expect(pings()).toBe(1);
+    await time.advance(1);
+    expect(pings()).toBe(2);
+
     h.shutdown();
     await done;
-    const pings = h.frames().filter((f) => f.type === "ping").length;
-    expect(pings).toBeLessThanOrEqual(5);
   });
 });

@@ -23,6 +23,7 @@ import { installWireCapture } from "../src/llm/wire_capture.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type { Role } from "../src/engine/types.ts";
+import { until } from "./support/until.ts";
 
 type Scripted =
   | { kind: "thinking"; thinking: string; signature: string; text: string }
@@ -429,9 +430,10 @@ describe("what gets recorded", () => {
     await runToDone(
       toolLoopEvents(withCallCapture(new AnthropicProvider(), store), req, phase, new AbortController().signal),
     );
-    await new Promise((resolve) => {
-      setTimeout(resolve, 50);
-    });
+    await until(() => {
+      const call = store.queryCalls({ character: "poppy", limit: 10 })[0];
+      return call !== undefined && store.httpCallsFor(required(store.getCall(call.id)).call_id).length >= 2;
+    }, "the captured call and both of its HTTP exchanges");
 
     const calls = store.queryCalls({ character: "poppy", limit: 10 });
     expect(calls).toHaveLength(1);

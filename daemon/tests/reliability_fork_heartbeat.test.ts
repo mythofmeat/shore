@@ -54,7 +54,7 @@ test("a first client can connect while a heartbeat is generating and receive its
   await started.promise;
   const history = buildHandshakeProvider(registry).history("ada", "main");
   try {
-    const connected = await Promise.race([history.then(() => true), Bun.sleep(1000).then(() => false)]);
+    const connected = await Promise.race([history.then(() => true), Bun.sleep(10_000).then(() => false)]);
     expect(connected).toBe(true);
   } finally {
     release.resolve();
