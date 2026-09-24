@@ -9,7 +9,7 @@ server.registerTool("three_images", {
 }, () => ({ content: ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNg+M8AAAICAQB7CYF4AAAAAElFTkSuQmCC", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"].map((data) => ({ type: "image" as const, mimeType: "image/png", data })) }));
 server.registerTool("nested", {
   description: "Echo nested entries, nullable flags and a selected mode.",
-  inputSchema: { entries: z.array(z.object({ text: z.string(), enabled: z.boolean().nullable() })), mode: z.enum(["single", "all"]), metadata: z.record(z.string(), z.string()).optional() },
+  inputSchema: { entries: z.array(z.object({ text: z.string(), enabled: z.boolean().nullable() })), mode: z.enum(["single", "all"]), metadata: z.record(z.string(), z.string()).optional(), alternative: z.union([z.strictObject({ first: z.string().optional() }), z.strictObject({ second: z.string().optional() })]).optional() },
 }, (args) => ({ content: [{ type: "text", text: JSON.stringify(args) }] }));
 server.registerTool("cancel_late", {
   description: "Demonstrate an external effect that finishes after cancellation.",

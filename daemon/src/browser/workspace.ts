@@ -172,9 +172,10 @@ export class Workspace {
         const character = message.selected_character ?? null;
         const thread = message.selected_thread ?? null;
         const changed = character !== this.#state.character || thread !== this.#state.thread;
+        const historyOnly = message.config !== null && typeof message.config === "object" && !Array.isArray(message.config) && Object.keys(message.config).length === 0;
         if (message.delta === undefined || message.delta === null) { this.#historyEpoch += 1; this.#before = "active"; }
         this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), activeStart: message.delta === undefined || message.delta === null ? message.active_start ?? 0 : this.#state.activeStart,
-          character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
+          character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void this.refreshNavigation();
         return;
       }
