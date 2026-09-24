@@ -13,6 +13,7 @@ import {
 } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import {
   SESSION_BOOK_VERSION,
   type SessionBook,
@@ -291,13 +292,11 @@ describe("the environment the subprocess is given", () => {
   }
 
   test("the daemon's own Anthropic key is not inherited, so a subscription turn stays one", async () => {
-    const had = process.env.ANTHROPIC_API_KEY;
-    process.env.ANTHROPIC_API_KEY = "sk-ant-daemon-key";
+    setTestEnv("ANTHROPIC_API_KEY", "sk-ant-daemon-key");
     try {
       expect(await envOf(request({ api_key: "" }))).not.toHaveProperty("ANTHROPIC_API_KEY");
     } finally {
-      if (had === undefined) delete process.env.ANTHROPIC_API_KEY;
-      else process.env.ANTHROPIC_API_KEY = had;
+      restoreTestEnv();
     }
   });
 
@@ -308,40 +307,31 @@ describe("the environment the subprocess is given", () => {
   });
 
   test.each(["/shared/claude", ""])("the credential-store override is preserved exactly: %j", async (directory) => {
-    const previous = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-    process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = directory;
+    setTestEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", directory);
     try {
       expect((await envOf(request())).CLAUDE_SECURESTORAGE_CONFIG_DIR).toBe(directory);
     } finally {
-      if (previous === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-      else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previous;
+      restoreTestEnv();
     }
   });
 
   test.each(["/shared/claude", undefined])("session restore keeps the original credential store: %j", async (directory) => {
-    const previousConfig = process.env.CLAUDE_CONFIG_DIR;
-    const previousAuth = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-    if (directory === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = directory;
-    delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+    if (directory === undefined) unsetTestEnv("CLAUDE_CONFIG_DIR");
+    else setTestEnv("CLAUDE_CONFIG_DIR", directory);
+    unsetTestEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR");
     try {
       expect((await envOf(request())).CLAUDE_SECURESTORAGE_CONFIG_DIR).toBe(directory ?? "");
     } finally {
-      if (previousConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-      else process.env.CLAUDE_CONFIG_DIR = previousConfig;
-      if (previousAuth === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-      else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previousAuth;
+      restoreTestEnv();
     }
   });
 
   test("nothing else of the daemon's environment leaks in", async () => {
-    const had = process.env.SHORE_SECRET_FIXTURE;
-    process.env.SHORE_SECRET_FIXTURE = "do-not-forward";
+    setTestEnv("SHORE_SECRET_FIXTURE", "do-not-forward");
     try {
       expect(Object.keys(await envOf(request()))).not.toContain("SHORE_SECRET_FIXTURE");
     } finally {
-      if (had === undefined) delete process.env.SHORE_SECRET_FIXTURE;
-      else process.env.SHORE_SECRET_FIXTURE = had;
+      restoreTestEnv();
     }
   });
 });

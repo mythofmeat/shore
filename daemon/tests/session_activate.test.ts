@@ -19,6 +19,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 const CHARACTER = "ada";
 const MINUTE = 60_000;
@@ -190,11 +191,11 @@ async function harnessFor(
 }
 
 beforeEach(() => {
-  process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+  setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
 });
 
 afterEach(() => {
-  delete process.env["SHORE_FIXTURE_API_KEY"];
+  unsetTestEnv("SHORE_FIXTURE_API_KEY");
 });
 
 describe("session_activate", () => {

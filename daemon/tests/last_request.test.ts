@@ -27,6 +27,7 @@ import type { KeepalivePrefix, PingNowOutcome } from "../src/cache/keepalive.ts"
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -116,11 +117,11 @@ function normalise(v: unknown): unknown {
 }
 
 beforeEach(() => {
-  process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+  setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
 });
 
 afterEach(() => {
-  delete process.env["SHORE_FIXTURE_API_KEY"];
+  unsetTestEnv("SHORE_FIXTURE_API_KEY");
 });
 
 async function loadThroughStore(shapes: Parameters<typeof fromShape>[0][]): Promise<Message[]> {

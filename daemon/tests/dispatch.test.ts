@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 import fixture from "./tools_captures/dispatch.json" with { type: "json" };
 
@@ -317,7 +317,7 @@ describe("context fields reach their handler argument", () => {
     try {
       await dispatchTool("web_search", { query: "x" }, ctx);
     } finally {
-      delete process.env["DISPATCH_TEST_KEY"];
+      unsetTestEnv("DISPATCH_TEST_KEY");
     }
     expect(seen).toEqual([
       {

@@ -1,7 +1,7 @@
 import { Ledger } from "../src/ledger/store.ts";
 import { writeDurable } from "../src/storage/files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
-import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,6 +25,10 @@ import { BudgetBlocked } from "../src/llm/generate.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 
+beforeEach(() => {
+  setTestEnv(KEY_ENV, "secret");
+});
+
 const cleanups: Array<() => void> = [];
 
 afterAll(() => {
@@ -38,7 +42,6 @@ afterEach(() => {
 });
 
 const KEY_ENV = "SHORE_HB_TICK_KEY";
-setTestEnv(KEY_ENV, "secret");
 
 const MODEL = {
   name: "fixture",

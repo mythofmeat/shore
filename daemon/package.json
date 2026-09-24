@@ -10,6 +10,7 @@
     "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",
     "lint:citations": "bun run scripts/check_live_citations.ts",
+    "lint:test-env": "bun run scripts/check_test_env.ts",
     "mutate": "bun run scripts/mutate.ts",
     "rerecord": "bun run scripts/rerecord.ts",
     "rerecord:check": "bun run scripts/rerecord.ts --check",

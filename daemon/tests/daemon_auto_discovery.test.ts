@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { until } from "./support/until.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -195,7 +195,7 @@ describe("what a failure costs", () => {
   });
 
   test("a provider with no key configured is a warning, not a throw", async () => {
-    delete process.env["SHORE_DISCOVERY_MISSING_KEY"];
+    unsetTestEnv("SHORE_DISCOVERY_MISSING_KEY");
     const { config } = await configWith({
       upstream: {
         base_url: "https://example.test/v1",

@@ -271,8 +271,7 @@ describe("buildToolContext", () => {
       cache: join(root, "cache"),
       runtime: join(root, "run"),
     }, (message) => warnings.push(message));
-    const savedKey = process.env.OPENROUTER_API_KEY;
-    process.env.OPENROUTER_API_KEY = "fixture-image-key";
+    setTestEnv("OPENROUTER_API_KEY", "fixture-image-key");
     let generated = false;
     try {
       const ctx = await buildToolContext(config, config.dirs.data, "ada", {
@@ -302,8 +301,7 @@ describe("buildToolContext", () => {
       expect(await readFile(result.path, "utf8")).toBe("hello");
       expect(warnings.filter((message) => message !== "Deprecated configuration")).toEqual([]);
     } finally {
-      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
-      else process.env.OPENROUTER_API_KEY = savedKey;
+      restoreTestEnv();
     }
   });
 

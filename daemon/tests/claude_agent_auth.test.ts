@@ -11,6 +11,7 @@ import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { startMockClaudeOAuth } from "../src/testing/mock_claude_oauth.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 test.each([false, true])("continued and regenerated turns refresh expired OAuth credentials (tools: %s)", async (withTools) => {
   const dir = await mkdtemp(join(tmpdir(), "shore-auth-refresh-"));
@@ -26,10 +27,8 @@ test.each([false, true])("continued and regenerated turns refresh expired OAuth 
         } } },
   });
   const oauth = await startMockClaudeOAuth(mock.url);
-  const previousConfig = process.env.CLAUDE_CONFIG_DIR;
-  const previousAuth = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-  process.env.CLAUDE_CONFIG_DIR = configDir;
-  delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+  setTestEnv("CLAUDE_CONFIG_DIR", configDir);
+  unsetTestEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR");
   const makeProvider = (book: string) => new ClaudeAgentProvider({
     bookPath: () => join(dir, book),
     runQuery: params => query({ ...params, options: {
@@ -81,10 +80,7 @@ test.each([false, true])("continued and regenerated turns refresh expired OAuth 
       "Bearer test-access-0", "Bearer test-access-1", "Bearer test-access-2",
     ]);
   } finally {
-    if (previousConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = previousConfig;
-    if (previousAuth === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-    else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previousAuth;
+    restoreTestEnv();
     await oauth.stop();
     await mock.stop();
     await rm(dir, { recursive: true, force: true });
@@ -115,10 +111,8 @@ test.each([false, true])("the SDK uses the shared credential store across token 
           message: "OAuth access token has expired. Re-authenticate to continue.",
         } } },
   });
-  const previousConfig = process.env.CLAUDE_CONFIG_DIR;
-  const previousAuth = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-  process.env.CLAUDE_CONFIG_DIR = configDir;
-  process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = authDir;
+  setTestEnv("CLAUDE_CONFIG_DIR", configDir);
+  setTestEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", authDir);
   const provider = new ClaudeAgentProvider({ bookPath: () => join(dir, "sessions.json") });
   const request: SidecarRequest = {
     sdk: "claude_agent", model: "claude-sonnet-4-6", api_key: "", base_url: mock.url,
@@ -157,10 +151,7 @@ test.each([false, true])("the SDK uses the shared credential store across token 
       "Bearer fresh-test-token", "Bearer rotated-test-token",
     ]);
   } finally {
-    if (previousConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = previousConfig;
-    if (previousAuth === undefined) delete process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
-    else process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = previousAuth;
+    restoreTestEnv();
     await mock.stop();
     await rm(dir, { recursive: true, force: true });
   }

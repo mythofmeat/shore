@@ -3,7 +3,7 @@ import { readFile } from "./support/stored_files.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent } from "../src/testing/fake_agent_query.ts";
 
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,10 +28,13 @@ import { eventsForResponse } from "./support/stream.ts";
 import { interpretResult } from "../src/mcp/client.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
 
+beforeEach(() => {
+  setTestEnv(KEY_ENV, "secret");
+});
+
 afterAll(restoreTestEnv);
 
 const KEY_ENV = "SHORE_INPROC_KEY";
-setTestEnv(KEY_ENV, "secret");
 
 const MODEL = {
   name: "fixture",

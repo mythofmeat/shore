@@ -17,6 +17,7 @@ import { required } from "../src/util/required.ts";
 import { appendCompactionTail } from "../src/memory/compaction/llm.ts";
 import type { CallRecord } from "../src/call_store.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 const dateIn = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
@@ -39,7 +40,6 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
   const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" } } as const;
   const messages: WireMessage[] = [];
   const captures: CallRecord[] = [];
-  const previousTimezone = process.env.TZ;
   const originalDate = dateIn(hostZone());
   let toolCalls = 0;
   const phase: ToolPhase = {
@@ -50,7 +50,7 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
     },
   };
   try {
-    process.env.TZ = required(["Pacific/Pago_Pago", "Pacific/Kiritimati"].find(zone => dateIn(zone) !== originalDate));
+    setTestEnv("TZ", required(["Pacific/Pago_Pago", "Pacific/Kiritimati"].find(zone => dateIn(zone) !== originalDate)));
     for (const [index, content] of [
       [{ type: "text", text: "First photo" }, image],
       [{ type: "text", text: "Another photo" }, image],
@@ -96,8 +96,7 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
     }
     expect(toolCalls).toBe(withTools ? 1 : 0);
   } finally {
-    if (previousTimezone === undefined) delete process.env.TZ;
-    else process.env.TZ = previousTimezone;
+    restoreTestEnv();
     await mock.stop();
     await rm(dir, { recursive: true, force: true });
   }

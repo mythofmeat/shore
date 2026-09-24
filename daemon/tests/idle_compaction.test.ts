@@ -16,6 +16,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -168,9 +169,9 @@ function spyingCache(): { cache: LastRequestCache; armed: string[]; disarmed: st
 }
 
 function withKey<T>(fn: () => Promise<T>): Promise<T> {
-  process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+  setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
   return fn().finally(() => {
-    delete process.env["SHORE_FIXTURE_API_KEY"];
+    unsetTestEnv("SHORE_FIXTURE_API_KEY");
   });
 }
 

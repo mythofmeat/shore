@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { localWallClock } from "../src/autonomy/activity.ts";
@@ -15,10 +15,13 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 
+beforeEach(() => {
+  setTestEnv(KEY_ENV, "fixture-key");
+});
+
 afterAll(restoreTestEnv);
 
 const KEY_ENV = "SHORE_ACTIVITY_TEST_KEY";
-setTestEnv(KEY_ENV, "fixture-key");
 const DAY = 86_400_000;
 
 function message(role: "user" | "assistant", id: string, at: number): Message {

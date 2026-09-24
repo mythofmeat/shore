@@ -24,6 +24,7 @@ import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type { Role } from "../src/engine/types.ts";
 import { until } from "./support/until.ts";
+import { setTestEnv } from "./support/env.ts";
 
 type Scripted =
   | { kind: "thinking"; thinking: string; signature: string; text: string }
@@ -240,7 +241,7 @@ async function harness(script: Scripted[]): Promise<Harness> {
   const config = await loadedConfig(root);
   const fake = serving(script);
   const resolved = model(fake.url);
-  process.env[KEY_ENV] = "test-key";
+  setTestEnv(KEY_ENV, "test-key");
   const store = MessageStore.create(join(root, "data", "poppy", "threads", "main", "active.jsonl"));
 
   const request = async (regen: boolean): Promise<SidecarRequest> => {

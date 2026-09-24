@@ -47,6 +47,7 @@ import {
 } from "../src/memory/retrieval";
 import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
 import { expandShared } from "./support/shared_subtrees.ts";
+import { setTestEnv } from "./support/env.ts";
 
 interface RawConfig {
   binary: string;
@@ -1044,21 +1045,10 @@ describe("hardcodedProviderBaseUrl", () => {
 });
 
 describe("resolveEmbedder", () => {
-  const saved = new Map<string, string | undefined>();
-
-  afterEach(() => {
-    for (const [k, v] of saved) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-    saved.clear();
-  });
-
   for (const c of fixture.retrieval.resolve_embedder) {
     test(c.name, async () => {
       for (const e of c.env) {
-        saved.set(e.var, process.env[e.var]);
-        process.env[e.var] = e.value;
+        setTestEnv(e.var, e.value);
       }
 
       const providers: Record<string, EmbeddingProvider> = {};
@@ -1113,8 +1103,7 @@ describe("resolveEmbedder", () => {
   }
 
   test("the cache key separates models, endpoints and widths", () => {
-    process.env.SHORE_TEST_EMBED_CACHE = "k";
-    saved.set("SHORE_TEST_EMBED_CACHE", undefined);
+    setTestEnv("SHORE_TEST_EMBED_CACHE", "k");
     const providers: Record<string, EmbeddingProvider> = {
       acme: {
         entry: {

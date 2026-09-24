@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { InProcessAutonomyExecutor } from "../src/autonomy/in_process.ts";
@@ -26,9 +26,12 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 
+beforeEach(() => {
+  setTestEnv(KEY, "fixture-key");
+});
+
 afterAll(restoreTestEnv);
 const KEY = "SHORE_BACKGROUND_CONTEXT_KEY";
-setTestEnv(KEY, "fixture-key");
 const PROMPT_FILES = ["MEMORY.md", "SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
 const ARCHIVE_TOOL: ToolDefinition = {
   name: "mcp__archive__recall", description: "Recall the archive",

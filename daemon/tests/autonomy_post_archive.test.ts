@@ -17,6 +17,7 @@ import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider } from "../src/llm/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { eventsForResponse } from "./support/stream.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -124,9 +125,9 @@ async function activeIds(characterDir: string): Promise<string[]> {
 }
 
 function withKey<T>(fn: () => Promise<T>): Promise<T> {
-  process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+  setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
   return fn().finally(() => {
-    delete process.env["SHORE_FIXTURE_API_KEY"];
+    unsetTestEnv("SHORE_FIXTURE_API_KEY");
   });
 }
 

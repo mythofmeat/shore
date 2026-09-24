@@ -86,6 +86,7 @@ for group in "$@"; do
         run bun-lint bun run lint
         run bun-lint-comments bun run lint:comments
         run bun-lint-citations bun run lint:citations
+        run bun-lint-test-env bun run lint:test-env
         run bun-typecheck bun run typecheck
         ;;
     daemon)
