@@ -11,7 +11,7 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import { contentForClient, MULTIMODAL_TOOL_RESULTS } from "../src/swp/content_projection.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
-import { countImageBlocks, MAX_REQUEST_IMAGES } from "../src/llm/image_support.ts";
+import { countImageBlocks, MAX_REQUEST_IMAGES, REQUEST_IMAGE_DROP_STEP } from "../src/llm/image_support.ts";
 import { required } from "../src/util/required.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -82,10 +82,10 @@ test("vision requests carry only the newest images within the per-request cap", 
   const req = request();
   req.messages = Array.from({ length: MAX_REQUEST_IMAGES + 1 }, (_, i) => ({ role: "user" as const, content: [{ type: "text" as const, text: String(i) }, image] }));
   for await (const _event of provider.stream(req)) { void _event; }
-  expect(countImageBlocks(required(sent[0]).messages)).toBe(MAX_REQUEST_IMAGES);
+  expect(countImageBlocks(required(sent[0]).messages)).toBe(MAX_REQUEST_IMAGES + 1 - REQUEST_IMAGE_DROP_STEP);
   expect(required(sent[0]).messages[0]?.content[1]).toMatchObject({ type: "text" });
   expect(warnings).toHaveLength(1);
-  expect(warnings[0]).toContain("1 older image(s) omitted");
+  expect(warnings[0]).toContain(`${String(REQUEST_IMAGE_DROP_STEP)} older image(s) omitted`);
   expect(countImageBlocks(req.messages)).toBe(MAX_REQUEST_IMAGES + 1);
 });
 

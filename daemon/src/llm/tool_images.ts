@@ -10,11 +10,13 @@ export interface ImagePolicy {
 
 export function withToolImages(provider: SidecarProvider, policy: ImagePolicy): SidecarProvider {
   let refused = false;
+  let capWarned = false;
   const project = (req: SidecarRequest): SidecarRequest => {
     if (!refused && policy.support(req) !== false) {
       const capped = capRequestImages(req.messages);
       if (capped.stripped === 0) return req;
-      policy.warn(`${capped.stripped} older image(s) omitted from this request to stay within per-request image limits. Original images remain in conversation history.`);
+      if (!capWarned) policy.warn(`${capped.stripped} older image(s) omitted from this request to stay within per-request image limits. Original images remain in conversation history.`);
+      capWarned = true;
       return { ...req, messages: capped.messages };
     }
     const reason = textOnlyReason(req.provider_key ?? req.sdk, req.model);

@@ -8,6 +8,7 @@ import {
   countImageBlocks,
   MAX_REQUEST_IMAGE_BASE64_CHARS,
   MAX_REQUEST_IMAGES,
+  REQUEST_IMAGE_DROP_STEP,
   imageSupportFor,
   isImageRejection,
   learnedImageSupportPath,
@@ -218,15 +219,27 @@ describe("capping images per request", () => {
     expect(messages[0]).toBe(history[0] as WireMessage);
   });
 
-  test("the oldest images beyond the count are replaced with notices", () => {
-    const history = [imageMessage(), toolImages(MAX_REQUEST_IMAGES)];
+  test("the oldest images beyond the count are replaced with notices, a whole step at a time", () => {
+    const history = [imageMessage(), toolImages(REQUEST_IMAGE_DROP_STEP - 1), toolImages(MAX_REQUEST_IMAGES - REQUEST_IMAGE_DROP_STEP + 1)];
     const { messages, stripped } = capRequestImages(history);
 
-    expect(stripped).toBe(1);
-    expect(countImageBlocks(messages)).toBe(MAX_REQUEST_IMAGES);
+    expect(stripped).toBe(REQUEST_IMAGE_DROP_STEP);
+    expect(countImageBlocks(messages)).toBe(MAX_REQUEST_IMAGES + 1 - REQUEST_IMAGE_DROP_STEP);
     const notice = messages[0]?.content[0];
     expect(notice?.type === "text" && notice.text).toContain(`only the newest ${String(MAX_REQUEST_IMAGES)} images`);
-    expect(messages[1]).toBe(history[1] as WireMessage);
+    expect(messages[2]).toBe(history[2] as WireMessage);
+  });
+
+  test("the dropped prefix stays identical as history grows within a step, keeping the prompt cache valid", () => {
+    const base = Array.from({ length: MAX_REQUEST_IMAGES + 1 }, () => imageMessage());
+    const first = capRequestImages(base);
+    const grown = capRequestImages([...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP - 1 }, () => imageMessage())]);
+
+    expect(grown.stripped).toBe(first.stripped);
+    expect(grown.messages.slice(0, base.length)).toEqual(first.messages);
+    const next = capRequestImages([...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP }, () => imageMessage())]);
+    expect(next.stripped).toBe(2 * REQUEST_IMAGE_DROP_STEP);
+    expect(countImageBlocks(next.messages)).toBeLessThanOrEqual(MAX_REQUEST_IMAGES);
   });
 
   test("the oldest images beyond the base64 size limit are replaced with notices", () => {
