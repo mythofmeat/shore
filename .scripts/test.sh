@@ -58,10 +58,27 @@ run() {
 }
 
 # Tests run with an empty home and none of the developer's shore settings, as they do in CI.
+# With --own-tmp they also get a temp dir inside that home, and anything they leave in it fails the
+# check. That home is kept in memory where the system offers it: the daemon's stores fsync every
+# write, which a CI runner's disk turns into multi-second stalls and spurious test timeouts. Cargo
+# runs without it: a compiler cache server started under it would outlive the run and be left
+# pointing at a deleted temp dir.
 hermetic() {
-    home=$(mktemp -d)
+    tmp_var=""
+    if [ "$1" = "--own-tmp" ]; then
+        shift
+        if [ -d /dev/shm ] && [ -w /dev/shm ]; then
+            home=$(mktemp -d -p /dev/shm)
+        else
+            home=$(mktemp -d)
+        fi
+        mkdir "$home/tmp"
+        tmp_var="TMPDIR=$home/tmp"
+    else
+        home=$(mktemp -d)
+    fi
     shore_vars=$(env | sed -n 's/^\(SHORE_[A-Za-z0-9_]*\)=.*/-u \1/p')
-    if env $shore_vars \
+    if env $shore_vars $tmp_var \
         RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" \
         CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" \
         BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-$HOME/.bun/install/cache}" \
@@ -74,6 +91,13 @@ hermetic() {
         status=0
     else
         status=$?
+    fi
+    if [ -n "$tmp_var" ]; then
+        leftovers=$(find "$home/tmp" -mindepth 1 -maxdepth 1 | sed "s|^$home/tmp/||" | head -20)
+        if [ -n "$leftovers" ]; then
+            printf 'tests left these in their temp dir instead of removing them:\n%s\n' "$leftovers" >&2
+            [ "$status" -ne 0 ] || status=1
+        fi
     fi
     rm -rf "$home"
     return "$status"
@@ -92,7 +116,7 @@ for group in "$@"; do
     daemon)
         cd "$root/daemon"
         run bun-build bun run build
-        run bun-test hermetic bun test
+        run bun-test hermetic --own-tmp bun test
         run bun-mutate-stale bun run mutate --stale
         run bun-rerecord-check bun run rerecord:check
         ;;
