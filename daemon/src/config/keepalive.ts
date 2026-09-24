@@ -1,4 +1,4 @@
-import { ConfigDuration, rustTrim, type ParseResult } from "./duration.ts";
+import { ConfigDuration, MAX_SCHEDULE_OFFSET, rustTrim, type ParseResult } from "./duration.ts";
 
 export const DEFAULT_KEEPALIVE_PINGS = 1;
 
@@ -15,6 +15,9 @@ export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSett
   if ("err" in interval) return interval;
   if (interval.ok.asMillisExact() === 0n) {
     return { err: 'cache_keepalive interval must be > 0; use "off" to disable' };
+  }
+  if (interval.ok.asMillisExact() > MAX_SCHEDULE_OFFSET.asMillisExact()) {
+    return { err: `cache_keepalive interval must not exceed ${MAX_SCHEDULE_OFFSET.toString()}` };
   }
   return { ok: { kind: "every", interval: interval.ok } };
 }

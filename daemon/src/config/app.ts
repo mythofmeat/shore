@@ -1,5 +1,5 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import { ConfigDuration, type ParseResult } from "./duration.ts";
+import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
@@ -332,16 +332,14 @@ const defaultHeartbeatConfig = (): HeartbeatConfig => ({
   wrap_up_grace_rounds: 3,
 });
 
-const MAX_HEARTBEAT_INTERVAL = ConfigDuration.fromSecs(8_640_000_000_000 / 2);
-
 export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
   if (heartbeat.min_interval.asMillisExact() <= 0n) {
     return "heartbeat.min_interval must be greater than zero";
   }
-  if (heartbeat.max_interval.asMillisExact() > MAX_HEARTBEAT_INTERVAL.asMillisExact()) {
+  if (heartbeat.max_interval.asMillisExact() > MAX_SCHEDULE_OFFSET.asMillisExact()) {
     return (
       `heartbeat.max_interval (${heartbeat.max_interval.toString()}) must not exceed ` +
-      MAX_HEARTBEAT_INTERVAL.toString()
+      MAX_SCHEDULE_OFFSET.toString()
     );
   }
   if (heartbeat.min_interval.asMillisExact() > heartbeat.max_interval.asMillisExact()) {

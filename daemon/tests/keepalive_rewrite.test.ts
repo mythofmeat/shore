@@ -361,6 +361,22 @@ describe("two misses in a row halt that model", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
+  test("a miss on one model does not count toward the next model's halt", async () => {
+    const h = harness(0, 14_144);
+    const other: KeepalivePrefix = { ...prefix(), model: "claude-sonnet-5" };
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(other, true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "cold"]);
+    expect(h.service.haltFor(other)).toBeUndefined();
+    expect(h.service.haltFor(prefix())).toBeUndefined();
+  });
+
   test("a halt does not carry over to the same model on a corrected SDK", async () => {
     const h = harness(0, 14_144);
     const wrongSdk: KeepalivePrefix = { ...prefix(), sdk: "openai" };

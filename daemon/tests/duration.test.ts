@@ -156,6 +156,8 @@ const KEEPALIVE: readonly KeepaliveCase[] = [
   { raw: "30s", display: "30s", intervalMillis: "30000" },
   { raw: "0s", err: "cache_keepalive interval must be > 0; use \"off\" to disable" },
   { raw: "0ms", err: "cache_keepalive interval must be > 0; use \"off\" to disable" },
+  { raw: "50000000d", display: "50000000d", intervalMillis: "4320000000000000" },
+  { raw: "100000000d", err: "cache_keepalive interval must not exceed 50000000d" },
   { raw: "", err: "duration string is empty" },
   { raw: "nope", err: "invalid duration suffix: nope" },
   { raw: "-1s", err: "duration cannot be negative" },

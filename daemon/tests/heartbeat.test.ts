@@ -109,6 +109,26 @@ describe("live heartbeat settings", () => {
     expect(restored.nextWakeAt).toBe(4 * HOUR);
   });
 
+  test("a restored default wake clamped to the bounds still follows a changed default_interval", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 10 * HOUR, maxIntervalMs: 10 * HOUR }), 0);
+    clock.tick(0);
+    const restored = new HeartbeatClock(config({ defaultIntervalMs: 4 * HOUR, maxIntervalMs: 4 * HOUR }), HOUR);
+    restored.restore(clock.snapshot());
+    restored.boundWake(HOUR);
+    expect(restored.nextWakeAt).toBe(5 * HOUR);
+    restored.setConfig(config({ defaultIntervalMs: 2 * HOUR, maxIntervalMs: 4 * HOUR }), HOUR);
+    expect(restored.nextWakeAt).toBe(2 * HOUR);
+  });
+
+  test("a deferral makes a pending default wake explicit", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 10 * HOUR }), 0);
+    clock.tick(0);
+    expect(clock.snapshot().default_wake).toBe(true);
+    clock.boundWake(9.5 * HOUR, true);
+    expect(clock.nextWakeAt).toBe(10.5 * HOUR);
+    expect(clock.snapshot().default_wake).toBeUndefined();
+  });
+
   test("a reload that does not raise the floor never postpones a pending wake", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.onUserMessage(0);

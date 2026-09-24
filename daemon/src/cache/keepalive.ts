@@ -68,6 +68,7 @@ interface Entry {
   armedFingerprint: string | undefined;
   lastCallFingerprint: string | undefined;
   consecutiveMisses: number;
+  missKey: string | undefined;
 }
 
 export interface KeepaliveHalt {
@@ -264,7 +265,7 @@ export class KeepaliveService {
       entry.lastCallFingerprint = fingerprint;
     }
     if (usage !== undefined && usage.cache_read_tokens > 0) entry.consecutiveMisses = 0;
-    entry.keepalive.onCacheWarmed(model, this.#now());
+    entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
   }
 
   forgetMisses(character: string): void {
@@ -382,6 +383,7 @@ export class KeepaliveService {
       armedFingerprint: undefined,
       lastCallFingerprint: undefined,
       consecutiveMisses: 0,
+      missKey: undefined,
     };
     this.#entries.set(character, entry);
     return entry;
@@ -456,6 +458,11 @@ export class KeepaliveService {
 
     const usage = response.usage;
     if (pingLandedCold(usage, prefix.sdk)) {
+      const missKey = haltKey(prefix);
+      if (entry.missKey !== missKey) {
+        entry.missKey = missKey;
+        entry.consecutiveMisses = 0;
+      }
       entry.consecutiveMisses += 1;
       if (entry.consecutiveMisses >= 2) {
         this.#haltModel(character, prefix, usage);

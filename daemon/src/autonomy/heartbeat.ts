@@ -171,6 +171,7 @@ export class HeartbeatClock {
     const bounded = now + this.#bounded((existing ?? now) - now);
     if (existing === bounded) return;
     this.#nextWakeAt = bounded;
+    if (this.#defaultWake && existing !== undefined && !ensureScheduled) return;
     this.#lastAnchor = now;
     this.#defaultWake = false;
   }

@@ -103,14 +103,14 @@ export class CacheKeepalive {
     }
   }
 
-  onCacheWarmed(model: string, now: number): void {
+  onCacheWarmed(model: string, now: number, newReply = true): void {
     if (this.#targetModel !== undefined && this.#targetModel !== model) {
       return;
     }
     this.#lastActiveAt = now;
     this.#lastWarmAt = now;
     this.#failureCount = 0;
-    this.#pingsSent = 0;
+    if (newReply) this.#pingsSent = 0;
     this.#nextPingAt = this.#deadline(now);
   }
 

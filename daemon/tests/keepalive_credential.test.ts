@@ -71,6 +71,12 @@ function streamResult(): StreamResult {
 class CountingEngine {
   readonly messages: unknown[] = [];
 
+  readonly thread?: string;
+
+  constructor(thread?: string) {
+    if (thread !== undefined) this.thread = thread;
+  }
+
   appendMessage(msg: unknown): Promise<void> {
     this.messages.push(msg);
     return Promise.resolve();
@@ -115,6 +121,7 @@ function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined }
 async function armedByChatTurn(
   send: (req: SidecarRequest) => Promise<GenerateResponse>,
   clock: ReturnType<typeof fakeClock>,
+  thread?: string,
 ) {
   const service = new KeepaliveService(send, clock.now);
   const cache = new LastRequestCache(service);
@@ -142,7 +149,7 @@ async function armedByChatTurn(
     newMessageId: () => "m_1",
   } as unknown as PersistContext;
 
-  await persistAndNotify(ctx, new CountingEngine(), {
+  await persistAndNotify(ctx, new CountingEngine(thread), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
     result: streamResult(),
@@ -204,5 +211,23 @@ describe("a ping carries a usable key", () => {
     expect(() => withResolvedCredential(chatTurn().request, configWithKey(), {})).toThrow(
       MissingApiKey,
     );
+  });
+});
+
+describe("a ping resumes the thread the turn ran on", () => {
+  test("a home thread moved off main is carried into the armed prefix", async () => {
+    const clock = fakeClock();
+    const sent: SidecarRequest[] = [];
+    const service = await armedByChatTurn(async (req) => {
+      sent.push(req);
+      return response();
+    }, clock, "garden");
+
+    expect(service.warmThread(CHARACTER)).toBe("garden");
+    clock.advance(55 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.context?.thread).toBe("garden");
   });
 });

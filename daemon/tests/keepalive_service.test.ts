@@ -332,6 +332,27 @@ describe("what counts as a warm", () => {
     expect(h.sent).toHaveLength(sentByCeiling);
   });
 
+  test("a compaction on the chat model does not hand out a fresh ping allowance", async () => {
+    const h = harness();
+    h.service.arm(prefix({ keepalive_pings: 1 }));
+    h.service.observe(CHARACTER, MODEL, "message");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(1);
+
+    h.service.observe(CHARACTER, MODEL, "compaction");
+    for (let i = 0; i < 4; i++) {
+      h.clock.advance(minutes(56));
+      await h.service.tick();
+    }
+    expect(h.sent).toHaveLength(1);
+
+    h.service.observe(CHARACTER, MODEL, "tool_loop");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(2);
+  });
+
   test("an unknown character is ignored rather than armed", () => {
     const h = harness();
     h.service.observe("nobody", MODEL, "message");
