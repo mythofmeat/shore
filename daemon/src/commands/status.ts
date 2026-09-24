@@ -119,7 +119,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
   const pending = await pendingDeferredEditPaths(characterDataDir, ctx.thread).catch(() => []);
 
   const tokens = ctx.conversationTokens;
-  const halt = ctx.autonomy.keepaliveHalt(ctx.characterName);
+  const halts = ctx.autonomy.keepaliveHalts(ctx.characterName);
   const mcp = ctx.mcpServers === undefined ? undefined : mcpWire(ctx.mcpServers);
   const sections = {
     tokens: {
@@ -136,10 +136,12 @@ export async function status(ctx: StatusContext): Promise<Json> {
   };
   return {
     character: ctx.characterName,
-    keepalive_halted:
-      halt === undefined
-        ? null
-        : { character: halt.character, model: halt.model, reason: halt.reason, at: rfc3339(halt.at) },
+    keepalive_halts: halts.map((halt) => ({
+      character: halt.character,
+      model: halt.model,
+      reason: halt.reason,
+      at: rfc3339(halt.at),
+    })),
     message_count: ctx.turnCount,
     turn_count: ctx.turnCount,
     ...(ctx.contextTokens === undefined ? {} : { context_tokens: ctx.contextTokens }),

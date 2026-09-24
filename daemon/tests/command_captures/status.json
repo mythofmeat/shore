@@ -21,7 +21,7 @@
         },
         "autonomy": null,
         "activity": null,
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -70,7 +70,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -149,7 +149,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -202,7 +202,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -251,7 +251,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -302,7 +302,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -351,7 +351,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -400,7 +400,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -449,7 +449,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -498,7 +498,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -549,7 +549,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -598,7 +598,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -651,7 +651,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -758,7 +758,7 @@
           "message_count": 140,
           "turn_count": 140
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -865,7 +865,7 @@
           "message_count": 4,
           "turn_count": 4
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -940,7 +940,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",

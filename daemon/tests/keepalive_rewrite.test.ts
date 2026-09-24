@@ -361,7 +361,21 @@ describe("two misses in a row halt that model", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
-  test("a character's own halted model is reported over a later halt elsewhere", async () => {
+  test("a halt does not carry over to the same model on a corrected SDK", async () => {
+    const h = harness(0, 14_144);
+    const wrongSdk: KeepalivePrefix = { ...prefix(), sdk: "openai" };
+    for (let miss = 0; miss < 2; miss += 1) {
+      h.service.arm(wrongSdk, true);
+      h.advance(10_000);
+      await h.service.tick();
+    }
+    expect(h.service.haltFor(wrongSdk)).toBeDefined();
+    expect(h.service.haltFor(prefix())).toBeUndefined();
+    h.service.arm(prefix(), true);
+    expect(h.service.intervalFor("Rhia")).toBe(1000);
+  });
+
+  test("every halted model is reported, the character's own first", async () => {
     const h = harness(0, 14_144);
     const other: KeepalivePrefix = {
       ...prefix(),
@@ -376,8 +390,10 @@ describe("two misses in a row halt that model", () => {
       }
     }
     expect(h.service.halted?.model).toBe("anthropic:claude-sonnet-5");
-    expect(h.service.haltedFor("Rhia")?.model).toBe("anthropic:claude-opus-5");
-    expect(h.service.haltedFor("Ada")?.model).toBe("anthropic:claude-sonnet-5");
+    expect(h.service.haltsFor("Rhia").map((halt) => halt.model))
+      .toEqual(["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"]);
+    expect(h.service.haltsFor("Ada").map((halt) => halt.model))
+      .toEqual(["anthropic:claude-sonnet-5", "anthropic:claude-opus-5"]);
   });
 
   test.each(["heartbeat", "heartbeat_tool_loop"])("a %s cache read does not clear chat keepalive misses", async (callType) => {

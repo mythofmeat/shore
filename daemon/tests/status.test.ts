@@ -582,15 +582,16 @@ describe("a halted keepalive reaches the status envelope", () => {
   test("a healthy daemon reports no halt", async () => {
     const ctx = await build("restored");
     const result = (await status(ctx)) as Record<string, unknown>;
-    expect(result["keepalive_halted"]).toBeNull();
+    expect(result["keepalive_halts"]).toEqual([]);
   });
 
   test("a halted daemon reports the character, the reason, and when", async () => {
     const ctx = await haltedContext();
     const result = (await status(ctx)) as Record<string, unknown>;
-    const halt = result["keepalive_halted"] as Record<string, unknown> | null;
+    const halts = result["keepalive_halts"] as Record<string, unknown>[];
+    const halt = halts[0];
 
-    expect(halt).not.toBeNull();
+    expect(halts).toHaveLength(1);
     expect(halt?.["character"]).toBe(CHARACTER);
     expect(String(halt?.["reason"])).toContain("two keepalive pings in a row missed");
     expect(String(halt?.["at"])).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -600,7 +601,7 @@ describe("a halted keepalive reaches the status envelope", () => {
     const ctx = await haltedContext();
     const first = (await status(ctx)) as Record<string, unknown>;
     const second = (await status(ctx)) as Record<string, unknown>;
-    expect(second["keepalive_halted"]).toEqual(first["keepalive_halted"]);
+    expect(second["keepalive_halts"]).toEqual(first["keepalive_halts"]);
   });
 
   test("every name in `sections` is a block the payload actually carries", async () => {

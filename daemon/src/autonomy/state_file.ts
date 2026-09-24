@@ -19,6 +19,9 @@ export interface AutonomyStateFile {
   readonly ticksWithoutUser: number;
   readonly nextWakeAt: number | undefined;
   readonly lastUserAt: number | undefined;
+  readonly forcedDormant?: boolean;
+  readonly defaultWake?: boolean;
+  readonly wakeAnchorAt?: number;
   readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
 }
@@ -40,6 +43,9 @@ export function encodeState(state: AutonomyStateFile): string {
       ticks_without_user: state.ticksWithoutUser,
       next_wake_at: state.nextWakeAt === undefined ? null : toRfc3339(state.nextWakeAt),
       last_user_at: state.lastUserAt === undefined ? null : toRfc3339(state.lastUserAt),
+      forced_dormant: state.forcedDormant === true,
+      default_wake: state.defaultWake === true,
+      wake_anchor_at: state.wakeAnchorAt === undefined ? null : toRfc3339(state.wakeAnchorAt),
       covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
       keepalive_interval_ms: k?.intervalMs ?? null,
@@ -74,8 +80,18 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
     ticksWithoutUser,
     nextWakeAt: timeField(o["next_wake_at"]),
     lastUserAt: timeField(o["last_user_at"]),
+    ...wakeProvenance(o),
     coveredTurnCount: typeof coveredTurnCount === "number" ? coveredTurnCount : 0,
     keepalive: keepaliveField(o),
+  };
+}
+
+function wakeProvenance(o: Record<string, unknown>): Pick<AutonomyStateFile, "forcedDormant" | "defaultWake" | "wakeAnchorAt"> {
+  const wakeAnchorAt = timeField(o["wake_anchor_at"]);
+  return {
+    ...(o["forced_dormant"] === true ? { forcedDormant: true } : {}),
+    ...(o["default_wake"] === true ? { defaultWake: true } : {}),
+    ...(wakeAnchorAt === undefined ? {} : { wakeAnchorAt }),
   };
 }
 

@@ -106,8 +106,15 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     }
     rows.write(out);
 
-    if let Some(halt) = data.get("keepalive_halted").filter(|h| !h.is_null()) {
+    let halts = data
+        .get("keepalive_halts")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    if !halts.is_empty() {
         blank(out);
+    }
+    for halt in halts {
         let reason = text(halt, "reason");
         warning(
             out,
@@ -314,7 +321,7 @@ mod tests {
             "config_dir": "/config",
             "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
             "pending_deferred_edit_count": 0,
-            "keepalive_halted": null,
+            "keepalive_halts": [],
             "autonomy": null,
             "activity": null,
             "sections": ["tokens", "autonomy", "activity"]
@@ -332,7 +339,7 @@ mod tests {
             "config_dir": "/config",
             "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
             "pending_deferred_edit_count": 0,
-            "keepalive_halted": null, "autonomy": null, "activity": null,
+            "keepalive_halts": [], "autonomy": null, "activity": null,
             "sections": ["tokens", "autonomy", "activity"]
         });
         let mut buf = Vec::new();
@@ -354,7 +361,7 @@ mod tests {
                 "cache_read": 1_600_000, "cache_write": 32_000
             },
             "pending_deferred_edit_count": 0,
-            "keepalive_halted": null, "autonomy": null, "activity": null,
+            "keepalive_halts": [], "autonomy": null, "activity": null,
             "sections": ["tokens", "autonomy", "activity"]
         });
         let mut busy_buf = Vec::new();
@@ -473,8 +480,11 @@ mod tests {
     #[test]
     fn a_halted_keepalive_is_surfaced_not_buried() {
         let mut data = payload();
-        if let Some(slot) = data.get_mut("keepalive_halted") {
-            *slot = json!({"character": "heidi", "model": "anthropic:claude-opus-5", "reason": "budget exhausted"});
+        if let Some(slot) = data.get_mut("keepalive_halts") {
+            *slot = json!([
+                {"character": "heidi", "model": "anthropic:claude-opus-5", "reason": "budget exhausted"},
+                {"character": "ada", "model": "anthropic:claude-sonnet-5", "reason": "no reuse"},
+            ]);
         }
         let out = render(&data);
         assert!(
@@ -482,6 +492,10 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("budget exhausted"), "{out}");
+        assert!(
+            out.contains("keepalive halted for anthropic:claude-sonnet-5 on ada"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -631,7 +645,7 @@ mod tests {
             "tokens": {"input": 288_106, "output": 71_483, "cache_read": 1_131_904, "cache_write": 0},
             "config_dir": "/config",
             "pending_deferred_edit_count": 0,
-            "keepalive_halted": null,
+            "keepalive_halts": [],
             "autonomy": {
                 "heartbeat_state": "Active",
                 "ticks_without_user": 1,

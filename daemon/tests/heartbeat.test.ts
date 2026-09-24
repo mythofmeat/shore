@@ -79,6 +79,36 @@ describe("live heartbeat settings", () => {
     expect(clock.tick(HOUR)).toBe("none");
   });
 
+  test("forced dormancy outlasts a reload that raises the idle limit", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 2 }), 0);
+    clock.forceDormant();
+    clock.setConfig(config({ maxIdleTicks: 5 }), HOUR);
+    expect(clock.isDormant(HOUR)).toBe(true);
+    expect(clock.tick(HOUR)).toBe("none");
+    expect(clock.nextWakeAt).toBeUndefined();
+    clock.onUserMessage(2 * HOUR);
+    expect(clock.isDormant(2 * HOUR)).toBe(false);
+  });
+
+  test("forced dormancy outlasts a restart under a higher idle limit", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 2 }), 0);
+    clock.forceDormant();
+    const restored = new HeartbeatClock(config({ maxIdleTicks: 5 }), HOUR);
+    restored.restore(clock.snapshot());
+    expect(restored.isDormant(HOUR)).toBe(true);
+    expect(restored.tick(HOUR)).toBe("none");
+    expect(restored.nextWakeAt).toBeUndefined();
+  });
+
+  test("a restored default wake still follows a changed default_interval", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 10 * HOUR }), 0);
+    clock.tick(0);
+    const restored = new HeartbeatClock(config({ defaultIntervalMs: 10 * HOUR }), HOUR);
+    restored.restore(clock.snapshot());
+    restored.setConfig(config({ defaultIntervalMs: 4 * HOUR }), HOUR);
+    expect(restored.nextWakeAt).toBe(4 * HOUR);
+  });
+
   test("a reload that does not raise the floor never postpones a pending wake", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.onUserMessage(0);

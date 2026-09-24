@@ -244,7 +244,7 @@ const INSERT_SQL = `INSERT INTO calls (
   $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped, $cache_state_reason
 )`;
 
-const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
+const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, provider, model, thinking_enabled, cache_read_tokens, tool_surface
   FROM calls
  WHERE character = $character
    AND (provider = 'anthropic' OR model LIKE 'anthropic/%')
@@ -254,6 +254,7 @@ const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_
 
 interface SeedRow {
   ts: string;
+  provider: string;
   model: string;
   thinking_enabled: number;
   cache_read_tokens: number;
@@ -419,6 +420,7 @@ export class Ledger {
         this.#ttlSecs,
         undefined,
         seed.tool_surface ?? undefined,
+        seed.provider,
       ),
     );
   }

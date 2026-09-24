@@ -227,7 +227,7 @@
           "data_dir",
           "history_index",
           "index",
-          "keepalive_halted",
+          "keepalive_halts",
           "message_count",
           "pending_deferred_edit_count",
           "pending_deferred_edits",

@@ -66,6 +66,14 @@ describe("warm/cold transitions", () => {
     expect(r.anomaly).toBeUndefined();
   });
 
+  test("the same model on another provider is a separate cache", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), provider: "anthropic", cache_read_tokens: 500 }));
+    const r = t.observe(obs({ ts: at(1), provider: "openrouter", cache_write_tokens: 5000 }));
+    expect(r.state).toBe("warm");
+    expect(r.anomaly).toBeUndefined();
+  });
+
   test("toggling thinking goes cold, deliberately", () => {
     const t = new CacheTracker();
     t.observe(obs({ ts: at(0), cache_read_tokens: 500 }));

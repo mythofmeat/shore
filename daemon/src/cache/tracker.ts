@@ -92,11 +92,12 @@ export class CacheTracker {
     ttlSecs: number,
     now: number = Date.now(),
     lastToolSurface?: string,
+    lastProvider?: string,
   ): CacheTracker {
     const tracker = new CacheTracker(ttlSecs);
     const parsed = parseTs(lastTs);
     tracker.#lastTs = parsed;
-    tracker.#lastModel = lastModel;
+    tracker.#lastModel = JSON.stringify([lastProvider, lastModel]);
     tracker.#lastThinking = lastThinking;
     tracker.#lastToolSurface = lastToolSurface;
     tracker.#lastCacheRead = lastCacheRead;
@@ -122,7 +123,7 @@ export class CacheTracker {
       this.#lastCacheRead = 0;
       this.#clearToolLoopBaseline();
       this.#ttlExpiredSinceWarm = false;
-      this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
+      this.#updateMetadata(obsTs, modelKey, obs.thinking_enabled, obs.tool_surface);
       this.#lastCallType = obs.call_type;
       this.#lastKeepaliveMissed = false;
       return { state: this.#state, anomaly: undefined };
@@ -140,7 +141,7 @@ export class CacheTracker {
       }
     }
 
-    if (this.#state === "warm" && this.#lastModel !== undefined && this.#lastModel !== obs.model) {
+    if (this.#state === "warm" && this.#lastModel !== undefined && this.#lastModel !== modelKey) {
       this.#state = "cold";
       this.#lastCacheRead = 0;
       this.#clearToolLoopBaseline();
@@ -221,7 +222,7 @@ export class CacheTracker {
       this.#clearToolLoopBaseline();
     }
 
-    this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
+    this.#updateMetadata(obsTs, modelKey, obs.thinking_enabled, obs.tool_surface);
     this.#lastCallType = obs.call_type;
     if ((obs.call_type === "message" || obs.call_type === "tool_loop") && obsTs !== undefined) {
       this.#lastActivityTs = obsTs;
@@ -266,12 +267,12 @@ export class CacheTracker {
 
   #updateMetadata(
     ts: number | undefined,
-    model: string,
+    modelKey: string,
     thinking: boolean,
     toolSurface: string | undefined,
   ): void {
     this.#lastTs = ts;
-    this.#lastModel = model;
+    this.#lastModel = modelKey;
     this.#lastThinking = thinking;
     if (toolSurface !== undefined) this.#lastToolSurface = toolSurface;
   }

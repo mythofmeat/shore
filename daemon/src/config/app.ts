@@ -332,7 +332,18 @@ const defaultHeartbeatConfig = (): HeartbeatConfig => ({
   wrap_up_grace_rounds: 3,
 });
 
+const MAX_HEARTBEAT_INTERVAL = ConfigDuration.fromSecs(8_640_000_000_000 / 2);
+
 export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
+  if (heartbeat.min_interval.asMillisExact() <= 0n) {
+    return "heartbeat.min_interval must be greater than zero";
+  }
+  if (heartbeat.max_interval.asMillisExact() > MAX_HEARTBEAT_INTERVAL.asMillisExact()) {
+    return (
+      `heartbeat.max_interval (${heartbeat.max_interval.toString()}) must not exceed ` +
+      MAX_HEARTBEAT_INTERVAL.toString()
+    );
+  }
   if (heartbeat.min_interval.asMillisExact() > heartbeat.max_interval.asMillisExact()) {
     return (
       `heartbeat.min_interval (${heartbeat.min_interval.toString()}) must not exceed ` +

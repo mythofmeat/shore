@@ -100,6 +100,9 @@ export class CharacterAutonomy {
         ticks_without_user: restored.ticksWithoutUser,
         next_wake_at: restored.nextWakeAt,
         last_user_at: restored.lastUserAt,
+        ...(restored.forcedDormant === true ? { forced_dormant: true } : {}),
+        ...(restored.defaultWake === true ? { default_wake: true } : {}),
+        ...(restored.wakeAnchorAt === undefined ? {} : { wake_anchor_at: restored.wakeAnchorAt }),
       });
       this.#clock.boundWake(opts.now());
     }
@@ -381,6 +384,9 @@ export class CharacterAutonomy {
       ticksWithoutUser: clock.ticks_without_user,
       nextWakeAt: clock.next_wake_at,
       lastUserAt: clock.last_user_at,
+      ...(clock.forced_dormant === true ? { forcedDormant: true } : {}),
+      ...(clock.default_wake === true ? { defaultWake: true } : {}),
+      ...(clock.wake_anchor_at === undefined ? {} : { wakeAnchorAt: clock.wake_anchor_at }),
       coveredTurnCount: this.#state.coveredTurnCount,
       keepalive: this.#state.keepalive,
     };

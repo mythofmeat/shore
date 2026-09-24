@@ -81,6 +81,10 @@ export function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "p
   return `${req.provider_key ?? req.sdk}:${req.model}`;
 }
 
+function haltKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
+  return JSON.stringify([req.provider_key ?? req.sdk, req.sdk, req.model]);
+}
+
 export function prefixFingerprint(req: {
   system?: SystemContent | undefined;
   messages: readonly WireMessage[];
@@ -192,12 +196,14 @@ export class KeepaliveService {
   }
 
   haltFor(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): KeepaliveHalt | undefined {
-    return this.#halts.get(keepaliveModelKey(req));
+    return this.#halts.get(haltKey(req));
   }
 
-  haltedFor(character: string): KeepaliveHalt | undefined {
+  haltsFor(character: string): KeepaliveHalt[] {
     const armed = this.#entries.get(character)?.prefix;
-    return (armed === undefined ? undefined : this.haltFor(armed)) ?? this.#lastHalt;
+    const own = armed === undefined ? undefined : this.haltFor(armed);
+    const others = [...this.#halts.values()].filter((halt) => halt !== own).reverse();
+    return own === undefined ? others : [own, ...others];
   }
 
   #haltModel(character: string, prefix: KeepalivePrefix, usage: Usage): void {
@@ -210,7 +216,8 @@ export class KeepaliveService {
       `further ping would pay full price for nothing. Keepalives for ${model} are stopped for the ` +
       `life of this daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
     const halt = { character, model, reason, at: this.#now() };
-    this.#halts.set(model, halt);
+    const key = haltKey(prefix);
+    this.#halts.set(key, halt);
     this.#lastHalt = halt;
     shoreLog.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
     this.#push({
@@ -220,7 +227,7 @@ export class KeepaliveService {
       at: this.#now(),
     });
     for (const [, other] of this.#entries) {
-      if (other.prefix !== undefined && keepaliveModelKey(other.prefix) === model) other.keepalive.onCacheInvalidated();
+      if (other.prefix !== undefined && haltKey(other.prefix) === key) other.keepalive.onCacheInvalidated();
     }
   }
 

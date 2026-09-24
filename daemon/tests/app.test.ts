@@ -1244,6 +1244,19 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
     expect(validateHeartbeat(heartbeat)).toContain("heartbeat.min_interval (2h) must not exceed heartbeat.max_interval (1h)");
   });
 
+  test("a zero heartbeat floor is refused", () => {
+    const heartbeat = defaultAppConfig().behavior.autonomy.heartbeat;
+    heartbeat.min_interval = ConfigDuration.fromSecs(0);
+    expect(validateHeartbeat(heartbeat)).toContain("heartbeat.min_interval must be greater than zero");
+  });
+
+  test("a heartbeat ceiling past the Date range is refused", () => {
+    const heartbeat = defaultAppConfig().behavior.autonomy.heartbeat;
+    heartbeat.default_interval = ConfigDuration.fromSecs(999_999_999 * 86_400);
+    heartbeat.max_interval = ConfigDuration.fromSecs(999_999_999 * 86_400);
+    expect(validateHeartbeat(heartbeat)).toContain("heartbeat.max_interval");
+  });
+
   test("a global keepalive ceiling is no longer a config key", () => {
     expect(rejected("[cache]\nkeepalive_max = \"6h\"\n")).toContain("unknown field `keepalive_max`");
   });
