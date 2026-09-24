@@ -3,6 +3,8 @@ import { connect, createServer, type Socket } from "node:net";
 import { networkInterfaces } from "node:os";
 import { expect, test } from "./fixtures.ts";
 
+test.use({ launchOptions: { args: ["--host-resolver-rules=MAP shore.test-tailnet.ts.net 127.0.0.1, MAP custom.shore.test 127.0.0.1", "--no-proxy-server"] } });
+
 async function exerciseWorkspace(page: Page, origin: string, secureContext: boolean): Promise<void> {
   const errors: string[] = [];
   page.on("pageerror", (error) => { errors.push(error.message); });
@@ -76,4 +78,15 @@ test.describe("LAN listener", () => {
     origin.hostname = address;
     await exerciseWorkspace(page, origin.origin, false);
   });
+});
+
+test.describe("DNS access", () => {
+  for (const host of ["shore.test-tailnet.ts.net", "custom.shore.test"]) {
+    test(`HTTP on ${host} supports the workspace without hostname configuration`, async ({ page, baseURL }) => {
+      if (baseURL === undefined) throw new Error("Missing daemon origin");
+      const origin = new URL(baseURL);
+      origin.hostname = host;
+      await exerciseWorkspace(page, origin.origin, false);
+    });
+  }
 });
