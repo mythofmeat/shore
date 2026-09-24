@@ -81,8 +81,8 @@ describe("thread ids", () => {
 
 describe("archive key", () => {
   test("the main thread keeps the bare character name", () => {
-    expect(archiveKey("qifei", MAIN_THREAD)).toBe("qifei");
-    expect(archiveKey("qifei", "scratch")).toBe("qifei/scratch");
+    expect(archiveKey("heidi", MAIN_THREAD)).toBe("heidi");
+    expect(archiveKey("heidi", "scratch")).toBe("heidi/scratch");
   });
 });
 

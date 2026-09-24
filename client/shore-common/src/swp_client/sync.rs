@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn switching_character_resets_independent_revision_watermarks() {
-        let mut sync = SyncState::new(650, Some("poppy"), None);
+        let mut sync = SyncState::new(650, Some("frank"), None);
         let switched = ServerMessage::History(History {
             delta: None,
             rid: None,

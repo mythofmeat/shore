@@ -23,7 +23,7 @@ function request(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 64,
     replay_prior_thinking: "all",
-    context: { character: "poppy", call_type: "message", thinking_enabled: false },
+    context: { character: "frank", call_type: "message", thinking_enabled: false },
     ...overrides,
   };
 }

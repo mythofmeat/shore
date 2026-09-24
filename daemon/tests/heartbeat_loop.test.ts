@@ -556,12 +556,12 @@ describe("the tools the loop answers itself", () => {
 describe("the reasoning behind what a tick says", () => {
   test("the message round's thinking comes back out of the loop", async () => {
     const w = world([
-      response([thinking("ren has been quiet since morning"), text("<sendMessage>hey you</sendMessage>")]),
+      response([thinking("eve has been quiet since morning"), text("<sendMessage>hey you</sendMessage>")]),
     ]);
 
     const result = await runHeartbeatToolLoop(request(), w.deps);
 
-    expect(result.thinking).toEqual([thinking("ren has been quiet since morning")]);
+    expect(result.thinking).toEqual([thinking("eve has been quiet since morning")]);
   });
 
   test("a later message round's thinking replaces an earlier round's", async () => {

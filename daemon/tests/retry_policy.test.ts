@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { AbortError } from "../src/llm/abort.ts";
 import type { LlmError } from "../src/llm/errors.ts";
+import { until } from "./support/until.ts";
 import {
   DEFAULT_BACKOFF_MAX_MS,
   DEFAULT_JITTER_FRACTION,
@@ -101,7 +102,7 @@ describe("streamWithRetry backoff cancellation", () => {
       (ms) => Bun.sleep(ms),
       { signal: controller.signal, random: () => 0 },
     );
-    await Bun.sleep(5);
+    await until(() => calls === 1, "the first attempt");
     controller.abort();
     expect(pending).rejects.toBeInstanceOf(AbortError);
     expect(calls).toBe(1);

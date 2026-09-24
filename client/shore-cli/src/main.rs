@@ -27,8 +27,6 @@ mod output;
 mod run;
 mod state;
 mod terminal_images;
-#[cfg(test)]
-mod test_env;
 mod tui;
 
 use std::process::ExitCode;

@@ -10,6 +10,7 @@ import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import { wideImage } from "./support/oversized_image.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -442,17 +443,15 @@ test.skipIf(process.platform === "win32")("cancelling a native patch stops the h
 test("an unavailable helper fails explicitly without changing a file", async () => {
   const { run, put } = await world();
   const path = await put("note", "old\n");
-  const previous = process.env.SHORE_APPLY_PATCH_PATH;
   try {
-    process.env.SHORE_APPLY_PATCH_PATH = "/nonexistent/shore-apply-patch";
+    setTestEnv("SHORE_APPLY_PATCH_PATH", "/nonexistent/shore-apply-patch");
     const result = await run("apply_patch", { patch: "*** Begin Patch\n*** Delete File: note\n*** End Patch" });
     expect(result.isError).toBe(true);
     expect(resultText(result)).toContain("Patch helper failed");
     expect(await readFile(path, "utf8")).toBe("old\n");
-    process.env.SHORE_APPLY_PATCH_PATH = "relative-helper";
+    setTestEnv("SHORE_APPLY_PATCH_PATH", "relative-helper");
     expect(resultText(await run("apply_patch", { patch: "*** Begin Patch\n*** End Patch" }))).toContain("absolute executable path");
   } finally {
-    if (previous === undefined) delete process.env.SHORE_APPLY_PATCH_PATH;
-    else process.env.SHORE_APPLY_PATCH_PATH = previous;
+    restoreTestEnv();
   }
 });

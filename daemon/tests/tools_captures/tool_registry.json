@@ -117,8 +117,8 @@
   },
   "render_tool_defs": {
     "plain": {
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "names": [
         "bash",
         "generate_image",
@@ -169,8 +169,8 @@
       ]
     },
     "respects_allowlist": {
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "names": [
         "activity_heatmap"
       ]
@@ -205,19 +205,19 @@
   "subagent_tool_defs": {
     "none_enabled": {
       "enabled": [],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": []
     },
     "one_enabled": {
       "enabled": [
         "music"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -240,11 +240,11 @@
         "music",
         "archivist"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Search qifei's archive on behalf of ren.",
+          "description": "Search heidi's archive on behalf of eve.",
           "input_schema": {
             "properties": {
               "query": {
@@ -260,7 +260,7 @@
           "name": "ask_archivist"
         },
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -298,11 +298,11 @@
         "music",
         "ghost"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -324,11 +324,11 @@
         "music",
         "music"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -392,8 +392,8 @@
         "\ud83c\udfb5drum",
         "\ufb00ute"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
           "name": "ask_\ufb00ute",
@@ -434,11 +434,11 @@
         "musicology",
         "music"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -455,7 +455,7 @@
         },
         {
           "name": "ask_musicology",
-          "description": "A name for which qifei's `music` is a strict prefix.",
+          "description": "A name for which heidi's `music` is a strict prefix.",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -475,11 +475,11 @@
       "enabled": [
         "archivist"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Search qifei's archive on behalf of ren.",
+          "description": "Search heidi's archive on behalf of eve.",
           "input_schema": {
             "properties": {
               "query": {
@@ -505,11 +505,11 @@
         "\ud83c\udfb5drum",
         "music"
       ],
-      "char_name": "qifei",
-      "user_name": "ren",
+      "char_name": "heidi",
+      "user_name": "eve",
       "defs": [
         {
-          "description": "Search qifei's archive on behalf of ren.",
+          "description": "Search heidi's archive on behalf of eve.",
           "input_schema": {
             "properties": {
               "query": {
@@ -525,7 +525,7 @@
           "name": "ask_archivist"
         },
         {
-          "description": "Ask qifei's music assistant about ren's taste.",
+          "description": "Ask heidi's music assistant about eve's taste.",
           "input_schema": {
             "properties": {
               "query": {
@@ -542,7 +542,7 @@
         },
         {
           "name": "ask_musicology",
-          "description": "A name for which qifei's `music` is a strict prefix.",
+          "description": "A name for which heidi's `music` is a strict prefix.",
           "input_schema": {
             "type": "object",
             "properties": {

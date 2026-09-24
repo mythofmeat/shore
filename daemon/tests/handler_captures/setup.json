@@ -692,14 +692,14 @@
         "system": [
           {
             "label": "system",
-            "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+            "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
           },
           {
             "$ref": "s5"
           },
           {
             "label": "character",
-            "text": "I am qifei.\n"
+            "text": "I am heidi.\n"
           }
         ],
         "max_tokens": 1024,
@@ -882,14 +882,14 @@
     "s2": [
       {
         "label": "system",
-        "text": "Answer as qifei, tersely.\n"
+        "text": "Answer as heidi, tersely.\n"
       },
       {
         "$ref": "s5"
       },
       {
         "label": "character",
-        "text": "I am qifei.\n"
+        "text": "I am heidi.\n"
       }
     ],
     "s3": {

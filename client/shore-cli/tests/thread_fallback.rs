@@ -31,7 +31,7 @@ fn serve(stream: TcpStream, requested: &str, selected: &str, runs_command: bool)
         reader.get_mut(),
         json!({
             "type": "history", "messages": [], "config": {},
-            "selected_character": "qifei", "selected_thread": selected
+            "selected_character": "heidi", "selected_thread": selected
         }),
     );
     line.clear();
@@ -93,7 +93,7 @@ fn run(
         .env("SHORE_DATA_DIR", data)
         .env("SHORE_TOKEN", "test-token")
         .env_remove("SHORE_THREAD")
-        .args(["--addr", &addr.to_string(), "--character", "qifei"]);
+        .args(["--addr", &addr.to_string(), "--character", "heidi"]);
     if let Some(thread) = env_thread {
         let _env = command.env("SHORE_THREAD", thread);
     }
@@ -107,11 +107,11 @@ fn run(
 
 fn save(data: &Path, thread: &str) {
     std::fs::create_dir_all(data.join("active_thread")).unwrap();
-    std::fs::write(data.join("active_thread/qifei"), thread).unwrap();
+    std::fs::write(data.join("active_thread/heidi"), thread).unwrap();
 }
 
 fn saved(data: &Path) -> String {
-    std::fs::read_to_string(data.join("active_thread/qifei")).unwrap()
+    std::fs::read_to_string(data.join("active_thread/heidi")).unwrap()
 }
 
 #[test]

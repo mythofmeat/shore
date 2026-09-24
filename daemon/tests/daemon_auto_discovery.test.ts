@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { until } from "./support/until.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -194,7 +195,7 @@ describe("what a failure costs", () => {
   });
 
   test("a provider with no key configured is a warning, not a throw", async () => {
-    delete process.env["SHORE_DISCOVERY_MISSING_KEY"];
+    unsetTestEnv("SHORE_DISCOVERY_MISSING_KEY");
     const { config } = await configWith({
       upstream: {
         base_url: "https://example.test/v1",
@@ -232,12 +233,7 @@ describe("the loop", () => {
       fetchImpl: modelsFetch(asked),
     });
     try {
-      const deadline = Date.now() + 2_000;
-      while (asked.length === 0 && Date.now() < deadline) {
-        await new Promise((resolve) => {
-          setTimeout(resolve, 5);
-        });
-      }
+      await until(() => asked.length > 0, "the first discovery pass");
       expect(asked).toHaveLength(1);
     } finally {
       loop.stop();
@@ -247,6 +243,8 @@ describe("the loop", () => {
   test("a pass that overruns the interval is not joined by a second", async () => {
     setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
+    let inFlight = 0;
+    let mostInFlight = 0;
     const { config } = await configWith({
       slow: {
         base_url: "https://slow.test/v1",
@@ -260,22 +258,21 @@ describe("the loop", () => {
       intervalMs: 20,
       fetchImpl: (async (url: string | URL) => {
         asked.push(url.toString());
-        await new Promise((resolve) => {
-          setTimeout(resolve, 100);
-        });
+        inFlight += 1;
+        mostInFlight = Math.max(mostInFlight, inFlight);
+        await Bun.sleep(100);
+        inFlight -= 1;
         throw new Error("still going");
       }) as unknown as typeof fetch,
       log: { warn: () => {} },
     });
     try {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 260);
-      });
+      await until(() => asked.length >= 2, "a second pass after the first overran");
     } finally {
       loop.stop();
     }
 
-    expect(asked.length).toBeLessThanOrEqual(4);
+    expect(mostInFlight).toBe(1);
   });
 
   test("stopping ends the schedule", async () => {
@@ -294,12 +291,7 @@ describe("the loop", () => {
       intervalMs: 30,
       fetchImpl: modelsFetch(asked),
     });
-    const deadline = Date.now() + 2_000;
-    while (asked.length === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 5);
-      });
-    }
+    await until(() => asked.length > 0, "the first discovery pass");
     loop.stop();
 
     await writeFile(cachePath(cacheDir, "upstream"), "");

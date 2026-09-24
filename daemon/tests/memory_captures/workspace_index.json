@@ -3919,18 +3919,18 @@
   "index_path": [
     {
       "cache_dir": "/cache",
-      "character": "ren",
-      "out": "/cache/characters/ren/workspace_index.db"
+      "character": "eve",
+      "out": "/cache/characters/eve/workspace_index.db"
     },
     {
       "cache_dir": "/cache/",
-      "character": "ren",
-      "out": "/cache/characters/ren/workspace_index.db"
+      "character": "eve",
+      "out": "/cache/characters/eve/workspace_index.db"
     },
     {
       "cache_dir": "relative",
-      "character": "ren",
-      "out": "relative/characters/ren/workspace_index.db"
+      "character": "eve",
+      "out": "relative/characters/eve/workspace_index.db"
     },
     {
       "cache_dir": "/cache",

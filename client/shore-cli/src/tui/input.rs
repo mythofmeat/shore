@@ -1152,12 +1152,19 @@ const fn scope_of(global: bool) -> Scope {
     if global { Scope::Global } else { Scope::Normal }
 }
 
+fn save_keymap(app: &App) -> std::io::Result<()> {
+    match &app.settings_files {
+        Some(files) => app.keymap.save_to(&files.keymap),
+        None => Ok(()),
+    }
+}
+
 fn run_bind_command(app: &mut App, scope: Scope, key: &str, command: &str) -> Action {
     if let Err(problem) = app.keymap.bind(scope, key, command) {
         app.set_error(problem);
         return Action::Redraw;
     }
-    match app.keymap.save() {
+    match save_keymap(app) {
         Ok(()) => app.set_status(format!("{key} runs {command}")),
         Err(error) => app.set_error(format!("bound {key} for this session only: {error}")),
     }
@@ -1175,7 +1182,7 @@ fn run_unbind_command(app: &mut App, scope: Scope, key: &str) -> Action {
             return Action::Redraw;
         }
         Ok(Some(previous)) => {
-            if let Err(error) = app.keymap.save() {
+            if let Err(error) = save_keymap(app) {
                 app.set_error(format!("freed {key} for this session only: {error}"));
                 return Action::Redraw;
             }
@@ -2348,7 +2355,7 @@ mod tests {
     fn the_config_palette_offers_the_thread_beside_the_model_and_character() {
         let mut app = App {
             model: "anthropic:opus".into(),
-            character_name: "qifei".into(),
+            character_name: "heidi".into(),
             thread_name: "eval".into(),
             ..App::default()
         };

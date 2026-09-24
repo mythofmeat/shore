@@ -89,7 +89,7 @@ class FakeRegistry implements ThreadRegistry {
     options: ForkThreadOptions = {},
   ): Promise<ForkResult> {
     this.calls.push(`fork:${source}->${child}:${JSON.stringify(options)}`);
-    if (this.busy) return Promise.reject(new ForkBusy("qifei", source, "a compaction is running"));
+    if (this.busy) return Promise.reject(new ForkBusy("heidi", source, "a compaction is running"));
     if (!this.index.threads.some((t) => t.id === source)) {
       return Promise.reject(new ThreadError("not_found", `no thread "${source}"`));
     }
@@ -111,7 +111,7 @@ class FakeRegistry implements ThreadRegistry {
       fork: {
         version: 1,
         fork_id: forked.fork_id,
-        character: "qifei",
+        character: "heidi",
         child,
         source,
         created_at: NOW,
@@ -139,7 +139,7 @@ class FakeRegistry implements ThreadRegistry {
 }
 
 function ctx(registry: FakeRegistry, current = MAIN_THREAD): ThreadContext {
-  return { registry, character: "qifei", current };
+  return { registry, character: "heidi", current };
 }
 
 describe("what a listed thread says about itself", () => {
@@ -213,7 +213,7 @@ describe("listing threads", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD), record("scratch")]);
     const out = listThreads(ctx(registry, "scratch"));
 
-    expect(out.character).toBe("qifei");
+    expect(out.character).toBe("heidi");
     expect(out.home).toBe(MAIN_THREAD);
     expect(out.current).toBe("scratch");
     expect(out.threads.map((t) => [t.id, t.home, t.current])).toEqual([
@@ -246,7 +246,7 @@ describe("switching threads", () => {
   test("a switch to another thread reports the change", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD), record("scratch")]);
     expect(switchThread(ctx(registry), { name: "scratch" })).toEqual({
-      character: "qifei",
+      character: "heidi",
       thread: "scratch",
       changed: true,
     });
@@ -255,7 +255,7 @@ describe("switching threads", () => {
   test("switching to the thread already in use changes nothing", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD)]);
     expect(switchThread(ctx(registry), { name: MAIN_THREAD })).toEqual({
-      character: "qifei",
+      character: "heidi",
       thread: MAIN_THREAD,
       changed: false,
     });

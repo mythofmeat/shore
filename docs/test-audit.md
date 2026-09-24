@@ -156,8 +156,8 @@ what it is, and run it as its own CI step so its failures are legible.
 - **`keymap::the_live_config_file_loads_without_complaint`** reads the real
   `~/.config/shore/tui.toml`. That's a personal lint, not a test. **Make it a
   command** (e.g. `shore ui check-keymap`) **or delete it.**
-- **`daemon/tests/fixture_env.ts`** hardcodes `USER = "eshen"`. Use a neutral
-  test name so tests can't depend on who runs them.
+- **`daemon/tests/fixture_env.ts`** hardcoded the developer's own name as
+  `USER`. Use a neutral test name.
 
 ### 6. Daemon environment writes
 
@@ -182,18 +182,22 @@ values the code reads rather than setting the environment.
 - **No automatic retries.** Retrying (e.g. nextest `--retries`) would turn
   these jobs green by hiding the races this audit found.
 
-## Suggested order of work
+## Status
 
-| # | change | fixes | size |
-|---|---|---|---|
-| 1 | inject token and dirs; delete `test_env.rs`; parameterise the handshake deadline | finding 1; current CI failures | small |
-| 2 | hermetic `test.sh` client group | catches finding-1-style bugs locally | tiny |
-| 3 | colour/decoration/chunk state as render context | finding 2; current CI failures | medium, mechanical |
-| 4 | paused time and `assert_pending!` in `conn_manager`; debounce clock in hot reload | finding 3 | small |
-| 5 | recorded fixture for `tool_image_tests`; client job drops bun | finding 4 | small |
-| 6 | table-driven argv → wire test replacing ~94 `cli.rs` tests | finding 5 | medium |
-| 7 | previews to an example; drop the live-config test; neutral `USER` | finding 5 | small |
-| 8 | daemon env writes through `setTestEnv`, plus a lint rule | finding 6 | small |
-| 9 | shared wire fixtures (after #232) | `golden_json.rs` | medium |
+All findings are addressed on `chore/test-hygiene`, one commit per change.
 
-Items 1–3 are what stands between the client job and being required.
+| finding | what changed | notes |
+|---|---|---|
+| 1. ambient token, env and config | `TokenSource` passed into `connect`/`spawn_connection`; `ShoreDirs` resolves from an env lookup; both `test_env.rs` deleted; the TUI's keymap/prefs paths live on `App::settings_files`, set only by the real entry point; the clap test parser ignores `SHORE_CHARACTER`/`SHORE_THREAD`/`SHORE_ADDR` | The CLI table (below) surfaced the clap env fallback: `usage` was sending the developer's own character. |
+| CI: run like CI | `test.sh` runs `cargo test` and `bun test` with an empty `HOME`/`XDG_*` and every `SHORE_*` variable unset | |
+| 2. global colour flag | tests override colour and decoration through a thread-local that production builds do not have; `COLOR_TEST_LOCK` is gone; the one test that wrote `CHUNK_STATE` is removed | **Differs from the recommendation.** A render context would have changed nearly every function in `output/`. What was needed is that no test writes process-wide state, and a per-thread test override achieves that. 0 failures in 40 stress runs that previously failed 1 in 20. |
+| 3. wall-clock assertions | paused tokio time and `is_finished()` in Rust; injectable clocks for the config watcher and SWP pings; positive checks after a fixed sleep now wait for the condition (`tests/support/until.ts`); rejected reloads are observed through `config_warning` | Sleeps that only simulate a slow peer, or guard a negative assertion that cannot fail spuriously, stay. Real-socket lifecycle tests keep real time with a hang guard below the handshake deadline. |
+| 4. other runtimes | read-image frames are a recorded capture checked by a daemon test; the Rust test `include_str!`s it and the client job no longer installs bun; the PTY/socket harness is its own `test.sh` step (`cargo-end-to-end`) | |
+| 5. `cli.rs` parse/mapping tests | 74 tests became one argv → daemon-command table generated from the current code | Parse tests for locally handled commands stay. |
+| 5. `golden_json.rs` | the 28 canonical fixtures are TypeScript that `satisfies` the daemon's generated types, recorded to a capture Rust reads; client fixtures go through `WireReader` and `admitClientMessage` | Surfaced that the daemon writes `8.0` as `8`; the round trip compares numbers numerically. |
+| 5. previews | all 13 are `render_preview_*` with one ignore reason and reachable from `preview.sh` | **Differs from the recommendation.** `shore-cli` is binary-only, so an example cannot reach the crate-private renderers. |
+| 5. live-config test, `USER` | deleted; `USER` is a placeholder | |
+| 6. daemon env writes | all go through `setTestEnv`/`unsetTestEnv`; the preload restores after every test; `lint:test-env` forbids direct writes | |
+| personal data | test names replaced with same-length placeholders | `LICENSE-MIT`'s copyright line is unchanged. |
+
+Still to do outside the code: make the `client tests and clippy` check required in branch protection once this branch's CI is green.

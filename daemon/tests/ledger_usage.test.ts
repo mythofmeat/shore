@@ -238,13 +238,13 @@ test("no budgets means no warnings and no ledger open", () => {
 
 test("model history is scoped to one character", () => {
   const ledger = ledgerWith([
-    { character: "poppy", model: "claude-opus-4-6", ts: "2026-04-05T10:00:00+00:00" },
-    { character: "poppy", model: "claude-opus-4-6", ts: "2026-05-01T10:00:00+00:00" },
-    { character: "poppy", model: "glm-5.2", call_type: "heartbeat", ts: "2026-06-01T10:00:00+00:00" },
+    { character: "frank", model: "claude-opus-4-6", ts: "2026-04-05T10:00:00+00:00" },
+    { character: "frank", model: "claude-opus-4-6", ts: "2026-05-01T10:00:00+00:00" },
+    { character: "frank", model: "glm-5.2", call_type: "heartbeat", ts: "2026-06-01T10:00:00+00:00" },
     { character: "other", model: "gpt-5.5", ts: "2026-06-03T10:00:00+00:00" },
   ]);
 
-  const result = modelHistory({ ledger, character: "poppy" }) as {
+  const result = modelHistory({ ledger, character: "frank" }) as {
     models: Array<{ model: string; call_count: number; first_ts: string; last_ts: string }>;
   };
 
@@ -256,13 +256,13 @@ test("model history is scoped to one character", () => {
 
 test("model history honours the time bounds", () => {
   const ledger = ledgerWith([
-    { character: "poppy", ts: "2026-04-05T10:00:00+00:00" },
-    { character: "poppy", ts: "2026-05-01T10:00:00+00:00" },
+    { character: "frank", ts: "2026-04-05T10:00:00+00:00" },
+    { character: "frank", ts: "2026-05-01T10:00:00+00:00" },
   ]);
 
   const result = modelHistory({
     ledger,
-    character: "poppy",
+    character: "frank",
     since: "2026-04-20T00:00:00+00:00",
     until: "2026-05-01T20:00:00+00:00",
   }) as { models: Array<{ call_count: number }> };

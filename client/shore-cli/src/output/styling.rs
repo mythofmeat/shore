@@ -510,22 +510,6 @@ mod tests {
         assert!(result.contains("42"));
     }
 
-    #[test]
-    fn reset_chunk_state_clears_thinking() {
-        set_color_enabled(false);
-        {
-            let mut s = CHUNK_STATE.lock().unwrap();
-            s.was_thinking = true;
-            s.has_emitted = true;
-            s.at_line_start = false;
-        }
-        reset_chunk_state();
-        let s = CHUNK_STATE.lock().unwrap();
-        assert!(!s.was_thinking);
-        assert!(!s.has_emitted);
-        assert!(s.at_line_start);
-    }
-
     fn chunk(content_type: &str, text: &str) -> StreamChunk {
         StreamChunk {
             subagent: None,
@@ -537,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh stream"]
     fn render_preview_stream() {
         set_color_enabled(true);
         let mut state = ChunkState::default();

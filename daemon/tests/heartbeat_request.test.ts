@@ -1,5 +1,5 @@
 import { writeDurable } from "../src/storage/files.ts";
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,6 +19,11 @@ import type { Message } from "../src/engine/types.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import type { KeepalivePrefix } from "../src/cache/keepalive.ts";
 import { testTmp } from "./support/tmp.ts";
+
+beforeEach(() => {
+  setTestEnv(CHAT_ENV, "chat-secret");
+  setTestEnv(OVERRIDE_ENV, "slowthink-secret");
+});
 
 afterAll(restoreTestEnv);
 
@@ -98,8 +103,6 @@ function blockText(block: unknown): string {
 
 const ENV = { [CHAT_ENV]: "chat-secret", [OVERRIDE_ENV]: "slowthink-secret" };
 
-setTestEnv(CHAT_ENV, "chat-secret");
-setTestEnv(OVERRIDE_ENV, "slowthink-secret");
 
 describe("the heartbeat model override", () => {
   test("swaps the model and keeps the cacheable prefix intact", async () => {

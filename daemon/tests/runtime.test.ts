@@ -21,6 +21,7 @@ import { HistoryIndexService } from "../src/memory/history_index_service.ts";
 import type { McpClient } from "../src/mcp/client.ts";
 import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
 import { required } from "../src/util/required.ts";
+import { until } from "./support/until.ts";
 
 async function dirsUnder(prefix: string): Promise<{ root: string; config: LoadedConfig }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -309,11 +310,9 @@ describe("the clocks", () => {
       record();
       const clocks = startRuntimeClocks(runtime, { diagnosticRetentionMs: 5 });
       try {
-        await Bun.sleep(15);
-        expect(store.callCount()).toBe(0);
+        await until(() => store.callCount() === 0, "the startup sweep");
         record();
-        await Bun.sleep(15);
-        expect(store.callCount()).toBe(0);
+        await until(() => store.callCount() === 0, "a periodic sweep");
         clocks.stop();
         record();
         await Bun.sleep(15);
@@ -340,8 +339,7 @@ describe("the clocks", () => {
         await Bun.sleep(15);
         expect(store.callCount()).toBe(1);
         store.database.run("DROP TRIGGER fail_retention");
-        await Bun.sleep(15);
-        expect(store.callCount()).toBe(0);
+        await until(() => store.callCount() === 0, "a later sweep that succeeds");
       } finally {
         clocks.stop();
         await runtime.shutdown();

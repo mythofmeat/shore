@@ -8,6 +8,16 @@ use crate::protocol::server_msg::{Error as ServerError, History, ServerHello, Se
 use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
 use crate::swp_client::error::{ClientError, Result};
+use crate::token::TokenSource;
+
+const HANDSHAKE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn handshake_timed_out(_: tokio::time::error::Elapsed) -> ClientError {
+    ClientError::Timeout {
+        message: "connection handshake timed out".into(),
+        retry_after_ms: None,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub String);
@@ -50,8 +60,9 @@ impl SWPConnection {
         client_type: T,
         client_name: N,
         character: Option<String>,
+        token: &TokenSource,
     ) -> Result<(Self, ServerHello, History)> {
-        Self::connect_in_thread(addr, client_type, client_name, character, None).await
+        Self::connect_in_thread(addr, client_type, client_name, character, None, token).await
     }
 
     pub async fn connect_in_thread<T: Into<String>, N: Into<String>>(
@@ -60,8 +71,9 @@ impl SWPConnection {
         client_name: N,
         character: Option<String>,
         thread: Option<String>,
+        token: &TokenSource,
     ) -> Result<(Self, ServerHello, History)> {
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        tokio::time::timeout(HANDSHAKE_DEADLINE, async {
             let mut conn = Self::open(addr).await?;
             let (server_hello, history) = conn
                 .do_handshake(
@@ -69,16 +81,13 @@ impl SWPConnection {
                     client_name.into(),
                     character,
                     thread,
-                    Some(&addr.0),
+                    token.resolve(Some(&addr.0)),
                 )
                 .await?;
             Ok((conn, server_hello, history))
         })
         .await
-        .map_err(|_| ClientError::Timeout {
-            message: "connection handshake timed out".into(),
-            retry_after_ms: None,
-        })?
+        .map_err(handshake_timed_out)?
     }
 
     async fn do_handshake(
@@ -87,14 +96,11 @@ impl SWPConnection {
         client_name: String,
         character: Option<String>,
         thread: Option<String>,
-        addr: Option<&str>,
+        token_lookup: std::result::Result<String, crate::token::TokenError>,
     ) -> Result<(ServerHello, History)> {
         debug!(client_type = %client_type, client_name = %client_name, character = ?character, thread = ?thread, "starting SWP handshake");
 
-        let token = crate::token::resolve_client_token(
-            addr.and_then(crate::swp_client::discovery::config_dir_for_addr),
-        )
-        .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
+        let token = token_lookup.map_err(|e| ClientError::Unauthorized(e.to_string()))?;
 
         let server_hello = self.recv_server_hello().await?;
 
@@ -396,20 +402,24 @@ impl SWPConnection {
         client_type: T,
         client_name: N,
         character: Option<String>,
+        token: &TokenSource,
     ) -> Result<(Self, ServerHello, History)>
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
         let mut conn = Self::from_raw_stream(stream);
-        let (server_hello, history) = conn
-            .do_handshake(
+        let (server_hello, history) = tokio::time::timeout(
+            HANDSHAKE_DEADLINE,
+            conn.do_handshake(
                 client_type.into(),
                 client_name.into(),
                 character,
                 None,
-                None,
-            )
-            .await?;
+                token.resolve(None),
+            ),
+        )
+        .await
+        .map_err(handshake_timed_out)??;
         Ok((conn, server_hello, history))
     }
 }
@@ -615,22 +625,23 @@ mod tests {
 
 #[cfg(test)]
 mod deadline_tests {
-    use super::{ClientError, SWPConnection, ServerAddr};
+    use super::{ClientError, SWPConnection};
+    use crate::token::TokenSource;
 
-    #[tokio::test]
-    async fn an_open_socket_without_a_hello_reaches_the_handshake_deadline() {
-        crate::test_env::set_env(crate::token::TOKEN_ENV, "test-token");
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = ServerAddr(listener.local_addr().unwrap().to_string());
-        let attempt =
-            tokio::spawn(
-                async move { SWPConnection::connect(&address, "test", "test", None).await },
-            );
-        let (_socket, _) = listener.accept().await.unwrap();
-        let result = tokio::time::timeout(std::time::Duration::from_secs(12), attempt)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(matches!(result, Err(ClientError::Timeout { .. })));
+    #[tokio::test(start_paused = true)]
+    async fn a_peer_that_never_sends_hello_reaches_the_handshake_deadline() {
+        let (client, _server) = tokio::io::duplex(64);
+        let result = SWPConnection::connect_raw(
+            client,
+            "test",
+            "test",
+            None,
+            &TokenSource::Given("test-token".into()),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ClientError::Timeout { .. })),
+            "a silent peer must end in the handshake deadline, not a hang"
+        );
     }
 }

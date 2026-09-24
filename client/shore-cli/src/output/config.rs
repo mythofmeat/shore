@@ -436,7 +436,7 @@ mod tests {
                         "prompt": "You are {{char}}.\nline two\nline three\nline four"
                     }
                 },
-                "defaults": {"display_name": "ren"}
+                "defaults": {"display_name": "eve"}
             },
             "defaults": {}
         })
@@ -679,7 +679,7 @@ mod tests {
             "set": "cache.keepalive_max",
             "value": "6h",
             "previous": "12h",
-            "file": "/home/ren/.config/shore/config.toml",
+            "file": "/home/eve/.config/shore/config.toml",
             "action": "replaced",
             "restart_required": [],
             "masked_by_preference": null
@@ -825,7 +825,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh config-set"]
     fn render_preview_config_set() {
         set_color_enabled(true);
         let mut buf = Vec::new();

@@ -5,6 +5,3 @@ pub mod image_protocol;
 pub mod protocol;
 pub mod swp_client;
 pub mod token;
-
-#[cfg(test)]
-mod test_env;

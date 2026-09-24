@@ -57,6 +57,28 @@ run() {
     fi
 }
 
+# Tests run with an empty home and none of the developer's shore settings, as they do in CI.
+hermetic() {
+    home=$(mktemp -d)
+    shore_vars=$(env | sed -n 's/^\(SHORE_[A-Za-z0-9_]*\)=.*/-u \1/p')
+    if env $shore_vars \
+        RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" \
+        CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" \
+        BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-$HOME/.bun/install/cache}" \
+        HOME="$home" \
+        XDG_CONFIG_HOME="$home/config" \
+        XDG_DATA_HOME="$home/data" \
+        XDG_CACHE_HOME="$home/cache" \
+        XDG_RUNTIME_DIR="$home/run" \
+        "$@"; then
+        status=0
+    else
+        status=$?
+    fi
+    rm -rf "$home"
+    return "$status"
+}
+
 for group in "$@"; do
     case "$group" in
     lint)
@@ -64,18 +86,20 @@ for group in "$@"; do
         run bun-lint bun run lint
         run bun-lint-comments bun run lint:comments
         run bun-lint-citations bun run lint:citations
+        run bun-lint-test-env bun run lint:test-env
         run bun-typecheck bun run typecheck
         ;;
     daemon)
         cd "$root/daemon"
         run bun-build bun run build
-        run bun-test bun test
+        run bun-test hermetic bun test
         run bun-mutate-stale bun run mutate --stale
         run bun-rerecord-check bun run rerecord:check
         ;;
     client)
         cd "$root/client"
-        run cargo-test cargo test --workspace --locked
+        run cargo-test hermetic cargo test --workspace --locked -- --skip cli_and_terminal_reliability_flows
+        run cargo-end-to-end hermetic cargo test -p shore-cli --test reliability --locked
         run cargo-fmt cargo fmt --all --check
         run cargo-clippy cargo clippy --workspace --all-targets --locked
         ;;

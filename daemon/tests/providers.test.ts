@@ -1,7 +1,7 @@
 import { expandShared } from "./support/shared_subtrees.ts";
 import { required } from "../src/util/required.ts";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -28,6 +28,7 @@ import {
 } from "../src/llm/nanogpt_subscription.ts";
 import { ZAI_SUB_BASE_URL } from "../src/llm/providers/zai_config.ts";
 import { testTmp } from "./support/tmp.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 interface WireError {
   code: string;
@@ -211,20 +212,10 @@ async function check(row: Row, world: World, run: () => unknown): Promise<void> 
   for (const stamp of stamps) expect(stamp, `${row.name} — timestamp shape`).toMatch(UTC_RE);
 }
 
-const saved: Record<string, string | undefined> = {};
-
-beforeAll(() => {
+beforeEach(() => {
   for (const [name, value] of Object.entries(env)) {
-    saved[name] = process.env[name];
-    if (value === null) delete process.env[name];
-    else process.env[name] = value;
-  }
-});
-
-afterAll(() => {
-  for (const [name, value] of Object.entries(saved)) {
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
+    if (value === null) unsetTestEnv(name);
+    else setTestEnv(name, value);
   }
 });
 

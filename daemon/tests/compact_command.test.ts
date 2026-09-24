@@ -33,6 +33,7 @@ import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 import { DEFAULT_COMPACT_PROMPT } from "../src/memory/compaction/prompts.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 const SEEDED = [
   ["m_1", "user", "first question"],
@@ -327,8 +328,7 @@ describe("compaction model selection and claim ownership", () => {
     await saveCompactionCheckpoint(w.config.dirs.data, checkpoint, "main");
 
     const keyName = "SHORE_TEST_COMPACTION_MODEL_SWITCH_KEY";
-    const previousKey = process.env[keyName];
-    process.env[keyName] = "test-key";
+    setTestEnv(keyName, "test-key");
     try {
       w.config.providers = ProviderRegistry.fromSection({
         claude_agent: { sdk: "claude_agent" },
@@ -352,8 +352,7 @@ describe("compaction model selection and claim ownership", () => {
       expect(w.engine.turnCount()).toBe(0);
       expect(await loadCompactionCheckpoint(w.config.dirs.data, "ada", "main")).toBeUndefined();
     } finally {
-      if (previousKey === undefined) delete process.env[keyName];
-      else process.env[keyName] = previousKey;
+      restoreTestEnv();
     }
   });
 
@@ -674,14 +673,14 @@ describe("write_memory = false", () => {
       return seen?.replay_prior_thinking;
     }
 
-    process.env["SHORE_COMPACT_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_COMPACT_TEST_KEY", "sk-test");
     try {
       expect(await replayOf({})).toBe("all");
       expect(await replayOf({ main: "chat.quiet" })).toBe("none");
       expect(await replayOf({ scratch: "chat.quiet" }, "scratch")).toBe("none");
       expect(await replayOf({ main: "chat.quiet" }, "scratch")).toBe("all");
     } finally {
-      delete process.env["SHORE_COMPACT_TEST_KEY"];
+      unsetTestEnv("SHORE_COMPACT_TEST_KEY");
     }
   });
 

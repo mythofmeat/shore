@@ -56,7 +56,7 @@
     "s4": [
       {
         "label": "system",
-        "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+        "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
       },
       {
         "label": "tools_guidance",
@@ -64,12 +64,12 @@
       },
       {
         "label": "character",
-        "text": "I am qifei.\n"
+        "text": "I am heidi.\n"
       }
     ],
     "s5": [
       {
-        "content": "I am qifei.\n",
+        "content": "I am heidi.\n",
         "name": "SOUL.md"
       },
       {
@@ -1577,7 +1577,7 @@
       "name": "no tools no files",
       "note": "nothing enabled and no prompt files: tool_defs is None and the system prompt is whatever assemble_prompt makes of nothing",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [],
         "canonical_files": [],
@@ -1622,7 +1622,7 @@
       "system": [
         {
           "label": "system",
-          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+          "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
           "label": "tools_guidance",
@@ -1656,12 +1656,12 @@
       "name": "all four prompt files load from the active snapshot",
       "note": "SOUL, USER, AGENTS and TOOLS each land in their own labelled block",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           },
           {
             "name": "USER.md",
@@ -1729,7 +1729,7 @@
           "label": "tools_guidance"
         },
         {
-          "text": "I am qifei.\n",
+          "text": "I am heidi.\n",
           "label": "character"
         },
         {
@@ -1768,7 +1768,7 @@
         },
         {
           "name": "SOUL.md",
-          "content": "I am qifei.\n"
+          "content": "I am heidi.\n"
         },
         {
           "name": "TOOLS.md",
@@ -1784,7 +1784,7 @@
       "name": "canonical files are snapshotted into active when it is empty",
       "note": "ensure_active_prompt_snapshot runs first, so a fresh character still gets its prompt",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [],
         "canonical_files": [
@@ -1838,7 +1838,7 @@
       "system": [
         {
           "label": "system",
-          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+          "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
           "label": "tools_guidance",
@@ -1887,12 +1887,12 @@
       "name": "enabled tools produce the assembled surface",
       "note": "render_tool_defs then subagent defs then mcp, in assemble_tool_surface's order",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2000,12 +2000,12 @@
       "name": "subagents and mcp join the surface",
       "note": "the three sources in one surface, with templating applied to the subagent",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2106,12 +2106,12 @@
       "name": "mcp defs alone make tools available",
       "note": "any_enabled is false but the surface is not empty, so tool_defs is Some",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2191,12 +2191,12 @@
       "name": "a non-anthropic sdk with tools still uses the text standin",
       "note": "for_request keys on the sdk, and it reaches build_llm_messages from here",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2269,7 +2269,7 @@
       "name": "a blocked active_prompt is warned about, not fatal",
       "note": "`active_prompt` is a regular file, so the snapshot step fails. Every prompt file then falls through to its canonical copy — the one path where that fallback is reachable",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [],
         "canonical_files": [
@@ -2323,7 +2323,7 @@
       "system": [
         {
           "label": "system",
-          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+          "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
           "label": "tools_guidance",
@@ -2359,12 +2359,12 @@
       "name": "an assistant image with tools off takes the stand-in",
       "note": "anthropic, so the sdk alone would say tool_pair — the absent tool surface is what makes it text, and this is the only case where the mode chosen here is observable at all",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2422,12 +2422,12 @@
       "name": "the same image with tools on takes the tool pair",
       "note": "the other side of the fork, so neither answer can be the constant one",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2516,12 +2516,12 @@
       "name": "prior context earns the first user turn a time marker",
       "note": "auto mode is the only mode has_prior_context reaches; under never it is invisible, which is what every case above it was",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2590,12 +2590,12 @@
       "name": "without prior context the same turn gets no marker",
       "note": "the control for the case above",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
             "name": "SOUL.md",
-            "content": "I am qifei.\n"
+            "content": "I am heidi.\n"
           }
         ],
         "canonical_files": [],
@@ -2664,7 +2664,7 @@
       "name": "an empty conversation carries no snapshot",
       "note": "the snapshot belongs to the conversation: with nothing in it the stale snapshot is dropped and every prompt file is read from canonical, so the next first message starts clean",
       "input": {
-        "character": "qifei",
+        "character": "heidi",
         "display_name": "Ash",
         "active_files": [
           {
@@ -2699,7 +2699,7 @@
       "system": [
         {
           "label": "system",
-          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+          "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
           "label": "tools_guidance",

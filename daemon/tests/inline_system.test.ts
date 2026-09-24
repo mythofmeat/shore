@@ -61,14 +61,14 @@ describe("the fold is scoped to models that translate to Anthropic", () => {
       sdk: "nanogpt",
       api_key: "k",
       max_tokens: 16,
-      system: [{ label: "prompt", text: "you are qifei" }],
+      system: [{ label: "prompt", text: "you are heidi" }],
       messages: conversation,
     }) as unknown as SidecarRequest;
 
   test("an Anthropic model behind nano-gpt gets guidance on the user turn", () => {
     const msgs = buildOpenAIMessages(openAiRequest("anthropic/claude-opus-4.6"));
     expect(msgs.filter((m) => m.role === "system")).toHaveLength(1);
-    expect(msgs[0]?.content).toBe("you are qifei");
+    expect(msgs[0]?.content).toBe("you are heidi");
     expect(msgs.at(-1)?.role).toBe("user");
     expect(JSON.stringify(msgs.at(-1))).toContain("guidance: be terse");
   });

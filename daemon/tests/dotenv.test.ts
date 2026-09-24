@@ -236,7 +236,7 @@ describe("loadRawConfigTable", () => {
 
   test("the config table still loads with a `.env` present", () => {
     const root = tempDir();
-    writeFileSync(join(root, "config.toml"), "[chat]\ndisplay_name = \"ren\"\n");
+    writeFileSync(join(root, "config.toml"), "[chat]\ndisplay_name = \"eve\"\n");
     writeFileSync(join(root, ".env"), "A=1\n");
 
     const raw = loadRawConfigTable(join(root, "config.toml"), {
@@ -244,6 +244,6 @@ describe("loadRawConfigTable", () => {
       envTarget: {},
       onWarn: () => {},
     });
-    expect(raw.table).toEqual({ defaults: { display_name: "ren" } });
+    expect(raw.table).toEqual({ defaults: { display_name: "eve" } });
   });
 });

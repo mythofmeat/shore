@@ -345,7 +345,7 @@ test("a character whose engine will not open is an internal error", async () => 
 });
 
 test("switch_character establishes an ambiguous unpinned session", async () => {
-  const h = await harness(["Yuna", "poppy"]);
+  const h = await harness(["Yuna", "frank"]);
   const selected: Array<[number, string | null]> = [];
   const sent: unknown[] = [];
   h.deps.router = {
@@ -359,7 +359,7 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
     },
   } as never;
   h.deps.handshake = {
-    hello: async () => ({ characters: [{ name: "Yuna" }, { name: "poppy" }] }),
+    hello: async () => ({ characters: [{ name: "Yuna" }, { name: "frank" }] }),
     history: async (character: string | null) => ({
       messages: [],
       activeStart: 0,
@@ -372,15 +372,15 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
 
   const frame = await dispatchCommand(
     h.deps,
-    { rid: null, name: "switch_character", args: { name: "poppy" } },
+    { rid: null, name: "switch_character", args: { name: "frank" } },
     meta(null, "r-switch"),
   );
 
   expect(frame.type).toBe("command_output");
   if (frame.type === "command_output") expect(frame.rid).toBe("r-switch");
-  expect(selected).toEqual([[1, "poppy"]]);
+  expect(selected).toEqual([[1, "frank"]]);
   expect(sent).toHaveLength(1);
-  expect(sent[0]).toMatchObject({ type: "history", selected_character: "poppy" });
+  expect(sent[0]).toMatchObject({ type: "history", selected_character: "frank" });
 });
 
 test("the character path is given the character's effective config", async () => {

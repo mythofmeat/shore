@@ -76,8 +76,24 @@ export interface ConnectionContext {
   readonly route: (msg: RoutedMessage) => Promise<void>;
   readonly shutdown: Promise<void>;
   readonly pingIntervalMs?: number;
+  readonly pingClock?: PingClock;
   readonly log?: Logger;
 }
+
+export interface PingClock {
+  readonly now: () => number;
+  readonly sleepUntil: (deadline: number) => Promise<void>;
+}
+
+const REAL_PING_CLOCK: PingClock = {
+  now: () => Date.now(),
+  sleepUntil: (deadline) => {
+    const delay = Math.max(0, deadline - Date.now());
+    return new Promise((resolve) => {
+      setTimeout(resolve, delay);
+    });
+  },
+};
 
 export interface Logger {
   info?(msg: string, fields?: Record<string, unknown>): void;
@@ -243,7 +259,8 @@ export async function messageLoop(
   ctx: ConnectionContext,
 ): Promise<void> {
   const period = ctx.pingIntervalMs ?? PING_INTERVAL_MS;
-  const started = Date.now();
+  const clock = ctx.pingClock ?? REAL_PING_CLOCK;
+  const started = clock.now();
   let tick = 1;
   let consecutiveLags = 0;
 
@@ -258,7 +275,9 @@ export async function messageLoop(
       (error: unknown) => ({ src: "client_error", error }) as const,
     );
     pendingEvent ??= ctx.events.recv().then((value) => ({ src: "event", value }) as const);
-    pendingPing ??= sleepUntil(nextTick(started, period, tick)).then(() => ({ src: "ping" }) as const);
+    pendingPing ??= clock
+      .sleepUntil(nextTick(started, period, tick))
+      .then(() => ({ src: "ping" }) as const);
 
     const wake = await Promise.race([pendingClient, pendingEvent, pendingPing, pendingShutdown]);
 
@@ -299,7 +318,7 @@ export async function messageLoop(
 
       case "ping": {
         pendingPing = null;
-        tick = ticksElapsed(started, period) + 1;
+        tick = ticksElapsed(clock.now(), started, period) + 1;
         await writeMessage(sink, { type: "ping" });
         break;
       }
@@ -346,17 +365,11 @@ export async function messageLoop(
   }
 }
 
-function ticksElapsed(started: number, period: number): number {
-  return Math.floor((Date.now() - started) / period);
+function ticksElapsed(now: number, started: number, period: number): number {
+  return Math.floor((now - started) / period);
 }
 
 function nextTick(started: number, period: number, tick: number): number {
   return started + tick * period;
 }
 
-function sleepUntil(deadline: number): Promise<void> {
-  const delay = Math.max(0, deadline - Date.now());
-  return new Promise((resolve) => {
-    setTimeout(resolve, delay);
-  });
-}

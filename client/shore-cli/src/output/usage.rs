@@ -520,7 +520,7 @@ mod tests {
                  "total_input": 279_600, "total_output": 12400, "total_cache_read": 425_000,
                  "total_cache_write": 0, "total_cost": 0.0}
             ],
-            "cache_health": [{"character": "qifei", "state": "cold", "streak": 3}],
+            "cache_health": [{"character": "heidi", "state": "cold", "streak": 3}],
             "anomaly_count_7d": 6,
             "budgets": [{
                 "name": "brainwife", "period": "week", "current_cost": 5.16, "cost_limit": 15.0,
@@ -593,7 +593,7 @@ mod tests {
     #[test]
     fn the_summary_reports_a_cold_cache_and_pending_anomalies() {
         let out = render(|buf| write_summary(buf, &summary_payload()));
-        assert!(out.contains("qifei cold"), "{out}");
+        assert!(out.contains("heidi cold"), "{out}");
         assert!(out.contains("6 in the last 7d"), "{out}");
     }
 
@@ -685,7 +685,7 @@ mod tests {
         let payload = json!({
             "mode": "anomalies",
             "period": "today",
-            "anomalies": [{"ts": "2026-08-13T01:43:00+00:00", "character": "qifei",
+            "anomalies": [{"ts": "2026-08-13T01:43:00+00:00", "character": "heidi",
                            "model": "claude-opus-4-6", "call_type": "message",
                            "anomaly": "unexpected_write", "cache_read_tokens": 0,
                            "cache_write_tokens": 18200}]

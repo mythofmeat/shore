@@ -90,9 +90,35 @@ static COLOR_STDERR: AtomicBool = AtomicBool::new(true);
 static DECORATE_STDOUT: AtomicBool = AtomicBool::new(true);
 
 #[cfg(test)]
+thread_local! {
+    static COLOR_FOR_THIS_TEST_THREAD: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    static DECORATION_FOR_THIS_TEST_THREAD: std::cell::Cell<Option<bool>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
 pub(crate) fn set_color_enabled(enabled: bool) {
-    COLOR_STDOUT.store(enabled, Ordering::Relaxed);
-    COLOR_STDERR.store(enabled, Ordering::Relaxed);
+    COLOR_FOR_THIS_TEST_THREAD.with(|forced| forced.set(Some(enabled)));
+}
+
+#[cfg(test)]
+fn color_override() -> Option<bool> {
+    COLOR_FOR_THIS_TEST_THREAD.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+const fn color_override() -> Option<bool> {
+    None
+}
+
+#[cfg(test)]
+fn decoration_override() -> Option<bool> {
+    DECORATION_FOR_THIS_TEST_THREAD.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+const fn decoration_override() -> Option<bool> {
+    None
 }
 
 pub(crate) fn detect_color() {
@@ -118,24 +144,21 @@ fn color_for_stream(vetoed: bool, forced: bool, is_terminal: bool) -> bool {
     !vetoed && (forced || is_terminal)
 }
 
-#[cfg(test)]
-pub(crate) static COLOR_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 pub(crate) fn use_color() -> bool {
-    COLOR_STDOUT.load(Ordering::Relaxed)
+    color_override().unwrap_or_else(|| COLOR_STDOUT.load(Ordering::Relaxed))
 }
 
 pub(crate) fn use_color_on_stderr() -> bool {
-    COLOR_STDERR.load(Ordering::Relaxed)
+    color_override().unwrap_or_else(|| COLOR_STDERR.load(Ordering::Relaxed))
 }
 
 pub(crate) fn use_decoration() -> bool {
-    DECORATE_STDOUT.load(Ordering::Relaxed)
+    decoration_override().unwrap_or_else(|| DECORATE_STDOUT.load(Ordering::Relaxed))
 }
 
 #[cfg(test)]
 pub(crate) fn set_decoration_enabled(enabled: bool) {
-    DECORATE_STDOUT.store(enabled, Ordering::Relaxed);
+    DECORATION_FOR_THIS_TEST_THREAD.with(|forced| forced.set(Some(enabled)));
 }
 
 pub(crate) fn write_stdout_line(args: fmt::Arguments<'_>) {

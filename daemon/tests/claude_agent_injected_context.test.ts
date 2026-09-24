@@ -50,8 +50,8 @@ test("each turn carries one identity for its model, and same-model turns keep th
   };
   const base = {
     sdk: "claude_agent" as const, api_key: "", base_url: mock.url,
-    system: [{ label: "soul", text: "# YOU ARE QIFEI\nYou are a companion, not a coding agent." }],
-    context: { character: "qifei", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
+    system: [{ label: "soul", text: "# YOU ARE HEIDI\nYou are a companion, not a coding agent." }],
+    context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
     max_tokens: 1024, replay_prior_thinking: "all" as const,
   };
   const say = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }] });
@@ -74,7 +74,7 @@ test("each turn carries one identity for its model, and same-model turns keep th
     expect(identities).toEqual(models.map(model => [model === "opus" ? alias : model]));
     expect(keepsCachedPrefix(required(mock.requests[0]), required(mock.requests[1]))).toBe(true);
     expect(keepsCachedPrefix(required(mock.requests[2]), required(mock.requests[3]))).toBe(true);
-    expect(JSON.stringify(required(mock.requests[1]).body.system)).toContain("YOU ARE QIFEI");
+    expect(JSON.stringify(required(mock.requests[1]).body.system)).toContain("YOU ARE HEIDI");
   } finally {
     await mock.stop();
     await rm(dir, { recursive: true, force: true });

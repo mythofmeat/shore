@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 import {
   ensureWorkspaceGitRepo,
@@ -124,14 +125,11 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     const workspace = join(tempDir(), "workspace");
     await ensureWorkspaceGitRepo(workspace);
     writeFileSync(join(workspace, "MEMORY.md"), "# memory\n\n- likes tea\n");
-
-    const restore = process.env["GIT_DIR"];
-    process.env["GIT_DIR"] = join(surrounding, ".git");
+    setTestEnv("GIT_DIR", join(surrounding, ".git"));
     try {
       expect(await gitCommitAll(workspace, "Ada", "memory: compaction")).toBe(true);
     } finally {
-      if (restore === undefined) delete process.env["GIT_DIR"];
-      else process.env["GIT_DIR"] = restore;
+      restoreTestEnv();
     }
 
     expect(await gitRevParse(surrounding, "HEAD")).toBe(before);

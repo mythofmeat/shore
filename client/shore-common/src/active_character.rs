@@ -153,6 +153,6 @@ mod tests {
                 "{name:?} must not name a state file",
             );
         }
-        assert!(thread_state_path("qifei").is_some());
+        assert!(thread_state_path("heidi").is_some());
     }
 }

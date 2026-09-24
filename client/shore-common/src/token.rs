@@ -23,6 +23,24 @@ impl std::fmt::Display for TokenError {
 
 impl std::error::Error for TokenError {}
 
+#[derive(Debug, Clone, Default)]
+pub enum TokenSource {
+    #[default]
+    Discover,
+    Given(String),
+}
+
+impl TokenSource {
+    pub(crate) fn resolve(&self, addr: Option<&str>) -> Result<String, TokenError> {
+        match self {
+            Self::Given(token) => Ok(token.clone()),
+            Self::Discover => resolve_client_token(
+                addr.and_then(crate::swp_client::discovery::config_dir_for_addr),
+            ),
+        }
+    }
+}
+
 pub(crate) fn resolve_client_token(
     daemon_config_dir: Option<PathBuf>,
 ) -> Result<String, TokenError> {

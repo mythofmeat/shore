@@ -867,7 +867,7 @@ mod tests {
     fn an_overview() -> Value {
         json!({
             "overview": true,
-            "character": "qifei",
+            "character": "heidi",
             "inherited_count": 2,
             "roles": [
                 {
@@ -1068,11 +1068,11 @@ mod tests {
 
     #[test]
     fn characters_are_marked_the_same_way_models_are() {
-        let data = json!({"characters": ["Yuna", "qifei"]});
-        let out = render(|b| write_character_list(b, &data, Some("qifei")));
+        let data = json!({"characters": ["Yuna", "heidi"]});
+        let out = render(|b| write_character_list(b, &data, Some("heidi")));
         let row = out
             .lines()
-            .find(|l| l.contains("qifei"))
+            .find(|l| l.contains("heidi"))
             .unwrap_or_default();
         assert!(row.trim_start().starts_with('*'), "{row:?}");
         assert!(!row.contains("(active)"), "{row:?}");
@@ -1080,7 +1080,7 @@ mod tests {
 
     fn threads() -> Value {
         json!({
-            "character": "qifei",
+            "character": "heidi",
             "home": "main",
             "current": "eval",
             "threads": [
@@ -1097,7 +1097,7 @@ mod tests {
     fn the_thread_list_names_the_character_it_belongs_to() {
         let out = render(|b| write_thread_list(b, &threads()));
         assert!(out.contains("threads"), "{out}");
-        assert!(out.contains("qifei"), "{out}");
+        assert!(out.contains("heidi"), "{out}");
     }
 
     #[test]
@@ -1134,7 +1134,7 @@ mod tests {
         let out = render(|b| {
             write_thread_list(
                 b,
-                &json!({"character": "qifei", "threads": [
+                &json!({"character": "heidi", "threads": [
                     {"id": "main", "compaction": true, "home": true, "turns": 0}
                 ]}),
             );
@@ -1148,7 +1148,7 @@ mod tests {
         let out = render(|b| {
             write_thread_list(
                 b,
-                &json!({"character": "qifei", "threads": [
+                &json!({"character": "heidi", "threads": [
                     {"id": "main", "compaction": true, "home": true}
                 ]}),
             );
@@ -1172,7 +1172,7 @@ mod tests {
         let out = render(|b| {
             write_thread_list(
                 b,
-                &json!({"character": "qifei", "threads": [
+                &json!({"character": "heidi", "threads": [
                     {"id": "main", "compaction": true, "home": true, "turns": 3}
                 ]}),
             );
@@ -1188,7 +1188,7 @@ mod tests {
 
     #[test]
     fn no_threads_says_so_rather_than_printing_a_bare_header() {
-        let out = render(|b| write_thread_list(b, &json!({"character": "qifei", "threads": []})));
+        let out = render(|b| write_thread_list(b, &json!({"character": "heidi", "threads": []})));
         assert!(out.contains("(no threads)"), "{out}");
     }
 

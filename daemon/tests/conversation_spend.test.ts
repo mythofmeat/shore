@@ -112,11 +112,11 @@ describe("conversation spend", () => {
   test("one character's spend is not another's", async () => {
     const path = ledgerWith([
       { ...ROW, ts: "2026-04-05T10:00:00.000Z", character: "aria" },
-      { ...ROW, ts: "2026-04-05T10:30:00.000Z", character: "qifei", input_tokens: 7000 },
+      { ...ROW, ts: "2026-04-05T10:30:00.000Z", character: "heidi", input_tokens: 7000 },
     ]);
 
     expect(conversationTokens(path, "aria", "2026-04-05T00:00:00.000Z").input).toBe(100);
-    expect(conversationTokens(path, "qifei", "2026-04-05T00:00:00.000Z").input).toBe(7000);
+    expect(conversationTokens(path, "heidi", "2026-04-05T00:00:00.000Z").input).toBe(7000);
   });
 
   test("an empty conversation has spent nothing yet", async () => {

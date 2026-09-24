@@ -410,20 +410,21 @@ fn persist_active_character(name: &str) {
     }
 }
 
-fn prefs_path() -> PathBuf {
-    shore_common::dirs::data_dir().join("tui_prefs.json")
-}
-
 fn load_keymap(app: &mut App) {
-    app.keymap = keymap::Keymap::load();
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    app.keymap = keymap::Keymap::load_from(&files.keymap);
     for warning in app.keymap.warnings.clone() {
         app.set_error(warning);
     }
 }
 
 fn load_prefs(app: &mut App) {
-    let path = prefs_path();
-    let prefs_data = std::fs::read_to_string(&path).ok();
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    let prefs_data = std::fs::read_to_string(&files.prefs).ok();
     if let Some(data) = prefs_data
         && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&data)
     {
@@ -502,7 +503,10 @@ fn save_prefs(app: &App) {
         "usage_display": app.usage_display.as_str(),
         "budget_focus": app.budget_focus.as_token(),
     });
-    if let Err(e) = write_prefs_file(&prefs_path(), &v.to_string()) {
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    if let Err(e) = write_prefs_file(&files.prefs, &v.to_string()) {
         warn!("failed to persist prefs: {e}");
     }
 }
@@ -1298,6 +1302,7 @@ async fn run_tui(
         app.image_cache.probe_protocol();
     }
     if !fixture_mode {
+        app.settings_files = Some(app::SettingsFiles::resolve());
         load_prefs(&mut app);
         load_keymap(&mut app);
         let root = draft::drafts_dir();
@@ -3609,17 +3614,17 @@ mod redraw_tests {
                 ServerMessage::CommandOutput(CommandOutput {
                     rid: None,
                     name: "switch_character".into(),
-                    data: serde_json::json!({ "character": "poppy", "active_model": null }),
+                    data: serde_json::json!({ "character": "frank", "active_model": null }),
                 }),
             );
 
-            assert_eq!(app.character_name, "poppy");
+            assert_eq!(app.character_name, "frank");
             assert_eq!(
                 shore_common::active_character::read_active_character().as_deref(),
-                Some("poppy"),
+                Some("frank"),
                 "the switch has to reach the file the next client reads",
             );
-            assert_eq!(resolve_character(None).as_deref(), Some("poppy"));
+            assert_eq!(resolve_character(None).as_deref(), Some("frank"));
 
             assert_eq!(
                 resolve_character(Some("Yuna".into())).as_deref(),
@@ -3627,14 +3632,14 @@ mod redraw_tests {
             );
             assert_eq!(
                 shore_common::active_character::read_active_character().as_deref(),
-                Some("poppy"),
+                Some("frank"),
             );
         });
     }
 
     fn thread_listing() -> serde_json::Value {
         serde_json::json!({
-            "character": "qifei",
+            "character": "heidi",
             "home": "main",
             "current": "eval",
             "threads": [
@@ -3720,7 +3725,7 @@ mod redraw_tests {
             "switching_threads_is_persisted_and_refetches_the_roster",
             || {
                 let mut app = App {
-                    character_name: "qifei".into(),
+                    character_name: "heidi".into(),
                     thread_name: "main".into(),
                     persist_session: true,
                     ..App::default()
@@ -3732,7 +3737,7 @@ mod redraw_tests {
                         rid: None,
                         name: "switch_thread".into(),
                         data: serde_json::json!({
-                            "character": "qifei",
+                            "character": "heidi",
                             "thread": "eval",
                             "changed": true,
                         }),
@@ -3741,7 +3746,7 @@ mod redraw_tests {
 
                 assert_eq!(app.thread_name, "eval");
                 assert_eq!(
-                    shore_common::active_character::read_active_thread("qifei").as_deref(),
+                    shore_common::active_character::read_active_thread("heidi").as_deref(),
                     Some("eval"),
                     "the switch has to reach the file the next client reads",
                 );
@@ -3754,7 +3759,7 @@ mod redraw_tests {
     fn a_switch_that_changed_nothing_asks_for_nothing() {
         {
             let mut app = App {
-                character_name: "qifei".into(),
+                character_name: "heidi".into(),
                 thread_name: "eval".into(),
                 ..App::default()
             };
@@ -3765,7 +3770,7 @@ mod redraw_tests {
                     rid: None,
                     name: "switch_thread".into(),
                     data: serde_json::json!({
-                        "character": "qifei",
+                        "character": "heidi",
                         "thread": "eval",
                         "changed": false,
                     }),
@@ -3792,7 +3797,7 @@ mod redraw_tests {
                 messages: vec![],
                 active_start: 0,
                 config: serde_json::json!({}),
-                selected_character: Some("qifei".into()),
+                selected_character: Some("heidi".into()),
                 selected_thread: Some("eval".into()),
                 revision: 1,
             }),
@@ -3816,7 +3821,7 @@ mod redraw_tests {
                 messages: vec![],
                 active_start: 0,
                 config: serde_json::json!({}),
-                selected_character: Some("qifei".into()),
+                selected_character: Some("heidi".into()),
                 selected_thread: None,
                 revision: 1,
             }),
@@ -4976,7 +4981,7 @@ mod redraw_tests {
                 name: "list_characters".into(),
                 data: serde_json::json!({
                     "characters": [
-                        { "name": "qifei" },
+                        { "name": "heidi" },
                         { "name": "debug" }
                     ]
                 }),
@@ -4984,7 +4989,7 @@ mod redraw_tests {
         );
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
-        assert_eq!(app.completion.candidates, vec!["qifei", "debug"]);
+        assert_eq!(app.completion.candidates, vec!["heidi", "debug"]);
         assert_eq!(app.characters.len(), 2);
         assert!(!app.entries.iter().any(|entry| {
             matches!(entry, ConversationEntry::System { content, .. } if content.contains("Characters:"))
@@ -6371,7 +6376,7 @@ mod conversation_reliability_tests {
         assert!(rendered.contains("PAGER_TAIL"));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn full_command_queue_does_not_block_input_or_leave_pending_navigation() {
         let mut app = App::default();
         let (tx, _rx) = tokio::sync::mpsc::channel(1);

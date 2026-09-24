@@ -1711,7 +1711,7 @@ mod compaction_tests {
 
     fn a_pass_in_progress(h: &mut Harness) {
         h.app.connection_status = crate::tui::app::ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         round(h, 1);
         chunk(h, "Pulling the recurring threads into memory.", "text");
         tool(h, "t1", "read", "memory/MEMORY.md", "2.1 KB");
@@ -1814,7 +1814,7 @@ mod compaction_tests {
             ServerMessage::CommandOutput(shore_common::protocol::server_msg::CommandOutput {
                 rid: None,
                 name: "compact".into(),
-                data: serde_json::json!({ "status": "compacted", "character": "qifei" }),
+                data: serde_json::json!({ "status": "compacted", "character": "heidi" }),
             }),
         );
         assert!(h.app.compaction.is_none(), "the run is over");
@@ -4793,9 +4793,17 @@ pub(crate) mod scenario_tests {
         format!("\u{1b}[{code}m")
     }
 
+    fn preview_block(label: &str, frame: &str) {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let _written = stdout
+            .write_all(format!("\n----- {label} -----\n{frame}\n----- end -----\n").as_bytes());
+        let _flushed = stdout.flush();
+    }
+
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
-    fn preview_config_panel() {
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh config-panel"]
+    fn render_preview_config_panel() {
         let mut h = Harness::with_size(76, 30);
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
@@ -4811,16 +4819,16 @@ pub(crate) mod scenario_tests {
         open_setting_menu_with_snapshot(&mut h);
 
         let _ = h.render("config");
-        eprintln!("=== config panel ===\n{}", h.ansi_dump());
+        preview_block("config panel", &h.ansi_dump());
 
         h.type_str("cache");
         let _ = h.render("filtered");
-        eprintln!("=== filtered to cache ===\n{}", h.ansi_dump());
+        preview_block("config panel filtered to cache", &h.ansi_dump());
     }
 
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
-    fn preview_output_pager_over_a_dimmed_conversation() {
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh pager"]
+    fn render_preview_output_pager() {
         let mut h = Harness::with_size(76, 22);
         h.app.connection_status = ConnectionStatus::Connected;
         for turn in 0..4 {
@@ -4840,7 +4848,7 @@ pub(crate) mod scenario_tests {
         h.app.scroll_to_bottom();
 
         let _before = h.render("before");
-        eprintln!("=== conversation ===\n{}", h.ansi_dump());
+        preview_block("conversation", &h.ansi_dump());
 
         h.app.push_command_text(
             "status",
@@ -4848,10 +4856,7 @@ pub(crate) mod scenario_tests {
                 .to_owned(),
         );
         let _after = h.render("after");
-        eprintln!(
-            "=== pager over a dimmed conversation ===\n{}",
-            h.ansi_dump()
-        );
+        preview_block("pager over a dimmed conversation", &h.ansi_dump());
     }
 
     #[test]
@@ -5513,7 +5518,7 @@ pub(crate) mod scenario_tests {
     fn a_side_thread_is_named_on_the_input_border() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.home_thread = "main".into();
         h.app.thread_name = "eval".into();
 
@@ -5529,7 +5534,7 @@ pub(crate) mod scenario_tests {
     fn the_home_thread_adds_no_chrome() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.home_thread = "main".into();
         h.app.thread_name = "main".into();
 
@@ -5545,7 +5550,7 @@ pub(crate) mod scenario_tests {
     fn a_thread_with_no_known_home_stays_quiet_rather_than_guessing() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.thread_name = "eval".into();
 
         let f = h.render("home not yet known");
@@ -5781,7 +5786,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.show_thinking = true;
         h.app.show_tools = true;
         h.app
@@ -5907,10 +5912,10 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
 
         h.app.entries.push(ConversationEntry::user(
-            "hi qifei.".into(),
+            "hi heidi.".into(),
             vec![],
             "t1".into(),
         ));
@@ -5947,15 +5952,15 @@ pub(crate) mod scenario_tests {
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
-                input: serde_json::json!({"query": "Ren"}),
+                input: serde_json::json!({"query": "Eve"}),
             }),
         );
 
         let f_mid = h.render("mid tool-use turn");
-        let mid_header_count = f_mid.lines().filter(|l| l.trim_end() == "qifei").count();
+        let mid_header_count = f_mid.lines().filter(|l| l.trim_end() == "heidi").count();
         assert_eq!(
             mid_header_count, 1,
-            "exactly one 'qifei' header mid-turn; got {mid_header_count}\n{f_mid}"
+            "exactly one 'heidi' header mid-turn; got {mid_header_count}\n{f_mid}"
         );
         assert!(
             !f_mid.contains("in:100"),
@@ -6013,10 +6018,10 @@ pub(crate) mod scenario_tests {
 
         let f = h.render("after multi-phase turn");
 
-        let header_count = f.lines().filter(|l| l.trim_end() == "qifei").count();
+        let header_count = f.lines().filter(|l| l.trim_end() == "heidi").count();
         assert_eq!(
             header_count, 1,
-            "exactly one 'qifei' header after turn; got {header_count}\n{f}"
+            "exactly one 'heidi' header after turn; got {header_count}\n{f}"
         );
 
         assert!(
@@ -6279,7 +6284,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "describe the sea".into(),
             vec![],
@@ -6440,7 +6445,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
 
         let _ = crate::tui::handle_server_message(
             &mut h.app,
@@ -6510,7 +6515,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "write a long answer".into(),
             vec![],
@@ -6643,7 +6648,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "run a tool and summarize".into(),
             vec![],

@@ -217,7 +217,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
     sdk: "moonshot",
     model: "kimi-k2-thinking",
     api_key: "sk-test",
-    system: [{ type: "text", text: "You are Poppy." }],
+    system: [{ type: "text", text: "You are Frank." }],
     messages: [
       { role: "user", content: [{ type: "text", text: "hi" }] },
       { role: "assistant", content: [{ type: "text", text: "hello" }] },
@@ -253,13 +253,13 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
 
   test("the character's system prompt travels as instructions, not a message", () => {
     const call = buildCall(conversation);
-    expect(call.instructions).toBe("You are Poppy.");
+    expect(call.instructions).toBe("You are Frank.");
     expect(call.messages?.map((m) => m.role)).toEqual(["user", "assistant", "system", "user"]);
   });
 
   test("generateText accepts the call: system prompt first, inline note in place", async () => {
     expect(await promptSeenByProvider(conversation)).toEqual([
-      { role: "system", content: "You are Poppy." },
+      { role: "system", content: "You are Frank." },
       { role: "user", content: [{ type: "text", text: "hi" }] },
       { role: "assistant", content: [{ type: "text", text: "hello" }] },
       { role: "system", content: "be brief" },

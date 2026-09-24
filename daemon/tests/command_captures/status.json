@@ -4,7 +4,7 @@
     {
       "case": "unregistered",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -42,7 +42,7 @@
     {
       "case": "fresh",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -90,7 +90,7 @@
     {
       "case": "restored",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -168,7 +168,7 @@
     {
       "case": "overdue",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -220,7 +220,7 @@
     {
       "case": "restored_no_times",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -268,7 +268,7 @@
     {
       "case": "dormant",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -318,7 +318,7 @@
     {
       "case": "custom_bounds",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -366,7 +366,7 @@
     {
       "case": "model_override",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": "claude-sonnet",
@@ -414,7 +414,7 @@
     {
       "case": "model_from_config",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": "claude-opus",
@@ -462,7 +462,7 @@
     {
       "case": "model_none",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -510,7 +510,7 @@
     {
       "case": "future_user",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -560,7 +560,7 @@
     {
       "case": "turns_and_tokens",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 3,
         "turn_count": 3,
         "active_model": null,
@@ -608,7 +608,7 @@
     {
       "case": "deferred_edits",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -660,7 +660,7 @@
     {
       "case": "activity_week",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -766,7 +766,7 @@
     {
       "case": "activity_thin",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -872,7 +872,7 @@
     {
       "case": "log_only",
       "ok": {
-        "character": "poppy",
+        "character": "frank",
         "message_count": 0,
         "turn_count": 0,
         "active_model": null,
@@ -1087,7 +1087,7 @@
       "setup": "fresh",
       "ok": {
         "status": "scheduled",
-        "character": "poppy"
+        "character": "frank"
       },
       "after": {
         "heartbeat_state": "Active",
@@ -1101,7 +1101,7 @@
       "setup": "dormant",
       "ok": {
         "status": "scheduled",
-        "character": "poppy",
+        "character": "frank",
         "warning": "Heartbeat is dormant. The scheduled tick will be suppressed by the abandonment guard. Run `shore debug heartbeat_status_active` first to wake the clock."
       },
       "after": {
@@ -1116,7 +1116,7 @@
       "setup": "unregistered",
       "err": {
         "code": "invalid_request",
-        "message": "No autonomy state for character 'poppy'"
+        "message": "No autonomy state for character 'frank'"
       },
       "after": null
     },
@@ -1126,7 +1126,7 @@
       "setup": "fresh",
       "ok": {
         "status": "dormant",
-        "character": "poppy"
+        "character": "frank"
       },
       "after": {
         "heartbeat_state": "Dormant",
@@ -1140,7 +1140,7 @@
       "setup": "dormant",
       "ok": {
         "status": "dormant",
-        "character": "poppy"
+        "character": "frank"
       },
       "after": {
         "heartbeat_state": "Dormant",
@@ -1154,7 +1154,7 @@
       "setup": "unregistered",
       "err": {
         "code": "invalid_request",
-        "message": "No autonomy state for character 'poppy'"
+        "message": "No autonomy state for character 'frank'"
       },
       "after": null
     },
@@ -1164,7 +1164,7 @@
       "setup": "dormant",
       "ok": {
         "status": "active",
-        "character": "poppy"
+        "character": "frank"
       },
       "after": {
         "heartbeat_state": "Active",
@@ -1178,7 +1178,7 @@
       "setup": "fresh",
       "ok": {
         "status": "active",
-        "character": "poppy"
+        "character": "frank"
       },
       "after": {
         "heartbeat_state": "Active",
@@ -1192,7 +1192,7 @@
       "setup": "unregistered",
       "err": {
         "code": "invalid_request",
-        "message": "No autonomy state for character 'poppy'"
+        "message": "No autonomy state for character 'frank'"
       },
       "after": null
     }
@@ -1220,19 +1220,19 @@
               "timestamp": "2026-01-15T12:00:09+00:00",
               "error_type": "llm",
               "message": "failure 9",
-              "context": "character=poppy"
+              "context": "character=frank"
             },
             {
               "timestamp": "2026-01-15T12:00:10+00:00",
               "error_type": "llm",
               "message": "failure 10",
-              "context": "character=poppy"
+              "context": "character=frank"
             },
             {
               "timestamp": "2026-01-15T12:00:11+00:00",
               "error_type": "llm",
               "message": "failure 11",
-              "context": "character=poppy"
+              "context": "character=frank"
             }
           ]
         },
@@ -1450,73 +1450,73 @@
     },
     "s4": [
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 0",
         "timestamp": "2026-01-15T12:00:00+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 1",
         "timestamp": "2026-01-15T12:00:01+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 2",
         "timestamp": "2026-01-15T12:00:02+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 3",
         "timestamp": "2026-01-15T12:00:03+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 4",
         "timestamp": "2026-01-15T12:00:04+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 5",
         "timestamp": "2026-01-15T12:00:05+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 6",
         "timestamp": "2026-01-15T12:00:06+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 7",
         "timestamp": "2026-01-15T12:00:07+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 8",
         "timestamp": "2026-01-15T12:00:08+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 9",
         "timestamp": "2026-01-15T12:00:09+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 10",
         "timestamp": "2026-01-15T12:00:10+00:00"
       },
       {
-        "context": "character=poppy",
+        "context": "character=frank",
         "error_type": "llm",
         "message": "failure 11",
         "timestamp": "2026-01-15T12:00:11+00:00"

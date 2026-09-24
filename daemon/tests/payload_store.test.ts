@@ -192,9 +192,9 @@ describe("payload diffing", () => {
         request_body: body(messages),
       });
 
-    const first = record("a1", "poppy", at(0), [turn("user", "one")]);
+    const first = record("a1", "frank", at(0), [turn("user", "one")]);
     record("b1", "nova", at(1), [turn("user", "elsewhere")]);
-    const third = record("a2", "poppy", at(2), [turn("user", "one"), turn("user", "two")]);
+    const third = record("a2", "frank", at(2), [turn("user", "one"), turn("user", "two")]);
 
     expect(store.previousCallId(third)).toBe(first);
     const diff = required(store.diffCalls(first, third));
@@ -223,7 +223,7 @@ describe("payload diffing", () => {
     const one = store.recordCall({
       call_id: "w1",
       ts: at(0),
-      character: "poppy",
+      character: "frank",
       usage: ZERO_USAGE,
       request_body: "internal one",
     });
@@ -231,7 +231,7 @@ describe("payload diffing", () => {
     const two = store.recordCall({
       call_id: "w2",
       ts: at(1),
-      character: "poppy",
+      character: "frank",
       usage: ZERO_USAGE,
       request_body: "internal two",
     });
@@ -252,7 +252,7 @@ describe("payload garbage collection", () => {
       call_id: callId,
       ts,
       call_type: "message",
-      character: "poppy",
+      character: "frank",
       usage: ZERO_USAGE,
       request_body: body(messages),
       response_body: `{"id":"${callId}"}`,

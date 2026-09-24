@@ -25,6 +25,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
+import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 
 interface Shape {
   role: string;
@@ -310,7 +311,7 @@ describe("runDeepIdleArchive", () => {
     const { config, characterDir } = await world((kase.input as Shape[]).map(fromShape), false, {
       backgroundModel: true,
     });
-    process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+    setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
 
     const seen: { keepTurns: unknown }[] = [];
     const result = await runDeepIdleArchive(
@@ -333,7 +334,7 @@ describe("runDeepIdleArchive", () => {
       kase.covered_turn_count,
     );
 
-    delete process.env["SHORE_FIXTURE_API_KEY"];
+    unsetTestEnv("SHORE_FIXTURE_API_KEY");
     expect(seen.length).toBeGreaterThan(0);
     expect(result.turnCount).toBe(0);
     expect(result.failed).toBeUndefined();
@@ -360,7 +361,7 @@ describe("runDeepIdleArchive", () => {
     await mkdir(join(config.dirs.config, "characters", "ada", "workspace", "memory"), {
       recursive: true,
     });
-    process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
+    setTestEnv("SHORE_FIXTURE_API_KEY", "sk-fixture");
 
     let round = 0;
     const result = await runDeepIdleArchive(
@@ -393,7 +394,7 @@ describe("runDeepIdleArchive", () => {
       }),
       kase.covered_turn_count,
     );
-    delete process.env["SHORE_FIXTURE_API_KEY"];
+    unsetTestEnv("SHORE_FIXTURE_API_KEY");
 
     expect(result.failed).toBeUndefined();
     expect(result.deepArchiveDone).toBe(false);

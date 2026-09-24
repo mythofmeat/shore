@@ -279,11 +279,11 @@ describe("buildGenerationRequest", () => {
         cache: join(root, "cache"),
         runtime: join(root, "run"),
       };
-      const workspace = characterWorkspaceDir(dirs.config, "qifei");
+      const workspace = characterWorkspaceDir(dirs.config, "heidi");
       await mkdir(workspace, { recursive: true });
-      await writeFile(join(workspace, "SOUL.md"), "I am qifei.\n");
-      const activePrompt = join(characterDataDir(dirs.data, "qifei"), "active_prompt");
-      writePromptSnapshotFile(join(activePrompt, "AGENTS.md"), "Answer as qifei, tersely.\n");
+      await writeFile(join(workspace, "SOUL.md"), "I am heidi.\n");
+      const activePrompt = join(characterDataDir(dirs.data, "heidi"), "active_prompt");
+      writePromptSnapshotFile(join(activePrompt, "AGENTS.md"), "Answer as heidi, tersely.\n");
       await mkdir(dirs.cache, { recursive: true });
 
       const app = defaultAppConfig();
@@ -319,7 +319,7 @@ describe("buildGenerationRequest", () => {
       const built = await buildGenerationRequest({
         engine: engineFor(c),
         dataDir: dirs.data,
-        charName: "qifei",
+        charName: "heidi",
         config: baseConfig(dirs, app, emptyCatalog()),
         resolved,
         regen: c.input.regen,

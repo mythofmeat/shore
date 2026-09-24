@@ -22,6 +22,7 @@ import {
 } from "../src/memory/markdown_store";
 import { truncateChars } from "../src/memory/markdown_query";
 import { expandShared } from "./support/shared_subtrees.ts";
+import { setTestEnv } from "./support/env.ts";
 
 type Node =
   | { kind: "dir" }
@@ -140,7 +141,7 @@ describe("reading and writing the markdown store", () => {
     const originalTz = process.env.TZ;
     try {
       for (const group of fixture.modified_at_format) {
-        process.env.TZ = group.tz;
+        setTestEnv("TZ", group.tz);
         expect(-new Date().getTimezoneOffset() + 0).toBe(group.utc_offset_minutes);
 
         for (const stamp of group.stamps) {
@@ -155,7 +156,7 @@ describe("reading and writing the markdown store", () => {
         expect(required(group.stamps[0]).formatted).not.toContain(".");
       }
     } finally {
-      process.env.TZ = originalTz ?? "UTC";
+      setTestEnv("TZ", originalTz ?? "UTC");
     }
   });
 

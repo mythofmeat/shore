@@ -23,10 +23,10 @@ function at(secs: number): Date {
 
 const CALL_ROWS: [string, number, string, string, string, string | null][] = (() => {
   const rows: [string, number, string, string, string, string | null][] = [
-    ["call_a", 0, "message", "poppy", "request a", "response a"],
-    ["call_b", 1, "heartbeat", "poppy", "request b", null],
+    ["call_a", 0, "message", "frank", "request a", "response a"],
+    ["call_b", 1, "heartbeat", "frank", "request b", null],
     ["call_c", 2, "message", "wren", "request c", "response c"],
-    ["call_d", 3, "heartbeat", "poppy", "request d", "response d"],
+    ["call_d", 3, "heartbeat", "frank", "request d", "response d"],
     ["call_e", 3, "heartbeat", "wren", "request e", "response e"],
   ];
   for (let i = 0; i < 20; i += 1) {
@@ -34,7 +34,7 @@ const CALL_ROWS: [string, number, string, string, string, string | null][] = (()
       `filler_${String(i).padStart(2, "0")}`,
       -1000 + i,
       "message",
-      "poppy",
+      "frank",
       "filler request",
       null,
     ]);
@@ -70,18 +70,18 @@ function fillCalls(store: CallStore): void {
 
 const TRANSCRIPT_ROWS: [number, string, number, string][] = (() => {
   const rows: [number, string, number, string][] = [
-    [0, "poppy", 0, "t1-i0"],
-    [1, "poppy", 1, "t1-i1"],
-    [2, "poppy", 2, "t1-i2"],
-    [3, "poppy", 0, "t2-i0"],
-    [4, "poppy", 0, "t3-i0"],
-    [5, "poppy", 1, "t3-i1"],
+    [0, "frank", 0, "t1-i0"],
+    [1, "frank", 1, "t1-i1"],
+    [2, "frank", 2, "t1-i2"],
+    [3, "frank", 0, "t2-i0"],
+    [4, "frank", 0, "t3-i0"],
+    [5, "frank", 1, "t3-i1"],
     [6, "wren", 0, "wren-i0"],
-    [7, "poppy", 1, "t4-i1"],
-    [8, "poppy", 1, "t5-i1"],
+    [7, "frank", 1, "t4-i1"],
+    [8, "frank", 1, "t5-i1"],
   ];
   for (let i = 0; i < 20; i += 1) {
-    rows.push([-1000 + i, "poppy", 0, `filler-${String(i).padStart(2, "0")}`]);
+    rows.push([-1000 + i, "frank", 0, `filler-${String(i).padStart(2, "0")}`]);
   }
   return rows;
 })();
@@ -177,7 +177,7 @@ function seededTranscript(marker: string): Record<string, unknown> {
 }
 
 const CHARACTER_FOR = (name: string): string =>
-  name === "no_rows_for_character" ? "nobody" : "poppy";
+  name === "no_rows_for_character" ? "nobody" : "frank";
 
 describe.each(["call_log", "transcript"])("%s", (command) => {
   for (const row of fixture.cases as Case[]) {
@@ -236,7 +236,7 @@ function withoutWire(value: unknown): unknown {
 test.each([{}, { wire: true }, { diff: true, against: 1 }, { wire: true, diff: true }])(
   "a call type checks the selected call with options %j",
   (options) => {
-    const ctx = { characterName: "poppy", callStore: stocked };
+    const ctx = { characterName: "frank", callStore: stocked };
     expect(callLog(ctx, { id: 2, call_type: "heartbeat", ...options }))
       .toEqual(callLog(ctx, { id: 2, ...options }));
     expect(() => callLog(ctx, { id: 2, call_type: "compaction", ...options }))
@@ -248,11 +248,11 @@ test("a call without a recorded type cannot satisfy a requested type", () => {
   const store = CallStore.openInMemory();
   try {
     const id = store.recordCall({
-      call_id: "untyped", ts: at(0), call_type: null, character: "poppy",
+      call_id: "untyped", ts: at(0), call_type: null, character: "frank",
       model: "claude-x", provider: "anthropic", usage: ZERO_USAGE,
       request_body: "{}", response_body: null,
     });
-    const ctx = { characterName: "poppy", callStore: store };
+    const ctx = { characterName: "frank", callStore: store };
     expect(() => callLog(ctx, { id })).not.toThrow();
     expect(() => callLog(ctx, { id, call_type: "compaction" }))
       .toThrow(new CommandError("invalid_request", `call ${id} has type null; expected "compaction"`));
@@ -279,7 +279,7 @@ test("dumping one call coalesces the streamed HTTP exchange recorded under it", 
     call_id: "wire-1",
     ts: at(0),
     call_type: "message",
-    character: "poppy",
+    character: "frank",
     model: "claude-x",
     provider: "anthropic",
     usage: ZERO_USAGE,
@@ -290,7 +290,7 @@ test("dumping one call coalesces the streamed HTTP exchange recorded under it", 
     call_id: "wire-1",
     seq: 0,
     ts: at(0),
-    character: "poppy",
+    character: "frank",
     call_type: "message",
     method: "POST",
     url: "https://api.anthropic.com/v1/messages",
@@ -302,7 +302,7 @@ test("dumping one call coalesces the streamed HTTP exchange recorded under it", 
     response_body: Buffer.from(SSE, "utf8"),
   });
 
-  const out = callLog({ characterName: "poppy", callStore: store }, { id, wire: true }) as {
+  const out = callLog({ characterName: "frank", callStore: store }, { id, wire: true }) as {
     call: { request: unknown };
     wire: { seq: number; url: string; status: number; request_body: unknown; response_body: unknown }[];
   };
@@ -328,7 +328,7 @@ test("without --wire the exchange keeps its metadata and drops the bodies", () =
     call_id: "wire-2",
     ts: at(0),
     call_type: "message",
-    character: "poppy",
+    character: "frank",
     model: "claude-x",
     provider: "anthropic",
     usage: ZERO_USAGE,
@@ -339,7 +339,7 @@ test("without --wire the exchange keeps its metadata and drops the bodies", () =
     call_id: "wire-2",
     seq: 0,
     ts: at(0),
-    character: "poppy",
+    character: "frank",
     call_type: "message",
     method: "POST",
     url: "https://api.anthropic.com/v1/messages",
@@ -351,7 +351,7 @@ test("without --wire the exchange keeps its metadata and drops the bodies", () =
     response_body: Buffer.from(SSE, "utf8"),
   });
 
-  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
+  const out = callLog({ characterName: "frank", callStore: store }, { id }) as {
     wire: Record<string, unknown>[];
   };
 
@@ -371,19 +371,19 @@ test("a call with no recorded exchange dumps an empty wire list", () => {
     call_id: "wire-none",
     ts: at(0),
     call_type: "message",
-    character: "poppy",
+    character: "frank",
     model: "claude-x",
     provider: "anthropic",
     usage: ZERO_USAGE,
     request_body: "{}",
     response_body: null,
   });
-  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as { wire: unknown[] };
+  const out = callLog({ characterName: "frank", callStore: store }, { id }) as { wire: unknown[] };
   expect(out.wire).toEqual([]);
 });
 
 test("ticks and the iterations inside them both read oldest-first", () => {
-  const ctx: CallLogContext = { characterName: "poppy", callStore: stocked };
+  const ctx: CallLogContext = { characterName: "frank", callStore: stocked };
   const result = transcript(ctx, { count: 8 }) as {
     entries: { entry: { marker: string } }[];
   };
@@ -407,18 +407,18 @@ describe("a store that fails mid-query", () => {
   }
 
   test("call_log reports a call-store failure", () => {
-    const ctx: CallLogContext = { characterName: "poppy", callStore: closedStore() };
+    const ctx: CallLogContext = { characterName: "frank", callStore: closedStore() };
     expect(() => callLog(ctx, {})).toThrow(/^call store query failed: /);
     expect(() => callLog(ctx, { id: 1 })).toThrow(/^call store query failed: /);
   });
 
   test("transcript reports a transcript failure, not a call-store one", () => {
-    const ctx: CallLogContext = { characterName: "poppy", callStore: closedStore() };
+    const ctx: CallLogContext = { characterName: "frank", callStore: closedStore() };
     expect(() => transcript(ctx, {})).toThrow(/^transcript query failed: /);
   });
 
   test("both failures are internal errors", () => {
-    const ctx: CallLogContext = { characterName: "poppy", callStore: closedStore() };
+    const ctx: CallLogContext = { characterName: "frank", callStore: closedStore() };
     for (const run of [() => callLog(ctx, {}), () => transcript(ctx, {})]) {
       try {
         run();

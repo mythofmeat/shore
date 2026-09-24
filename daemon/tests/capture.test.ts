@@ -11,6 +11,7 @@ import {
 import { REDACTED } from "../src/llm/redact.ts";
 import { installWireCapture, type WireExchange } from "../src/llm/wire_capture.ts";
 import { CallStore, type CallRecord } from "../src/call_store.ts";
+import { until } from "./support/until.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -49,7 +50,7 @@ function req(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     max_tokens: 64,
     replay_prior_thinking: "all",
     context: {
-      character: "poppy",
+      character: "frank",
       call_type: "message",
       thinking_enabled: true,
       rid: "r_1",
@@ -110,7 +111,7 @@ describe("call capture", () => {
 
     expect(store.rows).toHaveLength(1);
     const row = required(store.rows[0]);
-    expect(row.character).toBe("poppy");
+    expect(row.character).toBe("frank");
     expect(row.call_type).toBe("message");
     expect(row.model).toBe("claude-opus-4-6");
     expect(row.provider).toBe("anthropic");
@@ -238,7 +239,7 @@ describe("call capture", () => {
       const p = withCallCapture(fake([{ type: "start", model: "m" }, DONE]), store);
       await drain(p.stream(req()));
 
-      const index = store.queryCalls({ character: "poppy", limit: 10 });
+      const index = store.queryCalls({ character: "frank", limit: 10 });
       expect(index).toHaveLength(1);
       expect(required(index[0]).call_type).toBe("message");
       expect(required(index[0]).usage.cache_read_tokens).toBe(33);
@@ -287,9 +288,7 @@ describe("call capture", () => {
         yield DONE;
       }),
     );
-    await new Promise((resolve) => {
-      setTimeout(resolve, 25);
-    });
+    await until(() => exchanges.length >= 2, "both captured exchanges");
     await server.stop(true);
 
     expect(store.rows).toHaveLength(1);
@@ -299,7 +298,7 @@ describe("call capture", () => {
       required(store.rows[0]).call_id,
     ]);
     expect(exchanges.map((e) => e.seq)).toEqual([0, 1]);
-    expect(required(exchanges[0]).character).toBe("poppy");
+    expect(required(exchanges[0]).character).toBe("frank");
   });
 
   test("no store means the loop's events pass through untouched", async () => {

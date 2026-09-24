@@ -304,7 +304,7 @@ mod tests {
 
     fn payload() -> Value {
         json!({
-            "character": "qifei",
+            "character": "heidi",
             "active_model": "deepseek:deepseek-v4-pro",
             "turn_count": 0,
             "message_count": 0,
@@ -323,7 +323,7 @@ mod tests {
     fn render_preview_status() {
         set_color_enabled(true);
         let fresh = json!({
-            "character": "qifei",
+            "character": "heidi",
             "active_model": "opencode-go:glm-5.3",
             "turn_count": 0, "message_count": 0,
             "config_dir": "/config",
@@ -342,7 +342,7 @@ mod tests {
 
         set_color_enabled(true);
         let busy = json!({
-            "character": "qifei",
+            "character": "heidi",
             "active_model": "opencode-go:glm-5.3",
             "turn_count": 11, "message_count": 34,
             "config_dir": "/config",
@@ -427,7 +427,7 @@ mod tests {
     #[test]
     fn the_character_names_the_section_rather_than_a_generic_word() {
         let out = render(&payload());
-        assert!(out.starts_with("\u{2500}\u{2500} qifei "), "{out}");
+        assert!(out.starts_with("\u{2500}\u{2500} heidi "), "{out}");
     }
 
     #[test]
@@ -471,10 +471,10 @@ mod tests {
     fn a_halted_keepalive_is_surfaced_not_buried() {
         let mut data = payload();
         if let Some(slot) = data.get_mut("keepalive_halted") {
-            *slot = json!({"character": "qifei", "reason": "budget exhausted"});
+            *slot = json!({"character": "heidi", "reason": "budget exhausted"});
         }
         let out = render(&data);
-        assert!(out.contains("keepalive halted for qifei"), "{out}");
+        assert!(out.contains("keepalive halted for heidi"), "{out}");
         assert!(out.contains("budget exhausted"), "{out}");
     }
 
@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn the_dashboard_consolidates_live_status() {
         let data = json!({
-            "character": "qifei",
+            "character": "heidi",
             "active_model": "zai-sub:glm-5.3",
             "turn_count": 5,
             "context_tokens": 23_400,

@@ -1,0 +1,136 @@
+{
+  "image": {
+    "live": [
+      {
+        "type": "tool_call",
+        "tool_id": "read-1",
+        "tool_name": "read",
+        "input": {
+          "file_path": "chart.png"
+        }
+      },
+      {
+        "type": "tool_result",
+        "tool_id": "read-1",
+        "tool_name": "read",
+        "output": "/workspace/chart.png: image/png, 1×1, 70 bytes\n[/workspace/chart.png: a separate media copy could not be saved]\n[/workspace/chart.png attached]",
+        "images": [
+          {
+            "path": "tool-image:read-1:0",
+            "caption": "/workspace/chart.png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+          }
+        ],
+        "is_error": false
+      }
+    ],
+    "history": {
+      "type": "history",
+      "messages": [
+        {
+          "msg_id": "reply-1",
+          "role": "assistant",
+          "content": "",
+          "images": [],
+          "timestamp": "",
+          "content_blocks": [
+            {
+              "type": "tool_use",
+              "id": "read-1",
+              "name": "read",
+              "input": {
+                "file_path": "chart.png"
+              }
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "read-1",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "/workspace/chart.png: image/png, 1×1, 70 bytes\n[/workspace/chart.png: a separate media copy could not be saved]\n[/workspace/chart.png attached]"
+                },
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                  }
+                }
+              ],
+              "is_error": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "markdown": {
+    "live": [
+      {
+        "type": "tool_call",
+        "tool_id": "read-1",
+        "tool_name": "read",
+        "input": {
+          "file_path": "docs/guide.md"
+        }
+      },
+      {
+        "type": "tool_result",
+        "tool_id": "read-1",
+        "tool_name": "read",
+        "output": "/workspace/docs/guide.md: lines 1–3\n1\t# Guide\n2\t\n3\t![Chart](../chart.png)\nEnd of file.\n[Chart (/workspace/chart.png): a separate media copy could not be saved]\n[Chart (/workspace/chart.png) attached]",
+        "images": [
+          {
+            "path": "tool-image:read-1:0",
+            "caption": "Chart (/workspace/chart.png)",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+          }
+        ],
+        "is_error": false
+      }
+    ],
+    "history": {
+      "type": "history",
+      "messages": [
+        {
+          "msg_id": "reply-1",
+          "role": "assistant",
+          "content": "",
+          "images": [],
+          "timestamp": "",
+          "content_blocks": [
+            {
+              "type": "tool_use",
+              "id": "read-1",
+              "name": "read",
+              "input": {
+                "file_path": "docs/guide.md"
+              }
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "read-1",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "/workspace/docs/guide.md: lines 1–3\n1\t# Guide\n2\t\n3\t![Chart](../chart.png)\nEnd of file.\n[Chart (/workspace/chart.png): a separate media copy could not be saved]\n[Chart (/workspace/chart.png) attached]"
+                },
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                  }
+                }
+              ],
+              "is_error": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

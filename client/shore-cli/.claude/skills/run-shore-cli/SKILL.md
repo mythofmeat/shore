@@ -94,12 +94,14 @@ cargo test -p shore-cli render_preview_log \
 
 The recipe for any in-crate visual preview:
 
-1. In the relevant `#[cfg(test)] mod tests`, `set_color_enabled(true)`.
+1. In the relevant `#[cfg(test)] mod tests`, `set_color_enabled(true)`. The
+   setting belongs to the test's own thread, so it cannot tint other tests.
 2. Render into a `Vec<u8>` via the real (private) renderer.
-3. `set_color_enabled(false)` again, then write the buffer straight to
-   `io::stdout()` so the ANSI escapes survive.
-4. Mark it `#[ignore]` so it stays out of normal `cargo test`, and run it with
-   `--ignored --nocapture --test-threads=1`.
+3. Write the buffer straight to `io::stdout()` between `----- <label> -----`
+   and `----- end -----` so the ANSI escapes survive and `preview.sh` finds it.
+4. Name it `render_preview_*`, mark it
+   `#[ignore = "preview: .claude/skills/run-shore-cli/preview.sh <name>"]`, and
+   add `<name>` to `preview.sh`.
 
 ## Test (assertions)
 
@@ -126,13 +128,9 @@ Use the preview path above instead when you only need to see how output looks.
 
 ## Gotchas
 
-- **`--test-threads=1` is mandatory for previews.** `COLOR_ENABLED` and the
-  streaming `CHUNK_STATE` are process globals; parallel tests race on them and
-  you'll get bleed-through (a stray sigil or color from another test) or a
-  garbled buffer. The driver already sets this.
-- **Color must be toggled back off after rendering.** The global stays set for
-  the rest of the process; the preview tests flip it back to `false` so they
-  don't tint other tests sharing the process.
+- **`--test-threads=1` keeps previews readable.** Colour is per test thread,
+  so parallel runs are correct, but their stdout blocks would interleave. The
+  driver already sets this.
 - **`#[ignore]`, not deletion.** Previews live permanently in the test modules
   but are skipped by default — that's why a normal `output::` run reports
   `2 ignored`. Don't "clean them up."

@@ -3,20 +3,17 @@ use super::ui::scenario_tests::Harness;
 use super::{ServerMessage, handle_server_message};
 use crossterm::event::KeyCode;
 
+const RECORDED_READ_FLOWS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../daemon/tests/handler_captures/read_image_preview.json"
+));
+
 fn read_flow(markdown: bool) -> serde_json::Value {
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../daemon/tests/support/read_image_preview.ts");
-    let output = std::process::Command::new("bun")
-        .arg(script)
-        .arg(if markdown { "markdown" } else { "image" })
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "read failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).unwrap()
+    let recorded: serde_json::Value = serde_json::from_str(RECORDED_READ_FLOWS).unwrap();
+    recorded
+        .get(if markdown { "markdown" } else { "image" })
+        .unwrap()
+        .clone()
 }
 
 #[test]
