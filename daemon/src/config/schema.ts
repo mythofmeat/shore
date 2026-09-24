@@ -214,7 +214,7 @@ function describeOption(path: readonly string[]): string {
     discover: "Discover this provider's models; false by default.",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
-    max_inline_image_bytes: "Total source image bytes per tool result before resizing; defaults to 5 MiB. Zero disables inline images.",
+    max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",

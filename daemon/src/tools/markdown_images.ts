@@ -3,8 +3,7 @@ import { dirname, resolve } from "node:path";
 import type { Definition, Image, ImageReference, Nodes } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { readBoundedFile } from "./file_access.ts";
-import { DEFAULT_MAX_INLINE_IMAGE_BYTES, carryToolMedia, type ToolResultPayload } from "./media.ts";
-import { base64Bytes } from "../util/base64.ts";
+import { MAX_INLINE_TOOL_IMAGES, MAX_LISTED_MEDIA_NOTES, carryToolMedia, type ToolResultPayload } from "./media.ts";
 import { readImageAt } from "./read_image.ts";
 
 export const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
@@ -42,33 +41,37 @@ function imageNodes(source: string, page: TextPage): { node: Image | ImageRefere
   });
 }
 
-export async function expandMarkdownImages(file: FileHandle, path: string, page: TextPage, signal?: AbortSignal, maxInlineImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES): Promise<unknown> {
+export async function expandMarkdownImages(file: FileHandle, path: string, page: TextPage, signal?: AbortSignal): Promise<unknown> {
   if (page.ranges.length === 0) return page.output;
-  const payload: ToolResultPayload = { value: page.output, media: [], extra: [] };
+  const notes: string[] = [];
+  const payload: ToolResultPayload = { value: page.output, media: [], extra: [], notes };
   try {
     const bytes = await readBoundedFile(file, path, MAX_MARKDOWN_IMAGE_SOURCE_BYTES, "Markdown image source", signal);
     const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error("file changed while reading; retry to expand images");
     const paths = new Set<string>();
-    let remainingBytes = maxInlineImageBytes;
+    const failures: string[] = [];
     for (const { node, url } of imageNodes(source, page)) {
       signal?.throwIfAborted();
       try {
         const imagePath = localImagePath(url, path);
         if (imagePath === undefined || paths.has(imagePath)) continue;
         paths.add(imagePath);
-        const image = await readImageAt(imagePath, signal, remainingBytes);
+        if (paths.size > MAX_INLINE_TOOL_IMAGES) continue;
+        const image = await readImageAt(imagePath, signal);
         if (node.alt) image.label = `${node.alt} (${imagePath})`;
         payload.media.push(image);
-        remainingBytes -= base64Bytes(image.data);
       } catch (error) {
         signal?.throwIfAborted();
-        payload.extra.push(`[Markdown image ${url} not attached: ${error instanceof Error ? error.message : String(error)}. Read the image file directly to view it.]`);
+        failures.push(`[Markdown image ${url} not attached: ${error instanceof Error ? error.message : String(error)}]`);
       }
     }
+    notes.push(...failures.slice(0, MAX_LISTED_MEDIA_NOTES));
+    if (failures.length > MAX_LISTED_MEDIA_NOTES) notes.push(`[${String(failures.length - MAX_LISTED_MEDIA_NOTES)} more Markdown image reference(s) could not be attached]`);
+    if (paths.size > MAX_INLINE_TOOL_IMAGES) notes.push(`[${String(paths.size - MAX_INLINE_TOOL_IMAGES)} more local image reference(s) not read; at most ${String(MAX_INLINE_TOOL_IMAGES)} are expanded per read. Read those image files directly to view them.]`);
   } catch (error) {
     signal?.throwIfAborted();
-    payload.extra.push(`[Markdown images not expanded: ${error instanceof Error ? error.message : String(error)}]`);
+    notes.push(`[Markdown images not expanded: ${error instanceof Error ? error.message : String(error)}]`);
   }
   return carryToolMedia(payload);
 }

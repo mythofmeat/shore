@@ -9,7 +9,7 @@ import { BUILTIN_TOOL_SCHEMAS, renderToolDefs } from "../src/tools/registry.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import { defaultToolsConfig } from "../src/config/app.ts";
-import { wideImage } from "./support/oversized_image.ts";
+import { oversizedImage, wideImage } from "./support/oversized_image.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
@@ -243,7 +243,7 @@ test("Markdown read sends ten small images and counts duplicate paths only once"
   expect(resultText(result)).not.toContain("not attached");
 });
 
-test("Markdown read uses a cumulative source-byte budget and skips images that do not fit", async () => {
+test("Markdown read shares the per-result image budget and skips images that do not fit", async () => {
   const { put, run, exec } = await world();
   const png = Buffer.from(PNG, "base64");
   await put("a.png", png);
@@ -254,8 +254,8 @@ test("Markdown read uses a cumulative source-byte budget and skips images that d
   const result = await run("read", { file_path: "budget.md" });
   expect(result.isError).toBe(false);
   expect(resultImages(result)).toHaveLength(2);
-  expect(resultText(result)).toContain("Markdown image b.png not attached");
-  expect(resultText(result)).toContain("remaining inline image budget");
+  expect(resultText(result)).toContain("Markdown image missing.png not attached");
+  expect(resultText(result)).toMatch(/b \(.*b\.png\) not sent to the model/);
   expect(resultText(result)).toContain("5\t![c](c.png)");
   expect(resultText(result)).toContain("c.png) attached");
 
@@ -266,23 +266,45 @@ test("Markdown read uses a cumulative source-byte budget and skips images that d
   expect(disabled.isError).toBe(false);
   expect(resultImages(disabled)).toHaveLength(0);
   expect(resultText(disabled)).toContain("5\t![c](c.png)");
+  expect(resultText(disabled)).toContain("not sent to the model: inline images are disabled for this tool");
+  const direct = await run("read", { file_path: "a.png" });
+  expect(direct.isError).toBe(false);
+  expect(resultImages(direct)).toHaveLength(0);
+  expect(resultText(direct)).toContain("inline images are disabled for this tool");
 });
 
-test("Markdown read defaults to five MiB of source images before resizing", async () => {
+test("Markdown read budgets prepared bytes, so large sources are resized to fit", async () => {
   const { put, run, exec } = await world();
   exec.limits = toolLimitsFrom(defaultToolsConfig());
-  const large = Buffer.alloc(4.5 * 1024 * 1024);
-  Buffer.from(PNG, "base64").copy(large);
+  const large = Buffer.from((await oversizedImage()).source.data, "base64");
   await put("a.png", large);
   await put("b.png", large);
   await put("large.md", "![a](a.png)\n![b](b.png)\n");
-  const bounded = await run("read", { file_path: "large.md" });
-  expect(bounded.isError).toBe(false);
-  expect(resultImages(bounded)).toHaveLength(1);
-  expect(resultText(bounded)).toContain("Markdown image b.png not attached");
-  expect(resultText(bounded)).toContain("remaining inline image budget");
-  exec.limits.config = { read: { max_inline_image_bytes: 9 * 1024 * 1024 } };
-  expect(resultImages(await run("read", { file_path: "large.md" }))).toHaveLength(2);
+  const result = await run("read", { file_path: "large.md" });
+  expect(2 * large.length).toBeGreaterThan(defaultToolsConfig().max_inline_image_bytes);
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(2);
+});
+
+test("Markdown image notes are bounded and follow the page without displacing it", async () => {
+  const { put, run, exec } = await world();
+  const png = Buffer.from(PNG, "base64");
+  const valid = Array.from({ length: 25 }, (_, i) => `v${String(i)}.png`);
+  for (const name of valid) await put(name, png);
+  const missing = Array.from({ length: 5 }, (_, i) => `![m](missing${String(i)}.png)`);
+  const filler = Array.from({ length: 400 }, (_, i) => `filler line ${String(i)}`);
+  await put("many.md", [...missing, ...valid.map((name) => `![v](${name})`), ...filler].join("\n"));
+  exec.limits.max_result_chars = 4000;
+  const result = await run("read", { file_path: "many.md" });
+  const text = resultText(result);
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(15);
+  expect(text.match(/Markdown image missing\d\.png not attached/g)).toHaveLength(3);
+  expect(text).toContain("[2 more Markdown image reference(s) could not be attached]");
+  expect(text).toContain("[10 more local image reference(s) not read; at most 20 are expanded per read.");
+  expect(text).not.toContain("tool_result truncated");
+  expect(text.indexOf("Partial view. Continue with offset=")).toBeGreaterThan(-1);
+  expect(text.indexOf("Partial view. Continue with offset=")).toBeLessThan(text.indexOf("Markdown image missing0.png"));
 });
 
 test("Markdown read bounds the document scanned for image references", async () => {

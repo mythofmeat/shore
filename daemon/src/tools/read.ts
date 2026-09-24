@@ -1,6 +1,6 @@
 import type { FileHandle } from "node:fs/promises";
 import { extname } from "node:path";
-import { DEFAULT_MAX_INLINE_IMAGE_BYTES, carryToolMedia } from "./media.ts";
+import { carryToolMedia } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
 import { imageMime, readImage } from "./read_image.ts";
@@ -23,7 +23,6 @@ function positiveInteger(input: Record<string, unknown>, name: string, fallback:
 
 export async function handleRead(
   input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal, maxChars = 50_000,
-  maxInlineImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES,
 ): Promise<unknown> {
   signal?.throwIfAborted();
   const path = filePath(input, workspaceDir);
@@ -42,7 +41,7 @@ export async function handleRead(
     }
     const page = await readText(file, path, offset, limit, maxChars, signal);
     return MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
-      ? await expandMarkdownImages(file, path, page, signal, maxInlineImageBytes)
+      ? await expandMarkdownImages(file, path, page, signal)
       : page.output;
   } finally {
     await file.close();

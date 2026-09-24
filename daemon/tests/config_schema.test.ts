@@ -89,7 +89,7 @@ describe("configSchema", () => {
     for (const key of ["tools.max_inline_image_bytes", "tools.read.max_inline_image_bytes"]) {
       expect(rows.find((row) => row.key === key)).toMatchObject({
         kind: "integer", units: "bytes", settable: true, restart_required: false,
-        description: "Total source image bytes per tool result before resizing; defaults to 5 MiB. Zero disables inline images.",
+        description: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
       });
     }
     expect(rows.some((row) => row.key.startsWith("tools.max_inline_image_bytes."))).toBe(false);

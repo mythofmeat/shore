@@ -29,7 +29,6 @@ export interface ToolContext {
   conversation?: readonly Message[];
   dryRun?: boolean;
   maxResultChars?: number;
-  maxInlineImageBytes?: number;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
@@ -150,7 +149,7 @@ export async function dispatchTool(
 
   switch (name) {
     case "read":
-      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars, ctx.maxInlineImageBytes);
+      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars);
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(ctx.workspaceDir,

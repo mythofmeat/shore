@@ -23,6 +23,8 @@ import {
   type ToolResultWindow,
 } from "./dispatch.ts";
 import {
+  MAX_INLINE_TOOL_IMAGES,
+  MAX_LISTED_MEDIA_NOTES,
   toolMediaOf,
   type ToolMediaItem,
   type ToolResultPayload,
@@ -99,7 +101,7 @@ export async function runToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     payload = toolMediaOf(value);
@@ -116,7 +118,7 @@ export async function runToolUse(
   const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
   const attached = await attachToolMedia(payload, exec, toolUse);
   isError ||= attached.failed;
-  const output = joinLines([windowed.output, ...attached.notes]);
+  const output = joinLines([windowed.output, ...(payload?.notes ?? []), ...attached.notes]);
 
   if (!isError && toolUse.name === "generate_image") {
     attachGeneratedImage(okValue, intermediateMessages, exec);
@@ -172,6 +174,7 @@ async function attachToolMedia(
   if (payload === undefined || payload.media.length === 0) return attached;
   const maxBytes = inlineImageBytesFor(exec.limits, toolUse.name);
   let inlinedBytes = 0;
+  const skipped: string[] = [];
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse, index);
@@ -186,16 +189,22 @@ async function attachToolMedia(
         data: item.data,
       });
     }
+    if (attached.blocks.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
+      skipped.push(item.label);
+      continue;
+    }
     try {
-      const bytes = base64Bytes(item.data);
-      const skipped = inlineRefusal(bytes, inlinedBytes, maxBytes);
-      if (skipped !== undefined) throw new Error(skipped);
       const block = await prepareImageBlock({
         type: "image", source: { type: "base64", media_type: item.mime_type, data: item.data },
       });
       if (block.type !== "image") throw new Error("image preparation returned no image");
       const resolution = resolveImageBlock(block.source);
       if ("omitted" in resolution) throw new Error(resolution.omitted);
+      const bytes = base64Bytes(block.source.data);
+      if (bytes > maxBytes - inlinedBytes) {
+        skipped.push(item.label);
+        continue;
+      }
       if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
@@ -211,17 +220,17 @@ async function attachToolMedia(
     }
   }
 
+  if (skipped.length > 0) attached.notes.push(skippedNote(skipped, maxBytes));
   return attached;
 }
 
-function inlineRefusal(bytes: number, alreadyInlinedBytes: number, maxBytes: number): string | undefined {
-  if (bytes > maxBytes - alreadyInlinedBytes) {
-    return (
-      `its ${String(bytes)} bytes would exceed the ${String(maxBytes)}-byte inline image budget ` +
-      `per tool result (${String(alreadyInlinedBytes)} bytes already attached)`
-    );
-  }
-  return undefined;
+function skippedNote(labels: readonly string[], maxBytes: number): string {
+  const listed = labels.slice(0, MAX_LISTED_MEDIA_NOTES).join(", ");
+  const more = labels.length > MAX_LISTED_MEDIA_NOTES ? ` and ${String(labels.length - MAX_LISTED_MEDIA_NOTES)} more` : "";
+  const reason = maxBytes === 0
+    ? "inline images are disabled for this tool"
+    : `at most ${String(MAX_INLINE_TOOL_IMAGES)} images and ${String(maxBytes)} bytes of prepared image data are sent per tool result`;
+  return `[${listed}${more} not sent to the model: ${reason}]`;
 }
 
 async function saveToolMedia(
