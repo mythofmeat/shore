@@ -98,7 +98,8 @@ async function afterChatModelChange(
     ctx.character, reason,
     ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character),
   );
-  if (name === "set_model_setting" && args["scope"] === "global") {
+  const chatSetting = args["background_task"] === undefined && args["subagent"] === undefined;
+  if (name === "set_model_setting" && args["scope"] === "global" && chatSetting) {
     for (const other of ctx.runtime.cachedCharacters()) {
       if (other !== ctx.character) await ctx.runtime.refreshCachedRequest(other, reason);
     }

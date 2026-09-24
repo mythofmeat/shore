@@ -184,6 +184,7 @@ function record(
   const entry: RecordCall = {
     ...(attempt?.subscription === undefined ? {} : { subscription: attempt.subscription }),
     provider: req.provider_key ?? req.sdk,
+    sdk: req.sdk,
     api_key_name: ctx.api_key_name,
     model: req.model,
     call_type: call.call_type ?? ctx.call_type,

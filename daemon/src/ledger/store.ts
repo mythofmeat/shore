@@ -157,6 +157,7 @@ export interface Timing {
 export interface RecordCall {
   subscription?: boolean;
   provider: string;
+  sdk?: string | undefined;
   api_key_name?: string | undefined;
   model: string;
   call_type: string;
@@ -455,6 +456,7 @@ export class Ledger {
     const observation: Observation = {
       ts,
       provider: record.provider,
+      sdk: record.sdk,
       model: record.model,
       keepalive_window_secs: record.keepalive_window_secs,
       thinking_enabled: record.thinking_enabled,

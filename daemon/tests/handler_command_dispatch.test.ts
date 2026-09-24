@@ -295,6 +295,19 @@ describe("a chat model change", () => {
     ]);
   });
 
+  test.each(["subagent", "background_task"])("a global %s setting leaves other characters' chat caches alone", async (target) => {
+    const f = fakes({ cached: ["nova", CHARACTER] });
+
+    await afterCommand(
+      "set_model_setting",
+      { key: "cache_keepalive_pings", value: "1", scope: "global", [target]: "scout" },
+      { changed: true },
+      f.ctx,
+    );
+
+    expect(f.log.refreshed).toEqual([CHARACTER]);
+  });
+
   test("a character model setting leaves other characters' cached requests alone", async () => {
     const f = fakes({ cached: ["nova", CHARACTER] });
 

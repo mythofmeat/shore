@@ -262,12 +262,15 @@ export class KeepaliveService {
   ): void {
     if (callType === "keepalive" || callType === "heartbeat" || callType === "heartbeat_tool_loop") return;
     const entry = this.#entryFor(character);
-    if (fingerprint !== undefined && entry.prefix?.model === model) {
+    const armed = entry.prefix;
+    const elsewhere = identity !== undefined && armed !== undefined && haltKey(identity) !== haltKey(armed);
+    if (fingerprint !== undefined && armed?.model === model && !elsewhere) {
       entry.lastCallFingerprint = fingerprint;
     }
     if (usage !== undefined && usage.cache_read_tokens > 0 && readsFromMissedModel(entry, model, identity)) {
       entry.consecutiveMisses = 0;
     }
+    if (elsewhere) return;
     entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
   }
 

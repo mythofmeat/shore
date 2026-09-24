@@ -30,6 +30,7 @@ export class HeartbeatClock {
 
   #config: HeartbeatClockConfig;
   #defaultWake = false;
+  #defaultFloor: number | undefined;
   #forcedDormant = false;
 
   constructor(config: HeartbeatClockConfig, now: number) {
@@ -66,7 +67,7 @@ export class HeartbeatClock {
     const existing = this.#nextWakeAt;
     if (existing === undefined) return;
     if (this.#defaultWake) {
-      this.#nextWakeAt = Math.max(now, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
+      this.#nextWakeAt = Math.max(now, this.#defaultFloor ?? now, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
     } else if (config.minIntervalMs > previous.minIntervalMs) {
       this.boundWake(now);
     } else if (existing > now + config.maxIntervalMs) {
@@ -120,6 +121,7 @@ export class HeartbeatClock {
       if (this.#isAbandoned(now)) return "none";
       this.#nextWakeAt = this.#lastAnchor + this.#bounded(this.#config.defaultIntervalMs);
       this.#defaultWake = true;
+      this.#defaultFloor = undefined;
       return "none";
     }
 
@@ -171,7 +173,10 @@ export class HeartbeatClock {
     const bounded = now + this.#bounded((existing ?? now) - now);
     if (existing === bounded) return;
     this.#nextWakeAt = bounded;
-    if (this.#defaultWake && existing !== undefined && !ensureScheduled) return;
+    if (this.#defaultWake && existing !== undefined && !ensureScheduled) {
+      if (bounded > existing) this.#defaultFloor = bounded;
+      return;
+    }
     this.#lastAnchor = now;
     this.#defaultWake = false;
   }
@@ -182,6 +187,7 @@ export class HeartbeatClock {
     if (snapshot.next_wake_at !== undefined) {
       this.#nextWakeAt = snapshot.next_wake_at;
       this.#defaultWake = snapshot.default_wake === true;
+      this.#defaultFloor = undefined;
       this.#lastAnchor = this.#defaultWake && snapshot.wake_anchor_at !== undefined
         ? snapshot.wake_anchor_at
         : snapshot.next_wake_at;

@@ -353,6 +353,23 @@ describe("what counts as a warm", () => {
     expect(h.sent).toHaveLength(2);
   });
 
+  test("the same model ID through another provider neither supersedes nor refreshes the armed prefix", async () => {
+    const h = harness();
+    h.service.arm(prefix({ provider_key: "anthropic", keepalive_pings: 1 }));
+    h.service.observe(CHARACTER, MODEL, "message", undefined, undefined, { sdk: "anthropic", provider_key: "anthropic", model: MODEL });
+    const deadline = h.service.nextPingAt(CHARACTER);
+
+    h.clock.advance(minutes(30));
+    h.service.observe(CHARACTER, MODEL, "subagent", "subagent-prefix", { cache_read_tokens: 0 }, {
+      sdk: "openai", provider_key: "openrouter", model: MODEL,
+    });
+    expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
+
+    h.clock.advance(minutes(26));
+    await h.service.tick();
+    expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
+  });
+
   test("an unknown character is ignored rather than armed", () => {
     const h = harness();
     h.service.observe("nobody", MODEL, "message");

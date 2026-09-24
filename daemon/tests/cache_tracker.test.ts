@@ -294,6 +294,20 @@ describe("keepalive", () => {
       .toBe("cold_keepalive");
   });
 
+  test("a cold keepalive through one SDK is not half of a double miss through another", () => {
+    const t = new CacheTracker();
+    expect(t.observe(obs({ ts: at(0), provider: "anthropic", sdk: "openai", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+    expect(t.observe(obs({ ts: at(1), provider: "anthropic", sdk: "anthropic", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+  });
+
+  test("a tracker seeded without an SDK still recognises the same model's live calls", () => {
+    const t = CacheTracker.reconstruct(at(0), MODEL, true, 500, 3600, Date.parse(at(1)), undefined, "anthropic");
+    const r = t.observe(obs({ ts: at(1), provider: "anthropic", sdk: "anthropic", cache_read_tokens: 100, cache_write_tokens: 5000 }));
+    expect(r.anomaly).toBe<Anomaly>("unexpected_write");
+  });
+
   test("a cache read on another model does not clear this model's keepalive miss", () => {
     const t = new CacheTracker();
     t.observe(obs({ ts: at(0), call_type: "keepalive" }));
