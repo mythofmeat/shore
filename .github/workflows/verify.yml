@@ -1,0 +1,82 @@
+name: verify Shore
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every job runs a group from .scripts/test.sh, so CI and local runs execute the same checks.
+jobs:
+  lint:
+    name: daemon lint and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+        working-directory: daemon
+      - run: .scripts/test.sh lint
+
+  daemon:
+    name: daemon build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+          check-latest: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+        working-directory: daemon
+      - run: rustup update stable --no-self-update && rustup default stable
+      - id: rust
+        run: echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      # build:patch compiles the vendored codex apply_patch from source, which takes ~15 minutes
+      # uncached. Its output depends only on the vendored inputs and the toolchain. It is saved
+      # right after the build so a later test failure doesn't throw the build away.
+      - id: patch-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            daemon/target/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
+      - run: bun run build:patch
+        working-directory: daemon
+      - if: steps.patch-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            daemon/target/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
+      - run: .scripts/test.sh daemon
+
+  client:
+    name: client tests and clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup update stable --no-self-update && rustup default stable && rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
+      - run: .scripts/test.sh client
