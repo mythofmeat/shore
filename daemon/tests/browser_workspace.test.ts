@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, controlFor, initialValue } from "../src/browser/forms.ts";
-import { mergeHistory, EVENT_POLICIES, inspectableRequest } from "../src/browser/workspace.ts";
+import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
+import { BrowserConnection, type ConnectionUpdate } from "../src/browser/connection.ts";
+import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
+import type { History } from "../src/protocol/History.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { formatConfigPath } from "../src/config/surface.ts";
 import { assertSettingsCoverage, configAt, settingControl } from "../src/browser/settings_forms.ts";
@@ -131,6 +134,36 @@ test("every registered action field reaches an implemented control, and every kn
 });
 
 const message = (id: string): Message => ({ msg_id: id, role: "user", content: id, images: [], content_blocks: [], timestamp: "now" });
+
+test("history-only updates retain configuration until it is replaced or the conversation changes", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    history(history: History) { for (const listener of this.listeners) listener({ kind: "frame", message: { type: "history", ...history } }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const history: History = { messages: [], config: { chat: { model: "fixture" } }, selected_character: "nova", selected_thread: "main", revision: 1 };
+  connection.history(history);
+  expect(workspace.getSnapshot().config).toEqual(history.config);
+  connection.history({ ...history, config: {}, messages: [message("question")], revision: 2, delta: { base_revision: 1, after: null } });
+  expect(workspace.getSnapshot().config).toEqual(history.config);
+  expect(workspace.getSnapshot().messages.map((item) => item.msg_id)).toEqual(["question"]);
+  connection.history({ ...history, config: {}, messages: [message("edited")], revision: 3 });
+  expect(workspace.getSnapshot().config).toEqual(history.config);
+  expect(workspace.getSnapshot().messages.map((item) => item.msg_id)).toEqual(["edited"]);
+  const updated = { chat: { model: "updated" } };
+  connection.history({ ...history, config: updated, revision: 4 });
+  expect(workspace.getSnapshot().config).toEqual(updated);
+  connection.history({ ...history, config: {}, selected_thread: "side" });
+  expect(workspace.getSnapshot().config).toEqual({});
+  connection.history(history);
+  connection.history({ ...history, config: {}, selected_character: "other" });
+  expect(workspace.getSnapshot().config).toEqual({});
+  connection.history({ ...history, config: updated });
+  expect(workspace.getSnapshot().config).toEqual(updated);
+});
+
 test("history deltas replace the suffix, preserve archived pages, and detect absent anchors", () => {
   const previous = [message("archive"), message("question"), message("old-answer")];
   const history = { messages: [message("new-answer")], config: {}, revision: 2, delta: { base_revision: 1, after: "question" } };

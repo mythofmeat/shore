@@ -166,9 +166,10 @@ export function Composer({ state, workspace, ref }: { state: WorkspaceSnapshot; 
         });
         added.push(imageUpload(file, data));
       }
-      const images = [...current.current.images, ...added];
+      const value = store.current ?? current.current;
+      const images = [...value.images, ...added];
       checkAttachments(images);
-      await change({ ...current.current, images });
+      await change({ ...value, images });
     } finally { setAttaching(false); }
   };
   const paste = (event: ClipboardEvent<HTMLTextAreaElement>) => {

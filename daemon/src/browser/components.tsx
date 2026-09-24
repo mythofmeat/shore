@@ -60,6 +60,7 @@ export function Field({ control, value, change, label, presentation, choices = {
   control: Control; value: unknown; change: (value: unknown) => void; label: string; presentation?: OperationField; choices?: ChoiceLists; suggestions?: string[]; secret?: boolean;
 }) {
   const id = useId();
+  const [unionIndex, setUnionIndex] = useState<number>();
   switch (control.kind) {
     case "json": return <JsonValue value={value} change={change} label={label} />;
     case "string": {
@@ -77,11 +78,13 @@ export function Field({ control, value, change, label, presentation, choices = {
       return <fieldset><legend>{label}</legend>{items.map((item, index) => <div className="collection-row" key={index}><Field control={control.item} value={item} label={`${label} ${String(index + 1)}`} choices={choices} {...(suggestions === undefined ? {} : { suggestions })} secret={secret} change={(next) => change(items.map((old, position) => position === index ? next : old))} /><button type="button" aria-label={`Remove ${label} ${String(index + 1)}`} onClick={() => change(items.filter((_, position) => position !== index))}>Remove</button></div>)}<button type="button" onClick={() => change([...items, initialValue(control.item)])}>Add {label.toLowerCase()}</button></fieldset>;
     }
     case "union": {
-      const index = Math.max(0, control.options.findIndex((option) => acceptsKind(option, value)));
+      const chosen = unionIndex === undefined ? undefined : control.options[unionIndex];
+      const index = unionIndex !== undefined && chosen !== undefined && acceptsKind(chosen, value) ? unionIndex : Math.max(0, control.options.findIndex((option) => acceptsKind(option, value)));
       const selected = control.options[index];
       return <fieldset><label className="field">{label} format<select value={index} onChange={(event) => {
-        const option = control.options[Number(event.target.value)]; if (option !== undefined) change(initialValue(option));
-      }}>{control.options.map((option, position) => <option key={position} value={position}>{option.kind === "null" ? "Explicitly unset" : option.kind === "array" ? "Collection" : option.kind === "integer" ? "Whole number" : option.kind === "string" && option.choices !== undefined ? option.choices.join(" / ") : option.kind}</option>)}</select></label>{selected === undefined ? null : <Field control={selected} value={value} change={change} label={label} {...(presentation === undefined ? {} : { presentation })} choices={choices} {...(suggestions === undefined ? {} : { suggestions })} secret={secret} />}</fieldset>;
+        const next = Number(event.target.value);
+        const option = control.options[next]; if (option !== undefined) { setUnionIndex(next); change(initialValue(option)); }
+      }}>{control.options.map((option, position) => <option key={position} value={position}>{option.kind === "null" ? "Explicitly unset" : option.kind === "array" ? "Collection" : option.kind === "integer" ? "Whole number" : option.kind === "string" && option.choices !== undefined ? option.choices.join(" / ") : option.kind}</option>)}</select></label>{selected === undefined ? null : <Field key={index} control={selected} value={value} change={change} label={label} {...(presentation === undefined ? {} : { presentation })} choices={choices} {...(suggestions === undefined ? {} : { suggestions })} secret={secret} />}</fieldset>;
     }
     case "object": {
       const values = record(value);

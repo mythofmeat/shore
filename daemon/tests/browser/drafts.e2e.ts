@@ -21,6 +21,55 @@ async function saved(page: Page): Promise<void> {
   await expect(page.getByRole("status").filter({ hasText: "Draft saved on this device" })).toBeVisible();
 }
 
+test("a delayed image read merges into the current draft after a conversation round trip", async ({ page }) => {
+  await openCharacter(page);
+  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Character name", { exact: true }).fill("other");
+  await dialog.getByRole("button", { name: "Run action", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByLabel("Message", { exact: true }).fill("Original draft before reading");
+  await page.getByLabel("Attach images", { exact: true }).setInputFiles({ ...picture, name: "removed.png" });
+  await saved(page);
+  await page.evaluate(`{
+    const read = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function(file) {
+      FileReader.prototype.readAsDataURL = read;
+      const loaded = this.onload;
+      this.onload = event => { window.shoreReleaseImage = () => loaded.call(this, event); };
+      read.call(this, file);
+    };
+  }`);
+  await page.getByLabel("Attach images", { exact: true }).setInputFiles(picture);
+  await expect.poll(() => page.evaluate("typeof window.shoreReleaseImage")).toBe("function");
+  const characters = page.getByRole("navigation", { name: "Characters" });
+  await characters.getByRole("button", { name: "O other" }).click();
+  await expect(page.getByRole("heading", { name: "other / main" })).toBeVisible();
+  await page.getByLabel("Message", { exact: true }).fill("Other conversation draft");
+  await saved(page);
+  await characters.getByRole("button", { name: "N nova" }).click();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Original draft before reading");
+  await page.getByLabel("Message", { exact: true }).fill("Newer draft must survive reading");
+  await page.getByRole("button", { name: "Remove removed.png", exact: true }).click();
+  await page.getByLabel("Attach images", { exact: true }).setInputFiles({ ...picture, name: "newer.png" });
+  await saved(page);
+  await page.evaluate("window.shoreReleaseImage()");
+  await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Newer draft must survive reading");
+  await expect(page.getByRole("button", { name: "Remove newer.png", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove removed.png", exact: true })).toHaveCount(0);
+  await saved(page);
+  await page.reload();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Newer draft must survive reading");
+  await expect(page.getByRole("button", { name: "Remove draft.png", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove newer.png", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove removed.png", exact: true })).toHaveCount(0);
+  await characters.getByRole("button", { name: "O other" }).click();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Other conversation draft");
+  await expect(page.locator(".attachments")).toHaveCount(0);
+});
+
 for (const edited of [false, true]) test(`send completion reconciles a remounted ${edited ? "edited" : "unchanged"} draft`, async ({ page }) => {
   let messageRid: string | undefined;
   let release: (() => void) | undefined;
