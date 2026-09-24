@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
+use shore_common::token::TokenSource;
 use tracing::{debug, info, instrument};
 
 use crate::cli::{Cli, CliCommand, LogRole, ModelCommand, ModelTarget, MsgCommand};
@@ -88,6 +89,7 @@ pub(crate) async fn execute(
         "shore-cli",
         character.clone(),
         thread.clone(),
+        &TokenSource::Discover,
     )
     .await?;
 
@@ -135,6 +137,7 @@ pub(crate) async fn execute(
                     "shore-cli",
                     Some(display_character.clone()),
                     Some(saved),
+                    &TokenSource::Discover,
                 )
                 .await?;
                 conn = fallback_conn;
@@ -1305,8 +1308,15 @@ async fn handle_complete_query(
         .thread
         .clone()
         .or_else(|| character.as_deref().and_then(state::read_active_thread));
-    let (mut conn, _hello, _history) =
-        SWPConnection::connect_in_thread(&addr, "cli", "shore-cli", character, thread).await?;
+    let (mut conn, _hello, _history) = SWPConnection::connect_in_thread(
+        &addr,
+        "cli",
+        "shore-cli",
+        character,
+        thread,
+        &TokenSource::Discover,
+    )
+    .await?;
 
     if matches!(
         kind,
@@ -1564,7 +1574,7 @@ async fn print_config_path(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> 
     let character = cli.character.clone().or_else(state::read_active_character);
 
     if let Ok((mut conn, _hello, _history)) =
-        SWPConnection::connect(&addr, "cli", "shore-cli", character).await
+        SWPConnection::connect(&addr, "cli", "shore-cli", character, &TokenSource::Discover).await
     {
         let _ignored = conn.send_command("status", serde_json::json!({})).await?;
         let data = recv_command_data(&mut conn).await?;
@@ -1952,7 +1962,7 @@ async fn recv_command_data(
 mod tests {
     use super::{ModelChange, model_change};
     use crate::cli::{ModelCommand, ModelTarget};
-    use crate::test_env::set_env;
+    use shore_common::token::TokenSource;
     use tokio::io::AsyncWriteExt;
     use tokio::io::duplex;
 
@@ -2201,13 +2211,11 @@ mod tests {
         CliCommand::Msg { command }
     }
 
-    fn with_token() {
-        static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| set_env(shore_common::token::TOKEN_ENV, "test-token"));
+    fn test_token() -> TokenSource {
+        TokenSource::Given("test-token".into())
     }
 
     async fn execute_with_mock(cli: Cli, responses: Vec<ServerMessage>) -> ClientMessage {
-        with_token();
         let (client_stream, server_stream) = duplex(16384);
 
         let server_handle = tokio::spawn(mock_server(server_stream, responses));
@@ -2217,6 +2225,7 @@ mod tests {
             "cli",
             "shore-cli",
             cli.character.clone(),
+            &test_token(),
         )
         .await
         .unwrap();
@@ -2714,7 +2723,6 @@ mod tests {
     }
 
     async fn error_from_mock(err: Error) -> Box<dyn std::error::Error> {
-        with_token();
         let (client_stream, server_stream) = duplex(16384);
         let server = tokio::spawn(mock_server(server_stream, vec![ServerMessage::Error(err)]));
 
@@ -2723,6 +2731,7 @@ mod tests {
             "cli",
             "shore-cli",
             None,
+            &test_token(),
         )
         .await
         .unwrap();

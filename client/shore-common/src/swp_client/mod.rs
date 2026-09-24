@@ -12,7 +12,7 @@ pub use error::{ClientError, DiscoveryKind, Result};
 
 #[cfg(test)]
 mod tests {
-    use crate::test_env::{set_env, unset_env};
+    use crate::token::TokenSource;
     use tokio::io::duplex;
 
     use crate::protocol::client_msg::ClientMessage;
@@ -49,14 +49,12 @@ mod tests {
         w.flush().await.unwrap();
     }
 
-    fn with_token() {
-        static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| set_env(crate::token::TOKEN_ENV, "test-token"));
+    fn test_token() -> TokenSource {
+        TokenSource::Given("test-token".into())
     }
 
     #[tokio::test]
     async fn handshake_success() {
-        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let server_handle = tokio::spawn(async move {
@@ -106,7 +104,7 @@ mod tests {
         });
 
         let (conn, server_hello, history) =
-            SWPConnection::connect_raw(client_stream, "tui", "test-client", None)
+            SWPConnection::connect_raw(client_stream, "tui", "test-client", None, &test_token())
                 .await
                 .unwrap();
 
@@ -130,7 +128,6 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_wrong_version() {
-        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let _ignored = tokio::spawn(async move {
@@ -143,7 +140,8 @@ mod tests {
             write_json_line(&mut w, &bad_hello).await;
         });
 
-        let result = SWPConnection::connect_raw(client_stream, "tui", "test", None).await;
+        let result =
+            SWPConnection::connect_raw(client_stream, "tui", "test", None, &test_token()).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -154,7 +152,6 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_unexpected_first_message() {
-        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let _ignored = tokio::spawn(async move {
@@ -163,7 +160,8 @@ mod tests {
             write_json_line(&mut w, &ping).await;
         });
 
-        let result = SWPConnection::connect_raw(client_stream, "tui", "test", None).await;
+        let result =
+            SWPConnection::connect_raw(client_stream, "tui", "test", None, &test_token()).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -174,7 +172,6 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_skips_unknown_frames() {
-        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let server_handle = tokio::spawn(async move {
@@ -209,7 +206,7 @@ mod tests {
         });
 
         let (conn, server_hello, history) =
-            SWPConnection::connect_raw(client_stream, "tui", "test-client", None)
+            SWPConnection::connect_raw(client_stream, "tui", "test-client", None, &test_token())
                 .await
                 .expect("handshake should skip unknown frames and succeed");
 
@@ -330,7 +327,6 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_rejects_oversized_server_hello() {
-        with_token();
         let (client_stream, server_stream) = duplex(MAX_WIRE_MESSAGE_SIZE + 4096);
 
         let _ignored = tokio::spawn(async move {
@@ -344,25 +340,15 @@ mod tests {
             write_raw_line(&mut w, &serde_json::to_string(&oversized).unwrap()).await;
         });
 
-        let result = SWPConnection::connect_raw(client_stream, "tui", "test-client", None).await;
+        let result =
+            SWPConnection::connect_raw(client_stream, "tui", "test-client", None, &test_token())
+                .await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
             format!("{err}").contains("maximum size"),
             "expected explicit framing limit error, got: {err}"
         );
-    }
-
-    #[test]
-    fn discovery_instances_path_uses_xdg() {
-        let orig = std::env::var("XDG_RUNTIME_DIR").ok();
-        set_env("XDG_RUNTIME_DIR", "/tmp/test-xdg");
-        let path = crate::swp_client::discovery::instances_path();
-        assert_eq!(path.to_str().unwrap(), "/tmp/test-xdg/shore/instances.json");
-        match orig {
-            Some(v) => set_env("XDG_RUNTIME_DIR", v),
-            None => unset_env("XDG_RUNTIME_DIR"),
-        }
     }
 
     #[test]

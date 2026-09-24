@@ -278,7 +278,23 @@ pub(crate) struct ImageEntry {
     pub line: usize,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct SettingsFiles {
+    pub keymap: std::path::PathBuf,
+    pub prefs: std::path::PathBuf,
+}
+
+impl SettingsFiles {
+    pub(crate) fn resolve() -> Self {
+        Self {
+            keymap: shore_common::dirs::config_dir().join("tui.toml"),
+            prefs: shore_common::dirs::data_dir().join("tui_prefs.json"),
+        }
+    }
+}
+
 pub(crate) struct App {
+    pub settings_files: Option<SettingsFiles>,
     pub persist_session: bool,
     pub draft_daemon: String,
     pub draft_lock: Option<std::fs::File>,
@@ -363,6 +379,7 @@ pub(crate) struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
+            settings_files: None,
             persist_session: false,
             draft_daemon: String::new(),
             draft_lock: None,

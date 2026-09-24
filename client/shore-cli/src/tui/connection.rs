@@ -8,5 +8,13 @@ pub(crate) fn spawn_connection(
     tokio::sync::mpsc::Sender<ConnCommand>,
     tokio::sync::mpsc::Receiver<ConnEvent>,
 ) {
-    shore_common::swp_client::spawn_connection(addr, None, "tui", "shore", character, thread)
+    shore_common::swp_client::spawn_connection(
+        addr,
+        None,
+        "tui",
+        "shore",
+        character,
+        thread,
+        shore_common::token::TokenSource::Discover,
+    )
 }

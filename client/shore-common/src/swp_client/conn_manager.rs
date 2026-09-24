@@ -2,6 +2,7 @@ use crate::protocol::client_msg::ClientMessage;
 use crate::protocol::server_msg::ServerMessage;
 use crate::swp_client::sync::{SyncDecision, SyncState};
 use crate::swp_client::{SWPConnection, ServerAddr, discover_or_default};
+use crate::token::TokenSource;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
@@ -35,6 +36,7 @@ pub fn spawn_connection(
     app_name: &str,
     character: Option<String>,
     thread: Option<String>,
+    token: TokenSource,
 ) -> (mpsc::Sender<ConnCommand>, mpsc::Receiver<ConnEvent>) {
     let (event_tx, event_rx) = mpsc::channel(256);
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
@@ -47,7 +49,11 @@ pub fn spawn_connection(
         config,
         owned_id,
         owned_app,
-        SessionTarget { character, thread },
+        SessionTarget {
+            character,
+            thread,
+            token,
+        },
         event_tx,
         cmd_rx,
     ));
@@ -59,6 +65,7 @@ pub fn spawn_connection(
 struct SessionTarget {
     character: Option<String>,
     thread: Option<String>,
+    token: TokenSource,
 }
 
 impl SessionTarget {
@@ -173,6 +180,7 @@ async fn connection_loop(
             &app_name,
             target.character.clone(),
             target.thread.clone(),
+            &target.token,
         );
         let Some(result) = await_without_queueing(attempt, &event_tx, &mut cmd_rx).await else {
             return;
@@ -410,7 +418,7 @@ mod tests {
         assert_eq!(reconnect_thread(&unselected, None), None);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn revision_gap_notifies_the_ui_before_reconnecting() {
         use tokio::io::AsyncWriteExt;
 
@@ -510,6 +518,13 @@ mod tests {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::{ConnCommand, ConnEvent, Duration, spawn_connection};
+    use crate::token::TokenSource;
+
+    const HANG_GUARD: Duration = Duration::from_secs(5);
+
+    fn token() -> TokenSource {
+        TokenSource::Given("test-token".into())
+    }
 
     #[tokio::test]
     async fn shutdown_interrupts_a_peer_that_never_sends_hello() {
@@ -521,11 +536,12 @@ mod lifecycle_tests {
             "test",
             None,
             None,
+            token(),
         );
         let (mut socket, _) = listener.accept().await.unwrap();
         tx.send(ConnCommand::Shutdown).await.unwrap();
         assert!(
-            tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            tokio::time::timeout(HANG_GUARD, rx.recv())
                 .await
                 .unwrap()
                 .is_none()
@@ -544,16 +560,15 @@ mod lifecycle_tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap().to_string();
         drop(listener);
-        let (tx, mut rx) = spawn_connection(Some(address), None, "test", "test", None, None);
+        let (tx, mut rx) =
+            spawn_connection(Some(address), None, "test", "test", None, None, token());
         assert!(matches!(
-            tokio::time::timeout(Duration::from_secs(1), rx.recv())
-                .await
-                .unwrap(),
+            tokio::time::timeout(HANG_GUARD, rx.recv()).await.unwrap(),
             Some(ConnEvent::Disconnected(_))
         ));
         tx.send(ConnCommand::Shutdown).await.unwrap();
         assert!(
-            tokio::time::timeout(Duration::from_millis(250), rx.recv())
+            tokio::time::timeout(HANG_GUARD, rx.recv())
                 .await
                 .unwrap()
                 .is_none()
@@ -570,6 +585,7 @@ mod lifecycle_tests {
             "test",
             None,
             None,
+            token(),
         );
         let (_socket, _) = listener.accept().await.unwrap();
         tx.send(ConnCommand::Send(
@@ -582,9 +598,7 @@ mod lifecycle_tests {
         .await
         .unwrap();
         assert!(matches!(
-            tokio::time::timeout(Duration::from_millis(250), rx.recv())
-                .await
-                .unwrap(),
+            tokio::time::timeout(HANG_GUARD, rx.recv()).await.unwrap(),
             Some(ConnEvent::SendFailed(_))
         ));
         tx.send(ConnCommand::Shutdown).await.unwrap();
@@ -599,7 +613,13 @@ mod blocked_io_tests {
     use crate::protocol::client_msg::{ClientMessage, Command};
     use crate::swp_client::{SWPConnection, sync::SyncState};
 
-    #[tokio::test]
+    async fn settle() {
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn rejecting_an_extra_command_keeps_the_original_socket_and_response() {
         use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -657,14 +677,14 @@ mod blocked_io_tests {
         assert!(matches!(task.await.unwrap(), SessionOutcome::Exit));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn shutdown_interrupts_a_full_event_queue() {
         let (event_tx, _event_rx) = tokio::sync::mpsc::channel(1);
         let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(1);
         event_tx
             .try_send(ConnEvent::Disconnected("existing".into()))
             .unwrap();
-        let mut sending = tokio::spawn(async move {
+        let sending = tokio::spawn(async move {
             send_event(
                 ConnEvent::Disconnected("pending".into()),
                 &event_tx,
@@ -672,11 +692,8 @@ mod blocked_io_tests {
             )
             .await
         });
-        assert!(
-            tokio::time::timeout(Duration::from_millis(20), &mut sending)
-                .await
-                .is_err()
-        );
+        settle().await;
+        assert!(!sending.is_finished(), "it must still be blocked");
         cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
         assert!(
             !tokio::time::timeout(Duration::from_millis(250), sending)
@@ -686,7 +703,7 @@ mod blocked_io_tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn shutdown_interrupts_a_write_to_a_peer_that_is_not_reading() {
         let (stream, _peer) = tokio::io::duplex(8);
         let mut conn = SWPConnection::from_raw_stream(stream);
@@ -700,18 +717,15 @@ mod blocked_io_tests {
             })))
             .await
             .unwrap();
-        let mut task = tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let mut sync = SyncState::new(0, None, None);
             matches!(
                 run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync).await,
                 SessionOutcome::Exit
             )
         });
-        assert!(
-            tokio::time::timeout(Duration::from_millis(20), &mut task)
-                .await
-                .is_err()
-        );
+        settle().await;
+        assert!(!task.is_finished(), "it must still be blocked");
         cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
         assert!(
             tokio::time::timeout(Duration::from_millis(250), task)

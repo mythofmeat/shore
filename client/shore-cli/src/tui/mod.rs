@@ -410,20 +410,21 @@ fn persist_active_character(name: &str) {
     }
 }
 
-fn prefs_path() -> PathBuf {
-    shore_common::dirs::data_dir().join("tui_prefs.json")
-}
-
 fn load_keymap(app: &mut App) {
-    app.keymap = keymap::Keymap::load();
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    app.keymap = keymap::Keymap::load_from(&files.keymap);
     for warning in app.keymap.warnings.clone() {
         app.set_error(warning);
     }
 }
 
 fn load_prefs(app: &mut App) {
-    let path = prefs_path();
-    let prefs_data = std::fs::read_to_string(&path).ok();
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    let prefs_data = std::fs::read_to_string(&files.prefs).ok();
     if let Some(data) = prefs_data
         && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&data)
     {
@@ -502,7 +503,10 @@ fn save_prefs(app: &App) {
         "usage_display": app.usage_display.as_str(),
         "budget_focus": app.budget_focus.as_token(),
     });
-    if let Err(e) = write_prefs_file(&prefs_path(), &v.to_string()) {
+    let Some(files) = &app.settings_files else {
+        return;
+    };
+    if let Err(e) = write_prefs_file(&files.prefs, &v.to_string()) {
         warn!("failed to persist prefs: {e}");
     }
 }
@@ -1298,6 +1302,7 @@ async fn run_tui(
         app.image_cache.probe_protocol();
     }
     if !fixture_mode {
+        app.settings_files = Some(app::SettingsFiles::resolve());
         load_prefs(&mut app);
         load_keymap(&mut app);
         let root = draft::drafts_dir();

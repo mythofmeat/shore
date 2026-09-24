@@ -57,6 +57,28 @@ run() {
     fi
 }
 
+# Tests run with an empty home and none of the developer's shore settings, as they do in CI.
+hermetic() {
+    home=$(mktemp -d)
+    if env -u SHORE_TOKEN -u SHORE_ADDR -u SHORE_CONFIG_DIR -u SHORE_DATA_DIR \
+        -u SHORE_RUNTIME_DIR -u SHORE_CACHE_DIR -u SHORE_WORKSPACE_DIR \
+        RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" \
+        CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" \
+        BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-$HOME/.bun/install/cache}" \
+        HOME="$home" \
+        XDG_CONFIG_HOME="$home/config" \
+        XDG_DATA_HOME="$home/data" \
+        XDG_CACHE_HOME="$home/cache" \
+        XDG_RUNTIME_DIR="$home/run" \
+        "$@"; then
+        status=0
+    else
+        status=$?
+    fi
+    rm -rf "$home"
+    return "$status"
+}
+
 for group in "$@"; do
     case "$group" in
     lint)
@@ -69,13 +91,13 @@ for group in "$@"; do
     daemon)
         cd "$root/daemon"
         run bun-build bun run build
-        run bun-test bun test
+        run bun-test hermetic bun test
         run bun-mutate-stale bun run mutate --stale
         run bun-rerecord-check bun run rerecord:check
         ;;
     client)
         cd "$root/client"
-        run cargo-test cargo test --workspace --locked
+        run cargo-test hermetic cargo test --workspace --locked
         run cargo-fmt cargo fmt --all --check
         run cargo-clippy cargo clippy --workspace --all-targets --locked
         ;;
