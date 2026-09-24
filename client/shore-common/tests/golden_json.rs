@@ -28,30 +28,50 @@ where
     let parsed: T = serde_json::from_str(fixture).expect("fixture deserializes into T");
     let reserialized = serde_json::to_value(&parsed).expect("re-serialize");
     assert_eq!(
-        reserialized, expected,
+        numbers_as_floats(reserialized),
+        numbers_as_floats(expected),
         "re-serialized JSON does not match fixture"
     );
     parsed
+}
+
+fn numbers_as_floats(value: Value) -> Value {
+    match value {
+        Value::Number(number) => number.as_f64().map_or(Value::Number(number), Value::from),
+        Value::Array(items) => Value::Array(items.into_iter().map(numbers_as_floats).collect()),
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(key, item)| (key, numbers_as_floats(item)))
+                .collect(),
+        ),
+        other @ (Value::Null | Value::Bool(_) | Value::String(_)) => other,
+    }
 }
 
 fn field<'val>(value: &'val Value, key: &str) -> &'val Value {
     value.get(key).expect("expected JSON field")
 }
 
+const SHARED_FIXTURES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../daemon/tests/handler_captures/wire_fixtures.json"
+));
+
+fn shared_fixture(section: &str, name: Option<&str>) -> String {
+    let all: Value = serde_json::from_str(SHARED_FIXTURES).expect("shared fixtures are valid JSON");
+    let part = field(&all, section);
+    let value = name.map_or(part, |key| field(part, key));
+    serde_json::to_string(value).expect("a JSON value re-encodes")
+}
+
 fn item<T>(items: &[T], index: usize) -> &T {
     items.get(index).expect("expected item")
 }
 
-const SERVER_HELLO_FIXTURE: &str = r#"{
-    "type": "hello",
-    "v": 1,
-    "server_name": "shore-daemon",
-    "characters": [{"name": "alice"}, {"name": "bob"}]
-}"#;
-
 #[test]
 fn server_hello_golden() {
-    let msg: ServerMessage = assert_golden(SERVER_HELLO_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("server_hello")));
     assert_variant!(
     msg,
     ServerMessage::Hello(h) => {
@@ -65,22 +85,10 @@ fn server_hello_golden() {
     );
 }
 
-const SERVER_HELLO_WITH_AVATAR_FIXTURE: &str = r#"{
-    "type": "hello",
-    "v": 1,
-    "server_name": "shore-daemon",
-    "characters": [{
-        "name": "alice",
-        "avatar": {
-            "mime_type": "image/png",
-            "data": "cG5n"
-        }
-    }]
-}"#;
-
 #[test]
 fn server_hello_with_avatar_golden() {
-    let msg: ServerMessage = assert_golden(SERVER_HELLO_WITH_AVATAR_FIXTURE);
+    let msg: ServerMessage =
+        assert_golden(&shared_fixture("server", Some("server_hello_with_avatar")));
     assert_variant!(
     msg,
     ServerMessage::Hello(h) => {
@@ -91,36 +99,9 @@ fn server_hello_with_avatar_golden() {
     );
 }
 
-const HISTORY_FIXTURE: &str = r#"{
-    "type": "history",
-    "messages": [
-        {
-            "msg_id": "m_001",
-            "role": "user",
-            "content": "Hello!",
-            "images": [],
-            "content_blocks": [],
-            "timestamp": "2026-01-15T10:30:00Z"
-        },
-        {
-            "msg_id": "m_002",
-            "role": "assistant",
-            "content": "Hi there!",
-            "images": [{"path": "/img/wave.png", "caption": "waving"}],
-            "content_blocks": [],
-            "alt_index": 0,
-            "alt_count": 2,
-            "timestamp": "2026-01-15T10:30:01Z"
-        }
-    ],
-    "config": {"model": "claude-haiku-4-5-20251001"},
-    "selected_character": "alice",
-    "revision": 12
-}"#;
-
 #[test]
 fn history_golden() {
-    let msg: ServerMessage = assert_golden(HISTORY_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("history")));
     assert_variant!(
     msg,
     ServerMessage::History(h) => {
@@ -149,32 +130,21 @@ fn history_golden() {
     );
 }
 
-const SHUTDOWN_FIXTURE: &str = r#"{"type": "shutdown"}"#;
-
 #[test]
 fn shutdown_golden() {
-    let msg: ServerMessage = assert_golden(SHUTDOWN_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("shutdown")));
     assert!(matches!(msg, ServerMessage::Shutdown(_)));
 }
 
-const PING_FIXTURE: &str = r#"{"type": "ping"}"#;
-
 #[test]
 fn ping_golden() {
-    let msg: ServerMessage = assert_golden(PING_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("ping")));
     assert!(matches!(msg, ServerMessage::Ping(_)));
 }
 
-const COMMAND_OUTPUT_FIXTURE: &str = r#"{
-    "type": "command_output",
-    "rid": "cmd_01",
-    "name": "list_conversations",
-    "data": {"conversations": [{"id": "c1", "title": "Chat"}]}
-}"#;
-
 #[test]
 fn command_output_golden() {
-    let msg: ServerMessage = assert_golden(COMMAND_OUTPUT_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("command_output")));
     assert_variant!(
     msg,
     ServerMessage::CommandOutput(co) => {
@@ -188,16 +158,9 @@ fn command_output_golden() {
     );
 }
 
-const ERROR_FIXTURE: &str = r#"{
-    "type": "error",
-    "rid": "msg_01",
-    "code": "busy",
-    "message": "Engine is currently processing another request"
-}"#;
-
 #[test]
 fn error_golden() {
-    let msg: ServerMessage = assert_golden(ERROR_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("error")));
     assert_variant!(
     msg,
     ServerMessage::Error(e) => {
@@ -208,11 +171,9 @@ fn error_golden() {
     );
 }
 
-const STREAM_START_FIXTURE: &str = r#"{"type": "stream_start", "rid": "msg_01", "regen": false}"#;
-
 #[test]
 fn stream_start_golden() {
-    let msg: ServerMessage = assert_golden(STREAM_START_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("stream_start")));
     assert_variant!(
     msg,
     ServerMessage::StreamStart(s) => {
@@ -222,16 +183,9 @@ fn stream_start_golden() {
     );
 }
 
-const STREAM_CHUNK_FIXTURE: &str = r#"{
-    "type": "stream_chunk",
-    "rid": "msg_01",
-    "text": "Hello, how can I ",
-    "content_type": "text"
-}"#;
-
 #[test]
 fn stream_chunk_golden() {
-    let msg: ServerMessage = assert_golden(STREAM_CHUNK_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("stream_chunk")));
     assert_variant!(
     msg,
     ServerMessage::StreamChunk(c) => {
@@ -242,16 +196,10 @@ fn stream_chunk_golden() {
     );
 }
 
-const STREAM_CHUNK_THINKING_FIXTURE: &str = r#"{
-    "type": "stream_chunk",
-    "rid": "msg_01",
-    "text": "Let me think about this...",
-    "content_type": "thinking"
-}"#;
-
 #[test]
 fn stream_chunk_thinking_golden() {
-    let msg: ServerMessage = assert_golden(STREAM_CHUNK_THINKING_FIXTURE);
+    let msg: ServerMessage =
+        assert_golden(&shared_fixture("server", Some("stream_chunk_thinking")));
     assert_variant!(
     msg,
     ServerMessage::StreamChunk(c) => {
@@ -261,31 +209,9 @@ fn stream_chunk_thinking_golden() {
     );
 }
 
-const STREAM_END_FIXTURE: &str = r#"{
-    "type": "stream_end",
-    "rid": "msg_01",
-    "msg_id": "m_assistant_01",
-    "revision": 12,
-    "content": "Hello, how can I help you today?",
-    "metadata": {
-        "tokens": {
-            "input": 1234,
-            "output": 567,
-            "cache_read": 890,
-            "cache_write": 12
-        },
-        "timing": {
-            "total_ms": 2340,
-            "ttft_ms": 450
-        },
-        "model": "claude-haiku-4-5-20251001"
-    },
-    "is_final": true
-}"#;
-
 #[test]
 fn stream_end_golden() {
-    let msg: ServerMessage = assert_golden(STREAM_END_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("stream_end")));
     assert_variant!(
     msg,
     ServerMessage::StreamEnd(se) => {
@@ -305,16 +231,9 @@ fn stream_end_golden() {
     );
 }
 
-const PHASE_FIXTURE: &str = r#"{
-    "type": "phase",
-    "rid": "msg_01",
-    "phase": "thinking",
-    "model": "claude-haiku-4-5-20251001"
-}"#;
-
 #[test]
 fn phase_golden() {
-    let msg: ServerMessage = assert_golden(PHASE_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("phase")));
     assert_variant!(
     msg,
     ServerMessage::Phase(p) => {
@@ -325,22 +244,9 @@ fn phase_golden() {
     );
 }
 
-const NEW_MESSAGE_FIXTURE: &str = r#"{
-    "type": "new_message",
-    "revision": 8,
-    "character": "Alice",
-    "origin": "autonomous",
-    "msg_id": "m_auto_01",
-    "role": "assistant",
-    "content": "I noticed something interesting.",
-    "images": [],
-    "content_blocks": [],
-    "timestamp": "2026-01-15T10:35:00Z"
-}"#;
-
 #[test]
 fn new_message_golden() {
-    let msg: ServerMessage = assert_golden(NEW_MESSAGE_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("new_message")));
     assert_variant!(
     msg,
     ServerMessage::NewMessage(nm) => {
@@ -358,22 +264,10 @@ fn new_message_golden() {
     );
 }
 
-const NEW_MESSAGE_WITH_ALTS_FIXTURE: &str = r#"{
-    "type": "new_message",
-    "revision": 9,
-    "msg_id": "m_auto_02",
-    "role": "assistant",
-    "content": "Alternative response.",
-    "images": [],
-    "content_blocks": [],
-    "alt_index": 1,
-    "alt_count": 3,
-    "timestamp": "2026-01-15T10:36:00Z"
-}"#;
-
 #[test]
 fn new_message_with_alts_golden() {
-    let msg: ServerMessage = assert_golden(NEW_MESSAGE_WITH_ALTS_FIXTURE);
+    let msg: ServerMessage =
+        assert_golden(&shared_fixture("server", Some("new_message_with_alts")));
     assert_variant!(
     msg,
     ServerMessage::NewMessage(nm) => {
@@ -387,17 +281,9 @@ fn new_message_with_alts_golden() {
     );
 }
 
-const TOOL_CALL_FIXTURE: &str = r#"{
-    "type": "tool_call",
-    "rid": "msg_01",
-    "tool_id": "tc_001",
-    "tool_name": "web_search",
-    "input": {"query": "rust serde tutorial", "max_results": 5}
-}"#;
-
 #[test]
 fn tool_call_golden() {
-    let msg: ServerMessage = assert_golden(TOOL_CALL_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("tool_call")));
     assert_variant!(
     msg,
     ServerMessage::ToolCall(tc) => {
@@ -411,18 +297,9 @@ fn tool_call_golden() {
     );
 }
 
-const TOOL_RESULT_FIXTURE: &str = r#"{
-    "type": "tool_result",
-    "rid": "msg_01",
-    "tool_id": "tc_001",
-    "tool_name": "web_search",
-    "output": "Found 5 results for 'rust serde tutorial'",
-    "is_error": false
-}"#;
-
 #[test]
 fn tool_result_golden() {
-    let msg: ServerMessage = assert_golden(TOOL_RESULT_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("tool_result")));
     assert_variant!(
     msg,
     ServerMessage::ToolResult(tr) => {
@@ -435,16 +312,9 @@ fn tool_result_golden() {
     );
 }
 
-const SEND_IMAGE_FIXTURE: &str = r#"{
-    "type": "send_image",
-    "rid": "msg_01",
-    "path": "/tmp/chart.png",
-    "caption": "Monthly revenue chart"
-}"#;
-
 #[test]
 fn send_image_golden() {
-    let msg: ServerMessage = assert_golden(SEND_IMAGE_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("send_image")));
     assert_variant!(
     msg,
     ServerMessage::SendImage(si) => {
@@ -455,15 +325,9 @@ fn send_image_golden() {
     );
 }
 
-const CACHE_WARNING_FIXTURE: &str = r#"{
-    "type": "cache_warning",
-    "expected_tokens": 5000,
-    "message": "Cache miss: context was evicted, re-processing 5000 tokens"
-}"#;
-
 #[test]
 fn cache_warning_golden() {
-    let msg: ServerMessage = assert_golden(CACHE_WARNING_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("cache_warning")));
     assert_variant!(
     msg,
     ServerMessage::CacheWarning(cw) => {
@@ -476,24 +340,9 @@ fn cache_warning_golden() {
     );
 }
 
-const USAGE_WARNING_FIXTURE: &str = r#"{
-    "type": "usage_warning",
-    "rid": "msg_01",
-    "budget": "daily total",
-    "message": "Usage budget \"daily total\" reached 80% ($8.00/$10.00); resets at 2026-05-19 10:00 AM.",
-    "current_cost": 8.0,
-    "cost_limit": 10.0,
-    "percent_used": 0.8,
-    "crossed_warn_at": [0.8],
-    "period": "day",
-    "period_start": "2026-05-18T00:00:00Z",
-    "reset_at": "2026-05-19T00:00:00Z",
-    "reset_at_display": "2026-05-19 10:00 AM"
-}"#;
-
 #[test]
 fn usage_warning_golden() {
-    let msg: ServerMessage = assert_golden(USAGE_WARNING_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("usage_warning")));
     assert_variant!(
     msg,
     ServerMessage::UsageWarning(w) => {
@@ -506,25 +355,9 @@ fn usage_warning_golden() {
     );
 }
 
-const USAGE_WARNING_PACE_FIXTURE: &str = r#"{
-    "type": "usage_warning",
-    "rid": "msg_02",
-    "budget": "weekly",
-    "message": "Usage budget \"weekly\" day pace reached 100% ($2.50/$2.17); pace resets at 2026-05-22 06:00 AM.",
-    "current_cost": 2.5,
-    "cost_limit": 2.17,
-    "percent_used": 1.15,
-    "crossed_warn_at": [1.0],
-    "period": "day",
-    "period_start": "2026-05-21T06:00:00Z",
-    "reset_at": "2026-05-22T06:00:00Z",
-    "reset_at_display": "2026-05-22 06:00 AM",
-    "scope": "pace"
-}"#;
-
 #[test]
 fn usage_warning_pace_golden() {
-    let msg: ServerMessage = assert_golden(USAGE_WARNING_PACE_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("usage_warning_pace")));
     assert_variant!(
     msg,
     ServerMessage::UsageWarning(w) => {
@@ -535,16 +368,9 @@ fn usage_warning_pace_golden() {
     );
 }
 
-const CONFIG_WARNING_FIXTURE: &str = r#"{
-    "type": "config_warning",
-    "path": "/home/u/.config/shore/characters/poppy/config.toml",
-    "character": "poppy",
-    "message": "invalid config for character \"poppy\": [chat].model: unknown model \"claud-opus\""
-}"#;
-
 #[test]
 fn config_warning_golden() {
-    let msg: ServerMessage = assert_golden(CONFIG_WARNING_FIXTURE);
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("config_warning")));
     assert_variant!(
     msg,
     ServerMessage::ConfigWarning(w) => {
@@ -555,15 +381,10 @@ fn config_warning_golden() {
     );
 }
 
-const CONFIG_WARNING_GLOBAL_FIXTURE: &str = r#"{
-    "type": "config_warning",
-    "path": "/home/u/.config/shore/config.toml",
-    "message": "TOML parse error at line 12"
-}"#;
-
 #[test]
 fn config_warning_without_a_character_golden() {
-    let msg: ServerMessage = assert_golden(CONFIG_WARNING_GLOBAL_FIXTURE);
+    let msg: ServerMessage =
+        assert_golden(&shared_fixture("server", Some("config_warning_global")));
     assert_variant!(
     msg,
     ServerMessage::ConfigWarning(w) => {
@@ -573,16 +394,9 @@ fn config_warning_without_a_character_golden() {
     );
 }
 
-const CLIENT_HELLO_FIXTURE: &str = r#"{
-    "type": "hello",
-    "client_type": "tui",
-    "client_name": "shore",
-    "capabilities": ["streaming", "images"]
-}"#;
-
 #[test]
 fn client_hello_golden() {
-    let msg: ClientMessage = assert_golden(CLIENT_HELLO_FIXTURE);
+    let msg: ClientMessage = assert_golden(&shared_fixture("client", Some("client_hello")));
     assert_variant!(
     msg,
     ClientMessage::Hello(h) => {
@@ -593,17 +407,9 @@ fn client_hello_golden() {
     );
 }
 
-const CLIENT_MESSAGE_FIXTURE: &str = r#"{
-    "type": "message",
-    "rid": "req_001",
-    "text": "Tell me about Rust",
-    "stream": true,
-    "images": ["/tmp/screenshot.png"]
-}"#;
-
 #[test]
 fn client_message_golden() {
-    let msg: ClientMessage = assert_golden(CLIENT_MESSAGE_FIXTURE);
+    let msg: ClientMessage = assert_golden(&shared_fixture("client", Some("client_message")));
     assert_variant!(
     msg,
     ClientMessage::Message(m) => {
@@ -616,15 +422,9 @@ fn client_message_golden() {
     );
 }
 
-const CLIENT_REGEN_FIXTURE: &str = r#"{
-    "type": "regen",
-    "rid": "req_002",
-    "stream": true
-}"#;
-
 #[test]
 fn client_regen_golden() {
-    let msg: ClientMessage = assert_golden(CLIENT_REGEN_FIXTURE);
+    let msg: ClientMessage = assert_golden(&shared_fixture("client", Some("client_regen")));
     assert_variant!(
     msg,
     ClientMessage::Regen(r) => {
@@ -654,16 +454,9 @@ fn client_regen_carries_guidance() {
     );
 }
 
-const CLIENT_COMMAND_FIXTURE: &str = r#"{
-    "type": "command",
-    "rid": "req_003",
-    "name": "switch_character",
-    "args": {"character": "alice", "greeting": true}
-}"#;
-
 #[test]
 fn client_command_golden() {
-    let msg: ClientMessage = assert_golden(CLIENT_COMMAND_FIXTURE);
+    let msg: ClientMessage = assert_golden(&shared_fixture("client", Some("client_command")));
     assert_variant!(
     msg,
     ClientMessage::Command(c) => {
@@ -676,23 +469,9 @@ fn client_command_golden() {
     );
 }
 
-const MESSAGE_OBJECT_FIXTURE: &str = r#"{
-    "msg_id": "m_100",
-    "role": "assistant",
-    "content": "Here is the analysis.",
-    "images": [
-        {"path": "/img/chart.png", "caption": "Revenue chart"},
-        {"path": "/img/table.png"}
-    ],
-    "content_blocks": [],
-    "alt_index": 2,
-    "alt_count": 4,
-    "timestamp": "2026-03-15T14:22:00Z"
-}"#;
-
 #[test]
 fn message_object_golden() {
-    let msg: Message = assert_golden(MESSAGE_OBJECT_FIXTURE);
+    let msg: Message = assert_golden(&shared_fixture("message_object", None));
     assert_eq!(msg.msg_id, "m_100");
     assert_eq!(msg.role, Role::Assistant);
     assert_eq!(msg.content, "Here is the analysis.");
@@ -709,23 +488,9 @@ fn message_object_golden() {
     assert_eq!(msg.timestamp, "2026-03-15T14:22:00Z");
 }
 
-const STREAM_METADATA_FIXTURE: &str = r#"{
-    "tokens": {
-        "input": 2048,
-        "output": 1024,
-        "cache_read": 512,
-        "cache_write": 256
-    },
-    "timing": {
-        "total_ms": 3500,
-        "ttft_ms": 800
-    },
-    "model": "claude-sonnet-4-6"
-}"#;
-
 #[test]
 fn stream_metadata_golden() {
-    let meta: StreamMetadata = assert_golden(STREAM_METADATA_FIXTURE);
+    let meta: StreamMetadata = assert_golden(&shared_fixture("stream_metadata", None));
     assert_eq!(meta.tokens.input, 2048);
     assert_eq!(meta.tokens.output, 1024);
     assert_eq!(meta.tokens.cache_read, 512);
