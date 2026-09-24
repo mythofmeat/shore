@@ -2,12 +2,15 @@ import { VIEW_CONTROLS, VIEW_KEYS, budgetFocus } from "./preferences.ts";
 import { VIEW_PREFERENCES } from "./preferences.generated.ts";
 import { Modal } from "./components.tsx";
 import { useDisplay } from "./display_state.tsx";
+import { AppearanceControls } from "./appearance.tsx";
 
 export function DisplayControls({ budgets, close }: { budgets: readonly string[]; close: () => void }) {
   const display = useDisplay();
   const { values, error } = display.getSnapshot();
   const focused = budgetFocus(values.budget);
   return <Modal title="Display preferences" close={close}><p>Saved for this browser and shared across its tabs.</p>
+    <AppearanceControls />
+    <h3 className="preferences-heading">Conversation details</h3>
     {VIEW_KEYS.map((key) => {
       const choices: readonly string[] = VIEW_PREFERENCES[key];
       const control = VIEW_CONTROLS[key];

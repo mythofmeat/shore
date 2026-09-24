@@ -1,3 +1,4 @@
+import { draftAction, openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 
@@ -47,9 +48,9 @@ test("expanded editing keeps reply context separate and saves draft changes acro
   await expanded.fill("My next question\nwith another line 🌊");
   await editor.getByRole("button", { name: "Return to composer", exact: true }).click();
   await expect(input).toHaveValue("My next question\nwith another line 🌊");
-  await page.getByRole("button", { name: "Undo text change", exact: true }).click();
+  await draftAction(page, "Undo text change");
   await expect(input).toHaveValue("My next question");
-  await page.getByRole("button", { name: "Redo text change", exact: true }).click();
+  await draftAction(page, "Redo text change");
   await expect(input).toHaveValue("My next question\nwith another line 🌊");
   await page.getByRole("button", { name: "Expand editor", exact: true }).click();
   await expanded.fill("Keep this expanded draft on reload");
@@ -77,7 +78,7 @@ test("keyboard editing preserves Unicode selection, supports browser undo events
   expect(await page.evaluate<number[]>('(() => { const element = document.getElementById("message-composer"); return [element.selectionStart, element.selectionEnd]; })()')).toEqual(originalSelection);
   expect(await page.evaluate<boolean>('document.getElementById("message-composer").dispatchEvent(new InputEvent("beforeinput", { inputType: "historyRedo", bubbles: true, cancelable: true }))')).toBe(false);
   await expect(input).toHaveValue("🌊 café\nreplaced line");
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   await shortcuts.getByLabel("Shortcut key", { exact: true }).fill("alt+e");
   await shortcuts.getByLabel("Shortcut scope", { exact: true }).selectOption("global");
@@ -91,7 +92,7 @@ test("keyboard editing preserves Unicode selection, supports browser undo events
   await page.keyboard.press("Escape");
   await expect(editor).toHaveCount(0);
   await expect(input).toBeFocused();
-  await page.getByRole("button", { name: "Message options", exact: true }).click();
+  await draftAction(page, "Message options");
   await page.keyboard.press("Control+z");
   await page.getByRole("dialog", { name: "Message options", exact: true }).getByRole("button", { name: "Close dialog" }).click();
   await expect(input).toHaveValue("🌊 café\nreplaced line");

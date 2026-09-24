@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -62,7 +63,7 @@ for (const crash of [false, true]) test(`archive ${crash ? "uncertain committed"
     await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close dialog" }).click();
     await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "R restart" }).click();
-    await page.getByRole("button", { name: "Character archives", exact: true }).click();
+    await openWorkspacePanel(page, "Character archives");
     await dialog.getByRole("button", { name: "Prepare archive", exact: true }).click();
     await expect(dialog.getByText("Export ready to download.", { exact: true })).toBeVisible();
     const downloading = page.waitForEvent("download");
@@ -79,7 +80,7 @@ for (const crash of [false, true]) test(`archive ${crash ? "uncertain committed"
     await dialog.getByRole("button", { name: "Confirm delete", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close dialog" }).click();
-    await page.getByRole("button", { name: "Character archives", exact: true }).click();
+    await openWorkspacePanel(page, "Character archives");
     await expect(dialog.getByLabel("Archive file", { exact: true })).toBeEnabled();
     await dialog.getByLabel("Archive file", { exact: true }).setInputFiles(archive);
     await dialog.getByRole("button", { name: "Import archive", exact: true }).click();
@@ -100,8 +101,8 @@ for (const crash of [false, true]) test(`archive ${crash ? "uncertain committed"
     if (crash) await expect(dialog.getByRole("alert")).toContainText("The import outcome is uncertain.");
     else await expect(dialog.getByText("Import completed for restart. Temporary upload removed.", { exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole("button", { name: "Character archives", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Character archives", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Workspace settings", exact: true })).toBeVisible();
+    await openWorkspacePanel(page, "Character archives");
     if (crash) await expect(dialog.getByRole("alert")).toContainText("The import outcome is uncertain.");
     else await expect(dialog.getByText("Import completed for restart. Temporary upload removed.", { exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Import archive", exact: true })).toHaveCount(0);

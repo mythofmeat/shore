@@ -23,10 +23,9 @@ function RequestStatus({ request }: { request: WebRequestInfo }) {
   }
 }
 
-export function RequestRecovery({ workspace, ready }: { workspace: Workspace; ready: boolean }) {
+export function RequestRecovery({ workspace, ready, opened, setOpened }: { workspace: Workspace; ready: boolean; opened: boolean; setOpened: (open: boolean) => void }) {
   const [listing, setListing] = useState<WebRequestList>();
   const [error, setError] = useState("");
-  const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const uncertain = workspace.getSnapshot().uncertain;
@@ -62,7 +61,7 @@ export function RequestRecovery({ workspace, ready }: { workspace: Workspace; re
   const interruptions = records.filter((request) => request.phase === "uncertain");
   const untracked = uncertain.filter((item) => !records.some((request) => request.rid === item.rid));
   return <>
-    <div className="request-history-bar"><button onClick={() => setOpened(true)}>Request history</button>{!ready ? <span className="muted"> Reconnect to check request outcomes.</span> : null}{error === "" ? null : <p role="alert" className="error">{error}</p>}</div>
+    {error === "" ? null : <p role="alert" className="notice error">{error}</p>}
     {interruptions.length === 0 ? null : <div className="notice"><strong>Request outcome uncertain</strong><p>{interruptions.length} interrupted {interruptions.length === 1 ? "request needs" : "requests need"} review. Inspect the affected state before trying again.</p><button onClick={() => setOpened(true)}>Review request</button></div>}
     {untracked.map((item) => <div className="notice" key={item.rid}><strong>Request outcome uncertain</strong><p>The connection was interrupted in {item.selection.character} / {item.selection.thread ?? "main"}. Inspect its outcome before trying again.</p><Inspect value={item.request} label="Inspect interrupted request" /><button onClick={() => workspace.connection.reconnect()}>Refresh conversation</button><button onClick={() => workspace.acknowledge(item.rid)}>I checked the outcome</button></div>)}
     {opened ? <Modal title="Request history" close={() => setOpened(false)}><p>Changes, messages and tool runs from tabs sharing this sign-in survive reloads and daemon restarts until sign-out or expiry. Older confirmed results may be removed when history fills. Uncertain outcomes stay until reviewed.</p><p>Retained results can include tool inputs and output. For messages and regeneration, inspect the conversation. Cancellation or failure does not undo changes already made.</p>

@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 
 test("provider discovery is usable before character selection and preserves hidden models and partial failures", async ({ page }) => {
@@ -9,7 +10,7 @@ test("provider discovery is usable before character selection and preserves hidd
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(page.getByRole("heading", { name: "Welcome to Shore" })).toBeVisible();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await openWorkspacePanel(page, "Providers");
   const dialog = page.getByRole("dialog", { name: "Providers", exact: true });
   const fixture = dialog.getByRole("article", { name: "fixture provider", exact: true });
   await expect(fixture).toContainText("key available");

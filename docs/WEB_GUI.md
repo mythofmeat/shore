@@ -8,6 +8,25 @@ graphical alternative for the union of CLI/TUI application workflows, with enfor
 checks. The generated action interface is a capability floor alongside designed conversation,
 navigation, settings, model, diagnostics, usage and memory workflows.
 
+## Browser appearance and navigation
+
+The browser opens in a dark theme with characters and conversations in the sidebar. The palette
+button beside Settings opens display preferences: dark, light or system theme; violet, blue, rose
+or amber accents; serif or sans-serif conversation text; text size; and focused or wide reading width.
+Appearance choices persist on this device and synchronize across tabs. Storage failures retain the
+current appearance and expose a retry action. Message metadata is hidden by default; existing saved
+display choices are preserved.
+
+Settings contains configuration, models, providers, memory, tools, usage, character backup
+import/export, diagnostics and help. The conversation's three-dot menu contains fork, regeneration,
+earlier history, system instructions, request history and visibility toggles. Interrupted-request
+warnings still appear directly in the conversation. The composer's three-dot menu contains saved
+drafts, message options and undo/redo. On phones, the navigation button opens the sidebar.
+
+Disconnect is under Settings → Connection. It clears the browser's daemon-token session, without
+introducing an account or removing locally saved drafts. Rebuild and restart the daemon, then reload
+the browser to pick up embedded UI changes.
+
 ## LAN, Tailscale and SSH access
 
 For access from another device on your local network, add this to the daemon configuration and

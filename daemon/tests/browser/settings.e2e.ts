@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 
 test("settings use live types, preserve collections and secrets, validate writes and reload without a character", async ({ page }) => {
@@ -8,7 +9,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await page.goto("/");
   await page.getByLabel("Daemon token").fill("browser-test-token");
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openWorkspacePanel(page, "Settings");
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog).toContainText("Global configuration");
   const choose = async (key: string) => {
@@ -72,7 +73,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.reload();
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openWorkspacePanel(page, "Settings");
   setting = await choose("notifications.command");
   await expect(setting.getByLabel("Value 2", { exact: true })).toHaveValue("a,b");
   setting = await choose("cache.keepalive_for");

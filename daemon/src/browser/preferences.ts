@@ -9,7 +9,7 @@ export const VIEW_CONTROLS = {
   subagent: { label: "Subagent activity", initial: "on" },
   compaction: { label: "Compaction activity", initial: "on" },
   images: { label: "Inline images", initial: "on" },
-  metadata: { label: "Message metadata", initial: "on" },
+  metadata: { label: "Message metadata", initial: "off" },
   usage: { label: "Usage display", initial: "off" },
   budget: { label: "Budget focus", initial: "auto" },
 } satisfies Record<ViewKey, { label: string; initial: string }>;

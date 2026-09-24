@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "./fixtures.ts";
 
 test("sign-out in another tab clears private dialogs before a new sign-in", async ({ page, context }) => {
@@ -11,7 +12,7 @@ test("sign-out in another tab clears private dialogs before a new sign-in", asyn
   await expect(create.getByRole("heading", { name: "Action completed" })).toBeVisible();
   await create.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "N nova" }).click();
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await openWorkspacePanel(page, "Keyboard shortcuts");
   const keyboard = page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true });
   await keyboard.getByLabel("Shortcut key", { exact: true }).fill("alt+u");
   await keyboard.getByLabel("Shortcut scope", { exact: true }).selectOption("global");
@@ -26,7 +27,7 @@ test("sign-out in another tab clears private dialogs before a new sign-in", asyn
   try {
     await other.goto(page.url());
     await expect(other.getByRole("heading", { name: "nova / main" })).toBeVisible();
-    await other.getByRole("button", { name: "Sign out", exact: true }).click();
+    await openWorkspacePanel(other, "Disconnect");
     await expect(page.getByLabel("Daemon token", { exact: true })).toBeVisible();
     await page.getByLabel("Daemon token").fill("browser-test-token");
     await page.getByRole("button", { name: "Open workspace" }).click();

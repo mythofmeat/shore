@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import { expect, test } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { access, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -81,7 +82,7 @@ test("the compiled executable serves a real browser from an empty directory and 
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
           await page.reload();
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
-          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await openWorkspacePanel(page, "Character archives");
           await dialog.getByRole("button", { name: "Prepare archive", exact: true }).click();
           await expect(dialog.getByText("Export ready to download.", { exact: true })).toBeVisible();
           const downloading = page.waitForEvent("download");
@@ -97,7 +98,7 @@ test("the compiled executable serves a real browser from an empty directory and 
           await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
           await expect(page.getByRole("navigation", { name: "Characters" })).not.toContainText("packaged");
           await dialog.getByRole("button", { name: "Close dialog" }).click();
-          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await openWorkspacePanel(page, "Character archives");
           await expect(dialog.getByLabel("Archive file", { exact: true })).toBeEnabled();
           await dialog.getByLabel("Archive file", { exact: true }).setInputFiles(archive);
           await dialog.getByRole("button", { name: "Import archive", exact: true }).click();
@@ -111,7 +112,7 @@ test("the compiled executable serves a real browser from an empty directory and 
           await expect.poll(() => tcpReady(tcp), { message: "Packaged daemon must restart", timeout: 10_000 }).toBe(true);
           await page.reload();
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
-          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await openWorkspacePanel(page, "Character archives");
           await expect(dialog.getByText("Import completed for packaged. Temporary upload removed.", { exact: true })).toBeVisible();
           expect(pageErrors).toEqual([]);
         } finally { await context.close(); }

@@ -1,3 +1,4 @@
+import { draftAction } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 
@@ -23,7 +24,7 @@ async function saved(page: Page): Promise<void> {
 
 test("a delayed image read merges into the current draft after a conversation round trip", async ({ page }) => {
   await openCharacter(page);
-  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New character", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Character name", { exact: true }).fill("other");
   await dialog.getByRole("button", { name: "Run action", exact: true }).click();
@@ -87,7 +88,7 @@ for (const edited of [false, true]) test(`send completion reconciles a remounted
     });
   });
   await openCharacter(page);
-  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+  await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New character", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Character name", { exact: true }).fill("other");
   await dialog.getByRole("button", { name: "Run action", exact: true }).click();
@@ -132,14 +133,14 @@ for (const destination of ["character", "thread", "round trip", "reconnect"]) te
   }));
   await openCharacter(page);
   if (destination === "thread") {
-    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Threads", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Conversations", exact: true }) }).getByRole("button", { name: "New conversation", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("New thread ID", { exact: true }).fill("side");
     await dialog.getByRole("button", { name: "Run action", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close dialog" }).click();
   } else if (destination !== "reconnect") {
-    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New", exact: true }).click();
+    await page.locator(".section-heading").filter({ has: page.getByRole("heading", { name: "Characters", exact: true }) }).getByRole("button", { name: "New character", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Character name", { exact: true }).fill("other");
     await dialog.getByRole("button", { name: "Run action", exact: true }).click();
@@ -280,7 +281,7 @@ test("a closed tab's text and pasted image can be recovered and explicitly disca
   const recovered = await context.newPage();
   await recovered.goto(url);
   await expect(recovered.getByRole("heading", { name: "nova / main" })).toBeVisible();
-  await recovered.getByRole("button", { name: "Saved drafts", exact: true }).click();
+  await draftAction(recovered, "Saved drafts");
   const dialog = recovered.getByRole("dialog", { name: "Saved drafts", exact: true });
   const record = dialog.getByRole("region", { name: "Saved draft", exact: true }).filter({ hasText: "Recover from closed tab" });
   await expect(record).toContainText("1 image(s)");
@@ -291,7 +292,7 @@ test("a closed tab's text and pasted image can be recovered and explicitly disca
   await expect(recovered.getByRole("article", { name: "user message" }).getByRole("img")).toBeVisible();
   await expect(recovered.getByLabel("Message", { exact: true })).toHaveValue("");
   await saved(recovered);
-  await recovered.getByRole("button", { name: "Saved drafts", exact: true }).click();
+  await draftAction(recovered, "Saved drafts");
   await record.getByRole("button", { name: "Discard saved draft", exact: true }).click();
   await dialog.getByRole("button", { name: "Confirm discard", exact: true }).click();
   await expect(dialog).toContainText("No saved drafts.");
@@ -326,7 +327,7 @@ test("storage failure stays visible and saving can be retried without losing the
   await expect(page.getByRole("status").filter({ hasText: "Draft not saved" })).toBeVisible();
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Retain this despite storage failure");
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.locator(".section-heading").filter({ hasText: "Characters" }).getByRole("button", { name: "New", exact: true }).click();
+  await page.locator(".section-heading").filter({ hasText: "Characters" }).getByRole("button", { name: "New character", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create character", exact: true });
   await dialog.getByLabel("Character name", { exact: true }).fill("other");
   await dialog.getByRole("button", { name: "Run action", exact: true }).click();
@@ -350,7 +351,7 @@ test("discarding a stale saved draft cannot delete another tab's newer edit", as
   await saved(page);
   const other = await context.newPage();
   await other.goto(page.url());
-  await other.getByRole("button", { name: "Saved drafts", exact: true }).click();
+  await draftAction(other, "Saved drafts");
   const dialog = other.getByRole("dialog", { name: "Saved drafts", exact: true });
   await expect(dialog).toContainText("Before concurrent edit");
   await page.getByLabel("Message", { exact: true }).fill("Newer edit must survive");
@@ -382,7 +383,7 @@ test("the draft limit refuses a new save without silently evicting another draft
   await other.getByLabel("Message", { exact: true }).fill("New draft stays open");
   await expect(other.getByRole("alert")).toContainText("Draft storage is full");
   await expect(other.getByLabel("Message", { exact: true })).toHaveValue("New draft stays open");
-  await other.getByRole("button", { name: "Saved drafts", exact: true }).click();
+  await draftAction(other, "Saved drafts");
   const dialog = other.getByRole("dialog", { name: "Saved drafts", exact: true });
   const first = dialog.getByRole("region", { name: "Saved draft", exact: true }).filter({ has: other.getByText("Fixture 0", { exact: true }) });
   await first.getByRole("button", { name: "Discard saved draft", exact: true }).click();

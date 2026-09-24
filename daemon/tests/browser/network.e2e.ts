@@ -1,3 +1,4 @@
+import { openWorkspacePanel } from "./navigation.ts";
 import type { Page } from "@playwright/test";
 import { connect, createServer, type Socket } from "node:net";
 import { networkInterfaces } from "node:os";
@@ -38,7 +39,7 @@ async function exerciseWorkspace(page: Page, origin: string, secureContext: bool
   await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Network draft survives reload");
   await expect(page.getByRole("button", { name: "Remove network.png", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await openWorkspacePanel(page, "Disconnect");
   await expect(page.getByLabel("Daemon token")).toBeVisible();
   expect(errors).toEqual([]);
 }
