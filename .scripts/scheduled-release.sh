@@ -12,6 +12,5 @@ if ! [ -n "$CHANGES" ]; then
     exit 0
 elif ./test.sh; then
     git commit -am "chore(deps): scheduled update"
-    git push
-    ./scheduled-release.sh patch
+    ./release.sh patch
 fi
