@@ -825,7 +825,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh config-set"]
     fn render_preview_config_set() {
         set_color_enabled(true);
         let mut buf = Vec::new();

@@ -605,7 +605,7 @@ mod tests {
     use crate::output::set_color_enabled;
 
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh log"]
     fn render_preview_log() {
         set_color_enabled(true);
         let blocks = vec![

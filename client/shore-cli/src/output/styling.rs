@@ -521,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh stream"]
     fn render_preview_stream() {
         set_color_enabled(true);
         let mut state = ChunkState::default();

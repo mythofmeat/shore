@@ -4793,9 +4793,17 @@ pub(crate) mod scenario_tests {
         format!("\u{1b}[{code}m")
     }
 
+    fn preview_block(label: &str, frame: &str) {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let _written = stdout
+            .write_all(format!("\n----- {label} -----\n{frame}\n----- end -----\n").as_bytes());
+        let _flushed = stdout.flush();
+    }
+
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
-    fn preview_config_panel() {
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh config-panel"]
+    fn render_preview_config_panel() {
         let mut h = Harness::with_size(76, 30);
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
@@ -4811,16 +4819,16 @@ pub(crate) mod scenario_tests {
         open_setting_menu_with_snapshot(&mut h);
 
         let _ = h.render("config");
-        eprintln!("=== config panel ===\n{}", h.ansi_dump());
+        preview_block("config panel", &h.ansi_dump());
 
         h.type_str("cache");
         let _ = h.render("filtered");
-        eprintln!("=== filtered to cache ===\n{}", h.ansi_dump());
+        preview_block("config panel filtered to cache", &h.ansi_dump());
     }
 
     #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
-    fn preview_output_pager_over_a_dimmed_conversation() {
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh pager"]
+    fn render_preview_output_pager() {
         let mut h = Harness::with_size(76, 22);
         h.app.connection_status = ConnectionStatus::Connected;
         for turn in 0..4 {
@@ -4840,7 +4848,7 @@ pub(crate) mod scenario_tests {
         h.app.scroll_to_bottom();
 
         let _before = h.render("before");
-        eprintln!("=== conversation ===\n{}", h.ansi_dump());
+        preview_block("conversation", &h.ansi_dump());
 
         h.app.push_command_text(
             "status",
@@ -4848,10 +4856,7 @@ pub(crate) mod scenario_tests {
                 .to_owned(),
         );
         let _after = h.render("after");
-        eprintln!(
-            "=== pager over a dimmed conversation ===\n{}",
-            h.ansi_dump()
-        );
+        preview_block("pager over a dimmed conversation", &h.ansi_dump());
     }
 
     #[test]

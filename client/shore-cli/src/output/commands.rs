@@ -1972,7 +1972,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "visual preview"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh subagent"]
     fn render_preview_subagent() {
         set_color_enabled(true);
         let mut buf = Vec::new();
@@ -1989,7 +1989,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "visual preview"]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh wire"]
     fn render_preview_wire() {
         let wire = serde_json::json!([{
             "seq": 0,
