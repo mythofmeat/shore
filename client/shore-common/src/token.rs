@@ -23,11 +23,20 @@ impl std::fmt::Display for TokenError {
 
 impl std::error::Error for TokenError {}
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub enum TokenSource {
     #[default]
     Discover,
     Given(String),
+}
+
+impl std::fmt::Debug for TokenSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Discover => f.write_str("Discover"),
+            Self::Given(_) => f.write_str("Given(<redacted>)"),
+        }
+    }
 }
 
 impl TokenSource {
@@ -78,6 +87,13 @@ fn non_blank(raw: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_output_never_carries_a_given_token() {
+        let rendered = format!("{:?}", TokenSource::Given("secret-token".into()));
+        assert_eq!(rendered, "Given(<redacted>)");
+        assert_eq!(format!("{:?}", TokenSource::Discover), "Discover");
+    }
 
     #[test]
     fn resolution_order() {
