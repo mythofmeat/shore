@@ -48,7 +48,7 @@ function full(d: Diagnostics): void {
     rid: "rid_1",
     provider: "anthropic",
     model: "claude-x",
-    character: "poppy",
+    character: "frank",
     from_key: "primary",
     to_key: "backup",
     kind: "quota",

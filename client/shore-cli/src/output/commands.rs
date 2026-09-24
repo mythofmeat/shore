@@ -1702,7 +1702,7 @@ mod tests {
                         "timestamp": "2026-08-15T04:26:05+00:00",
                         "error_type": "llm",
                         "message": "connection reset by peer",
-                        "context": "character=qifei"
+                        "context": "character=heidi"
                     },
                     {
                         "timestamp": "2026-08-15T04:31:44+00:00",
@@ -1719,7 +1719,7 @@ mod tests {
                         "timestamp": "2026-08-15T04:28:16+00:00",
                         "provider": "opencode-go",
                         "model": "glm-5.3",
-                        "character": "qifei",
+                        "character": "heidi",
                         "from_key": "primary",
                         "to_key": "backup",
                         "kind": "quota",
@@ -1730,7 +1730,7 @@ mod tests {
                         "timestamp": "2026-08-15T04:44:02+00:00",
                         "provider": "anthropic",
                         "model": "claude-opus-5",
-                        "character": "qifei",
+                        "character": "heidi",
                         "from_key": "only",
                         "kind": "missing",
                         "reason": "no key configured"
@@ -2035,7 +2035,7 @@ mod tests {
             "call_id": "20260815T042808877-0004",
             "ts": "2026-08-15T04:28:08.877+00:00",
             "call_type": "message",
-            "character": "qifei",
+            "character": "heidi",
             "model": "glm-5.3",
             "provider": "opencode-go",
             "finish_reason": "end_turn",
@@ -2385,7 +2385,7 @@ mod tests {
                 "COMPACTED (shore compact)",
                 serde_json::json!({
                     "status": "compacted",
-                    "character": "qifei",
+                    "character": "heidi",
                     "memory_files_written": ["MEMORY.md", "USER.md", "memory/keepsakes.md"],
                     "compacted_turns": 13,
                     "retained_count": 8,
@@ -2397,7 +2397,7 @@ mod tests {
                 "ARCHIVE-ONLY ROTATION (write_memory = false)",
                 serde_json::json!({
                     "status": "rotated",
-                    "character": "qifei",
+                    "character": "heidi",
                     "dry_run": false,
                     "memory_files_written": [],
                     "archived_messages": 22,
@@ -2410,7 +2410,7 @@ mod tests {
                 "PAUSED ON A WEDGED CHECKPOINT (shore compact 0)",
                 serde_json::json!({
                     "status": "paused",
-                    "character": "qifei",
+                    "character": "heidi",
                     "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
                     "compacted_turns": 13,
                     "tool_rounds": 2,
@@ -2423,7 +2423,7 @@ mod tests {
                 "PAUSED BY THE PROVIDER (shore compact)",
                 serde_json::json!({
                     "status": "paused",
-                    "character": "qifei",
+                    "character": "heidi",
                     "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
                     "compacted_turns": 13,
                     "tool_rounds": 2,
@@ -2436,7 +2436,7 @@ mod tests {
                 "CUT OFF (shore compact)",
                 serde_json::json!({
                     "status": "truncated",
-                    "character": "qifei",
+                    "character": "heidi",
                     "compacted_turns": 13,
                     "tool_rounds": 2,
                     "truncated_turns": 1,
@@ -2447,7 +2447,7 @@ mod tests {
                 "DRY RUN",
                 serde_json::json!({
                     "status": "dry_run",
-                    "character": "qifei",
+                    "character": "heidi",
                     "would_write_files": 3,
                     "compacted_turns": 13,
                     "retained_count": 8,
@@ -2481,7 +2481,7 @@ mod tests {
     fn an_archive_only_rotation_says_no_memory_files_were_written() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "rotated",
-            "character": "qifei",
+            "character": "heidi",
             "dry_run": false,
             "memory_files_written": [],
             "archived_messages": 22,
@@ -2499,7 +2499,7 @@ mod tests {
     fn a_rotation_dry_run_says_it_would_archive() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "rotated",
-            "character": "qifei",
+            "character": "heidi",
             "dry_run": true,
             "archived_messages": 22,
             "compacted_turns": 11,
@@ -2515,7 +2515,7 @@ mod tests {
     fn a_completed_compaction_reports_what_it_wrote_and_kept() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "compacted",
-            "character": "qifei",
+            "character": "heidi",
             "memory_files_written": ["MEMORY.md", "memory/keepsakes.md"],
             "compacted_turns": 13,
             "retained_count": 8,
@@ -2535,7 +2535,7 @@ mod tests {
     fn a_paused_compaction_says_nothing_was_archived_and_how_to_recover() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "paused",
-            "character": "qifei",
+            "character": "heidi",
             "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
             "message_count": 34,
             "compacted_turns": 13,
@@ -2581,7 +2581,7 @@ mod tests {
     fn a_truncated_pass_names_the_token_ceiling() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "truncated",
-            "character": "qifei",
+            "character": "heidi",
             "message_count": 34,
             "compacted_turns": 13,
             "tool_rounds": 2,
@@ -2603,7 +2603,7 @@ mod tests {
     fn a_provider_failure_keeps_the_provider_message() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "paused",
-            "character": "qifei",
+            "character": "heidi",
             "checkpoint_id": "29e55e7b",
             "compacted_turns": 13,
             "tool_rounds": 2,
@@ -2623,7 +2623,7 @@ mod tests {
     fn a_dry_run_still_reads_as_a_preview() {
         let rendered = rendered_compaction(&serde_json::json!({
             "status": "dry_run",
-            "character": "qifei",
+            "character": "heidi",
             "would_write_files": 3,
             "compacted_turns": 13,
             "retained_count": 8,

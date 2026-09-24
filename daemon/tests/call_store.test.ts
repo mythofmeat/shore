@@ -30,7 +30,7 @@ function fillCanonical(store: CallStore): void {
       call_id: "c1",
       ts: at(0),
       call_type: "message",
-      character: "poppy",
+      character: "frank",
       model: "claude-x",
       provider: "anthropic",
       sdk: "anthropic",
@@ -51,7 +51,7 @@ function fillCanonical(store: CallStore): void {
       call_id: "c2",
       ts: at(1),
       call_type: "heartbeat",
-      character: "poppy",
+      character: "frank",
       model: "claude-x",
       provider: "anthropic",
       sdk: "anthropic",
@@ -104,7 +104,7 @@ function fillCanonical(store: CallStore): void {
       call_id: "c5",
       ts: at(0, 750),
       call_type: "message",
-      character: "poppy",
+      character: "frank",
       model: "claude-x",
       provider: "anthropic",
       sdk: "anthropic",
@@ -125,9 +125,9 @@ function fillCanonical(store: CallStore): void {
   for (const call of calls) store.recordCall(call);
 
   const transcripts: [number, string, string | null, string | null, number, string][] = [
-    [0, "heartbeat", "poppy", "heartbeat", 0, JSON.stringify({ text: "hi" })],
-    [0, "heartbeat", "poppy", "heartbeat", 1, JSON.stringify({ text: "tool result" })],
-    [1, "heartbeat", "poppy", "heartbeat", 0, JSON.stringify({ text: "second tick" })],
+    [0, "heartbeat", "frank", "heartbeat", 0, JSON.stringify({ text: "hi" })],
+    [0, "heartbeat", "frank", "heartbeat", 1, JSON.stringify({ text: "tool result" })],
+    [1, "heartbeat", "frank", "heartbeat", 0, JSON.stringify({ text: "second tick" })],
     [2, "dreaming", "wren", "compaction", 0, "not json {"],
     [3, "heartbeat", null, null, 0, "[1,2,3]"],
   ];
@@ -212,14 +212,14 @@ describe("querying the calls a store holds", () => {
 
   test("filtered by character", () => {
     const store = filled();
-    expect(ids(store, { character: "poppy", limit: 0 })).toEqual(["c2", "c5", "c1"]);
+    expect(ids(store, { character: "frank", limit: 0 })).toEqual(["c2", "c5", "c1"]);
     expect(ids(store, { character: "wren", limit: 0 })).toEqual(["c3"]);
     store.close();
   });
 
   test("both filters together narrow, they do not widen", () => {
     const store = filled();
-    expect(ids(store, { call_type: "heartbeat", character: "poppy", limit: 0 })).toEqual(["c2"]);
+    expect(ids(store, { call_type: "heartbeat", character: "frank", limit: 0 })).toEqual(["c2"]);
     store.close();
   });
 
@@ -269,7 +269,7 @@ describe("querying the transcripts a store holds", () => {
 
   test("a null character in the filter means any, not only the null ones", () => {
     const store = filled();
-    expect(store.queryTranscripts("heartbeat", "poppy", 0)).toHaveLength(3);
+    expect(store.queryTranscripts("heartbeat", "frank", 0)).toHaveLength(3);
     expect(store.queryTranscripts("heartbeat", null, 0)).toHaveLength(4);
     expect(store.queryTranscripts("heartbeat", "wren", 0)).toHaveLength(0);
     store.close();
@@ -319,7 +319,7 @@ describe("rotating a store", () => {
   test("transcripts age out alongside the calls", () => {
     const store = filled();
     store.rotate(at(2), HUGE);
-    expect(store.queryTranscripts("heartbeat", "poppy", 0)).toEqual([]);
+    expect(store.queryTranscripts("heartbeat", "frank", 0)).toEqual([]);
     store.close();
   });
 
@@ -433,7 +433,7 @@ describe("what a call body costs to store", () => {
         call_id: `r${i}`,
         ts: at(i),
         call_type: "message",
-        character: "poppy",
+        character: "frank",
         model: "m",
         provider: "p",
         sdk: "openai",
@@ -458,7 +458,7 @@ test("headers and transcript entries survive characters that are not latin-1", (
   store.recordTranscript({
     ts: new Date("2026-08-10T12:00:00.000Z"),
     source: "heartbeat",
-    character: "poppy",
+    character: "frank",
     call_type: "heartbeat",
     iteration: 0,
     model: "claude-x",
@@ -472,7 +472,7 @@ test("headers and transcript entries survive characters that are not latin-1", (
     call_id: "call-utf8",
     seq: 0,
     ts: new Date("2026-08-10T12:00:00.000Z"),
-    character: "poppy",
+    character: "frank",
     call_type: "heartbeat",
     rid: null,
     method: "POST",
@@ -487,7 +487,7 @@ test("headers and transcript entries survive characters that are not latin-1", (
     response_body: null,
   });
 
-  expect(store.queryTranscripts("heartbeat", "poppy", 0)[0]?.entry).toEqual({ marker });
+  expect(store.queryTranscripts("heartbeat", "frank", 0)[0]?.entry).toEqual({ marker });
   expect(store.httpCallsFor("call-utf8")[0]?.request_headers).toEqual([["x-note", marker]]);
 
   store.close();

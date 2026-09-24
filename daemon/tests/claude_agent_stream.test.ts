@@ -615,7 +615,7 @@ test("a heartbeat between chat turns cannot replace the chat session", async () 
   const heartbeat = fakeAgent({ sessionId: "heartbeat-session", rounds: [{ blocks: [{ kind: "text", text: "heartbeat reply" }] }] });
   const provider = new ClaudeAgentProvider({ runQuery: chat.query, bookPath: () => path });
   const background = new ClaudeAgentProvider({ runQuery: heartbeat.query, bookPath: () => path });
-  const context = { character: "qifei", ledger: "/data/ledger.db", call_type: "message", thinking_enabled: false };
+  const context = { character: "heidi", ledger: "/data/ledger.db", call_type: "message", thinking_enabled: false };
   const first = request({ context });
   for await (const event of provider.stream(first)) expect(event.type).not.toBe("error");
   for await (const event of background.stream(request({ context: { ...context, call_type: "heartbeat" } }))) {

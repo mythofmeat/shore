@@ -375,7 +375,7 @@ fn config_warning_golden() {
     msg,
     ServerMessage::ConfigWarning(w) => {
         assert_eq!(w.rid, None);
-        assert_eq!(w.character.as_deref(), Some("poppy"));
+        assert_eq!(w.character.as_deref(), Some("frank"));
         assert!(w.message.contains("unknown model"));
     }
     );

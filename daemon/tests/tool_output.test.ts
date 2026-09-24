@@ -45,7 +45,7 @@ describe("compact built-in output", () => {
 
   test("model usage is one row per record, preserving provider, call type and range", () => {
     const output = formatToolOutput("model_history", {
-      character: "qifei", time_zone: "UTC", time_range: { start_time: "2026-01-01", inclusive: true },
+      character: "heidi", time_zone: "UTC", time_range: { start_time: "2026-01-01", inclusive: true },
       models: [{ model: "example", provider: "local", call_type: "tool_loop", kind: "interactive", calls: 12, first_seen: "2026-01-01", last_seen: "2026-01-02" }],
     });
     expect(output).toContain("2026-01-01 to latest (inclusive)");

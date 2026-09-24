@@ -207,7 +207,7 @@ describe("WorkspaceIndexService", () => {
       embedder: first,
     });
     service.register({
-      character: "qifei",
+      character: "heidi",
       workspaceDir: await workspaceOf(8),
       indexPath: join(root, "second.db"),
       retrievalConfig: CONFIG,
@@ -219,7 +219,7 @@ describe("WorkspaceIndexService", () => {
       await service.runOnce();
     }
 
-    expect(required(service.progress("qifei")).sweptAt).toBeDefined();
+    expect(required(service.progress("heidi")).sweptAt).toBeDefined();
     expect(second.documents).toBeGreaterThan(0);
   });
 

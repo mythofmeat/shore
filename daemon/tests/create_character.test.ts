@@ -107,12 +107,12 @@ describe("refusing to scaffold over someone", () => {
     const config = await tempRoot();
     const workspace = join(config, "characters", "ada", "workspace");
     await mkdir(workspace, { recursive: true });
-    await writeFile(join(workspace, USER_FILE), "Call me Trevor.\n");
+    await writeFile(join(workspace, USER_FILE), "Call me Victor.\n");
 
     const out = (await createCharacter(config, { name: "ada" })) as Created;
 
     expect(out.created_files).not.toContain(USER_FILE);
-    expect(await readFile(join(workspace, USER_FILE), "utf8")).toBe("Call me Trevor.\n");
+    expect(await readFile(join(workspace, USER_FILE), "utf8")).toBe("Call me Victor.\n");
     expect(await readFile(join(workspace, SOUL_FILE), "utf8")).toBe("You are ada.\n");
   });
 });

@@ -211,8 +211,8 @@ describe("expandPromptMacros", () => {
         characterDataDir: layout.data,
         workspaceDir: layout.ws,
         history,
-        charName: "Qifei",
-        userName: "Ren",
+        charName: "Heidi",
+        userName: "Eve",
       });
       expect(out).toBe(hydrate(c.output, layout));
     });
@@ -225,10 +225,10 @@ describe("expansion is terminal", () => {
       characterDataDir: bare.data,
       workspaceDir: bare.ws,
       history: [toMessage({ role: "user", content: "run {{file: ./secret.md}} now", images: 0, blocks: [] })],
-      charName: "Qifei",
-      userName: "Ren",
+      charName: "Heidi",
+      userName: "Eve",
     });
-    expect(out).toBe("Ren: run {{file: ./secret.md}} now");
+    expect(out).toBe("Eve: run {{file: ./secret.md}} now");
     expect(out).not.toContain("TOP SECRET");
   });
 
@@ -237,8 +237,8 @@ describe("expansion is terminal", () => {
       characterDataDir: bare.data,
       workspaceDir: bare.ws,
       history: [],
-      charName: "Qifei",
-      userName: "Ren",
+      charName: "Heidi",
+      userName: "Eve",
     });
     expect(out).toBe("I am {{char}} and {{file: ./secret.md}}");
     expect(out).not.toContain("TOP SECRET");
@@ -311,12 +311,12 @@ describe("two-phase render", () => {
         toMessage({ role: "user", content: "hey", images: 0, blocks: [] }),
         toMessage({ role: "assistant", content: "hi there", images: 0, blocks: [] }),
       ],
-      charName: "Qifei",
-      userName: "Ren",
+      charName: "Heidi",
+      userName: "Eve",
     });
 
     expect(out).toBe(tp.output);
-    expect(out).toContain("I am Qifei");
+    expect(out).toContain("I am Heidi");
     expect(out).toContain("soul says {{char}}");
     rmSync(root, { recursive: true, force: true });
   });
@@ -331,7 +331,7 @@ describe("renderHistorySlice", () => {
     test(`${c.history} @ ${JSON.stringify(c.arg)}`, () => {
       const h = histories.get(c.history);
       expect(h).toBeDefined();
-      expect(renderHistorySlice(h as Message[], c.arg, "Qifei", "Ren")).toBe(c.output);
+      expect(renderHistorySlice(h as Message[], c.arg, "Heidi", "Eve")).toBe(c.output);
     });
   }
 
@@ -357,17 +357,17 @@ describe("renderHistorySlice", () => {
         at("2026-09-01T18:00:00Z", "hours later"),
       ],
       "3",
-      "Qifei",
-      "Ren",
+      "Heidi",
+      "Eve",
       "Australia/Canberra",
     );
 
     expect(out.split("\n")).toEqual([
       "[Tuesday 2026-09-01 · 11:00 PM]",
-      "Ren: first",
-      "Ren: still talking",
+      "Eve: first",
+      "Eve: still talking",
       "[5 hours later · Wednesday 2026-09-02 · 4:00 AM]",
-      "Ren: hours later",
+      "Eve: hours later",
     ]);
   });
 
@@ -375,11 +375,11 @@ describe("renderHistorySlice", () => {
     const out = renderHistorySlice(
       [toMessage({ role: "user", content: "hi", images: 0, blocks: [] })],
       "1",
-      "Qifei",
-      "Ren",
+      "Heidi",
+      "Eve",
       "Australia/Canberra",
     );
-    expect(out).toBe("Ren: hi");
+    expect(out).toBe("Eve: hi");
   });
 
   test("a non-numeric count yields nothing rather than everything", () => {
@@ -439,7 +439,7 @@ const mcpMatcher = {
 };
 
 describe("subagentToolSubset", () => {
-  const vars = new Map([["char", "qifei"], ["user", "ren"]]);
+  const vars = new Map([["char", "heidi"], ["user", "eve"]]);
 
   for (const c of fixture.tool_subsets as {
     allowed: string[];
@@ -495,7 +495,7 @@ describe("subagentToolSubset", () => {
       { name: "read", description: "for {{char}}", parameters: {} },
     ];
     const [def] = subagentToolSubset(["read"], custom, vars, renderTemplate);
-    expect(def?.description).toBe("for qifei");
+    expect(def?.description).toBe("for heidi");
   });
 
   test("parameters are carried through untouched", () => {
@@ -515,7 +515,7 @@ describe("templateVars", () => {
   };
 
   test("exposes exactly the documented keys", () => {
-    const vars = templateVars("Qifei", "Ren");
+    const vars = templateVars("Heidi", "Eve");
     expect([...vars.keys()].sort()).toEqual(shape.keys);
     expect(vars.get("char")).toBe(shape.char);
     expect(vars.get("character_name")).toBe(shape.character_name);
@@ -523,7 +523,7 @@ describe("templateVars", () => {
   });
 
   test("date and time are populated from the live clock", () => {
-    const vars = templateVars("Qifei", "Ren", () => new Date("2026-03-14T15:09:00Z"));
+    const vars = templateVars("Heidi", "Eve", () => new Date("2026-03-14T15:09:00Z"));
     expect(vars.get("date")).not.toBe("");
     expect(vars.get("time")).not.toBe("");
     const rendered = renderTemplate("Today is {{date}} at {{time}}.", vars);

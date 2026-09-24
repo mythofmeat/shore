@@ -1352,7 +1352,7 @@
         "count": 1,
         "recent": [
           {
-            "character": "poppy",
+            "character": "frank",
             "from_key": "primary",
             "kind": "quota",
             "model": "claude-x",
@@ -1374,7 +1374,7 @@
     },
     "s3": [
       {
-        "character": "poppy",
+        "character": "frank",
         "from_key": "primary",
         "kind": "quota",
         "model": "claude-x",

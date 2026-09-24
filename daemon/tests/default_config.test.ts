@@ -118,7 +118,7 @@ describe("loadConfig", () => {
   test("an existing config.toml is never overwritten", () => {
     const root = tempDir();
     const configPath = join(root, "config.toml");
-    writeFileSync(configPath, "[chat]\ndisplay_name = \"ren\"\n");
+    writeFileSync(configPath, "[chat]\ndisplay_name = \"eve\"\n");
 
     loadConfig(configPath, {
       env: { SHORE_CONFIG_DIR: root },
@@ -127,7 +127,7 @@ describe("loadConfig", () => {
       },
       onWarn: () => {},
     });
-    expect(readFileSync(configPath, "utf8")).toContain("ren");
+    expect(readFileSync(configPath, "utf8")).toBe("[chat]\ndisplay_name = \"eve\"\n");
   });
 });
 

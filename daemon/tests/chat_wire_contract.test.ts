@@ -176,7 +176,7 @@ async function loadedConfig(root: string): Promise<LoadedConfig> {
     runtime: join(root, "run"),
   };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
-  await mkdir(join(dirs.data, "poppy"), { recursive: true });
+  await mkdir(join(dirs.data, "frank"), { recursive: true });
 
   const app: AppConfig = defaultAppConfig();
   app.defaults.model = "fixture";
@@ -242,13 +242,13 @@ async function harness(script: Scripted[]): Promise<Harness> {
   const fake = serving(script);
   const resolved = model(fake.url);
   setTestEnv(KEY_ENV, "test-key");
-  const store = MessageStore.create(join(root, "data", "poppy", "threads", "main", "active.jsonl"));
+  const store = MessageStore.create(join(root, "data", "frank", "threads", "main", "active.jsonl"));
 
   const request = async (regen: boolean): Promise<SidecarRequest> => {
     const built = await buildGenerationRequest({
       engine: engineOver(store),
       dataDir: config.dirs.data,
-      charName: "poppy",
+      charName: "frank",
       config,
       resolved,
       regen,
@@ -425,18 +425,18 @@ describe("what gets recorded", () => {
       max_tokens: 1024,
       replay_prior_thinking: "all",
       provider_options: { cache_ttl: "5m" },
-      context: { character: "poppy", call_type: "message", thinking_enabled: true },
+      context: { character: "frank", call_type: "message", thinking_enabled: true },
     };
 
     await runToDone(
       toolLoopEvents(withCallCapture(new AnthropicProvider(), store), req, phase, new AbortController().signal),
     );
     await until(() => {
-      const call = store.queryCalls({ character: "poppy", limit: 10 })[0];
+      const call = store.queryCalls({ character: "frank", limit: 10 })[0];
       return call !== undefined && store.httpCallsFor(required(store.getCall(call.id)).call_id).length >= 2;
     }, "the captured call and both of its HTTP exchanges");
 
-    const calls = store.queryCalls({ character: "poppy", limit: 10 });
+    const calls = store.queryCalls({ character: "frank", limit: 10 });
     expect(calls).toHaveLength(1);
     expect(required(calls[0]).call_type).toBe("message");
 

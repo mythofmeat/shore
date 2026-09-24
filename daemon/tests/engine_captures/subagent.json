@@ -397,37 +397,37 @@
     {
       "history": "four_turns",
       "arg": "1",
-      "output": "Qifei: fourth"
+      "output": "Heidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "2",
-      "output": "Ren: third\nQifei: fourth"
+      "output": "Eve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "3",
-      "output": "Qifei: second\nRen: third\nQifei: fourth"
+      "output": "Heidi: second\nEve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "99",
-      "output": "Ren: first\nQifei: second\nRen: third\nQifei: fourth"
+      "output": "Eve: first\nHeidi: second\nEve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "100",
-      "output": "Ren: first\nQifei: second\nRen: third\nQifei: fourth"
+      "output": "Eve: first\nHeidi: second\nEve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "101",
-      "output": "Ren: first\nQifei: second\nRen: third\nQifei: fourth"
+      "output": "Eve: first\nHeidi: second\nEve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
       "arg": "1000",
-      "output": "Ren: first\nQifei: second\nRen: third\nQifei: fourth"
+      "output": "Eve: first\nHeidi: second\nEve: third\nHeidi: fourth"
     },
     {
       "history": "four_turns",
@@ -462,37 +462,37 @@
     {
       "history": "with_blank",
       "arg": "1",
-      "output": "Ren: also kept"
+      "output": "Eve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "2",
-      "output": "Ren: also kept"
+      "output": "Eve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "3",
-      "output": "Ren: kept\nRen: also kept"
+      "output": "Eve: kept\nEve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "99",
-      "output": "Ren: kept\nRen: also kept"
+      "output": "Eve: kept\nEve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "100",
-      "output": "Ren: kept\nRen: also kept"
+      "output": "Eve: kept\nEve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "101",
-      "output": "Ren: kept\nRen: also kept"
+      "output": "Eve: kept\nEve: also kept"
     },
     {
       "history": "with_blank",
       "arg": "1000",
-      "output": "Ren: kept\nRen: also kept"
+      "output": "Eve: kept\nEve: also kept"
     },
     {
       "history": "with_blank",
@@ -592,37 +592,37 @@
     {
       "history": "image_turn",
       "arg": "1",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "2",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "3",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "99",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "100",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "101",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
       "arg": "1000",
-      "output": "Ren: look [1 image(s)]"
+      "output": "Eve: look [1 image(s)]"
     },
     {
       "history": "image_turn",
@@ -657,37 +657,37 @@
     {
       "history": "image_only",
       "arg": "1",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "2",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "3",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "99",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "100",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "101",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
       "arg": "1000",
-      "output": "Ren: [2 image(s)]"
+      "output": "Eve: [2 image(s)]"
     },
     {
       "history": "image_only",
@@ -722,37 +722,37 @@
     {
       "history": "blocks",
       "arg": "1",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "2",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "3",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "99",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "100",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "101",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
       "arg": "1000",
-      "output": "Qifei: block one\nblock two"
+      "output": "Heidi: block one\nblock two"
     },
     {
       "history": "blocks",
@@ -787,37 +787,37 @@
     {
       "history": "blocks_ignored",
       "arg": "1",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "2",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "3",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "99",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "100",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "101",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
       "arg": "1000",
-      "output": "Qifei: plain wins"
+      "output": "Heidi: plain wins"
     },
     {
       "history": "blocks_ignored",
@@ -1173,7 +1173,7 @@
       "snapshot": true,
       "history": "exfil_pair",
       "text": "<<{{active_history: 2}}>>",
-      "output": "<<Ren: run {{file: ./secret.md}} now\nQifei: hi there>>"
+      "output": "<<Eve: run {{file: ./secret.md}} now\nHeidi: hi there>>"
     },
     {
       "snapshot": true,
@@ -1191,19 +1191,19 @@
       "snapshot": true,
       "history": "exfil_pair",
       "text": "{{active_history:2}}",
-      "output": "Ren: run {{file: ./secret.md}} now\nQifei: hi there"
+      "output": "Eve: run {{file: ./secret.md}} now\nHeidi: hi there"
     },
     {
       "snapshot": true,
       "history": "exfil_pair",
       "text": "{{ active_history: 99 }}",
-      "output": "Ren: run {{file: ./secret.md}} now\nQifei: hi there"
+      "output": "Eve: run {{file: ./secret.md}} now\nHeidi: hi there"
     },
     {
       "snapshot": true,
       "history": "exfil_pair",
       "text": "{{file: ./SOUL.md}}|{{active_history: 1}}|{{unknown}}",
-      "output": "SNAPSHOT SOUL|Qifei: hi there|{{unknown}}"
+      "output": "SNAPSHOT SOUL|Heidi: hi there|{{unknown}}"
     },
     {
       "snapshot": true,
@@ -1215,7 +1215,7 @@
       "snapshot": true,
       "history": "exfil_pair",
       "text": "{{active_history: 1}}\n{{file: ./nested.md}}",
-      "output": "Qifei: hi there\nI am {{char}} and {{file: ./secret.md}}"
+      "output": "Heidi: hi there\nI am {{char}} and {{file: ./secret.md}}"
     },
     {
       "snapshot": true,
@@ -1653,7 +1653,7 @@
       "snapshot": false,
       "history": "exfil_pair",
       "text": "<<{{active_history: 2}}>>",
-      "output": "<<Ren: run {{file: ./secret.md}} now\nQifei: hi there>>"
+      "output": "<<Eve: run {{file: ./secret.md}} now\nHeidi: hi there>>"
     },
     {
       "snapshot": false,
@@ -1671,19 +1671,19 @@
       "snapshot": false,
       "history": "exfil_pair",
       "text": "{{active_history:2}}",
-      "output": "Ren: run {{file: ./secret.md}} now\nQifei: hi there"
+      "output": "Eve: run {{file: ./secret.md}} now\nHeidi: hi there"
     },
     {
       "snapshot": false,
       "history": "exfil_pair",
       "text": "{{ active_history: 99 }}",
-      "output": "Ren: run {{file: ./secret.md}} now\nQifei: hi there"
+      "output": "Eve: run {{file: ./secret.md}} now\nHeidi: hi there"
     },
     {
       "snapshot": false,
       "history": "exfil_pair",
       "text": "{{file: ./SOUL.md}}|{{active_history: 1}}|{{unknown}}",
-      "output": "WORKSPACE SOUL|Qifei: hi there|{{unknown}}"
+      "output": "WORKSPACE SOUL|Heidi: hi there|{{unknown}}"
     },
     {
       "snapshot": false,
@@ -1695,7 +1695,7 @@
       "snapshot": false,
       "history": "exfil_pair",
       "text": "{{active_history: 1}}\n{{file: ./nested.md}}",
-      "output": "Qifei: hi there\nI am {{char}} and {{file: ./secret.md}}"
+      "output": "Heidi: hi there\nI am {{char}} and {{file: ./secret.md}}"
     },
     {
       "snapshot": false,
@@ -1961,13 +1961,13 @@
   "two_phase": {
     "authored": "I am {{char}}, talking to {{user}}.\nSOUL:\n{{file: ./SOUL.md}}\nLOG:\n{{active_history: 2}}",
     "vars": {
-      "char": "Qifei",
-      "character_name": "Qifei",
-      "user": "Ren"
+      "char": "Heidi",
+      "character_name": "Heidi",
+      "user": "Eve"
     },
     "soul_contents": "soul says {{char}}",
     "phase1_contains_char": true,
-    "output": "I am Qifei, talking to Ren.\nSOUL:\nsoul says {{char}}\nLOG:\nRen: hey\nQifei: hi there"
+    "output": "I am Heidi, talking to Eve.\nSOUL:\nsoul says {{char}}\nLOG:\nEve: hey\nHeidi: hi there"
   },
   "template_vars": {
     "keys": [
@@ -1977,9 +1977,9 @@
       "time",
       "user"
     ],
-    "char": "Qifei",
-    "character_name": "Qifei",
-    "user": "Ren",
+    "char": "Heidi",
+    "character_name": "Heidi",
+    "user": "Eve",
     "date_nonempty": true,
     "time_nonempty": true
   },

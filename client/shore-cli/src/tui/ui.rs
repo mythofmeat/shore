@@ -1711,7 +1711,7 @@ mod compaction_tests {
 
     fn a_pass_in_progress(h: &mut Harness) {
         h.app.connection_status = crate::tui::app::ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         round(h, 1);
         chunk(h, "Pulling the recurring threads into memory.", "text");
         tool(h, "t1", "read", "memory/MEMORY.md", "2.1 KB");
@@ -1814,7 +1814,7 @@ mod compaction_tests {
             ServerMessage::CommandOutput(shore_common::protocol::server_msg::CommandOutput {
                 rid: None,
                 name: "compact".into(),
-                data: serde_json::json!({ "status": "compacted", "character": "qifei" }),
+                data: serde_json::json!({ "status": "compacted", "character": "heidi" }),
             }),
         );
         assert!(h.app.compaction.is_none(), "the run is over");
@@ -5518,7 +5518,7 @@ pub(crate) mod scenario_tests {
     fn a_side_thread_is_named_on_the_input_border() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.home_thread = "main".into();
         h.app.thread_name = "eval".into();
 
@@ -5534,7 +5534,7 @@ pub(crate) mod scenario_tests {
     fn the_home_thread_adds_no_chrome() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.home_thread = "main".into();
         h.app.thread_name = "main".into();
 
@@ -5550,7 +5550,7 @@ pub(crate) mod scenario_tests {
     fn a_thread_with_no_known_home_stays_quiet_rather_than_guessing() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.thread_name = "eval".into();
 
         let f = h.render("home not yet known");
@@ -5786,7 +5786,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.show_thinking = true;
         h.app.show_tools = true;
         h.app
@@ -5912,10 +5912,10 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
 
         h.app.entries.push(ConversationEntry::user(
-            "hi qifei.".into(),
+            "hi heidi.".into(),
             vec![],
             "t1".into(),
         ));
@@ -5952,15 +5952,15 @@ pub(crate) mod scenario_tests {
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
-                input: serde_json::json!({"query": "Ren"}),
+                input: serde_json::json!({"query": "Eve"}),
             }),
         );
 
         let f_mid = h.render("mid tool-use turn");
-        let mid_header_count = f_mid.lines().filter(|l| l.trim_end() == "qifei").count();
+        let mid_header_count = f_mid.lines().filter(|l| l.trim_end() == "heidi").count();
         assert_eq!(
             mid_header_count, 1,
-            "exactly one 'qifei' header mid-turn; got {mid_header_count}\n{f_mid}"
+            "exactly one 'heidi' header mid-turn; got {mid_header_count}\n{f_mid}"
         );
         assert!(
             !f_mid.contains("in:100"),
@@ -6018,10 +6018,10 @@ pub(crate) mod scenario_tests {
 
         let f = h.render("after multi-phase turn");
 
-        let header_count = f.lines().filter(|l| l.trim_end() == "qifei").count();
+        let header_count = f.lines().filter(|l| l.trim_end() == "heidi").count();
         assert_eq!(
             header_count, 1,
-            "exactly one 'qifei' header after turn; got {header_count}\n{f}"
+            "exactly one 'heidi' header after turn; got {header_count}\n{f}"
         );
 
         assert!(
@@ -6284,7 +6284,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "describe the sea".into(),
             vec![],
@@ -6445,7 +6445,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
 
         let _ = crate::tui::handle_server_message(
             &mut h.app,
@@ -6515,7 +6515,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "write a long answer".into(),
             vec![],
@@ -6648,7 +6648,7 @@ pub(crate) mod scenario_tests {
 
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.character_name = "qifei".into();
+        h.app.character_name = "heidi".into();
         h.app.entries.push(ConversationEntry::user(
             "run a tool and summarize".into(),
             vec![],

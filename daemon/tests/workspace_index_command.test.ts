@@ -69,7 +69,7 @@ function stocked(name: string): string {
 
 function sourceFor(overrides: Partial<WorkspaceIndexSource> = {}): WorkspaceIndexSource {
   return {
-    indexPathFor: (c: string) => (c === "qifei" ? stocked("qifei") : undefined),
+    indexPathFor: (c: string) => (c === "heidi" ? stocked("heidi") : undefined),
     progressFor: () => undefined,
     now: () => 1_000_000,
     ...overrides,
@@ -78,7 +78,7 @@ function sourceFor(overrides: Partial<WorkspaceIndexSource> = {}): WorkspaceInde
 
 const section = async (
   source: WorkspaceIndexSource | undefined = sourceFor(),
-  character = "qifei",
+  character = "heidi",
 ): Promise<IndexSection | null> =>
   (await workspaceIndexSection(source, character)) as IndexSection | null;
 
@@ -127,7 +127,7 @@ describe("the status index section", () => {
 
   test("a registered pass reports its progress and its backoff", async () => {
     const progress: WorkspaceIndexProgress = {
-      character: "qifei",
+      character: "heidi",
       pending: 42,
       files: 100,
       failures: 3,
@@ -152,7 +152,7 @@ describe("the status index section", () => {
     const out = await section(
       sourceFor({
         progressFor: () => ({
-          character: "qifei",
+          character: "heidi",
           pending: 0,
           files: 0,
           failures: 0,
@@ -171,7 +171,7 @@ describe("the status index section", () => {
     const out = await section(
       sourceFor({
         progressFor: () => ({
-          character: "qifei",
+          character: "heidi",
           pending: 0,
           files: 0,
           failures: 0,
@@ -195,7 +195,7 @@ describe("the status index section", () => {
     const out = await section(
       sourceFor({
         progressFor: () => ({
-          character: "qifei",
+          character: "heidi",
           pending: 0,
           files: 4,
           failures: 0,
@@ -215,7 +215,7 @@ describe("the status index section", () => {
   });
 
   test("an unwired daemon has no section rather than an empty one", async () => {
-    expect(await workspaceIndexSection(undefined, "qifei")).toBeNull();
+    expect(await workspaceIndexSection(undefined, "heidi")).toBeNull();
   });
 
   test("an index that has never been written reports zeroes, not an error", async () => {

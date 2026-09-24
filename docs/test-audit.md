@@ -156,7 +156,7 @@ what it is, and run it as its own CI step so its failures are legible.
 - **`keymap::the_live_config_file_loads_without_complaint`** reads the real
   `~/.config/shore/tui.toml`. That's a personal lint, not a test. **Make it a
   command** (e.g. `shore ui check-keymap`) **or delete it.**
-- **`daemon/tests/fixture_env.ts`** hardcodes `USER = "eshen"`. Use a neutral
+- **`daemon/tests/fixture_env.ts`** hardcodes `USER = "peggy"`. Use a neutral
   test name so tests can't depend on who runs them.
 
 ### 6. Daemon environment writes

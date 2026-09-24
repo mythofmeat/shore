@@ -56,7 +56,7 @@ describe("omissionNotice", () => {
   });
 
   test("labels an image by its file name, not its full path", () => {
-    expect(imageLabel({ path: "/home/eshen/pictures/holiday.png" })).toBe("holiday.png");
+    expect(imageLabel({ path: "/home/peggy/pictures/holiday.png" })).toBe("holiday.png");
   });
 });
 

@@ -238,7 +238,7 @@
     },
     {
       "ts": "2026-05-13T15:30:00+00:00",
-      "character": "ren, \"the quiet one\"",
+      "character": "eve, \"the quiet one\"",
       "provider": "anthropic",
       "api_key_name": null,
       "model": "claude-opus-4-6",

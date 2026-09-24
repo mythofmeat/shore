@@ -2355,7 +2355,7 @@ mod tests {
     fn the_config_palette_offers_the_thread_beside_the_model_and_character() {
         let mut app = App {
             model: "anthropic:opus".into(),
-            character_name: "qifei".into(),
+            character_name: "heidi".into(),
             thread_name: "eval".into(),
             ..App::default()
         };

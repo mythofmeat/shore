@@ -3922,8 +3922,8 @@ mod tests {
             Some(FlagProblem::BareName("model", "opus".to_owned()))
         );
         assert_eq!(
-            misplaced(&["character", "qifei"]),
-            Some(FlagProblem::BareName("character", "qifei".to_owned()))
+            misplaced(&["character", "heidi"]),
+            Some(FlagProblem::BareName("character", "heidi".to_owned()))
         );
     }
 
@@ -3934,7 +3934,7 @@ mod tests {
             &["model", "use", "opus"][..],
             &["model", "info", "opus"][..],
             &["model", "setting", "temperature", "0.7"][..],
-            &["character", "use", "qifei"][..],
+            &["character", "use", "heidi"][..],
             &["character", "new", "ada"][..],
             &["provider", "models", "openrouter"][..],
             &["log", "last"][..],

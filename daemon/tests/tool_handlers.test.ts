@@ -320,7 +320,7 @@ describe("handleModelHistory", () => {
   ];
 
   test("no ledger reports io, not not-implemented", async () => {
-    expect(handleModelHistory({}, "poppy", undefined)).rejects.toThrow(
+    expect(handleModelHistory({}, "frank", undefined)).rejects.toThrow(
       "io: the usage ledger is not available in this context",
     );
   });
@@ -335,7 +335,7 @@ describe("handleModelHistory", () => {
     expect(
       handleModelHistory(
         { start_time: "2026-06-01T00:00:00Z", end_time: "2026-05-01T00:00:00Z" },
-        "poppy",
+        "frank",
         async () => [],
       ),
     ).rejects.toThrow("invalid args: start_time must be before or equal to end_time");
@@ -344,7 +344,7 @@ describe("handleModelHistory", () => {
   test("the range check runs on the rebased bounds", async () => {
     const out = await handleModelHistory(
       { start_time: "2026-05-13T09:00:00+10:00", end_time: "2026-05-13T00:00:00Z" },
-      "poppy",
+      "frank",
       async () => [],
     );
     expect(out.time_range.start_time).toBe("2026-05-12T23:00:00+00:00");
@@ -352,8 +352,8 @@ describe("handleModelHistory", () => {
   });
 
   test("rows are shaped and classified", async () => {
-    const out = await handleModelHistory({}, "poppy", async () => rows);
-    expect(out.character).toBe("poppy");
+    const out = await handleModelHistory({}, "frank", async () => rows);
+    expect(out.character).toBe("frank");
     expect(out.count).toBe(2);
     expect(out.time_range).toEqual({
       start_time: undefined,
@@ -376,7 +376,7 @@ describe("handleModelHistory", () => {
     let seen: [string | undefined, string | undefined] = [undefined, undefined];
     await handleModelHistory(
       { start_time: "2026-05-13T09:00:00+10:00" },
-      "poppy",
+      "frank",
       async (_c, since, until) => {
         seen = [since, until];
         return [];

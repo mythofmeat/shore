@@ -218,7 +218,7 @@ describe("conversationKey", () => {
     };
   }
   const context = (thread?: string): CallContext => ({
-    character: "qifei",
+    character: "heidi",
     ledger: "/data/ledger.db",
     call_type: "message",
     thinking_enabled: false,
@@ -257,21 +257,21 @@ describe("conversationKey", () => {
 
 describe("forgetting a thread's sessions", () => {
   const book = (): SessionBook => ({
-    [sessionKey("qifei", "/l.db", "main")]: { version: SESSION_BOOK_VERSION, sessionId: "home", entries: [] },
-    [sessionKey("qifei", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval", entries: [] },
-    [sessionKey("qifei", "/other.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval-other", entries: [] },
+    [sessionKey("heidi", "/l.db", "main")]: { version: SESSION_BOOK_VERSION, sessionId: "home", entries: [] },
+    [sessionKey("heidi", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval", entries: [] },
+    [sessionKey("heidi", "/other.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval-other", entries: [] },
     [sessionKey("aria", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "aria-eval", entries: [] },
   });
 
   test("background session keys retain their owner and thread for cleanup", () => {
-    const key = sessionKey("qifei", "/l.db", "main", "heartbeat");
+    const key = sessionKey("heidi", "/l.db", "main", "heartbeat");
     const record: SessionRecord = { version: SESSION_BOOK_VERSION, sessionId: "heartbeat", entries: [] };
     expect(sessionKeyThread(key)).toBe("main");
-    expect(withoutThread({ [key]: record }, "qifei", "main")).toEqual({});
+    expect(withoutThread({ [key]: record }, "heidi", "main")).toEqual({});
   });
 
   test("drops every ledger's session for that character's thread", () => {
-    const kept = withoutThread(book(), "qifei", "eval");
+    const kept = withoutThread(book(), "heidi", "eval");
     expect(Object.values(kept ?? {}).map((r) => r.sessionId).sort()).toEqual([
       "aria-eval",
       "home",
@@ -280,19 +280,19 @@ describe("forgetting a thread's sessions", () => {
 
   test("another character's identically named thread is left alone", () => {
     const kept = withoutThread(book(), "aria", "eval");
-    expect(kept?.[sessionKey("qifei", "/l.db", "eval")]?.sessionId).toBe("eval");
+    expect(kept?.[sessionKey("heidi", "/l.db", "eval")]?.sessionId).toBe("eval");
   });
 
   test("a book with nothing to drop says so rather than rewriting itself", () => {
-    expect(withoutThread(book(), "qifei", "nowhere")).toBeUndefined();
+    expect(withoutThread(book(), "heidi", "nowhere")).toBeUndefined();
   });
 
   test("home is reachable by name even though its key does not carry one", () => {
-    expect(sessionKeyThread(sessionKey("qifei", "/l.db", "main"))).toBe("main");
-    expect(sessionKeyThread(sessionKey("qifei", "/l.db", "eval"))).toBe("eval");
-    const kept = withoutThread(book(), "qifei", "main");
-    expect(kept?.[sessionKey("qifei", "/l.db", "main")]).toBeUndefined();
-    expect(kept?.[sessionKey("qifei", "/l.db", "eval")]?.sessionId).toBe("eval");
+    expect(sessionKeyThread(sessionKey("heidi", "/l.db", "main"))).toBe("main");
+    expect(sessionKeyThread(sessionKey("heidi", "/l.db", "eval"))).toBe("eval");
+    const kept = withoutThread(book(), "heidi", "main");
+    expect(kept?.[sessionKey("heidi", "/l.db", "main")]).toBeUndefined();
+    expect(kept?.[sessionKey("heidi", "/l.db", "eval")]?.sessionId).toBe("eval");
   });
 });
 

@@ -385,10 +385,10 @@ mod tests {
 
     #[test]
     fn reconnect_target_follows_the_session() {
-        let sync = SyncState::new(3, Some("poppy"), Some("eval"));
+        let sync = SyncState::new(3, Some("frank"), Some("eval"));
         assert_eq!(
             reconnect_target(&sync, Some("Yuna".into())),
-            Some("poppy".into())
+            Some("frank".into())
         );
     }
 
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn reconnect_thread_follows_the_session_then_falls_back_to_the_startup_thread() {
-        let sync = SyncState::new(3, Some("poppy"), Some("eval"));
+        let sync = SyncState::new(3, Some("frank"), Some("eval"));
         assert_eq!(
             reconnect_thread(&sync, Some("main".into())),
             Some("eval".into())

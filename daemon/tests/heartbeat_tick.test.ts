@@ -699,25 +699,25 @@ describe("what an autonomous turn leaves in the history", () => {
 
   test("the reasoning is stored ahead of the text, the way a chat turn stores it", async () => {
     const [msg] = await persist({
-      sendMessageText: "evening ren",
+      sendMessageText: "evening eve",
       images: [],
       thinking: [{ type: "thinking", thinking: "she has been quiet all day" }],
     });
 
     expect(msg?.content_blocks).toEqual([
       { type: "thinking", thinking: "she has been quiet all day" },
-      { type: "text", text: "evening ren" },
+      { type: "text", text: "evening eve" },
     ]);
   });
 
   test("the displayed content stays text only", async () => {
     const [msg] = await persist({
-      sendMessageText: "evening ren",
+      sendMessageText: "evening eve",
       images: [],
       thinking: [{ type: "thinking", thinking: "internal" }],
     });
 
-    expect(msg?.content).toBe("evening ren");
+    expect(msg?.content).toBe("evening eve");
   });
 
   test("a tick with no reasoning stores the text alone", async () => {

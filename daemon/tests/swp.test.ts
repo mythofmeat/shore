@@ -294,18 +294,18 @@ describe("event_matches_session", () => {
       messages: [],
       active_start: 0,
       config: {},
-      selected_character: "poppy",
+      selected_character: "frank",
       revision: 1,
     } as ServerMessage;
     const message = {
       type: "new_message",
-      character: "poppy",
+      character: "frank",
       revision: 1,
     } as ServerMessage;
 
-    expect(eventMatchesSession(history, "poppy", true)).toBe(true);
+    expect(eventMatchesSession(history, "frank", true)).toBe(true);
     expect(eventMatchesSession(history, "Yuna", true)).toBe(false);
-    expect(eventMatchesSession(message, "poppy", true)).toBe(true);
+    expect(eventMatchesSession(message, "frank", true)).toBe(true);
     expect(eventMatchesSession(message, "Yuna", true)).toBe(false);
     expect(eventMatchesSession(message, null, true)).toBe(false);
   });
@@ -313,7 +313,7 @@ describe("event_matches_session", () => {
   test("an all-characters subscriber gets conversation events for every character", () => {
     const message = {
       type: "new_message",
-      character: "poppy",
+      character: "frank",
       revision: 1,
     } as ServerMessage;
 
@@ -488,24 +488,24 @@ describe("history is routed to the thread that asked for it", () => {
       messages: [],
       active_start: 0,
       config: {},
-      selected_character: "poppy",
+      selected_character: "frank",
       ...(thread === undefined ? {} : { selected_thread: thread }),
       revision: 1,
     });
 
   test("a session on one thread does not see another thread's conversation", () => {
-    expect(eventMatchesSession(history("main"), "poppy", true, false, "main")).toBe(true);
-    expect(eventMatchesSession(history("scratch"), "poppy", true, false, "main")).toBe(false);
-    expect(eventMatchesSession(history("main"), "poppy", true, false, "scratch")).toBe(false);
+    expect(eventMatchesSession(history("main"), "frank", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(history("scratch"), "frank", true, false, "main")).toBe(false);
+    expect(eventMatchesSession(history("main"), "frank", true, false, "scratch")).toBe(false);
   });
 
   test("a session that has not picked a thread still sees the character's history", () => {
-    expect(eventMatchesSession(history("main"), "poppy", true, false, null)).toBe(true);
-    expect(eventMatchesSession(history("scratch"), "poppy", true, false, null)).toBe(true);
+    expect(eventMatchesSession(history("main"), "frank", true, false, null)).toBe(true);
+    expect(eventMatchesSession(history("scratch"), "frank", true, false, null)).toBe(true);
   });
 
   test("a broadcast from before threads existed reaches everyone on the character", () => {
-    expect(eventMatchesSession(history(), "poppy", true, false, "scratch")).toBe(true);
+    expect(eventMatchesSession(history(), "frank", true, false, "scratch")).toBe(true);
   });
 
   test("the character check still comes first", () => {
@@ -513,6 +513,6 @@ describe("history is routed to the thread that asked for it", () => {
   });
 
   test("an all-characters subscriber is not filtered by thread either", () => {
-    expect(eventMatchesSession(history("scratch"), "poppy", true, true, "main")).toBe(true);
+    expect(eventMatchesSession(history("scratch"), "frank", true, true, "main")).toBe(true);
   });
 });

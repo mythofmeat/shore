@@ -988,7 +988,7 @@ mod tests {
     fn write_header_is_coloured_by_speaker() {
         set_color_enabled(true);
         let mut buf = Vec::new();
-        write_header(&mut buf, "qifei", "14:30", character_color("qifei"), 40);
+        write_header(&mut buf, "heidi", "14:30", character_color("heidi"), 40);
         set_color_enabled(false);
         let out = String::from_utf8(buf).unwrap_or_default();
         assert!(
@@ -1010,7 +1010,7 @@ mod tests {
                 "timestamp": "2026-01-01T14:30:00+00:00",
             })],
             0,
-            "qifei",
+            "heidi",
             LogFilter::default(),
         );
         let batch = String::from_utf8(batch_bytes).unwrap_or_default();

@@ -70,7 +70,7 @@ describe("the assembled prompt puts its dynamic block at the tail", () => {
   test("memory_index lands last even though it is built before nothing else", () => {
     const { system } = assemblePrompt({
       character_name: "Rhia",
-      display_name: "eshen",
+      display_name: "peggy",
       has_prior_context: false,
       messages: [],
       user_timestamp_mode: "none",

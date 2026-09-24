@@ -37,7 +37,7 @@ test("a retry after a cancelled reply resumes from the last reply Shore kept", a
   const reply: WireMessage = { role: "assistant", content: [{ type: "text", text: "Here is the answer." }] };
   const turn = (messages: WireMessage[]) => runGeneration({
     sdk: "claude_agent", model: "claude-opus-5", api_key: "", base_url: mock.url, messages,
-    context: { character: "qifei", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
+    context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
     max_tokens: 1024, replay_prior_thinking: "all",
   }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(20_000), sink: () => {} });
   try {

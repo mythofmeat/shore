@@ -223,9 +223,9 @@ export const SERVER_FIXTURES = {
   } satisfies ServerMessage,
   config_warning: {
     "type": "config_warning",
-    "path": "/home/u/.config/shore/characters/poppy/config.toml",
-    "character": "poppy",
-    "message": "invalid config for character \"poppy\": [chat].model: unknown model \"claud-opus\""
+    "path": "/home/u/.config/shore/characters/frank/config.toml",
+    "character": "frank",
+    "message": "invalid config for character \"frank\": [chat].model: unknown model \"claud-opus\""
   } satisfies ServerMessage,
   config_warning_global: {
     "type": "config_warning",

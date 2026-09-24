@@ -32,7 +32,7 @@ const USAGE = {
 };
 
 const ctx = (over: Partial<CallContext> = {}): CallContext => ({
-  character: "poppy",
+  character: "frank",
   call_type: "message",
   thinking_enabled: true,
   forensics_dir: dir,
@@ -55,7 +55,7 @@ const PLACEMENT: CachePlacement = {
 describe("cache forensics rows", () => {
   test("a row carries placement, usage, and the daemon's labels", () => {
     recordCacheCall(
-      ctx({ character: "poppy", call_type: "keepalive", rid: "r-1" }),
+      ctx({ character: "frank", call_type: "keepalive", rid: "r-1" }),
       "claude-opus-5",
       PLACEMENT,
       USAGE,
@@ -64,7 +64,7 @@ describe("cache forensics rows", () => {
 
     const [row] = rows();
     expect(row).toMatchObject({
-      character: "poppy",
+      character: "frank",
       call_type: "keepalive",
       rid: "r-1",
       model: "claude-opus-5",
@@ -89,7 +89,7 @@ describe("cache forensics rows", () => {
   });
 
   test("rows append rather than overwrite", () => {
-    const both = ctx({ character: "poppy" });
+    const both = ctx({ character: "frank" });
     recordCacheCall(both, "claude-opus-5", PLACEMENT, USAGE, "done");
     recordCacheCall(both, "claude-opus-5", PLACEMENT, USAGE, "error");
     expect(rows().map((r) => r["outcome"])).toEqual(["done", "error"]);

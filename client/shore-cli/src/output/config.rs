@@ -436,7 +436,7 @@ mod tests {
                         "prompt": "You are {{char}}.\nline two\nline three\nline four"
                     }
                 },
-                "defaults": {"display_name": "ren"}
+                "defaults": {"display_name": "eve"}
             },
             "defaults": {}
         })
@@ -679,7 +679,7 @@ mod tests {
             "set": "cache.keepalive_max",
             "value": "6h",
             "previous": "12h",
-            "file": "/home/ren/.config/shore/config.toml",
+            "file": "/home/eve/.config/shore/config.toml",
             "action": "replaced",
             "restart_required": [],
             "masked_by_preference": null

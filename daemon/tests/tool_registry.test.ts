@@ -166,7 +166,7 @@ describe("renderToolDefs — description templating", () => {
 
   test("no placeholder survives into a rendered description", () => {
     const all = ALL_TOOLS.map((t) => t.name);
-    for (const d of renderToolDefs(cfg(all), "qifei", "ren")) {
+    for (const d of renderToolDefs(cfg(all), "heidi", "eve")) {
       expect(d.description).not.toContain("{{char}}");
       expect(d.description).not.toContain("{{user}}");
       expect(d.description).not.toContain("{{character_name}}");
@@ -180,7 +180,7 @@ describe("renderToolDefs — description templating", () => {
   });
 
   test("an empty allowlist renders nothing", () => {
-    expect(renderToolDefs(cfg([]), "qifei", "ren")).toEqual([]);
+    expect(renderToolDefs(cfg([]), "heidi", "eve")).toEqual([]);
   });
 });
 
@@ -195,7 +195,7 @@ describe("subagentToolDefs", () => {
     const naive = [...names].sort();
     expect(naive).toEqual(["\u{1F3B5}drum", "ﬀute"]);
 
-    const actual = subagentToolDefs(subagentConfig, names, "qifei", "ren").map((d) => d.name);
+    const actual = subagentToolDefs(subagentConfig, names, "heidi", "eve").map((d) => d.name);
     expect(actual).toEqual(["ask_ﬀute", "ask_\u{1F3B5}drum"]);
     expect(actual).not.toEqual(naive.map((n) => `ask_${n}`));
   });
@@ -209,19 +209,19 @@ describe("subagentToolDefs", () => {
     const order = subagentToolDefs(
       subagentConfig,
       ["musicology", "music"],
-      "qifei",
-      "ren",
+      "heidi",
+      "eve",
     ).map((d) => d.name);
     expect(order).toEqual(["ask_music", "ask_musicology"]);
   });
 
   test("{{character_name}} renders as its own variable", () => {
-    const [archivist] = subagentToolDefs(subagentConfig, ["archivist"], "qifei", "ren");
-    expect(archivist?.description).toBe("Search qifei's archive on behalf of ren.");
+    const [archivist] = subagentToolDefs(subagentConfig, ["archivist"], "heidi", "eve");
+    expect(archivist?.description).toBe("Search heidi's archive on behalf of eve.");
   });
 
   test("every synthesized tool takes one required string query", () => {
-    const defs = subagentToolDefs(subagentConfig, ["music", "archivist"], "qifei", "ren");
+    const defs = subagentToolDefs(subagentConfig, ["music", "archivist"], "heidi", "eve");
     expect(defs.length).toBe(2);
     for (const d of defs) {
       expect(d.input_schema).toEqual({
@@ -238,7 +238,7 @@ describe("subagentToolDefs", () => {
   });
 
   test("an empty config offers nothing however many names are enabled", () => {
-    expect(subagentToolDefs(new Map(), ["music"], "qifei", "ren")).toEqual([]);
+    expect(subagentToolDefs(new Map(), ["music"], "heidi", "eve")).toEqual([]);
   });
 });
 

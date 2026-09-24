@@ -29,7 +29,7 @@ import {
 import rawFixture from "./command_captures/status.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
-const CHARACTER = "poppy";
+const CHARACTER = "frank";
 const TOLERANCE_SECS = fixture.tolerance_secs;
 
 const DEFAULT_CLOCK: HeartbeatClockConfig = {

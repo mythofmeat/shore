@@ -848,12 +848,12 @@ mod tests {
     fn one_marked_row_gives_every_row_the_same_mark_column() {
         let out = render(|buf| {
             let mut rows = Rows::new();
-            rows.add_marked(Mark::Active, "qifei", "active", Tone::Active);
+            rows.add_marked(Mark::Active, "heidi", "active", Tone::Active);
             rows.add_marked(Mark::None, "Yuna", "", Tone::Plain);
             rows.write(buf);
         });
         assert_eq!(
-            out, "  * qifei  active\n    Yuna\n",
+            out, "  * heidi  active\n    Yuna\n",
             "names must align whether or not the row carries a mark, \
              and a valueless row must not pad out to nothing"
         );
@@ -864,7 +864,7 @@ mod tests {
         set_color_enabled(true);
         let mut buf = Vec::new();
         let mut rows = Rows::new();
-        rows.add_marked(Mark::Active, "qifei", "", Tone::Active);
+        rows.add_marked(Mark::Active, "heidi", "", Tone::Active);
         rows.add_marked(Mark::None, "Yuna", "", Tone::Plain);
         rows.write(&mut buf);
         set_color_enabled(false);
@@ -882,11 +882,11 @@ mod tests {
         }
 
         assert!(
-            active.contains(&format!("{cyan}qifei")),
+            active.contains(&format!("{cyan}heidi")),
             "the active name must carry the mark's colour: {active:?}"
         );
         assert!(
-            !active.contains(&format!("{muted}qifei")),
+            !active.contains(&format!("{muted}heidi")),
             "the active name must not also be dimmed: {active:?}"
         );
         assert!(

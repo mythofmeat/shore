@@ -261,7 +261,7 @@ describe("wire capture", () => {
       messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       max_tokens: 64,
       replay_prior_thinking: "all",
-      context: { character: "poppy", call_type: "message", thinking_enabled: false, rid: "r_1" },
+      context: { character: "frank", call_type: "message", thinking_enabled: false, rid: "r_1" },
     };
 
     const text: string[] = [];
@@ -281,7 +281,7 @@ describe("wire capture", () => {
     expect(required(wire[0]).request_body).toBe(servedBody);
     expect(required(wire[0]).response_body).toBe(sse);
     expect(required(wire[0]).url).toBe(`http://localhost:${port}/v1/messages`);
-    expect(required(wire[0]).character).toBe("poppy");
+    expect(required(wire[0]).character).toBe("frank");
     expect(required(wire[0]).call_type).toBe("message");
 
     const headers = new Map(required(wire[0]).request_headers);

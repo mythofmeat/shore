@@ -244,13 +244,13 @@ describe("rendering command output", () => {
 
   test("status renders summary lines and no code block", () => {
     const out = renderCommandOutput("status", {
-      character: "poppy",
+      character: "frank",
       active_model: "claude-sonnet-5",
       turn_count: 42,
       tokens: { input: 100, output: 50, cache_read: 10, cache_write: 5 },
       autonomy: { state: "active" },
     });
-    expect(out).toContain("**poppy**");
+    expect(out).toContain("**frank**");
     expect(out).toContain("`claude-sonnet-5`");
     expect(out).toContain("turns: 42");
     expect(out).toContain("100 in / 50 out (cache 10 read / 5 write)");
@@ -260,9 +260,9 @@ describe("rendering command output", () => {
 
   test("characters render with and without descriptions", () => {
     const out = renderCommandOutput("list_characters", {
-      characters: [{ name: "poppy", description: "flower enthusiast" }, { name: "sage" }],
+      characters: [{ name: "frank", description: "flower enthusiast" }, { name: "sage" }],
     });
-    expect(out).toContain("**poppy** — flower enthusiast");
+    expect(out).toContain("**frank** — flower enthusiast");
     expect(out).toContain("- **sage**");
   });
 
