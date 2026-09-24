@@ -279,7 +279,7 @@ describe("keepalive", () => {
 
   test("TTL expiry plus a non-keepalive call is a miss", () => {
     const t = new CacheTracker();
-    t.observe(obs({ ts: hour(1), cache_read_tokens: 500 }));
+    t.observe(obs({ ts: hour(1), cache_read_tokens: 500, keepalive_window_secs: 12 * 3600 }));
     const r = t.observe(obs({ ts: hour(3), cache_write_tokens: 500 }));
     expect(r.anomaly).toBe<Anomaly>("keepalive_miss");
   });
@@ -324,16 +324,23 @@ describe("keepalive", () => {
     expect(r.anomaly).toBeUndefined();
   });
 
-  test("past the idle ceiling, a cold start is by design", () => {
-    const t = new CacheTracker(3600, 6 * 3600);
-    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
+  test("past the keepalive window, a cold start is by design", () => {
+    const t = new CacheTracker(3600);
+    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500, keepalive_window_secs: 6 * 3600 }));
     const r = t.observe(obs({ ts: "2026-04-05T20:00:00Z", cache_write_tokens: 500 }));
     expect(r.anomaly).toBeUndefined();
   });
 
-  test("inside the ceiling, a miss still fires", () => {
-    const t = new CacheTracker(3600, 6 * 3600);
+  test("with no known keepalive window, a cold start is not a miss", () => {
+    const t = new CacheTracker(3600);
     t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
+    const r = t.observe(obs({ ts: "2026-04-05T04:00:00Z", cache_write_tokens: 500 }));
+    expect(r.anomaly).toBeUndefined();
+  });
+
+  test("inside the keepalive window, a miss still fires", () => {
+    const t = new CacheTracker(3600);
+    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500, keepalive_window_secs: 6 * 3600 }));
     const r = t.observe(obs({ ts: "2026-04-05T04:00:00Z", cache_write_tokens: 500 }));
     expect(r.anomaly).toBe<Anomaly>("keepalive_miss");
   });
@@ -369,15 +376,6 @@ describe("reconstruction", () => {
 });
 
 describe("the tracker map", () => {
-  test("raising the ceiling retunes live trackers", () => {
-    const trackers = new CacheTrackers();
-    const t = trackers.forCharacter("aria");
-    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
-    trackers.setMaxIdleSecs(6 * 3600);
-    expect(t.observe(obs({ ts: "2026-04-05T20:00:00Z", cache_write_tokens: 500 })).anomaly)
-      .toBeUndefined();
-  });
-
   test("a character with no tracker asks to be seeded", () => {
     const trackers = new CacheTrackers();
     expect(trackers.needsSeed("aria")).toBe(true);

@@ -26,8 +26,6 @@ export interface ObservationResult {
   anomaly: Anomaly | undefined;
 }
 
-const DEFAULT_MAX_IDLE_SECS = 12 * 3600;
-
 const DEFAULT_TTL_SECS = 3600;
 
 function parseTs(ts: string): number | undefined {
@@ -68,16 +66,14 @@ export class CacheTracker {
   #lastToolLoopKind: string | undefined;
   #lastToolLoopCacheRead = 0;
   #ttlSecs: number;
-  #maxIdleSecs: number;
   readonly #keepaliveWindows = new Map<string, number>();
   #ttlExpiredSinceWarm = false;
 
   #lastKeepaliveMissed = false;
   #lastActivityTs: number | undefined;
 
-  constructor(ttlSecs: number = DEFAULT_TTL_SECS, maxIdleSecs: number = DEFAULT_MAX_IDLE_SECS) {
+  constructor(ttlSecs: number = DEFAULT_TTL_SECS) {
     this.#ttlSecs = ttlSecs;
-    this.#maxIdleSecs = maxIdleSecs;
   }
 
   get state(): CacheState {
@@ -86,10 +82,6 @@ export class CacheTracker {
 
   get lastCacheRead(): number {
     return this.#lastCacheRead;
-  }
-
-  setMaxIdleSecs(secs: number): void {
-    this.#maxIdleSecs = secs;
   }
 
   static reconstruct(
@@ -123,7 +115,7 @@ export class CacheTracker {
     if (obs.keepalive_window_secs !== undefined) {
       this.#keepaliveWindows.set(modelKey, obs.keepalive_window_secs);
     }
-    const maxIdleSecs = this.#keepaliveWindows.get(modelKey) ?? this.#maxIdleSecs;
+    const maxIdleSecs = this.#keepaliveWindows.get(modelKey) ?? 0;
 
     if (obs.call_type === "compaction") {
       this.#state = "cold";
@@ -292,21 +284,10 @@ export class CacheTracker {
 
 export class CacheTrackers {
   readonly #map = new Map<string, CacheTracker>();
-  #maxIdleSecs = DEFAULT_MAX_IDLE_SECS;
-
-  setMaxIdleSecs(secs: number): void {
-    this.#maxIdleSecs = secs;
-    for (const tracker of this.#map.values()) tracker.setMaxIdleSecs(secs);
-  }
-
-  get maxIdleSecs(): number {
-    return this.#maxIdleSecs;
-  }
-
   forCharacter(character: string, ttlSecs: number = DEFAULT_TTL_SECS): CacheTracker {
     let tracker = this.#map.get(character);
     if (!tracker) {
-      tracker = new CacheTracker(ttlSecs, this.#maxIdleSecs);
+      tracker = new CacheTracker(ttlSecs);
       this.#map.set(character, tracker);
     }
     return tracker;
@@ -317,7 +298,6 @@ export class CacheTrackers {
   }
 
   seed(character: string, tracker: CacheTracker): void {
-    tracker.setMaxIdleSecs(this.#maxIdleSecs);
     this.#map.set(character, tracker);
   }
 }
