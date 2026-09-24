@@ -2726,15 +2726,18 @@ mod tests {
     }
 
     fn parse(args: &[&str]) -> Cli {
-        let mut full = vec!["shore"];
-        full.extend_from_slice(args);
-        Cli::parse_from(full)
+        try_parse(args).unwrap_or_else(|error| panic!("{error}"))
     }
 
     fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
         let mut full = vec!["shore"];
         full.extend_from_slice(args);
-        Cli::try_parse_from(full)
+        let matches = Cli::command()
+            .mut_arg("character", |arg| arg.env(None))
+            .mut_arg("thread", |arg| arg.env(None))
+            .mut_arg("addr", |arg| arg.env(None))
+            .try_get_matches_from(full)?;
+        Cli::from_arg_matches(&matches)
     }
 
     fn parsed_command(cli: &Cli) -> &CliCommand {
@@ -3028,116 +3031,281 @@ mod tests {
     }
 
     #[test]
-    fn parse_alt_defaults_to_list() {
-        let cli = parse(&["msg", "alt"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Alt {
-                selector,
-                msg_ref,
-                json,
-            } => {
-                assert!(selector.is_none());
-                assert!(msg_ref.is_none());
-                assert!(!json);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_alt_position_with_ref_and_json() {
-        let cli = parse(&["msg", "alt", "2", "--ref", "-1", "--json"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Alt {
-                selector,
-                msg_ref,
-                json,
-            } => {
-                assert_eq!(selector.as_deref(), Some("2"));
-                assert_eq!(msg_ref.as_deref(), Some("-1"));
-                assert!(*json);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_log_default() {
-        let cli = parse(&["log"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log {
-                msg_ref,
-                count,
-                role,
-                follow,
-                json,
-                content,
-                reasoning,
-                tools,
-                subagent_tools,
-            } => {
-                assert!(msg_ref.is_none());
-                assert_eq!(*count, 64);
-                assert!(role.is_none());
-                assert!(!follow);
-                assert!(!json);
-                assert!(!content);
-                assert!(!reasoning);
-                assert!(!tools);
-                assert!(!subagent_tools);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_log_custom_count() {
-        let cli = parse(&["log", "--count", "50"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log { count, .. } => {
-                assert_eq!(*count, 50);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_log_get_by_ref() {
-        let cli = parse(&["log", "last"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log { msg_ref, .. } => {
-                assert_eq!(msg_ref.as_deref(), Some("last"));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_log_get_by_role() {
-        let cli = parse(&["log", "last", "--role", "user"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log { msg_ref, role, .. } => {
-                assert_eq!(msg_ref.as_deref(), Some("last"));
-                assert_eq!(*role, Some(LogRole::User));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_log_character_role_alias() {
-        let cli = parse(&["log", "--role", "character"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log { role, .. } => {
-                assert_eq!(*role, Some(LogRole::Character));
-                assert_eq!(
-                    role.map(LogRole::as_protocol_role),
-                    Some("assistant"),
-                    "character must reach the daemon as assistant"
-                );
-            }
-        );
+    fn each_command_line_sends_the_daemon_exactly_this_command() {
+        use serde_json::json;
+        type Sent<'name> = Option<(&'name str, serde_json::Value)>;
+        let cases: Vec<(&[&str], Sent<'_>)> = vec![
+            (&["msg", "send", "hello", "world"], None),
+            (
+                &["msg", "send", "-i", "photo.jpg", "describe", "this"],
+                None,
+            ),
+            (
+                &["msg", "send", "-i", "a.jpg", "-i", "b.png", "compare"],
+                None,
+            ),
+            (&["msg", "regen"], None),
+            (&["msg", "regen", "--guidance", "be more concise"], None),
+            (&["msg", "alt"], Some(("list_alternatives", json!({})))),
+            (
+                &["msg", "alt", "2", "--ref", "-1", "--json"],
+                Some(("alt", json!({"ref": "-1", "position": 2}))),
+            ),
+            (&["log"], Some(("log", json!({"turns": 64})))),
+            (
+                &["log", "--count", "50"],
+                Some(("log", json!({"turns": 50}))),
+            ),
+            (&["log", "last"], Some(("get", json!({"ref": "last"})))),
+            (
+                &["log", "last", "--role", "user"],
+                Some(("get", json!({"ref": "last", "role": "user"}))),
+            ),
+            (
+                &["log", "--role", "character"],
+                Some(("log", json!({"turns": 64, "role": "assistant"}))),
+            ),
+            (&["log", "3"], Some(("get", json!({"ref": "3"})))),
+            (
+                &["msg", "edit", "msg_123", "new", "text"],
+                Some(("edit", json!({"ref": "msg_123", "content": "new text"}))),
+            ),
+            (
+                &["msg", "edit", "last", "updated"],
+                Some(("edit", json!({"ref": "last", "content": "updated"}))),
+            ),
+            (
+                &["msg", "edit", "-1", "new", "text"],
+                Some(("edit", json!({"ref": "-1", "content": "new text"}))),
+            ),
+            (
+                &["msg", "delete", "msg_456"],
+                Some(("delete", json!({"refs": ["msg_456"]}))),
+            ),
+            (
+                &["msg", "delete", "-1"],
+                Some(("delete", json!({"refs": ["-1"]}))),
+            ),
+            (
+                &["msg", "delete", "-1", "-2", "msg_456"],
+                Some(("delete", json!({"refs": ["-1", "-2", "msg_456"]}))),
+            ),
+            (&["character"], None),
+            (&["character", "use", "alice"], None),
+            (&["character", "new", "alice"], None),
+            (
+                &[
+                    "character",
+                    "delete",
+                    "alice",
+                    "--archive",
+                    "/tmp/alice.tar.gz",
+                ],
+                None,
+            ),
+            (&["thread"], Some(("list_threads", json!({})))),
+            (
+                &["thread", "use", "scratch"],
+                Some(("switch_thread", json!({"name": "scratch"}))),
+            ),
+            (
+                &[
+                    "thread",
+                    "new",
+                    "eval",
+                    "--label",
+                    "Agent SDK eval",
+                    "--model",
+                    "claude-agent:opus5",
+                    "--compaction",
+                ],
+                Some((
+                    "create_thread",
+                    json!({"name": "eval", "label": "Agent SDK eval", "model": "claude-agent:opus5", "compaction": true}),
+                )),
+            ),
+            (
+                &["character", "info"],
+                Some(("character_info", json!({"name": ""}))),
+            ),
+            (&["status"], Some(("status", json!({})))),
+            (
+                &["trace", "errors", "-n", "5"],
+                Some(("error_log", json!({"count": 5}))),
+            ),
+            (
+                &["debug", "heartbeat_tick_now"],
+                Some(("heartbeat_tick_now", json!({}))),
+            ),
+            (
+                &["debug", "heartbeat_status_dormant"],
+                Some(("heartbeat_set_dormant", json!({}))),
+            ),
+            (
+                &["debug", "heartbeat_status_active"],
+                Some(("heartbeat_set_active", json!({}))),
+            ),
+            (&["model"], Some(("list_models", json!({})))),
+            (
+                &["model", "use", "claude-haiku-4-5-20251001"],
+                Some(("switch_model", json!({"name": "claude-haiku-4-5-20251001"}))),
+            ),
+            (
+                &["model", "info", "opus"],
+                Some(("model_info", json!({"name": "opus"}))),
+            ),
+            (
+                &["model", "--all"],
+                Some(("list_models", json!({"include_hidden": true}))),
+            ),
+            (
+                &["model", "setting"],
+                Some(("model_settings", json!({"overview": true}))),
+            ),
+            (
+                &["model", "setting", "temperature", "0.8"],
+                Some((
+                    "set_model_setting",
+                    json!({"key": "temperature", "value": "0.8", "scope": "character"}),
+                )),
+            ),
+            (
+                &["model", "setting", "--reset", "temperature"],
+                Some((
+                    "set_model_setting",
+                    json!({"key": "temperature", "value": null, "scope": "character"}),
+                )),
+            ),
+            (
+                &["model", "setting", "--global", "top_p", "0.9"],
+                Some((
+                    "set_model_setting",
+                    json!({"key": "top_p", "value": "0.9", "scope": "global"}),
+                )),
+            ),
+            (&["provider"], Some(("list_providers", json!({})))),
+            (
+                &["provider", "models", "openrouter"],
+                Some((
+                    "list_provider_models",
+                    json!({"provider": "openrouter", "include_hidden": false}),
+                )),
+            ),
+            (
+                &["provider", "models", "openrouter", "--all"],
+                Some((
+                    "list_provider_models",
+                    json!({"provider": "openrouter", "include_hidden": true}),
+                )),
+            ),
+            (
+                &["provider", "refresh", "openrouter"],
+                Some(("refresh_provider_models", json!({"provider": "openrouter"}))),
+            ),
+            (
+                &["provider", "refresh"],
+                Some(("refresh_all_provider_models", json!({}))),
+            ),
+            (
+                &["segments", "show", "4"],
+                Some(("segments", json!({"action": "show", "index": 4}))),
+            ),
+            (
+                &["clear", "--exclude", "--note", "bad branch"],
+                Some(("clear", json!({"exclude": true, "note": "bad branch"}))),
+            ),
+            (
+                &["config"],
+                Some(("config", json!({"key": null, "value": null}))),
+            ),
+            (
+                &["config", "get", "chat.model"],
+                Some(("config", json!({"key": "chat.model"}))),
+            ),
+            (
+                &["config", "set", "chat.model", "claude-haiku-4-5-20251001"],
+                Some((
+                    "config",
+                    json!({"key": "chat.model", "value": "claude-haiku-4-5-20251001"}),
+                )),
+            ),
+            (&["config", "reload"], None),
+            (&["config", "reload", "-y"], None),
+            (&["config", "--path"], None),
+            (
+                &["debug", "keepalive_ping_now"],
+                Some(("keepalive_ping_now", json!({}))),
+            ),
+            (
+                &["debug", "session_activate"],
+                Some(("session_activate", json!({}))),
+            ),
+            (&["completions", "fish"], None),
+            (&["completions", "bash"], None),
+            (&["completions", "zsh"], None),
+            (
+                &["usage"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": null, "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
+            (
+                &["usage", "--call-type", "message"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": "message", "group_by": null, "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
+            (&["complete", "models"], None),
+            (&["complete", "characters"], None),
+            (
+                &["model", "--favorites"],
+                Some(("list_models", json!({"favorites_only": true}))),
+            ),
+            (
+                &["model", "-f"],
+                Some(("list_models", json!({"favorites_only": true}))),
+            ),
+            (&["compact"], Some(("compact", json!({})))),
+            (
+                &["compact", "0"],
+                Some(("compact", json!({"keep_turns": 0}))),
+            ),
+            (
+                &["compact", "8"],
+                Some(("compact", json!({"keep_turns": 8}))),
+            ),
+            (
+                &["compact", "--restart"],
+                Some(("compact", json!({"restart": true}))),
+            ),
+            (
+                &["compact", "0", "--restart"],
+                Some(("compact", json!({"keep_turns": 0, "restart": true}))),
+            ),
+            (
+                &["-c", "ada", "usage"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": "ada", "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": null, "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
+            (
+                &["msg", "edit", "last", "two", "words"],
+                Some(("edit", json!({"ref": "last", "content": "two words"}))),
+            ),
+        ];
+        for (argv, expected) in cases {
+            let cli = parse(argv);
+            let sent = to_swp_command(parsed_command(&cli), cli.character.as_deref());
+            assert_eq!(
+                sent,
+                expected,
+                "`shore {}` sends the wrong command (None means it is handled locally)",
+                argv.join(" ")
+            );
+        }
     }
 
     #[test]
@@ -3226,86 +3394,6 @@ mod tests {
                 "`shore {name}` must still be completable: {script}"
             );
         }
-    }
-
-    #[test]
-    fn parse_log_get_positive_index() {
-        let cli = parse(&["log", "3"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Log { msg_ref, .. } => {
-                assert_eq!(msg_ref.as_deref(), Some("3"));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_edit() {
-        let cli = parse(&["msg", "edit", "msg_123", "new", "text"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Edit { msg_ref, content, .. } => {
-                assert_eq!(msg_ref, "msg_123");
-                assert_eq!(content, &["new", "text"]);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_edit_last() {
-        let cli = parse(&["msg", "edit", "last", "updated"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Edit { msg_ref, content, .. } => {
-                assert_eq!(msg_ref, "last");
-                assert_eq!(content, &["updated"]);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_edit_negative_index() {
-        let cli = parse(&["msg", "edit", "-1", "new", "text"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Edit { msg_ref, content, .. } => {
-                assert_eq!(msg_ref, "-1");
-                assert_eq!(content, &["new", "text"]);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_delete() {
-        let cli = parse(&["msg", "delete", "msg_456"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Delete { msg_refs, .. } => {
-                assert_eq!(msg_refs, &["msg_456"]);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_delete_negative_index() {
-        let cli = parse(&["msg", "delete", "-1"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Delete { msg_refs, .. } => {
-                assert_eq!(msg_refs, &["-1"]);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_delete_takes_several_refs() {
-        let cli = parse(&["msg", "delete", "-1", "-2", "msg_456"]);
-        assert_variant!(
-            parsed_msg(&cli),
-            MsgCommand::Delete { msg_refs, .. } => {
-                assert_eq!(msg_refs, &["-1", "-2", "msg_456"]);
-            }
-        );
     }
 
     #[test]
@@ -3408,60 +3496,6 @@ mod tests {
         assert!(
             to_swp_command(parsed_command(&cli), None).is_none(),
             "deletion goes through the confirming handler, never the bare mapper",
-        );
-    }
-
-    #[test]
-    fn parse_thread_list() {
-        let cli = parse(&["thread"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Thread { subcommand, json } => {
-                assert!(subcommand.is_none());
-                assert!(!json);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_thread_use() {
-        let cli = parse(&["thread", "use", "scratch"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Thread { subcommand, .. } => {
-                assert!(matches!(
-                    subcommand,
-                    Some(ThreadCommand::Use { name }) if name == "scratch"
-                ));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_thread_new_carries_its_options() {
-        let cli = parse(&[
-            "thread",
-            "new",
-            "eval",
-            "--label",
-            "Agent SDK eval",
-            "--model",
-            "claude-agent:opus5",
-            "--compaction",
-        ]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Thread { subcommand, .. } => {
-                assert_variant!(
-                    subcommand.as_ref().expect("a subcommand"),
-                    ThreadCommand::New { name, label, model, compaction } => {
-                        assert_eq!(name, "eval");
-                        assert_eq!(label.as_deref(), Some("Agent SDK eval"));
-                        assert_eq!(model.as_deref(), Some("claude-agent:opus5"));
-                        assert!(compaction);
-                    }
-                );
-            }
         );
     }
 
@@ -3637,28 +3671,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_character_info() {
-        let cli = parse(&["character", "info"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Character { subcommand, .. } => {
-                assert!(matches!(subcommand, Some(CharacterCommand::Info)));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_status() {
-        let cli = parse(&["status"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Status { section, .. } => {
-                assert!(section.is_none());
-            }
-        );
-    }
-
-    #[test]
     fn status_no_longer_carries_diagnostics() {
         for args in [
             &["status", "--diagnostics"][..],
@@ -3667,123 +3679,6 @@ mod tests {
             assert!(
                 Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
                 "{args:?} must not parse"
-            );
-        }
-    }
-
-    #[test]
-    fn parse_trace_errors() {
-        let cli = parse(&["trace", "errors", "-n", "5"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Trace {
-                subcommand: Some(TraceCommand::Errors { count, json }),
-            } => {
-                assert_eq!(*count, 5);
-                assert!(!json);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_debug_tick_now() {
-        let cli = parse(&["debug", "heartbeat_tick_now"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Debug {
-                subcommand: Some(DebugCommand::TickNow),
-            } => {}
-        );
-    }
-
-    #[test]
-    fn parse_debug_status_dormant() {
-        let cli = parse(&["debug", "heartbeat_status_dormant"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Debug {
-                subcommand: Some(DebugCommand::StatusDormant),
-            } => {}
-        );
-    }
-
-    #[test]
-    fn parse_debug_status_active() {
-        let cli = parse(&["debug", "heartbeat_status_active"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Debug {
-                subcommand: Some(DebugCommand::StatusActive),
-            } => {}
-        );
-    }
-
-    #[test]
-    fn parse_model_list() {
-        let cli = parse(&["model"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model {
-                info,
-                subcommand,
-                all,
-                ..
-            } => {
-                assert!(!info);
-                assert!(subcommand.is_none());
-                assert!(!all);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_switch() {
-        let cli = parse(&["model", "use", "claude-haiku-4-5-20251001"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model { subcommand, .. } => {
-                assert!(matches!(
-                    subcommand,
-                    Some(ModelCommand::Use { name, target })
-                        if target.is_bare() && name == "claude-haiku-4-5-20251001"
-                ));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_info() {
-        let cli = parse(&["model", "info", "opus"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model { subcommand, .. } => {
-                assert!(matches!(
-                    subcommand,
-                    Some(ModelCommand::Info { name: Some(n), .. }) if n == "opus"
-                ));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_all_flag() {
-        let cli = parse(&["model", "--all"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model { all, .. } => assert!(all),
-        );
-    }
-
-    #[test]
-    fn parse_model_favorites_flag() {
-        for argv in [&["model", "--favorites"][..], &["model", "-f"][..]] {
-            let cli = parse(argv);
-            assert_variant!(
-                parsed_command(&cli),
-                CliCommand::Model { favorites, all, .. } => {
-                    assert!(favorites, "{argv:?}");
-                    assert!(!all, "{argv:?}");
-                },
             );
         }
     }
@@ -3819,227 +3714,6 @@ mod tests {
                 "{verb}"
             );
         }
-    }
-
-    #[test]
-    fn parse_model_setting_show() {
-        let cli = parse(&["model", "setting"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model {
-                subcommand: Some(ModelCommand::Setting { key, value, .. }),
-                ..
-            } => {
-                assert!(key.is_none());
-                assert!(value.is_none());
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_setting_with_value() {
-        let cli = parse(&["model", "setting", "temperature", "0.8"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model {
-                subcommand:
-                    Some(ModelCommand::Setting {
-                        key,
-                        value,
-                        global,
-                        reset,
-                        ..
-                    }),
-                ..
-            } => {
-                assert_eq!(key.as_deref(), Some("temperature"));
-                assert_eq!(value.as_deref(), Some("0.8"));
-                assert!(!global);
-                assert!(!reset);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_setting_reset() {
-        let cli = parse(&["model", "setting", "--reset", "temperature"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model {
-                subcommand:
-                    Some(ModelCommand::Setting {
-                        key, reset, value, ..
-                    }),
-                ..
-            } => {
-                assert_eq!(key.as_deref(), Some("temperature"));
-                assert!(reset);
-                assert!(value.is_none());
-            }
-        );
-    }
-
-    #[test]
-    fn parse_model_setting_global_flag() {
-        let cli = parse(&["model", "setting", "--global", "top_p", "0.9"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Model {
-                subcommand: Some(ModelCommand::Setting { global, .. }),
-                ..
-            } => {
-                assert!(global);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_provider_list() {
-        let cli = parse(&["provider"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Provider { subcommand, .. } => assert!(subcommand.is_none()),
-        );
-    }
-
-    #[test]
-    fn parse_provider_models() {
-        let cli = parse(&["provider", "models", "openrouter"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Provider {
-                subcommand: Some(ProviderCommand::Models { name, all, .. }),
-                ..
-            } => {
-                assert_eq!(name, "openrouter");
-                assert!(!all);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_provider_models_all() {
-        let cli = parse(&["provider", "models", "openrouter", "--all"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Provider {
-                subcommand: Some(ProviderCommand::Models { all, .. }),
-                ..
-            } => assert!(all),
-        );
-    }
-
-    #[test]
-    fn parse_provider_refresh() {
-        let cli = parse(&["provider", "refresh", "openrouter"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Provider {
-                subcommand: Some(ProviderCommand::Refresh { name, .. }),
-                ..
-            } => assert_eq!(name.as_deref(), Some("openrouter")),
-        );
-    }
-
-    #[test]
-    fn parse_provider_refresh_no_arg() {
-        let cli = parse(&["provider", "refresh"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Provider {
-                subcommand: Some(ProviderCommand::Refresh { name, .. }),
-                ..
-            } => assert!(name.is_none()),
-        );
-    }
-
-    #[test]
-    fn parse_compact() {
-        for (args, expected, expected_restart) in [
-            (&["compact"][..], None, false),
-            (&["compact", "0"][..], Some(0), false),
-            (&["compact", "8"][..], Some(8), false),
-            (&["compact", "--restart"][..], None, true),
-            (&["compact", "0", "--restart"][..], Some(0), true),
-        ] {
-            let cli = parse(args);
-            assert_variant!(
-                parsed_command(&cli),
-                CliCommand::Compact { keep_turns, restart, .. } => {
-                    assert_eq!(*keep_turns, expected, "{args:?}");
-                    assert_eq!(*restart, expected_restart, "{args:?}");
-                }
-            );
-        }
-    }
-
-    #[test]
-    fn parse_segments_and_clear() {
-        let segments = parse(&["segments", "show", "4"]);
-        assert_variant!(
-            parsed_command(&segments),
-            CliCommand::Segments {
-                subcommand: Some(SegmentsCommand::Show { index }),
-                ..
-            } => assert_eq!(*index, 4),
-        );
-        let clear = parse(&["clear", "--exclude", "--note", "bad branch"]);
-        assert_variant!(
-            parsed_command(&clear),
-            CliCommand::Clear { exclude, note, .. } => {
-                assert!(*exclude);
-                assert_eq!(note.as_deref(), Some("bad branch"));
-            }
-        );
-    }
-
-    #[test]
-    fn parse_config_no_args() {
-        let cli = parse(&["config"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Config {
-                subcommand,
-                path,
-                check,
-                ..
-            } => {
-                assert!(subcommand.is_none());
-                assert!(!path);
-                assert!(!check);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_config_get() {
-        let cli = parse(&["config", "get", "chat.model"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Config {
-                subcommand: Some(ConfigCommand::Get { key, toml, all, .. }),
-                ..
-            } => {
-                assert_eq!(key, "chat.model");
-                assert!(!toml);
-                assert!(!all);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_config_set() {
-        let cli = parse(&["config", "set", "chat.model", "claude-haiku-4-5-20251001"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Config {
-                subcommand: Some(ConfigCommand::Set { key, value, .. }),
-                ..
-            } => {
-                assert_eq!(key, "chat.model");
-                assert_eq!(value, "claude-haiku-4-5-20251001");
-            }
-        );
     }
 
     #[test]
@@ -4087,22 +3761,6 @@ mod tests {
                 ..
             } => assert!(yes)
         );
-    }
-
-    #[test]
-    fn config_reload_maps_to_none() {
-        let cmd = CliCommand::Config {
-            subcommand: Some(ConfigCommand::Reload {
-                yes: false,
-                json: false,
-            }),
-            path: false,
-            check: false,
-            json: false,
-            toml: false,
-            all: false,
-        };
-        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
@@ -4305,73 +3963,6 @@ mod tests {
     }
 
     #[test]
-    fn send_maps_to_none() {
-        let cmd = msg(MsgCommand::Send {
-            message: vec!["hi".into()],
-            images: vec![],
-            system: false,
-        });
-        assert!(to_swp_command(&cmd, None).is_none());
-    }
-
-    #[test]
-    fn regen_maps_to_none() {
-        let cmd = msg(MsgCommand::Regen { guidance: None });
-        assert!(to_swp_command(&cmd, None).is_none());
-    }
-
-    #[test]
-    fn completions_maps_to_none() {
-        let cmd = CliCommand::Completions { shell: Shell::Fish };
-        assert!(to_swp_command(&cmd, None).is_none());
-    }
-
-    #[test]
-    fn status_maps_to_command() {
-        let cmd = CliCommand::Status {
-            section: None,
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "status");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn trace_errors_maps_to_error_log_command() {
-        let cmd = CliCommand::Trace {
-            subcommand: Some(TraceCommand::Errors {
-                count: 15,
-                json: false,
-            }),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "error_log");
-        assert_eq!(arg(&args, "count"), 15);
-    }
-
-    #[test]
-    fn debug_keepalive_ping_now_maps_to_command() {
-        let cmd = CliCommand::Debug {
-            subcommand: Some(DebugCommand::KeepalivePingNow),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "keepalive_ping_now");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn parse_debug_keepalive_ping_now() {
-        let cli = parse(&["debug", "keepalive_ping_now"]);
-        assert!(matches!(
-            cli.command,
-            Some(CliCommand::Debug {
-                subcommand: Some(DebugCommand::KeepalivePingNow)
-            })
-        ));
-    }
-
-    #[test]
     fn debug_tool_sends_pairs_as_strings_for_the_daemon_to_coerce() {
         let cli = parse(&["debug", "tool", "read", "path=notes.md", "offset=3"]);
         let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
@@ -4449,104 +4040,6 @@ mod tests {
     }
 
     #[test]
-    fn debug_session_activate_maps_to_command() {
-        let cmd = CliCommand::Debug {
-            subcommand: Some(DebugCommand::SessionActivate),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "session_activate");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn parse_debug_session_activate() {
-        let cli = parse(&["debug", "session_activate"]);
-        assert!(matches!(
-            cli.command,
-            Some(CliCommand::Debug {
-                subcommand: Some(DebugCommand::SessionActivate)
-            })
-        ));
-    }
-
-    #[test]
-    fn debug_tick_now_maps_to_command() {
-        let cmd = CliCommand::Debug {
-            subcommand: Some(DebugCommand::TickNow),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "heartbeat_tick_now");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn debug_status_dormant_maps_to_command() {
-        let cmd = CliCommand::Debug {
-            subcommand: Some(DebugCommand::StatusDormant),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "heartbeat_set_dormant");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn debug_status_active_maps_to_command() {
-        let cmd = CliCommand::Debug {
-            subcommand: Some(DebugCommand::StatusActive),
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "heartbeat_set_active");
-        assert_eq!(args, serde_json::json!({}));
-    }
-
-    #[test]
-    fn character_listing_maps_to_none() {
-        let listing = CliCommand::Character {
-            subcommand: None,
-            info: false,
-            json: false,
-        };
-        assert!(to_swp_command(&listing, None).is_none());
-        let switching = CliCommand::Character {
-            subcommand: Some(CharacterCommand::Use {
-                name: "alice".into(),
-            }),
-            info: false,
-            json: false,
-        };
-        assert!(to_swp_command(&switching, None).is_none());
-    }
-
-    #[test]
-    fn character_info_maps_to_command() {
-        let cmd = CliCommand::Character {
-            subcommand: Some(CharacterCommand::Info),
-            info: false,
-            json: false,
-        };
-        let (name, _) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "character_info");
-    }
-
-    #[test]
-    fn model_info_maps_to_command() {
-        let cmd = CliCommand::Model {
-            subcommand: Some(ModelCommand::Info {
-                name: Some("opus".into()),
-                target: ModelTarget::default(),
-            }),
-            info: false,
-            reset: false,
-            all: false,
-            favorites: false,
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "model_info");
-        assert_eq!(arg(&args, "name"), "opus");
-    }
-
-    #[test]
     fn model_list_with_all_includes_hidden_arg() {
         let cmd = CliCommand::Model {
             subcommand: None,
@@ -4559,53 +4052,6 @@ mod tests {
         let (cmd_name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(cmd_name, "list_models");
         assert_eq!(arg(&args, "include_hidden"), true);
-    }
-
-    #[test]
-    fn model_setting_no_key_maps_to_show() {
-        let cmd = CliCommand::Model {
-            subcommand: Some(ModelCommand::Setting {
-                key: None,
-                value: None,
-                global: false,
-                reset: false,
-                target: ModelTarget::default(),
-                model: None,
-                json: false,
-            }),
-            info: false,
-            reset: false,
-            all: false,
-            favorites: false,
-            json: false,
-        };
-        let (name, _) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "model_settings");
-    }
-
-    #[test]
-    fn model_setting_with_value_maps_to_set_model_setting() {
-        let cmd = CliCommand::Model {
-            subcommand: Some(ModelCommand::Setting {
-                key: Some("temperature".into()),
-                value: Some("0.8".into()),
-                global: false,
-                reset: false,
-                target: ModelTarget::default(),
-                model: None,
-                json: false,
-            }),
-            info: false,
-            reset: false,
-            all: false,
-            favorites: false,
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "set_model_setting");
-        assert_eq!(arg(&args, "key"), "temperature");
-        assert_eq!(arg(&args, "value"), "0.8");
-        assert_eq!(arg(&args, "scope"), "character");
     }
 
     #[test]
@@ -4953,50 +4399,6 @@ mod tests {
     }
 
     #[test]
-    fn provider_models_maps_to_command() {
-        let cmd = CliCommand::Provider {
-            subcommand: Some(ProviderCommand::Models {
-                name: "openrouter".into(),
-                all: true,
-                json: false,
-            }),
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "list_provider_models");
-        assert_eq!(arg(&args, "provider"), "openrouter");
-        assert_eq!(arg(&args, "include_hidden"), true);
-    }
-
-    #[test]
-    fn provider_refresh_maps_to_command() {
-        let cmd = CliCommand::Provider {
-            subcommand: Some(ProviderCommand::Refresh {
-                name: Some("openrouter".into()),
-                json: false,
-            }),
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "refresh_provider_models");
-        assert_eq!(arg(&args, "provider"), "openrouter");
-    }
-
-    #[test]
-    fn provider_refresh_no_arg_maps_to_refresh_all() {
-        let cmd = CliCommand::Provider {
-            subcommand: Some(ProviderCommand::Refresh {
-                name: None,
-                json: false,
-            }),
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "refresh_all_provider_models");
-        assert!(args.as_object().unwrap().is_empty());
-    }
-
-    #[test]
     fn a_footer_line_completing_an_option_requires_its_parameter() {
         for line in fish_dynamic_completions_footer()
             .lines()
@@ -5256,43 +4658,6 @@ mod tests {
     }
 
     #[test]
-    fn config_path_maps_to_none() {
-        let cmd = CliCommand::Config {
-            subcommand: None,
-            path: true,
-            check: false,
-            json: false,
-            toml: false,
-            all: false,
-        };
-        assert!(to_swp_command(&cmd, None).is_none());
-    }
-
-    #[test]
-    fn edit_maps_to_edit_command() {
-        let cmd = msg(MsgCommand::Edit {
-            msg_ref: "m1".into(),
-            content: vec!["new".into(), "text".into()],
-            json: false,
-        });
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "edit");
-        assert_eq!(arg(&args, "ref"), "m1");
-        assert_eq!(arg(&args, "content"), "new text");
-    }
-
-    #[test]
-    fn delete_maps_to_delete_command() {
-        let cmd = msg(MsgCommand::Delete {
-            msg_refs: vec!["m1".into()],
-            json: false,
-        });
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "delete");
-        assert_eq!(arg(&args, "refs"), &serde_json::json!(["m1"]));
-    }
-
-    #[test]
     fn delete_sends_every_ref_as_one_list() {
         let cmd = msg(MsgCommand::Delete {
             msg_refs: vec!["-1".into(), "-2".into()],
@@ -5301,69 +4666,6 @@ mod tests {
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "delete");
         assert_eq!(arg(&args, "refs"), &serde_json::json!(["-1", "-2"]));
-    }
-
-    #[test]
-    fn alt_position_maps_to_alt_command() {
-        let cmd = msg(MsgCommand::Alt {
-            selector: Some("2".into()),
-            msg_ref: Some("last".into()),
-            json: false,
-        });
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "alt");
-        assert_eq!(arg(&args, "position"), 2);
-        assert_eq!(arg(&args, "ref"), "last");
-    }
-
-    #[test]
-    fn alt_list_maps_to_list_alternatives_command() {
-        let cmd = msg(MsgCommand::Alt {
-            selector: Some("list".into()),
-            msg_ref: None,
-            json: false,
-        });
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "list_alternatives");
-        assert!(args.as_object().unwrap().is_empty());
-    }
-
-    #[test]
-    fn log_ref_maps_to_get_command() {
-        let cmd = CliCommand::Log {
-            msg_ref: Some("last".into()),
-            count: 20,
-            role: Some(LogRole::User),
-            follow: false,
-            json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "get");
-        assert_eq!(arg(&args, "ref"), "last");
-        assert_eq!(arg(&args, "role"), "user");
-    }
-
-    #[test]
-    fn log_default_maps_to_log_command() {
-        let cmd = CliCommand::Log {
-            msg_ref: None,
-            count: 20,
-            role: Some(LogRole::Assistant),
-            follow: false,
-            json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "log");
-        assert_eq!(arg(&args, "turns"), 20);
-        assert_eq!(arg(&args, "role"), "assistant");
     }
 
     #[test]
@@ -5505,19 +4807,6 @@ mod tests {
         let (events, _) =
             to_swp_command(parsed_command(&parse(&["trace", "events"])), None).unwrap();
         assert_eq!(events, "heartbeat_log");
-    }
-
-    #[test]
-    fn compact_maps_to_compact_command() {
-        let cmd = CliCommand::Compact {
-            keep_turns: None,
-            restart: false,
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "compact");
-        assert!(args.get("keep_turns").is_none());
-        assert!(args.get("restart").is_none());
     }
 
     #[test]
@@ -5819,30 +5108,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_usage_no_call_type_flag() {
-        let cli = parse(&["usage"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Usage { call_type, .. } => {
-                assert!(call_type.is_none(), "flag absent → None");
-            }
-        );
-    }
-
-    #[test]
     fn usage_call_type_filter_requires_a_value() {
         assert!(Cli::try_parse_from(["shore", "usage", "--call-type"]).is_err());
-    }
-
-    #[test]
-    fn parse_usage_call_type_with_value() {
-        let cli = parse(&["usage", "--call-type", "message"]);
-        assert_variant!(
-            parsed_command(&cli),
-            CliCommand::Usage { call_type, .. } => {
-                assert_eq!(*call_type, Some("message".into()));
-            }
-        );
     }
 
     #[test]
@@ -6085,18 +5352,6 @@ mod tests {
             CliCommand::Complete { kind, .. } => {
                 assert_eq!(*kind, CompleteKind::Characters);
             }
-        );
-    }
-
-    #[test]
-    fn complete_maps_to_none_swp() {
-        let cmd = CliCommand::Complete {
-            kind: CompleteKind::Models,
-            arg: None,
-        };
-        assert!(
-            to_swp_command(&cmd, None).is_none(),
-            "complete is a client-side helper, not an SWP command",
         );
     }
 }

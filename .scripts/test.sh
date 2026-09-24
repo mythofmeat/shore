@@ -60,8 +60,8 @@ run() {
 # Tests run with an empty home and none of the developer's shore settings, as they do in CI.
 hermetic() {
     home=$(mktemp -d)
-    if env -u SHORE_TOKEN -u SHORE_ADDR -u SHORE_CONFIG_DIR -u SHORE_DATA_DIR \
-        -u SHORE_RUNTIME_DIR -u SHORE_CACHE_DIR -u SHORE_WORKSPACE_DIR \
+    shore_vars=$(env | sed -n 's/^\(SHORE_[A-Za-z0-9_]*\)=.*/-u \1/p')
+    if env $shore_vars \
         RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" \
         CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" \
         BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-$HOME/.bun/install/cache}" \
