@@ -861,9 +861,6 @@ mod tests {
 
     #[test]
     fn a_marked_row_paints_its_name_the_way_the_mark_does() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(true);
         let mut buf = Vec::new();
         let mut rows = Rows::new();
@@ -1103,9 +1100,6 @@ mod tests {
 
     #[test]
     fn a_toned_write_actually_emits_colour_when_colour_is_on() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(true);
         let mut buf = Vec::new();
         paint(&mut buf, Tone::Active, "hello");

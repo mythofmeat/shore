@@ -681,9 +681,6 @@ mod tests {
 
     #[test]
     fn rich_transcript_render_snapshot() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(false);
         let mut buf = Vec::new();
         write_log_with_boundary(
@@ -989,9 +986,6 @@ mod tests {
 
     #[test]
     fn write_header_is_coloured_by_speaker() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(true);
         let mut buf = Vec::new();
         write_header(&mut buf, "qifei", "14:30", character_color("qifei"), 40);
@@ -1005,9 +999,6 @@ mod tests {
 
     #[test]
     fn the_flat_speaker_line_matches_what_the_batch_renderer_writes() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         crate::output::set_decoration_enabled(false);
 
         let mut batch_bytes = Vec::new();
@@ -1048,9 +1039,6 @@ mod tests {
 
     #[test]
     fn a_terminal_still_gets_the_drawn_rule() {
-        let _guard = crate::output::COLOR_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(false);
         let mut buf = Vec::new();
         write_speaker_line(
