@@ -241,7 +241,7 @@ export class KeepaliveService {
     entry.lastCallFingerprint = undefined;
     const interval = this.haltFor(prefix) === undefined ? prefix.keepalive_interval_ms : undefined;
     entry.keepalive.setMaxPings(prefix.keepalive_pings ?? DEFAULT_KEEPALIVE_PINGS);
-    entry.keepalive.setInterval(interval, prefix.model, this.#now());
+    entry.keepalive.setInterval(interval, prefix.model, this.#now(), haltKey(prefix));
     if (warm) entry.keepalive.onPrefixWarmed(this.#now());
   }
 
@@ -258,13 +258,16 @@ export class KeepaliveService {
     callType: string,
     fingerprint?: string,
     usage?: Pick<Usage, "cache_read_tokens">,
+    identity?: Pick<SidecarRequest, "sdk" | "model" | "provider_key">,
   ): void {
     if (callType === "keepalive" || callType === "heartbeat" || callType === "heartbeat_tool_loop") return;
     const entry = this.#entryFor(character);
     if (fingerprint !== undefined && entry.prefix?.model === model) {
       entry.lastCallFingerprint = fingerprint;
     }
-    if (usage !== undefined && usage.cache_read_tokens > 0) entry.consecutiveMisses = 0;
+    if (usage !== undefined && usage.cache_read_tokens > 0 && readsFromMissedModel(entry, model, identity)) {
+      entry.consecutiveMisses = 0;
+    }
     entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
   }
 
@@ -515,6 +518,16 @@ export class KeepaliveService {
       at: this.#now(),
     });
   }
+}
+
+function readsFromMissedModel(
+  entry: Entry,
+  model: string,
+  identity: Pick<SidecarRequest, "sdk" | "model" | "provider_key"> | undefined,
+): boolean {
+  if (entry.missKey === undefined) return true;
+  const call = identity ?? (entry.prefix === undefined ? undefined : { ...entry.prefix, model });
+  return call !== undefined && haltKey(call) === entry.missKey;
 }
 
 function truncate(text: string, limit: number): string {

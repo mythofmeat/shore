@@ -37,7 +37,7 @@ import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { captureProviders } from "./llm/capture.ts";
-import { withResolvedCredential } from "./llm/generate.ts";
+import { withResolvedCredential, withWorkspaceDir } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { installWireCapture } from "./llm/wire_capture.ts";
@@ -189,7 +189,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       const provider = providers[req.sdk];
       if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
       return provider.generate(
-        withResolvedCredential(req, config, options.env ?? process.env),
+        withResolvedCredential(withWorkspaceDir(req, config), config, options.env ?? process.env),
         signal,
       );
     },
@@ -295,6 +295,7 @@ export function startRuntimeClocks(
       callType,
       prefixFingerprint(req),
       usage,
+      req,
     );
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);

@@ -377,6 +377,21 @@ describe("two misses in a row halt that model", () => {
     expect(h.service.haltFor(prefix())).toBeUndefined();
   });
 
+  test("a cache read on another model between two misses does not save this one", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    const subagent = { sdk: "anthropic" as const, provider_key: "anthropic", model: "claude-sonnet-5" };
+    h.service.observe("Rhia", "claude-sonnet-5", "subagent", "subagent-prefix", usage(40_000, 0), subagent);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "halted"]);
+  });
+
   test("a halt does not carry over to the same model on a corrected SDK", async () => {
     const h = harness(0, 14_144);
     const wrongSdk: KeepalivePrefix = { ...prefix(), sdk: "openai" };

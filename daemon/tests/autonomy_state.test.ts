@@ -43,6 +43,7 @@ describe("what a state file holds", () => {
     coveredTurnCount: 12,
     keepalive: {
       model: "claude-opus-4-6",
+      identity: '["anthropic","anthropic","claude-opus-4-6"]',
       intervalMs: 3_300_000,
       lastWarmAt: Date.parse("2026-04-30T08:30:00Z"),
       lastActiveAt: Date.parse("2026-04-30T08:29:00Z"),

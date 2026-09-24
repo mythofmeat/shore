@@ -543,6 +543,24 @@ describe("the keepalive's two halves", () => {
     });
   });
 
+  test("shutdown writes the ping count spent since the last tick", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir, COMPACTION_ONLY));
+
+      ka.schedules.set("nova", snapshot({ pings_sent: 0, max_pings: 2 }));
+      await service.tick();
+      ka.schedules.set("nova", snapshot({ pings_sent: 1, max_pings: 2 }));
+      await service.shutdown();
+
+      const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
+      expect(saved["keepalive_pings_sent"]).toBe(1);
+    });
+  });
+
   test("a schedule that goes away clears the persisted copy", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");

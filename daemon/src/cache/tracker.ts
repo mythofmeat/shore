@@ -69,7 +69,7 @@ export class CacheTracker {
   readonly #keepaliveWindows = new Map<string, number>();
   #ttlExpiredSinceWarm = false;
 
-  #lastKeepaliveMissed = false;
+  #keepaliveMissedModel: string | undefined;
   #lastActivityTs: number | undefined;
 
   constructor(ttlSecs: number = DEFAULT_TTL_SECS) {
@@ -125,12 +125,19 @@ export class CacheTracker {
       this.#ttlExpiredSinceWarm = false;
       this.#updateMetadata(obsTs, modelKey, obs.thinking_enabled, obs.tool_surface);
       this.#lastCallType = obs.call_type;
-      this.#lastKeepaliveMissed = false;
+      this.#keepaliveMissedModel = undefined;
       return { state: this.#state, anomaly: undefined };
     }
 
     const loopKind = toolLoopKind(obs.call_type);
     const skipNormalCacheReadComparison = obs.call_type !== "message" && loopKind === undefined;
+
+    if (this.#lastModel !== undefined && this.#lastModel !== modelKey) {
+      this.#state = "cold";
+      this.#lastCacheRead = 0;
+      this.#clearToolLoopBaseline();
+      this.#ttlExpiredSinceWarm = false;
+    }
 
     if (this.#state === "warm" && this.#lastTs !== undefined && obsTs !== undefined) {
       if (secondsBetween(obsTs, this.#lastTs) > this.#ttlSecs) {
@@ -139,13 +146,6 @@ export class CacheTracker {
         this.#clearToolLoopBaseline();
         this.#ttlExpiredSinceWarm = true;
       }
-    }
-
-    if (this.#state === "warm" && this.#lastModel !== undefined && this.#lastModel !== modelKey) {
-      this.#state = "cold";
-      this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
     }
 
     if (
@@ -194,7 +194,7 @@ export class CacheTracker {
       obs.cache_read_tokens === 0;
 
     if (obs.call_type === "keepalive") {
-      if (pureMiss && this.#lastKeepaliveMissed) {
+      if (pureMiss && this.#keepaliveMissedModel === modelKey) {
         anomaly = "keepalive_double_miss";
       } else if (anomaly === undefined && pureMiss) {
         anomaly = "cold_keepalive";
@@ -202,11 +202,16 @@ export class CacheTracker {
         anomaly = "keepalive_rewrote";
       }
     }
-    this.#lastKeepaliveMissed =
-      obs.call_type === "keepalive"
-        ? pureMiss
-        : this.#lastKeepaliveMissed &&
-          (obs.cache_read_tokens === 0 || obs.call_type === "heartbeat" || obs.call_type === "heartbeat_tool_loop");
+    if (obs.call_type === "keepalive") {
+      this.#keepaliveMissedModel = pureMiss ? modelKey : undefined;
+    } else if (
+      this.#keepaliveMissedModel === modelKey &&
+      obs.cache_read_tokens > 0 &&
+      obs.call_type !== "heartbeat" &&
+      obs.call_type !== "heartbeat_tool_loop"
+    ) {
+      this.#keepaliveMissedModel = undefined;
+    }
 
     if (loopKind !== undefined) {
       if (anomaly === undefined) {

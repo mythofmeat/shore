@@ -11,6 +11,7 @@ import {
   generateWithCredentialFallback,
   runGeneration,
   resolveModelForRequest,
+  withWorkspaceDir,
   type GenerateDeps,
 } from "../src/llm/generate.ts";
 import { compactionGenerate } from "../src/autonomy/in_process.ts";
@@ -155,6 +156,17 @@ describe("shared generation contract", () => {
       expect(req.context?.workspace_dir).toBe(join(ACCOUNTING_ROOT, "characters", "ada", "workspace"));
     });
   }
+
+  test("a keepalive ping runs in the workspace its chat turn did", () => {
+    const ping = request({ sdk: "claude_agent", provider_key: "claude-code", api_key: "", context: {
+      character: "ada", call_type: "keepalive", thinking_enabled: false,
+    } });
+    expect(withWorkspaceDir(ping, config()).context?.workspace_dir)
+      .toBe(join(ACCOUNTING_ROOT, "characters", "ada", "workspace"));
+    expect(ping.context?.workspace_dir).toBeUndefined();
+    const other = request({ context: { character: "ada", call_type: "keepalive", thinking_enabled: false } });
+    expect(withWorkspaceDir(other, config())).toBe(other);
+  });
 
   for (const effect of ["text", "tool", "image"] as const) {
     test(`does not replay or rotate credentials after a ${effect} effect`, async () => {

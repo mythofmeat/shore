@@ -59,6 +59,7 @@ function toPersisted(s: KeepaliveSnapshot | undefined): PersistedKeepalive | und
     ? undefined
     : {
         model: s.model,
+        ...(s.identity === undefined ? {} : { identity: s.identity }),
         intervalMs: s.interval,
         lastWarmAt: s.last_warm_at,
         lastActiveAt: s.last_active_at,
@@ -70,6 +71,7 @@ function toPersisted(s: KeepaliveSnapshot | undefined): PersistedKeepalive | und
 function toSnapshot(p: PersistedKeepalive): KeepaliveSnapshot {
   return {
     model: p.model,
+    ...(p.identity === undefined ? {} : { identity: p.identity }),
     interval: p.intervalMs,
     last_warm_at: p.lastWarmAt,
     last_active_at: p.lastActiveAt,
@@ -104,7 +106,7 @@ export class AutonomyService {
   async register(request: RegisterCharacter): Promise<void> {
     const { character, data_dir: dataDir } = request;
     const existing = this.#entries.get(character);
-    if (existing !== undefined) await existing.runner.shutdown();
+    if (existing !== undefined) await this.#shutdownRunner(character, existing);
 
     const statePath = `${dataDir}/${STATE_FILENAME}`;
     const restored = await loadState(statePath);
@@ -138,6 +140,11 @@ export class AutonomyService {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;
     this.#entries.delete(character);
+    await this.#shutdownRunner(character, entry);
+  }
+
+  async #shutdownRunner(character: string, entry: Entry): Promise<void> {
+    entry.runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(character)));
     await entry.runner.shutdown();
   }
 
@@ -266,7 +273,7 @@ export class AutonomyService {
   }
 
   async shutdown(): Promise<void> {
-    await Promise.all([...this.#entries.values()].map((entry) => entry.runner.shutdown()));
+    await Promise.all([...this.#entries].map(([character, entry]) => this.#shutdownRunner(character, entry)));
   }
 }
 

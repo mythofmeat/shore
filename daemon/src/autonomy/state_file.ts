@@ -8,6 +8,7 @@ export const STATE_FILENAME = "autonomy_state.json";
 
 export interface PersistedKeepalive {
   readonly model: string;
+  readonly identity?: string;
   readonly intervalMs: number;
   readonly lastWarmAt: number;
   readonly lastActiveAt: number;
@@ -48,6 +49,7 @@ export function encodeState(state: AutonomyStateFile): string {
       wake_anchor_at: state.wakeAnchorAt === undefined ? null : toRfc3339(state.wakeAnchorAt),
       covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
+      keepalive_identity: k?.identity ?? null,
       keepalive_interval_ms: k?.intervalMs ?? null,
       keepalive_last_warm_at: k === undefined ? null : toRfc3339(k.lastWarmAt),
       keepalive_last_active_at: k === undefined ? null : toRfc3339(k.lastActiveAt),
@@ -108,10 +110,12 @@ function keepaliveField(o: Record<string, unknown>): PersistedKeepalive | undefi
   if (typeof model !== "string" || typeof intervalMs !== "number") return undefined;
   if (lastWarmAt === undefined || lastActiveAt === undefined) return undefined;
 
+  const identity = o["keepalive_identity"];
   const pingsSent = o["keepalive_pings_sent"];
   const maxPings = o["keepalive_max_pings"];
   return {
     model, intervalMs, lastWarmAt, lastActiveAt,
+    ...(typeof identity === "string" ? { identity } : {}),
     ...(typeof pingsSent === "number" ? { pingsSent } : {}),
     ...(typeof maxPings === "number" ? { maxPings } : {}),
   };

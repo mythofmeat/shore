@@ -58,6 +58,7 @@ function fakes(
     historyFails?: Error;
     rid?: string;
     home?: string;
+    cached?: string[];
   } = {},
 ): Fakes {
   const log: Log = {
@@ -97,6 +98,7 @@ function fakes(
       log.refreshArgs.push({ character, ...(reason === undefined ? {} : { reason }), ...(thread === undefined ? {} : { thread }) });
     },
     homeThread: () => opts.home ?? "main",
+    cachedCharacters: () => opts.cached ?? [],
     applyReloadedConfig: async (cfg) => {
       log.order.push("adopt");
       log.adopted.push(cfg);
@@ -274,6 +276,36 @@ describe("a chat model change", () => {
     expect(f.log.refreshArgs).toEqual([
       { character: CHARACTER, reason: "model_setting_change", thread: "main" },
     ]);
+  });
+
+  test("a global model setting refreshes every character with a cached request", async () => {
+    const f = fakes({ cached: ["nova", CHARACTER, "bo"] });
+
+    await afterCommand(
+      "set_model_setting",
+      { key: "cache_keepalive_pings", value: "1", scope: "global" },
+      { changed: true },
+      f.ctx,
+    );
+
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_setting_change", thread: "main" },
+      { character: "nova", reason: "model_setting_change" },
+      { character: "bo", reason: "model_setting_change" },
+    ]);
+  });
+
+  test("a character model setting leaves other characters' cached requests alone", async () => {
+    const f = fakes({ cached: ["nova", CHARACTER] });
+
+    await afterCommand(
+      "set_model_setting",
+      { key: "cache_keepalive_pings", value: "1", scope: "character" },
+      { changed: true },
+      f.ctx,
+    );
+
+    expect(f.log.refreshed).toEqual([CHARACTER]);
   });
 });
 

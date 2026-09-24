@@ -285,6 +285,31 @@ describe("keepalive", () => {
       .toBe("keepalive_double_miss");
   });
 
+  test("a cold keepalive on one provider is not half of a double miss on another", () => {
+    const t = new CacheTracker();
+    expect(t.observe(obs({ ts: at(0), provider: "anthropic", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+    t.observe(obs({ ts: at(1), provider: "openrouter", cache_write_tokens: 500 }));
+    expect(t.observe(obs({ ts: at(2), provider: "openrouter", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+  });
+
+  test("a cache read on another model does not clear this model's keepalive miss", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), call_type: "keepalive" }));
+    t.observe(obs({ ts: at(1), model: "glm-4.6", call_type: "subagent", cache_read_tokens: 500 }));
+    expect(t.observe(obs({ ts: at(2), call_type: "keepalive" })).anomaly).toBe("keepalive_double_miss");
+  });
+
+  test("the first call on a new model after the old one's TTL is not a keepalive miss", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: hour(1), provider: "anthropic", cache_read_tokens: 500, keepalive_window_secs: 12 * 3600 }));
+    const r = t.observe(obs({
+      ts: hour(3), provider: "openrouter", cache_write_tokens: 500, keepalive_window_secs: 12 * 3600,
+    }));
+    expect(r.anomaly).toBeUndefined();
+  });
+
   test("TTL expiry plus a non-keepalive call is a miss", () => {
     const t = new CacheTracker();
     t.observe(obs({ ts: hour(1), cache_read_tokens: 500, keepalive_window_secs: 12 * 3600 }));

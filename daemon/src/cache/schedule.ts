@@ -4,6 +4,7 @@ export type CacheKeepaliveAction =
 
 export interface KeepaliveSnapshot {
   model: string;
+  identity?: string;
   interval: number;
   last_warm_at: number;
   last_active_at: number;
@@ -26,6 +27,8 @@ export class CacheKeepalive {
   #interval: number | undefined;
 
   #targetModel: string | undefined;
+
+  #targetIdentity: string | undefined;
 
   #maxPings: number;
 
@@ -81,12 +84,15 @@ export class CacheKeepalive {
     interval: number | undefined,
     model: string,
     _now?: number,
+    identity?: string,
   ): void {
-    if (this.#targetModel !== model) {
+    const identityChanged = identity !== undefined && this.#targetIdentity !== identity;
+    if (this.#targetModel !== model || identityChanged) {
       if (this.#targetModel !== undefined) {
         this.onCacheInvalidated();
       }
       this.#targetModel = model;
+      this.#targetIdentity = identity;
     }
     const changed = this.#interval !== interval;
     this.#interval = interval;
@@ -142,6 +148,7 @@ export class CacheKeepalive {
     }
     return {
       model: this.#targetModel,
+      ...(this.#targetIdentity === undefined ? {} : { identity: this.#targetIdentity }),
       interval: this.#interval,
       last_warm_at: this.#lastWarmAt,
       last_active_at: this.#lastActiveAt,
@@ -155,6 +162,7 @@ export class CacheKeepalive {
       return false;
     }
     this.#targetModel = snapshot.model;
+    this.#targetIdentity = snapshot.identity;
     this.#interval = snapshot.interval;
     this.#lastWarmAt = snapshot.last_warm_at;
     this.#prefixWarmAt = snapshot.last_warm_at;

@@ -305,6 +305,33 @@ describe("the ping count bounds the schedule", () => {
     await restored.tick();
     expect(sent).toHaveLength(expectedPings);
   });
+
+  test("a restored schedule does not carry over to the same model ID on another provider", async () => {
+    const clock = fakeClock();
+    const before = await turnPersisted(THREE_PINGS, clock);
+    before.service.observe(CHARACTER, "claude-opus-4-6", "message");
+    clock.advance(55 * MINUTE);
+    await before.service.tick();
+    const snapshot = before.service.scheduleFor(CHARACTER);
+    if (snapshot === undefined) throw new Error("missing persisted schedule");
+
+    const sent: SidecarRequest[] = [];
+    const restored = new KeepaliveService(async (request) => {
+      sent.push(request);
+      return response();
+    }, clock.now);
+    expect(restored.restore(CHARACTER, snapshot)).toBe(true);
+    const current = turnFor(THREE_PINGS);
+    new LastRequestCache(restored).set(CHARACTER, { ...current.request, provider_key: "openrouter" }, {
+      intervalMs: current.intervalMs, pings: current.pings,
+    }, false);
+    expect(restored.nextPingAt(CHARACTER)).toBeUndefined();
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(55 * MINUTE);
+      await restored.tick();
+    }
+    expect(sent).toHaveLength(0);
+  });
 });
 
 describe("the cadence reaches the schedule", () => {

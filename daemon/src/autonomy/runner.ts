@@ -253,6 +253,7 @@ export class CharacterAutonomy {
       (current !== undefined &&
         schedule !== undefined &&
         current.model === schedule.model &&
+        current.identity === schedule.identity &&
         current.intervalMs === schedule.intervalMs &&
         current.lastWarmAt === schedule.lastWarmAt &&
         current.lastActiveAt === schedule.lastActiveAt &&
