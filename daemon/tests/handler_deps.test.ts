@@ -506,6 +506,28 @@ describe("the autonomy surface a turn drives", () => {
     release();
   });
 
+  test("the turn's thread rides along, so a home thread off main is armed as itself", () => {
+    const threads: Array<string | undefined> = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const bridge = new TurnAutonomyBridge(recordingService(gate));
+    const autonomy = turnAutonomy(bridge, {
+      set: (_character: string, _request: unknown, _keepalive?: KeepaliveArming, _warm?: boolean, thread?: string) =>
+        threads.push(thread),
+    });
+
+    autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
+      intervalMs: 10 * 60_000,
+      pings: undefined,
+    }, "garden");
+
+    expect(threads).toEqual(["garden"]);
+    release();
+  });
+
   test("the assistant turn waits for the registration it followed", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
