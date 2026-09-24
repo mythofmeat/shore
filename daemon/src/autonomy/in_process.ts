@@ -98,7 +98,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           [],
         );
         return {
-          output: run.window?.output ?? run.raw,
+          output: run.output,
           isError: run.isError,
           block: run.block,
           ...(run.value === undefined ? {} : { value: run.value }),

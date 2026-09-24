@@ -47,6 +47,7 @@ export interface ToolExecution {
 
 export interface ToolRun {
   block: ContentBlock;
+  output: string;
   raw: string;
   isError: boolean;
   rejected: boolean;
@@ -86,6 +87,7 @@ export async function runToolUse(
     emitToolResult(exec, toolUse, rejection, true);
     return {
       block: { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true },
+      output: rejection,
       raw: rejection,
       isError: true,
       rejected: true,
@@ -133,6 +135,7 @@ export async function runToolUse(
       content: toolResultContent(output, attached.blocks),
       is_error: isError,
     },
+    output,
     raw: rawOutput,
     isError,
     rejected: false,

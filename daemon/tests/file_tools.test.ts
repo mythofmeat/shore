@@ -320,6 +320,7 @@ test("Markdown read bounds the document scanned for image references", async () 
 
 test("read does not expand Markdown syntax in other text files", async () => {
   const { put, run } = await world();
+  expect(result.output).toBe(text);
   await put("chart.png", Buffer.from(PNG, "base64"));
   await put("notes.txt", "![chart](chart.png)\n");
   expect(resultImages(await run("read", { file_path: "notes.txt" }))).toHaveLength(0);
