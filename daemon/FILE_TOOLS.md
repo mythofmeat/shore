@@ -61,7 +61,7 @@ bun run build:patch
 bun run build
 ```
 
-Building requires the stable Rust toolchain via rustup, Cargo, tar, a native C/C++ build toolchain, OpenSSL development libraries (including static libraries for musl), and network access for the first build. Source and build caches live in `daemon/target/`. The executable is `daemon/dist/shore-apply-patch`; distribute it and its LICENSE/NOTICE beside `shore-daemon`. Source development also locates it in `dist/`. Alternatively set `SHORE_APPLY_PATCH_PATH` to an absolute executable path. `SHORE_PATCH_TARGET_DIR` can select a build-artifact cache. The Dockerfile builds and installs the helper in its own stage. A missing helper gives an actionable tool error and performs no patching.
+Building requires the stable Rust toolchain via rustup, Cargo, tar, a native C/C++ build toolchain, OpenSSL development libraries (including static libraries for musl), and network access for the first build. Source and build caches live in `$XDG_CACHE_HOME/shore/codex-apply-patch` (default `~/.cache/shore/codex-apply-patch`), shared by every checkout. The executable is `daemon/dist/shore-apply-patch`; distribute it and its LICENSE/NOTICE beside `shore-daemon`. Source development also locates it in `dist/`. Alternatively set `SHORE_APPLY_PATCH_PATH` to an absolute executable path. `SHORE_PATCH_TARGET_DIR` can select a build-artifact cache. The Dockerfile builds and installs the helper in its own stage. A missing helper gives an actionable tool error and performs no patching.
 
 ## Manual checks
 

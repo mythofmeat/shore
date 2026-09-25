@@ -1,8 +1,12 @@
-import { readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Glob } from "bun";
 
-const JOURNAL = "/tmp/shore-rerecord.jsonl";
 const ROOT = join(import.meta.dir, "..");
+const JOURNAL_DIR = mkdtempSync(join(tmpdir(), "shore-rerecord-"));
+const JOURNAL = join(JOURNAL_DIR, "journal.jsonl");
+process.on("exit", () => rmSync(JOURNAL_DIR, { recursive: true, force: true }));
 
 interface Entry {
   capture: string;
@@ -49,9 +53,11 @@ function setAt(root: unknown, pointer: (string | number)[], value: unknown): boo
 const args = new Set(process.argv.slice(2));
 const check = args.has("--check");
 
-rmSync(JOURNAL, { force: true });
+const recordingTests = Array.from(new Glob("tests/**/*.test.ts").scanSync(ROOT))
+  .filter((file) => readFileSync(join(ROOT, file), "utf8").includes("recordedValue("))
+  .map((file) => `./${file}`);
 
-const run = Bun.spawnSync(["bun", "test"], {
+const run = Bun.spawnSync(["bun", "test", ...recordingTests], {
   cwd: ROOT,
   env: { ...process.env, SHORE_RERECORD: JOURNAL },
   stdout: "pipe",
@@ -110,8 +116,6 @@ for (const [capture, list] of byCapture) {
   writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`);
   written += 1;
 }
-
-rmSync(JOURNAL, { force: true });
 
 if (check && differed > 0) {
   console.error(`\n${differed} capture(s) no longer match what shore produces`);
