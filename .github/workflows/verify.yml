@@ -63,6 +63,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
           key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
+      - run: bunx playwright install --with-deps chromium
+        working-directory: daemon
       - run: .scripts/test.sh daemon
 
   client:

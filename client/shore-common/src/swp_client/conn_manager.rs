@@ -528,7 +528,6 @@ mod lifecycle_tests {
 
     #[tokio::test]
     async fn shutdown_interrupts_a_peer_that_never_sends_hello() {
-        crate::test_env::set_env(crate::token::TOKEN_ENV, "test-token");
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (tx, mut rx) = spawn_connection(
             Some(listener.local_addr().unwrap().to_string()),
@@ -578,7 +577,6 @@ mod lifecycle_tests {
 
     #[tokio::test]
     async fn disconnected_messages_fail_promptly_without_waiting_for_the_handshake() {
-        crate::test_env::set_env(crate::token::TOKEN_ENV, "test-token");
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (tx, mut rx) = spawn_connection(
             Some(listener.local_addr().unwrap().to_string()),

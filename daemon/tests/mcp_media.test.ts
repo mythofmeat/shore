@@ -198,7 +198,7 @@ describe("mcp media reaches the model", () => {
   test("an image that does not fit leaves room for later smaller images", async () => {
     const png = Buffer.from(PNG, "base64");
     const larger = Buffer.concat([png, Buffer.alloc(1)]).toString("base64");
-    const { block } = await runMcpTool({ content: [PNG, larger, PNG].map((data) => ({ type: "image", data, mimeType: "image/png" })) },
+    const { block, frames } = await runMcpTool({ content: [PNG, larger, PNG].map((data) => ({ type: "image", data, mimeType: "image/png" })) },
       { ...LIMITS, max_inline_image_bytes: 2 * png.length });
     expect(blocksOf(block).filter((b) => b.type === "image")).toEqual([
       { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
@@ -206,6 +206,7 @@ describe("mcp media reaches the model", () => {
     ]);
     expect(toolResult(block).is_error).toBe(false);
     expect(textOf(block)).toContain("not sent to the model");
+    expect(frames.find((frame) => frame.type === "tool_result")?.images?.[1]?.data).toBe(larger);
   });
 
   test("a tool's media notes follow the windowed output instead of being truncated", async () => {

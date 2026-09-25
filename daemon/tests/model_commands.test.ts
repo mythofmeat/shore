@@ -633,7 +633,7 @@ describe("model preference readback and preservation", () => {
     expect(modelSettings(ctx, {})).toMatchObject({ saved_global: { temperature: 0.3 }, saved_character: null, effective_sampler: { temperature: 0.3 } });
     const detail = modelSettings(ctx, {});
     if (!("scopes" in detail)) throw new Error("Expected model setting detail");
-    expect(Object.keys(detail.scopes)).toEqual(["temperature", "top_p", "reasoning_effort", "reasoning_budget_tokens", "max_output_tokens", "cache_ttl", "cache_keepalive", "cache_keepalive_for", "sdk", "reasoning_replay", "max_tool_rounds", "openrouter_routing", "gemini_thinking_mode", "zai_clear_reasoning", "supports_images"]);
+    expect(Object.keys(detail.scopes)).toEqual(["temperature", "top_p", "reasoning_effort", "reasoning_budget_tokens", "max_output_tokens", "cache_ttl", "cache_keepalive", "cache_keepalive_pings", "sdk", "reasoning_replay", "max_tool_rounds", "openrouter_routing", "gemini_thinking_mode", "zai_clear_reasoning", "supports_images"]);
     const overview = modelSettings(ctx, { overview: true });
     if (!("overview" in overview)) throw new Error("Expected role overview");
     expect(overview.roles.find((role) => role.role === "chat")?.settings).toEqual([{ key: "temperature", value: 0.3, scope: "global" }]);

@@ -4089,7 +4089,7 @@
     {
       "path": "shore model setting",
       "about": "Show, set, or clear saved sampler settings",
-      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, reasoning_replay and max_tool_rounds.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
+      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay and max_tool_rounds.\n\ncache_keepalive is the interval between cache keepalive pings, or off. Any model can have one. After each reply, the model gets cache_keepalive_pings pings (default 1) spaced by that interval; the next message starts the count over. Only the model you are chatting with is pinged.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -5011,7 +5011,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "Dotted key, e.g. heartbeat.enabled, cache.keepalive_for",
+          "help": "Dotted key, e.g. heartbeat.enabled, compaction.idle_after",
           "long_help": null,
           "action": "Set",
           "required": true,

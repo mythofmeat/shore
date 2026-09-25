@@ -3472,15 +3472,11 @@
           "character": {
             "type": "string"
           },
-          "keepalive_halted": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/KeepaliveHaltReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "keepalive_halts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/KeepaliveHaltReport"
+            }
           },
           "message_count": {
             "type": "integer",
@@ -3588,7 +3584,7 @@
         },
         "required": [
           "character",
-          "keepalive_halted",
+          "keepalive_halts",
           "message_count",
           "turn_count",
           "active_model",
@@ -3611,6 +3607,9 @@
           "character": {
             "type": "string"
           },
+          "model": {
+            "type": "string"
+          },
           "reason": {
             "type": "string"
           },
@@ -3620,6 +3619,7 @@
         },
         "required": [
           "character",
+          "model",
           "reason",
           "at"
         ]
@@ -3671,7 +3671,7 @@
             "format": "uint64",
             "minimum": 0
           },
-          "effective_interval_secs": {
+          "default_interval_secs": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0
@@ -3703,7 +3703,12 @@
             "format": "uint64",
             "minimum": 0
           },
-          "minimum_heartbeat_latency_secs": {
+          "min_interval_secs": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_interval_secs": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0
@@ -3724,8 +3729,9 @@
           "heartbeat_state",
           "ticks_without_user",
           "dormant_after_heartbeat_turns",
-          "effective_interval_secs",
-          "minimum_heartbeat_latency_secs",
+          "default_interval_secs",
+          "min_interval_secs",
+          "max_interval_secs",
           "dormant_after_idle_time_secs",
           "recent_events"
         ]
@@ -5850,11 +5856,12 @@
               "null"
             ]
           },
-          "cache_keepalive_max": {
+          "cache_keepalive_pings": {
             "type": [
-              "string",
+              "number",
               "null"
-            ]
+            ],
+            "format": "double"
           },
           "replay_prior_thinking": {
             "type": [
@@ -5914,7 +5921,7 @@
           "reasoning_effort",
           "cache_ttl",
           "cache_keepalive",
-          "cache_keepalive_max",
+          "cache_keepalive_pings",
           "replay_prior_thinking",
           "zai_clear_thinking",
           "supports_images",
@@ -6655,6 +6662,12 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -11350,15 +11363,11 @@
           "character": {
             "type": "string"
           },
-          "keepalive_halted": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/KeepaliveHaltReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "keepalive_halts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/KeepaliveHaltReport"
+            }
           },
           "message_count": {
             "type": "integer",
@@ -11466,7 +11475,7 @@
         },
         "required": [
           "character",
-          "keepalive_halted",
+          "keepalive_halts",
           "message_count",
           "turn_count",
           "active_model",
@@ -11489,6 +11498,9 @@
           "character": {
             "type": "string"
           },
+          "model": {
+            "type": "string"
+          },
           "reason": {
             "type": "string"
           },
@@ -11498,6 +11510,7 @@
         },
         "required": [
           "character",
+          "model",
           "reason",
           "at"
         ]
@@ -11549,7 +11562,7 @@
             "format": "uint64",
             "minimum": 0
           },
-          "effective_interval_secs": {
+          "default_interval_secs": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0
@@ -11581,7 +11594,12 @@
             "format": "uint64",
             "minimum": 0
           },
-          "minimum_heartbeat_latency_secs": {
+          "min_interval_secs": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_interval_secs": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0
@@ -11602,8 +11620,9 @@
           "heartbeat_state",
           "ticks_without_user",
           "dormant_after_heartbeat_turns",
-          "effective_interval_secs",
-          "minimum_heartbeat_latency_secs",
+          "default_interval_secs",
+          "min_interval_secs",
+          "max_interval_secs",
           "dormant_after_idle_time_secs",
           "recent_events"
         ]
@@ -13728,11 +13747,12 @@
               "null"
             ]
           },
-          "cache_keepalive_max": {
+          "cache_keepalive_pings": {
             "type": [
-              "string",
+              "number",
               "null"
-            ]
+            ],
+            "format": "double"
           },
           "replay_prior_thinking": {
             "type": [
@@ -13792,7 +13812,7 @@
           "reasoning_effort",
           "cache_ttl",
           "cache_keepalive",
-          "cache_keepalive_max",
+          "cache_keepalive_pings",
           "replay_prior_thinking",
           "zai_clear_thinking",
           "supports_images",
@@ -14533,6 +14553,12 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         },

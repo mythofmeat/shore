@@ -1,6 +1,6 @@
 {
   "character": "ada",
-  "keepalive_halted": null,
+  "keepalive_halts": [],
   "message_count": 4,
   "turn_count": 4,
   "context_tokens": 12,

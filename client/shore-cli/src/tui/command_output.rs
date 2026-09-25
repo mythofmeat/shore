@@ -627,8 +627,10 @@ mod tests {
 
     #[test]
     fn a_setting_is_saved_quietly_unless_the_daemon_warns() {
-        let saved =
-            serde_json::json!({"key": "cache_keepalive", "value": "55m", "scope": "character"});
+        let saved = serde_json::json!({
+            "changed": true, "scope": "character", "model": "anthropic:opus",
+            "provider": "anthropic", "model_id": "opus", "key": "cache_keepalive", "value": "55m"
+        });
         assert_eq!(
             render(
                 "model setting cache_keepalive 55m",
@@ -640,7 +642,8 @@ mod tests {
         );
 
         let warned = serde_json::json!({
-            "key": "cache_keepalive", "value": "1h", "scope": "character",
+            "changed": true, "scope": "character", "model": "anthropic:opus",
+            "provider": "anthropic", "model_id": "opus", "key": "cache_keepalive", "value": "1h",
             "warning": "cache_keepalive is not shorter than this model's 1h cache TTL"
         });
         let rendered = render(
