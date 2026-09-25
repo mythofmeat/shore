@@ -12,16 +12,14 @@ are listed with reasons in `daemon/scripts/browser_parity.ts`. See [WEB_UI_V3_PL
 - `terminal.generated.json` is produced from the actual Clap command tree, including hidden commands,
   every argument, aliases, defaults, enum choices, arity, conflicts, and environment variable names.
   It also records examples passed through the actual `to_swp_command` mapping, the complete `ViewKey`
-  preferences, and the production key bindings and shortcut menu. A null example mapping means that
-  a special runner or local workflow must be accounted for; it is not an exception from browser parity.
-- `daemon.generated.json` combines the executable operation registry, the remaining legacy dispatch
-  paths and every generated wire type. It includes characterless dispatch, core message/regen/cancel
-  requests, results, images, tools, warnings, and all known server-event variants. Its
-  `legacy_operations` list makes unmigrated contracts explicit. Registered operation schemas validate
-  all 56 named operation payloads; no legacy names remain. The `requests` collection now records
-  the executable message/regen/cancel registrations and their canonical input/completion schemas.
-  Exhaustive terminal field/event/local-workflow coverage remains separate parity work. The inventory itself is
-  not a runtime validator.
+  preferences, and the production key bindings and shortcut menu. A null example mapping marks a
+  special runner or local workflow rather than a single daemon command.
+- `daemon.generated.json` combines the executable operation registry and every generated wire type.
+  It includes characterless dispatch, core message/regen/cancel requests, results, images, tools,
+  warnings, and all known server-event variants. All 56 named operations are registered and
+  validated against their generated schemas, so `legacy_operations` is empty. The `requests`
+  collection records the message/regen/cancel registrations and their input/completion schemas.
+  The inventory itself is not a runtime validator.
 
 Regenerate from `client/`, then from `daemon/`:
 
@@ -35,122 +33,40 @@ cargo test -p shore-cli export_capability_inventory -- --ignored
 bun run inventory:generate
 ```
 
-The normal Rust and daemon test suites compare the inventories against the running source. Review
-regenerated differences together with the corresponding browser controls and conformance fixtures.
-These gates detect source drift. The migrated registry also enforces handler/contract bindings and
-input-field metadata. Browser checks cover generated controls, live settings types and current
-browser journeys. Complete field/result/event accessibility and transport conformance remain
-required gates; metadata alone does not establish a usable browser control.
+The normal Rust and daemon test suites compare the inventories against the running source, so a new
+command, argument or operation fails until the inventory is regenerated. Review regenerated
+differences together with the browser parity gate below.
 
-## Capability mappings
+## Where terminal capabilities live in the browser
 
-The generated terminal inventory is the exhaustive list of command paths and declared options. The
-table below records the browser destination and semantics required by each family. A destination in
-this table is a required destination, not proof of an implemented GUI registration. No application operation is excluded.
+`TERMINAL_ROUTES` in `daemon/scripts/browser_parity.ts` is the authoritative mapping. Each terminal
+command path names the daemon operations it reaches, the operation field behind each argument, and
+the tier the browser must reach it at. Individual arguments can override their command's tier. The
+tiers correspond to places in the UI:
 
-| Terminal capability | Shared operation or browser equivalent | Required options and observable behavior |
+| Tier | Where it appears | Examples |
 | --- | --- | --- |
-| Leading character/thread flags | Browser session selection, `switch_character`, `switch_thread` | Per-tab identity; selection survives reconnect; stale updates cannot cross conversations. |
-| Leading daemon address | The serving daemon's same-origin endpoint | TCP discovery/address syntax is terminal-specific; remote browser access uses an explicitly secured web origin. |
-| Bare `shore` | Conversation workspace | Character/thread navigation, composer, transcript, optional details panels; empty-character onboarding. |
-| `msg send` | `message`; `inject_system` for system mode | Text, multiple images, stream choice; uploads and omitted-image labels distinguished. Preserve interruption versus confirmed failure. |
-| `msg regen` | `regen` | Optional ephemeral guidance; responsive cancellation; alternatives, metadata and warnings. |
-| `msg edit` | `get`, `edit` | Stable message target; in-app multiline editor; cancel pending fetch/edit; save without changing another message after concurrent updates. |
-| `msg delete` | `delete` | Multiple references resolve against one snapshot; tool-loop deletion semantics; confirmation. |
-| `msg alt` | `list_alternatives`, `alt` | List, previous, next, first, last, numeric selection; arbitrary assistant reference. |
-| `log` | `log`, `get`, `history_page` | Turns, role, single reference, follow, content-only, structured results, reasoning, tools, nested subagent tools; full history navigation. |
-| `compact` | `compact` | Keep zero or more turns; restart paused work; inspect progress, partial completion and recovery. |
-| `clear` | `clear` | Archive without summary; immediate exclusion; note; safeguard and resulting segment visibility. |
-| `segments` and every subcommand | `segments` | List/show/include/exclude/label/note/retry; clearing labels/notes; messages and retain status. |
-| `character` | `list_characters`, `character_info`, `create_character`, `switch_character`, `delete_character` | Avatars, metadata, bootstrap status; create/select from empty state; deletion confirmation and optional downloadable backup. |
-| `thread` and every subcommand | `list_threads`, `switch_thread`, `create_thread`, `thread_label`, `thread_model`, `thread_home`, `archive_thread`, `fork_thread` | Labels including clearing, model pins including reset, compaction, home/warm state, fork source and turn limit, archive outcomes. Hidden thread-model remains an application capability. |
-| `export`, `import` | `export_character`, `import_character` through transfers | Authenticated local file selection/download; controlled artifact ownership, limits, expiry and cleanup; same archive safety rules. |
-| `status` | `status` | All sections, optional section filter, inspect every result field including new fields. |
-| `model` and every subcommand | `list_models`, `model_info`, `switch_model`, `model_settings`, `set_model_setting`, `reset_model`, `favorite_model` | Search/all/favorites; chat, all/named background roles, all/named subagents; named model without switching; global setting scope; reset one setting or role selection. |
-| `provider` | `list_providers`, `list_provider_models`, `refresh_provider_models`, `refresh_all_provider_models` | Status and redacted credentials, hidden models, one/all refresh, failure and recovery. |
-| `config` | `config`, `config_schema`, `config_check`, `config_reload`, `tools` | Effective/default values, all/filter, JSON/TOML download, path labelled server-side, schema choices/writability/scope; reload preview and confirmation for prompt invalidation. |
-| `trace` summary | Diagnostics navigation | The special runner's overview must remain available alongside detailed views. |
-| `trace calls` | `call_log` | List/count/call-type, inspect call, compare previous or explicit call, full wire payload, structured download. |
-| `trace heartbeat`, `trace recall` | `transcript` | Both transcript kinds; count, calls/tools/recall details, structured download. |
-| `trace events`, `trace errors` | `heartbeat_log`, `error_log` | Count, event details, provider-key fallback warnings, errors. |
-| `trace subagent` | `subagent_trace` | Stored list/count and parent tool-use ID detail; nested activity. |
-| `debug` summary and heartbeat controls | `heartbeat_tick_now`, `heartbeat_set_dormant`, `heartbeat_set_active`, `keepalive_ping_now`, `session_activate` | Manual actions, scheduling outcomes, cache status and long-running results. |
-| `debug tool`, `debug subagent` | `run_tool` | Dynamic tool schema forms; describe; named argument pairs and nested collections; raw/untruncated output; configured availability, timeouts and real side effects. |
-| `usage` and every subcommand | `usage` | Period, provider, API-key name, model, call-type; group by all six dimensions; budgets/cache/anomalies/limits; CSV and TSV download. |
-| `view` | Persistent browser display preferences | Every generated `ViewKey` and value, including named budget selection; no loss of images/editing/drafts under a platform-specific label. |
-| `ui insert`, `ui normal`, `ui scroll` | Composer focus and keyboard transcript navigation | Home/end, line/page/top/bottom movement and keyboard-accessible controls. Exact terminal modes need not be copied. |
-| `ui images`, `ui image` | Media picker, clipboard paste, attachment queue, full-size viewer | Add/remove/clear; image captions, multi-image navigation, draft/reconnect recovery. |
-| `ui subagents`, `ui output` | Optional activity and result panels | Current and stored subagent activity; reopen and inspect last action output. |
-| `ui editor`, `ui edit-cancel` | Built-in draft/message editor | Multiline editing, undo/redo, discard pending edit, recover text and attachments. `$EDITOR` process execution is terminal-specific. |
-| `ui cancel` | `cancel` | Control routing must bypass long-running mutation queues. |
-| `ui help`, `ui palette` | Searchable actions, settings and shortcuts | Keyboard access, choices/completion, help; schema-generated controls and designed workflows. |
-| `ui bind`, `ui unbind` | Browser shortcut customization | Bind/unbind application actions and save preferences; reserve browser-owned keys explicitly. |
-| `ui quit` | Disconnect/close workspace | Detach peer and preserve drafts; browser window closure stays browser-owned. |
-| `completions` | Shell-specific exception | Installing shell completion scripts has no application effect; GUI action discovery replaces command completion. |
-| `complete` | Dynamic GUI choices and help | Every generated completion kind still maps to characters, threads, models, providers, status sections, tools/subagents, settings and config choices. The helper process itself is shell-specific. |
-| `--json`, `--toml`, content/display flags | Inspectable results, preferences and supported downloads | Output formatting is a presentation adapter; meaningful data and supported export formats must remain accessible. |
+| `inline` | The chat screen: sidebar, top bar, conversation menu, message actions, composer | Send, regenerate, edit, delete, swipe, compact, clear, creating characters, conversation create/rename/fork/archive, model picker |
+| `settings` | Settings → Chat and Daemon pages | Display preferences, model roles and settings, providers, usage and budgets, configuration, character info and deletion |
+| `advanced` | Settings → Advanced pages, which may use generated forms | Segments, traces and call log, status, tool runner, character archives, heartbeat and keepalive controls |
 
-## Workflows outside the command tree
+`NOT_APPLICABLE` in the same file lists terminal-only concepts with a reason each: help and version
+output, `--json`, TOML formatting, the TCP address, shell completions, the TUI output pane and one
+request field the daemon ignores.
 
-These require explicit browser scenarios in addition to command/option coverage:
+## How coverage is checked
 
-- `tui/draft.rs` and draft lifecycle tests: per-conversation drafts, concurrent client ownership,
-  attachment persistence/recovery, interrupted editing, pruning without deleting another draft.
-- `tui/app/input.rs` and `tui/input.rs`: Unicode cursor movement, multiline paste, word deletion,
-  undo/redo, input history, edit cancellation while the fetch is outstanding, picker search,
-  keyboard confirmation/cancellation, favorite toggling and output pagination.
-- `tui/images.rs`, `tui/clipboard.rs`, `terminal_images.rs`: clipboard/picker attachments, inline
-  images, full-size image navigation, captions and recovered media. Terminal escape sequences and
-  terminal graphics protocols are narrow presentation exceptions; viewing the media is not.
-- `tui/app/stream.rs`, `notifications.rs`, `cache.rs`, `usage.rs`, `compaction.rs`: text and thinking
-  streams, tool and nested subagent activity, phase/progress, usage/cache/provider/config warnings,
-  model and timing metadata, compaction activity and result inspection.
-- `swp_client/sync.rs`, `conn_manager.rs`, `tui/connection.rs`: correlation, independent selection and
-  revision watermarks, full versus delta history, stale/duplicate rejection, revision-gap recovery,
-  disconnect/reconnect/restart, selection during streaming and uncertain mutations.
-- `run.rs` special runners: character creation/selection/deletion, edit fetch-and-save, config reload
-  preview/confirm/apply, dynamic completion, persisted client selection, log-follow and summaries.
+- `daemon/tests/browser_parity.test.ts` turns every terminal command, field and finite choice, view
+  preference, `shore ui` command, conversation request field and result renderer family into a unit.
+  Each unit must be declared in `surfaces.ts` at its route's tier or a more accessible one, listed as
+  a known gap, or listed as not applicable. New terminal commands, fields and choices fail until they
+  are tracked. A known gap that becomes covered fails until it is removed
+  (`bun run scripts/browser_parity.ts --prune`). A terminal field that maps to no daemon operation
+  field fails as an API parity error, whatever the UI declares.
+- `daemon/tests/browser_local_workflows.test.ts` checks that `shore ui` commands keep their fields and
+  choices, that conversation shortcuts resolve to the operation catalogue, and that line scrolling
+  keeps the terminal defaults.
 
-The generated examples exercise `to_swp_command`; they do not execute these special runners. Their
-null mappings must be replaced by real workflow evidence in the final parity gate, not accepted as
-covered. Known events require exhaustive policies tied to handlers; a generic unknown-frame fallback
-may only serve genuinely future events.
-
-### Executable command and option coverage
-
-`daemon/scripts/browser_terminal_coverage.ts` accounts for each non-UI command and argument from the
-actual Clap inventory. Each argument points to fields in canonical generated operation/request forms
-or a justified local adapter with syntax-tree evidence from its implementation. The companion test
-checks finite choices, all generated wire-example fields, the generated form execution path and full
-result inspection. Deliberate omissions prove that new commands/options/choices, missing operations
-and controls, missing result inspection and missing default-value readers fail the gate. The existing
-browser coverage gate additionally checks recursive control kinds and known event branches/policies.
-All these tests run in the normal daemon suite in PR CI. Required merge policy remains externally
-constrained as recorded in the acceptance checklist.
-
-The reviewed presentation mappings include JSON inspection/download in place of terminal JSON/TOML
-printing, effective and default settings together in place of `--all`, and full status inspection for
-the daemon configuration directory. Offline local directory discovery, shell script installation and
-TCP address discovery are narrow terminal-platform exceptions. Model-role selection, destructive
-confirmation, tool/subagent input, browser transfers, completion choices, editing and display options
-remain application capabilities with concrete browser paths. The mappings supplement real browser
-journeys; syntax-tree presence is not a claim of equivalent subjective usability.
-
-### Executable local-workflow coverage
-
-`daemon/tests/browser_local_workflows.test.ts` compares every `shore ui` command, argument and
-finite choice from the Rust-generated inventory with the browser mapping. The gate reads the actual
-shortcut-handler syntax trees and the controls/readers used by the composer, keyboard editor and
-retained-output viewer. Removing a handler, its implementation or the scroll-amount reader fails;
-adding a terminal command, field or choice without an equivalent also fails. Quick-palette entries
-must resolve to the canonical operation/request catalogue. These structural checks complement actual
-browser journeys in `local_workflows.e2e.ts`, `editor.e2e.ts`, `keyboard.e2e.ts`, `gallery.e2e.ts`, `transfers.e2e.ts`,
-`drafts.e2e.ts` and the conversation workflow tests; presence checks alone do not establish behavior.
-
-Workspace help links to All actions, Conversation shortcuts, Settings, the editor, image gallery,
-activity and keyboard controls. The normal-mode equivalent is a focused transcript; insert/home/end
-focus the composer at its current/start/end-of-line position. Scroll amounts are whole lines, from
-0 through 65535, with the terminal default of one line for shortcuts. The help control initially
-chooses ten lines. Native arrows, Page Up/Down and Home/End operate the focused transcript. Closing
-or cancelling an edit discards that form while preserving the separate draft. Image picking and
-pasting use the device; message options identify daemon paths. Sign out detaches the browser session.
+Surface declarations are claims. The Playwright journeys in `daemon/tests/browser/` back them up:
+sign-in, the chat workspace and every settings page. Run them with `bun run test:browser` from
+`daemon/`. The pre-commit hook runs the unit gates above but not the journeys.

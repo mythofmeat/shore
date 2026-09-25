@@ -112,7 +112,7 @@ State comes from `Workspace` via `useSyncExternalStore`, as today. No new state 
 - The selected theme persists per browser, reusing the existing preferences store, and applies
   before first paint so the page doesn't flash the wrong theme.
 - **Lint gate:** raw colors (`#hex`, `rgb(`, `hsl(`) outside `styles/tokens.css` and
-  `styles/themes/*` fail CI.
+  `styles/themes/*` fail `tests/browser_styles.test.ts`.
 - Later, optional: a user theme file loaded from the daemon config directory.
 
 ### Build and serving
@@ -147,8 +147,8 @@ renderers.
 
 ## Phases
 
-Each phase ends with `.scripts/test.sh` green, then a commit. Playwright journeys land with the
-feature they cover, not at the end.
+Each phase ends with the full check suite (now `.githooks/pre-commit`) green, then a commit.
+Playwright journeys land with the feature they cover, not at the end.
 
 1. **Teardown + ratchet (one commit).**
    - Delete the UI files listed above.

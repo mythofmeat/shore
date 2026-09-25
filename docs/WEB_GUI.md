@@ -66,28 +66,25 @@ the CLI/TUI protocol and cannot serve a browser.
 hostname or port. Remove `tls_cert` and `tls_key` if switching an existing HTTPS listener to HTTP.
 All web configuration changes require a daemon restart.
 
-## Schema ownership decision
+## Operation contracts
 
-Rust remains canonical for SWP envelopes, events and existing wire value types, as specified in
-`daemon/src/protocol/README.md`. Extend that path for operation payloads: define typed inputs and
-results in `client/shore-common`, generate TypeScript with ts-rs, and derive runtime JSON Schemas from
-the same Rust definitions. Use those schemas for server validation and GUI controls. Schemars 1.2.2
-has been added in a separate dependency change; its installed implementation supports explicit
-2020-12 schemas and distinct deserialize/input and serialize/result contracts. All Rust workspace
-checks pass with the addition. Do not hand-edit generated protocol files or duplicate validators/UI schemas.
+Browser and terminal clients call the same daemon operations. Rust is canonical for their shapes, as
+it is for SWP envelopes and events (`daemon/src/protocol/README.md`):
 
-Pair an operation's input and result in the canonical catalogue so Rust and TypeScript callers keep
-the association. Handler registration, scope/prerequisites, effects, confirmation and presentation
-metadata reference that catalogue. The executable registry must replace the dispatch switches;
-discovery comes from that registry, not the source inventory. During migration, explicitly track the
-unmigrated names and keep the final parity gate failing until they are closed. Keep all existing
-golden assertions as independent behavioral evidence.
-
-The runtime validator must validate payloads before side effects and validate observable results
-after the existing after-command annotations. Field names, optional/null behavior, discriminated
-variants, modes, defaults and result information must match current clients. Domain validation stays
-in shared daemon handlers. Genuinely open tool/config values may remain structured dynamic values;
-all-operation `unknown` results may not.
+- `client/shore-common/src/protocol/operations.rs` pairs each operation's name, input type and result
+  type in one `operations!` catalogue. ts-rs generates the TypeScript types. Schemars generates
+  `daemon/src/operations/schemas.generated.json`, with a deserialize schema for inputs and a
+  serialize schema for results. Regenerate with `cargo test -p shore-common --lib export_bindings`
+  and `cargo test -p shore-common --lib export_operation_schemas`, and never hand-edit the output.
+- `daemon/src/commands/registry.ts` registers a handler for every catalogue entry, with its scope,
+  prerequisites, effects, confirmation and field presentation. Startup fails if a contract has no
+  handler or a handler has no contract. Discovery fails if a handler's presentation leaves out an
+  input field. Every command dispatches through this registry, and unknown names are rejected.
+- Inputs are validated against the schema before the handler runs. Results are validated after the
+  handler, and again after the after-command annotations in `daemon/src/handler/command_dispatch.ts`.
+  Domain validation stays in the handlers.
+- The browser uses Ajv validators precompiled from the same schemas (`bun run browser:generate`).
+  `tests/browser_wire.test.ts` fails if they drift.
 
 ## Developing the browser client
 
@@ -98,7 +95,9 @@ all-operation `unknown` results may not.
   `styles/themes/`. See the plan for the theme rules.
 - Build: `bun run browser:build` regenerates `daemon/src/web/assets.generated.ts`, which the daemon
   embeds. Rebuild and restart the daemon to pick up UI changes.
-- Tests: `bun test tests/browser_*.test.ts` for units, `bun run test:browser` for Playwright.
+- Tests: `bun test tests/browser_*.test.ts` for units, `bun run test:browser` for Playwright. The
+  pre-commit hook runs the unit tests but not Playwright, so run the journeys before pushing UI
+  changes.
 - Parity: `tests/browser_parity.test.ts` checks every CLI command and option, TUI view preference,
   local workflow, conversation request and renderer family against `src/browser/surfaces.ts` and the
   shrinking list in `scripts/browser_known_gaps.json`. After implementing something, declare it in

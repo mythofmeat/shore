@@ -63,7 +63,8 @@ revision counters silently.
 
 From `daemon/`, `bun run browser:generate` precompiles browser validators with Ajv's standalone
 generator; `bun run browser:check` verifies reproducibility. Browser bundles do not compile schemas
-at runtime or require dynamic code evaluation. Both generated layers are checked in PR CI.
+at runtime or require dynamic code evaluation. `tests/browser_wire.test.ts` fails if the validators
+no longer regenerate exactly from the Rust schemas, so the daemon test suite catches drift.
 
 Peers announcing `request-lifecycle` receive `request_finished` directly from the shared handler,
 independent of current selection. Outcomes are completed, failed, cancelled or superseded, with
