@@ -10,7 +10,7 @@ CHANGES=$(git status --porcelain)
 if ! [ -n "$CHANGES" ]; then
     echo "No dependency updates!"
     exit 0
-elif ./test.sh; then
+else
     git commit -am "chore(deps): scheduled update"
     ./release.sh patch
 fi

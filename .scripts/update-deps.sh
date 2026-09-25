@@ -1,22 +1,7 @@
 #!/bin/sh
 set -eu
 
-usage() {
-    printf 'Usage: %s\nUpdate stable toolchains, Cargo tooling, and daemon/client dependencies (including major versions).\n' "$0"
-}
-
-case "${1:-}" in
-    -h|--help) usage; exit 0 ;;
-esac
-if [ "$#" -ne 0 ]; then
-    usage >&2
-    exit 2
-fi
-
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-export RUSTUP_TOOLCHAIN=stable
-export PATH="${CARGO_HOME:-"$HOME/.cargo"}/bin:$PATH"
-export BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-"$root/daemon/node_modules/.cache/bun-install"}"
 
 run() {
     printf '\n>>> %s\n' "$*"
@@ -47,5 +32,3 @@ run bun install
 cd "$root/client"
 run cargo upgrade --incompatible
 run cargo update
-
-printf '\nDependency updates completed. Run .scripts/test.sh, then review and commit dependency changes separately.\n'
