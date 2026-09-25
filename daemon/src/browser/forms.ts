@@ -8,6 +8,9 @@ export type Control =
   | { kind: "array"; item: Control }
   | { kind: "union"; options: Control[] }
   | { kind: "object"; fields: Record<string, Control>; required: string[]; additional?: Control; hints?: Record<string, string> };
+export const CONTROL_KINDS = ["json", "string", "integer", "number", "boolean", "null", "array", "union", "object"] as const satisfies readonly Control["kind"][];
+export type ControlKind = (typeof CONTROL_KINDS)[number];
+export const CONTROL_KINDS_COMPLETE: [Exclude<Control["kind"], ControlKind>] extends [never] ? true : never = true;
 
 export function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a schema object");

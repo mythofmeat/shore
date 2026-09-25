@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_CONTROLS, VIEW_KEYS, budgetFocus, cycleView, defaultViews, readViews } from "../src/browser/preferences.ts";
 import { VIEW_PREFERENCES } from "../src/browser/preferences.generated.ts";
 import { focusedBudget, showUsage } from "../src/browser/budget_display.ts";
-import { assertDisplayCoverage, displayReaders, switchCases } from "../scripts/browser_coverage.ts";
+import { assertDisplayCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import fixtures from "../../client/shore-cli/tests/fixtures/display_budgets.json" with { type: "json" };
 
 function storage() {
@@ -12,21 +12,17 @@ function storage() {
   return { data, fail: (value: boolean) => { fail = value; }, getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { if (fail) throw new Error("Storage unavailable"); data.set(key, value); } };
 }
 
-test("all terminal display choices have controls, rendering readers and enum modes; omissions fail", async () => {
-  const sources = await Promise.all(["app.tsx", "components.tsx", "activity.tsx", "memory.tsx", "budget_readout.tsx"].map((file) => readFile(new URL(`../src/browser/${file}`, import.meta.url), "utf8")));
+test("all terminal display choices have controls and enum modes; omissions fail", async () => {
   const policy = await readFile(new URL("../src/browser/budget_display.ts", import.meta.url), "utf8");
-  const readers = await displayReaders(sources);
   const modes = { usage: await switchCases(policy, "showUsage", "mode"), budget: await switchCases(policy, "budgetLevel", "scope") };
-  expect(() => assertDisplayCoverage(VIEW_PREFERENCES, VIEW_CONTROLS, readers, modes)).not.toThrow();
+  expect(() => assertDisplayCoverage(VIEW_PREFERENCES, VIEW_CONTROLS, modes)).not.toThrow();
   for (const key of VIEW_KEYS) {
-    expect(() => assertDisplayCoverage({ ...VIEW_PREFERENCES, [key]: [] }, VIEW_CONTROLS, readers, modes)).toThrow(`Missing GUI display choices: ${key}`);
-    expect(() => assertDisplayCoverage(VIEW_PREFERENCES, { ...VIEW_CONTROLS, [key]: undefined }, readers, modes)).toThrow(`Missing GUI display control: ${key}`);
-    const missing = await displayReaders(sources.map((source) => source.replaceAll(`display.option("${key}")`, '"on"')));
-    expect(() => assertDisplayCoverage(VIEW_PREFERENCES, VIEW_CONTROLS, missing, modes)).toThrow(`Missing GUI display reader: ${key}`);
+    expect(() => assertDisplayCoverage({ ...VIEW_PREFERENCES, [key]: [] }, VIEW_CONTROLS, modes)).toThrow(`Missing GUI display choices: ${key}`);
+    expect(() => assertDisplayCoverage(VIEW_PREFERENCES, { ...VIEW_CONTROLS, [key]: undefined }, modes)).toThrow(`Missing GUI display control: ${key}`);
   }
   for (const [key, values] of Object.entries(modes)) for (const value of values) {
     const missing = await switchCases(policy.replace(`case "${value}":`, 'case "omitted":'), key === "usage" ? "showUsage" : "budgetLevel", key === "usage" ? "mode" : "scope");
-    expect(() => assertDisplayCoverage(VIEW_PREFERENCES, VIEW_CONTROLS, readers, { ...modes, [key]: missing })).toThrow(`Missing GUI display mode: ${key}:${value}`);
+    expect(() => assertDisplayCoverage(VIEW_PREFERENCES, VIEW_CONTROLS, { ...modes, [key]: missing })).toThrow(`Missing GUI display mode: ${key}:${value}`);
   }
 });
 

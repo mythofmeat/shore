@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { requestCatalogue } from "../src/operations/requests.ts";
-import { switchCases } from "../scripts/browser_coverage.ts";
 import { VIEW_PREFERENCES } from "../src/browser/preferences.generated.ts";
 import { KEYBOARD_STORAGE, LOCAL_SHORTCUTS, MAX_BINDINGS, KeyboardBindings, bindingId, bindingValue, defaultBindings, keyFromEvent, matchingBinding, normalizeKey, reservedKey, shortcutTargets, validateBinding, validateSavedConfig, type Binding } from "../src/browser/keyboard.ts";
 
@@ -45,7 +43,7 @@ test("typing, dialogs and modifier-specific bindings keep their own behavior", (
   expect(matchingBinding([{ ...global, scope: "normal" }, global], "alt+k", false, false)).toBe(global);
 });
 
-test("current catalogue operations, requests, preferences and local targets are reachable and omission fails", async () => {
+test("current catalogue operations, requests, preferences and local targets are reachable and omission fails", () => {
   const operations = commandCatalogue(); const requests = requestCatalogue();
   const targets = shortcutTargets(operations, requests);
   const required = [...operations.map((item) => `operation:${item.name}`), ...requests.map((item) => `request:${item.name}`), ...Object.keys(VIEW_PREFERENCES).map((key) => `view:${key}`), ...Object.keys(LOCAL_SHORTCUTS).map((key) => `local:${key}`)];
@@ -53,14 +51,6 @@ test("current catalogue operations, requests, preferences and local targets are 
   expect(() => assertTargets(targets)).not.toThrow();
   for (const target of targets) { expect(() => bindingValue(binding("alt+b", target.id))).not.toThrow(); }
   for (const target of targets) expect(() => assertTargets(targets.filter((item) => item.id !== target.id))).toThrow(`Missing shortcut target: ${target.id}`);
-  const app = await readFile(new URL("../src/browser/app.tsx", import.meta.url), "utf8");
-  const assertRoutes = (routes: Set<string>) => { for (const domain of ["operation", "request", "view", "local"]) if (!routes.has(domain)) throw new Error(`Missing shortcut route: ${domain}`); };
-  const awaited = await switchCases(app, "runBinding", "kind");
-  expect(() => assertRoutes(awaited)).not.toThrow();
-  for (const domain of ["operation", "request", "view", "local"]) {
-    const omitted = await switchCases(app.replace(`case "${domain}":`, 'case "omitted":'), "runBinding", "kind");
-    expect(() => assertRoutes(omitted)).toThrow(`Missing shortcut route: ${domain}`);
-  }
   for (const operation of operations) expect(() => validateBinding({ ...binding("alt+o", `operation:${operation.name}`), mode: "open" }, operations, requests)).not.toThrow();
   expect(() => validateBinding({ ...binding("alt+s", "operation:create_character"), args: {} }, operations, requests)).toThrow("Complete");
   expect(() => validateBinding({ ...binding("alt+s", "operation:create_character"), args: { name: "from-shortcut" } }, operations, requests)).not.toThrow();

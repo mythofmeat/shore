@@ -1,9 +1,11 @@
 # Application capability inventory
 
-This directory tracks the implementation of [issue #214](https://github.com/mythofmeat/shore/issues/214).
-The browser must provide every application capability in this inventory. The inventory is a migration
-input, **not evidence that a browser workflow exists**. Implemented browser workflows and their
-verification are recorded in [WEB_GUI.md](../WEB_GUI.md); full parity remains unfinished.
+This directory holds the generated inventories of every CLI/TUI capability and daemon operation.
+The browser tracks them through a ratchet rather than a one-to-one mapping: every command, option,
+view preference, local workflow and conversation request is either surfaced by the browser
+(declared in `daemon/src/browser/surfaces.ts` at an `inline`, `settings` or `advanced` tier) or
+listed in `daemon/scripts/browser_known_gaps.json`, which may only shrink. Terminal-only concepts
+are listed with reasons in `daemon/scripts/browser_parity.ts`. See [WEB_UI_V3_PLAN.md](../WEB_UI_V3_PLAN.md).
 
 ## Reproducible source inventory
 
