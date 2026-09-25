@@ -13,7 +13,8 @@ bind_addr = "127.0.0.1:7340"
 ```
 
 Restart the daemon, open `http://127.0.0.1:7340`, and connect with the same access token the CLI
-uses. Every web setting requires a daemon restart. Disconnect (Settings → Disconnect) ends the
+uses. Press `?` for keyboard shortcuts or Ctrl/⌘+K for the command palette. Themes and display
+options are under Settings → Appearance. Every web setting requires a daemon restart. Disconnect (Settings → Disconnect) ends the
 browser session; it does not remove drafts saved in that browser.
 
 All web settings are visible through the existing configuration schema and require restart. Bind

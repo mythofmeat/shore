@@ -1,8 +1,8 @@
 # Web UI v3 — rebuild plan
 
-Status: agreed 2026-09-25. This plan supersedes the CLI-parity approach in `WEB_GUI.md`,
-`WEB_GUI_HANDOVER.md` and `WEB_GUI_ACCEPTANCE.md` (issue #214). Those files are deleted or trimmed
-in phase 1; do not follow their instructions.
+Status: all eight phases complete as of 2026-09-25 (see "Outcome" at the end). This plan
+superseded the CLI-parity approach of issue #214; the old handover and acceptance docs were deleted
+and `WEB_GUI.md` now holds operator and developer notes.
 
 Design reference (mockups for every screen below):
 https://claude.ai/artifact/Ufj14TjUNNNbk4SzEwe7b9 — the "Conversation" and "Settings, message
@@ -185,9 +185,25 @@ feature they cover, not at the end.
    - Delete the superseded docs and any browser modules that ended up unused.
    - Final pass on phone layouts.
 
-## Open questions (decide when the phase arrives)
+## Decisions on the open questions
 
-- Keyboard shortcuts: keep TUI-style configurable bindings or ship a fixed set first (phase 5).
-- Light theme: not planned; the theme system makes it possible later.
-- Where context usage lives: conversation menu, Usage page, or both (phase 4/5).
-- User-supplied theme file from the daemon config directory (after phase 6).
+- **Keyboard shortcuts:** a fixed, documented set (Settings → Keyboard shortcuts, `?` from
+  anywhere) plus a command palette on Ctrl/⌘+K. Rebinding is not offered yet; `local:bind` and
+  `local:unbind` are the only remaining known gaps. `keyboard.ts` keeps the tested binding model
+  for when rebinding is built.
+- **Light theme:** not planned. The token system supports it if it's ever wanted.
+- **Context usage:** shown in Settings → Diagnostics (context tokens, messages, turns), not in the
+  chat. Budgets can optionally appear as a small chip in the top bar (off by default).
+- **User-supplied theme file:** not built; still possible later on top of the theme tokens.
+
+## Outcome
+
+- Phases 1–8 are done. The Sodium fog theme landed together with phases 2–3.
+- Deviation: the mockup's per-message "Branch from here" was dropped. The daemon forks the last N
+  turns of a conversation, not up to an arbitrary message, so forking lives in the conversation
+  menu as "Fork conversation…" with an optional turn count.
+- Parity: 254 known gaps at the start of phase 1, 2 at the end (`local:bind`, `local:unbind`).
+  Terminal-only concepts are listed with reasons in `scripts/browser_parity.ts`.
+- Verification: `tests/browser_parity.test.ts`, `tests/browser_chat.test.ts`,
+  `tests/browser_settings.test.ts`, `tests/browser_styles.test.ts`, the Playwright journeys in
+  `tests/browser/`, and the `browser_chat` mutation pass (30/30 mutants killed).

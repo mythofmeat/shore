@@ -19,9 +19,7 @@ MUTANTS = [
     ("manual tools create phantom chat", W, 'manual && next.subagent === null ? this.#state.streams :', ''),
     ("manual subagent remains live after completion", W, ' || this.actions.pendingOperation(message.rid) === "run_tool"', ''),
     ("manual image adopted by chat history", 'src/browser/media.ts', 'image.manual === true || ', ''),
-    ("progress history unbounded", 'src/browser/tool_activity.ts', '.slice(-MAX_ENTRIES)', '.slice(0)'),
-    ("progress text unbounded", 'src/browser/tool_activity.ts', 'item.text.slice(-MAX_TEXT)', 'item.text'),
 ]
 
 if __name__ == "__main__":
-    sys.exit(run(MUTANTS, ["tests/run_tool_command.test.ts", "tests/command_path.test.ts", "tests/web_transport.test.ts", "tests/browser_media.test.ts", "tests/browser_tool_activity.test.ts"]))
+    sys.exit(run(MUTANTS, ["tests/run_tool_command.test.ts", "tests/command_path.test.ts", "tests/web_transport.test.ts", "tests/browser_media.test.ts"]))

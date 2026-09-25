@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CONVERSATION_DIALOG_EVENT } from "../app/intents.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
@@ -7,6 +8,8 @@ import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { useConversationActive } from "../app/state.ts";
 import { makeHome } from "./actions.ts";
+import { BudgetChip } from "./budget.tsx";
+import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
 import { ConversationDialogs, type ConversationDialog } from "./dialogs.tsx";
 import { ModelPicker, shortModel, useModelListing } from "./models.tsx";
@@ -18,13 +21,19 @@ function SidebarToggle({ open, mobile, toggle }: { open: boolean; mobile: boolea
 }
 
 export function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
-  const [dialog, setDialog] = useState<ConversationDialog | "model" | null>(null);
+  const [dialog, setDialog] = useState<ConversationDialog | "model" | "gallery" | null>(null);
   const { listing, refresh } = useModelListing(state);
+  useEffect(() => {
+    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["rename", "fork", "guidance", "system", "compact", "clear", "archive", "model", "gallery"].includes(name)) setDialog(name as ConversationDialog | "model" | "gallery"); };
+    addEventListener(CONVERSATION_DIALOG_EVENT, open);
+    return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
+  }, []);
   const busy = useConversationActive();
   const character = state.characters.find((item) => item.name === state.character);
   const thread = state.threads.find((item) => item.id === state.thread);
   const ready = state.status === "ready";
   const items: MenuItem[] = [
+    { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
     { label: "Rename…", icon: "label", onSelect: () => setDialog("rename"), disabled: !ready },
     { label: "Fork conversation…", icon: "branch", onSelect: () => setDialog("fork"), disabled: !ready },
     { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role === "assistant") },
@@ -44,12 +53,13 @@ export function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { stat
         <span className="topbar-name">{state.character}</span>
         {state.thread === null ? null : <><span className="topbar-separator">/</span><span className="topbar-thread">{thread === undefined ? state.thread : threadLabel(thread)}</span></>}
       </div>
+      {mobile ? null : <BudgetChip state={state} />}
       {mobile ? null : <button type="button" className="model-chip" aria-label={`Chat model: ${listing?.active ?? "unknown"}. Change model`} title="Change model" disabled={!ready} onClick={() => setDialog("model")}>
         <span className="mono">{listing === undefined ? "…" : shortModel(listing.active)}</span><Icon name="chevronDown" size={14} />
       </button>}
       <Menu label="Conversation options" items={mobile ? [{ label: `Model: ${shortModel(listing?.active)}`, icon: "settings", onSelect: () => setDialog("model"), disabled: !ready }, "separator", ...items] : items} />
     </>}
-    {dialog === "model" ? <ModelPicker state={state} close={() => setDialog(null)} changed={refresh} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
+    {dialog === "model" ? <ModelPicker state={state} close={() => setDialog(null)} changed={refresh} /> : dialog === "gallery" ? <GalleryDialog state={state} close={() => setDialog(null)} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
   </header>;
 }
 

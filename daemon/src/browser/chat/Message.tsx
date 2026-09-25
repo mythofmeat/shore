@@ -12,8 +12,9 @@ import { Avatar, UserAvatar } from "../ui/avatar.tsx";
 import { Dialog, IconButton, Menu, Spinner, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, workspace } from "../app/state.ts";
+import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { blockViews, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView } from "./transcript.ts";
+import { swipe as swipeTo } from "./actions.ts";
 
 export type OpenImage = (source: string, caption: string) => void;
 
@@ -154,14 +155,7 @@ function AlternativesDialog({ message, close }: { message: Message; close: () =>
 function Swipe({ message, last, busy }: { message: Message; last: boolean; busy: boolean }) {
   const swipe = swipeState(message);
   const [listing, setListing] = useState(false);
-  const move = (direction: "prev" | "next") => {
-    void (async () => {
-      try {
-        if (direction === "next" && swipe.atLast) await conversation.regenerate();
-        else await workspace.actions.run("alt", { ref: message.msg_id, direction });
-      } catch (error) { toasts.show(errorText(error), "error"); }
-    })();
-  };
+  const move = (direction: "prev" | "next") => { void swipeTo(message, direction, last).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   if (!last && swipe.count <= 1) return null;
   return <div className="swipe" role="group" aria-label="Alternative responses">
     <IconButton icon="chevronLeft" label="Previous response" size={16} disabled={busy || !swipe.canPrevious} onClick={() => move("prev")} />
@@ -171,14 +165,20 @@ function Swipe({ message, last, busy }: { message: Message; last: boolean; busy:
   </div>;
 }
 
-export function MessageRow({ message, character, avatar, last, metadata, display, busy, mobile, openImage }: {
-  message: Message; character: string; avatar: CharacterAvatar | null | undefined; last: boolean; metadata: StreamMetadata | undefined;
+export function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage }: {
+  message: Message; character: string; avatar: CharacterAvatar | null | undefined; last: boolean; lastUser?: boolean; metadata: StreamMetadata | undefined;
   display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
+  useEffect(() => {
+    if (!lastUser) return;
+    const edit = () => setMode("edit");
+    addEventListener("shore:edit-last", edit);
+    return () => removeEventListener("shore:edit-last", edit);
+  }, [lastUser]);
   const assistant = message.role === "assistant";
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
-  const regenerate = () => { void conversation.regenerate().catch((error: unknown) => toasts.show(errorText(error), "error")); };
+  const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;
   const actions: MenuItem[] = [
     { label: "Copy", icon: "copy", onSelect: copy },

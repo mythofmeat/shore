@@ -14,6 +14,11 @@ describe("commentRanges", () => {
     expect(comments(source)).toEqual(["// line", "/* block */", "/** jsdoc */"]);
   });
 
+  test("skips a hash that starts no identifier instead of looping forever", () => {
+    const source = "const a = <th>#</th>;\n// after\nconst b = x.#y;\n";
+    expect(comments(source)).toEqual(["// after"]);
+  });
+
   test("keeps scanning after a template substitution", () => {
     const source = "const t = `a ${1 /* inside */} b`;\n/** after */\nfunction f() {}\n";
     expect(comments(source)).toEqual(["/* inside */", "/** after */"]);

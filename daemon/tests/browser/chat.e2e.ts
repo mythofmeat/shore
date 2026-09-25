@@ -11,6 +11,7 @@ test("chat renders markdown, edits in place, confirms deletion, swipes between r
   await expect(user.locator("li")).toHaveText(["first", "second"]);
   const reply = page.locator("article.message.assistant").last();
   await expect(reply.getByRole("button", { name: "Reasoning" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load earlier messages" })).toHaveCount(0);
   await reply.getByRole("button", { name: "Reasoning" }).click();
   await expect(reply).toContainText("Considering the question");
 
@@ -71,6 +72,12 @@ test("the sidebar collapses on desktop and becomes a drawer on phones", async ({
   await page.getByRole("button", { name: "Open sidebar" }).click();
   await expect(page.locator(".sidebar")).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open sidebar" }).click();
+  await page.getByRole("button", { name: "New character" }).click();
+  await page.getByRole("dialog", { name: "New character" }).getByLabel("Name").fill("bea");
+  await page.getByRole("dialog", { name: "New character" }).getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.locator(".topbar-name")).toHaveText("bea");
   await expect(page.locator(".sidebar")).toHaveCount(0);
   await page.getByRole("button", { name: "Open sidebar" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();

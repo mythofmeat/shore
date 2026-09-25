@@ -15,8 +15,8 @@ export class ConversationRequests {
     this.#set(new Set([...this.#active, rid]));
     try { return await finished; } finally { this.#set(new Set([...this.#active].filter((item) => item !== rid))); }
   }
-  async regenerate(guidance?: string): Promise<void> {
-    const result = await this.submit("regen", { stream: true, ...(guidance === undefined || guidance.trim() === "" ? {} : { guidance: guidance.trim() }) });
+  async regenerate(guidance?: string, stream = true): Promise<void> {
+    const result = await this.submit("regen", { stream, ...(guidance === undefined || guidance.trim() === "" ? {} : { guidance: guidance.trim() }) });
     if (result.outcome !== "completed") throw new Error(result.error?.message ?? (result.outcome === "cancelled" ? "Regeneration stopped" : `Regeneration ${result.outcome}`));
   }
   cancel(): void { this.connection.cancel(); }

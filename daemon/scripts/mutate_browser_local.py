@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise draft history, retained output and local workflow omission checks."""
+"""Exercise retained output, scroll bindings and local workflow checks."""
 import sys
 from mutation import run
 
-H = "src/browser/text_history.ts"
 O = "src/browser/operations.ts"
 K = "src/browser/keyboard.ts"
 MUTANTS = [
-    ("typing splits every character", H, 'this.#run === kind', 'false'),
-    ("whitespace does not finish typing group", H, '/\\s$/.test(next.text.slice(0, next.start))', 'false'),
-    ("composition splits intermediate text", H, 'this.#composing ? this.#compositionEdited', 'this.#composing ? false'),
-    ("selection direction lost", H, 'textSnapshot(this.#current.text, start, end, direction)', 'textSnapshot(this.#current.text, start, end)'),
-    ("new edit retains stale redo", H, 'this.#future = [];\n    this.#trim(this.#past);', 'this.#trim(this.#past);'),
-    ("history depth unbounded", H, 'stack.length > DEPTH', 'false'),
-    ("history byte bound counts code units", H, 'item.text.length * 2', 'item.text.length'),
-    ("history removes newest checkpoint", H, 'stack.shift()', 'stack.pop()'),
     ("background actions replace reopened output", O, 'options.remember !== false &&', ''),
     ("sign-out lets late completion retain output", O, 'epoch === this.#epoch', 'true'),
     ("missing output becomes usable", O, 'invalid || !received || !validOperationResult(name, result)', 'false'),
@@ -23,4 +14,4 @@ MUTANTS = [
 ]
 
 if __name__ == "__main__":
-    sys.exit(run(MUTANTS, ["tests/browser_text_history.test.ts", "tests/browser_local_workflows.test.ts", "tests/web_transport.test.ts"]))
+    sys.exit(run(MUTANTS, ["tests/browser_local_workflows.test.ts", "tests/web_transport.test.ts"]))

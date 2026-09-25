@@ -25,8 +25,8 @@ export const TERMINAL_ROUTES: Record<string, Route> = {
   "shore msg alt": route("inline", "alt list_alternatives", { selector: "alt.direction alt.position list_alternatives.ref", msg_ref: "alt.ref list_alternatives.ref" }),
   "shore msg edit": route("inline", "edit get", { msg_ref: "edit.ref get.ref", content: "edit.content @editor" }),
   "shore msg delete": route("inline", "delete", { msg_refs: "delete.refs" }),
-  "shore log": route("inline", "log get", { msg_ref: "get.ref", count: "log.turns", role: "log.role", follow: "@follow", content: "@content", reasoning: "@thinking", tools: "@tools", subagent_tools: "@subagents" },
-    { msg_ref: "advanced", count: "advanced", role: "advanced" }),
+  "shore log": route("advanced", "log get", { msg_ref: "get.ref", count: "log.turns", role: "log.role", follow: "@follow", content: "@content", reasoning: "@thinking", tools: "@tools", subagent_tools: "@subagents" },
+    { follow: "inline", content: "inline", reasoning: "inline", tools: "inline", subagent_tools: "inline" }),
   "shore compact": route("inline", "compact", { keep_turns: "compact.keep_turns", restart: "compact.restart" }),
   "shore segments": route("advanced", "segments"),
   "shore segments show": route("advanced", "segments", { index: "segments.index" }),
@@ -45,7 +45,7 @@ export const TERMINAL_ROUTES: Record<string, Route> = {
   "shore character use": route("inline", "switch_character", { name: "switch_character.name" }),
   "shore character info": route("settings", "character_info"),
   "shore character new": route("inline", "create_character", { name: "create_character.name" }),
-  "shore character delete": route("settings", "delete_character", { name: "delete_character.character", archive: "delete_character.archive @archives", yes: "delete_character.confirm @confirmation" }),
+  "shore character delete": route("settings", "delete_character", { name: "delete_character.character", archive: "delete_character.archive @archives", yes: "delete_character.confirm @confirmation" }, { archive: "advanced" }),
   "shore thread": route("inline", "list_threads"),
   "shore thread use": route("inline", "switch_thread", { name: "switch_thread.name" }),
   "shore thread new": route("inline", "create_thread", { name: "create_thread.name", label: "create_thread.label", model: "create_thread.model", compaction: "create_thread.compaction" }),
@@ -101,8 +101,11 @@ export const NOT_APPLICABLE: Readonly<Record<string, string>> = {
   "@config_format": "TOML formatting is terminal output; the browser shows structured values.",
   "@shell_scripts": "Shell completion scripts have no browser equivalent.",
   "@completion": "The shell completion helper process has no browser equivalent; controls offer live choices instead.",
+  "local:output": "The TUI prints command results into an output pane; in the browser every action shows its result where it was taken.",
+  "request:message.absence_seconds": "Compatibility field the daemon accepts but ignores; the TUI leaves it unset too.",
 };
 
+const REQUEST_FIELD_TIERS: Partial<Record<string, Tier>> = { "message.stream": "settings", "regen.stream": "settings" };
 const LOCAL_TIERS: Partial<Record<string, Tier>> = { bind: "settings", unbind: "settings", output: "advanced", quit: "settings" };
 export const RENDERER_FAMILIES = ["field", "request_phase", "archive_phase", "usage_mode", "compaction_status"] as const;
 
@@ -175,7 +178,7 @@ export function parityUnits({ operations, requests, inventory = terminal, local 
     const fields = Object.keys(definitions[variant.$ref.slice("#/$defs/".length)]?.properties ?? {}).filter((key) => key !== "rid").sort();
     if (fields.join(",") !== Object.keys(actionControl(request).fields).sort().join(",")) throw new Error(`Unaccounted conversation request fields: ${name}`);
     units.push({ id: `request:${name}`, tier: "inline", targets: [`request:${name}`] });
-    for (const field of fields) units.push({ id: `request:${name}.${field}`, tier: "inline", targets: [`request:${name}.${field}`] });
+    for (const field of fields) units.push({ id: `request:${name}.${field}`, tier: REQUEST_FIELD_TIERS[`${name}.${field}`] ?? "inline", targets: [`request:${name}.${field}`] });
   }
   for (const family of RENDERER_FAMILIES) units.push({ id: `renderer:${family}`, tier: null, targets: [`renderer:${family}`] });
   return units;
