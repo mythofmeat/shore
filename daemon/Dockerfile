@@ -4,7 +4,7 @@ COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /build/daemon
 COPY daemon/scripts/build_patch.ts scripts/build_patch.ts
 COPY daemon/vendor/codex-apply-patch vendor/codex-apply-patch
-RUN --mount=type=cache,target=/build/daemon/target \
+RUN --mount=type=cache,target=/root/.cache/shore \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     bun run scripts/build_patch.ts

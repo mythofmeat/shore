@@ -24,8 +24,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-        working-directory: daemon
       - run: .scripts/test.sh lint
 
   daemon:
@@ -41,8 +39,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-        working-directory: daemon
       - run: rustup update stable --no-self-update && rustup default stable
       - id: rust
         run: echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
@@ -53,7 +49,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: |
-            daemon/target/codex-apply-patch
+            ~/.cache/shore/codex-apply-patch
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
           key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
@@ -63,7 +59,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: |
-            daemon/target/codex-apply-patch
+            ~/.cache/shore/codex-apply-patch
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
           key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}

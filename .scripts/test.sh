@@ -62,7 +62,7 @@ run() {
 # check. That home is kept in memory where the system offers it: the daemon's stores fsync every
 # write, which a CI runner's disk turns into multi-second stalls and spurious test timeouts. Cargo
 # runs without it: a compiler cache server started under it would outlive the run and be left
-# pointing at a deleted temp dir.
+# pointing at a deleted temp dir. For the same reason sccache keeps the developer's cache dir.
 hermetic() {
     tmp_var=""
     if [ "$1" = "--own-tmp" ]; then
@@ -82,6 +82,7 @@ hermetic() {
         RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" \
         CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" \
         BUN_INSTALL_CACHE_DIR="${BUN_INSTALL_CACHE_DIR:-$HOME/.bun/install/cache}" \
+        SCCACHE_DIR="${SCCACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sccache}" \
         HOME="$home" \
         XDG_CONFIG_HOME="$home/config" \
         XDG_DATA_HOME="$home/data" \
@@ -107,6 +108,7 @@ for group in "$@"; do
     case "$group" in
     lint)
         cd "$root/daemon"
+        run bun-install bun install --frozen-lockfile
         run bun-lint bun run lint
         run bun-lint-comments bun run lint:comments
         run bun-lint-citations bun run lint:citations
@@ -115,10 +117,11 @@ for group in "$@"; do
         ;;
     daemon)
         cd "$root/daemon"
+        run bun-install bun install --frozen-lockfile
         run bun-build bun run build
-        run bun-test hermetic --own-tmp bun test
+        run bun-test hermetic --own-tmp bun test --parallel
         run bun-mutate-stale bun run mutate --stale
-        run bun-rerecord-check bun run rerecord:check
+        run bun-rerecord-check hermetic --own-tmp bun run rerecord:check
         ;;
     client)
         cd "$root/client"
