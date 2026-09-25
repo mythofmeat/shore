@@ -7,6 +7,7 @@ export const THEME_STORAGE_KEY = "shore.theme";
 export const DEFAULT_THEME: ThemeId = "default";
 
 type ThemeStorage = Pick<Storage, "getItem" | "setItem">;
+export interface ThemeRoot { dataset: Record<string, string | undefined> }
 
 export function isThemeId(value: unknown): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
@@ -19,7 +20,7 @@ export function storedTheme(storage: Pick<Storage, "getItem"> | undefined): Them
   } catch { return DEFAULT_THEME; }
 }
 
-export function applyTheme(theme: ThemeId, root: { dataset: DOMStringMap }): void {
+export function applyTheme(theme: ThemeId, root: ThemeRoot): void {
   root.dataset["theme"] = theme;
 }
 
@@ -31,7 +32,7 @@ export class ThemeStore {
   #theme: ThemeId;
   #error = "";
   readonly #listeners = new Set<() => void>();
-  constructor(readonly storage: ThemeStorage | undefined = browserStorage(), readonly root: { dataset: DOMStringMap } | undefined = globalThis.document?.documentElement) {
+  constructor(readonly storage: ThemeStorage | undefined = browserStorage(), readonly root: ThemeRoot | undefined = (globalThis as { document?: { documentElement: ThemeRoot } }).document?.documentElement) {
     this.#theme = storedTheme(storage);
     if (root !== undefined) applyTheme(this.#theme, root);
   }

@@ -9,6 +9,8 @@ import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport,
 import { readSmallJson, sameOrigin, securityHeaders, webBinding, webRequestOrigin, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
+
+const servedAssets = new Map(Object.entries(browserAssets).map(([path, asset]) => [path, { type: asset.type, body: asset.encoding === "base64" ? Buffer.from(asset.body, "base64") : asset.body }]));
 import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
 import { WebRecovery, type WebRecoveryOptions } from "./recovery.ts";
 import { RequestHistory, RequestHistoryError } from "./requests.ts";
@@ -74,9 +76,10 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       const secureCookie = requestOrigin.startsWith("https:");
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
       if (request.method === "GET" || request.method === "HEAD") {
-        const asset = browserAssets[url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname];
+        const asset = servedAssets.get(url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname);
         if (asset !== undefined) {
           const headers = securityHeaders(); headers.set("content-type", asset.type);
+          if (url.pathname.startsWith("/assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
           return new Response(request.method === "HEAD" ? null : asset.body, { headers });
         }
       }

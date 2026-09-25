@@ -103,7 +103,7 @@ export const NOT_APPLICABLE: Readonly<Record<string, string>> = {
   "@completion": "The shell completion helper process has no browser equivalent; controls offer live choices instead.",
 };
 
-const LOCAL_TIERS: Partial<Record<string, Tier>> = { bind: "settings", unbind: "settings", output: "advanced" };
+const LOCAL_TIERS: Partial<Record<string, Tier>> = { bind: "settings", unbind: "settings", output: "advanced", quit: "settings" };
 export const RENDERER_FAMILIES = ["field", "request_phase", "archive_phase", "usage_mode", "compaction_status"] as const;
 
 const choices: Record<string, readonly string[]> = {

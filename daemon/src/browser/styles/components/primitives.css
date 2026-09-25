@@ -1,0 +1,326 @@
+.icon-button {
+  width: var(--icon-button);
+  height: var(--icon-button);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--accent);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+.shell[data-layout="mobile"] .icon-button {
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: 10px;
+}
+
+.avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  object-fit: cover;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.avatar[data-tone="0"] { background: var(--avatar-0-bg); color: var(--avatar-0-fg); }
+.avatar[data-tone="1"] { background: var(--avatar-1-bg); color: var(--avatar-1-fg); }
+.avatar[data-tone="2"] { background: var(--avatar-2-bg); color: var(--avatar-2-fg); }
+.avatar[data-tone="3"] { background: var(--avatar-3-bg); color: var(--avatar-3-fg); }
+.avatar[data-tone="4"] { background: var(--avatar-4-bg); color: var(--avatar-4-fg); }
+.avatar[data-tone="5"] { background: var(--avatar-5-bg); color: var(--avatar-5-fg); }
+
+.avatar.user {
+  background: var(--avatar-user-bg);
+  color: var(--avatar-user-fg);
+}
+
+.avatar.selected {
+  box-shadow: 0 0 0 1.5px var(--bg-sidebar), 0 0 0 3px var(--accent);
+}
+
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: var(--z-menu);
+  min-width: 220px;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  background: var(--surface-3);
+  box-shadow: 0 10px 28px var(--shadow);
+}
+
+.menu-list.align-end {
+  right: 0;
+}
+
+.menu-list.align-start {
+  left: 0;
+}
+
+.menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-body);
+  font-size: var(--text-md);
+  text-align: left;
+}
+
+.menu-list button:hover:not(:disabled),
+.menu-list button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.menu-list button.danger {
+  color: var(--danger);
+}
+
+.menu-list button:disabled {
+  color: var(--text-3);
+}
+
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-detail {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line-2);
+}
+
+.dialog {
+  width: min(440px, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 24px 60px var(--shadow);
+}
+
+.dialog.wide {
+  width: min(720px, calc(100vw - 2 * var(--gutter)));
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px 20px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px -8px -4px 0;
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-hint,
+.muted {
+  color: var(--text-3);
+}
+
+.form-hint {
+  margin: -4px 0 0;
+  font-size: var(--text-sm);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-md);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.switch {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--line-3);
+}
+
+.switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-2);
+  transition: transform 140ms var(--ease);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.switch[aria-checked="true"] span {
+  transform: translateX(16px);
+  background: var(--accent-ink);
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.toasts {
+  position: fixed;
+  right: var(--gutter);
+  bottom: var(--gutter);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - 2 * var(--gutter));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 420px;
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text-body);
+  font-size: var(--text-md);
+  box-shadow: 0 10px 28px var(--shadow);
+  pointer-events: auto;
+  animation: toast-in 160ms var(--ease);
+}
+
+.toast > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.toast.error {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.toast.error > svg {
+  color: var(--danger);
+}
+
+.toast span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.shell[data-layout="mobile"] .toasts {
+  right: 50%;
+  bottom: 88px;
+  align-items: center;
+  transform: translateX(50%);
+}
