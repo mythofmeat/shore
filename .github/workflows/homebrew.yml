@@ -9,12 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    if: ${{ !contains(github.ref_name, '-') && !contains(github.ref_name, '+') }}
-    uses: ./.github/workflows/verify.yml
-
   notify:
-    needs: verify
+    if: ${{ !contains(github.ref_name, '-') && !contains(github.ref_name, '+') }}
     runs-on: ubuntu-latest
     env:
       PACKAGE: shore
