@@ -36,6 +36,17 @@ test("a multi-megabyte image below the old limit is still compressed", async () 
   expect(await prepareImageBlock(prepared)).toBe(prepared);
 });
 
+test("preparing the same image again gives the same result as its own block", async () => {
+  const image = await oversizedImage();
+  const first = await prepareImageBlock(image);
+  const second = await prepareImageBlock({ ...image, source: { ...image.source } });
+  if (first.type !== "image" || second.type !== "image") throw new Error("missing image");
+  expect(second).toEqual(first);
+  expect(second).not.toBe(first);
+  expect(second.source).not.toBe(first.source);
+  expect(first.source.data.length).toBeLessThanOrEqual(1_000_000);
+});
+
 function imageData(value: unknown): string[] {
   if (typeof value === "string") {
     if (value.startsWith("data:image/")) return [value.slice(value.indexOf(",") + 1)];
