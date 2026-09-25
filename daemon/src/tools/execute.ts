@@ -192,8 +192,10 @@ async function attachToolMedia(
         data: item.data,
       });
     }
+    const original: ImageRef = { path: saved ?? `tool-image:${toolUse.id}:${String(index)}`, caption: item.label, data: item.data };
     if (attached.blocks.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
       skipped.push(item.label);
+      attached.images.push(original);
       continue;
     }
     try {
@@ -206,20 +208,17 @@ async function attachToolMedia(
       const bytes = base64Bytes(block.source.data);
       if (bytes > maxBytes - inlinedBytes) {
         skipped.push(item.label);
+        attached.images.push(original);
         continue;
       }
       if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
       inlinedBytes += bytes;
-      attached.images.push({
-        path: saved ?? `tool-image:${toolUse.id}:${String(index)}`,
-        caption: item.label,
-        data: block.source.data,
-      });
+      attached.images.push({ ...original, data: block.source.data });
     } catch (error) {
       attached.failed = true;
-      attached.images.push({ path: saved ?? `tool-image:${toolUse.id}:${String(index)}`, caption: item.label, data: item.data });
+      attached.images.push(original);
       attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
     }
   }

@@ -3,4 +3,4 @@ import type { BackgroundModelTarget } from "./BackgroundModelTarget";
 import type { ModelInvalidated } from "./ModelInvalidated";
 import type { ModelPreferenceScope } from "./ModelPreferenceScope";
 
-export type ModelSettingChanged = { changed: boolean, scope: ModelPreferenceScope, model: string, provider: string, model_id: string, key: string, value: unknown, subagent?: string, applies_to?: string, background_task?: BackgroundModelTarget, also_affects?: Array<string>, invalidated?: ModelInvalidated, };
+export type ModelSettingChanged = { changed: boolean, scope: ModelPreferenceScope, model: string, provider: string, model_id: string, key: string, value: unknown, subagent?: string, applies_to?: string, background_task?: BackgroundModelTarget, also_affects?: Array<string>, invalidated?: ModelInvalidated, warning?: string, };

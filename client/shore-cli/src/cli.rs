@@ -3243,10 +3243,7 @@ mod tests {
                 &["clear", "--exclude", "--note", "bad branch"],
                 Some(("clear", json!({"exclude": true, "note": "bad branch"}))),
             ),
-            (
-                &["config"],
-                Some(("config", json!({"key": null, "value": null}))),
-            ),
+            (&["config"], Some(("config", json!({})))),
             (
                 &["config", "get", "chat.model"],
                 Some(("config", json!({"key": "chat.model"}))),

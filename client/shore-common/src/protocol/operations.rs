@@ -889,7 +889,7 @@ wire_types! {
         #[ts(type = "number")]
         pub dormant_after_heartbeat_turns: u64,
         #[ts(type = "number")]
-        pub effective_interval_secs: u64,
+        pub default_interval_secs: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub next_wake_at: Option<String>,
@@ -905,7 +905,9 @@ wire_types! {
         #[ts(type = "number")]
         pub seconds_since_user: Option<u64>,
         #[ts(type = "number")]
-        pub minimum_heartbeat_latency_secs: u64,
+        pub min_interval_secs: u64,
+        #[ts(type = "number")]
+        pub max_interval_secs: u64,
         #[ts(type = "number")]
         pub dormant_after_idle_time_secs: u64,
         pub recent_events: Vec<HeartbeatEvent>,
@@ -1010,6 +1012,7 @@ wire_types! {
 
     pub struct KeepaliveHaltReport {
         pub character: String,
+        pub model: String,
         pub reason: String,
         pub at: String,
     }
@@ -1032,8 +1035,7 @@ wire_types! {
 
     pub struct StatusReport {
         pub character: String,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub keepalive_halted: Option<KeepaliveHaltReport>,
+        pub keepalive_halts: Vec<KeepaliveHaltReport>,
         pub message_count: usize,
         pub turn_count: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1529,7 +1531,7 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub cache_keepalive: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub cache_keepalive_max: Option<String>,
+        pub cache_keepalive_pings: Option<f64>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub replay_prior_thinking: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
@@ -1652,6 +1654,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub invalidated: Option<ModelInvalidated>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub warning: Option<String>,
     }
 
     pub struct SavedModelSetting {

@@ -26,7 +26,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
   await expect(setting.getByLabel("Value", { exact: true })).not.toBeChecked();
-  setting = await choose("cache.keepalive_for");
+  setting = await choose("heartbeat.idle_timeout");
   await setting.getByLabel("Value", { exact: true }).fill("90m");
   await setting.getByRole("button", { name: "Save setting" }).click();
   await expect(setting.getByRole("status")).toContainText("Setting saved");
@@ -76,7 +76,7 @@ test("settings use live types, preserve collections and secrets, validate writes
   await openWorkspacePanel(page, "Settings");
   setting = await choose("notifications.command");
   await expect(setting.getByLabel("Value 2", { exact: true })).toHaveValue("a,b");
-  setting = await choose("cache.keepalive_for");
+  setting = await choose("heartbeat.idle_timeout");
   await expect(setting.getByLabel("Value", { exact: true })).toHaveValue("90m");
   expect(responses.join("\n")).not.toContain("settings-fixture-secret");
   const history = await page.request.post("/api/requests/list", { headers: { origin: new URL(page.url()).origin } });

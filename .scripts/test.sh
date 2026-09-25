@@ -103,6 +103,32 @@ hermetic() {
     return "$status"
 }
 
+# Fails when regenerating changed or added any of the given paths. A git hook exports GIT_DIR,
+# which makes git treat the current directory as the work tree root, so it is cleared here.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+unchanged() {
+    git diff --exit-code -- "$@" && test -z "$(git ls-files --others --exclude-standard -- "$@")"
+}
+
+browser_generated() {
+    bun run browser:generate &&
+        unchanged 'src/browser/*validators.generated.js' 'src/browser/*validators.generated.d.ts' \
+            src/browser/preferences.generated.ts
+}
+
+inventory_generated() {
+    bun run inventory:generate && unchanged ../docs/capabilities/daemon.generated.json
+}
+
+client_generated() {
+    for export in export_bindings export_operation_schemas export_web_schemas export_wire_schemas; do
+        cargo test -p shore-common --lib "$export" --locked || return
+    done
+    cargo test -p shore-cli export_capability_inventory --locked -- --ignored || return
+    unchanged ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json \
+        ../daemon/src/web/schemas.generated.json ../docs/capabilities/terminal.generated.json
+}
+
 for group in "$@"; do
     case "$group" in
     lint)
@@ -112,6 +138,10 @@ for group in "$@"; do
         run bun-lint-citations bun run lint:citations
         run bun-lint-test-env bun run lint:test-env
         run bun-typecheck bun run typecheck
+        run browser-check bun run browser:check
+        run browser-generated browser_generated
+        run inventory-check bun run inventory:check
+        run inventory-generated inventory_generated
         ;;
     daemon)
         cd "$root/daemon"
@@ -119,6 +149,8 @@ for group in "$@"; do
         run bun-test hermetic --own-tmp bun test
         run bun-mutate-stale bun run mutate --stale
         run bun-rerecord-check bun run rerecord:check
+        run browser-test bun run test:browser
+        run web-assets-generated unchanged src/web/assets.generated.ts
         ;;
     client)
         cd "$root/client"
@@ -126,6 +158,7 @@ for group in "$@"; do
         run cargo-end-to-end hermetic cargo test -p shore-cli --test reliability --locked
         run cargo-fmt cargo fmt --all --check
         run cargo-clippy cargo clippy --workspace --all-targets --locked
+        run client-generated client_generated
         ;;
     esac
 done

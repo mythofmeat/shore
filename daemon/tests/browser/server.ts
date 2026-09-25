@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { startDaemon } from "../../src/daemon/run.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
+import { restoreTestEnv, setTestEnv } from "../support/env.ts";
 import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
 import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
@@ -11,8 +12,7 @@ import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
 const configPath = join(root, "config", "shore.toml");
-const oldKey = process.env["SHORE_BROWSER_DISCOVERY_KEY"];
-process.env["SHORE_BROWSER_DISCOVERY_KEY"] = "private-discovery-fixture-key";
+setTestEnv("SHORE_BROWSER_DISCOVERY_KEY", "private-discovery-fixture-key");
 const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   if (request.headers.get("authorization") !== "Bearer private-discovery-fixture-key") return new Response("Wrong fixture key", { status: 401 });
   if (new URL(request.url).pathname === "/v1/models") return Response.json({ data: [
@@ -132,6 +132,6 @@ try {
   await daemon.done;
 } finally {
   await discovery.stop(true);
-  if (oldKey === undefined) delete process.env["SHORE_BROWSER_DISCOVERY_KEY"]; else process.env["SHORE_BROWSER_DISCOVERY_KEY"] = oldKey;
+  restoreTestEnv();
   await rm(root, { recursive: true, force: true });
 }
