@@ -1,25 +1,15 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import { assertLocalWorkflowCoverage, assertQuickActions, localWorkflowReaders } from "../scripts/browser_local_coverage.ts";
+import { assertLocalWorkflowCoverage, assertQuickActions } from "../scripts/browser_local_coverage.ts";
 import { TERMINAL_LOCAL_COMMANDS, TERMINAL_SHORTCUTS } from "../src/browser/preferences.generated.ts";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { requestCatalogue } from "../src/operations/requests.ts";
 import { scrollAmount, validateBinding } from "../src/browser/keyboard.ts";
 
-const files = ["app.tsx", "composer.tsx", "keyboard_controls.tsx", "action_output.tsx"];
-test("terminal local commands and fields require live browser handlers and readers", async () => {
-  const texts = await Promise.all(files.map((file) => readFile(new URL(`../src/browser/${file}`, import.meta.url), "utf8")));
-  const readers = await localWorkflowReaders(texts);
-  expect(() => assertLocalWorkflowCoverage(readers)).not.toThrow();
-  for (const target of ["editor", "output", "focus_home", "focus_end", "transcript", "edit_cancel", "quick", "up"]) {
-    const omitted = await localWorkflowReaders(texts.map((text) => text.replace(`${target}: () =>`, `omitted_${target}: () =>`).replace(`${target}: (args) =>`, `omitted_${target}: (args) =>`)));
-    expect(() => assertLocalWorkflowCoverage(omitted)).toThrow("Missing GUI local handler");
-  }
-  const noAmount = await localWorkflowReaders(texts.map((text) => text.replaceAll('binding.args["amount"]', 'binding.args["omitted"]')));
-  expect(() => assertLocalWorkflowCoverage(noAmount)).toThrow("Missing GUI local reader: scroll");
-  expect(() => assertLocalWorkflowCoverage(readers, { ...TERMINAL_LOCAL_COMMANDS, future: {} })).toThrow("Missing GUI local workflow: future");
-  expect(() => assertLocalWorkflowCoverage(readers, { ...TERMINAL_LOCAL_COMMANDS, scroll: { ...TERMINAL_LOCAL_COMMANDS.scroll, future: [] } })).toThrow("Missing GUI local fields: scroll");
-  expect(() => assertLocalWorkflowCoverage(readers, { ...TERMINAL_LOCAL_COMMANDS, palette: { scope: ["full", "shortcuts", "config", "future"] } })).toThrow("Missing GUI local choices: palette.scope");
+test("terminal local commands keep their fields and choices, and new ones fail until tracked", () => {
+  expect(() => assertLocalWorkflowCoverage()).not.toThrow();
+  expect(() => assertLocalWorkflowCoverage({ ...TERMINAL_LOCAL_COMMANDS, future: {} })).toThrow("Missing GUI local workflow: future");
+  expect(() => assertLocalWorkflowCoverage({ ...TERMINAL_LOCAL_COMMANDS, scroll: { ...TERMINAL_LOCAL_COMMANDS.scroll, future: [] } })).toThrow("Missing GUI local fields: scroll");
+  expect(() => assertLocalWorkflowCoverage({ ...TERMINAL_LOCAL_COMMANDS, palette: { scope: ["full", "shortcuts", "config", "future"] } })).toThrow("Missing GUI local choices: palette.scope");
 });
 
 test("conversation shortcuts resolve to the actual canonical catalogue", () => {

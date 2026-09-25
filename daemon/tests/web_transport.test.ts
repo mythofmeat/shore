@@ -88,7 +88,7 @@ describe("browser connection state", () => {
     expect(document.headers.get("content-security-policy")).toContain("script-src 'self'");
     const html = await document.text();
     const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
-    expect(assets).toHaveLength(2);
+    expect(assets).toHaveLength(3);
     for (const asset of assets) {
       const response = await fetch(`${f.web.origin}${asset ?? ""}`);
       expect(response.status).toBe(200);

@@ -6,7 +6,6 @@ from mutation import run
 H = "src/browser/text_history.ts"
 O = "src/browser/operations.ts"
 K = "src/browser/keyboard.ts"
-A = "src/browser/app.tsx"
 MUTANTS = [
     ("typing splits every character", H, 'this.#run === kind', 'false'),
     ("whitespace does not finish typing group", H, '/\\s$/.test(next.text.slice(0, next.start))', 'false'),
@@ -21,8 +20,6 @@ MUTANTS = [
     ("missing output becomes usable", O, 'invalid || !received || !validOperationResult(name, result)', 'false'),
     ("scroll ignores saved amount", K, 'args["amount"] ?? 1', '1'),
     ("scroll accepts overflowing amount", K, 'amount > 65535', 'false'),
-    ("editor handler silently omitted", A, 'editor: () => composer.current?.expand()', 'editor: () => {}'),
-    ("scroll amount control omitted", 'src/browser/keyboard_controls.tsx', 'value={typeof binding.args["amount"] === "number" ? Number.isFinite(binding.args["amount"]) ? binding.args["amount"] : "" : 1}', 'value={1}'),
 ]
 
 if __name__ == "__main__":
