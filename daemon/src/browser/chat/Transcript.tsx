@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { LiveTurn, WorkspaceSnapshot } from "../workspace.ts";
 import { mediaSource } from "../media.ts";
 import { Avatar } from "../ui/avatar.tsx";
@@ -6,6 +6,7 @@ import { Dialog, Spinner } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
 import { perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
+import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, ReasoningChip, type OpenImage } from "./Message.tsx";
 import { compactionPhase, transcriptItems, visibleStreams } from "./transcript.ts";
 
@@ -14,6 +15,22 @@ function Lightbox({ image, close }: { image: { source: string; caption: string }
     <img className="lightbox-image" src={image.source} alt={image.caption} />
     <div className="dialog-footer"><a className="button" href={image.source} download={image.caption}>Download</a></div>
   </Dialog>;
+}
+
+function SubagentChip({ stream, openImage }: { stream: LiveTurn; openImage: OpenImage }) {
+  const [open, setOpen] = useState(false);
+  const display = useDisplay();
+  const name = stream.subagent ?? "Subagent";
+  return <>
+    <button type="button" className="chip" onClick={() => setOpen(true)} aria-label={`${name}: ${stream.final ? "finished" : "working"}. Show its output`}>
+      <Icon name="branch" size={14} /><span>{name}</span>{stream.final ? <Icon name="check" size={14} /> : <Spinner label={`${name} working`} />}
+    </button>
+    {open ? <Dialog title={`Subagent ${name}`} close={() => setOpen(false)} wide>
+      <p className="form-text">{stream.final ? "Finished." : "Working…"}</p>
+      <MessageBody message={{ content: "", images: [], content_blocks: stream.blocks.filter((block) => block.type !== "text") }} display={display} openImage={openImage} live={!stream.final} />
+      {stream.text === "" ? null : <Markdown text={stream.text} />}
+    </Dialog> : null}
+  </>;
 }
 
 function StreamingMessage({ stream, character, state, openImage, mobile }: { stream: LiveTurn; character: string; state: WorkspaceSnapshot; openImage: OpenImage; mobile: boolean }) {
@@ -35,7 +52,7 @@ function StreamingMessage({ stream, character, state, openImage, mobile }: { str
         {stream.text === "" ? null : <Markdown text={stream.text} className="prose streaming-text" />}
         {empty && stream.reasoning === "" ? <div className="typing" aria-label="Waiting for the response"><span /><span /><span /></div> : null}
         {images.length === 0 || display.images === "off" ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}
-        {subagents.map((item) => <div key={item.key} className="chip static"><Icon name="branch" size={14} /><span>{item.subagent}</span>{item.final ? <Icon name="check" size={14} /> : <Spinner label={`${item.subagent ?? "Subagent"} working`} />}</div>)}
+        {subagents.map((item) => <SubagentChip key={item.key} stream={item} openImage={openImage} />)}
         {stream.previewLimited === true ? <p className="notice-inline">Showing the most recent part of a long response.</p> : null}
       </div>
     </div>
@@ -62,6 +79,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   const anchor = useRef<{ height: number; top: number; first: string | undefined } | null>(null);
   const [loading, setLoading] = useState(false);
   const items = useMemo(() => transcriptItems(state.messages, state.activeStart), [state.messages, state.activeStart]);
+  const lastUser = state.messages.findLast((message) => message.role === "user")?.msg_id;
   const streams = visibleStreams(state.streams, state.messages, active);
   const info = state.characters.find((item) => item.name === character);
   const compacting = display.compaction === "off" ? null : compactionPhase(state.activity);
@@ -71,8 +89,14 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
     if (node === null || loading || !state.hasEarlier || state.status !== "ready") return;
     anchor.current = { height: node.scrollHeight, top: node.scrollTop, first: state.messages[0]?.msg_id };
     setLoading(true);
-    perform(async () => { try { await workspace.loadEarlier(); } finally { setLoading(false); } });
+    perform(async () => { try { await workspace.loadEarlier(); } finally { setLoading(false); setTimeout(() => { anchor.current = null; }, 0); } });
   };
+  const probed = useRef(false);
+  useEffect(() => {
+    if (probed.current || state.status !== "ready" || !state.hasEarlier || state.messages.length === 0) return;
+    probed.current = true;
+    loadEarlier();
+  });
   useLayoutEffect(() => {
     const node = scroller.current;
     if (node === null) return;
@@ -107,7 +131,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
           switch (item.kind) {
             case "day": return <div key={item.key} className="divider" role="separator">{item.label}</div>;
             case "context": return <div key={item.key} className="divider context" role="separator">Earlier messages aren’t in the active context</div>;
-            case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={item.last && streams.length === 0}
+            case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={item.last && streams.length === 0} lastUser={item.message.msg_id === lastUser}
               metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} />;
           }
         })}
@@ -115,7 +139,8 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
         {compacting === null ? null : <div className="divider context" role="status"><span className="spinner" aria-hidden="true" />{compacting}</div>}
         {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
           <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Check the conversation before trying again.</span>
-          <button type="button" className="button" onClick={() => workspace.acknowledge(item.rid)}>Dismiss</button>
+          <button type="button" className="button" onClick={() => navigate({ view: "settings", page: "diagnostics" })}>Review</button>
+          <button type="button" className="button ghost" onClick={() => workspace.acknowledge(item.rid)}>Dismiss</button>
         </div>)}
       </div>
     </div>

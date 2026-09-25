@@ -47,6 +47,12 @@ export function useConversationActive(): boolean {
   return useActiveRequests().size > 0;
 }
 
+export const STREAM_KEY = "shore.stream";
+
+export function streamReplies(): boolean {
+  try { return localStorage.getItem(STREAM_KEY) !== "false"; } catch { return true; }
+}
+
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

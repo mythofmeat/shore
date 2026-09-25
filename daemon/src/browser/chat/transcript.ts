@@ -1,3 +1,4 @@
+import type { CompactionReport } from "../../protocol/CompactionReport.ts";
 import type { ContentBlock } from "../../protocol/ContentBlock.ts";
 import type { Message } from "../../protocol/Message.ts";
 import type { ToolResultContent } from "../../protocol/ToolResultContent.ts";
@@ -132,4 +133,14 @@ export function compactionPhase(activity: readonly { id: number; type: string; d
   if (phase === null || phase.id < finished) return null;
   const round = /round (\d+)/.exec(phase.text)?.[1];
   return round === undefined || round === "1" ? "Compacting context…" : `Compacting context (round ${round})…`;
+}
+
+export function compactionSummary(report: CompactionReport): string {
+  switch (report.status) {
+    case "compacted": return `Summarized ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
+    case "rotated": return `Archived ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
+    case "dry_run": return `Compaction would summarize ${String(report.compacted_turns)} turns and write ${String(report.would_write_files)} memory files.`;
+    case "truncated": return `Compaction stopped early after summarizing ${String(report.compacted_turns)} turns; ${String(report.truncated_turns)} turns were left as they were.`;
+    case "paused": return `Compaction paused: ${report.detail ?? report.reason}.${report.resume_at === null ? "" : ` It resumes at ${new Date(report.resume_at).toLocaleTimeString()}.`}`;
+  }
 }

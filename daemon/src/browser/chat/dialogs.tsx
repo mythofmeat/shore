@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import type { WorkspaceSnapshot } from "../workspace.ts";
-import type { CompactionReport } from "../../protocol/CompactionReport.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, workspace } from "../app/state.ts";
+import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
+import { compactionSummary } from "./transcript.ts";
 
 export type ConversationDialog = "rename" | "fork" | "compact" | "clear" | "guidance" | "system" | "archive";
 
@@ -30,15 +30,6 @@ function Form({ title, close, submit, busy, error, action, danger = false, disab
   </Dialog>;
 }
 
-export function compactionSummary(report: CompactionReport): string {
-  switch (report.status) {
-    case "compacted": return `Summarized ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
-    case "rotated": return `Archived ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
-    case "dry_run": return `Compaction would summarize ${String(report.compacted_turns)} turns and write ${String(report.would_write_files)} memory files.`;
-    case "truncated": return `Compaction stopped early after summarizing ${String(report.compacted_turns)} turns; ${String(report.truncated_turns)} turns were left as they were.`;
-    case "paused": return `Compaction paused: ${report.detail ?? report.reason}.${report.resume_at === null ? "" : ` It resumes at ${new Date(report.resume_at).toLocaleTimeString()}.`}`;
-  }
-}
 
 async function resync(state: WorkspaceSnapshot): Promise<void> {
   await workspace.refreshNavigation();
@@ -84,7 +75,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>Note for the segment <span className="muted">(optional)</span></span><input className="input" value={text} onChange={(event) => setText(event.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Exclude the cleared messages from memory</label>
     </Form>;
-    case "guidance": return <Form title="Regenerate with guidance" close={close} busy={busy} error={error} action="Regenerate" disabled={text.trim() === ""} submit={() => { close(); void conversation.regenerate(text).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }}>
+    case "guidance": return <Form title="Regenerate with guidance" close={close} busy={busy} error={error} action="Regenerate" disabled={text.trim() === ""} submit={() => { close(); void conversation.regenerate(text, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }}>
       <label className="field"><span>Guidance for the new response</span><textarea className="input textarea" autoFocus rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>
       <p className="form-hint">Used only for this regeneration; it isn’t saved to the conversation.</p>
     </Form>;

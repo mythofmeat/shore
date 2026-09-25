@@ -4,12 +4,29 @@ import type { WorkspaceSnapshot } from "../workspace.ts";
 import { browserDraft, type DraftContent } from "../drafts.ts";
 import { checkAttachments, imageUpload } from "../request_forms.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
-import { IconButton } from "../ui/controls.tsx";
+import { Dialog, IconButton, Menu } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, useConversationActive, workspace } from "../app/state.ts";
+import { conversation, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
+import { swipe } from "./actions.ts";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+export function pathImages(draft: Pick<DraftContent, "options">): string[] {
+  const images = draft.options?.["images"];
+  return Array.isArray(images) ? images.filter((item): item is string => typeof item === "string") : [];
+}
+
+function PathDialog({ close, add }: { close: () => void; add: (path: string) => void }) {
+  const [path, setPath] = useState("");
+  return <Dialog title="Attach an image from the daemon’s machine" close={close}>
+    <form className="form" onSubmit={(event) => { event.preventDefault(); add(path.trim()); close(); }}>
+      <label className="field"><span>Path</span><input className="input mono" autoFocus placeholder="/home/you/pictures/pier.jpg" value={path} onChange={(event) => setPath(event.target.value)} /></label>
+      <p className="form-hint">The daemon reads the file itself, so it must exist on the machine running Shore.</p>
+      <div className="form-actions"><button type="button" className="button" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={path.trim() === ""}>Attach</button></div>
+    </form>
+  </Dialog>;
+}
 
 async function readImage(file: File): Promise<ImageUpload> {
   if (!IMAGE_TYPES.includes(file.type)) throw new Error("Choose PNG, JPEG, WebP or GIF images");
@@ -32,6 +49,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const [loaded, setLoaded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
+  const [pathDialog, setPathDialog] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const active = useConversationActive();
@@ -73,7 +91,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const send = async () => {
     const submitted = current.current;
     if (!loaded || submitted.pending || !ready || streaming) return;
-    if (submitted.text.trim() === "" && submitted.images.length === 0) return;
+    if (submitted.text.trim() === "" && submitted.images.length === 0 && pathImages(submitted).length === 0) return;
     const connection = workspace.connection;
     const generation = connection.generation;
     const retain = async () => { const value = { ...(store.current ?? current.current), pending: false }; if (mounted.current) await change(value); else await store.save(value).catch(() => {}); };
@@ -87,11 +105,11 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
         toasts.show("The conversation changed before sending. Your draft was kept.", "error");
         return;
       }
-      const values = submitted.options ?? { stream: true };
-      const result = await conversation.submit("message", { stream: true, ...values, text: submitted.text, image_data: submitted.images });
+      const paths = pathImages(submitted);
+      const result = await conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images, ...(paths.length === 0 ? {} : { images: paths }) });
       if (result.outcome === "completed") {
         const value = store.current ?? current.current;
-        await change({ text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false });
+        await change({ text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false, ...(pathImages(value).join("\n") === paths.join("\n") ? {} : { options: value.options ?? {} }) });
       } else {
         await retain();
         if (result.outcome !== "cancelled") toasts.show(result.error?.message ?? `The message wasn’t sent (${result.outcome}). Your draft was kept.`, "error");
@@ -106,9 +124,12 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     event.preventDefault(); setDragging(false);
     void attach([...event.dataTransfer.files]);
   };
-  const empty = draft.text.trim() === "" && draft.images.length === 0;
+  const paths = pathImages(draft);
+  const empty = draft.text.trim() === "" && draft.images.length === 0 && paths.length === 0;
+  const setPaths = (next: string[]) => void change({ ...current.current, options: { ...current.current.options, images: next } });
   return <div className="composer-wrap">
     <div className={`composer ${dragging ? "dragging" : ""}`} onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDragging(true); } }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+      {paths.length === 0 ? null : <div className="path-attachments">{paths.map((path, index) => <span key={index} className="chip static"><Icon name="image" size={14} /><span className="mono">{path}</span><button type="button" className="chip-remove" aria-label={`Remove ${path}`} onClick={() => setPaths(paths.filter((_, item) => item !== index))}><Icon name="close" size={12} /></button></span>)}</div>}
       {draft.images.length === 0 ? null : <div className="attachments">
         {draft.images.map((image, index) => <div key={index} className="attachment">
           <img src={`data:${image.mime_type ?? "image/png"};base64,${image.data}`} alt={image.filename} />
@@ -118,17 +139,34 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
       <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded || draft.pending}
         onChange={(event) => void change({ ...current.current, text: event.target.value })} onPaste={onPaste}
         onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+          if (event.nativeEvent.isComposing) return;
+          const blank = current.current.text === "" && current.current.images.length === 0;
+          const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            if (streaming) conversation.cancel();
+            else document.querySelector<HTMLElement>(".transcript")?.focus();
+            return;
+          }
+          if (blank && plain && event.key === "ArrowUp") { event.preventDefault(); dispatchEvent(new CustomEvent("shore:edit-last")); return; }
+          if (blank && plain && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !streaming) {
+            const last = state.messages.findLast((message) => message.role === "assistant");
+            if (last !== undefined) { event.preventDefault(); void swipe(last, event.key === "ArrowLeft" ? "prev" : "next", true).catch((error: unknown) => toasts.show(errorText(error), "error")); }
+            return;
+          }
+          if (event.key !== "Enter") return;
           const submit = event.ctrlKey || event.metaKey || (!mobile && !event.shiftKey && !event.altKey);
           if (submit) { event.preventDefault(); void send(); }
         }} />
       <div className="composer-bar">
         <IconButton icon="attach" label="Attach image" disabled={!loaded || draft.pending} onClick={() => files.current?.click()} />
+        <Menu label="More attachment options" icon="more" align="start" items={[{ label: "Attach from the daemon’s machine…", icon: "image", onSelect: () => setPathDialog(true), disabled: !loaded || draft.pending }]} />
         <input ref={files} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(event) => { const list = [...(event.target.files ?? [])]; event.target.value = ""; void attach(list); }} />
         <span className="composer-status">{unsaved ? "Draft not saved in this browser" : ""}</span>
         {streaming ? <button type="button" className="stop" onClick={() => conversation.cancel()}><Icon name="stop" size={14} />Stop</button>
           : <button type="button" className="send" aria-label="Send" title="Send" disabled={empty || !ready || draft.pending} onClick={() => void send()}><Icon name="send" /></button>}
       </div>
     </div>
+    {pathDialog ? <PathDialog close={() => setPathDialog(false)} add={(path) => setPaths([...paths, path])} /> : null}
   </div>;
 }
