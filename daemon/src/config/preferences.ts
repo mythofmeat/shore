@@ -12,9 +12,7 @@ import {
   defaultSdk,
   keepaliveToString,
   parseCacheKeepalive,
-  parseCacheKeepaliveMax,
   resolvedModelFromParts,
-  applyKeepalivePolicy,
   sdkFromWire,
   type CacheKeepaliveSetting,
   type ModelCatalog,
@@ -23,7 +21,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { invalidType } from "./models.ts";
-import { ConfigDuration } from "./duration.ts";
+import { parseKeepalivePings } from "./keepalive.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
@@ -34,7 +32,6 @@ import {
   validateSetting,
 } from "../llm/settings.ts";
 import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
-import { keepalivePolicyError } from "../llm/cache_capability.ts";
 
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
@@ -71,7 +68,7 @@ export interface SamplerSettings {
   maxOutputTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
-  cacheKeepaliveMax?: ConfigDuration;
+  cacheKeepalivePings?: number;
   sdk?: string;
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
@@ -364,11 +361,6 @@ function sanitizeForModel(
     }
     delete cleaned[field];
   }
-  const cadence = cleaned.cacheKeepalive;
-  if (cadence?.kind === "every" && keepalivePolicyError(
-    sdkFromWire(cleaned.sdk ?? model.sdk) ?? model.sdk,
-    model.modelId, cleaned.cacheTtl, cadence.interval.asMillis(),
-  ) !== undefined) cleaned.cacheKeepalive = { kind: "off" };
   return cleaned;
 }
 
@@ -700,6 +692,7 @@ export function applySamplerOverlay(
     ["maxOutputTokens", "maxOutputTokens"],
     ["cacheTtl", "cacheTtl"],
     ["cacheKeepalive", "cacheKeepalive"],
+    ["cacheKeepalivePings", "cacheKeepalivePings"],
     ["replayPriorThinking", "replayPriorThinking"],
     ["maxToolIterations", "maxToolIterations"],
     ["openrouterProvider", "openrouterProvider"],
@@ -727,7 +720,6 @@ export function applySamplerOverlay(
 
   const transportError = nanogptTransportError(patched.providerKey, patched.sdk);
   if (transportError !== undefined) throw new Error(transportError);
-  applyKeepalivePolicy(patched);
   return patched;
 }
 
@@ -1030,12 +1022,12 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
     out.cacheKeepalive = parsed.ok;
   }
 
-  const keepaliveMax = table["cache_keepalive_max"];
-  if (keepaliveMax !== undefined) {
-    if (typeof keepaliveMax !== "string") return { err: invalidType(keepaliveMax, "a string") };
-    const parsed = parseCacheKeepaliveMax(keepaliveMax);
+  const pings = table["cache_keepalive_pings"];
+  if (pings !== undefined) {
+    if (typeof pings !== "number") return { err: invalidType(pings, "u32") };
+    const parsed = parseKeepalivePings(pings);
     if ("err" in parsed) return parsed;
-    out.cacheKeepaliveMax = parsed.ok;
+    out.cacheKeepalivePings = parsed.ok;
   }
 
   const replay = table["replay_prior_thinking"];
@@ -1186,8 +1178,6 @@ function samplerLines(sampler: SamplerSettings): string[] {
     if (value === undefined) continue;
     if (field === "cacheKeepalive") {
       out.push(`${key} = ${tomlString(keepaliveToString(value as CacheKeepaliveSetting))}`);
-    } else if (field === "cacheKeepaliveMax") {
-      out.push(`${key} = ${tomlString((value as ConfigDuration).toString())}`);
     } else if (field === "temperature" || field === "topP") {
       out.push(`${key} = ${tomlFloat(value as number)}`);
     } else if (typeof value === "string") {

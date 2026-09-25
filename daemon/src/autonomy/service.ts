@@ -36,7 +36,8 @@ export interface AutonomyStatus {
   last_user_at?: number;
   default_interval_ms: number;
   max_idle_ticks: number;
-  min_wake_interval_ms: number;
+  min_interval_ms: number;
+  max_interval_ms: number;
   max_silent_ms: number;
   recent_events: HeartbeatEvent[];
 }
@@ -58,18 +59,24 @@ function toPersisted(s: KeepaliveSnapshot | undefined): PersistedKeepalive | und
     ? undefined
     : {
         model: s.model,
+        ...(s.identity === undefined ? {} : { identity: s.identity }),
         intervalMs: s.interval,
         lastWarmAt: s.last_warm_at,
         lastActiveAt: s.last_active_at,
+        ...(s.pings_sent === undefined ? {} : { pingsSent: s.pings_sent }),
+        ...(s.max_pings === undefined ? {} : { maxPings: s.max_pings }),
       };
 }
 
 function toSnapshot(p: PersistedKeepalive): KeepaliveSnapshot {
   return {
     model: p.model,
+    ...(p.identity === undefined ? {} : { identity: p.identity }),
     interval: p.intervalMs,
     last_warm_at: p.lastWarmAt,
     last_active_at: p.lastActiveAt,
+    ...(p.pingsSent === undefined ? {} : { pings_sent: p.pingsSent }),
+    ...(p.maxPings === undefined ? {} : { max_pings: p.maxPings }),
   };
 }
 
@@ -92,14 +99,14 @@ export class AutonomyService {
     });
   }
 
-  keepaliveHalt(): KeepaliveHalt | undefined {
-    return this.#keepalive?.halted;
+  keepaliveHalts(character: string): KeepaliveHalt[] {
+    return this.#keepalive?.haltsFor(character) ?? [];
   }
 
   async register(request: RegisterCharacter): Promise<void> {
     const { character, data_dir: dataDir } = request;
     const existing = this.#entries.get(character);
-    if (existing !== undefined) await existing.runner.shutdown();
+    if (existing !== undefined) await this.#shutdownRunner(character, existing);
 
     const statePath = `${dataDir}/${STATE_FILENAME}`;
     const restored = await loadState(statePath);
@@ -125,10 +132,19 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setCompactionConfig(compaction);
   }
 
+  setHeartbeatConfig(character: string, clock: HeartbeatClockConfig): void {
+    this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
+  }
+
   async unregister(character: string): Promise<void> {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;
     this.#entries.delete(character);
+    await this.#shutdownRunner(character, entry);
+  }
+
+  async #shutdownRunner(character: string, entry: Entry): Promise<void> {
+    entry.runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(character)));
     await entry.runner.shutdown();
   }
 
@@ -208,7 +224,8 @@ export class AutonomyService {
       covered_turn_count: snapshot.coveredTurnCount,
       default_interval_ms: bounds.defaultIntervalMs,
       max_idle_ticks: bounds.maxIdleTicks,
-      min_wake_interval_ms: bounds.minWakeIntervalMs,
+      min_interval_ms: bounds.minIntervalMs,
+      max_interval_ms: bounds.maxIntervalMs,
       max_silent_ms: bounds.maxSilentMs,
       recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
     };
@@ -256,7 +273,7 @@ export class AutonomyService {
   }
 
   async shutdown(): Promise<void> {
-    await Promise.all([...this.#entries.values()].map((entry) => entry.runner.shutdown()));
+    await Promise.all([...this.#entries].map(([character, entry]) => this.#shutdownRunner(character, entry)));
   }
 }
 

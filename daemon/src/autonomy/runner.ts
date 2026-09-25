@@ -1,5 +1,5 @@
 import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
-import { HeartbeatClock, type HeartbeatAction } from "./heartbeat.ts";
+import { HeartbeatClock, type HeartbeatAction, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
 import {
   tickDecision,
@@ -14,8 +14,6 @@ import {
   type PersistedKeepalive,
 } from "./state_file.ts";
 
-const MIN_WAKE_HOURS = 1;
-const MAX_WAKE_HOURS = 48;
 
 export interface CompactionRunnerConfig {
   readonly compactionEnabled: boolean;
@@ -102,8 +100,11 @@ export class CharacterAutonomy {
         ticks_without_user: restored.ticksWithoutUser,
         next_wake_at: restored.nextWakeAt,
         last_user_at: restored.lastUserAt,
+        ...(restored.forcedDormant === true ? { forced_dormant: true } : {}),
+        ...(restored.defaultWake === true ? { default_wake: true } : {}),
+        ...(restored.wakeAnchorAt === undefined ? {} : { wake_anchor_at: restored.wakeAnchorAt }),
       });
-      this.#clock.deferWakeToMinimumLatency(opts.now());
+      this.#clock.boundWake(opts.now());
     }
     this.#state = {
       dirty: false,
@@ -137,7 +138,7 @@ export class CharacterAutonomy {
   }
 
   deferHeartbeat(now: number): void {
-    this.#clock.deferWakeToMinimumLatency(now, true);
+    this.#clock.boundWake(now, true);
     this.#state.lastActivityAt = now;
     this.#state.dirty = true;
   }
@@ -177,6 +178,12 @@ export class CharacterAutonomy {
     };
   }
 
+  setHeartbeatConfig(clock: HeartbeatClockConfig, now: number): void {
+    const before = this.#clock.nextWakeAt;
+    this.#clock.setConfig(clock, now);
+    if (this.#clock.nextWakeAt !== before) this.#state.dirty = true;
+  }
+
   shouldCompactNow(turnCount: number, contextTokens: number): boolean {
     const c = this.#config;
     if (!c.compactionEnabled || turnCount < c.minTurns) return false;
@@ -191,8 +198,7 @@ export class CharacterAutonomy {
   }
 
   scheduleNextWake(hoursFromNow: number, reason: string, now: number): number {
-    const hours = Math.min(Math.max(hoursFromNow, MIN_WAKE_HOURS), MAX_WAKE_HOURS);
-    this.#clock.schedule(now + hours * 3_600_000, now);
+    const hours = this.#clock.schedule(now + hoursFromNow * 3_600_000, now) / 3_600_000;
     this.note("tool_use", `set_next_wake: ${hours.toFixed(1)}h - ${reason}`, now);
     this.#state.dirty = true;
     return hours;
@@ -247,9 +253,12 @@ export class CharacterAutonomy {
       (current !== undefined &&
         schedule !== undefined &&
         current.model === schedule.model &&
+        current.identity === schedule.identity &&
         current.intervalMs === schedule.intervalMs &&
         current.lastWarmAt === schedule.lastWarmAt &&
-        current.lastActiveAt === schedule.lastActiveAt);
+        current.lastActiveAt === schedule.lastActiveAt &&
+        current.pingsSent === schedule.pingsSent &&
+        current.maxPings === schedule.maxPings);
     if (same) return;
     this.#state.keepalive = schedule;
     this.#state.dirty = true;
@@ -376,6 +385,9 @@ export class CharacterAutonomy {
       ticksWithoutUser: clock.ticks_without_user,
       nextWakeAt: clock.next_wake_at,
       lastUserAt: clock.last_user_at,
+      ...(clock.forced_dormant === true ? { forcedDormant: true } : {}),
+      ...(clock.default_wake === true ? { defaultWake: true } : {}),
+      ...(clock.wake_anchor_at === undefined ? {} : { wakeAnchorAt: clock.wake_anchor_at }),
       coveredTurnCount: this.#state.coveredTurnCount,
       keepalive: this.#state.keepalive,
     };

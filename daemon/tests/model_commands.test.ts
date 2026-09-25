@@ -189,7 +189,7 @@ function samplerWire(s: SamplerSettings): Record<string, unknown> {
         : keepalive.kind === "off"
           ? "off"
           : keepalive.interval.toString(),
-    cache_keepalive_max: s.cacheKeepaliveMax?.toString() ?? null,
+    cache_keepalive_pings: s.cacheKeepalivePings ?? null,
     sdk: s.sdk ?? null,
     replay_prior_thinking: s.replayPriorThinking ?? null,
     max_tool_iterations: s.maxToolIterations ?? null,

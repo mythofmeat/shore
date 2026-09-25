@@ -244,7 +244,7 @@ describe("session_activate", () => {
     if (built === undefined) throw new Error("the fixture conversation did not rebuild");
     h.cache.set(CHARACTER, built.request, {
       intervalMs: built.keepalive_interval_ms,
-      maxSecs: built.keepalive_max_secs,
+      pings: built.keepalive_pings,
     });
 
     const activated = await h.activate();

@@ -271,7 +271,7 @@ describe("preparing a heartbeat body", () => {
 
   test("says the configured fallback interval, not the default one", async () => {
     const config = await baseConfig();
-    config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval =
+    config.app.behavior.autonomy.heartbeat.default_interval =
       ConfigDuration.fromSecs(10_800);
     await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
     await writeFile(
@@ -286,6 +286,24 @@ describe("preparing a heartbeat body", () => {
 
     const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("next wake in 3 hours");
+  });
+
+  test("says the wait the clock will actually use when the default is below the floor", async () => {
+    const config = await baseConfig();
+    config.app.behavior.autonomy.heartbeat.default_interval = ConfigDuration.fromSecs(600);
+    await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
+    await writeFile(
+      join(config.dirs.config, "prompts", "heartbeat.md"),
+      "[{{now}}]\n\nnext wake in {{default_interval}}\n",
+    );
+    await withConversation(config);
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
+    expect(text).toContain("next wake in 1 hour");
   });
 
   test("uses a heartbeat.md override from the config prompts dir", async () => {
@@ -358,7 +376,7 @@ describe("preparing a heartbeat body", () => {
     expect(now?.messages.at(-1)?.role).not.toBe("system");
   });
 
-  test("the cold rebuild arms with the model's own ceiling, not a bare cadence", async () => {
+  test("the cold rebuild arms with the model's own ping count, not a bare cadence", async () => {
     const config = await baseConfig();
     await withConversation(config);
     const sonnet = config.models.chat.get("chat.anthropic.sonnet") as unknown as Record<
@@ -366,7 +384,7 @@ describe("preparing a heartbeat body", () => {
       unknown
     >;
     sonnet["cacheKeepalive"] = { kind: "every", interval: ConfigDuration.fromSecs(600) };
-    sonnet["cacheKeepaliveMax"] = ConfigDuration.fromSecs(5400);
+    sonnet["cacheKeepalivePings"] = 9;
     sonnet["cacheTtl"] = "1h";
 
     const armed: KeepalivePrefix[] = [];
@@ -379,7 +397,9 @@ describe("preparing a heartbeat body", () => {
     await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
-    expect(armed[0]?.context?.keepalive_max_secs).toBe(5400);
+    expect(armed[0]?.keepalive_pings).toBe(9);
+    expect(armed[0]?.context?.thread, "the ping resumes the heartbeat's own thread").toBe("main");
+    expect(armed[0]?.context?.keepalive_window_secs).toBe(5400);
     expect(warmed).toEqual([false]);
   });
 

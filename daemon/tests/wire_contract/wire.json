@@ -49,7 +49,7 @@
       "thinking_enabled": true,
       "cache_ttl": "1h",
       "reasoning_effort": "high",
-      "keepalive_max_secs": 43200,
+      "keepalive_window_secs": 3300,
       "forensics_dir": "/var/cache/shore",
       "rid": "rid_1",
       "usage": {

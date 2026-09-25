@@ -71,7 +71,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const { runtime } = a;
   const dataDir = runtime.config.dirs.data;
   const ledgerPath = rustJoin(dataDir, "shore.db");
-  const global = () => runtime.registry.globalConfig();
   const usage = (character: string) =>
     usageConfigView(runtime.registry.effectiveConfig(character).app.usage);
 
@@ -91,8 +90,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     compaction: chatCompactionRunner(a),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
     ledgerPath,
-    keepaliveMaxSecs: () =>
-      Number(global().app.cache.keepalive_max.asSecs()),
     tools: (charName, turn) => chatToolDeps(a, charName, turn),
     ...(a.env === undefined ? {} : { env: a.env }),
   };
@@ -131,8 +128,8 @@ export function turnAutonomy(
     notifyAssistantMessage: (character, turnCount) => {
       bridge.onAssistantMessage(character, turnCount);
     },
-    notifyLastRequest: (character, request, keepalive) => {
-      cache.set(character, request as SidecarRequest, keepalive);
+    notifyLastRequest: (character, request, keepalive, thread) => {
+      cache.set(character, request as SidecarRequest, keepalive, true, thread);
     },
   };
 }
@@ -359,6 +356,10 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
     },
 
     homeThread: (character) => runtime.registry.homeThread(character),
+
+    cachedCharacters: () => runtime.cache.cachedCharacters(),
+
+    warmThread: (character) => runtime.keepalive.warmThread(character),
 
     refreshCachedRequest: async (character, reason = "model_change", thread) => {
       runtime.keepalive.disarm(character);

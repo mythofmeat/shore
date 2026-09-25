@@ -157,6 +157,7 @@ export interface Timing {
 export interface RecordCall {
   subscription?: boolean;
   provider: string;
+  sdk?: string | undefined;
   api_key_name?: string | undefined;
   model: string;
   call_type: string;
@@ -166,6 +167,7 @@ export interface RecordCall {
   finish_reason: string;
   thinking_enabled: boolean;
   cache_ttl?: string | undefined;
+  keepalive_window_secs?: number | undefined;
   reasoning_effort?: string | undefined;
   tool_surface?: string | undefined;
   output_tokens_estimated?: boolean | undefined;
@@ -243,7 +245,7 @@ const INSERT_SQL = `INSERT INTO calls (
   $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped, $cache_state_reason
 )`;
 
-const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
+const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, provider, model, thinking_enabled, cache_read_tokens, tool_surface
   FROM calls
  WHERE character = $character
    AND (provider = 'anthropic' OR model LIKE 'anthropic/%')
@@ -253,6 +255,7 @@ const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_
 
 interface SeedRow {
   ts: string;
+  provider: string;
   model: string;
   thinking_enabled: number;
   cache_read_tokens: number;
@@ -298,10 +301,6 @@ export class Ledger {
 
   get trackers(): CacheTrackers {
     return this.#trackers;
-  }
-
-  setMaxIdleSecs(secs: number): void {
-    this.#trackers.setMaxIdleSecs(secs);
   }
 
   setCacheTtlSecs(secs: number): void {
@@ -422,6 +421,7 @@ export class Ledger {
         this.#ttlSecs,
         undefined,
         seed.tool_surface ?? undefined,
+        seed.provider,
       ),
     );
   }
@@ -455,7 +455,10 @@ export class Ledger {
 
     const observation: Observation = {
       ts,
+      provider: record.provider,
+      sdk: record.sdk,
       model: record.model,
+      keepalive_window_secs: record.keepalive_window_secs,
       thinking_enabled: record.thinking_enabled,
       cache_read_tokens: record.usage.cache_read_tokens,
       cache_write_tokens: record.usage.cache_creation_tokens,

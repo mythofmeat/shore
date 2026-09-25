@@ -10,7 +10,7 @@ import {
 } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from "../config/models.ts";
-import { resolveDisplayName } from "../config/app.ts";
+import { resolveDisplayName, type HeartbeatConfig } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { formatWallClock } from "../engine/prompt.ts";
@@ -40,6 +40,13 @@ export function fallbackIntervalPhrase(secs: bigint): string {
     return hours === 1n ? "1 hour" : `${hours} hours`;
   }
   return `${secs / SECONDS_PER_MINUTE} minutes`;
+}
+
+function defaultWakeSecs(heartbeat: HeartbeatConfig): bigint {
+  const secs = heartbeat.default_interval.asSecs();
+  const floor = heartbeat.min_interval.asSecs();
+  const ceiling = heartbeat.max_interval.asSecs();
+  return secs < floor ? floor : secs > ceiling ? ceiling : secs;
 }
 
 export interface HeartbeatModelChoice {
@@ -139,8 +146,8 @@ export async function prepareHeartbeatRequest(
   if (deps.cache.get(character) === undefined) {
     deps.cache.set(character, source, {
       intervalMs: rebuilt.keepalive_interval_ms,
-      maxSecs: rebuilt.keepalive_max_secs,
-    }, false);
+      pings: rebuilt.keepalive_pings,
+    }, false, thread);
   }
 
   const { request, override } = applyHeartbeatModelOverride(
@@ -178,7 +185,7 @@ export async function prepareHeartbeatRequest(
     template,
     formatWallClock(nowMs, deps.timeZone ?? hostZone()),
     resolveDisplayName(config.app.defaults, deps.env),
-    fallbackIntervalPhrase(config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval.asSecs()),
+    fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
   );
 
   pushInlineSystem(request, prompt);

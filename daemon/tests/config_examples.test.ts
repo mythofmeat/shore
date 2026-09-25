@@ -5,7 +5,7 @@ const CONFIG_EXAMPLES = [
   { title: "Provider and a qualified model override", text: "[providers.anthropic]\napi_key_env = \"ANTHROPIC_API_KEY\"\ncache_ttl = \"1h\"\n\n[chat]\nmodel = \"anthropic:claude-opus-4-8\"\n\n[chat.\"anthropic:claude-opus-4-8\"]\nmax_output_tokens = 16384\n" },
   { title: "Background work and a budget", text: `[heartbeat]
 enabled = true
-interval = "6h"
+default_interval = "6h"
 min_interval = "4h"
 
 [compaction]

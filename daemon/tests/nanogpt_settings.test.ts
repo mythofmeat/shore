@@ -37,32 +37,45 @@ test.each([CLAUDE, GEMINI, "nanogpt:deepseek/deepseek-v4.1-flash"])("%s has no b
   expect(model.cacheKeepalive).toBeUndefined();
 });
 
-test("provider-wide caching settings only arm Claude models", async () => {
-  const ctx = await context({ cache_ttl: "1h", cache_keepalive: "55m" });
-  const resolve = (name: string) => findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, name, true);
-  expect(resolve(CLAUDE).cacheKeepalive?.kind).toBe("every");
-  expect(resolve(GEMINI).cacheKeepalive).toEqual({ kind: "off" });
+test("a provider's defaults in config.toml cannot carry a keepalive", () => {
+  expect(() => ProviderRegistry.fromSection({ nanogpt: { defaults: { cache_keepalive: "55m" } } })).toThrow("cache_keepalive");
+  expect(() => ProviderRegistry.fromSection({ nanogpt: { defaults: { cache_keepalive_for: "12h" } } })).toThrow("cache_keepalive_for");
 });
 
-test("setting a TTL then opting in uses the saved TTL and survives a reload", async () => {
+test("a keepalive needs no TTL, and only warns when it cannot beat a known one", async () => {
   const ctx = await context();
-  expect(() => setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "55m" })).toThrow("cache_ttl");
+  const untimed = setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "55m" }) as Record<string, unknown>;
+  expect(untimed["warning"]).toBeUndefined();
+
   setModelSetting(ctx, { name: CLAUDE, key: "cache_ttl", value: "1h" });
-  expect(() => setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "55m" })).not.toThrow();
+  const late = setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "1h" }) as Record<string, unknown>;
+  expect(late["warning"]).toContain("1h cache TTL");
+  const shortened = setModelSetting(ctx, { name: CLAUDE, key: "cache_ttl", value: "5m" }) as Record<string, unknown>;
+  expect(shortened["warning"]).toContain("5m cache TTL");
+
   const settings = modelSettings(ctx, { name: CLAUDE }) as { effective_sampler: Record<string, unknown> };
-  expect(settings.effective_sampler["cache_keepalive"]).toBe("55m");
-  expect(() => setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "1h" })).toThrow("shorter");
-  setModelSetting(ctx, { name: CLAUDE, key: "cache_ttl", value: "5m" });
-  const shorter = modelSettings(ctx, { name: CLAUDE }) as { effective_sampler: Record<string, unknown> };
-  expect(shorter.effective_sampler["cache_keepalive"]).toBe("off");
+  expect(settings.effective_sampler["cache_keepalive"], "a warning never rewrites what was set").toBe("1h");
 });
 
-test("implicit-cache models reject enabling keepalive but always allow disabling it", async () => {
+test("a TTL written in other units is judged by the value that gets stored", async () => {
+  const ctx = await context();
+  setModelSetting(ctx, { name: CLAUDE, key: "cache_keepalive", value: "55m" });
+  const hour = setModelSetting(ctx, { name: CLAUDE, key: "cache_ttl", value: "60m" }) as Record<string, unknown>;
+  expect(hour["warning"]).toBeUndefined();
+});
+
+test("implicit-cache models take a keepalive like any other", async () => {
   const ctx = await context({ cache_ttl: "1h" });
-  expect(() => setModelSetting(ctx, { name: GEMINI, key: "cache_keepalive", value: "55m" })).toThrow("not applicable");
-  expect(() => setModelSetting(ctx, { name: GEMINI, key: "cache_keepalive", value: "off" })).not.toThrow();
-  const settings = modelSettings(ctx, { name: GEMINI }) as { setting_schema: Array<{ key: string; applicability: string }> };
-  expect(settings.setting_schema.find((setting) => setting.key === "cache_keepalive")?.applicability).toBe("ignored");
+  expect(() => setModelSetting(ctx, { name: GEMINI, key: "cache_keepalive", value: "55m" })).not.toThrow();
+  expect(() => setModelSetting(ctx, { name: GEMINI, key: "cache_keepalive_pings", value: "3" })).not.toThrow();
+  const settings = modelSettings(ctx, { name: GEMINI }) as {
+    effective_sampler: Record<string, unknown>;
+    setting_schema: Array<{ key: string; applicability: string }>;
+  };
+  expect(settings.effective_sampler["cache_keepalive"]).toBe("55m");
+  expect(settings.effective_sampler["cache_keepalive_pings"]).toBe(3);
+  expect(settings.setting_schema.find((setting) => setting.key === "cache_keepalive")?.applicability).toBe("always");
+  expect(settings.setting_schema.find((setting) => setting.key === "cache_keepalive_pings")?.applicability).toBe("always");
 });
 
 test("native Gemini is rejected when setting or loading a NanoGPT override", async () => {

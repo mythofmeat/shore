@@ -247,11 +247,16 @@ describe("conversationKey", () => {
   });
 
   test("background workflows cannot replace the main chat session", () => {
-    const keys = ["message", "heartbeat", "compaction", "subagent", "keepalive"].map((call_type) =>
+    const keys = ["message", "heartbeat", "compaction", "subagent"].map((call_type) =>
       conversationKey(request({ ...context(), call_type })));
     expect(new Set(keys).size).toBe(keys.length);
     expect(conversationKey(request({ ...context(), call_type: "heartbeat_tool_loop" }))).toBe(keys[1] ?? "");
     expect(conversationKey(request({ ...context(), call_type: "tool_loop" }))).toBe(keys[0] ?? "");
+  });
+
+  test("a keepalive ping reads the main chat session, since that is the cache it keeps warm", () => {
+    expect(conversationKey(request({ ...context(), call_type: "keepalive" })))
+      .toBe(conversationKey(request({ ...context(), call_type: "message" })));
   });
 });
 

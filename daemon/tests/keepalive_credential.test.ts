@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
+import { catalogFromSections, parseCacheKeepalive, toRequestModel } from "../src/config/models.ts";
+import { applySamplerOverlay } from "../src/config/preferences.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
@@ -21,7 +22,6 @@ const T0 = Date.UTC(2026, 7, 8, 12, 0, 0);
 
 const CHAT_TOML = `
 ["anthropic:claude-opus-4-6"]
-cache_keepalive = "55m"
 `;
 
 function configWithKey(): LoadedConfig {
@@ -71,6 +71,12 @@ function streamResult(): StreamResult {
 class CountingEngine {
   readonly messages: unknown[] = [];
 
+  readonly thread?: string;
+
+  constructor(thread?: string) {
+    if (thread !== undefined) this.thread = thread;
+  }
+
   appendMessage(msg: unknown): Promise<void> {
     this.messages.push(msg);
     return Promise.resolve();
@@ -92,8 +98,11 @@ function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined }
     undefined,
     undefined,
   );
-  const model = catalog.chat.get("anthropic:claude-opus-4-6");
-  if (model === undefined) throw new Error("the fixture catalog lost its model");
+  const listed = catalog.chat.get("anthropic:claude-opus-4-6");
+  if (listed === undefined) throw new Error("the fixture catalog lost its model");
+  const cadence = parseCacheKeepalive("55m");
+  if ("err" in cadence) throw new Error(cadence.err);
+  const model = applySamplerOverlay(listed, { cacheKeepalive: cadence.ok });
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "", {
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
@@ -112,6 +121,7 @@ function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined }
 async function armedByChatTurn(
   send: (req: SidecarRequest) => Promise<GenerateResponse>,
   clock: ReturnType<typeof fakeClock>,
+  thread?: string,
 ) {
   const service = new KeepaliveService(send, clock.now);
   const cache = new LastRequestCache(service);
@@ -139,7 +149,7 @@ async function armedByChatTurn(
     newMessageId: () => "m_1",
   } as unknown as PersistContext;
 
-  await persistAndNotify(ctx, new CountingEngine(), {
+  await persistAndNotify(ctx, new CountingEngine(thread), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
     result: streamResult(),
@@ -201,5 +211,23 @@ describe("a ping carries a usable key", () => {
     expect(() => withResolvedCredential(chatTurn().request, configWithKey(), {})).toThrow(
       MissingApiKey,
     );
+  });
+});
+
+describe("a ping resumes the thread the turn ran on", () => {
+  test("a home thread moved off main is carried into the armed prefix", async () => {
+    const clock = fakeClock();
+    const sent: SidecarRequest[] = [];
+    const service = await armedByChatTurn(async (req) => {
+      sent.push(req);
+      return response();
+    }, clock, "garden");
+
+    expect(service.warmThread(CHARACTER)).toBe("garden");
+    clock.advance(55 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.context?.thread).toBe("garden");
   });
 });

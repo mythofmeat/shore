@@ -1,7 +1,6 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import { ConfigDuration, type ParseResult } from "./duration.ts";
+import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
-import { DEFAULT_KEEPALIVE_MAX_SECS } from "./keepalive.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
@@ -316,29 +315,51 @@ export type UserTimestampMode = "auto" | "always" | "never";
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
 export interface HeartbeatConfig {
-  fallback_heartbeat_interval: ConfigDuration;
+  default_interval: ConfigDuration;
   dormant_after_heartbeat_turns: number;
   dormant_after_idle_time: ConfigDuration;
-  minimum_heartbeat_latency: ConfigDuration;
+  min_interval: ConfigDuration;
+  max_interval: ConfigDuration;
   wrap_up_grace_rounds: number;
 }
 
 const defaultHeartbeatConfig = (): HeartbeatConfig => ({
-  fallback_heartbeat_interval: ConfigDuration.fromSecs(3600),
+  default_interval: ConfigDuration.fromSecs(3600),
   dormant_after_heartbeat_turns: 3,
   dormant_after_idle_time: ConfigDuration.fromSecs(172_800),
-  minimum_heartbeat_latency: ConfigDuration.fromSecs(3600),
+  min_interval: ConfigDuration.fromSecs(3600),
+  max_interval: ConfigDuration.fromSecs(172_800),
   wrap_up_grace_rounds: 3,
 });
+
+export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
+  if (heartbeat.min_interval.asMillisExact() <= 0n) {
+    return "heartbeat.min_interval must be greater than zero";
+  }
+  if (heartbeat.max_interval.asMillisExact() > MAX_SCHEDULE_OFFSET.asMillisExact()) {
+    return (
+      `heartbeat.max_interval (${heartbeat.max_interval.toString()}) must not exceed ` +
+      MAX_SCHEDULE_OFFSET.toString()
+    );
+  }
+  if (heartbeat.min_interval.asMillisExact() > heartbeat.max_interval.asMillisExact()) {
+    return (
+      `heartbeat.min_interval (${heartbeat.min_interval.toString()}) must not exceed ` +
+      `heartbeat.max_interval (${heartbeat.max_interval.toString()})`
+    );
+  }
+  return undefined;
+}
 
 const HEARTBEAT: StructSpec<HeartbeatConfig> = {
   name: "HeartbeatConfig",
   make: defaultHeartbeatConfig,
   fields: {
-    fallback_heartbeat_interval: readDuration,
+    default_interval: readDuration,
     dormant_after_heartbeat_turns: readU32,
     dormant_after_idle_time: readDuration,
-    minimum_heartbeat_latency: readDuration,
+    min_interval: readDuration,
+    max_interval: readDuration,
     wrap_up_grace_rounds: readU32,
   },
 };
@@ -363,12 +384,10 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
 };
 
 export interface CacheConfig {
-  keepalive_max: ConfigDuration;
   forensics: boolean;
 }
 
 export const defaultCacheConfig = (): CacheConfig => ({
-  keepalive_max: ConfigDuration.fromSecs(DEFAULT_KEEPALIVE_MAX_SECS),
   forensics: false,
 });
 
@@ -376,7 +395,6 @@ const CACHE: StructSpec<CacheConfig> = {
   name: "CacheConfig",
   make: defaultCacheConfig,
   fields: {
-    keepalive_max: readDuration,
     forensics: readBool,
   },
 };

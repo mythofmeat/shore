@@ -2,20 +2,14 @@ import { shoreLog } from "../log.ts";
 import { MODEL_FIELDS } from "./surface.ts";
 
 import { settingApplicability, validateSetting } from "../llm/settings.ts";
-import { keepalivePolicyError } from "../llm/cache_capability.ts";
 import type { DiscoveredModelSupport } from "../llm/discovery.ts";
 import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
-import { ConfigDuration, type ParseResult } from "./duration.ts";
-import {
-  parseCacheKeepalive,
-  parseCacheKeepaliveMax,
-  type CacheKeepaliveSetting,
-} from "./keepalive.ts";
+import type { ParseResult } from "./duration.ts";
+import type { CacheKeepaliveSetting } from "./keepalive.ts";
 export {
   keepaliveIntervalMs,
   keepaliveToString,
   parseCacheKeepalive,
-  parseCacheKeepaliveMax,
   type CacheKeepaliveSetting,
 } from "./keepalive.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
@@ -68,8 +62,6 @@ export interface ModelConfigFields {
   reasoningEffort?: string;
   budgetTokens?: number;
   cacheTtl?: string;
-  cacheKeepalive?: CacheKeepaliveSetting;
-  cacheKeepaliveMax?: ConfigDuration;
   openrouterProvider?: unknown;
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
@@ -89,8 +81,6 @@ const FIELD_KEYS = [
   "reasoningEffort",
   "budgetTokens",
   "cacheTtl",
-  "cacheKeepalive",
-  "cacheKeepaliveMax",
   "openrouterProvider",
   "geminiGeneration",
   "zaiClearThinking",
@@ -141,7 +131,7 @@ export interface ResolvedModel {
   budgetTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
-  cacheKeepaliveMax?: ConfigDuration;
+  cacheKeepalivePings?: number;
   openrouterProvider?: unknown;
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
@@ -177,7 +167,7 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
     ...opt("budget_tokens", model.budgetTokens),
     ...opt("cache_ttl", model.cacheTtl),
     ...opt("cache_keepalive", keepaliveString(model.cacheKeepalive)),
-    ...opt("cache_keepalive_max", model.cacheKeepaliveMax?.toString()),
+    ...opt("cache_keepalive_pings", model.cacheKeepalivePings),
     ...opt("openrouter_provider", model.openrouterProvider),
     ...opt("gemini_generation", model.geminiGeneration),
     ...opt("zai_clear_thinking", model.zaiClearThinking),
@@ -245,8 +235,6 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "reasoningEffort", merged.reasoningEffort);
   assignIfPresent(resolved, "budgetTokens", merged.budgetTokens);
   assignIfPresent(resolved, "cacheTtl", merged.cacheTtl);
-  assignIfPresent(resolved, "cacheKeepalive", merged.cacheKeepalive);
-  assignIfPresent(resolved, "cacheKeepaliveMax", merged.cacheKeepaliveMax);
   assignIfPresent(resolved, "support", support);
   assignIfPresent(resolved, "discoveredSupportsImages", discoveredSupportsImages);
   assignIfPresent(resolved, "openrouterProvider", merged.openrouterProvider);
@@ -255,16 +243,7 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
   assignIfPresent(resolved, "replayPriorThinking", merged.replayPriorThinking);
   assignIfPresent(resolved, "maxToolIterations", merged.maxToolIterations);
-  applyKeepalivePolicy(resolved);
   return resolved;
-}
-
-export function applyKeepalivePolicy(model: ResolvedModel): void {
-  if (model.cacheKeepalive?.kind !== "every") return;
-  const error = keepalivePolicyError(model.sdk, model.modelId, model.cacheTtl, model.cacheKeepalive.interval.asMillis());
-  if (error === undefined) return;
-  shoreLog.warn(`shore: disabling keepalive for ${model.qualifiedName}: ${error}`);
-  model.cacheKeepalive = { kind: "off" };
 }
 
 function assignIfPresent<K extends keyof ResolvedModel>(
@@ -761,22 +740,6 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
     if (read.ok !== undefined) (out as Record<string, unknown>)[field] = read.ok;
   }
 
-  const keepaliveRaw = readString(table, "cache_keepalive");
-  if ("err" in keepaliveRaw) return keepaliveRaw;
-  if (keepaliveRaw.ok !== undefined) {
-    const keepalive = parseCacheKeepalive(keepaliveRaw.ok);
-    if ("err" in keepalive) return keepalive;
-    out.cacheKeepalive = keepalive.ok;
-  }
-
-  const keepaliveMaxRaw = readString(table, "cache_keepalive_max");
-  if ("err" in keepaliveMaxRaw) return keepaliveMaxRaw;
-  if (keepaliveMaxRaw.ok !== undefined) {
-    const max = parseCacheKeepaliveMax(keepaliveMaxRaw.ok);
-    if ("err" in max) return max;
-    out.cacheKeepaliveMax = max.ok;
-  }
-
   if (table["openrouter_provider"] !== undefined) {
     out.openrouterProvider = table["openrouter_provider"];
   }
@@ -858,7 +821,7 @@ export function resolvedModelToWire(model: ResolvedModel): Record<string, unknow
     budget_tokens: or(model.budgetTokens),
     cache_ttl: or(model.cacheTtl),
     cache_keepalive: or(keepaliveString(model.cacheKeepalive)),
-    cache_keepalive_max: or(model.cacheKeepaliveMax?.toString()),
+    cache_keepalive_pings: or(model.cacheKeepalivePings),
     openrouter_provider: or(model.openrouterProvider),
     gemini_generation: or(model.geminiGeneration),
     zai_clear_thinking: or(model.zaiClearThinking),

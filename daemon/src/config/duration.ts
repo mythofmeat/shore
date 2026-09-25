@@ -186,3 +186,5 @@ function invalidDurationType(value: unknown): string {
   }
   return `invalid type: ${String(value)}, expected ${DURATION_EXPECTING}`;
 }
+
+export const MAX_SCHEDULE_OFFSET = ConfigDuration.fromSecs(8_640_000_000_000 / 2);

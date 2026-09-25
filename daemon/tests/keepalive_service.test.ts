@@ -20,7 +20,8 @@ const minutes = (m: number) => m * 60_000;
 const hours = (h: number) => h * 3_600_000;
 
 const INTERVAL_MS = 55 * 60_000;
-const MAX_IDLE_SECS = 12 * 3600;
+const PINGS = 12;
+const WINDOW_SECS = (PINGS * INTERVAL_MS) / 1000;
 
 const T0 = Date.UTC(2026, 6, 30, 12, 0, 0);
 
@@ -69,11 +70,12 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
     provider_options: { cache_ttl: "1h" },
     replay_prior_thinking: "all",
     keepalive_interval_ms: INTERVAL_MS,
+    keepalive_pings: PINGS,
     context: {
       character: CHARACTER,
       call_type: "message",
       thinking_enabled: true,
-      keepalive_max_secs: MAX_IDLE_SECS,
+      keepalive_window_secs: WINDOW_SECS,
       rid: "rid_live",
     },
     ...overrides,
@@ -279,7 +281,7 @@ describe("what counts as a warm", () => {
     const deadline = h.service.nextPingAt(CHARACTER);
 
     h.clock.advance(minutes(50));
-    h.service.observe(CHARACTER, MODEL, callType, undefined, "heartbeat-prefix", { cache_read_tokens: 4096 });
+    h.service.observe(CHARACTER, MODEL, callType, "heartbeat-prefix", { cache_read_tokens: 4096 });
     expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
     expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
 
@@ -330,6 +332,73 @@ describe("what counts as a warm", () => {
     expect(h.sent).toHaveLength(sentByCeiling);
   });
 
+  test("a compaction on the chat model does not hand out a fresh ping allowance", async () => {
+    const h = harness();
+    h.service.arm(prefix({ keepalive_pings: 1 }));
+    h.service.observe(CHARACTER, MODEL, "message");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(1);
+
+    h.service.observe(CHARACTER, MODEL, "compaction");
+    for (let i = 0; i < 4; i++) {
+      h.clock.advance(minutes(56));
+      await h.service.tick();
+    }
+    expect(h.sent).toHaveLength(1);
+
+    h.service.observe(CHARACTER, MODEL, "tool_loop");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(2);
+  });
+
+  test("the same model ID through another provider neither supersedes nor refreshes the armed prefix", async () => {
+    const h = harness();
+    h.service.arm(prefix({ provider_key: "anthropic", keepalive_pings: 1 }));
+    h.service.observe(CHARACTER, MODEL, "message", undefined, undefined, { sdk: "anthropic", provider_key: "anthropic", model: MODEL });
+    const deadline = h.service.nextPingAt(CHARACTER);
+
+    h.clock.advance(minutes(30));
+    h.service.observe(CHARACTER, MODEL, "subagent", "subagent-prefix", { cache_read_tokens: 0 }, {
+      sdk: "openai", provider_key: "openrouter", model: MODEL,
+    });
+    expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
+
+    h.clock.advance(minutes(26));
+    await h.service.tick();
+    expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
+  });
+
+  test("a ping still in flight when a new reply lands is not charged to that reply", async () => {
+    const clock = fakeClock();
+    let release!: (reply: GenerateResponse) => void;
+    const service = new KeepaliveService(
+      async () => await new Promise<GenerateResponse>((resolve) => {
+        release = resolve;
+      }),
+      clock.now,
+    );
+    service.arm(prefix({ keepalive_pings: 1 }));
+    service.observe(CHARACTER, MODEL, "message");
+
+    clock.advance(minutes(56));
+    const inFlight = service.tick();
+    await Promise.resolve();
+
+    clock.advance(minutes(1));
+    service.observe(CHARACTER, MODEL, "message");
+    service.arm(prefix({ keepalive_pings: 1 }), true);
+    const replyDeadline = service.nextPingAt(CHARACTER);
+    expect(replyDeadline).toBe(clock.now() + INTERVAL_MS);
+
+    release(response(2200, 0));
+    await inFlight;
+
+    expect(required(service.scheduleFor(CHARACTER)).pings_sent).toBe(0);
+    expect(service.nextPingAt(CHARACTER)).toBe(replyDeadline);
+  });
+
   test("an unknown character is ignored rather than armed", () => {
     const h = harness();
     h.service.observe("nobody", MODEL, "message");
@@ -377,19 +446,67 @@ describe("arming and disarming", () => {
     expect(h.service.scheduleFor(CHARACTER)).toBeUndefined();
   });
 
-  test("a changed idle ceiling carries the schedule across", async () => {
+  test("a changed ping count carries the schedule across", async () => {
     const h = harness();
     armWarm(h);
     const before = h.service.scheduleFor(CHARACTER);
 
-    h.service.arm(
-      prefix({ context: { ...required(prefix().context), keepalive_max_secs: 6 * 3600 } }),
-    );
-    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
+    h.service.arm(prefix({ keepalive_pings: 3 }));
+    expect(h.service.scheduleFor(CHARACTER)).toEqual({ ...required(before), max_pings: 3 });
 
     h.clock.advance(minutes(56));
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
+  });
+});
+
+describe("only the selected chat model is kept warm", () => {
+  function switchTo(h: ReturnType<typeof harness>, model: string) {
+    h.service.disarm(CHARACTER);
+    h.service.arm(prefix({ model }));
+  }
+
+  test("switching away stops the old model's pings before any message", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    for (let i = 0; i < 6; i += 1) {
+      h.clock.advance(INTERVAL_MS);
+      await h.service.tick();
+    }
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  test("switching back without a message does not resume the old model's pings", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    h.clock.advance(minutes(10));
+    switchTo(h, MODEL);
+    h.clock.advance(hours(3));
+    await h.service.tick();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  test("the first message on the new model arms it, and only it", async () => {
+    const h = harness();
+    armWarm(h);
+
+    h.clock.advance(minutes(10));
+    switchTo(h, OTHER_MODEL);
+    h.clock.advance(minutes(10));
+    h.service.observe(CHARACTER, OTHER_MODEL, "message");
+    h.service.arm(prefix({ model: OTHER_MODEL }), true);
+    h.clock.advance(INTERVAL_MS);
+    await h.service.tick();
+
+    expect(h.sent.map((req) => req.model)).toEqual([OTHER_MODEL]);
   });
 });
 
@@ -489,14 +606,14 @@ describe("what reaches the heartbeat log and the state file", () => {
     const fresh = harness();
     fresh.clock.advance(minutes(10));
     expect(
-      fresh.service.restore(CHARACTER, persisted, MAX_IDLE_SECS),
+      fresh.service.restore(CHARACTER, persisted),
       "a prefix warmed 10m ago is still inside the 55m interval",
     ).toBe(true);
 
     const stale = harness();
     stale.clock.advance(hours(3));
     expect(
-      stale.service.restore(CHARACTER, persisted, MAX_IDLE_SECS),
+      stale.service.restore(CHARACTER, persisted),
       "a prefix warmed 3h ago is past any plausible TTL",
     ).toBe(false);
   });

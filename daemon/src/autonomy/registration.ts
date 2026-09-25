@@ -31,10 +31,11 @@ function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
 export function clockConfigFor(config: LoadedConfig): HeartbeatClockConfig {
   const heartbeat = config.app.behavior.autonomy.heartbeat;
   return {
-    defaultIntervalMs: Number(heartbeat.fallback_heartbeat_interval.asMillisExact()),
+    defaultIntervalMs: Number(heartbeat.default_interval.asMillisExact()),
     maxIdleTicks: heartbeat.dormant_after_heartbeat_turns,
     maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),
-    minWakeIntervalMs: Number(heartbeat.minimum_heartbeat_latency.asMillisExact()),
+    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),
+    maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),
   };
 }
 
@@ -51,6 +52,7 @@ type ServiceSlice = Pick<
   AutonomyService,
   | "register"
   | "setCompactionConfig"
+  | "setHeartbeatConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onAssistantMessage"
@@ -115,10 +117,12 @@ export class TurnAutonomyBridge {
   reloadConfig(effectiveConfig: (character: string) => LoadedConfig): void {
     for (const character of Array.from(this.#registered.keys())) {
       this.#after(character, () => {
+        const config = effectiveConfig(character);
         this.#service.setCompactionConfig(
           character,
-          compactionConfigFor(effectiveConfig(character)),
+          compactionConfigFor(config),
         );
+        this.#service.setHeartbeatConfig(character, clockConfigFor(config));
       });
     }
   }

@@ -5,6 +5,7 @@ import type { BuiltRequest } from "../llm/request.ts";
 import type { CallContext, SidecarRequest } from "../llm/types.ts";
 import type { KeepalivePrefix, KeepaliveService } from "./keepalive.ts";
 import { homeThreadOf } from "../engine/threads.ts";
+import { keepaliveWindowSecs } from "../config/keepalive.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "./rebuild.ts";
 
 export type InvalidationReason =
@@ -19,11 +20,11 @@ export type InvalidationReason =
   | "mcp_recovery"
   | "character_deleted";
 
-const UNARMED: KeepaliveArming = { intervalMs: undefined, maxSecs: undefined };
+const UNARMED: KeepaliveArming = { intervalMs: undefined, pings: undefined };
 
 export interface KeepaliveArming {
   intervalMs: number | undefined;
-  maxSecs: number | undefined;
+  pings: number | undefined;
 }
 
 export type KeepaliveReprime =
@@ -38,7 +39,7 @@ export function reprimeDecision(rebuilt: BuiltRequest | undefined): KeepaliveRep
         request: rebuilt.request,
         keepalive: {
           intervalMs: rebuilt.keepalive_interval_ms,
-          maxSecs: rebuilt.keepalive_max_secs,
+          pings: rebuilt.keepalive_pings,
         },
       };
 }
@@ -64,9 +65,10 @@ export class LastRequestCache {
     request: SidecarRequest,
     keepalive?: KeepaliveArming,
     warm = true,
+    thread?: string,
   ): void {
     this.#bodies.set(character, request);
-    this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED), warm);
+    this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED, thread), warm);
   }
 
   invalidate(character: string, reason: InvalidationReason): void {
@@ -115,10 +117,10 @@ function toPrefix(
       : { ...context, character };
   return {
     ...request,
-    context:
-      keepalive.maxSecs === undefined ? base : { ...base, keepalive_max_secs: keepalive.maxSecs },
+    context: { ...base, keepalive_window_secs: keepaliveWindowSecs(keepalive.intervalMs, keepalive.pings) },
     ...(keepalive.intervalMs === undefined
       ? {}
       : { keepalive_interval_ms: keepalive.intervalMs }),
+    ...(keepalive.pings === undefined ? {} : { keepalive_pings: keepalive.pings }),
   };
 }

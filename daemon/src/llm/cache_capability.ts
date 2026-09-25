@@ -12,19 +12,21 @@ export function honorsCacheTtl(sdk: Sdk, model?: string): boolean {
     (sdk !== "nanogpt" || model === undefined || nanogptSupportsExplicitCache(model));
 }
 
-export function supportsKeepalive(sdk: Sdk, model: string, ttl: string | undefined): boolean {
-  return honorsCacheTtl(sdk, model) && ttl !== undefined && ttl !== "";
+export function acceptsCacheTtl(sdk: Sdk, model?: string): boolean {
+  return sdk === "claude_agent" || honorsCacheTtl(sdk, model);
 }
 
-export function keepalivePolicyError(sdk: Sdk, model: string, ttl: string | undefined, intervalMs: number): string | undefined {
-  if (!supportsKeepalive(sdk, model, ttl)) {
-    return `cache_keepalive requires an explicit cache_ttl honored by ${sdk} for ${model}`;
-  }
-  const ttlMs = ttl === "1h" ? 3_600_000 : 300_000;
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0 || intervalMs >= ttlMs) {
-    return `cache_keepalive must be positive and shorter than the effective cache TTL (${ttl === "1h" ? "1h" : "5m"})`;
-  }
-  return undefined;
+export function cacheTtlTier(ttl: string | undefined): "5m" | "1h" | undefined {
+  if (ttl === undefined || ttl === "") return undefined;
+  return ttl === "1h" ? "1h" : "5m";
+}
+
+export function keepaliveTtlWarning(sdk: Sdk, model: string, ttl: string | undefined, intervalMs: number): string | undefined {
+  const known = acceptsCacheTtl(sdk, model) ? cacheTtlTier(ttl) : undefined;
+  if (known === undefined) return undefined;
+  const ttlMs = known === "1h" ? 3_600_000 : 300_000;
+  if (intervalMs < ttlMs) return undefined;
+  return `cache_keepalive is not shorter than this model's ${known} cache TTL, so each ping will land after the cache has already expired`;
 }
 
 export function reportsCacheWrites(sdk: Sdk): boolean {

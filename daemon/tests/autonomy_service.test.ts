@@ -54,7 +54,8 @@ function clockConfig(): HeartbeatClockConfig {
     defaultIntervalMs: HOUR,
     maxIdleTicks: 100,
     maxSilentMs: 48 * HOUR,
-    minWakeIntervalMs: HOUR,
+    minIntervalMs: HOUR,
+    maxIntervalMs: 48 * 3_600_000,
   };
 }
 
@@ -113,7 +114,7 @@ function build(clock?: { value: number }) {
 }
 
 describe("registering", () => {
-  test("restoring a keepalive uses the configured global ceiling", async () => {
+  test("a keepalive restored from a state file with no ping count still gets its one ping", async () => {
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
       writeDurable(join(dir, STATE_FILENAME), encodeState({
@@ -125,7 +126,7 @@ describe("registering", () => {
       const { service } = build(clock);
       const events: KeepaliveEvent[] = [];
       const keepalive = new KeepaliveService(async () => { throw new Error("no prefix restored"); },
-        () => clock.value, { maxIdleSecs: () => 20 * 3600 });
+        () => clock.value);
       service.attachKeepalive(keepalive);
       keepalive.onEvent((event) => events.push(event));
       await service.register(registration("nova", dir));
@@ -158,6 +159,29 @@ describe("registering", () => {
     });
   });
 
+  test("restarting under a smaller ceiling bounds and runs the restored wake", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const first = build();
+      await first.service.register(registration("nova", dir));
+      first.service.scheduleNextWake("nova", 47, "later");
+      await first.service.shutdown();
+
+      const restarted = build();
+      const request = registration("nova", dir);
+      request.clock.maxIntervalMs = 2 * HOUR;
+      await restarted.service.register(request);
+      expect(restarted.service.status("nova")?.next_wake_at).toBe(START + 2 * HOUR);
+      restarted.now.value += 2 * HOUR - 1;
+      await restarted.service.tick();
+      expect(restarted.executor.calls).toEqual([]);
+      restarted.now.value += 1;
+      await restarted.service.tick();
+      expect(restarted.executor.calls).toEqual(["nova:heartbeat"]);
+      await restarted.service.shutdown();
+    });
+  });
+
   test("a character with nothing on disk starts from defaults", async () => {
     await inTempDir(async (root) => {
       const { service } = build();
@@ -169,7 +193,8 @@ describe("registering", () => {
         covered_turn_count: 0,
         default_interval_ms: HOUR,
         max_idle_ticks: 100,
-        min_wake_interval_ms: HOUR,
+        min_interval_ms: HOUR,
+        max_interval_ms: 48 * HOUR,
         max_silent_ms: 48 * HOUR,
         recent_events: [],
       });
@@ -515,6 +540,24 @@ describe("the keepalive's two halves", () => {
       const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
       expect(saved["keepalive_model"]).toBe("claude-opus-4-6");
       expect(saved["keepalive_interval_ms"]).toBe(3_300_000);
+    });
+  });
+
+  test("shutdown writes the ping count spent since the last tick", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir, COMPACTION_ONLY));
+
+      ka.schedules.set("nova", snapshot({ pings_sent: 0, max_pings: 2 }));
+      await service.tick();
+      ka.schedules.set("nova", snapshot({ pings_sent: 1, max_pings: 2 }));
+      await service.shutdown();
+
+      const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
+      expect(saved["keepalive_pings_sent"]).toBe(1);
     });
   });
 

@@ -952,7 +952,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_for, sdk, reasoning_replay, max_tool_rounds, openrouter_routing, gemini_thinking_mode, zai_clear_reasoning, supports_images"
+            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay, max_tool_rounds, openrouter_routing, gemini_thinking_mode, zai_clear_reasoning, supports_images"
           }
         },
         {

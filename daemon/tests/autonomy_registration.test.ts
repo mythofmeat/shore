@@ -27,9 +27,11 @@ function configWith(mutate: (app: ReturnType<typeof defaultAppConfig>) => void =
 function recordingService(registerDelay?: Promise<void>) {
   const calls: string[] = [];
   const stamps: number[] = [];
+  const clocks: [string, ReturnType<typeof clockConfigFor>][] = [];
   return {
     calls,
     stamps,
+    clocks,
     register: async () => {
       calls.push("register");
       if (registerDelay !== undefined) await registerDelay;
@@ -46,6 +48,9 @@ function recordingService(registerDelay?: Promise<void>) {
     },
     setCompactionConfig: (_c: string, cfg: { maxTurns: number }) => {
       calls.push(`compaction:${cfg.maxTurns}`);
+    },
+    setHeartbeatConfig: (character: string, clock: ReturnType<typeof clockConfigFor>) => {
+      clocks.push([character, clock]);
     },
     shouldCompactNow: () => undefined,
     onCompactionComplete: (_c: string, retained: number) => {
@@ -84,17 +89,19 @@ describe("reading the config a loop runs on", () => {
   test("the clock's four bounds each come from their own knob", () => {
     const config = configWith((app) => {
       const h = app.behavior.autonomy.heartbeat;
-      h.fallback_heartbeat_interval = ConfigDuration.fromSecs(1800);
+      h.default_interval = ConfigDuration.fromSecs(1800);
       h.dormant_after_heartbeat_turns = 4;
       h.dormant_after_idle_time = ConfigDuration.fromSecs(172_800);
-      h.minimum_heartbeat_latency = ConfigDuration.fromSecs(600);
+      h.min_interval = ConfigDuration.fromSecs(600);
+      h.max_interval = ConfigDuration.fromSecs(7200);
     });
 
     expect(clockConfigFor(config)).toEqual({
       defaultIntervalMs: 1_800_000,
       maxIdleTicks: 4,
       maxSilentMs: 172_800_000,
-      minWakeIntervalMs: 600_000,
+      minIntervalMs: 600_000,
+      maxIntervalMs: 7_200_000,
     });
   });
 
@@ -165,6 +172,7 @@ describe("updates that can wait", () => {
     bridge.onUserMessage("ada", 3);
 
     expect(service.calls).toEqual(["register"]);
+    expect(service.clocks).toEqual([]);
     release();
     await bridge.settled("ada");
     expect(service.calls).toEqual(["register", "user:3:1000"]);
@@ -207,6 +215,7 @@ describe("updates that can wait", () => {
     bridge.onAssistantMessage("ada", 9);
 
     expect(service.calls).toEqual(["register"]);
+    expect(service.clocks).toEqual([]);
     release();
     await bridge.settled("ada");
     expect(service.calls).toEqual(["register", "assistant:9"]);
@@ -314,12 +323,16 @@ describe("a config reload", () => {
       asked.push(name);
       return configWith((app) => {
         app.memory.compaction.max_turns = name === "ada" ? 11 : 22;
+        app.behavior.autonomy.heartbeat.max_interval = ConfigDuration.fromSecs(name === "ada" ? 7200 : 14400);
       });
     });
 
     await bridge.settled("ada");
     await bridge.settled("nova");
     expect(asked.sort()).toEqual(["ada", "nova"]);
+    expect(service.clocks.map(([name, clock]) => [name, clock.maxIntervalMs])).toEqual([
+      ["ada", 7_200_000], ["nova", 14_400_000],
+    ]);
     expect(service.calls.filter((c) => c.startsWith("compaction"))).toEqual([
       "compaction:11",
       "compaction:22",
@@ -346,9 +359,11 @@ describe("a config reload", () => {
     bridge.reloadConfig(() => configWith((app) => (app.memory.compaction.max_turns = 3)));
 
     expect(service.calls).toEqual(["register"]);
+    expect(service.clocks).toEqual([]);
     release();
     await bridge.settled("ada");
     expect(service.calls).toEqual(["register", "compaction:3"]);
+    expect(service.clocks).toEqual([["ada", clockConfigFor(configWith())]]);
   });
 });
 

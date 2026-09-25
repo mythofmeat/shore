@@ -2,23 +2,21 @@ export type HeartbeatAction =
   | "none"
   | "run_tick";
 
-const HOUR_MS = 3_600_000;
-
-export const MIN_WAKE_INTERVAL_MS = HOUR_MS;
-
-export const MAX_WAKE_INTERVAL_MS = 48 * HOUR_MS;
-
 export interface HeartbeatClockConfig {
   defaultIntervalMs: number;
   maxIdleTicks: number;
   maxSilentMs: number;
-  minWakeIntervalMs: number;
+  minIntervalMs: number;
+  maxIntervalMs: number;
 }
 
 export interface HeartbeatSnapshot {
   ticks_without_user: number;
   next_wake_at: number | undefined;
   last_user_at: number | undefined;
+  forced_dormant?: boolean;
+  default_wake?: boolean;
+  wake_anchor_at?: number;
 }
 
 export class HeartbeatClock {
@@ -30,7 +28,10 @@ export class HeartbeatClock {
 
   #lastUserAt: number | undefined;
 
-  readonly #config: HeartbeatClockConfig;
+  #config: HeartbeatClockConfig;
+  #defaultWake = false;
+  #defaultFloor: number | undefined;
+  #forcedDormant = false;
 
   constructor(config: HeartbeatClockConfig, now: number) {
     this.#config = config;
@@ -57,19 +58,41 @@ export class HeartbeatClock {
     return this.#config;
   }
 
+  setConfig(config: HeartbeatClockConfig, now: number): void {
+    const previous = this.#config;
+    this.#config = config;
+    if (previous.defaultIntervalMs === config.defaultIntervalMs &&
+        previous.minIntervalMs === config.minIntervalMs &&
+        previous.maxIntervalMs === config.maxIntervalMs) return;
+    const existing = this.#nextWakeAt;
+    if (existing === undefined) return;
+    if (this.#defaultWake) {
+      const floor = Math.min(this.#defaultFloor ?? now, now + config.maxIntervalMs);
+      this.#nextWakeAt = Math.max(now, floor, this.#lastAnchor + this.#bounded(config.defaultIntervalMs));
+    } else if (config.minIntervalMs > previous.minIntervalMs) {
+      this.boundWake(now);
+    } else if (existing > now + config.maxIntervalMs) {
+      this.#nextWakeAt = now + config.maxIntervalMs;
+    }
+  }
+
   forceWake(now: number): void {
     this.#nextWakeAt = now;
+    this.#defaultWake = false;
   }
 
   forceDormant(): void {
     this.#ticksWithoutUser = this.#config.maxIdleTicks;
     this.#nextWakeAt = undefined;
+    this.#forcedDormant = true;
   }
 
   forceActive(now: number): void {
+    this.#forcedDormant = false;
     this.#ticksWithoutUser = 0;
     this.#lastUserAt = now;
     this.#nextWakeAt = now;
+    this.#defaultWake = false;
   }
 
   seedLastUserAtIfUnset(at: number): void {
@@ -77,6 +100,7 @@ export class HeartbeatClock {
   }
 
   #isAbandoned(now: number): boolean {
+    if (this.#forcedDormant) return true;
     if (this.#ticksWithoutUser >= this.#config.maxIdleTicks) return true;
     if (this.#lastUserAt !== undefined) {
       if (now - this.#lastUserAt >= this.#config.maxSilentMs) return true;
@@ -96,13 +120,15 @@ export class HeartbeatClock {
     const wakeAt = this.#nextWakeAt;
     if (wakeAt === undefined) {
       if (this.#isAbandoned(now)) return "none";
-      this.#nextWakeAt = this.#lastAnchor + this.#config.defaultIntervalMs;
+      this.#nextWakeAt = this.#lastAnchor + this.#bounded(this.#config.defaultIntervalMs);
+      this.#defaultWake = true;
+      this.#defaultFloor = undefined;
       return "none";
     }
 
     if (now < wakeAt) return "none";
 
-    if (this.#ticksWithoutUser >= this.#config.maxIdleTicks) {
+    if (this.#forcedDormant || this.#ticksWithoutUser >= this.#config.maxIdleTicks) {
       this.#nextWakeAt = undefined;
       return "none";
     }
@@ -119,36 +145,53 @@ export class HeartbeatClock {
     return "run_tick";
   }
 
-  schedule(when: number, now: number): void {
-    const delta = Math.max(0, when - now);
-    const clamped = Math.min(Math.max(delta, MIN_WAKE_INTERVAL_MS), MAX_WAKE_INTERVAL_MS);
+  #bounded(delayMs: number): number {
+    return Math.min(Math.max(delayMs, this.#config.minIntervalMs), this.#config.maxIntervalMs);
+  }
+
+  schedule(when: number, now: number): number {
+    const clamped = this.#bounded(Math.max(0, when - now));
     this.#nextWakeAt = now + clamped;
     this.#lastAnchor = now;
+    this.#defaultWake = false;
+    return clamped;
   }
 
   onUserMessage(now: number): void {
+    this.#forcedDormant = false;
     this.#ticksWithoutUser = 0;
     this.#lastUserAt = now;
 
-    const floor = now + this.#config.minWakeIntervalMs;
+    const floor = now + this.#config.minIntervalMs;
     const existing = this.#nextWakeAt;
     this.#nextWakeAt = existing !== undefined && existing > floor ? existing : floor;
+    this.#defaultWake = false;
   }
 
-  deferWakeToMinimumLatency(now: number, ensureScheduled = false): void {
+  boundWake(now: number, ensureScheduled = false): void {
     const existing = this.#nextWakeAt;
     if (existing === undefined && !ensureScheduled) return;
-    const floor = now + this.#config.minWakeIntervalMs;
-    if (existing !== undefined && existing >= floor) return;
-    this.#nextWakeAt = floor;
-    this.#lastAnchor = floor;
+    const bounded = now + this.#bounded((existing ?? now) - now);
+    if (existing === bounded) return;
+    this.#nextWakeAt = bounded;
+    if (this.#defaultWake && existing !== undefined && !ensureScheduled) {
+      if (bounded > existing) this.#defaultFloor = bounded;
+      return;
+    }
+    this.#lastAnchor = now;
+    this.#defaultWake = false;
   }
 
   restore(snapshot: HeartbeatSnapshot): void {
     this.#ticksWithoutUser = snapshot.ticks_without_user;
+    this.#forcedDormant = snapshot.forced_dormant === true;
     if (snapshot.next_wake_at !== undefined) {
       this.#nextWakeAt = snapshot.next_wake_at;
-      this.#lastAnchor = snapshot.next_wake_at;
+      this.#defaultWake = snapshot.default_wake === true;
+      this.#defaultFloor = undefined;
+      this.#lastAnchor = this.#defaultWake && snapshot.wake_anchor_at !== undefined
+        ? snapshot.wake_anchor_at
+        : snapshot.next_wake_at;
     }
     if (snapshot.last_user_at !== undefined) {
       this.#lastUserAt = snapshot.last_user_at;
@@ -160,6 +203,8 @@ export class HeartbeatClock {
       ticks_without_user: this.#ticksWithoutUser,
       next_wake_at: this.#nextWakeAt,
       last_user_at: this.#lastUserAt,
+      ...(this.#forcedDormant ? { forced_dormant: true } : {}),
+      ...(this.#defaultWake ? { default_wake: true, wake_anchor_at: this.#lastAnchor } : {}),
     };
   }
 }

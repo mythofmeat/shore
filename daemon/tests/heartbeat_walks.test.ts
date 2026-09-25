@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   HeartbeatClock,
-  MAX_WAKE_INTERVAL_MS,
-  MIN_WAKE_INTERVAL_MS,
 } from "../src/autonomy/heartbeat.ts";
 
 const HOUR = 3_600_000;
@@ -13,8 +11,12 @@ const CONFIG = {
   defaultIntervalMs: HOUR,
   maxIdleTicks: 6,
   maxSilentMs: 2 * DAY,
-  minWakeIntervalMs: HOUR,
+  minIntervalMs: HOUR,
+  maxIntervalMs: 48 * 3_600_000,
 };
+
+const CONFIG_MIN = CONFIG.minIntervalMs;
+const CONFIG_MAX = CONFIG.maxIntervalMs;
 
 const clockAt = (now = 0, over: Partial<typeof CONFIG> = {}) =>
   new HeartbeatClock({ ...CONFIG, ...over }, now);
@@ -110,7 +112,7 @@ describe("a user message", () => {
   test("pushes the next wake out to at least the minimum latency", () => {
     const clock = clockAt(0);
     clock.onUserMessage(0);
-    expect(clock.nextWakeAt).toBe(CONFIG.minWakeIntervalMs);
+    expect(clock.nextWakeAt).toBe(CONFIG.minIntervalMs);
   });
 
   test("never pulls an already-later wake forward", () => {
@@ -132,19 +134,19 @@ describe("scheduling a wake explicitly", () => {
   test("is clamped up to the minimum, so nothing can ask to wake immediately", () => {
     const clock = clockAt(0);
     clock.schedule(1, 0);
-    expect(clock.nextWakeAt).toBe(MIN_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(CONFIG_MIN);
   });
 
   test("is clamped down to the maximum, so nothing can sleep forever", () => {
     const clock = clockAt(0);
     clock.schedule(365 * DAY, 0);
-    expect(clock.nextWakeAt).toBe(MAX_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(CONFIG_MAX);
   });
 
   test("a time already past is treated as the soonest allowed, not as overdue", () => {
     const clock = clockAt(0);
     clock.schedule(-DAY, HOUR);
-    expect(clock.nextWakeAt).toBe(HOUR + MIN_WAKE_INTERVAL_MS);
+    expect(clock.nextWakeAt).toBe(HOUR + CONFIG_MIN);
   });
 });
 
@@ -213,7 +215,7 @@ describe("over a long randomised run of events", () => {
       const wake = clock.nextWakeAt;
       if (wake !== undefined) {
         expect(wake, `${where}: a wake is never scheduled beyond the ceiling`).toBeLessThanOrEqual(
-          now + MAX_WAKE_INTERVAL_MS,
+          now + CONFIG_MAX,
         );
       }
       expect(clock.ticksWithoutUser, `${where}: idle budget is never negative`).toBeGreaterThanOrEqual(0);

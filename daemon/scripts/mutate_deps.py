@@ -83,11 +83,11 @@ MUTANTS = [
 
     # --- the autonomy surface -------------------------------------------------
     ("autonomy: the cached body is queued behind registration, leaving a live prefix unarmed", D,
-     "    notifyLastRequest: (character, request, keepalive) => {\n"
-     "      cache.set(character, request as SidecarRequest, keepalive);\n    },",
-     "    notifyLastRequest: (character, request, keepalive) => {\n"
+     "    notifyLastRequest: (character, request, keepalive, thread) => {\n"
+     "      cache.set(character, request as SidecarRequest, keepalive, true, thread);\n    },",
+     "    notifyLastRequest: (character, request, keepalive, thread) => {\n"
      "      void bridge.settled(character).then(() => {\n"
-     "        cache.set(character, request as SidecarRequest, keepalive);\n"
+     "        cache.set(character, request as SidecarRequest, keepalive, true, thread);\n"
      "      });\n    },"),
     ("autonomy: the assistant turn is reported to nobody",
      D,
@@ -95,19 +95,22 @@ MUTANTS = [
      "      bridge.onAssistantMessage(character, turnCount);\n    },",
      "    notifyAssistantMessage: () => {},"),
     ("autonomy: only the model and the messages are cached, dropping the prefix's key", D,
-     "      cache.set(character, request as SidecarRequest, keepalive);",
+     "      cache.set(character, request as SidecarRequest, keepalive, true, thread);",
      "      cache.set(\n"
      "        character,\n"
      "        { model: request.model, messages: request.messages } as SidecarRequest,\n"
-     "        keepalive,\n      );"),
+     "        keepalive,\n        true,\n        thread,\n      );"),
     ("autonomy: the keepalive interval is dropped, so the armed prefix has no cadence", D,
-     "      cache.set(character, request as SidecarRequest, keepalive);",
-     "      cache.set(character, request as SidecarRequest, undefined);"),
-    ("autonomy: the arming loses its ceiling, so every model falls back to the global", D,
-     "      cache.set(character, request as SidecarRequest, keepalive);",
+     "      cache.set(character, request as SidecarRequest, keepalive, true, thread);",
+     "      cache.set(character, request as SidecarRequest, undefined, true, thread);"),
+    ("autonomy: the arming loses its ping count, so every model falls back to one ping", D,
+     "      cache.set(character, request as SidecarRequest, keepalive, true, thread);",
      "      cache.set(character, request as SidecarRequest, {\n"
-     "        intervalMs: keepalive?.intervalMs,\n"
-     "        maxSecs: undefined,\n      });"),
+     "        intervalMs: keepalive.intervalMs,\n"
+     "        pings: undefined,\n      }, true, thread);"),
+    ("autonomy: the turn's thread is dropped, so a home thread moved off main arms main", D,
+     "      cache.set(character, request as SidecarRequest, keepalive, true, thread);",
+     "      cache.set(character, request as SidecarRequest, keepalive, true);"),
 
     # --- the inline compaction ------------------------------------------------
 
@@ -120,21 +123,6 @@ MUTANTS = [
     ("live: every character is budgeted against the global config, not its own overlay", D,
      "    usageConfigView(runtime.registry.effectiveConfig(character).app.usage);",
      "    usageConfigView(global().app.usage);"),
-    ("live: the keepalive ceiling is captured at assembly and never moves again",
-     D,
-     "    keepaliveMaxSecs: () =>\n"
-     "      Number(global().app.cache.keepalive_max.asSecs()),",
-     "    keepaliveMaxSecs: (() => {\n"
-     "      const secs = Number(global().app.cache.keepalive_max.asSecs());\n"
-     "      return () => secs;\n    })(),"),
-    ("live: the ceiling is read in milliseconds, so it never expires",
-     D,
-     "      Number(global().app.cache.keepalive_max.asSecs()),",
-     "      Number(global().app.cache.keepalive_max.asMillisExact()),"),
-    ("live: the config is read off the startup snapshot rather than the registry",
-     D,
-     "  const global = () => runtime.registry.globalConfig();",
-     "  const global = () => runtime.config;"),
 
     # --- the ledger and the budget check --------------------------------------
     ("ledger: the path is the data root itself, so nothing is ever recorded",

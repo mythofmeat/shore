@@ -308,7 +308,7 @@ describe("writing rows the daemon's schema accepts", () => {
 
       const ledger = Ledger.open(path);
       ledger.setCacheTtlSecs(300);
-      ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:00:00Z"));
+      ledger.record(call({ usage: read(0, 40_000), keepalive_window_secs: 3600 }), at("2026-04-05T10:00:00Z"));
       const expired = ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:06:00Z"));
       ledger.close();
       expect(expired.cache_state).toBe("warm");

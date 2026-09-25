@@ -11,7 +11,10 @@ export const KEEPALIVE_REWRITE_TOKENS = 1000;
 
 export interface Observation {
   ts: string;
+  provider?: string | undefined;
+  sdk?: string | undefined;
   model: string;
+  keepalive_window_secs?: number | undefined;
   thinking_enabled: boolean;
   cache_read_tokens: number;
   cache_write_tokens: number;
@@ -23,8 +26,6 @@ export interface ObservationResult {
   state: CacheState;
   anomaly: Anomaly | undefined;
 }
-
-const DEFAULT_MAX_IDLE_SECS = 12 * 3600;
 
 const DEFAULT_TTL_SECS = 3600;
 
@@ -43,6 +44,18 @@ function toolLoopKind(callType: string): string | undefined {
   return callType === "tool_loop" || callType === "heartbeat_tool_loop" ? callType : undefined;
 }
 
+interface ModelIdentity {
+  provider: string | undefined;
+  sdk: string | undefined;
+  model: string;
+}
+
+function sameModel(a: ModelIdentity | undefined, b: ModelIdentity): boolean {
+  if (a === undefined) return false;
+  if (a.provider !== b.provider || a.model !== b.model) return false;
+  return a.sdk === undefined || b.sdk === undefined || a.sdk === b.sdk;
+}
+
 export function reconstructState(
   lastTs: string,
   lastCacheRead: number,
@@ -58,7 +71,7 @@ export function reconstructState(
 export class CacheTracker {
   #state: CacheState = "cold";
   #lastTs: number | undefined;
-  #lastModel: string | undefined;
+  #lastModel: ModelIdentity | undefined;
   #lastThinking: boolean | undefined;
   #lastToolSurface: string | undefined;
   #lastCallType: string | undefined;
@@ -66,15 +79,14 @@ export class CacheTracker {
   #lastToolLoopKind: string | undefined;
   #lastToolLoopCacheRead = 0;
   #ttlSecs: number;
-  #maxIdleSecs: number;
+  readonly #keepaliveWindows = new Map<string, number>();
   #ttlExpiredSinceWarm = false;
 
-  #lastKeepaliveMissed = false;
+  #keepaliveMissedModel: ModelIdentity | undefined;
   #lastActivityTs: number | undefined;
 
-  constructor(ttlSecs: number = DEFAULT_TTL_SECS, maxIdleSecs: number = DEFAULT_MAX_IDLE_SECS) {
+  constructor(ttlSecs: number = DEFAULT_TTL_SECS) {
     this.#ttlSecs = ttlSecs;
-    this.#maxIdleSecs = maxIdleSecs;
   }
 
   get state(): CacheState {
@@ -85,10 +97,6 @@ export class CacheTracker {
     return this.#lastCacheRead;
   }
 
-  setMaxIdleSecs(secs: number): void {
-    this.#maxIdleSecs = secs;
-  }
-
   static reconstruct(
     lastTs: string,
     lastModel: string,
@@ -97,11 +105,12 @@ export class CacheTracker {
     ttlSecs: number,
     now: number = Date.now(),
     lastToolSurface?: string,
+    lastProvider?: string,
   ): CacheTracker {
     const tracker = new CacheTracker(ttlSecs);
     const parsed = parseTs(lastTs);
     tracker.#lastTs = parsed;
-    tracker.#lastModel = lastModel;
+    tracker.#lastModel = { provider: lastProvider, sdk: undefined, model: lastModel };
     tracker.#lastThinking = lastThinking;
     tracker.#lastToolSurface = lastToolSurface;
     tracker.#lastCacheRead = lastCacheRead;
@@ -116,20 +125,33 @@ export class CacheTracker {
 
   observe(obs: Observation): ObservationResult {
     const obsTs = parseTs(obs.ts);
+    const identity: ModelIdentity = { provider: obs.provider, sdk: obs.sdk, model: obs.model };
+    const windowKey = JSON.stringify([obs.provider, obs.model]);
+    if (obs.keepalive_window_secs !== undefined) {
+      this.#keepaliveWindows.set(windowKey, obs.keepalive_window_secs);
+    }
+    const maxIdleSecs = this.#keepaliveWindows.get(windowKey) ?? 0;
 
     if (obs.call_type === "compaction") {
       this.#state = "cold";
       this.#lastCacheRead = 0;
       this.#clearToolLoopBaseline();
       this.#ttlExpiredSinceWarm = false;
-      this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
+      this.#updateMetadata(obsTs, identity, obs.thinking_enabled, obs.tool_surface);
       this.#lastCallType = obs.call_type;
-      this.#lastKeepaliveMissed = false;
+      this.#keepaliveMissedModel = undefined;
       return { state: this.#state, anomaly: undefined };
     }
 
     const loopKind = toolLoopKind(obs.call_type);
     const skipNormalCacheReadComparison = obs.call_type !== "message" && loopKind === undefined;
+
+    if (this.#lastModel !== undefined && !sameModel(this.#lastModel, identity)) {
+      this.#state = "cold";
+      this.#lastCacheRead = 0;
+      this.#clearToolLoopBaseline();
+      this.#ttlExpiredSinceWarm = false;
+    }
 
     if (this.#state === "warm" && this.#lastTs !== undefined && obsTs !== undefined) {
       if (secondsBetween(obsTs, this.#lastTs) > this.#ttlSecs) {
@@ -138,13 +160,6 @@ export class CacheTracker {
         this.#clearToolLoopBaseline();
         this.#ttlExpiredSinceWarm = true;
       }
-    }
-
-    if (this.#state === "warm" && this.#lastModel !== undefined && this.#lastModel !== obs.model) {
-      this.#state = "cold";
-      this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
     }
 
     if (
@@ -181,9 +196,9 @@ export class CacheTracker {
       this.#ttlExpiredSinceWarm = false;
       if (obs.call_type !== "keepalive") {
         const withinKeepaliveWindow =
-          this.#lastActivityTs !== undefined && obsTs !== undefined
-            ? secondsBetween(obsTs, this.#lastActivityTs) <= this.#maxIdleSecs
-            : true;
+          maxIdleSecs > 0 && (this.#lastActivityTs !== undefined && obsTs !== undefined
+            ? secondsBetween(obsTs, this.#lastActivityTs) <= maxIdleSecs
+            : true);
         if (anomaly === undefined && withinKeepaliveWindow) anomaly = "keepalive_miss";
       }
     }
@@ -193,7 +208,7 @@ export class CacheTracker {
       obs.cache_read_tokens === 0;
 
     if (obs.call_type === "keepalive") {
-      if (pureMiss && this.#lastKeepaliveMissed) {
+      if (pureMiss && sameModel(this.#keepaliveMissedModel, identity)) {
         anomaly = "keepalive_double_miss";
       } else if (anomaly === undefined && pureMiss) {
         anomaly = "cold_keepalive";
@@ -201,11 +216,16 @@ export class CacheTracker {
         anomaly = "keepalive_rewrote";
       }
     }
-    this.#lastKeepaliveMissed =
-      obs.call_type === "keepalive"
-        ? pureMiss
-        : this.#lastKeepaliveMissed &&
-          (obs.cache_read_tokens === 0 || obs.call_type === "heartbeat" || obs.call_type === "heartbeat_tool_loop");
+    if (obs.call_type === "keepalive") {
+      this.#keepaliveMissedModel = pureMiss ? identity : undefined;
+    } else if (
+      sameModel(this.#keepaliveMissedModel, identity) &&
+      obs.cache_read_tokens > 0 &&
+      obs.call_type !== "heartbeat" &&
+      obs.call_type !== "heartbeat_tool_loop"
+    ) {
+      this.#keepaliveMissedModel = undefined;
+    }
 
     if (loopKind !== undefined) {
       if (anomaly === undefined) {
@@ -221,7 +241,7 @@ export class CacheTracker {
       this.#clearToolLoopBaseline();
     }
 
-    this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
+    this.#updateMetadata(obsTs, identity, obs.thinking_enabled, obs.tool_surface);
     this.#lastCallType = obs.call_type;
     if ((obs.call_type === "message" || obs.call_type === "tool_loop") && obsTs !== undefined) {
       this.#lastActivityTs = obsTs;
@@ -266,12 +286,12 @@ export class CacheTracker {
 
   #updateMetadata(
     ts: number | undefined,
-    model: string,
+    identity: ModelIdentity,
     thinking: boolean,
     toolSurface: string | undefined,
   ): void {
     this.#lastTs = ts;
-    this.#lastModel = model;
+    this.#lastModel = identity;
     this.#lastThinking = thinking;
     if (toolSurface !== undefined) this.#lastToolSurface = toolSurface;
   }
@@ -284,21 +304,10 @@ export class CacheTracker {
 
 export class CacheTrackers {
   readonly #map = new Map<string, CacheTracker>();
-  #maxIdleSecs = DEFAULT_MAX_IDLE_SECS;
-
-  setMaxIdleSecs(secs: number): void {
-    this.#maxIdleSecs = secs;
-    for (const tracker of this.#map.values()) tracker.setMaxIdleSecs(secs);
-  }
-
-  get maxIdleSecs(): number {
-    return this.#maxIdleSecs;
-  }
-
   forCharacter(character: string, ttlSecs: number = DEFAULT_TTL_SECS): CacheTracker {
     let tracker = this.#map.get(character);
     if (!tracker) {
-      tracker = new CacheTracker(ttlSecs, this.#maxIdleSecs);
+      tracker = new CacheTracker(ttlSecs);
       this.#map.set(character, tracker);
     }
     return tracker;
@@ -309,7 +318,6 @@ export class CacheTrackers {
   }
 
   seed(character: string, tracker: CacheTracker): void {
-    tracker.setMaxIdleSecs(this.#maxIdleSecs);
     this.#map.set(character, tracker);
   }
 }

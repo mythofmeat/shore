@@ -120,6 +120,18 @@ function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
   }
 }
 
+export function withWorkspaceDir(request: SidecarRequest, config: LoadedConfig): SidecarRequest {
+  const context = request.context;
+  if (request.sdk !== "claude_agent" || context === undefined || context.workspace_dir !== undefined) return request;
+  return {
+    ...request,
+    context: {
+      ...context,
+      workspace_dir: characterWorkspaceDir(config.dirs.config, context.character, config.dirs.workspace),
+    },
+  };
+}
+
 function providerFor(request: SidecarRequest, deps: GenerateDeps): SidecarProvider {
   const provider = deps.providers[request.sdk];
   if (provider === undefined) throw new Error(`unsupported sdk: ${request.sdk}`);

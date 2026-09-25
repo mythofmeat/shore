@@ -198,7 +198,7 @@ function modelInfo(field: string): ConfigTypeInfo {
   if (field === "temperature" || field === "top_p") return { kind: "float", optional: true };
   if (["max_context_tokens", "max_output_tokens", "budget_tokens", "max_tool_iterations"].includes(field)) return { kind: "integer", width: "u32", optional: true };
   if (field === "openrouter_provider") return { kind: "table", optional: true };
-  if (field === "cache_ttl" || field === "cache_keepalive_max") return { kind: "duration", optional: true };
+  if (field === "cache_ttl") return { kind: "duration", optional: true };
   return { kind: "string", optional: true };
 }
 
@@ -207,8 +207,9 @@ function describeOption(path: readonly string[]): string {
   const descriptions: Record<string, string> = {
     model: "Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.",
     enabled: "Enable this feature or select the names granted access.",
-    keepalive_for: "Maximum idle period during which prompt-cache keepalive is allowed.",
-    cache_keepalive_for: "Per-model maximum idle period for prompt-cache keepalive.",
+    default_interval: "Time until the next heartbeat when the character does not schedule one.",
+    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat, message, or daemon start.",
+    max_interval: "Longest time the character may schedule its next heartbeat.",
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",

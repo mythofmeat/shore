@@ -44,6 +44,7 @@ function prefix(): KeepalivePrefix {
     replay_prior_thinking: "all",
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
     keepalive_interval_ms: 1000,
+    keepalive_pings: 100,
     context: { character: "Rhia", call_type: "message", thinking_enabled: false },
   };
 }
@@ -149,7 +150,6 @@ describe("a ping that would miss is not sent", () => {
       "Rhia",
       "claude-opus-5",
       "compaction",
-      undefined,
       prefixFingerprint(movedPrefix()),
     );
 
@@ -165,7 +165,7 @@ describe("a ping that would miss is not sent", () => {
     const h = harness(12_000, 0);
     h.service.arm(prefix(), true);
     h.advance(1);
-    h.service.observe("Rhia", "claude-opus-5", "message", undefined, prefixFingerprint(prefix()));
+    h.service.observe("Rhia", "claude-opus-5", "message", prefixFingerprint(prefix()));
 
     h.advance(10_000);
     await h.service.tick();
@@ -182,7 +182,6 @@ describe("a ping that would miss is not sent", () => {
       "Rhia",
       "claude-opus-5",
       "compaction",
-      undefined,
       prefixFingerprint(movedPrefix()),
     );
     h.advance(1);
@@ -203,7 +202,6 @@ describe("a ping that would miss is not sent", () => {
       "Rhia",
       "some-other-model",
       "heartbeat",
-      undefined,
       prefixFingerprint(movedPrefix()),
     );
 
@@ -276,13 +274,12 @@ describe("the tracker gives read-and-write its own name", () => {
   });
 });
 
-describe("two misses in a row halt everything", () => {
+describe("two misses in a row halt that model", () => {
   function landRealTurn(h: ReturnType<typeof harness>, read: number) {
     h.service.observe(
       "Rhia",
       "claude-opus-5",
       "message",
-      undefined,
       prefixFingerprint(prefix()),
       usage(read, 0),
     );
@@ -299,7 +296,7 @@ describe("two misses in a row halt everything", () => {
     expect(h.service.halted).toBeUndefined();
   });
 
-  test("a second miss with nothing between stops all keepalives", async () => {
+  test("a second miss with nothing between stops that model's keepalives", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
     h.advance(10_000);
@@ -310,6 +307,7 @@ describe("two misses in a row halt everything", () => {
     await h.service.tick();
 
     expect(h.service.halted?.character).toBe("Rhia");
+    expect(h.service.halted?.model).toBe("anthropic:claude-opus-5");
     expect(h.service.halted?.reason).toContain("two keepalive pings in a row missed");
     expect(h.events.at(-1)?.outcome).toBe("halted");
   });
@@ -329,7 +327,7 @@ describe("two misses in a row halt everything", () => {
     expect(h.events.at(-1)?.outcome).toBe("halted");
   });
 
-  test("once halted it sends nothing, for any character", async () => {
+  test("once halted it sends nothing more on that model", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
     h.advance(10_000);
@@ -347,6 +345,88 @@ describe("two misses in a row halt everything", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
+  test("a real call on a halted model cannot schedule another ping before it is re-armed", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    const sentWhenHalted = h.sends();
+
+    h.service.observe("Rhia", "claude-opus-5", "message", prefixFingerprint(prefix()), usage(0, 0));
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.sends()).toBe(sentWhenHalted);
+  });
+
+  test("a miss on one model does not count toward the next model's halt", async () => {
+    const h = harness(0, 14_144);
+    const other: KeepalivePrefix = { ...prefix(), model: "claude-sonnet-5" };
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(other, true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "cold"]);
+    expect(h.service.haltFor(other)).toBeUndefined();
+    expect(h.service.haltFor(prefix())).toBeUndefined();
+  });
+
+  test("a cache read on another model between two misses does not save this one", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    const subagent = { sdk: "anthropic" as const, provider_key: "anthropic", model: "claude-sonnet-5" };
+    h.service.observe("Rhia", "claude-sonnet-5", "subagent", "subagent-prefix", usage(40_000, 0), subagent);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "halted"]);
+  });
+
+  test("a halt does not carry over to the same model on a corrected SDK", async () => {
+    const h = harness(0, 14_144);
+    const wrongSdk: KeepalivePrefix = { ...prefix(), sdk: "openai" };
+    for (let miss = 0; miss < 2; miss += 1) {
+      h.service.arm(wrongSdk, true);
+      h.advance(10_000);
+      await h.service.tick();
+    }
+    expect(h.service.haltFor(wrongSdk)).toBeDefined();
+    expect(h.service.haltFor(prefix())).toBeUndefined();
+    h.service.arm(prefix(), true);
+    expect(h.service.intervalFor("Rhia")).toBe(1000);
+  });
+
+  test("every halted model is reported, the character's own first", async () => {
+    const h = harness(0, 14_144);
+    const other: KeepalivePrefix = {
+      ...prefix(),
+      model: "claude-sonnet-5",
+      context: { character: "Ada", call_type: "message", thinking_enabled: false },
+    };
+    for (const armed of [prefix(), other]) {
+      for (let miss = 0; miss < 2; miss += 1) {
+        h.service.arm(armed, true);
+        h.advance(10_000);
+        await h.service.tick();
+      }
+    }
+    expect(h.service.halted?.model).toBe("anthropic:claude-sonnet-5");
+    expect(h.service.haltsFor("Rhia").map((halt) => halt.model))
+      .toEqual(["anthropic:claude-opus-5", "anthropic:claude-sonnet-5"]);
+    expect(h.service.haltsFor("Ada").map((halt) => halt.model))
+      .toEqual(["anthropic:claude-sonnet-5", "anthropic:claude-opus-5"]);
+  });
+
   test.each(["heartbeat", "heartbeat_tool_loop"])("a %s cache read does not clear chat keepalive misses", async (callType) => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
@@ -354,7 +434,7 @@ describe("two misses in a row halt everything", () => {
     await h.service.tick();
     expect(h.service.halted).toBeUndefined();
 
-    h.service.observe("Rhia", "claude-opus-5", callType, undefined, "heartbeat-prefix", { cache_read_tokens: 40_000 });
+    h.service.observe("Rhia", "claude-opus-5", callType, "heartbeat-prefix", { cache_read_tokens: 40_000 });
     h.service.arm(prefix(), true);
     h.advance(10_000);
     await h.service.tick();
@@ -435,7 +515,7 @@ describe("two misses in a row halt everything", () => {
 
     for (let i = 0; i < 5; i += 1) {
       h.service.arm(prefix(), true);
-      h.service.observe("Rhia", "claude-opus-4-6", "message", undefined, "fresh-fingerprint");
+      h.service.observe("Rhia", "claude-opus-4-6", "message", "fresh-fingerprint");
       h.advance(10_000);
       await h.service.tick();
     }
@@ -509,42 +589,38 @@ describe("a provider that never reports cache writes", () => {
     expect(pingLandedCold(usage(10_240, 0), "moonshot")).toBe(false);
   });
 
-  test("an implicit-cache provider never sends an automatic ping", async () => {
-    const h = harness(0, 0);
-    h.service.arm(implicitPrefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
-
-    expect(h.events).toEqual([]);
-    expect(h.service.nextPingAt("Rhia")).toBeUndefined();
-
-    h.advance(10_000);
-    await h.service.tick();
-    expect(h.sends()).toBe(0);
-  });
-
-  test("implicit caching does not arm a schedule even when a provider could report hits", async () => {
+  test("an implicit-cache provider is pinged like any other", async () => {
     const h = harness(10_240, 0);
     h.service.arm(implicitPrefix(), true);
     h.advance(10_000);
     await h.service.tick();
 
-    expect(h.events).toEqual([]);
-    expect(h.service.nextPingAt("Rhia")).toBeUndefined();
+    expect(h.sends()).toBe(1);
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
   });
 
-  test("repeatedly arming an implicit-cache provider never pays to discover misses", async () => {
-    const h = harness(0, 0);
-    h.service.arm(implicitPrefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
+  test("a model whose pings never read halts itself, not the models that work", async () => {
+    const events: KeepaliveEvent[] = [];
+    let at = 0;
+    const sent: string[] = [];
+    const service = new KeepaliveService(async (req) => {
+      sent.push(req.model);
+      return response(req.model === "kimi-k3" ? 0 : 12_000, 0);
+    }, () => at);
+    service.onEvent((e) => events.push(e));
+    const working: KeepalivePrefix = { ...prefix(), context: { character: "Ada", call_type: "message", thinking_enabled: false } };
 
-    h.service.arm(implicitPrefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
+    for (let i = 0; i < 3; i += 1) {
+      service.arm(implicitPrefix(), true);
+      service.arm(working, true);
+      at += 10_000;
+      await service.tick();
+    }
 
-    expect(h.sends()).toBe(0);
-    expect(h.service.halted).toBeUndefined();
+    expect(service.halted?.model).toBe("moonshotai:kimi-k3");
+    expect(service.haltFor(working)).toBeUndefined();
+    expect(sent.filter((model) => model === "kimi-k3")).toHaveLength(2);
+    expect(sent.filter((model) => model === "claude-opus-5")).toHaveLength(3);
   });
 
   test("an explicit cache reading nothing with no write is disarmed", async () => {

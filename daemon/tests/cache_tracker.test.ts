@@ -66,6 +66,14 @@ describe("warm/cold transitions", () => {
     expect(r.anomaly).toBeUndefined();
   });
 
+  test("the same model on another provider is a separate cache", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), provider: "anthropic", cache_read_tokens: 500 }));
+    const r = t.observe(obs({ ts: at(1), provider: "openrouter", cache_write_tokens: 5000 }));
+    expect(r.state).toBe("warm");
+    expect(r.anomaly).toBeUndefined();
+  });
+
   test("toggling thinking goes cold, deliberately", () => {
     const t = new CacheTracker();
     t.observe(obs({ ts: at(0), cache_read_tokens: 500 }));
@@ -277,9 +285,48 @@ describe("keepalive", () => {
       .toBe("keepalive_double_miss");
   });
 
+  test("a cold keepalive on one provider is not half of a double miss on another", () => {
+    const t = new CacheTracker();
+    expect(t.observe(obs({ ts: at(0), provider: "anthropic", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+    t.observe(obs({ ts: at(1), provider: "openrouter", cache_write_tokens: 500 }));
+    expect(t.observe(obs({ ts: at(2), provider: "openrouter", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+  });
+
+  test("a cold keepalive through one SDK is not half of a double miss through another", () => {
+    const t = new CacheTracker();
+    expect(t.observe(obs({ ts: at(0), provider: "anthropic", sdk: "openai", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+    expect(t.observe(obs({ ts: at(1), provider: "anthropic", sdk: "anthropic", call_type: "keepalive" })).anomaly)
+      .toBe("cold_keepalive");
+  });
+
+  test("a tracker seeded without an SDK still recognises the same model's live calls", () => {
+    const t = CacheTracker.reconstruct(at(0), MODEL, true, 500, 3600, Date.parse(at(1)), undefined, "anthropic");
+    const r = t.observe(obs({ ts: at(1), provider: "anthropic", sdk: "anthropic", cache_read_tokens: 100, cache_write_tokens: 5000 }));
+    expect(r.anomaly).toBe<Anomaly>("unexpected_write");
+  });
+
+  test("a cache read on another model does not clear this model's keepalive miss", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), call_type: "keepalive" }));
+    t.observe(obs({ ts: at(1), model: "glm-4.6", call_type: "subagent", cache_read_tokens: 500 }));
+    expect(t.observe(obs({ ts: at(2), call_type: "keepalive" })).anomaly).toBe("keepalive_double_miss");
+  });
+
+  test("the first call on a new model after the old one's TTL is not a keepalive miss", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: hour(1), provider: "anthropic", cache_read_tokens: 500, keepalive_window_secs: 12 * 3600 }));
+    const r = t.observe(obs({
+      ts: hour(3), provider: "openrouter", cache_write_tokens: 500, keepalive_window_secs: 12 * 3600,
+    }));
+    expect(r.anomaly).toBeUndefined();
+  });
+
   test("TTL expiry plus a non-keepalive call is a miss", () => {
     const t = new CacheTracker();
-    t.observe(obs({ ts: hour(1), cache_read_tokens: 500 }));
+    t.observe(obs({ ts: hour(1), cache_read_tokens: 500, keepalive_window_secs: 12 * 3600 }));
     const r = t.observe(obs({ ts: hour(3), cache_write_tokens: 500 }));
     expect(r.anomaly).toBe<Anomaly>("keepalive_miss");
   });
@@ -324,16 +371,23 @@ describe("keepalive", () => {
     expect(r.anomaly).toBeUndefined();
   });
 
-  test("past the idle ceiling, a cold start is by design", () => {
-    const t = new CacheTracker(3600, 6 * 3600);
-    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
+  test("past the keepalive window, a cold start is by design", () => {
+    const t = new CacheTracker(3600);
+    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500, keepalive_window_secs: 6 * 3600 }));
     const r = t.observe(obs({ ts: "2026-04-05T20:00:00Z", cache_write_tokens: 500 }));
     expect(r.anomaly).toBeUndefined();
   });
 
-  test("inside the ceiling, a miss still fires", () => {
-    const t = new CacheTracker(3600, 6 * 3600);
+  test("with no known keepalive window, a cold start is not a miss", () => {
+    const t = new CacheTracker(3600);
     t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
+    const r = t.observe(obs({ ts: "2026-04-05T04:00:00Z", cache_write_tokens: 500 }));
+    expect(r.anomaly).toBeUndefined();
+  });
+
+  test("inside the keepalive window, a miss still fires", () => {
+    const t = new CacheTracker(3600);
+    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500, keepalive_window_secs: 6 * 3600 }));
     const r = t.observe(obs({ ts: "2026-04-05T04:00:00Z", cache_write_tokens: 500 }));
     expect(r.anomaly).toBe<Anomaly>("keepalive_miss");
   });
@@ -369,15 +423,6 @@ describe("reconstruction", () => {
 });
 
 describe("the tracker map", () => {
-  test("raising the ceiling retunes live trackers", () => {
-    const trackers = new CacheTrackers();
-    const t = trackers.forCharacter("aria");
-    t.observe(obs({ ts: "2026-04-05T00:00:00Z", cache_read_tokens: 500 }));
-    trackers.setMaxIdleSecs(6 * 3600);
-    expect(t.observe(obs({ ts: "2026-04-05T20:00:00Z", cache_write_tokens: 500 })).anomaly)
-      .toBeUndefined();
-  });
-
   test("a character with no tracker asks to be seeded", () => {
     const trackers = new CacheTrackers();
     expect(trackers.needsSeed("aria")).toBe(true);

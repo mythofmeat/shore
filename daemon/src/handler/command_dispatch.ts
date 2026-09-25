@@ -26,6 +26,10 @@ export interface DispatchRuntime {
 
   homeThread(character: string): string;
 
+  cachedCharacters(): string[];
+
+  warmThread(character: string): string | undefined;
+
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
 }
 
@@ -91,10 +95,17 @@ async function afterChatModelChange(
     (args["background_task"] !== undefined || args["subagent"] !== undefined)
   ) return undefined;
 
+  const reason = name === "set_model_setting" ? "model_setting_change" : "model_change";
   await ctx.runtime.refreshCachedRequest(
-    ctx.character, name === "set_model_setting" ? "model_setting_change" : "model_change",
+    ctx.character, reason,
     ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character),
   );
+  const chatSetting = args["background_task"] === undefined && args["subagent"] === undefined;
+  if (name === "set_model_setting" && args["scope"] === "global" && chatSetting) {
+    for (const other of ctx.runtime.cachedCharacters()) {
+      if (other !== ctx.character) await ctx.runtime.refreshCachedRequest(other, reason, ctx.runtime.warmThread(other));
+    }
+  }
   return invalidated(data, { cached_request: true });
 }
 

@@ -70,14 +70,20 @@ MUTANTS = [
     # --- the clock ------------------------------------------------------------
     ("clock: the fallback interval is read in seconds, so a wake fires at once",
      R,
-     "    defaultIntervalMs: Number(heartbeat.fallback_heartbeat_interval.asMillisExact()),",
-     "    defaultIntervalMs: Number(heartbeat.fallback_heartbeat_interval.asSecs()),"),
+     "    defaultIntervalMs: Number(heartbeat.default_interval.asMillisExact()),",
+     "    defaultIntervalMs: Number(heartbeat.default_interval.asSecs()),"),
     ("clock: the silence bound and the wake floor are swapped",
      R,
      "    maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),\n"
-     "    minWakeIntervalMs: Number(heartbeat.minimum_heartbeat_latency.asMillisExact()),",
-     "    maxSilentMs: Number(heartbeat.minimum_heartbeat_latency.asMillisExact()),\n"
-     "    minWakeIntervalMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),"),
+     "    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),",
+     "    maxSilentMs: Number(heartbeat.min_interval.asMillisExact()),\n"
+     "    minIntervalMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),"),
+    ("clock: the floor and the ceiling are swapped",
+     R,
+     "    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),\n"
+     "    maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),",
+     "    minIntervalMs: Number(heartbeat.max_interval.asMillisExact()),\n"
+     "    maxIntervalMs: Number(heartbeat.min_interval.asMillisExact()),"),
     ("clock: the dormancy tick count comes from the wrong knob",
      R,
      "    maxIdleTicks: heartbeat.dormant_after_heartbeat_turns,",
@@ -136,12 +142,12 @@ MUTANTS = [
     # --- the reload -----------------------------------------------------------
     ("reload: one character's config is pushed to all of them, as the Rust's shared copy was",
      R,
-     "        this.#service.setCompactionConfig(\n"
-     "          character,\n"
-     "          compactionConfigFor(effectiveConfig(character)),\n        );",
-     "        this.#service.setCompactionConfig(\n"
-     "          character,\n"
-     '          compactionConfigFor(effectiveConfig("ada")),\n        );'),
+     "        const config = effectiveConfig(character);",
+     '        const config = effectiveConfig("ada");'),
+    ("reload: heartbeat bounds still wait for a restart",
+     R,
+     "        this.#service.setHeartbeatConfig(character, clockConfigFor(config));",
+     "        void clockConfigFor(config);"),
     ("reload: nobody is told, so an edited threshold waits for a restart",
      R,
      "    for (const character of Array.from(this.#registered.keys())) {",
@@ -149,9 +155,9 @@ MUTANTS = [
     ("reload: the push runs before the registration it belongs to",
      R,
      "      this.#after(character, () => {\n"
-     "        this.#service.setCompactionConfig(",
+     "        const config = effectiveConfig(character);",
      "      ((fn: () => void) => fn())(() => {\n"
-     "        this.#service.setCompactionConfig("),
+     "        const config = effectiveConfig(character);"),
     ("user: the timestamp is taken when the queue drains, not when the user spoke",
      R,
      "    const localAt = localWallClock(this.#now(), this.#zone);\n    this.#after(character, () => {\n"

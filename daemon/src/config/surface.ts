@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "cache", "budgets", "notifications", "mcp", "matrix", "web_search", "retrieval", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "notifications", "mcp", "matrix", "web_search", "retrieval", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -16,7 +16,6 @@ const field = (internal: string, canonical: string): ConfigField => ({
 export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("daemon.addr", "daemon.listen_addr"),
   field("cache.forensics", "daemon.cache_forensics"),
-  field("cache.keepalive_max", "cache.keepalive_for"),
   field("defaults.model", "chat.model"),
   field("defaults.display_name", "chat.display_name"),
   field("defaults.embedding", "embedding.model"),
@@ -28,8 +27,9 @@ export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
   ...Object.entries({
-    fallback_heartbeat_interval: "interval",
-    minimum_heartbeat_latency: "min_interval",
+    default_interval: "default_interval",
+    min_interval: "min_interval",
+    max_interval: "max_interval",
     dormant_after_heartbeat_turns: "max_idle_turns",
     dormant_after_idle_time: "idle_timeout",
     wrap_up_grace_rounds: "max_wrap_up_rounds",
@@ -68,7 +68,7 @@ export const BUDGET_FIELDS: readonly ConfigField[] = Object.entries({
 }).map(([old, key]) => field(old, key));
 
 export const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
-  budget_tokens: "reasoning_budget_tokens", cache_keepalive_max: "cache_keepalive_for",
+  budget_tokens: "reasoning_budget_tokens",
   replay_prior_thinking: "reasoning_replay", max_tool_iterations: "max_tool_rounds",
   openrouter_provider: "openrouter_routing", gemini_generation: "gemini_thinking_mode",
   zai_clear_thinking: "zai_clear_reasoning",
@@ -76,7 +76,7 @@ export const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
 
 export const MODEL_FIELDS = [
   "max_context_tokens", "max_output_tokens", "temperature", "top_p", "reasoning_effort",
-  "budget_tokens", "cache_ttl", "cache_keepalive", "cache_keepalive_max", "replay_prior_thinking",
+  "budget_tokens", "cache_ttl", "replay_prior_thinking",
   "max_tool_iterations", "openrouter_provider", "gemini_generation", "zai_clear_thinking", "supports_images",
 ] as const;
 

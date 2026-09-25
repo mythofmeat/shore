@@ -4,7 +4,6 @@ import { describe, expect, test } from "bun:test";
 import rawFixture from "./config_captures/model_resolution.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
-import { ConfigDuration } from "../src/config/duration.ts";
 import type { Sdk } from "../src/llm/types.ts";
 import { settingDefinition } from "../src/llm/settings.ts";
 import {
@@ -156,7 +155,6 @@ function toWire(model: ResolvedModel): Record<string, unknown> {
 }
 
 function fieldsToWire(fields: ModelConfigFields): Record<string, unknown> {
-  const keepalive = fields.cacheKeepalive;
   return {
     sdk: fields.sdk ?? null,
     api_key_env: fields.apiKeyEnv ?? null,
@@ -168,7 +166,6 @@ function fieldsToWire(fields: ModelConfigFields): Record<string, unknown> {
     reasoning_effort: fields.reasoningEffort ?? null,
     budget_tokens: fields.budgetTokens ?? null,
     cache_ttl: fields.cacheTtl ?? null,
-    cache_keepalive: keepalive === undefined ? null : keepaliveToString(keepalive),
     openrouter_provider: fields.openrouterProvider ?? null,
     gemini_generation: fields.geminiGeneration ?? null,
     zai_clear_thinking: fields.zaiClearThinking ?? null,
@@ -379,19 +376,7 @@ describe("resolvedModelFromParts", () => {
     expect(model.cacheTtl).toBe("");
   });
 
-  test("an explicit keepalive is carried, and nothing is defaulted in beside it", () => {
-    const off = resolvedModelFromParts(
-      "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic",
-      { cacheKeepalive: { kind: "off" } },
-    );
-    expect(keepaliveToString(off.cacheKeepalive as never)).toBe("off");
-
-    const every = resolvedModelFromParts(
-      "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic",
-      { cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(3300) } as never },
-    );
-    expect(keepaliveToString(every.cacheKeepalive as never)).toBe("55m");
-
+  test("a catalog model has no keepalive of its own, only the TTL default", () => {
     const defaulted = resolvedModelFromParts(
       "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic", {},
     );
@@ -530,41 +515,11 @@ describe("catalogFromSections", () => {
     expect(model.sdk).toBe("openai");
   });
 
-  test("a provider default idle ceiling reaches its models, and a model overrides it", () => {
-    const chat = Bun.TOML.parse(
-      "[\"moonshotai:kimi-k3\"]\n" +
-        "[\"moonshotai:kimi-k2\"]\n\ncache_keepalive_max = \"6h\"\n",
-    ) as Record<string, unknown>;
-    const read = readModelConfigFields(
-      Bun.TOML.parse('cache_keepalive = "10m"\ncache_keepalive_max = "90m"\n') as Record<
-        string,
-        unknown
-      >,
-    );
-    if ("err" in read) throw new Error(read.err);
-    const registry: ProviderRegistryView = {
-      get: () => ({ sdk: "openai", defaults: read.ok }),
-    };
-    const catalog = catalogFromSections(chat, undefined, undefined, registry);
-
-    const inherited = catalog.chat.get("moonshotai:kimi-k3") as ResolvedModel;
-    expect(inherited.cacheKeepaliveMax?.toString()).toBe("90m");
-
-    const overridden = catalog.chat.get("moonshotai:kimi-k2") as ResolvedModel;
-    expect(overridden.cacheKeepaliveMax?.toString()).toBe("6h");
-  });
-
-  test("a model that names no ceiling leaves the field absent for the global to fill", () => {
-    const catalog = catalogFromSections(
-      Bun.TOML.parse("[\"anthropic:claude-opus-4-6\"]\n") as Record<
-        string,
-        unknown
-      >,
-      undefined,
-      undefined,
-    );
-    expect((catalog.chat.get("anthropic:claude-opus-4-6") as ResolvedModel).cacheKeepaliveMax)
-      .toBeUndefined();
+  test("a provider's defaults cannot name a keepalive either", () => {
+    for (const key of ["cache_keepalive", "cache_keepalive_for", "cache_keepalive_max", "cache_keepalive_pings"]) {
+      const read = readModelConfigFields(Bun.TOML.parse(`${key} = "10m"\n`) as Record<string, unknown>);
+      expect("err" in read ? read.err : "", key).toContain(`unknown field \`${key}\``);
+    }
   });
 
   test("registry credentials deliberately do not cascade", () => {

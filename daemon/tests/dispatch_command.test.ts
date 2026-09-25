@@ -161,7 +161,8 @@ async function autonomyWithState(dataDir: string): Promise<AutonomyService> {
       defaultIntervalMs: 3_600_000,
       maxIdleTicks: 3,
       maxSilentMs: 172_800_000,
-      minWakeIntervalMs: 3_600_000,
+      minIntervalMs: 3_600_000,
+      maxIntervalMs: 48 * 3_600_000,
     },
   });
   return service;

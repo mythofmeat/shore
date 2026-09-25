@@ -137,6 +137,7 @@ function recordingService(gate?: Promise<void>) {
     onUserMessage: () => calls.push("user"),
     onAssistantMessage: (_c: string, turns: number) => calls.push(`assistant:${turns}`),
     setCompactionConfig: () => calls.push("compaction"),
+    setHeartbeatConfig: () => {},
     shouldCompactNow: () => undefined,
     onCompactionComplete: () => calls.push("compacted"),
     onCompactionFailed: () => calls.push("failed"),
@@ -474,7 +475,7 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
       intervalMs: 55 * 60_000,
-      maxSecs: undefined,
+      pings: undefined,
     });
 
     expect(cached, "the cadence rides along, or the armed prefix has none").toEqual([
@@ -483,7 +484,7 @@ describe("the autonomy surface a turn drives", () => {
     release();
   });
 
-  test("the ceiling rides along with the cadence, not just the cadence", () => {
+  test("the ping count rides along with the cadence, not just the cadence", () => {
     const cached: Array<KeepaliveArming | undefined> = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -498,10 +499,32 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
       intervalMs: 10 * 60_000,
-      maxSecs: 5400,
+      pings: 3,
     });
 
-    expect(cached).toEqual([{ intervalMs: 10 * 60_000, maxSecs: 5400 }]);
+    expect(cached).toEqual([{ intervalMs: 10 * 60_000, pings: 3 }]);
+    release();
+  });
+
+  test("the turn's thread rides along, so a home thread off main is armed as itself", () => {
+    const threads: Array<string | undefined> = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const bridge = new TurnAutonomyBridge(recordingService(gate));
+    const autonomy = turnAutonomy(bridge, {
+      set: (_character: string, _request: unknown, _keepalive?: KeepaliveArming, _warm?: boolean, thread?: string) =>
+        threads.push(thread),
+    });
+
+    autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
+      intervalMs: 10 * 60_000,
+      pings: undefined,
+    }, "garden");
+
+    expect(threads).toEqual(["garden"]);
     release();
   });
 
@@ -647,36 +670,6 @@ describe("what the assembly hands the driver", () => {
       expect(deps.notifier).toBe(runtime.notifier);
       expect(await routesToCurrentRegistry(runtime, deps.mcpRegistry)).toBe(true);
       expect(deps.mcpRegistry.toolDefsFiltered(["*"])).toEqual([]);
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("the keepalive ceiling is read live, not copied", async () => {
-    const { root, config, runtime } = await runtimeUnder("shore-deps-live-", (app) => {
-      app.cache.keepalive_max = ConfigDuration.fromSecs(3600);
-    });
-    try {
-      const deps = buildGenerationDeps({
-        runtime,
-        providers: {},
-        autonomy: new TurnAutonomyBridge(recordingService()),
-        emitEvent: () => {},
-        diagnostics: { api_calls: { push: () => {} } } as never,
-      });
-
-      expect(deps.keepaliveMaxSecs?.()).toBe(3600);
-
-      runtime.registry.setGlobalConfig({
-        ...config,
-        app: {
-          ...config.app,
-          cache: { ...config.app.cache, keepalive_max: ConfigDuration.fromSecs(60) },
-        },
-      });
-
-      expect(deps.keepaliveMaxSecs?.()).toBe(60);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -1073,6 +1066,49 @@ describe("the command path", () => {
     }
   });
 
+  test("applying config reload updates heartbeat status and existing schedules", async () => {
+    const hour = 3_600_000;
+    const { root, config, runtime } = await runtimeUnder("shore-heartbeat-reload-", () => {}, ["ada", "nova"]);
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      const deps = buildCommandPathDeps(commandAssembly(runtime, { autonomy: bridge }));
+      for (const character of ["ada", "nova"]) {
+        bridge.ensureState(character, config);
+        await bridge.settled(character);
+      }
+      runtime.autonomy.scheduleNextWake("ada", 47, "later");
+      const clock = required(runtime.autonomy.runnerFor("nova")).clock;
+      clock.tick(Date.now());
+      const before = Date.now();
+      const updated = configFor(root, (app) => {
+        const heartbeat = app.behavior.autonomy.heartbeat;
+        heartbeat.default_interval = ConfigDuration.fromSecs(90 * 60);
+        heartbeat.min_interval = ConfigDuration.fromSecs(20 * 60);
+        heartbeat.max_interval = ConfigDuration.fromSecs(2 * 3600);
+      });
+      await deps.dispatchRuntime.applyReloadedConfig(updated);
+      await bridge.settled("ada");
+      await bridge.settled("nova");
+      expect(runtime.autonomy.status("ada")).toMatchObject({
+        default_interval_ms: 1.5 * hour,
+        min_interval_ms: hour / 3,
+        max_interval_ms: 2 * hour,
+      });
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeGreaterThanOrEqual(before + 2 * hour);
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeLessThanOrEqual(Date.now() + 2 * hour);
+      expect(clock.nextWakeAt).toBeGreaterThan(before + 1.5 * hour - 1000);
+      expect(clock.nextWakeAt).toBeLessThanOrEqual(Date.now() + 1.5 * hour);
+      expect(runtime.autonomy.scheduleNextWake("ada", 0, "soon")).toBeCloseTo(1 / 3);
+      const deadline = runtime.autonomy.status("ada")?.next_wake_at;
+      await deps.dispatchRuntime.applyReloadedConfig(updated);
+      await bridge.settled("ada");
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(deadline);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a refreshed prompt snapshot drops the cached body", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-prompt-");
     try {
@@ -1104,7 +1140,7 @@ describe("the command path", () => {
           max_tokens: 128,
           replay_prior_thinking: "all",
         },
-        { intervalMs: 55 * 60_000, maxSecs: undefined },
+        { intervalMs: 55 * 60_000, pings: undefined },
       );
       expect(runtime.keepalive.nextPingAt("ada")).toBeDefined();
 
@@ -1167,17 +1203,20 @@ describe("the command path", () => {
         ...before,
         app: {
           ...before.app,
-          cache: { ...before.app.cache, keepalive_max: ConfigDuration.fromSecs(4242) },
+          memory: {
+            ...before.app.memory,
+            compaction: { ...before.app.memory.compaction, idle_trigger: ConfigDuration.fromSecs(4242) },
+          },
         },
       };
 
       deps.runtime.adoptGlobalConfig(fresh);
 
       expect(
-        Number(runtime.registry.globalConfig().app.cache.keepalive_max.asSecs()),
+        Number(runtime.registry.globalConfig().app.memory.compaction.idle_trigger.asSecs()),
       ).toBe(4242);
       expect(
-        Number(runtime.registry.effectiveConfig("ada").app.cache.keepalive_max.asSecs()),
+        Number(runtime.registry.effectiveConfig("ada").app.memory.compaction.idle_trigger.asSecs()),
       ).toBe(4242);
     } finally {
       await runtime.shutdown();
@@ -1424,7 +1463,7 @@ describe("the shape of what is cached", () => {
       model: "m",
       provider_key: "anthropic",
       messages: [{ role: "user", content: "hi" } as never],
-    }, { intervalMs: undefined, maxSecs: undefined });
+    }, { intervalMs: undefined, pings: undefined });
 
     expect(seen[0]?.provider_key).toBe("anthropic");
     expect(seen[0]?.messages).toHaveLength(1);

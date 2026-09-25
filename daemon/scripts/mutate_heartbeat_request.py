@@ -131,13 +131,13 @@ MUTANTS = [
      H,
      "    deps.cache.set(character, source, {\n"
      "      intervalMs: rebuilt.keepalive_interval_ms,\n"
-     "      maxSecs: rebuilt.keepalive_max_secs,\n"
-     "    }, false);",
+     "      pings: rebuilt.keepalive_pings,\n"
+     "    }, false, thread);",
      "    void rebuilt.keepalive_interval_ms;"),
-    ("prepare: the rebuilt body is armed without the model's ceiling",
+    ("prepare: the rebuilt body is armed without the model's ping count",
      H,
-     "      maxSecs: rebuilt.keepalive_max_secs,",
-     "      maxSecs: undefined,"),
+     "      pings: rebuilt.keepalive_pings,",
+     "      pings: undefined,"),
     ("prepare: the body carrying the heartbeat prompt is what gets cached",
      H,
      "  pushInlineSystem(request, prompt);",

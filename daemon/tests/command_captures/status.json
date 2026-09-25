@@ -21,7 +21,7 @@
         },
         "autonomy": null,
         "activity": null,
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -61,15 +61,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -109,12 +110,13 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 2,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "next_wake_at": "2026-08-04T11:26:56.378977001+00:00",
           "seconds_until_wake": 3599,
           "last_user_at": "2026-08-04T10:24:51.378976533+00:00",
           "seconds_since_user": 125,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": [
             {
@@ -147,7 +149,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -187,19 +189,20 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 1,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "next_wake_at": "2026-08-04T10:26:11.380481267+00:00",
           "seconds_until_wake": -45,
           "last_user_at": "2026-08-04T08:26:56.380480894+00:00",
           "seconds_since_user": 7200,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -239,15 +242,16 @@
           "heartbeat_state": "Dormant",
           "ticks_without_user": 5,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -287,17 +291,18 @@
           "heartbeat_state": "Dormant",
           "ticks_without_user": 3,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "last_user_at": "2026-08-04T10:25:56.382859160+00:00",
           "seconds_since_user": 60,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -337,15 +342,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 7,
-          "effective_interval_secs": 2700,
-          "minimum_heartbeat_latency_secs": 1,
+          "default_interval_secs": 2700,
+          "min_interval_secs": 1,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 90000,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -385,15 +391,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -433,15 +440,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -481,15 +489,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -529,17 +538,18 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "last_user_at": "2026-08-04T10:36:56.389546437+00:00",
           "seconds_since_user": 0,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -579,15 +589,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -631,15 +642,16 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -679,10 +691,11 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "last_user_at": "2026-08-04T10:21:56.393763463+00:00",
           "seconds_since_user": 300,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
@@ -745,7 +758,7 @@
           "message_count": 140,
           "turn_count": 140
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -785,10 +798,11 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
+          "default_interval_secs": 3600,
           "last_user_at": "2026-08-04T10:21:56.395188579+00:00",
           "seconds_since_user": 300,
-          "minimum_heartbeat_latency_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": []
         },
@@ -851,7 +865,7 @@
           "message_count": 4,
           "turn_count": 4
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",
@@ -891,8 +905,9 @@
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
+          "default_interval_secs": 3600,
+          "min_interval_secs": 3600,
+          "max_interval_secs": 172800,
           "dormant_after_idle_time_secs": 172800,
           "recent_events": [
             {
@@ -925,7 +940,7 @@
         "activity": {
           "$ref": "s5"
         },
-        "keepalive_halted": null,
+        "keepalive_halts": [],
         "sections": [
           "tokens",
           "autonomy",

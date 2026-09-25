@@ -2,8 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
-import { keepalivePolicyError, supportsKeepalive } from "../llm/cache_capability.ts";
-import { DEFAULT_KEEPALIVE_MAX_SECS, resolveKeepaliveMaxSecs } from "../config/keepalive.ts";
+import { DEFAULT_KEEPALIVE_PINGS, keepaliveWindowSecs } from "../config/keepalive.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { MAIN_THREAD } from "../config/dirs.ts";
 import {
@@ -26,11 +25,9 @@ import type {
 
 const KEEPALIVE_TICK_MS = 10_000;
 
-export { DEFAULT_KEEPALIVE_MAX_SECS };
-const DEFAULT_MAX_IDLE_SECS = DEFAULT_KEEPALIVE_MAX_SECS;
-
 export interface KeepalivePrefix extends SidecarRequest {
   keepalive_interval_ms?: number;
+  keepalive_pings?: number;
 }
 
 export interface KeepaliveEvent {
@@ -46,11 +43,6 @@ export interface KeepaliveSchedule extends KeepaliveSnapshot {
   character: string;
 }
 
-export interface KeepaliveRestore extends KeepaliveSnapshot {
-  character: string;
-  max_idle_secs: number;
-}
-
 export interface KeepaliveDrain {
   events: KeepaliveEvent[];
   schedules: KeepaliveSchedule[];
@@ -60,7 +52,7 @@ export interface PingNowOutcome {
   status: "sent" | "skipped" | "failed";
   cold: boolean;
   usage?: Usage;
-  reason?: "no_prefix" | "budget" | "unsupported_cache" | "halted";
+  reason?: "no_prefix" | "budget" | "halted";
   detail?: string;
 }
 
@@ -71,18 +63,27 @@ export type PingSender = (
 
 interface Entry {
   keepalive: CacheKeepalive;
-  maxIdleSecs: number;
   prefix: KeepalivePrefix | undefined;
   inFlight: boolean;
   armedFingerprint: string | undefined;
   lastCallFingerprint: string | undefined;
   consecutiveMisses: number;
+  missKey: string | undefined;
 }
 
 export interface KeepaliveHalt {
   character: string;
+  model: string;
   reason: string;
   at: number;
+}
+
+export function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
+  return `${req.provider_key ?? req.sdk}:${req.model}`;
+}
+
+function haltKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
+  return JSON.stringify([req.provider_key ?? req.sdk, req.sdk, req.model]);
 }
 
 export function prefixFingerprint(req: {
@@ -125,12 +126,11 @@ export function pingRewrotePrefix(usage: {
 
 export interface KeepaliveCallLabels {
   ledgerPath?: string;
-  maxIdleSecs?: number;
+  windowSecs?: number;
 }
 
 export interface KeepaliveServiceOptions {
   ledgerPath?: string;
-  maxIdleSecs?: () => number;
   runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
@@ -142,7 +142,7 @@ export function buildKeepalivePing(
     role: "user",
     content: [{ type: "text", text: "." }],
   };
-  const { keepalive_interval_ms: _cadence, context, ...request } = prefix;
+  const { keepalive_interval_ms: _cadence, keepalive_pings: _pings, context, ...request } = prefix;
   const ping: SidecarRequest = {
     ...request,
     max_tokens: 1,
@@ -154,7 +154,7 @@ export function buildKeepalivePing(
       ...carried,
       call_type: "keepalive",
       ...(labels.ledgerPath === undefined ? {} : { ledger: labels.ledgerPath }),
-      ...(labels.maxIdleSecs === undefined ? {} : { keepalive_max_secs: labels.maxIdleSecs }),
+      ...(labels.windowSecs === undefined ? {} : { keepalive_window_secs: labels.windowSecs }),
     };
   }
   return ping;
@@ -165,10 +165,10 @@ export class KeepaliveService {
   readonly #send: PingSender;
   readonly #now: () => number;
   readonly #ledgerPath: string | undefined;
-  readonly #configuredMaxIdleSecs: () => number;
   readonly #runActivity: <T>(run: () => Promise<T>) => Promise<T>;
   #sink: KeepaliveEventSink | undefined;
-  #halt: KeepaliveHalt | undefined;
+  readonly #halts = new Map<string, KeepaliveHalt>();
+  #lastHalt: KeepaliveHalt | undefined;
 
   constructor(
     send: PingSender,
@@ -178,14 +178,13 @@ export class KeepaliveService {
     this.#send = send;
     this.#now = now;
     this.#ledgerPath = opts.ledgerPath;
-    this.#configuredMaxIdleSecs = opts.maxIdleSecs ?? (() => DEFAULT_MAX_IDLE_SECS);
     this.#runActivity = opts.runActivity ?? (async (run) => await run());
   }
 
   #labels(entry: Entry): KeepaliveCallLabels {
     return {
       ...(this.#ledgerPath === undefined ? {} : { ledgerPath: this.#ledgerPath }),
-      maxIdleSecs: entry.maxIdleSecs,
+      windowSecs: keepaliveWindowSecs(entry.keepalive.interval, entry.keepalive.maxPings),
     };
   }
 
@@ -194,17 +193,33 @@ export class KeepaliveService {
   }
 
   get halted(): KeepaliveHalt | undefined {
-    return this.#halt;
+    return this.#lastHalt;
   }
 
-  #haltAll(character: string, sdk: Sdk, usage: Usage): void {
+  haltFor(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): KeepaliveHalt | undefined {
+    return this.#halts.get(haltKey(req));
+  }
+
+  haltsFor(character: string): KeepaliveHalt[] {
+    const armed = this.#entries.get(character)?.prefix;
+    const own = armed === undefined ? undefined : this.haltFor(armed);
+    const others = [...this.#halts.values()].filter((halt) => halt !== own).reverse();
+    return own === undefined ? others : [own, ...others];
+  }
+
+  #haltModel(character: string, prefix: KeepalivePrefix, usage: Usage): void {
+    const sdk = prefix.sdk;
+    const model = keepaliveModelKey(prefix);
     const evidence = `Neither read any cached tokens on ${sdk}; the latest wrote ` +
       `${usage.cache_creation_tokens} tokens. There is no evidence that the prefix is being reused`;
     const reason =
       `two keepalive pings in a row missed with nothing in between. ${evidence}, so every ` +
-      `further ping would pay full price for nothing. All keepalives are stopped for the life ` +
-      `of this daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
-    this.#halt = { character, reason, at: this.#now() };
+      `further ping would pay full price for nothing. Keepalives for ${model} are stopped for the ` +
+      `life of this daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
+    const halt = { character, model, reason, at: this.#now() };
+    const key = haltKey(prefix);
+    this.#halts.set(key, halt);
+    this.#lastHalt = halt;
     shoreLog.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
     this.#push({
       character,
@@ -212,22 +227,21 @@ export class KeepaliveService {
       detail: `Cache keepalive HALTED: ${reason}`,
       at: this.#now(),
     });
-    for (const [, other] of this.#entries) other.keepalive.onCacheInvalidated();
+    for (const [, other] of this.#entries) {
+      if (other.prefix !== undefined && haltKey(other.prefix) === key) other.keepalive.onCacheInvalidated();
+    }
   }
 
   arm(prefix: KeepalivePrefix, warm = false): void {
     const character = prefix.context?.character;
     if (character === undefined) return;
-    const maxIdleSecs = resolveKeepaliveMaxSecs(prefix.context?.keepalive_max_secs, this.#configuredMaxIdleSecs());
-    const entry = this.#entryFor(character, maxIdleSecs);
+    const entry = this.#entryFor(character);
     entry.prefix = prefix;
     entry.armedFingerprint = prefixFingerprint(prefix);
     entry.lastCallFingerprint = undefined;
-    const requested = prefix.keepalive_interval_ms;
-    const interval = this.#halt === undefined && requested !== undefined &&
-      keepalivePolicyError(prefix.sdk, prefix.model, prefix.provider_options?.cache_ttl, requested) === undefined
-      ? requested : undefined;
-    entry.keepalive.setInterval(interval, prefix.model, this.#now());
+    const interval = this.haltFor(prefix) === undefined ? prefix.keepalive_interval_ms : undefined;
+    entry.keepalive.setMaxPings(prefix.keepalive_pings ?? DEFAULT_KEEPALIVE_PINGS);
+    entry.keepalive.setInterval(interval, prefix.model, this.#now(), haltKey(prefix));
     if (warm) entry.keepalive.onPrefixWarmed(this.#now());
   }
 
@@ -242,19 +256,22 @@ export class KeepaliveService {
     character: string,
     model: string,
     callType: string,
-    maxIdleSecs?: number,
     fingerprint?: string,
     usage?: Pick<Usage, "cache_read_tokens">,
+    identity?: Pick<SidecarRequest, "sdk" | "model" | "provider_key">,
   ): void {
     if (callType === "keepalive" || callType === "heartbeat" || callType === "heartbeat_tool_loop") return;
-    const entry =
-      this.#entries.get(character) ??
-      this.#entryFor(character, maxIdleSecs ?? this.#configuredMaxIdleSecs());
-    if (fingerprint !== undefined && entry.prefix?.model === model) {
+    const entry = this.#entryFor(character);
+    const armed = entry.prefix;
+    const elsewhere = identity !== undefined && armed !== undefined && haltKey(identity) !== haltKey(armed);
+    if (fingerprint !== undefined && armed?.model === model && !elsewhere) {
       entry.lastCallFingerprint = fingerprint;
     }
-    if (usage !== undefined && usage.cache_read_tokens > 0) entry.consecutiveMisses = 0;
-    entry.keepalive.onCacheWarmed(model, this.#now());
+    if (usage !== undefined && usage.cache_read_tokens > 0 && readsFromMissedModel(entry, model, identity)) {
+      entry.consecutiveMisses = 0;
+    }
+    if (elsewhere) return;
+    entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
   }
 
   forgetMisses(character: string): void {
@@ -296,16 +313,14 @@ export class KeepaliveService {
   }
 
   async #pingNow(character: string): Promise<PingNowOutcome> {
-    if (this.#halt !== undefined) {
-      return { status: "skipped", cold: false, reason: "halted", detail: this.#halt.reason };
-    }
     const entry = this.#entries.get(character);
     const prefix = entry?.prefix;
     if (entry === undefined || prefix === undefined) {
       return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
     }
-    if (!supportsKeepalive(prefix.sdk, prefix.model, prefix.provider_options?.cache_ttl)) {
-      return { status: "skipped", cold: false, reason: "unsupported_cache", detail: "this model has no enabled explicit prompt cache" };
+    const halt = this.haltFor(prefix);
+    if (halt !== undefined) {
+      return { status: "skipped", cold: false, reason: "halted", detail: halt.reason };
     }
     const ping = buildKeepalivePing(prefix, this.#labels(entry));
     await prepareCallAccounting(ping, fetch, this.#now());
@@ -338,7 +353,6 @@ export class KeepaliveService {
   }
 
   async tick(): Promise<void> {
-    if (this.#halt !== undefined) return;
     const due: string[] = [];
     for (const [character, entry] of this.#entries) {
       if (entry.inFlight) continue;
@@ -357,34 +371,25 @@ export class KeepaliveService {
     );
   }
 
-  restore(character: string, snapshot: KeepaliveSnapshot, maxIdleSecs = this.#configuredMaxIdleSecs()): boolean {
-    const entry = this.#entryFor(character, maxIdleSecs);
-    return entry.keepalive.restore(snapshot, this.#now());
+  restore(character: string, snapshot: KeepaliveSnapshot): boolean {
+    return this.#entryFor(character).keepalive.restore(snapshot, this.#now());
   }
 
   scheduleFor(character: string): KeepaliveSnapshot | undefined {
     return this.#entries.get(character)?.keepalive.snapshot();
   }
 
-  #entryFor(character: string, maxIdleSecs: number): Entry {
+  #entryFor(character: string): Entry {
     const existing = this.#entries.get(character);
-    if (existing !== undefined) {
-      if (existing.maxIdleSecs === maxIdleSecs) return existing;
-      const carried = existing.keepalive.snapshot();
-      const rebuilt = new CacheKeepalive(maxIdleSecs * 1000);
-      if (carried !== undefined) rebuilt.restore(carried, this.#now());
-      existing.keepalive = rebuilt;
-      existing.maxIdleSecs = maxIdleSecs;
-      return existing;
-    }
+    if (existing !== undefined) return existing;
     const entry: Entry = {
-      keepalive: new CacheKeepalive(maxIdleSecs * 1000),
-      maxIdleSecs,
+      keepalive: new CacheKeepalive(DEFAULT_KEEPALIVE_PINGS),
       prefix: undefined,
       inFlight: false,
       armedFingerprint: undefined,
       lastCallFingerprint: undefined,
       consecutiveMisses: 0,
+      missKey: undefined,
     };
     this.#entries.set(character, entry);
     return entry;
@@ -411,6 +416,11 @@ export class KeepaliveService {
       return;
     }
 
+    if (this.haltFor(prefix) !== undefined) {
+      entry.keepalive.onCacheInvalidated();
+      return;
+    }
+
     if (prefixIsStale(entry)) {
       this.#skip(
         character,
@@ -431,6 +441,7 @@ export class KeepaliveService {
     }
 
     const startedAt = this.#now();
+    const epoch = entry.keepalive.epoch;
     let attempt: CallAttempt | undefined;
     let response: GenerateResponse;
     try {
@@ -439,6 +450,7 @@ export class KeepaliveService {
     } catch (e) {
       await attempt?.pricingReady;
       recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
+      if (entry.keepalive.epoch !== epoch) return;
       entry.keepalive.onPingFailed(this.#now());
       this.#push({
         character,
@@ -451,12 +463,18 @@ export class KeepaliveService {
 
     await attempt?.pricingReady;
     recordGenerate(ping.context, ping, response, attempt);
+    if (entry.keepalive.epoch !== epoch) return;
 
     const usage = response.usage;
     if (pingLandedCold(usage, prefix.sdk)) {
+      const missKey = haltKey(prefix);
+      if (entry.missKey !== missKey) {
+        entry.missKey = missKey;
+        entry.consecutiveMisses = 0;
+      }
       entry.consecutiveMisses += 1;
       if (entry.consecutiveMisses >= 2) {
-        this.#haltAll(character, prefix.sdk, usage);
+        this.#haltModel(character, prefix, usage);
         return;
       }
       entry.keepalive.onCacheInvalidated();
@@ -506,6 +524,16 @@ export class KeepaliveService {
       at: this.#now(),
     });
   }
+}
+
+function readsFromMissedModel(
+  entry: Entry,
+  model: string,
+  identity: Pick<SidecarRequest, "sdk" | "model" | "provider_key"> | undefined,
+): boolean {
+  if (entry.missKey === undefined) return true;
+  const call = identity ?? (entry.prefix === undefined ? undefined : { ...entry.prefix, model });
+  return call !== undefined && haltKey(call) === entry.missKey;
 }
 
 function truncate(text: string, limit: number): string {
