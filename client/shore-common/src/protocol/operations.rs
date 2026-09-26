@@ -530,7 +530,7 @@ wire_types! {
 
     #[serde(tag = "mode", rename_all = "snake_case")]
     pub enum UsageResult {
-        Summary(UsageSummaryReport),
+        Summary(Box<UsageSummaryReport>),
         SummaryBy(UsageGroupedReport),
         Budget(UsageBudgetReport),
         Anomalies(UsageAnomaliesReport),
