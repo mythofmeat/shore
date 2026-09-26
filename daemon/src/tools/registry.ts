@@ -4,6 +4,7 @@ import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { schemasFrom } from "./validate.ts";
+import { toolPatternMatches } from "../config/app.ts";
 
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
@@ -11,17 +12,13 @@ import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import searchHistoryDesc from "../../prompts/tools/history/search_history.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
-import webSearchDesc from "../../prompts/tools/web/web_search.md" with { type: "text" };
 import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
-
-export type ToolCategory = "web" | "other";
 
 export interface ToolDef {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  category: ToolCategory;
 }
 
 export interface ToolsConfigView {
@@ -50,7 +47,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["file_path"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "edit",
@@ -66,7 +62,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["file_path", "old_string", "new_string"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "apply_patch",
@@ -77,7 +72,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["patch"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "bash",
@@ -98,7 +92,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["command"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "generate_image",
@@ -121,23 +114,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: ["prompt"],
     },
-    category: "other",
-  },
-  {
-    name: "web_search",
-    description: stripOneTrailingNewline(webSearchDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Web search query." },
-        max_results: {
-          type: "integer",
-          description: "Number of results to return. Omit to use the configured default.",
-        },
-      },
-      required: ["query"],
-    },
-    category: "web",
   },
   {
     name: "activity_heatmap",
@@ -152,7 +128,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
     },
-    category: "other",
   },
   {
     name: "search",
@@ -189,7 +164,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: ["query"],
     },
-    category: "other",
   },
   {
     name: "search_chat_logs",
@@ -237,7 +211,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: [],
     },
-    category: "other",
   },
   {
     name: "model_history",
@@ -256,7 +229,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: [],
     },
-    category: "other",
   },
   {
     name: "set_next_wake",
@@ -273,7 +245,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["hours_from_now", "reason"],
       additionalProperties: false,
     },
-    category: "other",
   },
 ]);
 
@@ -281,18 +252,10 @@ export const BUILTIN_TOOL_SCHEMAS = schemasFrom(
   ALL_TOOLS.map((tool) => ({ name: tool.name, input_schema: tool.parameters })),
 );
 
-export function toolPatternMatches(pattern: string, name: string): boolean {
-  return pattern.endsWith("*")
-    ? name.startsWith(pattern.slice(0, -1))
-    : pattern === name;
-}
+export { toolPatternMatches };
 
 export function toolEnabled(cfg: ToolsConfigView, name: string): boolean {
   return cfg.enabled_tools.some((t) => toolPatternMatches(t, name));
-}
-
-export function anyEnabled(cfg: ToolsConfigView): boolean {
-  return cfg.enabled_tools.length > 0 || cfg.enabled_subagents.length > 0;
 }
 
 export function availableTools(cfg: ToolsConfigView): ToolDef[] {

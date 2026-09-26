@@ -20,13 +20,13 @@
     },
     "order_is_registry_not_config": {
       "enabled_tools": [
+        "search",
         "bash",
-        "bash",
-        "web_search"
+        "bash"
       ],
       "offered": [
         "bash",
-        "web_search"
+        "search"
       ],
       "any_enabled": true
     },
@@ -60,7 +60,6 @@
         "apply_patch",
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -92,7 +91,6 @@
     "all": {
       "enabled_tools": [
         "generate_image",
-        "web_search",
         "bash",
         "activity_heatmap",
         "bash",
@@ -107,7 +105,6 @@
       "offered": [
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -123,7 +120,6 @@
       "names": [
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -136,7 +132,6 @@
       "names": [
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -149,7 +144,6 @@
       "names": [
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -162,7 +156,6 @@
       "names": [
         "bash",
         "generate_image",
-        "web_search",
         "activity_heatmap",
         "search",
         "search_chat_logs",
@@ -727,7 +720,6 @@
     "apply_patch",
     "bash",
     "generate_image",
-    "web_search",
     "activity_heatmap",
     "search",
     "search_chat_logs",

@@ -13,7 +13,7 @@ import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
 import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
-import { resolveDisplayName } from "../../config/app.ts";
+import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
@@ -233,7 +233,7 @@ export async function runCompactionPass(
       }
 
       const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
-        deps.tools?.mcpToolDefs?.(effective.app.tools.enabled_tools) ?? [], deps.env);
+        deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
       const resolved = await resolveDeps(character, deps, effective, thread,
         [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
 

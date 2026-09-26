@@ -1223,7 +1223,6 @@
               "apply_patch",
               "bash",
               "generate_image",
-              "web_search",
               "activity_heatmap",
               "search",
               "search_chat_logs",
@@ -1480,7 +1479,6 @@
         "image_generation": null,
         "embedding": null,
         "embedding_key_set": false,
-        "search_depth": null,
         "conversation_len": 0
       },
       "output": {
@@ -1502,12 +1500,6 @@
           "max_total_indexed_bytes": 1073741824,
           "mode": "auto"
         },
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "include_answer": true,
-          "result_limit": 5,
-          "search_depth": "basic"
-        },
         "subagent_conversation_len": null,
         "subagent_runtime": false,
         "workspace_dir": "<root>/config/characters/ada/workspace"
@@ -1522,7 +1514,6 @@
         "image_generation": null,
         "embedding": null,
         "embedding_key_set": false,
-        "search_depth": null,
         "conversation_len": 1
       },
       "output": {
@@ -1544,12 +1535,6 @@
           "max_total_indexed_bytes": 1073741824,
           "mode": "auto"
         },
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "include_answer": true,
-          "result_limit": 5,
-          "search_depth": "basic"
-        },
         "subagent_conversation_len": null,
         "subagent_runtime": false,
         "workspace_dir": "<root>/config/characters/ada/workspace"
@@ -1564,7 +1549,6 @@
         "image_generation": null,
         "embedding": null,
         "embedding_key_set": false,
-        "search_depth": null,
         "conversation_len": 2
       },
       "output": {
@@ -1580,12 +1564,6 @@
         "subagent_runtime": true,
         "subagent_conversation_len": 2,
         "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
         "memory_retrieval_config": {
           "mode": "auto",
           "max_file_bytes": 2097152,
@@ -1606,7 +1584,6 @@
         "image_generation": null,
         "embedding": "openai:text-embedding-3-large",
         "embedding_key_set": false,
-        "search_depth": null,
         "conversation_len": 0
       },
       "output": {
@@ -1628,12 +1605,6 @@
           "max_total_indexed_bytes": 1073741824,
           "mode": "auto"
         },
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "include_answer": true,
-          "result_limit": 5,
-          "search_depth": "basic"
-        },
         "subagent_conversation_len": null,
         "subagent_runtime": false,
         "workspace_dir": "<root>/config/characters/ada/workspace"
@@ -1648,7 +1619,6 @@
         "image_generation": null,
         "embedding": "openai:text-embedding-3-large",
         "embedding_key_set": true,
-        "search_depth": null,
         "conversation_len": 0
       },
       "output": {
@@ -1664,12 +1634,6 @@
         "subagent_runtime": false,
         "subagent_conversation_len": null,
         "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
         "memory_retrieval_config": {
           "mode": "auto",
           "max_file_bytes": 2097152,
@@ -1690,7 +1654,6 @@
         "image_generation": "openai:gpt-image-1",
         "embedding": null,
         "embedding_key_set": false,
-        "search_depth": null,
         "conversation_len": 0
       },
       "output": {
@@ -1714,54 +1677,6 @@
           "quality": null,
           "aspect_ratio": null,
           "image_size": null
-        },
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
-        "autonomy_manager_present": true
-      }
-    },
-    {
-      "name": "the web search config is carried through unchanged",
-      "note": "the tool context does not interpret it; the handler does",
-      "input": {
-        "tools_enabled": null,
-        "subagent": null,
-        "image_generation": null,
-        "embedding": null,
-        "embedding_key_set": false,
-        "search_depth": "advanced",
-        "conversation_len": 0
-      },
-      "output": {
-        "image_dir": "<root>/data/media/ada",
-        "workspace_dir": "<root>/config/characters/ada/workspace",
-        "character_data_dir": "<root>/data/ada",
-        "config_dir": "<root>/config",
-        "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "markdown_store": true,
-        "embedder": false,
-        "mcp_registry": true,
-        "subagent_runtime": false,
-        "subagent_conversation_len": null,
-        "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "advanced",
-          "include_answer": true
         },
         "memory_retrieval_config": {
           "mode": "auto",

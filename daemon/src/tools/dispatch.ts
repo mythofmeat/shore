@@ -10,7 +10,7 @@ import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors
 import { handleSearchHistory } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
-import { handleWebSearch, type FetchLike, type SearchConfigView } from "./web.ts";
+import type { FetchLike } from "./web.ts";
 import {
   handleSearch,
   type ToolInput,
@@ -37,7 +37,6 @@ export interface ToolContext {
   characterName: string;
   historyDbPath: string;
   configDir: string;
-  searchConfig: SearchConfigView;
   retrievalConfig: RetrievalConfig;
   retrievalMode: RetrievalMode;
 
@@ -186,7 +185,7 @@ export async function dispatchTool(
       );
 
     case "web_search":
-      return await handleWebSearch(args, ctx.searchConfig, process.env, ctx.fetchImpl ?? fetch, ctx.signal);
+      throw new InvalidArgs("web_search has been removed; use a search tool from a configured MCP server instead");
 
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {

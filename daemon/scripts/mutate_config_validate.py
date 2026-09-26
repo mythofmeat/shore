@@ -172,10 +172,14 @@ MUTANTS = [
     ("mcp: sub-agent grants are not swept",
      "    ...[...app.subagents.values()].flatMap((s) => s.tools),\n", ""),
     ("mcp: the global allowlist is not swept",
-     "    ...app.tools.enabled_tools,\n", ""),
+     "    ...toolGrants(app.tools),\n", ""),
+    ("mcp: servers granted by name are not swept",
+     "    ...toolGrants(app.tools),\n", "    ...app.tools.enabled_tools,\n"),
     ("mcp: sub-agent grants are swept before the global allowlist",
-     "    ...app.tools.enabled_tools,\n    ...[...app.subagents.values()].flatMap((s) => s.tools),",
-     "    ...[...app.subagents.values()].flatMap((s) => s.tools),\n    ...app.tools.enabled_tools,"),
+     "    ...toolGrants(app.tools),\n    ...[...app.subagents.values()].flatMap((s) => s.tools),",
+     "    ...[...app.subagents.values()].flatMap((s) => s.tools),\n    ...toolGrants(app.tools),"),
+    ("a removed web_search grant is not reported",
+     "    if (pattern === \"web_search\") onWarn(", "    if (false) onWarn("),
 
     # --- validateUsageConfig ----------------------------------------------
     ("usage: the timezone check is case insensitive",

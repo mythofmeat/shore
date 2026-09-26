@@ -295,6 +295,42 @@ describe("a config that shore can act on", () => {
     expect(warningsOf("[subagents]\n\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\ntools = [\"mcp__subghost__y\"]\n\n[tools]\nenabled = [\"mcp__globalghost__x\"]\n").join(" ")).toContain("tool grant references MCP server with no [mcp.glob");
     expect(warningsOf("[subagents]\n\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\ntools = [\"mcp__subghost__y\"]\n\n[tools]\nenabled = [\"mcp__globalghost__x\"]\n").join(" ")).toContain("tool grant references MCP server with no [mcp.subg");
   });
+  test("bearer_token_env names an environment variable for an HTTP server", () => {
+    expect(accepted("[mcp.search]\nurl = \"https://mcp.example.invalid/mcp\"\nbearer_token_env = \"SEARCH_TOKEN\"\n").mcp).toEqual(["search"]);
+    expect(refused("[mcp.search]\ncommand = \"search-mcp\"\nbearer_token_env = \"SEARCH_TOKEN\"\n")).toContain("sets `bearer_token_env` on a `command` server");
+    expect(refused("[mcp.search]\nurl = \"https://mcp.example.invalid/mcp\"\nbearer_token_env = \"SEARCH_TOKEN\"\nheaders = { authorization = \"Bearer x\" }\n")).toContain("sets both `bearer_token_env` and an Authorization header");
+  });
+  test("an MCP server granted by name with no definition warns", () => {
+    expect(warningsOf("[tools]\nmcp = [\"tavily\"]\n").join(" ")).toContain("tool grant references MCP server with no [mcp.tavily]");
+  });
+  test("a wildcard or empty MCP server name in tools.mcp warns that it matches nothing", () => {
+    for (const name of ["*", ""]) {
+      expect(warningsOf(`[tools]\nmcp = ["${name}"]\n`).join(" ")).toContain("an empty or `*` entry matches no tools");
+    }
+  });
+  test("an MCP server granted by name with a definition is silent", () => {
+    expect(warningsOf("[mcp.tavily]\nurl = \"https://mcp.example.invalid/mcp\"\n\n[tools]\nmcp = [\"tavily\"]\n").join(" ")).not.toContain("tavily");
+  });
+  test("a removed web_search grant warns and names the MCP replacement", () => {
+    for (const src of [
+      "[tools]\nenabled = [\"bash\", \"web_search\"]\n",
+      "\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\ntools = [\"web_search\"]\n",
+    ]) {
+      const warnings = warningsOf(src).join(" ");
+      expect(warnings).toContain("tool 'web_search' was removed and grants nothing");
+      expect(warnings).toContain("tools.mcp");
+    }
+    expect(warningsOf("[tools]\nenabled = [\"bash\"]\n").join(" ")).not.toContain("web_search");
+  });
+  test("a leftover [web_search] section is refused with a migration hint", () => {
+    const message = refused("[web_search]\nmax_results = 5\n");
+    expect(message).toContain("[web_search] is no longer supported");
+    expect(message).toContain("[mcp.tavily]");
+    expect(message).toContain("tools.mcp");
+  });
+  test("a top-level key named like an Object method is an unknown field, not a removed section", () => {
+    expect(refused("constructor = 1\n")).toContain("unknown field `constructor`");
+  });
   test("provider:model_id embedding default passes", () => {
     const digest = accepted("[providers]\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[embedding]\nmodel = \"openai:text-embedding-3-large\"\n");
     expect(digest.providers).toEqual([{"key": "openai", "enabled": true}]);

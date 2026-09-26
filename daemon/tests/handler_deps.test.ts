@@ -1362,6 +1362,7 @@ describe("reloading [mcp]", () => {
       cwd: undefined,
       url: undefined,
       headers: new Map(),
+      bearer_token_env: undefined,
     });
   }
 

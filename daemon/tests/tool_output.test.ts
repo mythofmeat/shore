@@ -19,14 +19,6 @@ describe("compact built-in output", () => {
     })).toBe('Search "tea" (hybrid): 2 results\n\nmemory/tea.md\n  2: Green tea\n  5: Black tea\nMore matches available. Increase max_results (up to 100) or narrow query/path.\nSemantic search unavailable: index unavailable\n3 files pending semantic indexing.\n2 binary or oversized files skipped.');
   });
 
-  test("keeps web source URLs, multiline snippets, and identifies provider summaries", () => {
-    expect(formatToolOutput("web_search", {
-      query: "tea", answer: "A provider summary", results: [
-        { title: "Tea", url: "https://example.com/tea", content: "First paragraph\nSecond paragraph" },
-      ],
-    })).toBe('Web search "tea": 1 results\n\nSearch provider summary: A provider summary\n\n1. Tea\nhttps://example.com/tea\nFirst paragraph\nSecond paragraph');
-  });
-
   test("no activity does not produce zero-filled tables", () => {
     expect(formatToolOutput("activity_heatmap", handleActivityHeatmap({}, () => undefined)))
       .toBe("Activity over 30 days: 0 messages (0 total)\nNo activity data in this window.");

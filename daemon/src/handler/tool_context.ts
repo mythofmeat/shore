@@ -102,7 +102,6 @@ export async function buildToolContext(
     historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),
     characterName: charName,
     configDir,
-    searchConfig: config.app.tools.web_search,
     retrievalConfig: retrievalView(config.app.memory.retrieval),
     retrievalMode: config.app.memory.retrieval.mode,
     memoryIndexPath: indexPath(config.dirs.cache, charName),

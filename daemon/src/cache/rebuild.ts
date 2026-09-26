@@ -8,6 +8,7 @@ import {
   threadDataDir,
 } from "../config/dirs.ts";
 
+import { toolGrants } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -119,7 +120,7 @@ export async function rebuildRequestFromDisk(
   if (resolved === undefined) return undefined;
 
   const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, thread, false))) > 0;
-  const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(config.app.tools.enabled_tools) ?? [];
+  const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(toolGrants(config.app.tools)) ?? [];
 
   try {
     const built = await buildChatShapeRequestFromDisk(

@@ -45,6 +45,19 @@ for (const completedBlocks of [false, true]) {
   });
 }
 
+test("an MCP server granted by name alone runs its tools in foreground chat", async () => {
+  const h = await reliabilityGeneration(providerFor({ input: {} }));
+  h.config.app.tools.enabled_tools = [];
+  h.config.app.tools.enabled_subagents = [];
+  h.config.app.tools.enabled_mcp = ["audit"];
+  let executions = 0;
+  const mcp = { call: async () => { executions += 1; return "executed"; } };
+  h.deps.mcpRegistry = { ...mcp, toolDefsFiltered: () => [{ name: TOOL, description: "optional filters", input_schema: { type: "object" } }] };
+  h.deps.tools = () => ({ mcpRegistry: mcp });
+  await h.run();
+  expect(executions).toBe(1);
+});
+
 test("cancelling generation reaches an in-flight MCP tool", async () => {
   const h = await reliabilityGeneration(providerFor({ input: {} }));
   h.config.app.tools.enabled_tools = [TOOL];

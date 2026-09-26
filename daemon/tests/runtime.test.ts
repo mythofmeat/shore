@@ -8,6 +8,7 @@ import {
   autonomousMessageNotifier,
   compactionCompleteNotifier,
   createRuntime,
+  mcpConfigView,
   startRuntimeClocks,
 } from "../src/runtime.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -387,6 +388,7 @@ describe("MCP configuration crosses the two shapes intact", () => {
         cwd: undefined,
         url: undefined,
         headers: new Map(),
+        bearer_token_env: undefined,
       });
 
       const specs: unknown[] = [];
@@ -414,6 +416,31 @@ describe("MCP configuration crosses the two shapes intact", () => {
     }
   });
 
+  test("a bearer token is read from the named environment variable, never from config", () => {
+    const config = { app: defaultAppConfig() } as LoadedConfig;
+    const server = (bearer: string | undefined, headers: [string, string][] = []) => ({
+      command: undefined, args: [], env: new Map<string, string>(), cwd: undefined,
+      url: "https://mcp.example.invalid/mcp", headers: new Map(headers), bearer_token_env: bearer,
+    });
+    config.app.mcp.set("search", server("SEARCH_TOKEN", [["DEFAULT_PARAMETERS", "{}"]]));
+    config.app.mcp.set("plain", server(undefined, [["X-Key", "literal"]]));
+    const warnings = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(mcpConfigView(config, { SEARCH_TOKEN: "tvly-secret" })).toMatchObject({
+        search: { headers: { DEFAULT_PARAMETERS: "{}", Authorization: "Bearer tvly-secret" } },
+        plain: { headers: { "X-Key": "literal" } },
+      });
+      expect(warnings).not.toHaveBeenCalled();
+      for (const env of [{}, { SEARCH_TOKEN: "" }]) {
+        expect(required(mcpConfigView(config, env)["search"]).headers).toEqual({ DEFAULT_PARAMETERS: "{}" });
+      }
+      expect(warnings.mock.calls.flat().join(" ")).toContain("mcp.search.bearer_token_env names $SEARCH_TOKEN, which is not set");
+      expect(warnings.mock.calls.flat().join(" ")).not.toContain("tvly-secret");
+    } finally {
+      warnings.mockRestore();
+    }
+  });
+
   test("a recovered tool surface invalidates cached prompt bodies", async () => {
     const { root, config } = await dirsUnder("shore-runtime-mcp-recovery-");
     try {
@@ -427,6 +454,7 @@ describe("MCP configuration crosses the two shapes intact", () => {
         cwd: undefined,
         url: undefined,
         headers: new Map(),
+        bearer_token_env: undefined,
       });
       config.app.tools.enabled_tools = ["mcp__hue__*"];
 
