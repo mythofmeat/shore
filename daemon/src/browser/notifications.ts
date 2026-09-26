@@ -2,6 +2,7 @@ import type { ConnectionUpdate } from "./connection.ts";
 
 export const NOTIFY_KEY = "shore.notify";
 export const NOTIFY_BODY_LIMIT = 200;
+const UNSAVED = "This browser couldn’t save the notification setting, so it will reset on reload.";
 
 type GrantState = "default" | "granted" | "denied";
 export type NotifyPermission = GrantState | "unavailable";
@@ -10,8 +11,9 @@ export interface ShownNotification { onclick: (() => void) | null; close(): void
 export interface NotificationApi {
   readonly permission: GrantState;
   requestPermission(): Promise<GrantState>;
-  new (title: string, options: { body: string; tag: string }): ShownNotification;
+  new (title: string, options: NotifyOptions): ShownNotification;
 }
+interface NotifyOptions { body: string; tag: string; renotify: boolean }
 type NotifyStorage = Pick<Storage, "getItem" | "setItem">;
 export interface NotifierOptions {
   storage?: NotifyStorage | null;
@@ -20,10 +22,6 @@ export interface NotifierOptions {
   focusWindow?: () => void;
 }
 export interface NotifySelection { character: string | null; thread: string | null }
-
-function browserStorage(): NotifyStorage | null {
-  try { return globalThis.localStorage; } catch { return null; }
-}
 
 function browserApi(): NotificationApi | null {
   const scope = globalThis as { isSecureContext?: boolean; Notification?: NotificationApi };
@@ -38,10 +36,17 @@ function focusBrowser(): void {
   (globalThis as { focus?: () => void }).focus?.();
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 export function notificationBody(text: string): string {
   const trimmed = text.trim();
-  const chars = Array.from(trimmed);
-  return chars.length <= NOTIFY_BODY_LIMIT ? trimmed : `${chars.slice(0, NOTIFY_BODY_LIMIT - 1).join("").trimEnd()}…`;
+  if (trimmed.length <= NOTIFY_BODY_LIMIT) return trimmed;
+  const kept: string[] = [];
+  for (const { segment } of graphemes.segment(trimmed)) {
+    if (kept.length === NOTIFY_BODY_LIMIT) return `${kept.slice(0, -1).join("").trimEnd()}…`;
+    kept.push(segment);
+  }
+  return trimmed;
 }
 
 export class Notifier {
@@ -50,10 +55,10 @@ export class Notifier {
   readonly #focused: () => boolean;
   readonly #focusWindow: () => void;
   readonly #listeners = new Set<() => void>();
-  readonly #shown = new Set<ShownNotification>();
+  readonly #shown = new Map<string, ShownNotification>();
   #snapshot: NotifySnapshot;
   constructor(options: NotifierOptions = {}) {
-    this.#storage = options.storage === undefined ? browserStorage() : options.storage;
+    this.#storage = options.storage ?? null;
     this.#api = options.api === undefined ? browserApi() : options.api;
     this.#focused = options.focused ?? browserFocused;
     this.#focusWindow = options.focusWindow ?? focusBrowser;
@@ -77,26 +82,28 @@ export class Notifier {
     return this.#api === null ? "unavailable" : this.#api.permission;
   }
   #closeShown(): void {
-    for (const shown of this.#shown) shown.close();
+    for (const shown of this.#shown.values()) shown.close();
     this.#shown.clear();
   }
   async enable(): Promise<void> {
-    this.#store(true);
+    const saved = this.#store(true);
     this.#set({ enabled: true });
-    if (this.#api !== null && this.#api.permission === "default") await this.#api.requestPermission();
-    this.#set({ permission: this.#permission() });
+    try { if (this.#api !== null && this.#api.permission === "default") await this.#api.requestPermission(); }
+    finally { this.#set({ permission: this.#permission() }); }
+    if (!saved) throw new Error(UNSAVED);
   }
   disable(): void {
-    this.#store(false);
+    const saved = this.#store(false);
     this.#closeShown();
     this.#set({ enabled: false, unread: 0 });
+    if (!saved) throw new Error(UNSAVED);
   }
   reload(): void {
     const enabled = this.#stored();
     if (!enabled) this.#closeShown();
     this.#set({ enabled, permission: this.#permission(), unread: enabled ? this.#snapshot.unread : 0 });
   }
-  focused(): void {
+  markRead(): void {
     this.#closeShown();
     this.#set({ permission: this.#permission(), unread: 0 });
   }
@@ -111,12 +118,13 @@ export class Notifier {
   #alert(character: string | null, thread: string | null, body: string): void {
     if (!this.#snapshot.enabled || this.#focused()) return;
     this.#set({ unread: this.#snapshot.unread + 1 });
-    const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag: `shore:${character ?? ""}/${thread ?? "main"}` });
+    const tag = `shore:${character ?? ""}/${thread ?? "main"}`;
+    const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag, renotify: true });
     if (shown === undefined) return;
-    this.#shown.add(shown);
-    shown.onclick = () => { this.#focusWindow(); shown.close(); this.#shown.delete(shown); };
+    this.#shown.set(tag, shown);
+    shown.onclick = () => { this.#focusWindow(); shown.close(); if (this.#shown.get(tag) === shown) this.#shown.delete(tag); };
   }
-  #show(title: string, options: { body: string; tag: string }): ShownNotification | undefined {
+  #show(title: string, options: NotifyOptions): ShownNotification | undefined {
     const api = this.#api;
     if (api === null || api.permission !== "granted") return undefined;
     try { return new api(title, options); } catch { return undefined; }

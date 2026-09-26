@@ -12,20 +12,22 @@ function storage() {
 }
 
 function fakeApi(permission: Grant, answer: Grant = "granted") {
-  const shown: { title: string; body: string; tag: string; closed: boolean; onclick: (() => void) | null; close(): void }[] = [];
+  const shown: { title: string; body: string; tag: string; renotify: boolean; closed: boolean; onclick: (() => void) | null; close(): void }[] = [];
   const requests: number[] = [];
   class FakeNotification {
     static permission: Grant = permission;
     static requestPermission(): Promise<Grant> { requests.push(1); FakeNotification.permission = answer; return Promise.resolve(answer); }
     onclick: (() => void) | null = null;
     closed = false;
-    constructor(readonly title: string, options: { body: string; tag: string }) {
+    constructor(readonly title: string, options: { body: string; tag: string; renotify: boolean }) {
       this.body = options.body;
       this.tag = options.tag;
+      this.renotify = options.renotify;
       shown.push(this);
     }
     readonly body: string;
     readonly tag: string;
+    readonly renotify: boolean;
     close(): void { this.closed = true; }
   }
   return { api: FakeNotification satisfies NotificationApi, shown, requests };
@@ -46,6 +48,10 @@ function reply(content: string, role: Role = "assistant", origin: MessageOrigin 
 }
 
 const selection = { character: "nova", thread: "main" };
+
+function failure(work: Promise<void>): Promise<string> {
+  return work.then(() => "", (error: unknown) => String(error));
+}
 
 test("notifications are off until enabled and do nothing while off", () => {
   const { notifier, fake } = setup({}, false);
@@ -79,17 +85,38 @@ test("enabling asks for permission only while the browser hasn't decided, and re
   expect(unavailable.getSnapshot()).toEqual({ enabled: true, permission: "unavailable", unread: 1 });
 });
 
+test("a permission request that fails still refreshes the permission, and a setting the browser can't save is reported", async () => {
+  const failing = fakeApi("default");
+  failing.api.requestPermission = () => { failing.api.permission = "denied"; return Promise.reject(new Error("prompt failed")); };
+  const notifier = new Notifier({ storage: storage(), api: failing.api, focused: () => false });
+  expect(await failure(notifier.enable())).toContain("prompt failed");
+  expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "denied", unread: 0 });
+
+  const full = { getItem: () => null, setItem: () => { throw new Error("QuotaExceededError"); } };
+  const unsaved = new Notifier({ storage: full, api: null, focused: () => false });
+  expect(await failure(unsaved.enable())).toContain("couldn’t save");
+  expect(unsaved.getSnapshot().enabled).toBe(true);
+  expect(() => { unsaved.disable(); }).toThrow("couldn’t save");
+  expect(unsaved.getSnapshot().enabled).toBe(false);
+});
+
 test("a reply while the tab is unfocused shows one notification per conversation and counts as unread", () => {
   const { notifier, fake, focus } = setup();
   notifier.observe(reply("Hello there"), selection);
   expect(fake.shown).toHaveLength(1);
-  expect(fake.shown[0]).toMatchObject({ title: "nova", body: "Hello there", tag: "shore:nova/side" });
+  expect(fake.shown[0]).toMatchObject({ title: "nova", body: "Hello there", tag: "shore:nova/side", renotify: true });
   expect(notifier.getSnapshot().unread).toBe(1);
+
+  notifier.observe(reply("Still away"), selection);
+  expect(fake.shown.map((item) => item.tag)).toEqual(["shore:nova/side", "shore:nova/side"]);
+  expect(notifier.getSnapshot().unread).toBe(2);
 
   focus(true);
   notifier.observe(reply("Seen already"), selection);
-  expect(fake.shown).toHaveLength(1);
-  expect(notifier.getSnapshot().unread).toBe(1);
+  expect(fake.shown).toHaveLength(2);
+  expect(notifier.getSnapshot().unread).toBe(2);
+  notifier.markRead();
+  expect(fake.shown.map((item) => item.closed)).toEqual([false, true]);
 });
 
 test("heartbeat messages and errors notify; user messages, empty replies and other updates don't", () => {
@@ -111,11 +138,11 @@ test("heartbeat messages and errors notify; user messages, empty replies and oth
 test("focusing the tab or clicking a notification clears what this tab showed", () => {
   const { notifier, fake, focusCalls } = setup();
   notifier.observe(reply("First"), selection);
-  notifier.observe(reply("Second"), selection);
+  notifier.observe({ kind: "frame", message: { type: "error", code: "provider_error", message: "Second" } }, selection);
   fake.shown[1]?.onclick?.();
   expect(focusCalls).toHaveLength(1);
   expect(fake.shown.map((item) => item.closed)).toEqual([false, true]);
-  notifier.focused();
+  notifier.markRead();
   expect(fake.shown.map((item) => item.closed)).toEqual([true, true]);
   expect(notifier.getSnapshot().unread).toBe(0);
 });
@@ -139,6 +166,10 @@ test("notification bodies are trimmed and cut to the limit without splitting cha
   expect(Array.from(body)).toHaveLength(NOTIFY_BODY_LIMIT);
   expect(body.endsWith("🌊…")).toBe(true);
   expect(notificationBody("a".repeat(NOTIFY_BODY_LIMIT))).toHaveLength(NOTIFY_BODY_LIMIT);
+  const family = "👨‍👩‍👧";
+  const grouped = notificationBody(family.repeat(NOTIFY_BODY_LIMIT + 5));
+  expect(grouped).toBe(`${family.repeat(NOTIFY_BODY_LIMIT - 1)}…`);
+  expect(notificationBody(family.repeat(NOTIFY_BODY_LIMIT))).toBe(family.repeat(NOTIFY_BODY_LIMIT));
 });
 
 test("a browser that refuses to construct notifications still counts unread", () => {

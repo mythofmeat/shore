@@ -36,6 +36,7 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
   useEffect(() => {
     const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${state.character} · Shore`;
     document.title = unread > 0 ? `(${String(unread)}) ${title}` : title;
+    return () => { document.title = "Shore"; };
   }, [route.view, state.character, unread]);
   const toggle = () => { if (mobile) setDrawer(!drawer); else setExpanded(!expanded); };
   useEffect(() => {

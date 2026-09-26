@@ -26,10 +26,10 @@ export const workspace = new Workspace(new BrowserConnection({
 export const conversation = new ConversationRequests(workspace.connection);
 export const themes = new ThemeStore();
 export const display = new DisplayPreferences(browserStorage());
-export const notifier = new Notifier();
+export const notifier = new Notifier({ storage: browserStorage() });
 workspace.connection.subscribe((update) => { notifier.observe(update, workspace.getSnapshot()); });
 addEventListener("storage", () => { themes.reload(); display.reload(); notifier.reload(); });
-addEventListener("focus", () => { notifier.focused(); });
+addEventListener("focus", () => { notifier.markRead(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);

@@ -22,6 +22,7 @@ const NOTIFY_NOTES: Partial<Record<NotifyPermission, string>> = {
   unavailable: "This browser only allows desktop notifications over HTTPS or localhost, so only the tab title count is shown.",
   denied: "Notifications are blocked for this site in the browser’s settings, so only the tab title count is shown.",
 };
+const NOTIFY_UNDECIDED = "The browser hasn’t allowed desktop notifications for this site yet, so only the tab title count is shown. Turn this off and on again to be asked.";
 
 export function AppearancePage(_: { state: WorkspaceSnapshot }) {
   const theme = useTheme();
@@ -29,7 +30,7 @@ export function AppearancePage(_: { state: WorkspaceSnapshot }) {
   const store = themes;
   const [stream, setStream] = useStoredFlag(STREAM_KEY, true);
   const notify = useNotifications();
-  const note = NOTIFY_NOTES[notify.permission];
+  const note = notify.permission === "default" ? notify.enabled ? NOTIFY_UNDECIDED : undefined : NOTIFY_NOTES[notify.permission];
   return <>
     <SettingsSection title="Theme" description="Saved in this browser.">
       <div className="theme-grid" role="radiogroup" aria-label="Theme">
@@ -55,7 +56,7 @@ export function AppearancePage(_: { state: WorkspaceSnapshot }) {
     <SettingsSection title="Notifications" description="Saved in this browser.">
       <div className="rows">
         <SettingRow label="Notify when unfocused" description={note === undefined ? NOTIFY_DESCRIPTION : `${NOTIFY_DESCRIPTION} ${note}`}>
-          <Switch label="Notify when unfocused" checked={notify.enabled} change={(checked) => { if (checked) perform(() => notifier.enable()); else notifier.disable(); }} />
+          <Switch label="Notify when unfocused" checked={notify.enabled} change={(checked) => { perform(async () => { if (checked) await notifier.enable(); else notifier.disable(); }); }} />
         </SettingRow>
       </div>
     </SettingsSection>
