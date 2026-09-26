@@ -158,7 +158,7 @@ describe("resolveTool", () => {
     const resolved = resolveTool("bash", config, []);
     expect(resolved.kind).toBe("builtin");
     expect(resolved.enabled).toBe(true);
-    expect(resolveTool("web_search", config, []).enabled).toBe(false);
+    expect(resolveTool("search", config, []).enabled).toBe(false);
   });
 
   test("ask_<name> resolves only for a configured sub-agent", async () => {

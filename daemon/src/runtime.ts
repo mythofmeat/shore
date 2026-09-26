@@ -20,6 +20,7 @@ import {
   MAIN_THREAD,
 } from "./config/dirs.ts";
 import { HISTORY_DB_FILE } from "./engine/history_store.ts";
+import { mcpBearerToken, type McpServerConfig } from "./config/app.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
@@ -211,6 +212,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       connectMcp,
       refreshMcpCaches,
       options.mcpRegistryOptions,
+      options.env,
     ),
   );
 
@@ -359,7 +361,10 @@ function ensureLedger(config: LoadedConfig): void {
   Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();
 }
 
-export function mcpConfigView(config: LoadedConfig): Record<string, McpServerConfigView> {
+export function mcpConfigView(
+  config: LoadedConfig,
+  env: Record<string, string | undefined> = process.env,
+): Record<string, McpServerConfigView> {
   const servers: Record<string, McpServerConfigView> = {};
   for (const [name, server] of config.app.mcp) {
     servers[name] = {
@@ -368,10 +373,28 @@ export function mcpConfigView(config: LoadedConfig): Record<string, McpServerCon
       env: Object.fromEntries(server.env),
       ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
       ...(server.url === undefined ? {} : { url: server.url }),
-      headers: Object.fromEntries(server.headers),
+      headers: mcpHeaders(name, server, env),
     };
   }
   return servers;
+}
+
+function mcpHeaders(
+  name: string,
+  server: McpServerConfig,
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  const headers = Object.fromEntries(server.headers);
+  if (server.bearer_token_env === undefined) return headers;
+  const token = mcpBearerToken(server, env);
+  if (token === undefined) {
+    shoreLog.warn(
+      `shore: mcp.${name}.bearer_token_env names $${server.bearer_token_env}, which is not set; ` +
+        "connecting without credentials",
+    );
+    return headers;
+  }
+  return { ...headers, Authorization: `Bearer ${token}` };
 }
 
 async function connectMcpRegistry(
@@ -379,9 +402,10 @@ async function connectMcpRegistry(
   connect: (spec: McpServerSpec) => Promise<McpClient>,
   onToolsChanged: (registry: McpRegistry, server: string) => Promise<void>,
   options: Omit<McpRegistryOptions, "onToolsChanged"> = {},
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<McpRegistry> {
   return await McpRegistry.fromConfig(
-    mcpConfigView(config),
+    mcpConfigView(config, env),
     pluginsDir(config.dirs.data),
     connect,
     undefined,

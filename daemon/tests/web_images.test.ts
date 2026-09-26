@@ -5,15 +5,12 @@ import {
   handleFetchUrl,
   MAX_BODY_BYTES,
   type FetchUrlPolicy,
-  handleWebSearch,
   MAX_CONTENT_BYTES,
   stripHtml,
   truncateToBytes,
   type FetchLike,
-  type SearchConfigView,
 } from "../src/tools/web.ts";
 import { decodeDataUrl, handleGenerateImage } from "../src/tools/images.ts";
-import { requestBody } from "./support/fetch.ts";
 
 const fx = fixture as unknown as {
   strip_html: { label: string; input: string; output: string }[];
@@ -165,93 +162,6 @@ describe("decodeDataUrl", () => {
     expect(() => decodeDataUrl("DATA:IMAGE/PNG;base64,aGVsbG8=")).toThrow(
       "data URL is not an image",
     );
-  });
-});
-
-const searchConfig: SearchConfigView = {
-  api_key_env: "TAVILY_KEY",
-  result_limit: 7,
-  search_depth: "basic",
-  include_answer: true,
-};
-
-function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
-}
-
-describe("handleWebSearch", () => {
-  const ok = async (): Promise<Response> =>
-    jsonResponse({
-      results: [
-        { title: "T", url: "U", content: "C" },
-        { url: "only-url" },
-        {},
-      ],
-      answer: "42",
-    });
-
-  test("a missing query is an argument error", async () => {
-    expect(
-      handleWebSearch({}, searchConfig, { TAVILY_KEY: "k" }, ok),
-    ).rejects.toThrow("invalid args: missing 'query' field");
-  });
-
-  test("an unset API key names the variable it wanted", async () => {
-    expect(handleWebSearch({ query: "q" }, searchConfig, {}, ok)).rejects.toThrow(
-      "invalid args: web_search requires the TAVILY_KEY environment variable to be set",
-    );
-  });
-
-  test("missing result fields become empty strings, not undefined", async () => {
-    const out = await handleWebSearch({ query: "q" }, searchConfig, { TAVILY_KEY: "k" }, ok);
-    expect(out.results).toEqual([
-      { title: "T", url: "U", content: "C" },
-      { title: "", url: "only-url", content: "" },
-      { title: "", url: "", content: "" },
-    ]);
-    expect(out.query).toBe("q");
-    expect(out.answer).toBe("42");
-  });
-
-  test("an absent answer omits the key", async () => {
-    const out = await handleWebSearch(
-      { query: "q" },
-      searchConfig,
-      { TAVILY_KEY: "k" },
-      async () => jsonResponse({ results: [] }),
-    );
-    expect("answer" in out).toBe(false);
-  });
-
-  test("max_results falls back to the configured limit", async () => {
-    let sentBody: Record<string, unknown> = {};
-    const capture: FetchLike = async (_u, init) => {
-      sentBody = JSON.parse(requestBody(init)) as Record<string, unknown>;
-      return jsonResponse({ results: [] });
-    };
-    await handleWebSearch({ query: "q" }, searchConfig, { TAVILY_KEY: "k" }, capture);
-    expect(sentBody["max_results"]).toBe(7);
-    await handleWebSearch(
-      { query: "q", max_results: 2 },
-      searchConfig,
-      { TAVILY_KEY: "k" },
-      capture,
-    );
-    expect(sentBody["max_results"]).toBe(2);
-    expect(sentBody["search_depth"]).toBe("basic");
-    expect(sentBody["include_answer"]).toBe(true);
-  });
-
-  test("a non-2xx response reports the status and the body", async () => {
-    expect(
-      handleWebSearch({ query: "q" }, searchConfig, { TAVILY_KEY: "k" }, async () =>
-        new Response("nope", { status: 429 }),
-      ),
-    ).rejects.toThrow("http: Tavily API returned HTTP 429: nope");
   });
 });
 

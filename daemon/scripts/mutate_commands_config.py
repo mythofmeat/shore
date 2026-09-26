@@ -89,8 +89,14 @@ MUTANTS = [
      "      model: sa.model ?? null,",
      "      model: sa.model,"),
     ("tools: unknown tools in enabled_tools are not reported",
-     "    if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);",
-     "    if (false) warnings.push(`enabled_tools references unknown tool '${t}'`);"),
+     "    else if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);",
+     "    else if (false) warnings.push(`enabled_tools references unknown tool '${t}'`);"),
+    ("tools: a removed web_search grant is not reported",
+     "    if (t === \"web_search\") warnings.push(WEB_SEARCH_REMOVED);",
+     "    if (false) warnings.push(WEB_SEARCH_REMOVED);"),
+    ("tools: an MCP server granted by name with no definition is not reported",
+     "    if (!ctx.config.app.mcp.has(server)) warnings.push(",
+     "    if (false) warnings.push("),
     ("tools: undefined subagents in enabled_subagents are not reported",
      "    if (!subagents.has(s)) {\n"
      "      warnings.push(`enabled_subagents references undefined subagent '${s}'`);\n"
@@ -99,8 +105,11 @@ MUTANTS = [
      "      warnings.push(`enabled_subagents references undefined subagent '${s}'`);\n"
      "    }"),
     ("tools: a subagent's dangling tool references are not reported",
-     "      if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);",
-     "      if (false) warnings.push(`subagent '${name}' references unknown tool '${t}'`);"),
+     "      else if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);",
+     "      else if (false) warnings.push(`subagent '${name}' references unknown tool '${t}'`);"),
+    ("tools: a subagent's removed web_search grant is not reported",
+     "      if (t === \"web_search\") warnings.push(`subagent '${name}': ${WEB_SEARCH_REMOVED}`);",
+     "      if (false) warnings.push(`subagent '${name}': ${WEB_SEARCH_REMOVED}`);"),
     ("tools: only enabled subagents are checked for dangling tools",
      "  for (const name of [...subagents.keys()].sort()) {\n"
      "    for (const t of required(subagents.get(name)).tools) {",

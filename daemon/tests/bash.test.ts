@@ -27,7 +27,6 @@ async function world() {
   const ctx: ToolContext = {
     workspaceDir, characterName: "Juniper Vale", characterDataDir: root,
     imageDir: root, conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-    searchConfig: { api_key_env: "UNUSED", result_limit: 5, search_depth: "basic", include_answer: false },
     retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
   };
   const frames: ServerMessage[] = [];
@@ -46,8 +45,8 @@ describe("bash on Shore's tool surface", () => {
   test("one shell replaces the basic command-line tools and keeps retrieval and services", () => {
     const names = renderToolDefs({ enabled_tools: ["*"], enabled_subagents: [] }, "Ada", "User").map((tool) => tool.name);
     expect(names).toContain("bash");
-    for (const name of ["delete", "git", "fetch_url", "roll_dice"]) expect(names).not.toContain(name);
-    for (const name of ["search", "search_chat_logs", "web_search", "generate_image", "model_history"]) expect(names).toContain(name);
+    for (const name of ["delete", "git", "fetch_url", "roll_dice", "web_search"]) expect(names).not.toContain(name);
+    for (const name of ["search", "search_chat_logs", "generate_image", "model_history"]) expect(names).toContain(name);
     expect(renderToolDefs({ enabled_tools: ["read"], enabled_subagents: [] }, "Ada", "User").map((d) => d.name)).toEqual(["read"]);
     expect(ALL_TOOLS.filter((tool) => tool.name === "bash")).toHaveLength(1);
   });

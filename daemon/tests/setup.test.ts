@@ -29,6 +29,7 @@ import {
   type SetupEngine,
 } from "../src/handler/setup.ts";
 import { testTmp } from "./support/tmp.ts";
+import { required } from "../src/util/required.ts";
 
 const ZONE = fixture.timezone;
 
@@ -330,4 +331,30 @@ describe("buildGenerationRequest", () => {
       expect(JSON.parse(JSON.stringify(built.request))).toEqual(c.request);
     });
   }
+
+  test("an MCP server granted by name exposes that server's tools and no others", async () => {
+    const c = required(buildCases[0]);
+    const root = await mkdtemp(testTmp("shore-build-mcp-"));
+    const dirs: ShoreDirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
+    await mkdir(characterWorkspaceDir(dirs.config, "heidi"), { recursive: true });
+    await mkdir(dirs.cache, { recursive: true });
+    const app = defaultAppConfig();
+    app.tools.enabled_tools = ["bash"];
+    app.tools.enabled_mcp = ["notes"];
+    const registry = McpRegistry.fromTools(["notes__search", "notes__append", "hue__set_light"].map((id) => {
+      const [server, tool] = id.split("__") as [string, string];
+      return { server, tool, full_name: `mcp__${id}`, description: `${tool} tool`, input_schema: { type: "object" }, repeatable: false };
+    }));
+    const resolved: ResolvedModel = {
+      name: "opus", qualifiedName: "chat.anthropic.opus", category: "chat", providerKey: "anthropic",
+      sdk: "anthropic", modelId: "opus-id", apiKeyEnv: "TEST_KEY",
+    };
+
+    const built = await buildGenerationRequest({
+      engine: engineFor(c), dataDir: dirs.data, charName: "heidi", config: baseConfig(dirs, app, emptyCatalog()),
+      resolved, regen: false, mcpRegistry: registry, timeZone: ZONE,
+    });
+
+    expect(built.request.tools?.map((tool) => tool.name)).toEqual(["bash", "mcp__notes__append", "mcp__notes__search"]);
+  });
 });

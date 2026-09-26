@@ -10,7 +10,7 @@
       "err": "invalid args: missing 'prompt' field"
     },
     "web_search": {
-      "err": "invalid args: missing 'query' field"
+      "err": "invalid args: web_search has been removed; use a search tool from a configured MCP server instead"
     },
     "activity_heatmap": {
       "err": "io: activity history is not available in this context"

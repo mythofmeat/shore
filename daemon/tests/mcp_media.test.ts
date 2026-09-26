@@ -48,12 +48,6 @@ async function runMcpTool(
   historyDbPath: "/tmp/history.db",
   characterName: "",
     configDir: "",
-    searchConfig: {
-      api_key_env: "TAVILY_API_KEY",
-      result_limit: 5,
-      search_depth: "basic",
-      include_answer: true,
-    },
     retrievalConfig: {
       maxFileBytes: 0,
       maxIndexedFiles: 0,
@@ -236,12 +230,6 @@ describe("mcp media reaches the model", () => {
   historyDbPath: "/tmp/history.db",
   characterName: "",
       configDir: "",
-      searchConfig: {
-        api_key_env: "TAVILY_API_KEY",
-        result_limit: 5,
-        search_depth: "basic",
-        include_answer: true,
-      },
       retrievalConfig: {
         maxFileBytes: 0,
         maxIndexedFiles: 0,

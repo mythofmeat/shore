@@ -218,6 +218,32 @@ describe("running a heartbeat", () => {
     expect(seen[0]?.tools?.map((tool) => tool.name)).toContain("mcp__notes__search");
   });
 
+  test("a cold-cache tick filters MCP tools by servers granted by name", async () => {
+    const config = await world();
+    config.app.tools.enabled_tools = ["bash"];
+    config.app.tools.enabled_mcp = ["notes"];
+    const filteredBy: string[][] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: scriptedProvider([response([{ type: "text", text: "quiet tick" }])], []),
+      },
+      rebuild: {
+        mcpRegistry: {
+          toolDefsFiltered: (patterns) => {
+            filteredBy.push([...patterns]);
+            return [];
+          },
+        },
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    expect(filteredBy).toEqual([["bash", "mcp__notes__*"]]);
+  });
+
   test("labels the ledger context per round", async () => {
     const config = await world();
     const seen: SidecarRequest[] = [];
@@ -343,7 +369,7 @@ describe("running a heartbeat", () => {
 
   test("a heartbeat tool call with bad arguments is rejected before it runs", async () => {
     const config = await world();
-    config.app.tools.enabled_tools = ["web_search"];
+    config.app.tools.enabled_tools = ["search"];
     const seen: SidecarRequest[] = [];
 
     const executor = new InProcessAutonomyExecutor({
@@ -353,7 +379,7 @@ describe("running a heartbeat", () => {
         anthropic: scriptedProvider(
           [
             response(
-              [{ type: "tool_use", id: "t1", name: "web_search", input: { query: 7 } }],
+              [{ type: "tool_use", id: "t1", name: "search", input: { query: 7 } }],
               "tool_use",
             ),
             response([{ type: "text", text: "done" }]),

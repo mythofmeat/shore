@@ -72,6 +72,30 @@ function at(config: unknown, path: string): unknown {
 
 const TOOLS_QUERIES = [
   {
+    "name": "an MCP server granted by name enables only that server's tools",
+    "toml": "[tools]\nenabled_mcp = [\"tavily\"]\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "mcp__tavily__tavily_search",
+        "enabled": true
+      },
+      {
+        "name": "mcp__tavilyx__search",
+        "enabled": false
+      },
+      {
+        "name": "mcp__hue__set_light",
+        "enabled": false
+      },
+      {
+        "name": "read",
+        "enabled": false
+      }
+    ],
+    "subagents": []
+  },
+  {
     "name": "the empty default offers nothing but still caps and deadlines",
     "toml": "[tools]\n",
     "any_enabled": false,
@@ -854,12 +878,10 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"git":{"max_result_chars":null,"timeout":"45s"}});
   });
 
-  test("web search", () => {
-    const cfg = parsed("[tools.web_search]\napi_key_env = \"MY_TAVILY_KEY\"\nresult_limit = 10\nsearch_depth = \"advanced\"\ninclude_answer = false\n");
-    expect(at(cfg, "tools.web_search.api_key_env"), "tools.web_search.api_key_env").toEqual("MY_TAVILY_KEY");
-    expect(at(cfg, "tools.web_search.result_limit"), "tools.web_search.result_limit").toEqual(10);
-    expect(at(cfg, "tools.web_search.search_depth"), "tools.web_search.search_depth").toEqual("advanced");
-    expect(at(cfg, "tools.web_search.include_answer"), "tools.web_search.include_answer").toEqual(false);
+  test("MCP servers granted by name", () => {
+    const cfg = parsed("[tools]\nenabled_mcp = [\"tavily\", \"hue\"]\n");
+    expect(at(cfg, "tools.enabled_mcp"), "tools.enabled_mcp").toEqual(["tavily", "hue"]);
+    expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual([]);
   });
 
   test("the mcp table, both transports", () => {

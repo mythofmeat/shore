@@ -133,7 +133,7 @@ MUTANTS = [
     # --- the rebuild ----------------------------------------------------------
     ("rebuild: the MCP tool surface is dropped — the strictly-negative keepalive",
      B,
-     "  const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(config.app.tools.enabled_tools) ?? [];",
+     "  const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(toolGrants(config.app.tools)) ?? [];",
      "  const mcpToolDefs: never[] = [];"),
     ("rebuild: prior context is assumed rather than counted",
      B,

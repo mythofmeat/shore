@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCharacterConfig, loadConfig, parseConfigTable } from "../src/config/loader.ts";
 import { inlineImageBytesFor, toolLimitsFrom } from "../src/tools/dispatch.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, toolGrants } from "../src/config/app.ts";
+import { required } from "../src/util/required.ts";
 import { resolveShoreDirs } from "../src/config/dirs.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
 import { parseConfigPath, publicConfig } from "../src/config/surface.ts";
@@ -65,6 +66,27 @@ describe("flat configuration", () => {
     }
   });
 
+  test("a character grants an MCP server in one entry without restating the global tool list", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-config-mcp-grant-"));
+    try {
+      mkdirSync(join(root, "characters", "alex"), { recursive: true });
+      mkdirSync(join(root, "characters", "blair"), { recursive: true });
+      writeFileSync(join(root, "config.toml"), '[tools]\nenabled = ["bash", "search"]\n[mcp.tavily]\nurl = "https://mcp.example.invalid/mcp"');
+      writeFileSync(join(root, "characters", "alex", "config.toml"), '[tools]\nmcp = ["tavily"]');
+      writeFileSync(join(root, "characters", "blair", "config.toml"), '[chat]\nmodel = "gemini:m"');
+      const global = loadConfig(join(root, "config.toml"), { onWarn: () => {} });
+      const alex = loadCharacterConfig(global, "alex", () => {});
+      const blair = loadCharacterConfig(global, "blair", () => {});
+      expect(alex?.app.tools.enabled_tools).toEqual(["bash", "search"]);
+      expect(alex?.app.tools.enabled_mcp).toEqual(["tavily"]);
+      expect(toolGrants(required(alex).app.tools)).toEqual(["bash", "search", "mcp__tavily__*"]);
+      expect(toolGrants(required(blair).app.tools)).toEqual(["bash", "search"]);
+      expect(toolGrants(global.app.tools)).toEqual(["bash", "search"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("the deployment-shaped settings retain their effective behavior", () => {
     const cfg = read(`
 [chat]
@@ -89,7 +111,8 @@ keep_recent_turns = 0
 max_context_tokens = 500000
 git_push = true
 [tools]
-enabled = ["bash", "web_search"]
+enabled = ["bash"]
+mcp = ["search"]
 [tools.bash]
 timeout = "10m"
 [subagents]
@@ -98,7 +121,7 @@ model = "deepseek:deepseek-flash"
 [subagents.internet]
 description = "Research"
 prompt = "Find evidence."
-tools = ["web_search"]
+tools = ["mcp__search__*"]
 max_tool_rounds = 8
 [[budgets]]
 name = "weekly"
@@ -123,6 +146,8 @@ discover = true
 discover = true
 [providers.local]
 base_url = "http://localhost:1/v1"
+[mcp.search]
+url = "https://search.invalid/mcp"
 `);
     expect(cfg.app.defaults).toMatchObject({ display_name: "Alex", embedding: "local:embed", image_generation: "openrouter:image" });
     expect(cfg.app.behavior.autonomy.enabled).toBe(true);
@@ -133,6 +158,9 @@ base_url = "http://localhost:1/v1"
     expect(cfg.app.memory.compaction.keep_recent_turns).toBe(0);
     expect(cfg.app.memory.git_push).toBe(true);
     expect(cfg.app.tools.config.get("bash")?.timeout?.toString()).toBe("10m");
+    expect(cfg.app.tools.enabled_tools).toEqual(["bash"]);
+    expect(cfg.app.tools.enabled_mcp).toEqual(["search"]);
+    expect(cfg.app.tools.config.has("mcp")).toBe(false);
     expect(cfg.app.subagents.get("internet")?.max_iterations).toBe(8);
     expect(cfg.app.usage.budgets[0]).toMatchObject({ cost_usd: 15, warn_at: [0.9, 1], allow_compaction_over_budget: true, limit: "block" });
     expect(cfg.app.notifications).toMatchObject({ enabled: true, backend: "ntfy" });
@@ -182,7 +210,7 @@ temperature = 0.25
     expect(() => read('notifications=[]')).toThrow("must be a table");
     expect(() => read('[[budgets]]\ncost_usd=1\n[tools]\nbash=[]')).toThrow("tools.bash must be a table");
     expect(() => read('[chat."gemini:m"]\ntemperatur=0.5')).toThrow("unknown field");
-    expect(() => read('[web_search]\ndepth="invented"')).toThrow("web_search.depth");
+    expect(() => read('[web_search]\ndepth="advanced"')).toThrow("[web_search] is no longer supported");
   });
 
 

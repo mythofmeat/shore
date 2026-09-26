@@ -25,7 +25,6 @@ async function world() {
   const ctx: ToolContext = {
     workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-    searchConfig: { api_key_env: "UNUSED", result_limit: 5, search_depth: "basic", include_answer: false },
     retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
   };
   const exec: ToolExecution = {
