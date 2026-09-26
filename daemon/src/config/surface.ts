@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "notifications", "mcp", "matrix", "web_search", "retrieval", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -39,6 +39,7 @@ export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("memory.git_push", "compaction.git_push"),
   field("tools.enabled_tools", "tools.enabled"),
   field("tools.enabled_subagents", "subagents.enabled"),
+  field("tools.enabled_mcp", "tools.mcp"),
   field("tools.config.*", "tools.*"),
   field("subagents.*.max_iterations", "subagents.*.max_tool_rounds"),
   ...Object.entries({
@@ -52,8 +53,6 @@ export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("notifications.generation_threshold", "notifications.min_generation_duration"),
   field("notifications.ntfy.url", "notifications.url"),
   field("notifications.ntfy.topic", "notifications.topic"),
-  ...Object.entries({api_key_env: "api_key_env", result_limit: "max_results", search_depth: "depth", include_answer: "include_answer"})
-    .map(([old, key]) => field(`tools.web_search.${old}`, `web_search.${key}`)),
   field("mcp.*.cwd", "mcp.*.working_dir"),
   field("usage.budgets", "budgets"),
   field("image_generation", "image"),
@@ -80,7 +79,7 @@ export const MODEL_FIELDS = [
   "max_tool_iterations", "openrouter_provider", "gemini_generation", "zai_clear_thinking", "supports_images",
 ] as const;
 
-export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "timeout", "max_result_chars", "max_inline_image_bytes"];
+export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "mcp", "timeout", "max_result_chars", "max_inline_image_bytes"];
 
 export const NOTIFICATION_EVENTS = ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"] as const;
 
@@ -242,17 +241,14 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  const depth = valueAt(table, ["tools", "web_search", "search_depth"]);
-  if (depth === "ultra_fast") putAt(table, ["tools", "web_search", "search_depth"], "ultra-fast");
-  else if (depth !== undefined && (typeof depth !== "string" || !["basic", "advanced", "fast", "ultra-fast"].includes(depth))) throw new Error(`${source}: web_search.depth must be basic, advanced, fast, or ultra_fast`);
-  for (const section of ["heartbeat", "compaction", "retrieval", "matrix", "web_search", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["heartbeat", "compaction", "retrieval", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 
 export function canonicalConfigPath(path: ConfigPath): string[] {
   const sections: Record<string, string[]> = {
     "memory.compaction": ["compaction"], "memory.retrieval": ["retrieval"], "connections.matrix": ["matrix"],
-    "tools.web_search": ["web_search"], "tools.config": ["tools"],
+    "tools.config": ["tools"],
   };
   const section = sections[path.join(".")];
   if (section !== undefined) return section;
@@ -306,7 +302,6 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     if (!isConfigTable(profiles)) continue;
     for (const [name, value] of Object.entries(profiles)) if (isConfigTable(value) && name.includes(":")) profiles[name] = publicSettings(value);
   }
-  if (valueAt(out, ["web_search", "depth"]) === "ultra-fast") putAt(out, ["web_search", "depth"], "ultra_fast");
   for (const path of [
     ["behavior"], ["defaults"],
     ["notifications", "enabled"], ["notifications", "backend"], ["tools", "config"],

@@ -91,7 +91,6 @@ function contextIn(root: string): ToolContext {
   historyDbPath: "/tmp/history.db",
   characterName: "ada",
     configDir: join(root, "config"),
-    searchConfig: app.tools.web_search,
     retrievalConfig: { top_k: 5, min_score: 0, max_chars: 1000 } as never,
     retrievalMode: app.memory.retrieval.mode,
     runSubagent: () => Promise.resolve("the parent's"),

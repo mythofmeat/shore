@@ -10,6 +10,7 @@ import {
   loadCharacterConfig,
   loadConfig,
   modelRefResolves,
+  WEB_SEARCH_REMOVED,
   type LoadedConfig,
 } from "../config/loader.ts";
 import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
@@ -96,7 +97,11 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
 
   const warnings: string[] = [];
   for (const t of cfg.enabled_tools) {
-    if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);
+    if (t === "web_search") warnings.push(WEB_SEARCH_REMOVED);
+    else if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);
+  }
+  for (const server of cfg.enabled_mcp) {
+    if (!ctx.config.app.mcp.has(server)) warnings.push(`tools.mcp references MCP server '${server}' with no [mcp.${server}] definition`);
   }
   for (const s of cfg.enabled_subagents) {
     if (!subagents.has(s)) {
@@ -105,7 +110,8 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
   }
   for (const name of [...subagents.keys()].sort()) {
     for (const t of required(subagents.get(name)).tools) {
-      if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
+      if (t === "web_search") warnings.push(`subagent '${name}': ${WEB_SEARCH_REMOVED}`);
+      else if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
     }
   }
 
@@ -146,6 +152,12 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
       warnings.push(
         `API key env var $${keyEnv} not set (needed by model ${model.qualifiedName})`,
       );
+    }
+  }
+  for (const [name, server] of ctx.config.app.mcp) {
+    const tokenEnv = server.bearer_token_env;
+    if (tokenEnv !== undefined && (env[tokenEnv] ?? "") === "") {
+      warnings.push(`Bearer token env var $${tokenEnv} not set (needed by MCP server ${name})`);
     }
   }
 

@@ -9,6 +9,7 @@ import { webBinding } from "../web/policy.ts";
 import {
   budgetPeriodRank,
   parseAppConfig,
+  toolGrants,
   validateCompaction,
   validateHeartbeat,
   validateAppConfigLayer,
@@ -501,6 +502,10 @@ function validateConfig(
 
 }
 
+export const WEB_SEARCH_REMOVED =
+  "tool 'web_search' was removed and grants nothing; configure a search MCP server " +
+  "such as [mcp.tavily] and grant it with tools.mcp or an mcp__<server>__* tool pattern";
+
 function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
   for (const [name, server] of app.mcp) {
     const hasCommand = server.command !== undefined;
@@ -520,13 +525,24 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
         `mcp.${name} sets \`headers\` on a \`command\` server; headers are HTTP-only`,
       );
     }
+    if (hasCommand && server.bearer_token_env !== undefined) {
+      throw validationError(
+        `mcp.${name} sets \`bearer_token_env\` on a \`command\` server; it is HTTP-only`,
+      );
+    }
+    if (server.bearer_token_env !== undefined && [...server.headers.keys()].some((key) => key.toLowerCase() === "authorization")) {
+      throw validationError(
+        `mcp.${name} sets both \`bearer_token_env\` and an Authorization header; set one`,
+      );
+    }
   }
 
   const referenced = [
-    ...app.tools.enabled_tools,
+    ...toolGrants(app.tools),
     ...[...app.subagents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
+    if (pattern === "web_search") onWarn(WEB_SEARCH_REMOVED, [["pattern", pattern]]);
     if (!pattern.startsWith("mcp__")) continue;
     const server = pattern.slice("mcp__".length).split("__")[0] ?? "";
     if (server !== "" && server !== "*" && !app.mcp.has(server)) {

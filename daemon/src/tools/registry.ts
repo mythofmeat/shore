@@ -10,11 +10,10 @@ import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.m
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import searchHistoryDesc from "../../prompts/tools/history/search_history.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
-import webSearchDesc from "../../prompts/tools/web/web_search.md" with { type: "text" };
 import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
-export type ToolCategory = "web" | "other";
+export type ToolCategory = "other";
 
 export interface ToolDef {
   name: string;
@@ -121,22 +120,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["prompt"],
     },
     category: "other",
-  },
-  {
-    name: "web_search",
-    description: stripOneTrailingNewline(webSearchDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Web search query." },
-        max_results: {
-          type: "integer",
-          description: "Number of results to return. Omit to use the configured default.",
-        },
-      },
-      required: ["query"],
-    },
-    category: "web",
   },
   {
     name: "activity_heatmap",

@@ -439,31 +439,6 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   },
 };
 
-export interface SearchConfig {
-  api_key_env: string;
-  result_limit: number;
-  search_depth: string;
-  include_answer: boolean;
-}
-
-export const defaultSearchConfig = (): SearchConfig => ({
-  api_key_env: "TAVILY_API_KEY",
-  result_limit: 10,
-  search_depth: "advanced",
-  include_answer: true,
-});
-
-const SEARCH: StructSpec<SearchConfig> = {
-  name: "SearchConfig",
-  make: defaultSearchConfig,
-  fields: {
-    api_key_env: readString,
-    result_limit: readU32,
-    search_depth: readString,
-    include_answer: readBool,
-  },
-};
-
 export interface ToolOverride {
   max_result_chars: number | undefined;
   max_inline_image_bytes?: number;
@@ -483,20 +458,20 @@ const TOOL_OVERRIDE: StructSpec<ToolOverride> = {
 export interface ToolsConfig {
   enabled_tools: string[];
   enabled_subagents: string[];
+  enabled_mcp: string[];
   max_result_chars: number;
   max_inline_image_bytes: number;
   timeout: ConfigDuration;
-  web_search: SearchConfig;
   config: Map<string, ToolOverride>;
 }
 
 export const defaultToolsConfig = (): ToolsConfig => ({
   enabled_tools: [],
   enabled_subagents: [],
+  enabled_mcp: [],
   max_result_chars: 50_000,
   max_inline_image_bytes: DEFAULT_MAX_INLINE_IMAGE_BYTES,
   timeout: ConfigDuration.fromSecs(300),
-  web_search: defaultSearchConfig(),
   config: new Map(),
 });
 
@@ -506,10 +481,10 @@ const TOOLS: StructSpec<ToolsConfig> = {
   fields: {
     enabled_tools: readToolNameSeq,
     enabled_subagents: readSubagentNameSeq,
+    enabled_mcp: readStringSeq,
     max_result_chars: readUsize,
     max_inline_image_bytes: readUsize,
     timeout: readDuration,
-    web_search: struct(SEARCH),
     config: readMap(struct(TOOL_OVERRIDE), "tools"),
   },
 };
@@ -520,8 +495,12 @@ export function toolPatternMatches(pattern: string, name: string): boolean {
     : pattern === name;
 }
 
+export function toolGrants(tools: Pick<ToolsConfig, "enabled_tools" | "enabled_mcp">): string[] {
+  return [...tools.enabled_tools, ...tools.enabled_mcp.map((server) => `mcp__${server}__*`)];
+}
+
 export function toolEnabled(tools: ToolsConfig, name: string): boolean {
-  return tools.enabled_tools.some((p) => toolPatternMatches(p, name));
+  return toolGrants(tools).some((p) => toolPatternMatches(p, name));
 }
 
 export function subagentEnabled(tools: ToolsConfig, name: string): boolean {
@@ -529,7 +508,7 @@ export function subagentEnabled(tools: ToolsConfig, name: string): boolean {
 }
 
 export function anyToolEnabled(tools: ToolsConfig): boolean {
-  return tools.enabled_tools.length > 0 || tools.enabled_subagents.length > 0;
+  return tools.enabled_tools.length > 0 || tools.enabled_mcp.length > 0 || tools.enabled_subagents.length > 0;
 }
 
 export function resultCharsFor(tools: ToolsConfig, name: string): number {
@@ -1052,6 +1031,7 @@ export interface McpServerConfig {
   cwd: string | undefined;
   url: string | undefined;
   headers: Map<string, string>;
+  bearer_token_env: string | undefined;
 }
 
 const MCP_SERVER: StructSpec<McpServerConfig> = {
@@ -1063,6 +1043,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     cwd: undefined,
     url: undefined,
     headers: new Map(),
+    bearer_token_env: undefined,
   }),
   fields: {
     command: optional(readString),
@@ -1071,6 +1052,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     cwd: optional(readString),
     url: optional(readString),
     headers: readMap(readString),
+    bearer_token_env: optional(readString),
   },
 };
 

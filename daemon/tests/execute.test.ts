@@ -19,12 +19,6 @@ import type { ImageGenerateResult } from "../src/tools/images.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
-const SEARCH_CONFIG = {
-  api_key_env: "TAVILY_API_KEY",
-  result_limit: 5,
-  search_depth: "basic",
-  include_answer: true,
-};
 const RETRIEVAL_CONFIG = {
   maxFileBytes: 0,
   maxIndexedFiles: 0,
@@ -147,7 +141,6 @@ function scriptedContext(name: string, scripted: Scripted): ToolContext {
   historyDbPath: "/tmp/history.db",
   characterName: "",
     configDir: "",
-    searchConfig: SEARCH_CONFIG,
     retrievalConfig: RETRIEVAL_CONFIG,
     retrievalMode: "auto",
   };
@@ -253,7 +246,6 @@ describe("generate_image", () => {
   historyDbPath: "/tmp/history.db",
   characterName: "",
           configDir: "",
-          searchConfig: SEARCH_CONFIG,
           retrievalConfig: RETRIEVAL_CONFIG,
           retrievalMode: "auto",
           imageGenConfig: {
