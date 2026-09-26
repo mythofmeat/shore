@@ -72,6 +72,7 @@ export interface ModelsContext {
   activeModel: string | undefined;
   thread?: string;
   threadModel?: string;
+  homeThreadModel?: string;
   configPath?: string;
   runtime?: ConfigRuntime;
   env?: Env;
@@ -149,7 +150,7 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
     ? resolveActiveModel(ctx)
     : resolveChatModelForCharacter(
       configView(ctx.config), ctx.characterName, findEffective,
-      task === "compaction" ? ctx.threadModel : undefined, ctx.preferences,
+      task === "compaction" ? ctx.threadModel : ctx.homeThreadModel, ctx.preferences,
     );
   if (inherited === undefined) {
     throw notFound(
@@ -292,7 +293,7 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-interface ChatInheritance { thread: ModelRole; character: ModelRole }
+interface ChatInheritance { thread: ModelRole; home: ModelRole }
 
 function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
   const bg = ctx.config.app.defaults.background;
@@ -300,13 +301,19 @@ function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: Cha
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
-  const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.character ?? inheritedChatRole(ctx);
+  const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.home ?? homeChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
 function inheritedChatRole(ctx: ModelsContext): ModelRole {
   const { threadModel: _threadModel, thread: _thread, ...character } = ctx;
   return chatRole(character);
+}
+
+function homeChatRole(ctx: ModelsContext, character?: ModelRole): ModelRole {
+  if (ctx.homeThreadModel === undefined) return character ?? inheritedChatRole(ctx);
+  const { thread: _thread, ...home } = ctx;
+  return chatRole({ ...home, threadModel: ctx.homeThreadModel });
 }
 
 function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
@@ -340,7 +347,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const inherited = inheritedChatRole(ctx);
   return [
     chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, { thread: chat, character: inherited })),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, { thread: chat, home: homeChatRole(ctx, inherited) })),
     subagentRole(ctx, inherited),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
@@ -992,7 +999,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task, { thread: chat, character: characterChat }).source,
+      source: backgroundRole(ctx, task, { thread: chat, home: homeChatRole(ctx, characterChat) }).source,
       resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
     });
   }

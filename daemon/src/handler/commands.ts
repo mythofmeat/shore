@@ -218,10 +218,9 @@ function characterSession(
       findEffectiveModel(view, cacheDir, name, includeHidden),
   );
 
-  const threadModel =
-    thread === undefined
-      ? undefined
-      : threadModelOf(deps.registry.listThreads(character), thread);
+  const threads = deps.registry.listThreads(character);
+  const threadModel = thread === undefined ? undefined : threadModelOf(threads, thread);
+  const homeThreadModel = threadModelOf(threads, deps.dispatchRuntime.homeThread(character));
 
   return {
     config,
@@ -231,6 +230,7 @@ function characterSession(
     activeModel: saved?.qualifiedName,
     ...(thread === undefined ? {} : { thread }),
     ...(threadModel === undefined ? {} : { threadModel }),
+    ...(homeThreadModel === undefined ? {} : { homeThreadModel }),
     runtime: deps.runtime,
     signal,
     ...(deps.env === undefined ? {} : { env: deps.env }),
