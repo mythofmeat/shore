@@ -125,6 +125,10 @@ export class CharacterAutonomy {
     return this.#log;
   }
 
+  get heartbeatMayTick(): boolean {
+    return this.#config.autonomyEnabled && this.#config.heartbeatEnabled;
+  }
+
   onUserMessage(turnCount: number, now: number): void {
     if (this.#clock.ticksWithoutUser > 0) {
       this.note("wake", "User returned — idle counter reset", now);

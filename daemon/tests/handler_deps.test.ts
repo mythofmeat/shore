@@ -521,6 +521,25 @@ describe("the tool backends a character's turn gets", () => {
     }
   });
 
+  test("a chat turn's set_next_wake answers from the runner, not from config it has not picked up", async () => {
+    const { root, config, runtime } = await runtimeUnder("shore-deps-wake-stale-", () => {}, ["ada"]);
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      bridge.ensureState("ada", config);
+      await bridge.settled("ada");
+      const before = runtime.autonomy.status("ada")?.next_wake_at;
+      config.app.behavior.autonomy.enabled = true;
+
+      expect(await wakeFailure(config, chatToolDeps(assemblyFor(runtime), "ada", turnFor()))).toBe(
+        "io: heartbeats are not running for this character",
+      );
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(before);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("background work gets no heartbeat schedule of its own", async () => {
     const { root, config, runtime } = await runtimeUnder(
       "shore-deps-wake-background-",
