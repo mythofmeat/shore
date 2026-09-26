@@ -147,9 +147,15 @@ MUTANTS = [
     ('background: the inherited model ignores the character preference',
      "    : resolveChatModelForCharacter(\n"
      "      configView(ctx.config), ctx.characterName, findEffective,\n"
-     "      task === \"compaction\" ? ctx.threadModel : undefined, ctx.preferences,\n"
+     "      task === \"compaction\" ? ctx.threadModel : ctx.homeThreadModel, ctx.preferences,\n"
      "    );",
      '    : resolve(ctx, ctx.config.app.defaults.model ?? "", true);'),
+    ("background: the heartbeat target ignores the home thread's pin",
+     '      task === "compaction" ? ctx.threadModel : ctx.homeThreadModel, ctx.preferences,',
+     '      task === "compaction" ? ctx.threadModel : undefined, ctx.preferences,'),
+    ("background: the heartbeat role ignores the home thread's pin",
+     "  if (ctx.homeThreadModel === undefined) return character ?? inheritedChatRole(ctx);",
+     "  if (true as boolean) return character ?? inheritedChatRole(ctx);"),
     ('background: "all" accepts differing models',
      "  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
      "  if (true as boolean) return first;\n\n  const mapping = resolved.map(([task, m])"),
@@ -560,6 +566,7 @@ def main() -> int:
         [
             "tests/model_commands.test.ts",
             "tests/subagent_model_pin.test.ts",
+            "tests/background_model_pin.test.ts",
             "tests/model_favorites.test.ts",
         ],
         src=SRC,

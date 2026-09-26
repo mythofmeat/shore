@@ -9,6 +9,7 @@ import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
 import { swipe } from "./actions.ts";
+import { EffortChip } from "./effort.tsx";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
@@ -27,7 +28,7 @@ async function readImage(file: File): Promise<ImageUpload> {
 export function Composer({ state, character, mobile }: { state: WorkspaceSnapshot; character: string; mobile: boolean }) {
   const key = JSON.stringify([state.character, state.thread]);
   const [store] = useState(() => browserDraft(key));
-  const [draft, setDraft] = useState<DraftContent>({ text: "", images: [], pending: false });
+  const [draft, setDraft] = useState<DraftContent>({ text: "", images: [] });
   const current = useRef(draft);
   const mounted = useRef(true);
   const [loaded, setLoaded] = useState(false);
@@ -73,30 +74,34 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   };
   const send = async () => {
     const submitted = current.current;
-    if (!loaded || submitted.pending || !ready || streaming) return;
+    if (!loaded || !ready) return;
     if (submitted.text.trim() === "" && submitted.images.length === 0) return;
+    if (streaming) { toasts.show("Wait for the reply to finish, or stop it, before sending again.", "error"); return; }
     const connection = workspace.connection;
-    const generation = connection.generation;
-    const retain = async () => { const value = { ...(store.current ?? current.current), pending: false }; if (mounted.current) await change(value); else await store.save(value).catch(() => {}); };
+    const selected = workspace.getSnapshot();
+    const synced = connection.selection;
+    if (connection.status !== "ready" || selected.character !== state.character || selected.thread !== state.thread || synced.character !== state.character || synced.thread !== state.thread) {
+      toasts.show("The conversation changed before sending. Your draft was kept.", "error");
+      return;
+    }
+    try { checkAttachments(submitted.images); } catch (error) { toasts.show(errorText(error), "error"); return; }
+    let accepted = false;
+    const finished = conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images }, () => { accepted = true; });
+    void finished.catch(() => {});
+    const restore = async () => {
+      if (accepted) return;
+      const value = store.current ?? current.current;
+      const next = { ...value, text: [submitted.text, value.text].filter((part) => part !== "").join("\n\n"), images: [...submitted.images, ...value.images] };
+      if (mounted.current) await change(next); else await store.save(next).catch(() => {});
+    };
+    await change({ ...submitted, text: "", images: [] });
     try {
-      checkAttachments(submitted.images);
-      await change({ ...submitted, pending: true });
-      const selected = workspace.getSnapshot();
-      const synced = connection.selection;
-      if (generation !== connection.generation || connection.status !== "ready" || selected.character !== state.character || selected.thread !== state.thread || synced.character !== state.character || synced.thread !== state.thread) {
-        await retain();
-        toasts.show("The conversation changed before sending. Your draft was kept.", "error");
-        return;
-      }
-      const result = await conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images });
-      if (result.outcome === "completed") {
-        const value = store.current ?? current.current;
-        await change({ text: value.text === submitted.text ? "" : value.text, images: value.images === submitted.images ? [] : value.images, pending: false });
-      } else {
-        await retain();
-        if (result.outcome !== "cancelled") toasts.show(result.error?.message ?? `The message wasn’t sent (${result.outcome}). Your draft was kept.`, "error");
-      }
-    } catch (error) { await retain(); toasts.show(errorText(error), "error"); }
+      const result = await finished;
+      if (result.outcome === "completed") return;
+      if (accepted) { if (result.outcome === "failed") toasts.show(result.error?.message ?? "The reply failed.", "error"); return; }
+      await restore();
+      if (result.outcome !== "cancelled") toasts.show(result.error?.message ?? `The message wasn’t sent (${result.outcome}). Your draft was restored.`, "error");
+    } catch (error) { await restore(); toasts.show(errorText(error), "error"); }
   };
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));
@@ -115,7 +120,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
           <button type="button" className="attachment-remove" aria-label={`Remove ${image.filename}`} onClick={() => void change({ ...current.current, images: current.current.images.filter((_, item) => item !== index) })}><Icon name="close" size={12} /></button>
         </div>)}
       </div>}
-      <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded || draft.pending}
+      <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded}
         onChange={(event) => void change({ ...current.current, text: event.target.value })} onPaste={onPaste}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
@@ -138,11 +143,12 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
           if (submit) { event.preventDefault(); void send(); }
         }} />
       <div className="composer-bar">
-        <IconButton icon="attach" label="Attach image" disabled={!loaded || draft.pending} onClick={() => files.current?.click()} />
+        <IconButton icon="attach" label="Attach image" disabled={!loaded} onClick={() => files.current?.click()} />
         <input ref={files} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(event) => { const list = [...(event.target.files ?? [])]; event.target.value = ""; void attach(list); }} />
+        <EffortChip state={state} />
         <span className="composer-status">{unsaved ? "Draft not saved in this browser" : ""}</span>
         {streaming ? <button type="button" className="stop" onClick={() => conversation.cancel()}><Icon name="stop" size={14} />Stop</button>
-          : <button type="button" className="send" aria-label="Send" title="Send" disabled={empty || !ready || draft.pending} onClick={() => void send()}><Icon name="send" /></button>}
+          : <button type="button" className="send" aria-label="Send" title="Send" disabled={empty || !ready} onClick={() => void send()}><Icon name="send" /></button>}
       </div>
     </div>
   </div>;

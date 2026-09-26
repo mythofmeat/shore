@@ -19,7 +19,7 @@
       "err": "invalid args: workspace not configured"
     },
     "set_next_wake": {
-      "err": "invalid args: set_next_wake is only available during heartbeat ticks"
+      "err": "io: the heartbeat schedule is not available in this context"
     },
     "unknown_tool": {
       "err": "unknown_tool: not yet implemented"

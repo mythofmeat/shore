@@ -40,7 +40,6 @@ export interface HeartbeatLoopDeps {
     toolUseId?: string,
     tools?: readonly ToolDefinition[],
   ) => Promise<HeartbeatToolResult>;
-  scheduleNextWake: (hoursFromNow: number, reason: string) => string;
   note: (text: string) => void;
   recordTranscript?: (round: TranscriptRound) => void;
   wrapUpGrace: number;
@@ -63,7 +62,7 @@ function thinkingOf(blocks: readonly ContentBlock[]): ContentBlock[] {
 
 export async function dispatchHeartbeatTools(
   toolUses: readonly ToolUse[],
-  deps: Pick<HeartbeatLoopDeps, "dispatch" | "scheduleNextWake" | "note">,
+  deps: Pick<HeartbeatLoopDeps, "dispatch" | "note">,
   tools?: readonly ToolDefinition[],
 ): Promise<{ results: ContentBlock[]; captured: CapturedTool[]; images: ImageRef[] }> {
   const results: ContentBlock[] = [];
@@ -75,16 +74,7 @@ export async function dispatchHeartbeatTools(
     let isError: boolean;
     let block: ContentBlock | undefined;
 
-    if (name === "set_next_wake") {
-      const record = (typeof input === "object" && input !== null ? input : {}) as Record<
-        string,
-        unknown
-      >;
-      const hours = typeof record["hours_from_now"] === "number" ? record["hours_from_now"] : 1;
-      const reason = typeof record["reason"] === "string" ? record["reason"] : "";
-      output = deps.scheduleNextWake(hours, reason);
-      isError = false;
-    } else if (isSendMessageTool(name)) {
+    if (isSendMessageTool(name)) {
       output = JSON.stringify({
         status: "delivered",
         detail: "Message will be delivered to the user when this tick ends.",
@@ -106,7 +96,7 @@ export async function dispatchHeartbeatTools(
     );
     captured.push({ name, input, output, isError });
 
-    if (name !== "set_next_wake") deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
+    if (name !== "set_next_wake" || isError) deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
   }
 
   return { results, captured, images };
@@ -116,30 +106,6 @@ export async function runHeartbeatToolLoop(
   request: SidecarRequest,
   deps: HeartbeatLoopDeps,
 ): Promise<HeartbeatLoopResult> {
-  request = {
-    ...request,
-    tools: [
-      ...(request.tools ?? []).filter((tool) => tool.name !== "set_next_wake" && !isSendMessageTool(tool.name)),
-      {
-        name: "set_next_wake",
-        description: "Schedule the next heartbeat.",
-        input_schema: {
-          type: "object",
-          properties: { hours_from_now: { type: "number" }, reason: { type: "string" } },
-          required: ["hours_from_now", "reason"],
-        },
-      },
-      {
-        name: "send_message",
-        description: "Send a message to the user when this heartbeat finishes.",
-        input_schema: {
-          type: "object",
-          properties: { message: { type: "string" } },
-          required: ["message"],
-        },
-      },
-    ],
-  };
   const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
   let iteration = 0;
   let captured: CapturedTool[] = [];

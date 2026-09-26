@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Message } from "../src/protocol/Message.ts";
-import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
+import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, regenInFlight, regenStart, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
@@ -79,6 +79,23 @@ test("finished streams disappear once their message arrives or their request is 
   const streams = [stream("live", false, null), stream("done", true, "m1"), stream("stale", true, "old"), stream("mine", true, "new"), stream("sub", false, null, "worker")];
   expect(visibleStreams(streams, [message("m1", "assistant", "")], new Set(["done", "mine"])).map((item) => item.rid)).toEqual(["live", "mine"]);
   expect(visibleStreams(streams, [], new Set()).map((item) => item.rid)).toEqual(["live"]);
+});
+
+test("a regeneration replaces everything after the last real user turn, within the active context", () => {
+  const toolResult = message("r", "user", "", { content_blocks: [{ type: "tool_result", tool_use_id: "t", content: "ok", is_error: false }] });
+  const messages = [message("u", "user", ""), message("a1", "assistant", ""), toolResult, message("a2", "assistant", ""), message("s", "system", "")];
+  expect(regenStart(messages, 0)).toBe(1);
+  expect(regenStart([message("u", "user", "", { content_blocks: [] })], 0)).toBe(1);
+  expect(regenStart([message("a", "assistant", ""), message("b", "assistant", "")], 1)).toBe(1);
+});
+
+test("the replaced reply stays hidden until the regeneration's own stream takes over", () => {
+  expect(regenInFlight([], ["pending"])).toBe(true);
+  expect(regenInFlight([{ regen: true }], [])).toBe(true);
+  expect(regenInFlight([{ regen: false }, {}], [])).toBe(false);
+  expect(regenInFlight([], [])).toBe(false);
+  expect(regenInFlight([{ rid: "quiet", regen: false }], [], ["quiet"])).toBe(true);
+  expect(regenInFlight([{ rid: "other", regen: false }], [], ["quiet"])).toBe(false);
 });
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

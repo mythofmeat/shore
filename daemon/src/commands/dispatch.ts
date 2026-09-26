@@ -34,6 +34,7 @@ export interface CommandSession {
   activeModel: string | undefined;
   thread?: string;
   threadModel?: string;
+  homeThreadModel?: string;
   runtime: ConfigRuntime;
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;

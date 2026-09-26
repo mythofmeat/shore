@@ -183,6 +183,16 @@ async function failureFrom(runtime: ShoreRuntime, deps: ToolContextDeps): Promis
   return "the subagent somehow ran";
 }
 
+async function wakeFailure(config: LoadedConfig, deps: ToolContextDeps): Promise<string> {
+  const ctx = await buildToolContext(config, config.dirs.data, "ada", deps);
+  try {
+    await dispatchTool("set_next_wake", { hours_from_now: 3, reason: "after dinner" }, ctx);
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+  return "the wake was scheduled";
+}
+
 async function subagentFailure(runtime: ShoreRuntime, character: string): Promise<string> {
   return await failureFrom(runtime, chatToolDeps(assemblyFor(runtime), character, turnFor()));
 }
@@ -452,6 +462,98 @@ describe("the tool backends a character's turn gets", () => {
       expect(ada.imageGenerator).toBeDefined();
       expect(ada.modelHistoryQuery).toBeDefined();
       expect(ada.runSubagent).toBeDefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a chat turn's set_next_wake moves that character's heartbeat, and logs why", async () => {
+    const hour = 3_600_000;
+    const { root, config, runtime } = await runtimeUnder(
+      "shore-deps-wake-",
+      (app) => {
+        app.behavior.autonomy.enabled = true;
+      },
+      ["ada", "nova"],
+    );
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      for (const character of ["ada", "nova"]) {
+        bridge.ensureState(character, config);
+        await bridge.settled(character);
+      }
+      const novaBefore = runtime.autonomy.status("nova")?.next_wake_at;
+      const ctx = await buildToolContext(config, config.dirs.data, "ada", chatToolDeps(assemblyFor(runtime), "ada", turnFor()));
+
+      const before = Date.now();
+      expect(await dispatchTool("set_next_wake", { hours_from_now: 3, reason: "after dinner" }, ctx)).toBe(
+        "Scheduled next moment in 3.0 hours.",
+      );
+
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeGreaterThanOrEqual(before + 3 * hour);
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeLessThanOrEqual(Date.now() + 3 * hour);
+      expect(JSON.stringify(runtime.autonomy.status("ada")?.recent_events)).toContain(
+        "set_next_wake: 3.0h - after dinner",
+      );
+      expect(runtime.autonomy.status("nova")?.next_wake_at).toBe(novaBefore);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("with heartbeats off, a chat turn's set_next_wake is told so and moves nothing", async () => {
+    const { root, config, runtime } = await runtimeUnder("shore-deps-wake-off-", () => {}, ["ada"]);
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      bridge.ensureState("ada", config);
+      await bridge.settled("ada");
+      const before = runtime.autonomy.status("ada")?.next_wake_at;
+
+      expect(await wakeFailure(config, chatToolDeps(assemblyFor(runtime), "ada", turnFor()))).toBe(
+        "io: heartbeats are not running for this character",
+      );
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(before);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a chat turn's set_next_wake answers from the runner, not from config it has not picked up", async () => {
+    const { root, config, runtime } = await runtimeUnder("shore-deps-wake-stale-", () => {}, ["ada"]);
+    try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      bridge.ensureState("ada", config);
+      await bridge.settled("ada");
+      const before = runtime.autonomy.status("ada")?.next_wake_at;
+      config.app.behavior.autonomy.enabled = true;
+
+      expect(await wakeFailure(config, chatToolDeps(assemblyFor(runtime), "ada", turnFor()))).toBe(
+        "io: heartbeats are not running for this character",
+      );
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(before);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("background work gets no heartbeat schedule of its own", async () => {
+    const { root, config, runtime } = await runtimeUnder(
+      "shore-deps-wake-background-",
+      (app) => {
+        app.behavior.autonomy.enabled = true;
+      },
+      ["ada"],
+    );
+    try {
+      const background = sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy);
+
+      expect(await wakeFailure(config, background)).toBe(
+        "io: the heartbeat schedule is not available in this context",
+      );
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

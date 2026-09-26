@@ -234,6 +234,10 @@ export class AutonomyService {
     return status;
   }
 
+  heartbeatsRunning(character: string): boolean {
+    return this.#entries.get(character)?.runner.heartbeatMayTick ?? false;
+  }
+
   scheduleNextWake(character: string, hoursFromNow: number, reason: string): number | undefined {
     return this.#entries
       .get(character)

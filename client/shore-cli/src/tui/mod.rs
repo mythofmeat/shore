@@ -2422,7 +2422,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
             app.spinner_frame = 0;
-            if start.regen {
+            if start.regen && !app.stream.regen {
                 app.begin_regen_optimistic();
             } else if !app.stream.active {
                 app.stream.reset();
@@ -5824,6 +5824,55 @@ mod redraw_tests {
             .expect("assistant turn");
         assert_eq!(turn.joined_text(), "complete answer");
         assert!(!turn.is_streaming());
+    }
+
+    #[test]
+    fn spectated_regen_hides_only_the_reply_it_replaces() {
+        let start = || {
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some("r_regen".into()),
+                regen: true,
+                subagent: None,
+                task_id: None,
+            })
+        };
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::Turn(Turn::text(
+            Role::User,
+            Some("m_user".into()),
+            "question".into(),
+            vec![],
+            "t1".into(),
+            None,
+        )));
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_old".into()),
+            "old reply".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
+
+        let _ = handle_server_message(&mut app, start());
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_round".into()),
+            "first tool round of the new reply".into(),
+            vec![],
+            "t3".into(),
+            None,
+        ));
+        let _ = handle_server_message(&mut app, start());
+
+        let hidden: Vec<_> = app
+            .entries
+            .iter()
+            .filter(|entry| app.stream.hides(entry))
+            .filter_map(ConversationEntry::msg_id)
+            .collect();
+        assert_eq!(hidden, vec!["m_old"]);
+
+        app.abort_stream();
+        assert!(!app.entries.iter().any(|entry| app.stream.hides(entry)));
     }
 
     #[test]
