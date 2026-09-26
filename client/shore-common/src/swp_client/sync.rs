@@ -252,6 +252,7 @@ mod tests {
     fn drops_new_message_when_snapshot_already_covers_it() {
         let mut sync = SyncState::new(6, Some("alice"), None);
         let message = ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: None,
             revision: 6,
             character: Some("alice".into()),
@@ -263,6 +264,7 @@ mod tests {
 
     fn new_message(revision: u64) -> ServerMessage {
         ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: None,
             revision,
             character: Some("alice".into()),
@@ -274,6 +276,7 @@ mod tests {
     fn foreign_thread_revision_does_not_suppress_selected_thread_messages() {
         let mut sync = SyncState::new(1, Some("alice"), Some("main"));
         let foreign = ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: Some("side".into()),
             revision: 99,
             character: Some("alice".into()),
@@ -394,6 +397,7 @@ mod tests {
     fn drops_new_messages_for_another_character() {
         let mut sync = SyncState::new(5, Some("alice"), None);
         let foreign = ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: None,
             revision: 99,
             character: Some("bob".into()),

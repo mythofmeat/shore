@@ -57,6 +57,63 @@ test("chat renders markdown, edits in place, confirms deletion, swipes between r
   await check();
 });
 
+test("sending clears the message box at once and regenerating replaces the reply in place", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "lumen");
+  const box = page.getByLabel("Message", { exact: true });
+  await box.fill("Please hold this request");
+  await box.press("Enter");
+  await expect(page.locator("article.message.user")).toContainText("Please hold this request");
+  await expect(box).toHaveValue("");
+  await expect(box).toBeEditable();
+  await expect(page.locator("article.message.assistant.streaming")).toBeVisible();
+  await box.fill("A follow-up typed while waiting");
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await expect(box).toHaveValue("A follow-up typed while waiting");
+  await expect(page.locator("article.message.user")).toHaveCount(1);
+
+  await box.fill("Answer once, then hold regenerations");
+  await box.press("Enter");
+  const settled = page.locator("article.message.assistant:not(.streaming)");
+  await expect(settled.last()).toContainText("Answer once, then hold regenerations");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await settled.last().hover();
+  await settled.last().getByRole("button", { name: "Generate another response" }).click();
+  await expect(page.locator("article.message.assistant.streaming")).toBeVisible();
+  await expect(page.locator("article.message.assistant", { hasText: "Answer once, then hold regenerations" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.locator("article.message.assistant.streaming")).toHaveCount(0);
+  await expect(settled).toHaveCount(1);
+  await expect(settled.last()).toContainText("Answer once, then hold regenerations");
+  await check();
+});
+
+test("the effort chip beside the message box changes reasoning effort in two clicks", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "ember");
+  const chip = page.getByRole("button", { name: /^Reasoning effort: / });
+  await expect(chip).toContainText("Effort");
+  await chip.click();
+  const menu = page.getByRole("menu", { name: "Reasoning effort" });
+  await expect(menu.getByRole("menuitem")).toContainText(["adaptive", "low", "medium", "high", "xhigh", "max", "off"]);
+  await menu.getByRole("menuitem", { name: "high", exact: true }).click();
+  await expect(chip).toHaveAccessibleName(/^Reasoning effort: high\./);
+  await expect(chip).toContainText("high");
+
+  await page.reload();
+  await expect(chip).toContainText("high");
+  await page.keyboard.press("Control+k");
+  await page.getByRole("dialog", { name: "Command palette" }).getByRole("searchbox").fill("reasoning effort");
+  await page.keyboard.press("Enter");
+  await expect(menu.getByRole("menuitem", { name: /^high/ })).toContainText("Current");
+  await menu.getByRole("menuitem", { name: "Reset to default" }).click();
+  await expect(chip).not.toContainText("high");
+  await check();
+});
+
 test("the sidebar collapses on desktop and becomes a drawer on phones", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);

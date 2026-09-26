@@ -248,7 +248,7 @@ async function runGenerationCore(
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }
 
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen);
+  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid);
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);

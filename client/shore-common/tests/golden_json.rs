@@ -316,6 +316,22 @@ fn new_message_golden() {
 }
 
 #[test]
+fn user_input_echo_names_its_request_without_becoming_its_response() {
+    let msg: ServerMessage = assert_golden(
+        r#"{
+        "type": "new_message", "revision": 4, "thread": "main", "rid": "send-1", "origin": "user_input",
+        "msg_id": "m_user_01", "role": "user", "content": "Hello", "images": [], "content_blocks": [],
+        "timestamp": "2026-01-15T10:35:00Z"
+    }"#,
+    );
+    assert_eq!(msg.request_id(), None);
+    assert_variant!(msg, ServerMessage::NewMessage(nm) => {
+        assert_eq!(nm.rid.as_deref(), Some("send-1"));
+        assert_eq!(nm.message.origin, Some(MessageOrigin::UserInput));
+    });
+}
+
+#[test]
 fn new_message_with_alts_golden() {
     let msg: ServerMessage =
         assert_golden(&shared_fixture("server", Some("new_message_with_alts")));

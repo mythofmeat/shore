@@ -60,6 +60,7 @@ export async function appendUserTurn(
   charName: string,
   body: TurnBody,
   regen: boolean,
+  rid: string | null = null,
 ): Promise<PendingAlt | undefined> {
   if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };
   if (!bodyHasContent(body)) return undefined;
@@ -94,6 +95,7 @@ export async function appendUserTurn(
     engine.currentRevision(),
     { ...userMsg, images: userMsg.images.map((i) => ({ ...i })) },
     engine.thread,
+    rid,
   );
 
   return undefined;

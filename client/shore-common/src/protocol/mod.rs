@@ -334,6 +334,7 @@ mod tests {
     #[test]
     fn server_new_message_round_trip() {
         let msg = ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: None,
             revision: 3,
             character: Some("Alice".into()),

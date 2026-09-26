@@ -202,6 +202,20 @@ describe("appendUserTurn", () => {
     });
   }
 
+  test("the user-input echo names the request that sent it", async () => {
+    const root = await tempRoot();
+    try {
+      const dataDir = await seedCharacter(root, []);
+      const rec = recorder();
+      const engine = await ConversationEngine.load("ada", dataDir);
+      await appendUserTurn(rec.ctx, engine, dataDir, "ada", { text: "hello", images: [], image_data: [] }, false, "send-1");
+      expect(rec.events).toHaveLength(1);
+      expect(rec.events[0]).toMatchObject({ type: "new_message", rid: "send-1", origin: "user_input", role: "user", content: "hello" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a minted id is a uuid and a minted timestamp is local rfc3339", () => {
     let checked = 0;
     for (const c of fixture.append_user_turn) {

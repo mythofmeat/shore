@@ -161,6 +161,8 @@ pub struct NewMessage {
     pub character: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rid: Option<String>,
     #[serde(flatten)]
     pub message: Message,
 }

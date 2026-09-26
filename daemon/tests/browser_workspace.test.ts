@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, CONTROL_KINDS, controlFor, initialValue } from "../src/browser/forms.ts";
 import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
-import { BrowserConnection, type ConnectionUpdate } from "../src/browser/connection.ts";
+import { BrowserConnection, type BrowserRequest, type ConnectionUpdate } from "../src/browser/connection.ts";
+import { ConversationRequests } from "../src/browser/chat/requests.ts";
+import type { RequestFinished } from "../src/protocol/RequestFinished.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
 import type { History } from "../src/protocol/History.ts";
 import { configSchema } from "../src/config/schema.ts";
@@ -129,6 +132,46 @@ test("history-only updates retain configuration until it is replaced or the conv
   expect(workspace.getSnapshot().config).toEqual({});
   connection.history({ ...history, config: updated });
   expect(workspace.getSnapshot().config).toEqual(updated);
+});
+
+test("conversation requests track when the daemon saved the message and when the reply started streaming", async () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    finish = new Map<string, (result: RequestFinished) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    override submit(_request: BrowserRequest) {
+      const rid = `r${String(this.finish.size + 1)}`;
+      return { rid, finished: new Promise<RequestFinished>((resolve) => { this.finish.set(rid, resolve); }) };
+    }
+    frame(event: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: event }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const requests = new ConversationRequests(connection);
+  const accepted: string[] = [];
+  const sent = requests.submit("message", { stream: true, text: "hello", image_data: [] }, () => accepted.push("r1"));
+  const regen = requests.submit("regen", { stream: true });
+  const echo = (rid: string, role: "user" | "assistant"): ServerMessage => ({ type: "new_message", revision: 1, rid, msg_id: `${role}-${rid}`, role, content: "hello", images: [], content_blocks: [], timestamp: "now" });
+  connection.frame(echo("r1", "assistant"));
+  connection.frame(echo("other", "user"));
+  expect(accepted).toEqual([]);
+  connection.frame(echo("r1", "user"));
+  connection.frame(echo("r1", "user"));
+  expect(accepted).toEqual(["r1"]);
+  expect(requests.pendingRegens()).toEqual(["r2"]);
+  expect(requests.awaitingStream()).toBe("r1");
+  connection.frame({ type: "stream_start", rid: "r1", regen: false, subagent: null });
+  expect(requests.awaitingStream()).toBe("r2");
+  connection.frame({ type: "stream_start", rid: "r2", regen: true, subagent: "worker" });
+  expect(requests.pendingRegens()).toEqual(["r2"]);
+  const before = requests.getSnapshot();
+  connection.frame({ type: "stream_start", rid: "r2", regen: true, subagent: null });
+  expect(requests.pendingRegens()).toEqual([]);
+  expect(requests.awaitingStream()).toBeUndefined();
+  expect(requests.getSnapshot()).not.toBe(before);
+  connection.finish.get("r1")?.({ rid: "r1", outcome: "completed" });
+  connection.finish.get("r2")?.({ rid: "r2", outcome: "cancelled" });
+  await Promise.all([sent, regen]);
+  expect(requests.getSnapshot().size).toBe(0);
 });
 
 test("history deltas replace the suffix, preserve archived pages, and detect absent anchors", () => {

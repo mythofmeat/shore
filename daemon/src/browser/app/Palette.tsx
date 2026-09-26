@@ -3,7 +3,7 @@ import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { openConversationDialog, requestConfigSearch } from "./intents.ts";
+import { openConversationDialog, openEffortMenu, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
 import { keyLabel, paletteMatches, SHORTCUTS } from "./shortcuts.ts";
 import { perform, workspace } from "./state.ts";
@@ -32,6 +32,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
         id: `dialog:${name}`, icon: "chat" as const, group: "Conversation", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
         label: { rename: "Rename conversation", fork: "Fork conversation", guidance: "Regenerate with guidance", system: "Add a system message", compact: "Compact context", clear: "Clear context", gallery: "Show images", model: "Choose a model" }[name],
       })),
+      { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Conversation", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
       ...state.threads.map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Conversations", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.actions.run("switch_thread", { name: thread.id, resync: true })); }) })),
     ];
     return [
