@@ -20,7 +20,7 @@ import {
   MAIN_THREAD,
 } from "./config/dirs.ts";
 import { HISTORY_DB_FILE } from "./engine/history_store.ts";
-import type { McpServerConfig } from "./config/app.ts";
+import { mcpBearerToken, type McpServerConfig } from "./config/app.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
@@ -212,6 +212,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       connectMcp,
       refreshMcpCaches,
       options.mcpRegistryOptions,
+      options.env,
     ),
   );
 
@@ -385,8 +386,8 @@ function mcpHeaders(
 ): Record<string, string> {
   const headers = Object.fromEntries(server.headers);
   if (server.bearer_token_env === undefined) return headers;
-  const token = env[server.bearer_token_env];
-  if (token === undefined || token === "") {
+  const token = mcpBearerToken(server, env);
+  if (token === undefined) {
     shoreLog.warn(
       `shore: mcp.${name}.bearer_token_env names $${server.bearer_token_env}, which is not set; ` +
         "connecting without credentials",
@@ -401,9 +402,10 @@ async function connectMcpRegistry(
   connect: (spec: McpServerSpec) => Promise<McpClient>,
   onToolsChanged: (registry: McpRegistry, server: string) => Promise<void>,
   options: Omit<McpRegistryOptions, "onToolsChanged"> = {},
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<McpRegistry> {
   return await McpRegistry.fromConfig(
-    mcpConfigView(config),
+    mcpConfigView(config, env),
     pluginsDir(config.dirs.data),
     connect,
     undefined,

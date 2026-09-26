@@ -407,7 +407,7 @@ export async function applyReloadedConfig(
 }
 
 async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): Promise<void> {
-  const servers = mcpConfigView(config);
+  const servers = mcpConfigView(config, a.env ?? process.env);
   if (a.runtime.mcp.current.matchesConfig(servers)) return;
 
   let next: McpRegistry;

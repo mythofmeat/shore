@@ -1056,6 +1056,14 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
   },
 };
 
+export function mcpBearerToken(
+  server: Pick<McpServerConfig, "bearer_token_env">,
+  env: Record<string, string | undefined>,
+): string | undefined {
+  const token = server.bearer_token_env === undefined ? undefined : env[server.bearer_token_env];
+  return token === "" ? undefined : token;
+}
+
 export interface AppConfig {
   daemon: DaemonConfig;
   defaults: DefaultsConfig;

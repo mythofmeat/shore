@@ -303,6 +303,11 @@ describe("a config that shore can act on", () => {
   test("an MCP server granted by name with no definition warns", () => {
     expect(warningsOf("[tools]\nmcp = [\"tavily\"]\n").join(" ")).toContain("tool grant references MCP server with no [mcp.tavily]");
   });
+  test("a wildcard or empty MCP server name in tools.mcp warns that it matches nothing", () => {
+    for (const name of ["*", ""]) {
+      expect(warningsOf(`[tools]\nmcp = ["${name}"]\n`).join(" ")).toContain("an empty or `*` entry matches no tools");
+    }
+  });
   test("an MCP server granted by name with a definition is silent", () => {
     expect(warningsOf("[mcp.tavily]\nurl = \"https://mcp.example.invalid/mcp\"\n\n[tools]\nmcp = [\"tavily\"]\n").join(" ")).not.toContain("tavily");
   });
@@ -322,6 +327,9 @@ describe("a config that shore can act on", () => {
     expect(message).toContain("[web_search] is no longer supported");
     expect(message).toContain("[mcp.tavily]");
     expect(message).toContain("tools.mcp");
+  });
+  test("a top-level key named like an Object method is an unknown field, not a removed section", () => {
+    expect(refused("constructor = 1\n")).toContain("unknown field `constructor`");
   });
   test("provider:model_id embedding default passes", () => {
     const digest = accepted("[providers]\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[embedding]\nmodel = \"openai:text-embedding-3-large\"\n");

@@ -200,6 +200,8 @@ function describeOption(path: readonly string[]): string {
   const descriptions: Record<string, string> = {
     model: "Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.",
     enabled: "Enable this feature or select the names granted access.",
+    mcp: "MCP servers granted by name; each grants every tool of that [mcp.<name>] server.",
+    bearer_token_env: "Environment variable holding a bearer token sent as the Authorization header; HTTP servers only.",
     default_interval: "Time until the next heartbeat when the character does not schedule one.",
     min_interval: "Shortest time before any heartbeat, measured from the last heartbeat, message, or daemon start.",
     max_interval: "Longest time the character may schedule its next heartbeat.",
@@ -233,16 +235,16 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   return template === undefined ? undefined : { ...template, key };
 }
 
-const REMOVED_SECTIONS: Readonly<Record<string, string>> = {
-  web_search: "[web_search] is no longer supported: the built-in web_search tool was removed. Delete this section and configure a search MCP server instead, for example [mcp.tavily] with url = \"https://mcp.tavily.com/mcp/\" and bearer_token_env = \"TAVILY_API_KEY\", then grant it with tools.mcp = [\"tavily\"]",
-};
+const REMOVED_SECTIONS: ReadonlyMap<string, string> = new Map([
+  ["web_search", "[web_search] is no longer supported: the built-in web_search tool was removed. Delete this section and configure a search MCP server instead, for example [mcp.tavily] with url = \"https://mcp.tavily.com/mcp/\" and bearer_token_env = \"TAVILY_API_KEY\", then grant it with tools.mcp = [\"tavily\"]"],
+]);
 
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });
   const visit = (value: unknown, path: string[]): void => {
     const key = formatConfigPath(path);
     const info = findSchemaEntry(entries, key);
-    const removed = path.length === 1 ? REMOVED_SECTIONS[key] : undefined;
+    const removed = path.length === 1 ? REMOVED_SECTIONS.get(key) : undefined;
     if (removed !== undefined) throw new Error(`${source}: ${removed}`);
     if (info === undefined) {
       const expected = entries.filter((candidate) => parseConfigPath(candidate.key).length === 1).map((candidate) => `\`${candidate.key}\``);

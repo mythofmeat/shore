@@ -59,7 +59,7 @@ nothing load-bearing in them, and two lines that did not need to exist:
   from the assembly-time key and the per-attempt copy then overwrote it with
   the key that was actually used. The dead line is gone and the mutant is aimed
   at the one that does the work.
-- **The `anyEnabled` gate on the tool loop.** Genuinely equivalent: the tool
+- **The `anyToolEnabled` gate on the tool loop.** Genuinely equivalent: the tool
   surface is built from the same config, so it is empty in exactly the cases
   the gate refuses. Removed from the list; both checks stay in the source
   because they fail differently if the surface builder ever changes.
@@ -147,7 +147,7 @@ MUTANTS = [
     # --- whether the loop runs ------------------------------------------------
     ("loop: tools never run",
      GEN,
-     "  const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;",
+     "  const toolsOn = anyToolEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;",
      "  const toolsOn = false;"),
     ("loop: the tool phase is given a list nothing reads back",
      GEN,

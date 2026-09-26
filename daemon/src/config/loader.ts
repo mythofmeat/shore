@@ -537,6 +537,11 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     }
   }
 
+  for (const server of app.tools.enabled_mcp) {
+    if (server === "" || server === "*") {
+      onWarn("tools.mcp names MCP servers one at a time; an empty or `*` entry matches no tools", [["server", server]]);
+    }
+  }
   const referenced = [
     ...toolGrants(app.tools),
     ...[...app.subagents.values()].flatMap((s) => s.tools),

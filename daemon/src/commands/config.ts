@@ -17,7 +17,7 @@ import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
 import { isSecretConfigPath, REDACTED, redactSecrets, serializeConfigValue } from "../config/serialize.ts";
-import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
+import { CATALOG_SECTIONS, defaultAppConfig, mcpBearerToken } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import {
@@ -155,9 +155,8 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     }
   }
   for (const [name, server] of ctx.config.app.mcp) {
-    const tokenEnv = server.bearer_token_env;
-    if (tokenEnv !== undefined && (env[tokenEnv] ?? "") === "") {
-      warnings.push(`Bearer token env var $${tokenEnv} not set (needed by MCP server ${name})`);
+    if (server.bearer_token_env !== undefined && mcpBearerToken(server, env) === undefined) {
+      warnings.push(`Bearer token env var $${server.bearer_token_env} not set (needed by MCP server ${name})`);
     }
   }
 

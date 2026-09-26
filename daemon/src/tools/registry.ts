@@ -13,13 +13,10 @@ import generateImageDesc from "../../prompts/tools/images/generate_image.md" wit
 import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
-export type ToolCategory = "other";
-
 export interface ToolDef {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  category: ToolCategory;
 }
 
 export interface ToolsConfigView {
@@ -48,7 +45,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["file_path"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "edit",
@@ -64,7 +60,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["file_path", "old_string", "new_string"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "apply_patch",
@@ -75,7 +70,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["patch"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "bash",
@@ -96,7 +90,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       required: ["command"],
       additionalProperties: false,
     },
-    category: "other",
   },
   {
     name: "generate_image",
@@ -119,7 +112,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: ["prompt"],
     },
-    category: "other",
   },
   {
     name: "activity_heatmap",
@@ -134,7 +126,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
     },
-    category: "other",
   },
   {
     name: "search",
@@ -171,7 +162,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: ["query"],
     },
-    category: "other",
   },
   {
     name: "search_chat_logs",
@@ -219,7 +209,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: [],
     },
-    category: "other",
   },
   {
     name: "model_history",
@@ -238,7 +227,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       },
       required: [],
     },
-    category: "other",
   },
 ]);
 
@@ -254,10 +242,6 @@ export function toolPatternMatches(pattern: string, name: string): boolean {
 
 export function toolEnabled(cfg: ToolsConfigView, name: string): boolean {
   return cfg.enabled_tools.some((t) => toolPatternMatches(t, name));
-}
-
-export function anyEnabled(cfg: ToolsConfigView): boolean {
-  return cfg.enabled_tools.length > 0 || cfg.enabled_subagents.length > 0;
 }
 
 export function availableTools(cfg: ToolsConfigView): ToolDef[] {
