@@ -2322,6 +2322,7 @@ mod tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -2494,6 +2495,7 @@ mod tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,

@@ -21,6 +21,7 @@ export interface TurnEngine {
   currentRevision(): number;
   turnCount(): number;
   pendingRegenAlt(): PendingAlt | undefined;
+  messagesAfterLastUserTurn(): readonly Message[];
   segments(): { segmentCount(): number; readSegment(index: number): Promise<Message[]> };
   reload(): Promise<void>;
 }

@@ -1095,16 +1095,31 @@ test("the shared engine handler preserves all conversation fields from its execu
 
 test("non-streaming requests wait for the completed response while spectators still receive progress", async () => {
   const h = harness(["Alice"], 2);
+  await h.handler.handleEngine({ type: "message", rid: "quiet", text: "hi", stream: false, images: [] }, meta("Alice", 1, "quiet", "message"));
+  const generation = required(h.started[0]);
+  const frames: ServerMessage[] = [
+    { type: "stream_start", rid: "quiet", regen: false },
+    { type: "stream_chunk", rid: "quiet", content_type: "text", text: "partial" },
+    { type: "stream_end", rid: "quiet", content: "completed", is_final: true, metadata: { model: "fixture", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } },
+  ];
+  for (const frame of frames) await generation.send(frame);
+  expect(h.frames.get(1)).toEqual([required(frames[2])]);
+  expect(h.frames.get(2)).toEqual(frames);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+});
+
+test("a non-streaming regenerate still tells its issuer which messages it replaces", async () => {
+  const h = harness(["Alice"], 2);
   await h.handler.handleEngine({ type: "regen", rid: "quiet", stream: false }, meta("Alice", 1, "quiet", "regen"));
   const generation = required(h.started[0]);
   const frames: ServerMessage[] = [
-    { type: "stream_start", rid: "quiet", regen: true },
+    { type: "stream_start", rid: "quiet", regen: true, replaces: ["m_old"] },
     { type: "stream_chunk", rid: "quiet", content_type: "thinking", text: "thinking" },
     { type: "stream_chunk", rid: "quiet", content_type: "text", text: "partial" },
     { type: "stream_end", rid: "quiet", content: "completed", is_final: true, metadata: { model: "fixture", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } },
   ];
   for (const frame of frames) await generation.send(frame);
-  expect(h.frames.get(1)).toEqual([required(frames[3])]);
+  expect(h.frames.get(1)).toEqual([required(frames[0]), required(frames[3])]);
   expect(h.frames.get(2)).toEqual(frames);
   await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
 });

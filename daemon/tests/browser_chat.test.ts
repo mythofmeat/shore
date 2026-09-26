@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Message } from "../src/protocol/Message.ts";
-import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, regenInFlight, regenStart, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
+import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
@@ -81,21 +81,21 @@ test("finished streams disappear once their message arrives or their request is 
   expect(visibleStreams(streams, [], new Set()).map((item) => item.rid)).toEqual(["live"]);
 });
 
-test("a regeneration replaces everything after the last real user turn, within the active context", () => {
+test("until the daemon lists what a regeneration replaces, the guess is everything after the last real user turn within the active context", () => {
   const toolResult = message("r", "user", "", { content_blocks: [{ type: "tool_result", tool_use_id: "t", content: "ok", is_error: false }] });
   const messages = [message("u", "user", ""), message("a1", "assistant", ""), toolResult, message("a2", "assistant", ""), message("s", "system", "")];
-  expect(regenStart(messages, 0)).toBe(1);
-  expect(regenStart([message("u", "user", "", { content_blocks: [] })], 0)).toBe(1);
-  expect(regenStart([message("a", "assistant", ""), message("b", "assistant", "")], 1)).toBe(1);
+  expect(optimisticRegenReplaces(messages, 0)).toEqual(["a1", "r", "a2", "s"]);
+  expect(optimisticRegenReplaces([message("u", "user", "", { content_blocks: [] })], 0)).toEqual([]);
+  expect(optimisticRegenReplaces([message("a", "assistant", ""), message("b", "assistant", "")], 1)).toEqual(["b"]);
+  expect(regenReplaces(messages, 0, [], true)).toEqual(["a1", "r", "a2", "s"]);
 });
 
-test("the replaced reply stays hidden until the regeneration's own stream takes over", () => {
-  expect(regenInFlight([], ["pending"])).toBe(true);
-  expect(regenInFlight([{ regen: true }], [])).toBe(true);
-  expect(regenInFlight([{ regen: false }, {}], [])).toBe(false);
-  expect(regenInFlight([], [])).toBe(false);
-  expect(regenInFlight([{ rid: "quiet", regen: false }], [], ["quiet"])).toBe(true);
-  expect(regenInFlight([{ rid: "other", regen: false }], [], ["quiet"])).toBe(false);
+test("a started regeneration hides exactly the messages its stream_start lists", () => {
+  const messages = [message("u", "user", ""), message("kept", "assistant", ""), message("old", "assistant", "")];
+  expect(regenReplaces(messages, 0, [{ replaces: ["old"] }], false)).toEqual(["old"]);
+  expect(regenReplaces(messages, 0, [{ replaces: ["old"] }, {}], false)).toEqual(["old"]);
+  expect(regenReplaces(messages, 0, [{}, { replaces: [] }], false)).toEqual([]);
+  expect(regenReplaces(messages, 0, [], false)).toEqual([]);
 });
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

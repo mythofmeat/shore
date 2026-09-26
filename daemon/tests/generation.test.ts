@@ -10,6 +10,7 @@ import { join } from "node:path";
 import rawFixture from "./handler_captures/generation.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { ConversationEngine } from "../src/engine/conversation.ts";
+import { MessageStore } from "../src/engine/message_store.ts";
 import { characterActiveJsonl, MAIN_THREAD } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -760,6 +761,98 @@ test("regeneration sends history through the last user turn followed by guidance
     "Of course I remember him.",
   ]);
   expect(JSON.stringify(stored)).not.toContain(guidance);
+});
+
+test("a regenerate's stream_start lists exactly the messages truncating after the last user turn removes", async () => {
+  const text = (msg_id: string, role: Message["role"], body: string, second: number): Message => ({
+    msg_id, role, content: body, images: [], content_blocks: [{ type: "text", text: body }],
+    timestamp: `2026-01-01T10:00:0${String(second)}-05:00`,
+  });
+  const history: Message[] = [
+    text("m_earlier", "user", "Hello", 0),
+    text("m_greeting", "assistant", "Hi there.", 1),
+    text("m_question", "user", "What's the weather?", 2),
+    {
+      msg_id: "m_lookup", role: "assistant", content: "", images: [],
+      content_blocks: [{ type: "tool_use", id: "tu_1", name: "weather", input: {} }],
+      timestamp: "2026-01-01T10:00:03-05:00",
+    },
+    {
+      msg_id: "m_result", role: "user", content: "sunny", images: [],
+      content_blocks: [{ type: "tool_result", tool_use_id: "tu_1", content: "sunny" }],
+      timestamp: "2026-01-01T10:00:04-05:00",
+    },
+    text("m_answer", "assistant", "It's sunny.", 5),
+  ];
+
+  const path = join(await tempRoot("truncate"), "active.jsonl");
+  writeDurable(path, history.map((m) => JSON.stringify(m)).join("\n") + "\n");
+  const store = await MessageStore.load(path);
+  await store.truncateAfterLastUserTurn();
+  const kept = new Set(store.messages().map((message) => message.msg_id));
+  const truncated = history.map((message) => message.msg_id).filter((id) => !kept.has(id));
+  expect(truncated).toEqual(["m_lookup", "m_result", "m_answer"]);
+
+  const run = await replayTurn({
+    input: {
+      history,
+      body: { text: "" },
+      regen: true,
+      rid: "r-regen",
+      max_retries: 0,
+      subagent: null,
+      tools_enabled: null,
+      tool_steps: [],
+      events: [
+        { type: "start", model: "claude-fixture" },
+        { type: "text", text: "Clear skies today." },
+        {
+          type: "done",
+          content: "Clear skies today.",
+          finish_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 4, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          timing: { total_ms: 10, time_to_first_token_ms: 2 },
+        },
+      ],
+    },
+    output: {},
+  });
+
+  expect(run.error).toBeUndefined();
+  expect(run.direct.find((frame) => frame.type === "stream_start")).toEqual({
+    type: "stream_start", subagent: null, rid: "r-regen", regen: true, replaces: truncated,
+  });
+});
+
+test("a fresh message's stream_start lists nothing to replace", async () => {
+  const run = await replayTurn({
+    input: {
+      history: [],
+      body: { text: "Hello" },
+      regen: false,
+      rid: "r-fresh",
+      max_retries: 0,
+      subagent: null,
+      tools_enabled: null,
+      tool_steps: [],
+      events: [
+        { type: "start", model: "claude-fixture" },
+        {
+          type: "done",
+          content: "Hi.",
+          finish_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          timing: { total_ms: 10, time_to_first_token_ms: 2 },
+        },
+      ],
+    },
+    output: {},
+  });
+
+  expect(run.error).toBeUndefined();
+  expect(run.direct.find((frame) => frame.type === "stream_start")).toEqual({
+    type: "stream_start", subagent: null, rid: "r-fresh", regen: false,
+  });
 });
 
 test("a failed tool loop is durable before the final answer and repaired after restart", async () => {

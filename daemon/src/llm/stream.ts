@@ -38,6 +38,8 @@ export function emptyTiming(): Timing {
 
 export type FrameSink = (message: ServerMessage) => void;
 
+export type RegenStart = false | { readonly replaces: readonly string[] };
+
 export class StreamAccumulator {
   #model = "";
   #started = false;
@@ -65,12 +67,18 @@ export class StreamAccumulator {
     this.#pendingCarrier = undefined;
   }
 
-  handle(event: StreamEvent, regen: boolean, sink: FrameSink, rid?: string): StreamStep {
+  handle(event: StreamEvent, regen: RegenStart, sink: FrameSink, rid?: string): StreamStep {
     switch (event.type) {
       case "start": {
         this.#model = event.model;
         this.#started = true;
-        sink({ type: "stream_start", subagent: null, rid: rid ?? null, regen });
+        sink({
+          type: "stream_start",
+          subagent: null,
+          rid: rid ?? null,
+          regen: regen !== false,
+          ...(regen === false || regen.replaces.length === 0 ? {} : { replaces: [...regen.replaces] }),
+        });
         return { kind: "continue" };
       }
 
@@ -206,7 +214,7 @@ export type ConsumeOutcome = { ok: StreamResult } | { err: LlmError };
 
 export async function consumeStream(
   events: AsyncIterable<StreamEvent>,
-  options: { regen: boolean; sink: FrameSink; rid?: string },
+  options: { regen: RegenStart; sink: FrameSink; rid?: string },
 ): Promise<ConsumeOutcome> {
   const accumulator = new StreamAccumulator();
   for await (const event of events) {

@@ -7,9 +7,9 @@ R = "src/operations/requests.ts"
 F = "src/browser/request_forms.ts"
 MUTANTS = [
     ("non-streaming issuers still receive token updates", "src/handler/router.ts",
-     '!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")', 'false'),
+     '!body.stream && (msg.type === "stream_chunk" || (msg.type === "stream_start" && !msg.regen))', 'false'),
     ("non-streaming requests lose final results", "src/handler/router.ts",
-     '!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")', '!body.stream'),
+     '!body.stream && (msg.type === "stream_chunk" || (msg.type === "stream_start" && !msg.regen))', '!body.stream'),
     ("completed sends retain stale one-shot options", F,
      'key === "stream" || value !== submitted[key]', 'true'),
     ("completed sends lose concurrently edited options", F,
