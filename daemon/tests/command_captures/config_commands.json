@@ -37,21 +37,16 @@
             "subagents": []
           },
           {
-            "tool": "web_search",
-            "main": true,
-            "subagents": [
-              "researcher"
-            ]
-          },
-          {
             "tool": "activity_heatmap",
             "main": false,
             "subagents": []
           },
           {
             "tool": "search",
-            "main": false,
-            "subagents": []
+            "main": true,
+            "subagents": [
+              "researcher"
+            ]
           },
           {
             "tool": "search_chat_logs",
@@ -78,6 +73,7 @@
             "name": "researcher",
             "enabled": true,
             "tools": [
+              "search",
               "web_search",
               "also_not_real"
             ],
@@ -86,9 +82,12 @@
         ],
         "mcp": [],
         "warnings": [
+          "tool 'web_search' was removed and grants nothing; configure a search MCP server such as [mcp.tavily] and grant it with tools.mcp or an mcp__<server>__* tool pattern",
           "enabled_tools references unknown tool 'not_a_real_tool'",
+          "tools.mcp references MCP server 'ghost_server' with no [mcp.ghost_server] definition",
           "enabled_subagents references undefined subagent 'ghost'",
           "subagent 'idle' references unknown tool 'idle_not_real'",
+          "subagent 'researcher': tool 'web_search' was removed and grants nothing; configure a search MCP server such as [mcp.tavily] and grant it with tools.mcp or an mcp__<server>__* tool pattern",
           "subagent 'researcher' references unknown tool 'also_not_real'"
         ]
       }
@@ -126,11 +125,6 @@
           },
           {
             "tool": "generate_image",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "web_search",
             "main": false,
             "subagents": []
           },
