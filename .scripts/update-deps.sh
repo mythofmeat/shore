@@ -21,6 +21,8 @@ run() {
 
 cd "$root"
 run bun upgrade
+# CI installs the Bun named here, so it moves in the same commit as the lockfile it was tested with.
+bun --version >"$root/daemon/.bun-version"
 run rustup update stable
 run rustup component add --toolchain stable rustfmt clippy
 run cargo install cargo-edit --locked

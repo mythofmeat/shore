@@ -69,4 +69,4 @@ request field the daemon ignores.
 
 Surface declarations are claims. The Playwright journeys in `daemon/tests/browser/` back them up:
 sign-in, the chat workspace and every settings page. Run them with `bun run test:browser` from
-`daemon/`. The pre-commit hook runs the unit gates above but not the journeys.
+`daemon/`. The pre-commit hook and CI run the unit gates above but not the journeys.

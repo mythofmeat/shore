@@ -147,7 +147,8 @@ renderers.
 
 ## Phases
 
-Each phase ends with the full check suite (now `.githooks/pre-commit`) green, then a commit.
+Each phase ends with the full check suite (now `.scripts/test.sh`, which the pre-commit hook and
+CI run) green, then a commit.
 Playwright journeys land with the feature they cover, not at the end.
 
 1. **Teardown + ratchet (one commit).**
