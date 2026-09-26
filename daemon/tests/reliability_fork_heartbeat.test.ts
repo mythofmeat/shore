@@ -37,7 +37,6 @@ test("a first client can connect while a heartbeat is generating and receive its
   const tick = runHeartbeatTick("ada", h.config, {
     cache: new LastRequestCache(),
     dispatch: async () => ({ output: "ok", isError: false }),
-    scheduleNextWake: () => "scheduled",
     budgetBlockFor: () => undefined,
     engine: (name, thread) => registry.getOrCreate(name, thread),
     generate: async (request, phase) => {

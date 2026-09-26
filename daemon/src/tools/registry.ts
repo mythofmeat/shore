@@ -7,6 +7,7 @@ import { schemasFrom } from "./validate.ts";
 
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
+import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import searchHistoryDesc from "../../prompts/tools/history/search_history.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
@@ -254,6 +255,23 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
       required: [],
+    },
+    category: "other",
+  },
+  {
+    name: "set_next_wake",
+    description: stripOneTrailingNewline(setNextWakeDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        hours_from_now: {
+          type: "number",
+          description: "Hours from now until the next heartbeat. Fractions are allowed. Clamped to the configured minimum and maximum interval.",
+        },
+        reason: { type: "string", description: "Why this time. Recorded in the heartbeat log." },
+      },
+      required: ["hours_from_now", "reason"],
+      additionalProperties: false,
     },
     category: "other",
   },

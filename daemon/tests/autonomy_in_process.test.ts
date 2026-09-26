@@ -14,6 +14,7 @@ import {
   type InProcessExecutorDeps,
 } from "../src/autonomy/in_process.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
+import { rebuildRequestFromDisk } from "../src/cache/rebuild.ts";
 import type { TickHooks } from "../src/autonomy/runner.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -379,6 +380,8 @@ describe("running a heartbeat", () => {
 
   test("set_next_wake goes to the runner's clock and quotes what it got", async () => {
     const config = await world();
+    config.app.tools.enabled_tools.push("set_next_wake");
+    config.app.behavior.autonomy.enabled = true;
     const asked: { hours: number; reason: string }[] = [];
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
@@ -416,6 +419,60 @@ describe("running a heartbeat", () => {
     const results = seen[1]?.messages.at(-1)?.content ?? [];
     const output = (results[0] as { content: string }).content;
     expect(output).toBe("Scheduled next moment in 48.0 hours.");
+  });
+
+  test("set_next_wake left off the allowlist is refused, and the clock stays put", async () => {
+    const config = await world();
+    config.app.behavior.autonomy.enabled = true;
+    const asked: number[] = [];
+    const seen: SidecarRequest[] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: scriptedProvider(
+          [
+            response(
+              [{ type: "tool_use", id: "t1", name: "set_next_wake", input: { hours_from_now: 6, reason: "the essay" } }],
+              "tool_use",
+            ),
+            response([{ type: "text", text: "ok" }]),
+          ],
+          seen,
+        ),
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", {
+      scheduleNextWake: (hours) => {
+        asked.push(hours);
+        return hours;
+      },
+    });
+
+    expect(seen[0]?.tools?.map((tool) => tool.name)).not.toContain("set_next_wake");
+    expect(asked).toEqual([]);
+    expect((seen[1]?.messages.at(-1)?.content ?? [])[0]).toMatchObject({ is_error: true });
+  });
+
+  test("a tick declares exactly the tools a chat turn would, and nothing heartbeat-only", async () => {
+    const config = await world();
+    config.app.tools.enabled_tools.push("set_next_wake");
+    config.app.behavior.autonomy.enabled = true;
+    const seen: SidecarRequest[] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: scriptedProvider([response([{ type: "text", text: "HEARTBEAT_OK" }])], seen),
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    const chat = await rebuildRequestFromDisk("ada", config.dirs.data, config, { thread: "main" });
+    expect(chat?.request.tools?.map((tool) => tool.name)).toContain("set_next_wake");
+    expect(seen[0]?.tools).toEqual(chat?.request.tools);
   });
 
   test("a failed model call ends the tick without throwing, and is logged as a failure", async () => {
@@ -685,18 +742,16 @@ test("Claude SDK heartbeats execute workspace tools, schedule a wake, and delive
   if (model === undefined) throw new Error("missing fixture model");
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
-  config.app.tools.enabled_tools = ["bash"];
+  config.app.tools.enabled_tools = ["bash", "set_next_wake"];
+  config.app.behavior.autonomy.enabled = true;
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await writeFile(join(workspace, "HEARTBEAT.md"), "Before");
   const agent = fakeAgent({
     rounds: [
       { blocks: [], toolCalls: [{ name: "bash", input: { command: "cat HEARTBEAT.md" } }] },
       { blocks: [], toolCalls: [{ name: "bash", input: { command: "mkdir -p . && printf %s After > HEARTBEAT.md" } }] },
-      { blocks: [], toolCalls: [
-        { name: "set_next_wake", input: { hours_from_now: 2, reason: "follow up" } },
-        { name: "send_message", input: { message: "I updated my notes." } },
-      ] },
-      { blocks: [{ kind: "text", text: "HEARTBEAT_OK" }] },
+      { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 2, reason: "follow up" } }] },
+      { blocks: [{ kind: "text", text: "<sendMessage>I updated my notes.</sendMessage>" }] },
     ],
   });
   const appended: Message[] = [];
@@ -717,12 +772,44 @@ test("Claude SDK heartbeats execute workspace tools, schedule a wake, and delive
     scheduleNextWake: (hours, reason) => { wakes.push([hours, reason]); return hours; },
   });
   expect(agent.calls).toHaveLength(1);
-  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true, true, true, true]);
+  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true, true, true]);
   expect(await readFile(join(workspace, "HEARTBEAT.md"), "utf8")).toBe("After");
   expect(wakes).toEqual([[2, "follow up"]]);
   expect(appended.map((entry) => entry.content)).toEqual(["I updated my notes."]);
   expect(transcripts).toHaveLength(4);
   expect(result.events.some((event) => event.kind === "message_sent")).toBe(true);
+});
+
+test("an SDK heartbeat cannot move the clock when set_next_wake is left off the allowlist", async () => {
+  const config = await world();
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.providerKey = "claude-agent";
+  config.app.tools.enabled_tools = ["bash"];
+  config.app.behavior.autonomy.enabled = true;
+  const agent = fakeAgent({
+    rounds: [
+      { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 2, reason: "later" } }] },
+      { blocks: [{ kind: "text", text: "HEARTBEAT_OK" }] },
+    ],
+  });
+  const wakes: number[] = [];
+  const executor = new InProcessAutonomyExecutor({
+    registry: registryFor(config),
+    cache: new LastRequestCache(),
+    providers: {
+      claude_agent: new ClaudeAgentProvider({
+        runQuery: agent.query,
+        bookPath: () => join(config.dirs.data, "sdk-sessions.json"),
+      }),
+    },
+  });
+  await executor.runHeartbeatTick("ada", {
+    scheduleNextWake: (hours) => { wakes.push(hours); return hours; },
+  });
+  expect(wakes).toEqual([]);
+  expect(agent.toolOutcomes.some((outcome) => outcome.allowed && outcome.isError !== true)).toBe(false);
 });
 
 test.each([false, true])("SDK heartbeat preserves completed work on SDK failure (stream throws: %s)", async (streamThrows) => {
@@ -769,13 +856,12 @@ test("SDK heartbeat respects the configured tool round budget", async () => {
   model.providerKey = "claude-agent";
   model.maxToolIterations = 1;
   config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds = 0;
+  config.app.tools.enabled_tools.push("set_next_wake");
+  config.app.behavior.autonomy.enabled = true;
   const agent = fakeAgent({
     rounds: [
       { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 2, reason: "first" } }] },
-      { blocks: [], toolCalls: [
-        { name: "set_next_wake", input: { hours_from_now: 3, reason: "denied" } },
-        { name: "send_message", input: { message: "Must not be delivered." } },
-      ] },
+      { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 3, reason: "denied" } }] },
       { blocks: [{ kind: "text", text: "HEARTBEAT_OK" }] },
     ],
   });

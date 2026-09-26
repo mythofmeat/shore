@@ -62,6 +62,11 @@
             "tool": "model_history",
             "main": false,
             "subagents": []
+          },
+          {
+            "tool": "set_next_wake",
+            "main": false,
+            "subagents": []
           }
         ],
         "subagents": [
@@ -151,6 +156,11 @@
           },
           {
             "tool": "model_history",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "set_next_wake",
             "main": false,
             "subagents": []
           }

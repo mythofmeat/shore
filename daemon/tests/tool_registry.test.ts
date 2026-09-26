@@ -111,7 +111,7 @@ describe("the registry itself", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test.each(["write", "list_files", "check_time", "exec", "memory_search", "set_next_wake"])(
+  test.each(["write", "list_files", "check_time", "exec", "memory_search"])(
     "%s is not offered",
     (name) => {
       expect(ALL_TOOLS.some((t) => t.name === name)).toBe(false);
@@ -124,6 +124,14 @@ describe("availableTools — the allowlist", () => {
     const config = cfg(c.enabled_tools);
     expect(availableTools(config).map((t) => t.name)).toEqual(c.offered);
     expect(anyEnabled(config)).toBe(c.any_enabled);
+  });
+
+  test("set_next_wake is offered only when the allowlist names it", () => {
+    expect(availableTools(cfg(["bash"])).map((t) => t.name)).toEqual(["bash"]);
+    expect(availableTools(cfg(["bash", "set_next_wake"])).map((t) => t.name)).toEqual([
+      "bash",
+      "set_next_wake",
+    ]);
   });
 
   test("a sub-agent alone makes tool use active", () => {
