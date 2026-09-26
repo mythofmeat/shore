@@ -1,0 +1,84 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run it replaces. Every other run gets its own group, so
+# runs on main and releases always finish.
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+# Each job runs one half of .scripts/test.sh, the same script the pre-commit hook runs, then fails if
+# the checks left the tree different from what was committed: a stale bun.lock, bundled browser
+# assets or generated wire types.
+jobs:
+  daemon:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned rather than latest, so a new Bun release can't fail a pull request that didn't touch
+      # it. .scripts/update-deps.sh moves the pin when it upgrades Bun.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: rustup update stable --no-self-update
+      - id: rust
+        run: echo "version=$(rustc +stable --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      # build:patch compiles the vendored codex apply_patch, which takes ~15 minutes cold. Its output
+      # depends only on the vendored inputs and the toolchain, and it is saved as soon as it is built
+      # so that a failing check later in the job doesn't throw it away.
+      - id: patch-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/shore/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
+      - run: bun run build:patch
+        working-directory: daemon
+      - if: steps.patch-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/shore/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: ${{ steps.patch-cache.outputs.cache-primary-key }}
+      - run: .scripts/test.sh daemon
+      - name: nothing left uncommitted
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error title=uncommitted changes::The checks changed or created files. Run .scripts/test.sh and commit what it changes. If it changes nothing locally, compare your bun --version with daemon/.bun-version: the bundled browser assets depend on it."
+            git status --short
+            git --no-pager diff | head -n 200
+            exit 1
+          fi
+
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup update stable --no-self-update && rustup component add clippy rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
+      - run: .scripts/test.sh client
+      - name: nothing left uncommitted
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error title=uncommitted changes::The checks changed or created files. Run .scripts/test.sh and commit what it changes."
+            git status --short
+            git --no-pager diff | head -n 200
+            exit 1
+          fi
