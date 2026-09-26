@@ -17,6 +17,12 @@ uses. Press `?` for keyboard shortcuts or Ctrl/⌘+K for the command palette. Th
 options are under Settings → Appearance. Every web setting requires a daemon restart. Disconnect (Settings → Disconnect) ends the
 browser session; it does not remove drafts saved in that browser.
 
+Settings → Appearance → Notifications makes a tab that isn't focused show a desktop notification and
+an unread count in its title for new replies, heartbeat messages and errors in the open
+conversation. The setting is saved per browser. Browsers only allow desktop notifications over
+HTTPS or `localhost` (an SSH tunnel counts); over plain HTTP on a LAN or Tailscale address you get
+only the title count. These are separate from the daemon's own `[notifications]`.
+
 All web settings are visible through the existing configuration schema and require restart. Bind
 addresses accept IP literals or resolvable hostnames. HTTP works on any listener, and browser URLs
 may use any hostname or forwarded port. TLS is optional and requires both `tls_cert` and `tls_key`.

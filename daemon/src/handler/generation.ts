@@ -27,7 +27,7 @@ import type {
   WireMessage,
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
-import { anyEnabled } from "../tools/registry.ts";
+import { anyToolEnabled } from "../config/app.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
@@ -393,7 +393,7 @@ async function streamTurn(
   params: StreamTurnParams,
 ): Promise<{ result: StreamResult; intermediate: Message[] }> {
   const { config, charName, resolved, request } = params;
-  const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
+  const toolsOn = anyToolEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
   let send: (message: ServerMessage) => void = params.send;
   const toolCtx = toolsOn
     ? await buildToolContext(

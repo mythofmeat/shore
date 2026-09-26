@@ -13,6 +13,7 @@ import {
   samplerIsEmpty,
   type SamplerSettings,
 } from "../config/preferences.ts";
+import { toolGrants } from "../config/app.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { resolvedReplayPriorThinking } from "../config/models.ts";
 import type { Message } from "../engine/types.ts";
@@ -92,7 +93,7 @@ export async function buildGenerationRequest(
     : [...engine.messages()];
   const hasPriorContext = engine.segmentCount() > 0;
 
-  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);
+  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));
 
   const prepared = await prepareChatContext({
     ...(engine.thread === undefined ? {} : { thread: engine.thread }),

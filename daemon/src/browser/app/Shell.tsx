@@ -9,7 +9,7 @@ import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, useRoute } from "./route.ts";
 import { adjacent, globalAction } from "./shortcuts.ts";
-import { perform, workspace } from "./state.ts";
+import { perform, useNotifications, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: WorkspaceSnapshot }) {
   const route = useRoute();
@@ -17,6 +17,7 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
   const [expanded, setExpanded] = useStoredFlag("shore.sidebar", true);
   const [drawer, setDrawer] = useState(false);
   const [dialog, setDialog] = useState<"character" | "thread" | "palette" | null>(null);
+  const { unread } = useNotifications();
   const open = mobile ? drawer : expanded;
   const closeDrawer = useCallback(() => setDrawer(false), []);
   useEscape(mobile && drawer, closeDrawer);
@@ -33,8 +34,10 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
     if (location.pathname !== path) history.replaceState(history.state, "", path + location.hash);
   }, [state.character, state.thread]);
   useEffect(() => {
-    document.title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${state.character} · Shore`;
-  }, [route.view, state.character]);
+    const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${state.character} · Shore`;
+    document.title = unread > 0 ? `(${String(unread)}) ${title}` : title;
+    return () => { document.title = "Shore"; };
+  }, [route.view, state.character, unread]);
   const toggle = () => { if (mobile) setDrawer(!drawer); else setExpanded(!expanded); };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {

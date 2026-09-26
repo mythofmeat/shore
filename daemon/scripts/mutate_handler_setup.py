@@ -131,13 +131,16 @@ MUTANTS = [
 
     # --- the mcp surface ---------------------------------------------------
     ("mcp: the allowlist is not applied",
-     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);",
+     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));",
      "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(['mcp__*']);"),
     ("mcp: the surface is dropped",
-     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);",
+     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));",
      "  const mcpToolDefs: never[] = [];"),
+    ("mcp: servers granted by name are ignored",
+     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));",
+     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);"),
     ("mcp: filtered by the subagent allowlist instead",
-     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);",
+     "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));",
      "  const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(\n"
      "    config.app.tools.enabled_subagents,\n"
      "  );"),
