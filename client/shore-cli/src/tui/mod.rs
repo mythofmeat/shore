@@ -2367,7 +2367,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         .pending_navigation
         .as_deref()
         .is_some_and(|rid| Some(rid) == msg.request_id());
-    if !navigation_response && app.stale_request(msg.request_id()) {
+    let adopting = matches!(msg, ServerMessage::StreamStart(_))
+        && !app.stream.active
+        && msg.task_id().is_none()
+        && msg.subagent().is_none();
+    if !navigation_response && !adopting && app.stale_request(msg.request_id()) {
         return UiEffect::redraw(RedrawEffect::None);
     }
     if app.pending_navigation.is_some()
@@ -5704,6 +5708,54 @@ mod redraw_tests {
                 .iter()
                 .any(|n| n.content == "setting temperature updated")
         );
+    }
+
+    #[test]
+    fn a_turn_replayed_after_reconnecting_is_adopted_rather_than_treated_as_stale() {
+        let mut app = App::default();
+        let rid = app.next_request_id("message");
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some(rid.clone()),
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        prepare_for_reconnect(&mut app);
+        assert!(!app.stream.active);
+        assert!(app.stale_request(Some(&rid)));
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some(rid.clone()),
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: Some(rid.clone()),
+                text: "so far".into(),
+                content_type: "text".into(),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+
+        assert!(app.stream.active);
+        assert_eq!(app.stream.rid.as_deref(), Some(rid.as_str()));
+        let turn = app
+            .entries
+            .last()
+            .and_then(ConversationEntry::as_turn)
+            .expect("replayed turn is shown");
+        assert!(turn.is_streaming());
+        assert_eq!(turn.joined_text(), "so far");
     }
 
     #[test]

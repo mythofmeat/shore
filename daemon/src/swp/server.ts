@@ -256,12 +256,11 @@ export class Server {
       lifecycle.abort();
       inbox.close(true);
       subscription.unsubscribe();
-      const { allGone } = this.#router.unregisterSession(clientId);
+      this.#router.unregisterSession(clientId);
       this.#config.log?.info?.("Local client detached", { client_id: clientId });
       detachment = (async () => {
         try {
           await this.#route({ kind: "session_disconnected", sessionId: clientId });
-          if (allGone) await this.#route({ kind: "all_clients_disconnected" });
           await relay;
         } finally {
           this.#localPeers.delete(detach);
@@ -318,6 +317,8 @@ export class Server {
       if (!detached) this.#config.log?.warn?.("Local client event relay failed", { client_id: clientId, error: String(error) });
       aborted();
     });
+
+    if (!detached) await this.#route({ kind: "session_connected", sessionId: clientId });
 
     this.#config.log?.info?.("Local client attached", {
       client_id: clientId,

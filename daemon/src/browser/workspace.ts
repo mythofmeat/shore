@@ -192,6 +192,10 @@ export class Workspace {
       case "error": this.report(message.message); this.#activity(message.type, message); return;
       case "request_finished":
         if (message.outcome !== "completed" || this.actions.pendingOperation(message.rid) === "run_tool") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
+        if (this.#state.uncertain.some((item) => item.rid === message.rid)) {
+          this.acknowledge(message.rid);
+          if (message.outcome === "failed") this.report(message.error?.message ?? "A request that was in flight when the connection dropped failed.");
+        }
         this.#activity(message.type, message); return;
       case "send_image": {
         const previous = this.#state.media.find((image) => image.path === message.path);

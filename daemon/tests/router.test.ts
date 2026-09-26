@@ -9,7 +9,6 @@ import {
   type GenerationParams,
   type HandlerRegistry,
 } from "../src/handler/router.ts";
-import { StreamLeases } from "../src/handler/lease.ts";
 import { isControlRoutedMessage, SessionRouter, type RequestMeta } from "../src/swp/session.ts";
 import { routeClientMessage } from "../src/swp/routing.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
@@ -48,6 +47,7 @@ function harness(
     meta: RequestMeta,
     signal: AbortSignal,
   ) => Promise<ServerMessage>,
+  commandChangesState?: (cmd: Command) => boolean,
 ) {
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
@@ -55,14 +55,12 @@ function harness(
     registerTestSession(router, frames, id);
   }
 
-  const leases = new StreamLeases();
   const started: GenerationParams[] = [];
   const notifications: Array<{ title: string; body: string }> = [];
   const errors: Array<{ message: string; fields: Record<string, unknown> | undefined }> = [];
 
   const handler = new MessageHandler({
     router,
-    leases,
     registry: registryOf(characters),
     notifier: { notify: (_e, title, body) => notifications.push({ title, body }) },
     dispatchCommand:
@@ -76,10 +74,11 @@ function harness(
         params.signal.addEventListener("abort", () => resolve(), { once: true });
       });
     },
+    ...(commandChangesState === undefined ? {} : { commandChangesState }),
     log: { error: (message, fields) => errors.push({ message, fields }) },
   });
 
-  return { handler, router, leases, frames, started, notifications, errors };
+  return { handler, router, frames, started, notifications, errors };
 }
 
 function registerTestSession(
@@ -188,7 +187,7 @@ describe("routed messages", () => {
       type: "stream_end", rid: "retried-reply", finish_reason: "cancelled", is_final: true,
     });
     await h.handler.drain();
-    expect(h.handler.sessionStateCount).toBe(0);
+    expect(h.handler.generationCount).toBe(0);
   });
 
   test.each([null, "réq"])("cancellation preserves an absent or rejected generation rid: %p", async (rid) => {
@@ -232,7 +231,6 @@ describe("routed messages", () => {
       meta: meta("Alice", 1, "r1", "message"),
     });
     const launched = h.started.length === 1;
-    const leaseTaken = h.leases.spectator("Alice", 2, h.router) !== undefined;
 
     await h.handler.handleRouted({
       kind: "engine",
@@ -245,15 +243,14 @@ describe("routed messages", () => {
     expect(
       stripAbsent({
         launched,
-        lease_taken: leaseTaken,
         cancel_frame: received.at(-1),
         generation_running: false,
       }),
     ).toEqual(c.output as never);
   });
 
-  test("a regen launches without taking the lease", async () => {
-    const c = caseByName(routed, "a regen launches without taking the lease");
+  test("a regen launches", async () => {
+    const c = caseByName(routed, "a regen launches");
     const h = harness(["Alice"], 1);
 
     await h.handler.handleRouted({
@@ -262,10 +259,7 @@ describe("routed messages", () => {
       meta: meta("Alice", 1, "r1", "regen"),
     });
 
-    expect({
-      generation_running: h.started.length === 1,
-      lease_taken: h.leases.spectator("Alice", 2, h.router) !== undefined,
-    }).toEqual(c.output as never);
+    expect({ generation_running: h.started.length === 1 }).toEqual(c.output as never);
   });
 
   test("an unknown character is an error frame and no launch", async () => {
@@ -286,30 +280,36 @@ describe("routed messages", () => {
     ).toEqual(c.output as never);
   });
 
-  test("all clients disconnected cancels every session", async () => {
-    const c = caseByName(routed, "all clients disconnected cancels every session");
-    const h = harness(["Alice"], 2);
+  test("disconnecting leaves every generation running", async () => {
+    const c = caseByName(routed, "disconnecting leaves every generation running");
+    const finishes: Array<() => void> = [];
+    const h = harness(["Alice", "Bob"], 2, () => new Promise<void>((resolve) => { finishes.push(resolve); }));
 
-    for (const id of [1, 2]) {
+    for (const [id, character] of [[1, "Alice"], [2, "Bob"]] as const) {
+      h.router.setSelectedCharacter(id, character);
       await h.handler.handleRouted({
         kind: "engine",
         msg: message("r1", "hi", false),
-        meta: meta("Alice", id, "r1", "message"),
+        meta: meta(character, id, "r1", "message"),
       });
     }
-    const before = [h.started.length >= 1, h.started.length >= 2];
+    const before = h.started.map((params) => !params.signal.aborted);
 
-    await h.handler.handleRouted({ kind: "all_clients_disconnected" });
+    for (const id of [1, 2]) {
+      h.router.unregisterSession(id);
+      await h.handler.handleRouted({ kind: "session_disconnected", sessionId: id });
+    }
 
     expect(
       stripAbsent({
         running_before: before,
-        running_after: [false, false],
-        leases_after: h.leases.spectator("Alice", 99, h.router) === undefined ? 0 : 1,
-        last_frame_1: (h.frames.get(1) ?? []).at(-1),
-        last_frame_2: (h.frames.get(2) ?? []).at(-1),
+        running_after: h.started.map((params) => !params.signal.aborted),
+        frames: [...(h.frames.get(1) ?? []), ...(h.frames.get(2) ?? [])],
       }),
     ).toEqual(c.output as never);
+    for (const finish of finishes) finish();
+    await h.handler.drain();
+    expect(h.handler.generationCount).toBe(0);
   });
 
   test("a second message supersedes the first on the same session", async () => {
@@ -355,8 +355,8 @@ describe("routed messages", () => {
     ).toEqual(c.output as never);
   });
 
-  test("a request from a vanished session launches nothing", async () => {
-    const c = caseByName(routed, "a request from a vanished session launches nothing");
+  test("a request from a vanished session still launches", async () => {
+    const c = caseByName(routed, "a request from a vanished session still launches");
     const h = harness(["Alice"], 1);
     h.router.unregisterSession(1);
 
@@ -410,14 +410,9 @@ describe("what a generation is handed", () => {
     expect(h.started[0]?.body.text).toBe("");
   });
 
-  test("the stream reaches the lease holder as well as the issuer", async () => {
+  test("the stream reaches every session viewing the conversation", async () => {
     const h = harness(["Alice"], 2);
 
-    await h.handler.handleRouted({
-      kind: "engine",
-      msg: message("r1", "hi", false),
-      meta: meta("Alice", 2, "r1", "message"),
-    });
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "regen", rid: "r2", stream: true },
@@ -489,7 +484,7 @@ describe("session state lifecycle", () => {
     await h.handler.handleRouted({ kind: "engine", msg: message("failure", "hello", true), meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } } });
     await h.handler.drain();
     expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished")).toMatchObject({ outcome: "failed", error: { message: "synchronous provider failure" } });
-    expect(h.handler.sessionStateCount).toBe(0);
+    expect(h.handler.generationCount).toBe(0);
   });
 
   test("opted-in clients receive failure details after moving away from the request's thread", async () => {
@@ -524,11 +519,11 @@ describe("session state lifecycle", () => {
       msg: message("r1", "hi", false),
       meta: meta("Alice", 1, "r1", "message"),
     });
-    expect(h.handler.sessionStateCount).toBe(1);
+    expect(h.handler.generationCount).toBe(1);
 
     finish?.();
     await h.handler.drain();
-    expect(h.handler.sessionStateCount).toBe(0);
+    expect(h.handler.generationCount).toBe(0);
   });
 
   test("cancelling releases session state while the generation settles", async () => {
@@ -545,14 +540,14 @@ describe("session state lifecycle", () => {
       msg: message("r1", "hi", false),
       meta: meta("Alice", 1, "r1", "message"),
     });
-    expect(h.handler.sessionStateCount).toBe(1);
+    expect(h.handler.generationCount).toBe(1);
 
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "cancel" },
       meta: meta("Alice", 1, null, "cancel"),
     });
-    expect(h.handler.sessionStateCount).toBe(0);
+    expect(h.handler.generationCount).toBe(0);
     finish?.();
     await h.handler.drain();
   });
@@ -580,11 +575,11 @@ describe("session state lifecycle", () => {
 
     finishes[0]?.();
     await Promise.resolve();
-    expect(h.handler.sessionStateCount).toBe(1);
+    expect(h.handler.generationCount).toBe(1);
 
     finishes[1]?.();
     await h.handler.drain();
-    expect(h.handler.sessionStateCount).toBe(0);
+    expect(h.handler.generationCount).toBe(0);
   });
 
   test("repeated connect, generate, and disconnect cycles stay bounded", async () => {
@@ -597,14 +592,18 @@ describe("session state lifecycle", () => {
         msg: message(`r${id}`, "hi", false),
         meta: meta("Alice", id, `r${id}`, "message"),
       });
-      expect(h.handler.sessionStateCount).toBe(1);
+      expect(h.handler.generationCount).toBe(1);
 
-      const { allGone } = h.router.unregisterSession(id);
-      expect(allGone).toBe(true);
-      await h.handler.handleRouted({ kind: "all_clients_disconnected" });
-      await h.handler.drain();
-      expect(h.handler.sessionStateCount).toBe(0);
+      h.router.unregisterSession(id);
+      await h.handler.handleRouted({ kind: "session_disconnected", sessionId: id });
+      expect(h.handler.generationCount).toBe(1);
     }
+    registerTestSession(h.router, h.frames, 101);
+    await h.handler.handleControl({ kind: "engine", msg: { type: "cancel" }, meta: meta("Alice", 101, null, "cancel") });
+    await h.handler.drain();
+    expect(h.handler.generationCount).toBe(0);
+    expect(h.handler.queuedSessionCount).toBe(0);
+    expect(h.started.filter((params) => !params.signal.aborted)).toEqual([]);
   });
 });
 
@@ -1018,9 +1017,9 @@ test.each([false, true])("cancel prevents queued mutations from starting and lea
 });
 
 describe("a session that disconnects mid-command", () => {
-  test("aborts the in-flight command and suppresses its reply", async () => {
+  test("aborts an in-flight read-only command and suppresses its reply", async () => {
     const { dispatch, gate, signals } = gatedDispatch();
-    const { handler, router, frames } = harness(["ada"], 1, undefined, dispatch);
+    const { handler, router, frames } = harness(["ada"], 1, undefined, dispatch, () => false);
 
     handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
     await settle();
@@ -1035,9 +1034,9 @@ describe("a session that disconnects mid-command", () => {
     expect(names(required(frames.get(1)))).toEqual([]);
   });
 
-  test("drops a command still queued for the departed session", async () => {
+  test("drops a read-only command still queued for the departed session", async () => {
     const { dispatch, gate, started } = gatedDispatch();
-    const { handler, router } = harness(["ada"], 1, undefined, dispatch);
+    const { handler, router } = harness(["ada"], 1, undefined, dispatch, () => false);
 
     handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
     handler.enqueueRouted({ kind: "command", cmd: command("never"), meta: meta("ada", 1, null, "command") });
@@ -1073,7 +1072,8 @@ test("different threads can generate in one session without cancelling or mixing
   expect(scratch.signal.aborted).toBe(true);
   expect(main.signal.aborted).toBe(false);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "scratch", finish_reason: "cancelled" });
-  await h.handler.handleControl({ kind: "all_clients_disconnected" });
+  h.router.setSelectedThread(1, "main");
+  await h.handler.cancelGeneration(1, null, "user cancelled");
   await h.handler.drain();
   expect(main.signal.aborted).toBe(true);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "main", finish_reason: "cancelled" });
@@ -1095,7 +1095,6 @@ test("the shared engine handler preserves all conversation fields from its execu
 
 test("non-streaming requests wait for the completed response while spectators still receive progress", async () => {
   const h = harness(["Alice"], 2);
-  h.leases.observe("Alice", 2, "message");
   await h.handler.handleEngine({ type: "regen", rid: "quiet", stream: false }, meta("Alice", 1, "quiet", "regen"));
   const generation = required(h.started[0]);
   const frames: ServerMessage[] = [
@@ -1119,4 +1118,123 @@ test("cancel reports each skipped command to clients without request lifecycle",
   gate("queued").resolve(); await handler.drain();
   expect(started).toEqual([]);
   expect(frames.get(1)).toContainEqual({ type: "error", rid: "queued-rid", code: "invalid_request", message: "Command cancelled before completion" });
+});
+
+describe("work outlives the client that started it", () => {
+  const lifecycle = (character: string, sessionId: number, rid: string | null, kind: RequestMeta["kind"]): RequestMeta => {
+    const base = meta(character, sessionId, rid, kind);
+    return { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } };
+  };
+
+  test("a state-changing command and the one queued behind it finish after the session drops", async () => {
+    const { dispatch, gate, signals, started } = gatedDispatch();
+    const { handler, router } = harness(["ada"], 1, undefined, dispatch, () => true);
+    const reported: ServerMessage[] = [];
+    router.observeRequests((_session, frame) => reported.push(frame));
+
+    handler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: lifecycle("ada", 1, "compact-rid", "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("archive"), meta: lifecycle("ada", 1, "archive-rid", "command") });
+    await settle();
+    router.unregisterSession(1);
+    await handler.handleControl({ kind: "session_disconnected", sessionId: 1 });
+    expect(required(signals.get("compact")).aborted).toBe(false);
+
+    gate("compact").resolve(); gate("archive").resolve();
+    await handler.drain();
+    expect(started).toEqual(["compact", "archive"]);
+    expect(reported.filter((frame) => frame.type === "request_finished")).toMatchObject([
+      { rid: "compact-rid", outcome: "completed" },
+      { rid: "archive-rid", outcome: "completed" },
+    ]);
+  });
+
+  test("a reconnected client cancels the turn its previous connection started", async () => {
+    const h = harness(["Alice"], 1);
+    const reported: ServerMessage[] = [];
+    h.router.observeRequests((_session, frame) => reported.push(frame));
+    await h.handler.handleRouted({ kind: "engine", msg: message("orphan", "hi", true), meta: lifecycle("Alice", 1, "orphan", "message") });
+    h.router.unregisterSession(1);
+    await h.handler.handleControl({ kind: "session_disconnected", sessionId: 1 });
+    expect(required(h.started[0]).signal.aborted).toBe(false);
+
+    registerTestSession(h.router, h.frames, 2);
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 2 });
+    await h.handler.handleControl({ kind: "engine", msg: { type: "cancel" }, meta: meta("Alice", 2, null, "cancel") });
+    await h.handler.drain();
+
+    expect(required(h.started[0]).signal.aborted).toBe(true);
+    expect(h.frames.get(2)?.at(-1)).toMatchObject({ type: "stream_end", rid: "orphan", finish_reason: "cancelled" });
+    expect(reported).toContainEqual({ type: "request_finished", rid: "orphan", outcome: "cancelled" });
+  });
+
+  test("a reconnected client cancels an orphaned command in its conversation but not a live client's", async () => {
+    const { dispatch, gate, signals } = gatedDispatch();
+    const { handler, router, frames } = harness(["ada"], 2, undefined, dispatch, () => true);
+    handler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("edit"), meta: meta("ada", 2, null, "command") });
+    await settle();
+    router.unregisterSession(1);
+    await handler.handleControl({ kind: "session_disconnected", sessionId: 1 });
+
+    registerTestSession(router, frames, 3);
+    await handler.handleControl({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 3, null, "cancel") });
+    expect(required(signals.get("compact")).aborted).toBe(true);
+    expect(required(signals.get("edit")).aborted).toBe(false);
+    gate("compact").resolve(); gate("edit").resolve();
+    await handler.drain();
+  });
+
+  test("a client that joins mid-turn sees the turn so far, then the live stream", async () => {
+    const h = harness(["Alice"], 1);
+    await h.handler.handleRouted({ kind: "engine", msg: message("live", "hi", true), meta: meta("Alice", 1, "live", "message") });
+    const generation = required(h.started[0]);
+    await generation.send({ type: "stream_start", rid: "live", regen: false });
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "thinking", text: "hm" });
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "text", text: "Hel" });
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "text", text: "lo" });
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "text", text: "sub", subagent: "helper" });
+
+    registerTestSession(h.router, h.frames, 2);
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "text", text: " there" });
+    expect(h.frames.get(2)).toEqual([]);
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 2 });
+    await generation.send({ type: "stream_chunk", rid: "live", content_type: "text", text: "!" });
+
+    expect(h.frames.get(2)).toEqual([
+      { type: "stream_start", rid: "live", regen: false },
+      { type: "stream_chunk", rid: "live", content_type: "thinking", text: "hm" },
+      { type: "stream_chunk", rid: "live", content_type: "text", text: "Hello there" },
+      { type: "stream_chunk", rid: "live", content_type: "text", text: "!" },
+    ]);
+    await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 2, null, "cancel"));
+    await h.handler.drain();
+  });
+
+  test("a client that switches into a running conversation is shown the turn once", async () => {
+    const h = harness(["Alice"], 2, undefined, (cmd, request) => {
+      if (cmd.name === "switch_thread") h.router.setSelectedThread(request.session.sessionId, (cmd.args as { name: string }).name);
+      return Promise.resolve({ type: "command_output", name: cmd.name, data: null });
+    });
+    h.router.setSelectedThread(1, "main");
+    h.router.setSelectedThread(2, "side");
+    await h.handler.handleRouted({
+      kind: "engine", msg: message("main-turn", "hi", true),
+      meta: { ...meta("Alice", 1, "main-turn", "message"), session: { ...meta("Alice", 1, "main-turn", "message").session, selectedThread: "main" } },
+    });
+    const generation = required(h.started[0]);
+    await generation.send({ type: "stream_start", rid: "main-turn", regen: false });
+    expect(h.frames.get(2)).toEqual([]);
+
+    await h.handler.handleRouted({ kind: "command", cmd: { name: "switch_thread", args: { name: "main" } }, meta: meta("Alice", 2, null, "command") });
+    await h.handler.handleRouted({ kind: "command", cmd: { name: "status", args: {} }, meta: meta("Alice", 2, null, "command") });
+    expect(h.frames.get(2)?.filter((frame) => frame.type === "stream_start")).toHaveLength(1);
+
+    await generation.send({ type: "stream_end", rid: "main-turn", content: "done", is_final: true, metadata: { model: "fixture", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } });
+    registerTestSession(h.router, h.frames, 3);
+    h.router.setSelectedThread(3, "main");
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 3 });
+    await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+    await h.handler.drain();
+    expect(h.frames.get(3)).toEqual([]);
+  });
 });

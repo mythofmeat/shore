@@ -143,7 +143,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
         {waiting === undefined ? null : <StreamingMessage stream={{ key: waiting, rid: waiting, subagent: null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null }} character={character} state={state} openImage={openImage} mobile={mobile} />}
         {compacting === null ? null : <div className="divider context" role="status"><span className="spinner" aria-hidden="true" />{compacting}</div>}
         {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
-          <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Check the conversation before trying again.</span>
+          <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.</span>
           <button type="button" className="button" onClick={() => navigate({ view: "settings", page: "diagnostics" })}>Review</button>
           <button type="button" className="button ghost" onClick={() => workspace.acknowledge(item.rid)}>Dismiss</button>
         </div>)}

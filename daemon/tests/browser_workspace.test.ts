@@ -105,6 +105,25 @@ test("every registered action field reaches an implemented control, and every kn
 
 const message = (id: string): Message => ({ msg_id: id, role: "user", content: id, images: [], content_blocks: [], timestamp: "now" });
 
+test("a dropped request's notice clears when its outcome arrives, and a failure is reported", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    emit(update: ConnectionUpdate) { for (const listener of this.listeners) listener(update); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const selection = { character: "nova", thread: "main", messageRevision: 0, snapshotRevision: 0 };
+  for (const rid of ["sent", "compacted"]) connection.emit({ kind: "uncertain", rid, request: { type: "command", name: "compact", args: {} }, selection });
+  expect(workspace.getSnapshot().uncertain.map((item) => item.rid)).toEqual(["sent", "compacted"]);
+  connection.emit({ kind: "frame", message: { type: "request_finished", rid: "sent", outcome: "completed" } });
+  expect(workspace.getSnapshot().uncertain.map((item) => item.rid)).toEqual(["compacted"]);
+  expect(workspace.getSnapshot().error).toBe("");
+  connection.emit({ kind: "frame", message: { type: "request_finished", rid: "compacted", outcome: "failed", error: { code: "provider_error", message: "overloaded" } } });
+  expect(workspace.getSnapshot().uncertain).toEqual([]);
+  expect(workspace.getSnapshot().error).toBe("overloaded");
+});
+
 test("history-only updates retain configuration until it is replaced or the conversation changes", () => {
   class Connection extends BrowserConnection {
     listeners = new Set<(update: ConnectionUpdate) => void>();

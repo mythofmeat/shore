@@ -230,16 +230,14 @@ export async function handleConnection(duplex: Duplex, ctx: ConnectionContext): 
 
   try {
     session = await performHandshake(reader, sink, ctx);
+    await ctx.route({ kind: "session_connected", sessionId: session.sessionId });
     await messageLoop(reader, sink, session, ctx);
   } finally {
     ctx.events.unsubscribe();
     if (session !== null) {
-      const { allGone } = ctx.router.unregisterSession(session.sessionId);
+      ctx.router.unregisterSession(session.sessionId);
       ctx.log?.info?.("Client disconnected", { client_id: ctx.clientId });
       await ctx.route({ kind: "session_disconnected", sessionId: session.sessionId });
-      if (allGone) {
-        await ctx.route({ kind: "all_clients_disconnected" });
-      }
     }
   }
 }
