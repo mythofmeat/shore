@@ -2480,7 +2480,7 @@ mod tests {
                 .filter(|key| key.as_str() != "period_since")
             {
                 let mut incomplete = report.clone();
-                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
                 assert!(
                     serde_json::from_value::<UsageResult>(incomplete).is_err(),
                     "missing {key}"
@@ -2514,7 +2514,7 @@ mod tests {
             assert_eq!(serde_json::to_value(parsed).unwrap(), report);
             for key in report.as_object().unwrap().keys() {
                 let mut incomplete = report.clone();
-                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
                 assert!(
                     serde_json::from_value::<RunToolResult>(incomplete).is_err(),
                     "missing {key}"
@@ -2573,7 +2573,7 @@ mod tests {
             assert_eq!(serde_json::to_value(parsed).unwrap(), report);
             for key in report.as_object().unwrap().keys() {
                 let mut incomplete = report.clone();
-                incomplete.as_object_mut().unwrap().remove(key);
+                assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
                 assert!(
                     serde_json::from_value::<CompactionReport>(incomplete).is_err(),
                     "{key}"
@@ -2638,7 +2638,13 @@ mod tests {
         let result = serde_json::json!({"character":"ada","registered":false,"heartbeat":null,"keepalive":{"status":"unavailable","detail":"No prefix"}});
         assert!(serde_json::from_value::<SessionActivated>(result.clone()).is_ok());
         let mut incomplete = result;
-        incomplete.as_object_mut().unwrap().remove("heartbeat");
+        assert!(
+            incomplete
+                .as_object_mut()
+                .unwrap()
+                .remove("heartbeat")
+                .is_some()
+        );
         assert!(serde_json::from_value::<SessionActivated>(incomplete).is_err());
         assert!(
             serde_json::from_value::<KeepaliveActivation>(
