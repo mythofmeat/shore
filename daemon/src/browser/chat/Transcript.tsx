@@ -79,11 +79,12 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   const anchor = useRef<{ height: number; top: number; first: string | undefined } | null>(null);
   const [loading, setLoading] = useState(false);
   const streams = visibleStreams(state.streams, state.messages, active);
-  const replacing = regenInFlight(streams, conversation.pendingRegens());
+  const scope = { character: state.character, thread: state.thread };
+  const replacing = regenInFlight(streams, conversation.pendingRegens(scope), conversation.regens(scope));
   const shown = useMemo(() => replacing ? state.messages.slice(0, regenStart(state.messages, state.activeStart)) : state.messages, [replacing, state.messages, state.activeStart]);
   const items = useMemo(() => transcriptItems(shown, state.activeStart), [shown, state.activeStart]);
   const lastUser = state.messages.findLast((message) => message.role === "user")?.msg_id;
-  const waiting = streams.length === 0 ? conversation.awaitingStream() : undefined;
+  const waiting = streams.length === 0 ? conversation.awaitingStream(scope) : undefined;
   const info = state.characters.find((item) => item.name === character);
   const compacting = display.compaction === "off" ? null : compactionPhase(state.activity);
   const openImage = useCallback<OpenImage>((source, caption) => setImage({ source, caption }), []);
@@ -129,12 +130,12 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
     <div className="transcript" ref={scroller} onScroll={onScroll} tabIndex={-1} role="log" aria-label={`Conversation with ${character}`} aria-live="off">
       <div className="transcript-column">
         {state.hasEarlier && state.messages.length > 0 ? <div className="load-earlier">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button ghost" onClick={loadEarlier}>Load earlier messages</button>}</div> : null}
-        {state.messages.length === 0 && streams.length === 0 ? state.status === "ready" ? <EmptyConversation character={character} state={state} /> : <div className="empty"><Spinner label="Loading conversation" /></div> : null}
+        {state.messages.length === 0 && streams.length === 0 && waiting === undefined ? state.status === "ready" ? <EmptyConversation character={character} state={state} /> : <div className="empty"><Spinner label="Loading conversation" /></div> : null}
         {items.map((item) => {
           switch (item.kind) {
             case "day": return <div key={item.key} className="divider" role="separator">{item.label}</div>;
             case "context": return <div key={item.key} className="divider context" role="separator">Earlier messages aren’t in the active context</div>;
-            case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={item.last && streams.length === 0} lastUser={item.message.msg_id === lastUser}
+            case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={item.last && streams.length === 0 && waiting === undefined} lastUser={item.message.msg_id === lastUser}
               metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} />;
           }
         })}

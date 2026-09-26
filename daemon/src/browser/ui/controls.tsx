@@ -7,10 +7,10 @@ export function IconButton({ icon, label, size = 18, className = "", ...props }:
 
 export type MenuItem = { label: string; icon?: IconName; onSelect: () => void; danger?: boolean; disabled?: boolean; detail?: string } | "separator";
 
-export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "icon-button", align = "end", placement = "below", openEvent, icon = "more" }: {
-  label: string; items: readonly MenuItem[]; trigger?: ReactNode; triggerLabel?: string; triggerClassName?: string; align?: "start" | "end"; placement?: "below" | "above"; openEvent?: string; icon?: IconName;
+export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "icon-button", align = "end", placement = "below", openEvent, defaultOpen = false, icon = "more" }: {
+  label: string; items: readonly MenuItem[]; trigger?: ReactNode; triggerLabel?: string; triggerClassName?: string; align?: "start" | "end"; placement?: "below" | "above"; openEvent?: string; defaultOpen?: boolean; icon?: IconName;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();

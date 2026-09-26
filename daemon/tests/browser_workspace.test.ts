@@ -158,6 +158,10 @@ test("conversation requests track when the daemon saved the message and when the
   connection.frame(echo("r1", "user"));
   expect(accepted).toEqual(["r1"]);
   expect(requests.pendingRegens()).toEqual(["r2"]);
+  expect(requests.pendingRegens({ character: null, thread: null })).toEqual(["r2"]);
+  expect(requests.pendingRegens({ character: "ada", thread: "side" })).toEqual([]);
+  expect(requests.regens({ character: null, thread: null })).toEqual(["r2"]);
+  expect(requests.awaitingStream({ character: "ada", thread: "side" })).toBeUndefined();
   expect(requests.awaitingStream()).toBe("r1");
   connection.frame({ type: "stream_start", rid: "r1", regen: false, subagent: null });
   expect(requests.awaitingStream()).toBe("r2");

@@ -345,9 +345,10 @@ function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRol
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const chat = chatRole(ctx);
   const inherited = inheritedChatRole(ctx);
+  const inherits = { thread: chat, home: homeChatRole(ctx, inherited) };
   return [
     chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, { thread: chat, home: homeChatRole(ctx, inherited) })),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, inherits)),
     subagentRole(ctx, inherited),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
@@ -986,6 +987,7 @@ function savedSettingsFor(
 function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   const chat = chatRole(ctx);
   const characterChat = inheritedChatRole(ctx);
+  const inherits = { thread: chat, home: homeChatRole(ctx, characterChat) };
   const slots: OverviewSlot[] = [
     {
       role: "chat",
@@ -999,7 +1001,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task, { thread: chat, home: homeChatRole(ctx, characterChat) }).source,
+      source: backgroundRole(ctx, task, inherits).source,
       resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
     });
   }

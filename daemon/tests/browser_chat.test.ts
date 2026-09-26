@@ -94,6 +94,8 @@ test("the replaced reply stays hidden until the regeneration's own stream takes 
   expect(regenInFlight([{ regen: true }], [])).toBe(true);
   expect(regenInFlight([{ regen: false }, {}], [])).toBe(false);
   expect(regenInFlight([], [])).toBe(false);
+  expect(regenInFlight([{ rid: "quiet", regen: false }], [], ["quiet"])).toBe(true);
+  expect(regenInFlight([{ rid: "other", regen: false }], [], ["quiet"])).toBe(false);
 });
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

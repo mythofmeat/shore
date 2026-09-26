@@ -128,8 +128,8 @@ export function regenStart(messages: readonly Message[], activeStart: number): n
   return Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart);
 }
 
-export function regenInFlight(visible: readonly { regen?: boolean }[], pendingRegens: readonly string[]): boolean {
-  return pendingRegens.length > 0 || visible.some((stream) => stream.regen === true);
+export function regenInFlight(visible: readonly { regen?: boolean; rid?: string | null }[], pendingRegens: readonly string[], regens: readonly string[] = []): boolean {
+  return pendingRegens.length > 0 || visible.some((stream) => stream.regen === true || (typeof stream.rid === "string" && regens.includes(stream.rid)));
 }
 
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {
