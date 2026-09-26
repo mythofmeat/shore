@@ -5,6 +5,7 @@ import { actionControl, CONTROL_KINDS, controlFor, initialValue } from "../src/b
 import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
 import { BrowserConnection, type BrowserRequest, type ConnectionUpdate } from "../src/browser/connection.ts";
 import { ConversationRequests } from "../src/browser/chat/requests.ts";
+import { regenReplaces, visibleStreams } from "../src/browser/chat/transcript.ts";
 import type { RequestFinished } from "../src/protocol/RequestFinished.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
@@ -122,6 +123,29 @@ test("a dropped request's notice clears when its outcome arrives, and a failure 
   connection.emit({ kind: "frame", message: { type: "request_finished", rid: "compacted", outcome: "failed", error: { code: "provider_error", message: "overloaded" } } });
   expect(workspace.getSnapshot().uncertain).toEqual([]);
   expect(workspace.getSnapshot().error).toBe("overloaded");
+});
+
+test("a regeneration started in another client hides exactly the messages its stream_start lists", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const reply = (id: string): Message => ({ ...message(id), role: "assistant" });
+  connection.frame({ type: "history", config: {}, revision: 1, selected_character: "nova", selected_thread: "main", messages: [message("question"), reply("kept"), reply("old")] });
+  const hidden = () => {
+    const state = workspace.getSnapshot();
+    return regenReplaces(state.messages, state.activeStart, visibleStreams(state.streams, state.messages, new Set()), false);
+  };
+  connection.frame({ type: "stream_start", rid: "elsewhere", regen: false });
+  expect(hidden()).toEqual([]);
+  connection.frame({ type: "stream_start", rid: "regen", regen: true, replaces: ["old"] });
+  expect(hidden()).toEqual(["old"]);
+  connection.frame({ type: "stream_chunk", rid: "regen", content_type: "text", text: "new" });
+  connection.frame({ type: "stream_start", rid: "regen", regen: true, replaces: ["old"] });
+  expect(hidden()).toEqual(["old"]);
 });
 
 test("history-only updates retain configuration until it is replaced or the conversation changes", () => {

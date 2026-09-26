@@ -446,7 +446,7 @@ export class MessageHandler {
             void this.#deliver(target, msg, sessionId);
             continue;
           }
-          if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) continue;
+          if (!body.stream && (msg.type === "stream_chunk" || (msg.type === "stream_start" && !msg.regen))) continue;
           issuerDelivery = target(msg);
         }
         await issuerDelivery;

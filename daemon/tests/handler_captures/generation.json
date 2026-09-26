@@ -286,7 +286,10 @@
           {
             "type": "stream_start",
             "rid": "r-2",
-            "regen": true
+            "regen": true,
+            "replaces": [
+              "m_seed_first answer"
+            ]
           },
           {
             "type": "stream_chunk",

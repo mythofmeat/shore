@@ -1035,6 +1035,12 @@
             "type": "boolean",
             "default": false
           },
+          "replaces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "subagent": {
             "type": [
               "string",

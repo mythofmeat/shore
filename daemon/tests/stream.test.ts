@@ -607,7 +607,7 @@ describe("stream accumulation", () => {
       let outcome: Row;
       try {
         const res = await consumeStream(decodeLines(c["lines"] as string[]), {
-          regen: c["regen"] as boolean,
+          regen: c["regen"] === true && { replaces: [] },
           sink,
           ...(rid === null ? {} : { rid }),
         });

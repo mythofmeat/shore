@@ -124,12 +124,13 @@ export function visibleStreams<T extends { subagent: string | null; final: boole
 
 const realUserTurn = (message: Message): boolean => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every((block) => block.type === "tool_result"));
 
-export function regenStart(messages: readonly Message[], activeStart: number): number {
-  return Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart);
+export function optimisticRegenReplaces(messages: readonly Message[], activeStart: number): string[] {
+  return messages.slice(Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart)).map((message) => message.msg_id);
 }
 
-export function regenInFlight(visible: readonly { regen?: boolean; rid?: string | null }[], pendingRegens: readonly string[], regens: readonly string[] = []): boolean {
-  return pendingRegens.length > 0 || visible.some((stream) => stream.regen === true || (typeof stream.rid === "string" && regens.includes(stream.rid)));
+export function regenReplaces(messages: readonly Message[], activeStart: number, visible: readonly { replaces?: readonly string[] }[], pendingRegen: boolean): string[] {
+  const listed = visible.flatMap((stream) => stream.replaces ?? []);
+  return [...new Set(pendingRegen ? [...listed, ...optimisticRegenReplaces(messages, activeStart)] : listed)];
 }
 
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {

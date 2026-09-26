@@ -8,7 +8,7 @@ import { Markdown } from "../markdown.tsx";
 import { conversation, perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, ReasoningChip, type OpenImage } from "./Message.tsx";
-import { compactionPhase, regenInFlight, regenStart, transcriptItems, visibleStreams } from "./transcript.ts";
+import { compactionPhase, regenReplaces, transcriptItems, visibleStreams } from "./transcript.ts";
 
 function Lightbox({ image, close }: { image: { source: string; caption: string }; close: () => void }) {
   return <Dialog title={image.caption} close={close} wide>
@@ -80,8 +80,12 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   const [loading, setLoading] = useState(false);
   const streams = visibleStreams(state.streams, state.messages, active);
   const scope = { character: state.character, thread: state.thread };
-  const replacing = regenInFlight(streams, conversation.pendingRegens(scope), conversation.regens(scope));
-  const shown = useMemo(() => replacing ? state.messages.slice(0, regenStart(state.messages, state.activeStart)) : state.messages, [replacing, state.messages, state.activeStart]);
+  const replaced = regenReplaces(state.messages, state.activeStart, streams, conversation.pendingRegens(scope).length > 0).join("\n");
+  const shown = useMemo(() => {
+    if (replaced === "") return state.messages;
+    const hidden = new Set(replaced.split("\n"));
+    return state.messages.filter((message) => !hidden.has(message.msg_id));
+  }, [replaced, state.messages]);
   const items = useMemo(() => transcriptItems(shown, state.activeStart), [shown, state.activeStart]);
   const lastUser = state.messages.findLast((message) => message.role === "user")?.msg_id;
   const waiting = streams.length === 0 ? conversation.awaitingStream(scope) : undefined;

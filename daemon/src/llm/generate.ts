@@ -26,7 +26,7 @@ import {
   type RetrySettings,
   type Sleep,
 } from "./fallback.ts";
-import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
+import { consumeStream, type FrameSink, type RegenStart, type StreamResult } from "./stream.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 import { characterWorkspaceDir, rustJoin } from "../config/dirs.ts";
 import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
@@ -146,7 +146,7 @@ export interface StreamedGenerateOptions {
 export interface GenerationOptions extends StreamedGenerateOptions {
   tools?: ToolPhase | ((request: SidecarRequest, sink: FrameSink) => ToolPhase | undefined);
   toolLoop?: ToolLoopOptions;
-  regen?: boolean;
+  regen?: RegenStart;
   rid?: string;
   onFallback?: (event: FallbackEvent) => void;
   onRetry?: import("./fallback.ts").RetryContext["onRetry"];

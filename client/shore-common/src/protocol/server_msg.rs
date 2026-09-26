@@ -87,6 +87,9 @@ pub struct StreamStart {
     pub rid: Option<String>,
     #[serde(default)]
     pub regen: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<String>>", optional)]
+    pub replaces: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

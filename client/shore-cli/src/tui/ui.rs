@@ -1902,6 +1902,7 @@ mod subagent_panel_tests {
                 ServerMessage::StreamStart(shore_common::protocol::server_msg::StreamStart {
                     rid: None,
                     regen: false,
+                    replaces: Vec::new(),
                     subagent: None,
                     task_id: None,
                 }),
@@ -5890,6 +5891,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6017,6 +6019,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6078,6 +6081,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6235,6 +6239,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6388,6 +6393,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6544,6 +6550,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
 
@@ -6619,6 +6626,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         for chunk in reply.as_bytes().chunks(96) {
