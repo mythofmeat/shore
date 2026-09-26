@@ -117,7 +117,6 @@ function tickDeps(over: Partial<Omit<HeartbeatTickDeps, "generate">> & { generat
   return {
     cache: new LastRequestCache(),
     dispatch: async () => ({ output: "ok", isError: false }),
-    scheduleNextWake: () => "scheduled",
     newId: () => "m_fixed",
     nowIso: () => "2026-07-30T13:00:00.000Z",
     now: () => Date.parse("2026-07-30T13:00:00Z"),

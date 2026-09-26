@@ -162,6 +162,10 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       (dir, path) => queueDeferredEdit(dir, path, turn.thread),
     ),
+    scheduleNextWake: (character, hours, reason) =>
+      runtime.autonomy.heartbeatsRunning(character)
+        ? runtime.autonomy.scheduleNextWake(character, hours, reason)
+        : undefined,
   };
 }
 

@@ -9,7 +9,10 @@ identically-shaped things a turn is handed.
 queue and `activityStats` reads one character's tracker. Point either at the
 data root and one character's self-edit is applied to another's prompt at the
 next compaction; drop either and both quietly do nothing, which reads as "no
-edits pending" and "no activity recorded".
+edits pending" and "no activity recorded". A chat turn's `set_next_wake` is the
+same kind of wiring: bound to the wrong character it moves someone else's
+heartbeat, and ignoring whether that character's heartbeat runner actually ticks
+it reports a wake that never comes.
 
 **The cached request.** One compaction runner serves every character, so the
 body it extends has to be looked up per pass. A fixed one hands Ada's
@@ -38,6 +41,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 D = "src/handler/deps.ts"
 R = "src/runtime.ts"
+CTX = "src/handler/tool_context.ts"
+SVC = "src/autonomy/service.ts"
 
 TESTS = ["tests/handler_deps.test.ts", "tests/runtime_activity.test.ts"]
 
@@ -218,6 +223,33 @@ MUTANTS = [
      D,
      "        return { error: e instanceof CharacterError ? e.message : String(e) };",
      "        if (!(e instanceof CharacterError)) throw e;\n        return { error: e.message };"),
+    ("wake: a chat turn's set_next_wake reaches no clock",
+     D,
+     "    scheduleNextWake: (character, hours, reason) =>\n"
+     "      runtime.autonomy.heartbeatsRunning(character)\n"
+     "        ? runtime.autonomy.scheduleNextWake(character, hours, reason)\n"
+     "        : undefined,\n",
+     ""),
+    ("wake: a chat turn's set_next_wake moves another character's heartbeat",
+     D,
+     "runtime.autonomy.scheduleNextWake(character, hours, reason)",
+     'runtime.autonomy.scheduleNextWake("nova", hours, reason)'),
+    ("wake: a chat turn's set_next_wake reaches the clock without its reason",
+     D,
+     "runtime.autonomy.scheduleNextWake(character, hours, reason)",
+     'runtime.autonomy.scheduleNextWake(character, hours, "")'),
+    ("wake: the tool context binds the wake to a fixed character",
+     CTX,
+     "scheduleNextWake(charName, hours, reason)",
+     'scheduleNextWake("nova", hours, reason)'),
+    ("wake: with heartbeats off, a wake is still scheduled and reported",
+     D,
+     "runtime.autonomy.heartbeatsRunning(character)\n        ? ",
+     "true\n        ? "),
+    ("wake: a registered runner reads as ticking whether or not its heartbeat is on",
+     SVC,
+     "?.runner.heartbeatMayTick ?? false",
+     " !== undefined"),
     ("notify: a failed generation is filed under the wrong event's toggle",
      D,
      "    notify: (event, title, body) => {\n      notifier.notify(event, title, body);\n    },",

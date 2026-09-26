@@ -64,7 +64,7 @@ export interface ToolContext {
 
   mcpCall?: (name: string, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 
-  scheduleNextWake?: (input: unknown) => Promise<unknown>;
+  scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
 
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
@@ -142,7 +142,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "set_next_wake"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -215,9 +215,13 @@ export async function dispatchTool(
 
     case "set_next_wake": {
       if (ctx.scheduleNextWake === undefined) {
-        throw new InvalidArgs("set_next_wake is only available during heartbeat ticks");
+        throw new ToolIoError("the heartbeat schedule is not available in this context");
       }
-      return await ctx.scheduleNextWake(args);
+      const hours = typeof args["hours_from_now"] === "number" ? args["hours_from_now"] : 1;
+      const reason = typeof args["reason"] === "string" ? args["reason"] : "";
+      const used = ctx.scheduleNextWake(hours, reason);
+      if (used === undefined) throw new ToolIoError("heartbeats are not running for this character");
+      return `Scheduled next moment in ${used.toFixed(1)} hours.`;
     }
 
     default: {

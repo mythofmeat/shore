@@ -1226,7 +1226,8 @@
               "activity_heatmap",
               "search",
               "search_chat_logs",
-              "model_history"
+              "model_history",
+              "set_next_wake"
             ],
             "max_tokens": 4096,
             "provider_key": "anthropic",

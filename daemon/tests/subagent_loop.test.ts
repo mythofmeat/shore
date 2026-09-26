@@ -447,6 +447,14 @@ describe("the recursion cap", () => {
     expect(nested.workspaceDir).toBe(parent.workspaceDir);
   });
 
+  test("the nested context has no heartbeat schedule, so a sub-agent cannot move its parent's wake", () => {
+    const parent = { ...contextIn("/tmp/whatever"), scheduleNextWake: () => 1 };
+
+    const nested = nestedContext(parent);
+
+    expect("scheduleNextWake" in nested).toBe(false);
+  });
+
   test("everything else is forwarded, so a sub-agent reaches the same workspace", () => {
     const parent = { ...contextIn("/tmp/whatever"), mcpCall: () => Promise.resolve(1) };
     const nested = nestedContext(parent);

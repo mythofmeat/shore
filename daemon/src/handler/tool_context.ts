@@ -37,6 +37,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
+  scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
   fetchImpl?: typeof fetch;
 }
 
@@ -85,6 +86,7 @@ export async function buildToolContext(
 
   const mcp = deps.mcpRegistry;
   const activityStats = deps.activityStats;
+  const scheduleNextWake = deps.scheduleNextWake;
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
@@ -107,6 +109,9 @@ export async function buildToolContext(
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
     ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
+    ...(scheduleNextWake === undefined
+      ? {}
+      : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(embedder === undefined ? {} : { embedder }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(mcp === undefined

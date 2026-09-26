@@ -83,6 +83,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           ...this.#deps.tools,
           thread: conversation.thread,
           conversation: conversation.conversation,
+          scheduleNextWake: (_character, hours, reason) => hooks.scheduleNextWake(hours, reason),
         });
         const exec: ToolExecution = {
           sendDirect: () => {},
@@ -103,11 +104,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           block: run.block,
           ...(run.value === undefined ? {} : { value: run.value }),
         };
-      },
-
-      scheduleNextWake: (hours, reason) => {
-        const used = hooks.scheduleNextWake(hours, reason);
-        return `Scheduled next moment in ${used.toFixed(1)} hours.`;
       },
 
       ...(this.#deps.callStore === undefined
