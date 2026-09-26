@@ -1,8 +1,9 @@
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { VIEW_CONTROLS, type ViewKey } from "../preferences.ts";
+import type { NotifyPermission } from "../notifications.ts";
 import { THEMES } from "../theme.ts";
 import { Switch } from "../ui/controls.tsx";
-import { display, STREAM_KEY, themes, useDisplay, useTheme } from "../app/state.ts";
+import { display, notifier, perform, STREAM_KEY, themes, useDisplay, useNotifications, useTheme } from "../app/state.ts";
 import { useStoredFlag } from "../ui/hooks.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
 
@@ -16,11 +17,19 @@ const TOGGLES: readonly { key: ViewKey; description: string }[] = [
   { key: "compaction", description: "Show a notice while the conversation is being compacted." },
 ];
 
+const NOTIFY_DESCRIPTION = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, heartbeat messages and errors.";
+const NOTIFY_NOTES: Partial<Record<NotifyPermission, string>> = {
+  unavailable: "This browser only allows desktop notifications over HTTPS or localhost, so only the tab title count is shown.",
+  denied: "Notifications are blocked for this site in the browser’s settings, so only the tab title count is shown.",
+};
+
 export function AppearancePage(_: { state: WorkspaceSnapshot }) {
   const theme = useTheme();
   const values = useDisplay();
   const store = themes;
   const [stream, setStream] = useStoredFlag(STREAM_KEY, true);
+  const notify = useNotifications();
+  const note = NOTIFY_NOTES[notify.permission];
   return <>
     <SettingsSection title="Theme" description="Saved in this browser.">
       <div className="theme-grid" role="radiogroup" aria-label="Theme">
@@ -42,6 +51,13 @@ export function AppearancePage(_: { state: WorkspaceSnapshot }) {
         </SettingRow>)}
       </div>
       {display.getSnapshot().error === "" ? null : <p className="form-error" role="alert">{display.getSnapshot().error}</p>}
+    </SettingsSection>
+    <SettingsSection title="Notifications" description="Saved in this browser.">
+      <div className="rows">
+        <SettingRow label="Notify when unfocused" description={note === undefined ? NOTIFY_DESCRIPTION : `${NOTIFY_DESCRIPTION} ${note}`}>
+          <Switch label="Notify when unfocused" checked={notify.enabled} change={(checked) => { if (checked) perform(() => notifier.enable()); else notifier.disable(); }} />
+        </SettingRow>
+      </div>
     </SettingsSection>
   </>;
 }
