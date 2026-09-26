@@ -33,8 +33,10 @@ request URL as usual. Session cookies use the browser-facing scheme for each con
 proxy access and direct HTTP access both work. Provider credentials are never part of this setup.
 
 The browser signs in with the daemon client token and receives an opaque, HttpOnly,
-SameSite=Strict session cookie. Tokens never appear in URLs or responses. Sessions expire after
-eight hours; disconnecting revokes the cookie and closes its sockets.
+SameSite=Strict session cookie. Tokens never appear in URLs or responses. The browser stays signed
+in, across daemon restarts, until the session expires after `daemon.web.session_lifetime` (default
+`30d`; accepts durations such as `12h` or `90d`) or the daemon token changes. Disconnecting revokes
+the cookie and closes its sockets.
 
 ## LAN, Tailscale and SSH access
 
