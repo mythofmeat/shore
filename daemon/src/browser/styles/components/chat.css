@@ -996,22 +996,3 @@ button.swipe-count:hover:not(:disabled) {
   max-width: none;
   height: 140px;
 }
-
-.path-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.path-attachments .chip {
-  margin: 0;
-}
-
-.chip-remove {
-  display: inline-flex;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-}
