@@ -1061,7 +1061,7 @@ export function mcpBearerToken(
   env: Record<string, string | undefined>,
 ): string | undefined {
   const token = server.bearer_token_env === undefined ? undefined : env[server.bearer_token_env];
-  return token === "" ? undefined : token;
+  return typeof token === "string" && token !== "" ? token : undefined;
 }
 
 export interface AppConfig {
