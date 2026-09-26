@@ -19,6 +19,7 @@ import {
   configReloader,
   generationRegistry,
   handlerNotifier,
+  commandChangesState,
   handlerRegistry,
   turnAutonomy,
   usageBudgetWarnings,
@@ -879,7 +880,7 @@ describe("the handler, whole", () => {
       expect(deps.router).toBe(a.router);
       expect(typeof deps.dispatchCommand).toBe("function");
       expect(typeof deps.runGeneration).toBe("function");
-      expect(deps.leases).toBeDefined();
+      expect(deps.commandChangesState).toBe(commandChangesState);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -949,20 +950,28 @@ describe("the handler, whole", () => {
     }
   });
 
-  test("each handler gets its own leases", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-leases-");
-    try {
-      const first = buildMessageHandlerDeps(handlerAssembly(runtime));
-      const second = buildMessageHandlerDeps(handlerAssembly(runtime));
-      expect(first.leases).not.toBe(second.leases);
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
+  test("only commands that change state survive their client disconnecting", () => {
+    const command = (name: string, args: unknown = {}) => ({ type: "command" as const, name, args });
+    expect(commandChangesState(command("compact"))).toBe(true);
+    expect(commandChangesState(command("archive_thread", { name: "side" }))).toBe(true);
+    expect(commandChangesState(command("status"))).toBe(false);
+    expect(commandChangesState(command("switch_thread", { name: "side" }))).toBe(false);
+    expect(commandChangesState(command("no_such_command"))).toBe(true);
   });
 });
 
 describe("resolving a character for the router", () => {
+  test("a conversation is named by its live thread, so an unset thread means home", () => {
+    const registry = handlerRegistry({
+      resolveCharacter: (r) => r ?? "ada",
+      homeThread: () => "main",
+      listThreads: () => [{ id: "main" }, { id: "side" }] as never,
+    });
+    expect(registry.resolveThread?.("ada", null)).toBe("main");
+    expect(registry.resolveThread?.("ada", "side")).toBe("side");
+    expect(registry.resolveThread?.("ada", "gone")).toBe("main");
+  });
+
   test("the only character is chosen when none was selected", () => {
     const registry = handlerRegistry({ resolveCharacter: (r) => r ?? "ada" });
     expect(registry.resolveCharacter(null)).toEqual({ name: "ada" });

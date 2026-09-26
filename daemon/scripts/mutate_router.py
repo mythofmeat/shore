@@ -10,10 +10,12 @@ Four things the mutants attack:
 - **The launch decision.** That an unresolvable character stops the request
   rather than launching one, that a `Cancel` never launches, and that a `Regen`
   does.
-- **The lease.** That only a real user message takes it, and that a
-  generation's stream goes to the fanout rather than to the issuer alone. Both
-  fail silently in the *quiet* direction — the turn still happens, a frontend
-  just never sees it.
+- **Who sees a turn (#247).** That a generation's stream goes to every session
+  viewing its conversation rather than the issuer alone, that a session joining
+  mid-turn is replayed the turn so far exactly once, and that a disconnect
+  never cancels a generation or a state-changing command. All of these fail in
+  the *quiet* direction — the turn still happens, a frontend just never sees
+  it, or it silently stops.
 - **The cancel frame.** That it is sent only when something was running, that
   it carries the cancel's rid rather than the generation's, and that it is
   `is_final` with `finish_reason: "cancelled"`. A client waits forever on a
@@ -71,27 +73,23 @@ MUTANTS = [
     ("an unresolvable character launches anyway",
      '    if ("error" in resolved) {',
      "    if (false as boolean) {\n      const resolved = { name: \"\" };"),
-    ("a cancel falls through into generation",
-     '    if (plan.kind === "cancel") {\n'
-     '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
-     "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
-     "      return;\n"
-     "    }",
-     '    if (plan.kind === "cancel") {\n'
-     '      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");\n'
-     "      await this.cancelGeneration(meta.session.sessionId, meta.rid, \"user cancelled\");\n"
-     "    }"),
     ("a regen is dropped instead of launched",
      '    if (msg.type === "hello" || msg.type === "command") return;',
      '    if (msg.type === "hello" || msg.type === "command" || msg.type === "regen") return;'),
     ("a hello or command is treated as a message",
      '    if (msg.type === "hello" || msg.type === "command") return;',
      "    if (false) return;"),
-    ("a request from a vanished session still launches",
-     "    const issuerSend = this.#deps.router.senderFor(meta.session.sessionId);\n"
-     "    if (issuerSend === undefined) return;",
-     "    const issuerSend =\n"
-     "      this.#deps.router.senderFor(meta.session.sessionId) ?? (() => Promise.resolve());"),
+    ("a cancel falls through into generation (EQUIVALENT: the core request plan for a cancel has no body, so launching it throws before any generation starts)",
+     '    if (plan.kind === "cancel") {\n'
+     "      await this.#cancel(meta.session.sessionId, meta.rid);\n"
+     "      return;\n"
+     "    }",
+     '    if (plan.kind === "cancel") {\n'
+     "      await this.#cancel(meta.session.sessionId, meta.rid);\n"
+     "    }"),
+    ("a request from a vanished session launches nothing",
+     "    const issuer = meta.session.sessionId;\n",
+     "    const issuer = meta.session.sessionId;\n    if (!this.#deps.router.has(issuer)) return;\n"),
 
     # ── the regen body ──────────────────────────────────────────────────
     ("a regen carries the frame's text through", "src/operations/requests.ts",
@@ -102,50 +100,78 @@ MUTANTS = [
     ("a regen drops its rid", "src/operations/requests.ts",
      'rid: request.rid ?? null, text: "",', 'rid: null, text: "",'),
 
-    # ── the lease ───────────────────────────────────────────────────────
-    ("every engine message takes the lease",
-     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
-     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, "message", undefined, meta.session.selectedThread);'),
-    ("no engine message takes the lease",
-     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
-     '    void resolved;'),
-    ("the lease is keyed by the session rather than the character",
-     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
-     '    this.#deps.leases.observe(String(meta.session.sessionId), meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);'),
-    ("the stream goes to the issuer alone, not the fanout",
-     '    const send = this.#deps.leases.fanout(\n      charName,\n      meta.session.sessionId,\n      async (msg) => {\n        if (!inSelectedThread()) return;\n        if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) return;\n        await issuerSend(msg);\n      },\n      this.#deps.router,\n      undefined,\n      thread,\n    );',
-     '    const send = issuerSend;'),
-    ("the disconnect sweep leaves the leases in place",
-     "    this.#deps.leases.clear();",
-     "    void 0;"),
-    ("the disconnect sweep cancels nothing",
-     "    for (const sessionId of this.#sessions.keys()) {\n"
-     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");\n'
-     "    }",
-     "    void 0;"),
-    ("the disconnect sweep answers with the last request's rid",
-     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");',
-     '      await this.cancelGeneration(sessionId, "r1", "all clients disconnected");'),
+    # ── who sees a turn, and what a disconnect does ────────────────────
+    ("the stream goes to the issuer alone, not every viewer",
+     "          if (sessionId !== issuer) {\n            void this.#deliver(target, msg, sessionId);\n            continue;\n          }",
+     "          if (sessionId !== issuer) continue;"),
+    ("a viewer that switched away keeps receiving the turn",
+     "          if (target === undefined || current.character !== viewer.character || current.thread !== viewer.thread) {",
+     "          if (target === undefined) {"),
+    ("a non-streaming issuer is sent the partial stream",
+     '          if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) continue;',
+     "          void body;"),
+    ("a joining session is not replayed the turn so far",
+     "    for (const frame of generation.replay) void this.#deliver(send, frame, sessionId);",
+     "    void send;"),
+    ("a connecting session never joins a running turn",
+     "      this.#join(routed.sessionId);\n      return;",
+     "      return;"),
+    ("switching into a running conversation does not join its turn",
+     "      if (this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);\n",
+     ""),
+    ("every command rejoins, replaying the turn twice",
+     " && this.#sessionScope(sessionId) !== before) this.#join(sessionId);",
+     ") this.#join(sessionId);"),
+    ("a replay is sent after the turn has finished",
+     "    if (generation === undefined || generation.finished) return;",
+     "    if (generation === undefined) return;"),
+    ("replayed chunks are not coalesced",
+     '  if (msg.type === "stream_chunk" && last?.type === "stream_chunk" && last.content_type === msg.content_type) {',
+     "  if (false as boolean) {"),
+    ("thinking and text are coalesced into one chunk",
+     ' && last.content_type === msg.content_type) {',
+     ") {"),
+    ("sub-agent frames are replayed into the main turn",
+     '  if ("subagent" in msg && msg.subagent !== undefined && msg.subagent !== null) return;\n',
+     ""),
+    ("a disconnect cancels every generation the session was viewing",
+     "    for (const generation of this.#generations.values()) generation.viewers.delete(routed.sessionId);\n    this.#queues.delete(routed.sessionId);",
+     "    for (const generation of this.#generations.values()) if (generation.viewers.has(routed.sessionId)) generation.abort();\n    this.#queues.delete(routed.sessionId);"),
+    ("a disconnect aborts state-changing commands too",
+     "      (command) => command.sessionId === routed.sessionId && !command.changesState,",
+     "      (command) => command.sessionId === routed.sessionId,"),
+    ("a disconnect leaves read-only commands running",
+     "      (command) => command.sessionId === routed.sessionId && !command.changesState,",
+     "      () => false,"),
+    ("a cancel cannot reach an orphaned command",
+     "        (command.changesState && command.scope === scope && !this.#deps.router.has(command.sessionId)),",
+     "        false,"),
+    ("a cancel reaches another live client's command",
+     " && !this.#deps.router.has(command.sessionId)),",
+     "),"),
+    ("request outcomes are not reported to observers",
+     "    this.#deps.router.reportRequest(meta.session.sessionId, finished);\n",
+     ""),
 
     # ── the cancel frame ────────────────────────────────────────────────
     ("a cancel with nothing running still sends a frame",
-     '    if (generations === undefined) return;',
-     '    if (generations === undefined) {\n      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n      return;\n    }'),
+     '    if (generation === undefined) return;',
+     '    if (generation === undefined) {\n      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n      return;\n    }'),
     ("a cancel sends no frame at all",
-     "      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(correlation));",
-     "      void correlation;"),
+     "      await generation.send(frame);\n      if (!generation.viewers.has(sessionId)) await this.#deps.router.sendToSession(sessionId, frame);",
+     "      void frame;"),
     ("a cancel does not abort what it announces",
-     '      generation.abort();\n      generations.delete(key);',
-     '      generations.delete(key);'),
+     '    generation.outcome = "cancelled";\n    generation.abort();',
+     '    generation.outcome = "cancelled";'),
     ("a finished generation clears a later launch's abort handle",
-     '        if (generations.get(scope) === generation) {',
-     '        if (true) {'),
-    ("a completed generation retains its session state",
-     '        if (generations.get(scope) === generation) {\n          generations.delete(scope);\n          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);\n        }',
-     '        void abort;'),
-    ("a cancelled generation retains its session state",
-     '    if (generations.size === 0) this.#sessions.delete(sessionId);',
-     '    void generations;'),
+     '        if (this.#generations.get(scope) === generation) this.#generations.delete(scope);',
+     '        this.#generations.delete(scope);'),
+    ("a completed generation retains its state",
+     '        if (this.#generations.get(scope) === generation) this.#generations.delete(scope);',
+     '        void scope;'),
+    ("a cancelled generation retains its state",
+     '    this.#deps.log?.info?.("cancelling active generation", { reason });\n    this.#generations.delete(scope);',
+     '    this.#deps.log?.info?.("cancelling active generation", { reason });'),
     ("the generation is never told it was cancelled",
      "      signal: controller.signal,",
      "      signal: new AbortController().signal,"),
@@ -164,7 +190,7 @@ MUTANTS = [
      "      previous.abort();",
      "      void previous;"),
     ("superseding leaves the original request without a terminal result",
-     '      if (previous.rid !== null) await issuerSend(cancelledStreamEnd(previous.rid));',
+     '      if (previous.rid !== null) await previous.send(cancelledStreamEnd(previous.rid));',
      '      void previous.rid;'),
 
     # ── the rid filter ──────────────────────────────────────────────────

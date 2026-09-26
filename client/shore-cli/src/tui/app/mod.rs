@@ -479,6 +479,9 @@ impl App {
 
     pub(crate) fn stale_request(&self, rid: Option<&str>) -> bool {
         rid.is_some_and(|id| {
+            if self.stream.active && self.stream.rid.as_deref() == Some(id) {
+                return false;
+            }
             self.retired_streams.contains(id)
                 || (id.starts_with(&format!("{}_", self.request_prefix))
                     && !id.starts_with(&format!("{}_{}_", self.request_prefix, self.request_epoch)))

@@ -50,7 +50,7 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
   const served = swp.serve();
   const routed: RoutedMessage[] = [];
   const controls: ControlRoutedMessage[] = [];
-  swp.setControlHandler(async (message) => { controls.push(message); });
+  swp.setControlHandler(async (message) => { if (message.kind !== "session_connected") controls.push(message); });
   const routing = (async () => { for await (const message of swp.routes()) routed.push(message); })();
   const web = startWebServer({
     server: swp, authenticate: (token) => tokenMatches(TOKEN, token),
@@ -70,7 +70,11 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     if (cookie === undefined) throw new Error("No session cookie");
     return { cookie, response, info: await response.json() as WebSessionInfo };
   };
-  return { swp, web, routed, controls, api, login, histories: () => histories };
+  const finish = async (session: number, message: ServerMessage) => {
+    swp.sessionRouter.reportRequest(session, message);
+    await swp.sessionRouter.sendToSession(session, message);
+  };
+  return { swp, web, routed, controls, api, login, finish, histories: () => histories };
 }
 
 function connectBrowser(origin: string, cookie: string, protocol = WEB_SUBPROTOCOL, options?: ConstructorParameters<typeof BrowserSocket>[3]): BrowserSocket {
@@ -721,28 +725,35 @@ test("request history authenticates, isolates owners, uses current selection and
   if (duplicate.type !== "request_finished") throw new Error("Missing duplicate rejection");
   expect(duplicate.error?.message).toContain("already has an outcome");
   expect(f.routed).toHaveLength(1);
-  await f.swp.sessionRouter.sendToSession(session, { type: "command_output", rid: command.rid, name: "edit", data: { ref: "1", edited: true } });
-  await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: command.rid, outcome: "completed" });
+  await f.finish(session, { type: "command_output", rid: command.rid, name: "edit", data: { ref: "1", edited: true } });
+  await f.finish(session, { type: "request_finished", rid: command.rid, outcome: "completed" });
   await first.frame("request_finished", command.rid);
   expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]).toMatchObject({ phase: "completed", result: { name: "edit", data: { ref: "1", edited: true } } });
   expect((await f.api(`/api/requests/${record.id}/acknowledge`, owner.cookie)).status).toBe(204);
   expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests).toEqual([]);
 });
 
-test("disconnect records uncertainty and never dispatches again when history is read or another tab attaches", async () => {
+test.each([true, false])("a request outlives its socket, and its outcome reaches the owner's next tab (reconnected first: %p)", async (reconnectedFirst) => {
   const f = await fixture(); f.web.activate(); const owner = await f.login();
   const first = connectBrowser(f.web.origin, owner.cookie); await first.attach();
-  first.send({ type: "command", rid: "lost-edit", name: "edit", args: { ref: "1", content: "new" } });
+  const session = f.swp.sessionRouter.sessions().at(0)?.[0]; if (session === undefined) throw new Error("Missing session");
+  first.send({ type: "command", rid: "orphaned-edit", name: "edit", args: { ref: "1", content: "new" } });
   await until(() => f.routed.some((message) => message.kind === "command"));
   await first.close(); await until(() => f.swp.sessionRouter.sessions().length === 0);
   const listing = await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList;
-  expect(listing.requests[0]).toMatchObject({ phase: "uncertain", rid: "lost-edit" });
-  const second = connectBrowser(f.web.origin, owner.cookie); await second.attach();
-  await f.api("/api/requests/list", owner.cookie);
+  expect(listing.requests[0]).toMatchObject({ phase: "running", rid: "orphaned-edit" });
+
+  const finished = { type: "request_finished", rid: "orphaned-edit", outcome: "completed" } as const;
+  const second = connectBrowser(f.web.origin, owner.cookie);
+  if (reconnectedFirst) await second.attach();
+  f.swp.sessionRouter.reportRequest(session, finished);
+  if (!reconnectedFirst) await second.attach();
+  expect(await second.frame("request_finished", "orphaned-edit")).toEqual(finished);
+  expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]).toMatchObject({ phase: "completed" });
   expect(f.routed.filter((message) => message.kind === "command")).toHaveLength(1);
 });
 
-test("failed durable admission never reaches dispatch, and failed completion storage closes with a recoverable uncertainty", async () => {
+test("failed durable admission never reaches dispatch, and failed completion storage still reports the outcome", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-request-admission-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data"); await mkdir(dataDir);
@@ -763,11 +774,10 @@ test("failed durable admission never reaches dispatch, and failed completion sto
     browser.send({ type: "command", rid: "admitted", name: "edit", args: { ref: "1", content: "new" } });
     await until(() => f.routed.length === 1);
     db.run("CREATE TRIGGER reject_completion BEFORE UPDATE ON requests BEGIN SELECT RAISE(FAIL, 'secret database path'); END;");
-    await f.swp.sessionRouter.sendToSession(session, { type: "request_finished", rid: "admitted", outcome: "completed" });
-    await browser.closed;
-    expect(browser.messages.some((message) => message.type === "request_finished" && message.rid === "admitted")).toBe(false);
+    await f.finish(session, { type: "request_finished", rid: "admitted", outcome: "completed" });
+    await browser.frame("request_finished", "admitted");
     expect(JSON.stringify(browser.messages)).not.toContain("secret database path");
-    expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]?.phase).toBe("uncertain");
+    expect((await (await f.api("/api/requests/list", owner.cookie)).json() as WebRequestList).requests[0]?.phase).toBe("completed");
     expect(db.query<{ info: string }, []>("SELECT info FROM requests").get()?.info).toContain('"phase":"running"');
   } finally { db.run("DROP TRIGGER IF EXISTS reject_admission; DROP TRIGGER IF EXISTS reject_completion;"); db.close(); }
 });
@@ -859,8 +869,8 @@ test("manual tool image bytes cross the socket once while results and recovery r
     const report = { tool: "read", character: "ada", kind: "builtin" as const, enabled: true, input: { file_path: "image.png" }, ok: true, rejected: false, duration_ms: 1, output: "Image", truncated: false, result_chars: 5, raw: null, calls: [], images: [image] };
     const send = (message: ServerMessage) => f.swp.sessionRouter.sendToSession(route.meta.session.sessionId, message);
     await send({ type: "send_image", rid, ...image });
-    await send({ type: "command_output", rid, name: "run_tool", data: report });
-    await send({ type: "request_finished", rid, outcome: "completed" });
+    await f.finish(route.meta.session.sessionId, { type: "command_output", rid, name: "run_tool", data: report });
+    await f.finish(route.meta.session.sessionId, { type: "request_finished", rid, outcome: "completed" });
     expect(await request).toEqual(report);
     const output = b.updates.find(update => update.kind === "frame" && update.message.type === "command_output");
     expect(output).toMatchObject({ message: { data: { images: [{ path: image.path, caption: image.caption }] } } });

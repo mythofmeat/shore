@@ -10,7 +10,7 @@ import type { LocalPeer, Server } from "../swp/server.ts";
 import { REQUEST_LIFECYCLE_CAPABILITY, sessionMetaOf } from "../swp/session.ts";
 import type { WebSession } from "./auth.ts";
 import { WEB_LIMITS } from "./policy.ts";
-import { RequestHistory, RequestHistoryError } from "./requests.ts";
+import { REQUEST_HISTORY_LIMITS, RequestHistory, RequestHistoryError, type SettledRequest } from "./requests.ts";
 
 interface PendingRequest {
   bytes: number;
@@ -46,12 +46,30 @@ export class WebSocketPeers {
   readonly #work = new Set<Promise<void>>();
   readonly #helloTimeout: number;
   readonly #drainTimeout: number;
+  readonly #unannounced = new Map<string, ServerMessage[]>();
+  readonly #stopObserving: () => void;
 
   constructor(server: Server, maxBytes: number, helloTimeout: number, drainTimeout: number, readonly history: RequestHistory) {
     this.#server = server;
     this.#maxBytes = maxBytes;
     this.#helloTimeout = helloTimeout;
     this.#drainTimeout = drainTimeout;
+    this.#stopObserving = server.sessionRouter.observeRequests((sessionId, message) => {
+      const settled = this.history.settle(sessionId, message);
+      if (settled !== undefined && !server.sessionRouter.has(sessionId)) this.#announce(settled);
+    });
+  }
+
+  #announce({ owner, finished }: SettledRequest): void {
+    let delivered = false;
+    for (const socket of this.#sockets) {
+      if (socket.data.auth.id !== owner || socket.data.phase !== "ready") continue;
+      this.#send(socket, finished);
+      delivered = true;
+    }
+    if (delivered) return;
+    const waiting = this.#unannounced.get(owner) ?? [];
+    this.#unannounced.set(owner, [...waiting, finished].slice(-REQUEST_HISTORY_LIMITS.perSession));
   }
 
   get size(): number { return this.#sockets.size; }
@@ -78,9 +96,6 @@ export class WebSocketPeers {
     state.detachAuth?.();
     state.abort.abort();
     state.drain?.();
-    for (const pending of state.pending.values()) {
-      if (pending.historyId !== undefined) this.history.interrupt(state.auth, pending.historyId);
-    }
     state.pending.clear();
     state.pendingBytes = 0;
     this.#sockets.delete(socket);
@@ -90,9 +105,7 @@ export class WebSocketPeers {
 
   #prepare(socket: ServerWebSocket<WebSocketState>, message: ServerMessage): ServerMessage {
     const state = socket.data;
-    const id = "rid" in message && typeof message.rid === "string" ? state.pending.get(message.rid)?.historyId : undefined;
     try {
-      if (id !== undefined) this.history.observe(state.auth, id, message);
       this.#complete(state, message);
       const pending = "rid" in message && typeof message.rid === "string" ? socket.data.pending.get(message.rid) : undefined;
       if (pending !== undefined) {
@@ -165,9 +178,12 @@ export class WebSocketPeers {
       clearTimeout(state.helloTimer);
       state.phase = "ready";
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
+      const unannounced = this.#unannounced.get(state.auth.id) ?? [];
+      this.#unannounced.delete(state.auth.id);
       for await (const message of peer.events()) {
         if (state.abort.signal.aborted) break;
         await this.#write(socket, message);
+        if (message.type === "history") for (const finished of unannounced.splice(0)) this.#send(socket, finished);
       }
     } catch {
       if (!state.abort.signal.aborted) this.#send(socket, { type: "error", code: "internal_error", message: "Could not attach the browser session" });
@@ -238,12 +254,16 @@ export class WebSocketPeers {
           this.#complete(state, { type: "request_finished", rid, outcome: "failed", error });
           this.#send(socket, { type: "error", ...error });
           this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
-        } else this.close(socket, 1011, "Request delivery failed");
+        } else {
+          if (pending?.historyId !== undefined) this.history.interrupt(state.auth, pending.historyId);
+          this.close(socket, 1011, "Request delivery failed");
+        }
       })
       .finally(() => { if (control) state.controls -= 1; }));
   }
 
   async stop(): Promise<void> {
+    this.#stopObserving();
     for (const socket of this.#sockets) {
       this.#send(socket, { type: "shutdown" });
       this.close(socket, 1001, "Daemon shutting down");

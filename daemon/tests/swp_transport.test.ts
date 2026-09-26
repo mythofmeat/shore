@@ -359,7 +359,7 @@ describe("handleConnection", () => {
     return { done, send, close, router, bus, routed, lines };
   }
 
-  test("handshake, route, disconnect, and report the last client gone", async () => {
+  test("handshake, route, and disconnect", async () => {
     const c = connect();
     c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -376,9 +376,9 @@ describe("handleConnection", () => {
       "history",
     ]);
     expect(c.routed.map((r) => r.kind)).toEqual([
+      "session_connected",
       "engine",
       "session_disconnected",
-      "all_clients_disconnected",
     ]);
     expect(c.router.sessions()).toEqual([]);
   });

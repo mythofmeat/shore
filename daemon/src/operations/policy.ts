@@ -6,3 +6,7 @@ export function operationPolicy(operation: OperationDescriptor, input: Readonly<
     : Object.hasOwn(input, condition.field) && input[condition.field] === condition.value);
   return match ?? operation;
 }
+
+export function changesState(operation: OperationDescriptor, input: Readonly<Record<string, unknown>>): boolean {
+  return operationPolicy(operation, input).effects.some((effect) => effect !== "read" && effect !== "selection");
+}

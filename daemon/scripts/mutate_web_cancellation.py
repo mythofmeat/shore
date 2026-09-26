@@ -8,9 +8,9 @@ R = "src/memory/compaction/run.ts"
 M = "src/memory/compaction/manager.ts"
 MUTANTS = [
     ("cancel bypasses active commands", H,
-     'this.#abortSessionCommands(routed.meta.session.sessionId, "User requested cancellation");', ''),
+     '      (command) => command.sessionId === sessionId ||', '      (command) => false ||'),
     ("queued mutations are not registered for cancellation", H,
-     'routed.kind === "command" ? this.#commandController(sessionId) : undefined', 'undefined'),
+     'routed.kind === "command" ? this.#registerCommand(routed.cmd, routed.meta) : undefined', 'undefined'),
     ("an aborted command starts anyway", H,
      'controller.signal.throwIfAborted();', ''),
     ("confirmed command results are discarded after cancellation", H,

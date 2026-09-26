@@ -254,7 +254,7 @@ describe("stopping", () => {
 });
 
 describe("what a connection produces", () => {
-  test("cancel and final disconnect bypass blocked regular work", async () => {
+  test("cancel and disconnect bypass blocked regular work", async () => {
     const { server, stop } = await serving();
     server.setHandshakeProvider(providerNaming(["ada"]));
     let releaseCommand = (): void => undefined;
@@ -288,13 +288,13 @@ describe("what a connection produces", () => {
       await started;
 
       await peer.send({ type: "cancel" });
-      expect(controls).toHaveLength(1);
-      expect(controls[0]).toMatchObject({ kind: "engine", msg: { type: "cancel" } });
+      expect(controls).toHaveLength(2);
+      expect(controls[0]).toEqual({ kind: "session_connected", sessionId: peer.session.sessionId });
+      expect(controls[1]).toMatchObject({ kind: "engine", msg: { type: "cancel" } });
 
       await peer.detach();
       expect(controls).toHaveLength(3);
-      expect(controls[1]).toMatchObject({ kind: "session_disconnected" });
-      expect(controls[2]).toEqual({ kind: "all_clients_disconnected" });
+      expect(controls[2]).toEqual({ kind: "session_disconnected", sessionId: peer.session.sessionId });
     } finally {
       releaseCommand();
       await stop();
@@ -325,7 +325,8 @@ describe("what a connection produces", () => {
       socket.write(`${JSON.stringify({ type: "command", name: "list_characters" })}\n`);
 
       const routes = server.routes();
-      const first = await routes.next();
+      let first = await routes.next();
+      while (!first.done && first.value.kind === "session_connected") first = await routes.next();
       expect(first.done).toBe(false);
       expect((first.value as { kind?: string } | undefined)?.kind).toBe("command");
 

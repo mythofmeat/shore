@@ -54,8 +54,8 @@ test("messages and regeneration are tracked with the same lifecycle", () => {
   const f = open();
   for (const type of ["message", "regen"] as const) {
     const request = type === "message" ? { type, rid: crypto.randomUUID(), text: "private user text", images: [], stream: true } : { type, rid: crypto.randomUUID(), guidance: "private guidance", stream: true };
-    const id = idOf(f.history.begin(f.session, selection, request));
-    f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" });
+    idOf(f.history.begin(f.session, selection, request));
+    f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" });
   }
   expect(f.history.list(f.session).requests.map((request) => request.operation).sort()).toEqual(["message", "regen"]);
   expect(f.history.list(f.session).requests.every((request) => request.phase === "completed")).toBe(true);
@@ -65,10 +65,10 @@ test("messages and regeneration are tracked with the same lifecycle", () => {
 test("results are correlated, bounded, typed and detached from caller mutations", () => {
   const f = open(); const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
   const data = { ref: "1", edited: true, future_detail: "kept" };
-  f.history.observe(f.session, id, { type: "command_output", rid: "unrelated", name: "edit", data });
+  f.history.settle(selection.sessionId, { type: "command_output", rid: "unrelated", name: "edit", data });
   expect(f.history.list(f.session).requests[0]?.result).toBeUndefined();
-  f.history.observe(f.session, id, { type: "command_output", rid: request.rid, name: "edit", data });
-  f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" });
+  f.history.settle(selection.sessionId, { type: "command_output", rid: request.rid, name: "edit", data });
+  f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" });
   f.history.interrupt(f.session, id);
   const listed = f.history.list(f.session); expect(listed.requests[0]).toMatchObject({ phase: "completed", result: { name: "edit", data } });
   data.future_detail = "changed";
@@ -78,11 +78,11 @@ test("results are correlated, bounded, typed and detached from caller mutations"
 });
 
 test.each(["oversized", "invalid", "wrong-name", "duplicate"])("%s results are explicitly omitted, never retained as trustworthy output", (scenario) => {
-  const f = open(); const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
+  const f = open(); const request = edit(); idOf(f.history.begin(f.session, selection, request));
   const data = scenario === "invalid" ? { ref: "1" } : { ref: "1", edited: true, detail: scenario === "oversized" ? "x".repeat(REQUEST_HISTORY_LIMITS.resultBytes) : "small" };
-  f.history.observe(f.session, id, { type: "command_output", rid: request.rid, name: scenario === "wrong-name" ? "get" : "edit", data });
-  if (scenario === "duplicate") f.history.observe(f.session, id, { type: "command_output", rid: request.rid, name: "edit", data });
-  f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" });
+  f.history.settle(selection.sessionId, { type: "command_output", rid: request.rid, name: scenario === "wrong-name" ? "get" : "edit", data });
+  if (scenario === "duplicate") f.history.settle(selection.sessionId, { type: "command_output", rid: request.rid, name: "edit", data });
+  f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" });
   expect(f.history.list(f.session).requests[0]).toMatchObject({ phase: "completed", result_omitted: true });
   expect(f.history.list(f.session).requests[0]?.result).toBeUndefined();
 });
@@ -93,7 +93,7 @@ test("restart preserves outcomes and original expiry, and changes unfinished wor
   for (const phase of phases) {
     const request = edit(); const id = idOf(a.history.begin(a.session, selection, request));
     if (phase === "uncertain") a.history.interrupt(a.session, id);
-    else if (phase !== "running") a.history.observe(a.session, id, { type: "request_finished", rid: request.rid, outcome: phase, ...(phase === "failed" ? { error: { code: "invalid_request", message: "failure" } } : {}) });
+    else if (phase !== "running") a.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: phase, ...(phase === "failed" ? { error: { code: "invalid_request", message: "failure" } } : {}) });
   }
   const before = a.history.list(a.session).requests; a.close();
   const b = open(config); const owner = b.sessions.read(new Request(origin, { headers: { cookie: a.cookie } }));
@@ -136,7 +136,7 @@ test("capacity preserves uncertain requests and evicts only old terminal records
   const f = open();
   for (let i = 0; i < REQUEST_HISTORY_LIMITS.perSession; i += 1) {
     const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
-    if (i === 0) f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" });
+    if (i === 0) f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" });
     else f.history.interrupt(f.session, id);
   }
   expect(() => f.history.begin(f.session, selection, edit())).not.toThrow();
@@ -170,24 +170,30 @@ test("failed admission and acknowledgement storage writes preserve prior state",
   } finally { db.run("DROP TRIGGER IF EXISTS reject_delete; DROP TRIGGER IF EXISTS reject_insert;"); db.close(); }
 });
 
-test("result persistence failure leaves a recoverable uncertainty even when disconnect writes also fail", async () => {
-  const config = await options(); const f = open(config); const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
+test("outcome persistence failure keeps the outcome in memory and leaves a recoverable uncertainty on disk", async () => {
+  const config = await options(); const f = open(config); const request = edit(); idOf(f.history.begin(f.session, selection, request));
   const db = new Database(join(dirname(f.recovery?.artifacts ?? ""), "recovery.sqlite"));
   try {
     db.run("CREATE TRIGGER reject_write BEFORE INSERT ON requests BEGIN SELECT RAISE(FAIL, 'storage unavailable'); END;");
-    expect(() => f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" })).toThrow("storage unavailable");
-    expect(() => f.history.interrupt(f.session, id)).not.toThrow();
-    expect(f.history.list(f.session).requests[0]?.phase).toBe("uncertain");
+    expect(f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" })).toMatchObject({ owner: f.session.id });
+    expect(f.history.list(f.session).requests[0]?.phase).toBe("completed");
     expect(f.recovery?.requests()[0]?.info.phase).toBe("running");
   } finally { db.run("DROP TRIGGER reject_write"); db.close(); }
   f.close(); const next = open(config);
   expect(next.recovery?.requests()[0]?.info.phase).toBe("uncertain");
 });
 
-test("late or unrelated completions cannot overwrite an uncertain or terminal outcome", () => {
+test("the daemon's outcome resolves an uncertain request, but unrelated or later completions change nothing", () => {
   const f = open(); const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
   f.history.interrupt(f.session, id);
+  expect(f.history.list(f.session).requests[0]?.phase).toBe("uncertain");
+  expect(f.history.settle(selection.sessionId + 1, { type: "request_finished", rid: request.rid, outcome: "completed" })).toBeUndefined();
+  expect(f.history.settle(selection.sessionId, { type: "request_finished", rid: "unrelated", outcome: "completed" })).toBeUndefined();
+  expect(f.history.list(f.session).requests[0]?.phase).toBe("uncertain");
+  const settled = f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "failed", error: { code: "provider_error", message: "overloaded" } });
+  expect(settled).toEqual({ owner: f.session.id, finished: { type: "request_finished", rid: request.rid, outcome: "failed", error: { code: "provider_error", message: "overloaded" } } });
   const before: WebRequestInfo | undefined = f.history.list(f.session).requests[0];
-  f.history.observe(f.session, id, { type: "request_finished", rid: request.rid, outcome: "completed" });
+  expect(before).toMatchObject({ phase: "failed", error: { message: "overloaded" } });
+  expect(f.history.settle(selection.sessionId, { type: "request_finished", rid: request.rid, outcome: "completed" })).toBeUndefined();
   expect(f.history.list(f.session).requests[0]).toEqual(before);
 });
