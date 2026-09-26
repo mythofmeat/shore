@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import rawFixture from "./command_captures/providers.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
+import { parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import {
   listProviderModels,
@@ -391,8 +392,12 @@ describe("listProviderModels", () => {
   for (const [name, args] of cases) {
     test(name, async () => {
       const world = await withCache();
+      if (!Object.hasOwn(args, "provider") || (Object.hasOwn(args, "include_hidden") && typeof args["include_hidden"] !== "boolean")) {
+        expect(() => parseOperationInput("list_provider_models", args)).toThrow();
+        return;
+      }
       await check(row("list_provider_models", name), world, () =>
-        listProviderModels(world.ctx, args),
+        parseOperationResult("list_provider_models", listProviderModels(world.ctx, parseOperationInput("list_provider_models", args))),
       );
     });
   }
@@ -422,8 +427,12 @@ describe("refreshProviderModels guards", () => {
   for (const [name, args] of cases) {
     test(name, async () => {
       const world = await build(REFRESH_GUARDS, "", [], upstream("openai"));
+      if (!Object.hasOwn(args, "provider")) {
+        expect(() => parseOperationInput("refresh_provider_models", args)).toThrow();
+        return;
+      }
       await check(row("refresh_provider_models", name), world, async () =>
-        await refreshProviderModels(world.ctx, args),
+        parseOperationResult("refresh_provider_models", await refreshProviderModels(world.ctx, parseOperationInput("refresh_provider_models", args))),
       );
     });
   }

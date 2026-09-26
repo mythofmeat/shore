@@ -43,7 +43,9 @@ fn serve(stream: TcpStream, requested: &str, selected: &str, runs_command: bool)
             reader.get_mut(),
             json!({
                 "type": "command_output", "name": "log", "rid": command.get("rid"),
-                "data": {"messages": [], "selected_thread": selected}
+                "data": {"messages": [], "selected_thread": selected, "active_start": 0, "cursor": 0,
+                    "next_before": 0, "has_more_before": false, "global_active_start": 0,
+                    "total_messages": 0, "total_turns": 0}
             }),
         );
     } else {

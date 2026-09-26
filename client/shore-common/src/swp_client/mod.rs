@@ -283,6 +283,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn typed_operation_preserves_arguments_and_reply_correlation() {
+        use crate::protocol::operations::{ForkThread, ForkThreadArgs};
+
+        let (client_stream, server_stream) = duplex(8192);
+        let server_handle = tokio::spawn(async move {
+            let (r, mut w) = tokio::io::split(server_stream);
+            let mut reader = tokio::io::BufReader::new(r);
+            let command: serde_json::Value = read_json_line(&mut reader).await;
+            assert_eq!(command.get("type").unwrap(), "command");
+            assert_eq!(command.get("name").unwrap(), "fork_thread");
+            assert_eq!(
+                command.get("args").unwrap(),
+                &serde_json::json!({"name": "branch", "from": "main", "turns": 2})
+            );
+            let rid = command.get("rid").unwrap().as_str().unwrap();
+            assert!(!rid.is_empty());
+            for (reply_rid, name) in [
+                ("unrelated", "fork_thread"),
+                (rid, "list_threads"),
+                (rid, "fork_thread"),
+            ] {
+                write_json_line(&mut w, &serde_json::json!({
+                    "type": "command_output", "rid": reply_rid, "name": name,
+                    "data": {"character": "ada", "threads": [], "current": "main", "home": "main"}
+                })).await;
+            }
+        });
+        let mut connection = SWPConnection::from_raw_stream(client_stream);
+        let rid = connection
+            .send_operation::<ForkThread>(ForkThreadArgs {
+                name: "branch".into(),
+                from: Some("main".into()),
+                turns: Some(2),
+            })
+            .await
+            .unwrap();
+        assert!(rid.is_some());
+        for matches in [false, false, true] {
+            let reply = connection.recv().await.unwrap();
+            assert_eq!(connection.matches_last_request(&reply), matches);
+        }
+        server_handle.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn recv_on_eof_returns_disconnected() {
         let (client_stream, server_stream) = duplex(8192);
         drop(server_stream);

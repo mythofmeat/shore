@@ -91,6 +91,41 @@ describe("auxiliary provider defaults", () => {
 });
 
 describe("a config that shore can act on", () => {
+  test("extracted sections preserve transport defaults and reject arrays of provider tables", () => {
+    expect(() => load('[[providers]]\napi_key_env = "KEY"')).toThrow("providers must be a table");
+    const config = load('[providers.custom]\nsdk = "openai"\nbase_url = "https://example.invalid/v1"\napi_key_env = "CUSTOM_KEY"\n[chat."custom:house-7"]');
+    expect(config.models.chat.get("custom:house-7")).toMatchObject({ sdk: "openai", baseUrl: "https://example.invalid/v1" });
+  });
+
+  test.each([
+    ['[chat.anthropic]\nmax_context_tokens = 1000', "parse_app"],
+    ['[chat."anthropic:"]', "catalog"],
+  ])("configuration errors preserve their stage for %s", (source, kind) => {
+    let failure: unknown;
+    try { load(source); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ kind });
+  });
+
+  test.each([
+    "",
+    '[chat]\nmodel = "anthropic:claude-opus-4-6"\n[chat."anthropic:claude-opus-4-6"]',
+    '[chat]\nmodel = "openrouter:vendor:model"\n[providers.openrouter]\napi_key_env = "KEY"',
+    '[tools]\nenabled = ["mcp__*", "mcp__"]',
+  ])("valid references and wildcard grants produce no warnings for %s", (source) => {
+    expect(warningsOf(source)).toEqual([]);
+  });
+
+  test("warnings retain setting and provider details and global grants precede subagent grants", () => {
+    const warnings: Record<string, string>[] = [];
+    load('[heartbeat]\nmodel = "disabled:model"\n[providers.disabled]\nenabled = false\nsdk = "openai"\n[tools]\nenabled = ["mcp__global__x"]\n[subagents.helper]\ndescription = "helper"\nprompt = "help"\ntools = ["mcp__sub__y"]',
+      (message, fields) => { if (message !== "Deprecated configuration") warnings.push(Object.fromEntries(fields)); });
+    expect(warnings).toEqual([
+      { field: "heartbeat.model", name: "disabled:model", provider: "disabled" },
+      { pattern: "mcp__global__x", server: "global" },
+      { pattern: "mcp__sub__y", server: "sub" },
+    ]);
+  });
+
   test("empty config", () => {
     expect(accepted("")).toBeDefined();
   });

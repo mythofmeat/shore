@@ -14,8 +14,8 @@ import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel, t
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   characterPreferencesPath,
-  configView,
   emptyPreferences,
+  configView,
   globalPreferencesPath,
   loadForCharacter,
   loadPreferences,
@@ -54,9 +54,18 @@ import {
 import { applySamplerValue, capabilityCheck } from "./model_settings.ts";
 import { internalError, invalidRequest, notFound, type CommandError } from "./errors.ts";
 
-export type Args = Record<string, unknown>;
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { ModelRole } from "../protocol/ModelRole.ts";
+import type { ModelSummary } from "../protocol/ModelSummary.ts";
+import type { SavedModelSetting as OverviewSetting } from "../protocol/SavedModelSetting.ts";
+import type { ModelOverviewRole as OverviewRole } from "../protocol/ModelOverviewRole.ts";
+import type { ModelSettingsOverview } from "../protocol/ModelSettingsOverview.ts";
+import type { ModelSettingChanged } from "../protocol/ModelSettingChanged.ts";
+import type { ModelSettingsDetail } from "../protocol/ModelSettingsDetail.ts";
+type Args = OperationInput<"model_info">;
 
 export interface ModelsContext {
+  preferences?: readonly [ModelPreferences, ModelPreferences];
   config: LoadedConfig;
   dataDir: string;
   characterName: string | undefined;
@@ -105,13 +114,14 @@ export function effectiveChatModel(
   config: LoadedConfig,
   character: string | undefined,
   threadModel?: string,
+  preferences?: readonly [ModelPreferences, ModelPreferences],
 ): ResolvedModel | undefined {
   if (character === undefined) return undefined;
-  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);
+  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel, preferences);
 }
 
 function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved;
 
   const fallback = ctx.config.app.defaults.model;
@@ -135,11 +145,12 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
   const pinned = ctx.config.app.defaults.background[task];
   if (pinned !== undefined) return resolve(ctx, pinned, true);
 
-  const character = requireCharacter(ctx);
-  const inherited = resolveChatModelForCharacter(
-    configView(ctx.config), character, findEffective,
-    task === "compaction" ? ctx.threadModel : undefined,
-  );
+  const inherited = ctx.characterName === undefined
+    ? resolveActiveModel(ctx)
+    : resolveChatModelForCharacter(
+      configView(ctx.config), ctx.characterName, findEffective,
+      task === "compaction" ? ctx.threadModel : undefined, ctx.preferences,
+    );
   if (inherited === undefined) {
     throw notFound(
       `${task} has no configured model and the catalog has no chat model to inherit`,
@@ -190,7 +201,7 @@ function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedMode
       configView(ctx.config),
       ctx.characterName,
       spec.model,
-      findEffective,
+      findEffective, ctx.preferences,
     );
   } catch (e) {
     throw catalogError(e);
@@ -261,14 +272,8 @@ function qualify(ctx: ModelsContext, name: string): string {
   }
 }
 
-interface ModelRole {
-  role: string;
-  model: string | null;
-  source: string | null;
-}
-
 function chatRole(ctx: ModelsContext): ModelRole {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) {
     return {
       role: "chat",
@@ -287,13 +292,21 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRole): ModelRole {
+interface ChatInheritance { thread: ModelRole; character: ModelRole }
+
+function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
   const bg = ctx.config.app.defaults.background;
   const perTask = bg[task];
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
   }
+  const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.character ?? inheritedChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
+}
+
+function inheritedChatRole(ctx: ModelsContext): ModelRole {
+  const { threadModel: _threadModel, thread: _thread, ...character } = ctx;
+  return chatRole(character);
 }
 
 function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
@@ -324,16 +337,17 @@ function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRol
 
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const chat = chatRole(ctx);
+  const inherited = inheritedChatRole(ctx);
   return [
     chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, chat)),
-    subagentRole(ctx, chat),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, { thread: chat, character: inherited })),
+    subagentRole(ctx, inherited),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
   ];
 }
 
-function effectiveModelToJson(entry: EffectiveModel, favorites: ReadonlySet<string>): unknown {
+function effectiveModelToJson(entry: EffectiveModel, favorites: ReadonlySet<string>): ModelSummary {
   const m = entry.resolved;
   return {
     name: m.name,
@@ -352,8 +366,8 @@ function effectiveModelToJson(entry: EffectiveModel, favorites: ReadonlySet<stri
 function modelsByProvider(
   entries: EffectiveModel[],
   favorites: ReadonlySet<string>,
-): Record<string, unknown[]> {
-  const out: Record<string, unknown[]> = {};
+): Record<string, ModelSummary[]> {
+  const out: Record<string, ModelSummary[]> = {};
   for (const entry of entries) {
     (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry, favorites));
   }
@@ -365,7 +379,7 @@ function favoriteNames(ctx: ModelsContext): Set<string> {
 }
 
 function activeName(ctx: ModelsContext): string | undefined {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved.qualifiedName;
 
   const fallback = ctx.config.app.defaults.model;
@@ -401,7 +415,7 @@ function favoritesOutsideTheWalk(
   return out;
 }
 
-export function listModels(ctx: ModelsContext, args: Args): unknown {
+export function listModels(ctx: ModelsContext, args: OperationInput<"list_models">): OperationResult<"list_models"> {
   const favoritesOnly = asBool(args["favorites_only"]) ?? false;
   const includeHidden = asBool(args["include_hidden"]) ?? false;
   const view = configView(ctx.config);
@@ -429,7 +443,7 @@ export function listModels(ctx: ModelsContext, args: Args): unknown {
   };
 }
 
-export function favoriteModel(ctx: ModelsContext, args: Args): unknown {
+export function favoriteModel(ctx: ModelsContext, args: OperationInput<"favorite_model">): OperationResult<"favorite_model"> {
   const name = asName(args["name"]);
   if (name === undefined) throw invalidRequest("missing model name");
 
@@ -482,31 +496,19 @@ function targetedRole(args: Args): boolean {
   return asName(args["subagent"]) !== undefined || asStr(args["background_task"]) !== undefined;
 }
 
-export function modelInfo(ctx: ModelsContext, args: Args): unknown {
+export function modelInfo(ctx: ModelsContext, args: OperationInput<"model_info">): OperationResult<"model_info"> {
   const name = asName(args["name"]);
   const byRole = targetedRole(args);
   if (name !== undefined && byRole) {
     throw invalidRequest("name a model or name a role, not both");
   }
 
-  const resolved = byRole
-    ? settingTarget(ctx, args).model
-    : name === undefined
-      ? resolveActiveModel(ctx)
-      : resolve(ctx, name, true);
-  const data = resolvedModelToWire(resolved);
-
-  const character = ctx.characterName;
-  if (character !== undefined) {
-    const [global, charPrefs] = loadPreferencesFor(ctx.dataDir, character);
-    data["effective_sampler"] = samplerJson(
-      resolveSamplerSettings(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),
-    );
-    data["scopes"] = scopesJson(
-      resolveSamplerScopes(global, charPrefs, resolved.providerKey, resolved.modelId, resolved),
-      INFO_SCOPE_FIELDS,
-    );
-  }
+  ctx = withPreferences(ctx);
+  const target = settingTarget(ctx, args);
+  const data = resolvedModelToWire(target.model);
+  const settings = modelSettingsDetail(ctx, args, target);
+  data["effective_sampler"] = settings.effective_sampler;
+  data["scopes"] = Object.fromEntries(INFO_SCOPE_FIELDS.map(([key]) => [key, settings.scopes[key] ?? null]));
   return data;
 }
 
@@ -533,7 +535,7 @@ function configContext(ctx: ModelsContext): ConfigContext {
   return ctx as ConfigContext & { configPath: string; runtime: ConfigRuntime };
 }
 
-function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): unknown {
+function pinBackgroundModel(ctx: ModelsContext, selector: string, args: OperationInput<"switch_model">): OperationResult<"switch_model"> & { config_keys?: readonly string[] } {
   const name = asName(args["name"]);
   if (name === undefined) throw invalidRequest("missing model name");
 
@@ -547,6 +549,7 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
   for (const other of keys.slice(1)) setConfigKey(config, other, resolved.qualifiedName);
 
   return {
+    target: "role",
     active: resolved.qualifiedName,
     qualified_name: resolved.qualifiedName,
     provider: resolved.providerKey,
@@ -561,7 +564,7 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): u
   };
 }
 
-function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
+function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationResult<"reset_model"> {
   const config = configContext(ctx);
   const keys = backgroundKeys(selector);
 
@@ -573,17 +576,20 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const chat = chatRole(ctx);
-  const task = selector === "all" ? "heartbeat" : backgroundTask(selector);
-  const role = backgroundRole(ctx, task, chat);
+  const tasks = selector === "all" ? BACKGROUND_TASKS : [backgroundTask(selector)];
+  const roles = tasks.map((task) => backgroundRole(ctx, task));
+  const [first] = roles as [ModelRole, ...ModelRole[]];
+  const shared = roles.every((role) => role.model === first.model && role.source === first.source);
 
   return {
-    active: role.model,
+    target: "role",
+    active: shared ? first.model : null,
     role: selector === "all" ? "background" : selector,
     cleared,
-    source: role.source,
+    source: shared ? first.source : null,
     file: file ?? null,
-    reset_to: role.source ?? "config default",
+    reset_to: shared ? first.source ?? "config default" : "per-task defaults",
+    roles,
   };
 }
 
@@ -602,7 +608,7 @@ function subagentRoleName(selector: string): string {
   return selector === ALL_SUBAGENTS ? "sub-agents" : `sub-agent: ${selector}`;
 }
 
-function pinSubagentModel(ctx: ModelsContext, selector: string, args: Args): unknown {
+function pinSubagentModel(ctx: ModelsContext, selector: string, args: OperationInput<"switch_model">): OperationResult<"switch_model"> {
   const name = asName(args["name"]);
   if (name === undefined) throw invalidRequest("missing model name");
 
@@ -617,6 +623,7 @@ function pinSubagentModel(ctx: ModelsContext, selector: string, args: Args): unk
   const cleared = overridden.map((each) => clearConfigKey(config, subagentModelKey(each)).set);
 
   return {
+    target: "role",
     active: resolved.qualifiedName,
     qualified_name: resolved.qualifiedName,
     provider: resolved.providerKey,
@@ -630,7 +637,7 @@ function pinSubagentModel(ctx: ModelsContext, selector: string, args: Args): unk
   };
 }
 
-function unpinSubagentModel(ctx: ModelsContext, selector: string): unknown {
+function unpinSubagentModel(ctx: ModelsContext, selector: string): OperationResult<"reset_model"> {
   if (selector !== ALL_SUBAGENTS) requireSubagent(ctx, selector);
   const config = configContext(ctx);
 
@@ -647,26 +654,31 @@ function unpinSubagentModel(ctx: ModelsContext, selector: string): unknown {
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const role = subagentRole(ctx, chatRole(ctx));
+  const role = { ...subagentRole(ctx, inheritedChatRole(ctx)), role: subagentRoleName(selector) };
   return {
+    target: "role",
     active: role.model,
-    role: subagentRoleName(selector),
+    role: role.role,
     cleared,
     source: role.source,
     file: file ?? null,
     reset_to: role.source ?? "config default",
+    roles: [role],
   };
 }
 
+export function changeThreadModel(ctx: ModelsContext, args: OperationInput<"switch_model">, setModel: (model: string | undefined) => Promise<unknown>, reset?: false): Promise<OperationResult<"switch_model">>;
+export function changeThreadModel(ctx: ModelsContext, args: OperationInput<"switch_model">, setModel: (model: string | undefined) => Promise<unknown>, reset: true): Promise<OperationResult<"reset_model">>;
 export async function changeThreadModel(
   ctx: ModelsContext,
-  args: Args,
+  args: OperationInput<"switch_model">,
   setModel: (model: string | undefined) => Promise<unknown>,
   reset = false,
-): Promise<unknown> {
+): Promise<OperationResult<"switch_model"> | OperationResult<"reset_model">> {
   if (reset) {
     await setModel(undefined);
     return {
+      target: "thread",
       active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null,
       reset_to: "character default",
     };
@@ -676,6 +688,7 @@ export async function changeThreadModel(
   const resolved = resolve(ctx, name, asBool(args["include_hidden"]) ?? false);
   await setModel(resolved.qualifiedName);
   return {
+    target: "thread",
     active: resolved.qualifiedName,
     qualified_name: resolved.qualifiedName,
     provider: resolved.providerKey,
@@ -684,7 +697,7 @@ export async function changeThreadModel(
   };
 }
 
-export function switchModel(ctx: ModelsContext, args: Args): unknown {
+export function switchModel(ctx: ModelsContext, args: OperationInput<"switch_model">): OperationResult<"switch_model"> {
   const subagent = asName(args["subagent"]);
   if (subagent !== undefined) return pinSubagentModel(ctx, subagent, args);
 
@@ -694,8 +707,9 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   const name = asStr(args["name"]);
   if (name === undefined) {
     return {
+      target: "current",
       active:
-        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,
+        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences)?.qualifiedName ?? null,
     };
   }
 
@@ -709,6 +723,7 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   saveCharacter(ctx, character, prefs);
 
   return {
+    target: "character",
     active: name,
     qualified_name: resolved.qualifiedName,
     provider: resolved.providerKey,
@@ -718,7 +733,7 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   };
 }
 
-export function resetModel(ctx: ModelsContext, args: Args = {}): unknown {
+export function resetModel(ctx: ModelsContext, args: OperationInput<"reset_model"> = {}): OperationResult<"reset_model"> {
   const subagent = asName(args["subagent"]);
   if (subagent !== undefined) return unpinSubagentModel(ctx, subagent);
 
@@ -732,6 +747,7 @@ export function resetModel(ctx: ModelsContext, args: Args = {}): unknown {
   saveCharacter(ctx, character, prefs);
 
   return {
+    target: "character",
     previous_provider: previous.provider ?? null,
     previous_model_id: previous.modelId ?? null,
     active: null,
@@ -755,7 +771,7 @@ function saveCharacter(ctx: ModelsContext, character: string, prefs: ModelPrefer
   }
 }
 
-export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
+export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_model_setting">): OperationResult<"set_model_setting"> {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
   const key = canonicalSettingKey(rawKey.trim());
@@ -763,7 +779,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
     throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
   }
 
-  const rawValue = "value" in args ? args["value"] : null;
+  const rawValue = args.value ?? null;
   const value = rawKey.trim() === "gemini_generation" ? geminiMode(typeof rawValue === "string" && /^\d+$/.test(rawValue) ? Number(rawValue) : rawValue) : rawValue;
   const scope = asStr(args["scope"]) ?? "character";
   if (scope !== "character" && scope !== "global") {
@@ -846,8 +862,8 @@ function aliasedRolesJson(
   ctx: ModelsContext,
   args: Args,
   model: ResolvedModel,
-): Record<string, unknown> {
-  const selector = asStr(args["background_task"]);
+): Pick<ModelSettingChanged, "background_task" | "also_affects"> {
+  const selector = args.background_task ?? undefined;
   if (selector === undefined) return {};
 
   const targeted = new Set<string>(
@@ -875,7 +891,7 @@ function sharesPreferenceKey(
   }
 }
 
-function targetJson(target: SettingTarget): Record<string, unknown> {
+function targetJson(target: SettingTarget): Pick<ModelSettingsDetail, "subagent" | "applies_to"> {
   switch (target.kind) {
     case "subagent":
       return { subagent: target.subagent };
@@ -905,23 +921,6 @@ function saveGlobal(ctx: ModelsContext, prefs: ModelPreferences): void {
 const SETTINGS_SCOPE_FIELDS = SETTING_STORAGE_FIELDS.map(
   ([field, key]) => [key, field] as const,
 );
-
-interface OverviewSetting {
-  key: string;
-  value: unknown;
-  scope: "character" | "global";
-}
-
-interface OverviewRole {
-  role: string;
-  flag: string;
-  model: string | null;
-  source: string | null;
-  inherited: boolean;
-  settings: OverviewSetting[];
-  same_settings_as: string | null;
-  error: string | null;
-}
 
 interface OverviewSlot {
   role: string;
@@ -979,6 +978,7 @@ function savedSettingsFor(
 
 function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   const chat = chatRole(ctx);
+  const characterChat = inheritedChatRole(ctx);
   const slots: OverviewSlot[] = [
     {
       role: "chat",
@@ -992,7 +992,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task, chat).source,
+      source: backgroundRole(ctx, task, { thread: chat, character: characterChat }).source,
       resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
     });
   }
@@ -1000,7 +1000,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   slots.push({
     role: "sub-agents",
     flag: "--subagent",
-    source: subagentRole(ctx, chat).source,
+    source: subagentRole(ctx, characterChat).source,
     resolve: () => ({ kind: "subagent_model", model: sharedSubagentModel(ctx) }),
   });
 
@@ -1017,11 +1017,11 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   return slots;
 }
 
-export function modelSettingsOverview(ctx: ModelsContext): unknown {
+export function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
   const character = ctx.characterName;
   const [global, charPrefs] =
     character === undefined
-      ? [emptyPreferences(), undefined]
+      ? [loadGlobalPreferences(ctx), undefined]
       : loadPreferencesFor(ctx.dataDir, character);
 
   const claimed = new Map<string, string>();
@@ -1064,7 +1064,7 @@ export function modelSettingsOverview(ctx: ModelsContext): unknown {
   };
 }
 
-function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
+function requestedKey(ctx: ModelsContext, args: OperationInput<"model_settings">): string | undefined {
   const raw = asName(args["key"]);
   if (raw === undefined) return undefined;
   const key = canonicalSettingKey(raw.trim());
@@ -1077,17 +1077,25 @@ function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
   throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
 }
 
-export function modelSettings(ctx: ModelsContext, args: Args): unknown {
+export function modelSettings(ctx: ModelsContext, args: OperationInput<"model_settings">): OperationResult<"model_settings"> {
   if (asBool(args["overview"]) === true) return modelSettingsOverview(ctx);
+  return modelSettingsDetail(ctx, args);
+}
 
+function withPreferences(ctx: ModelsContext): ModelsContext & { preferences: readonly [ModelPreferences, ModelPreferences] } {
+  return { ...ctx, preferences: ctx.preferences ?? (ctx.characterName === undefined
+    ? [loadGlobalPreferences(ctx), emptyPreferences()]
+    : loadPreferencesFor(ctx.dataDir, ctx.characterName)) };
+}
+
+function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_settings">, selected?: SettingTarget): ModelSettingsDetail {
   const only = requestedKey(ctx, args);
-  const target = settingTarget(ctx, args);
+  const prepared = withPreferences(ctx);
+  const target = selected ?? settingTarget(prepared, args);
   const model = target.model;
   const character = ctx.characterName;
-  const [global, charPrefs] =
-    character === undefined
-      ? [emptyPreferences(), undefined]
-      : loadPreferencesFor(ctx.dataDir, character);
+  const [global, savedCharacter] = prepared.preferences;
+  const charPrefs = character === undefined ? undefined : savedCharacter;
 
   const subagentName = target.kind === "subagent" ? target.subagent : undefined;
   const sampler =
@@ -1112,7 +1120,7 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
           model.modelId,
           model,
         );
-  const saved = (prefs: ModelPreferences | undefined): unknown => {
+  const saved = (prefs: ModelPreferences | undefined): Record<string, unknown> | null => {
     if (prefs === undefined) return null;
     const entry =
       target.kind === "subagent"

@@ -1,4 +1,6 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { readDurable, writeDurable } from "../src/storage/files.ts";
+import { readThreadsIndex } from "../src/engine/threads.ts";
+import { globalPreferencesPath, characterPreferencesPath } from "../src/config/preferences.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -21,6 +23,23 @@ import { StartupError } from "../src/daemon/startup.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { BrowserSocket } from "./support/browser.ts";
+import { browserConnection } from "./support/browser_connection.ts";
+import { OperationClient } from "../src/browser/operations.ts";
+import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
+import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
+import type { BrowserRequest } from "../src/browser/connection.ts";
+import { segments } from "../src/commands/segments.ts";
+import { characterMemoryDir, characterWorkspaceDir } from "../src/config/dirs.ts";
+import { characterMediaDir } from "../src/storage/media.ts";
+import { toolFixture } from "./support/tool_fixture.ts";
+import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "./support/usage_fixture.ts";
+import { ledgerFor } from "../src/ledger/record.ts";
+import { MessageStore } from "../src/engine/message_store.ts";
+import { threadFile } from "../src/storage/files.ts";
+import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { runCompactionPass } from "../src/memory/compaction/run.ts";
+import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -74,12 +93,14 @@ async function start(
   place: Layout,
   extraArgv: readonly string[] = [],
   providers: Partial<Record<string, SidecarProvider>> = {},
+  watchConfig = true,
 ): Promise<RunningDaemon> {
   const daemon = await startDaemon({
     argv: ["--config", place.configPath, "--addr", "127.0.0.1:0", ...extraArgv],
     env: place.env,
     providers,
     instancesPath: place.instancesPath,
+    watchConfig,
   });
   running.push(daemon);
   return daemon;
@@ -166,7 +187,7 @@ class Client {
 
   private constructor(readonly socket: Socket) {}
 
-  static async open(port: number, selected: string | null): Promise<Client> {
+  static async open(port: number, selected: string | null, capabilities: string[] = []): Promise<Client> {
     const socket = connect({ host: "127.0.0.1", port, noDelay: true });
     await new Promise<void>((resolve, reject) => {
       socket.once("connect", resolve);
@@ -179,7 +200,7 @@ class Client {
         type: "hello",
         client_type: "tui",
         client_name: "test",
-        capabilities: [],
+        capabilities,
         token: TEST_TOKEN,
         ...(selected === null ? {} : { character: selected }),
       })}\n`,
@@ -226,6 +247,596 @@ class Client {
 }
 
 describe("coming up", () => {
+  test("character archives agree across TCP and browser with backups, refusals and restored storage", async () => {
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, ["nova", "other"]);
+      const daemon = await start(place, [], {}, false);
+      const config = daemon.runtime.registry.globalConfig();
+      await seedUsageFixture(daemon.runtime, "2026-09-01T00:00:00Z");
+      const workspace = characterWorkspaceDir(config.dirs.config, "nova", config.dirs.workspace);
+      const media = join(characterMediaDir(config.dirs.data, "nova"), "fixture.png");
+      await mkdir(characterMediaDir(config.dirs.data, "nova"), { recursive: true });
+      await writeFile(media, new Uint8Array([137, 80, 78, 71]));
+      await writeFile(join(workspace, "notes.txt"), "Archive fixture <untrusted>\n");
+      const activePath = threadFile(config.dirs.data, "nova", "main", "active.jsonl");
+      const store = await MessageStore.load(activePath);
+      await store.append({ msg_id: "archive-user", role: "user", content: "Keep this conversation", images: [], content_blocks: [], timestamp: "2026-09-01T00:00:00Z" });
+      const output = join(place.root, "export.tar.gz");
+      const backup = join(place.root, "backup.tar.gz");
+      const steps = [
+        { name: "export_character", args: { character: "nova", output } },
+        { name: "export_character", args: { character: "nova", output }, error: true },
+        { name: "import_character", args: { archive: output }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "wrong" }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", archive: output }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", archive: backup }, absent: true },
+        { name: "import_character", args: { archive: backup } },
+        { name: "delete_character", args: { character: "nova", confirm: "nova" }, absent: true },
+        { name: "import_character", args: { archive: output } },
+        { name: "import_character", args: { archive: join(place.root, "missing.tar.gz") }, error: true },
+        { name: "export_character", args: { character: "nova", output: "local-filename.tar.gz" }, error: true },
+        { name: "delete_character", args: { character: "nova", confirm: "nova", overwrite: true }, error: true },
+      ];
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "other", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "other", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      const db = required(ledgerFor(join(config.dirs.data, "shore.db"))).database;
+      const snapshot = async () => ({
+        present: daemon.runtime.registry.hasCharacter("nova"), other: daemon.runtime.registry.hasCharacter("other"),
+        soul: await readFile(join(workspace, "SOUL.md"), "utf8").catch(() => null), notes: await readFile(join(workspace, "notes.txt"), "utf8").catch(() => null),
+        media: await readFile(media).then((bytes) => [...bytes]).catch(() => null),
+        messages: daemon.runtime.registry.hasCharacter("nova") ? [...(await MessageStore.load(activePath)).messages()].map(({ role, content }) => ({ role, content })) : [],
+        calls: db.query("SELECT character, COUNT(*) AS calls, SUM(total_cost) AS cost FROM calls GROUP BY character ORDER BY character").all(),
+      });
+      const before = await snapshot();
+      let exported: Buffer | undefined;
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Archive browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          if (!isOperationName(step.name)) throw new Error(`Missing archive operation: ${step.name}`);
+          let rid = `archive-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: step.name, args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} archive step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const result = observed.find((frame) => frame["type"] === "command_output")?.["data"] as Record<string, unknown> | undefined;
+          if (step.error !== true) expect(validOperationResult(step.name, result)).toBe(true);
+          if (index === 0) {
+            exported = await readFile(output);
+            expect(result).toMatchObject({ character: "nova", archive: output, bytes: exported.byteLength, live: true, call_diagnostics: "included", external_memory: "rebuild_from_archived_segments" });
+          }
+          expect<unknown>(await readFile(output)).toEqual(exported);
+          if (index === 5) expect((await readFile(backup)).byteLength).toBeGreaterThan(0);
+          if (index === 7) expect(result).toMatchObject({ deleted: true, archive: null });
+          const state = await snapshot();
+          if (step.absent === true) expect(state).toEqual({ present: false, other: true, soul: null, notes: null, media: null, messages: [], calls: [{ character: "other", calls: 1, cost: 1.75 }] });
+          else expect(state).toEqual(before);
+          const normalized = observed.map((frame) => frame["type"] === "command_output" && result?.["bytes"] !== undefined ? { ...frame, data: { ...result, bytes: "verified archive size" } } : frame);
+          results.push({ observed: JSON.parse(JSON.stringify(normalized).replaceAll(rid, `archive-${String(index)}`).replaceAll(place.root, "/fixture")) as unknown, state });
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+  test("usage agrees across independent TCP and browser sessions without changing the ledger", async () => {
+    const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown> }[] = [
+      { args: {}, check: { mode: "summary", period: "budget", summary: [{ total_cost: 3.5, call_count: 2 }, { total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "all" }, check: { mode: "summary", summary: [{ total_cost: 12.5, call_count: 3 }, { total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "all", character: "nova", provider: "anthropic", api_key: "default", model: "usage-model-a", call_type: "message" }, check: { summary: [{ total_cost: 3.5, call_count: 1 }] } },
+      { args: { last: "all", api_key: "unknown" }, check: { summary: [{ provider: "openai", total_cost: 1.75, call_count: 1 }] } },
+      { args: { last: "0h" }, check: { summary: [] } },
+      { args: { last: null, character: null, provider: null, api_key: null, model: null, call_type: null, group_by: null, budget: false, anomalies: false, export_csv: false, export_tsv: false }, check: { mode: "summary" } },
+      ...["model", "provider", "call_type", "kind", "api_key", "cost_source"].map((dimension) => ({ args: { last: "all", group_by: dimension }, check: { mode: "summary_by", dimension } })),
+      { args: { budget: true, character: "nobody", export_tsv: true }, check: { mode: "budget", budgets: [{ name: "Nova monthly", over_limit: true }] } },
+      { args: { last: "all", export_csv: true, export_tsv: true, group_by: "model", anomalies: true }, check: { mode: "tsv" } },
+      { args: { last: "all", export_csv: true, group_by: "model", anomalies: true }, check: { mode: "csv" } },
+      { args: { last: "today", anomalies: true }, check: { mode: "anomalies", anomalies: [{ anomaly: "unexpected_write", character: "nova" }] } },
+      { args: { last: "all", anomalies: true, character: "nobody" }, check: { mode: "anomalies", anomalies: [] } },
+      { args: { last: "all", character: "nobody" }, check: { mode: "summary", summary: [] } },
+      ...[{ last: "invalid-period" }, { group_by: "character" }, { budget: "true" }, { last: 3 }].map((args) => ({ args, error: true })),
+    ];
+    const outcomes: unknown[][] = [];
+    const ts = new Date(Date.now() - 1000).toISOString();
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n${USAGE_FIXTURE_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+      const daemon = await start(place, [], {}, false);
+      await seedUsageFixture(daemon.runtime, ts);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, null, ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: null, thread: null }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      const db = required(ledgerFor(join(daemon.runtime.registry.globalConfig().dirs.data, "shore.db"))).database;
+      const snapshot = () => ({ calls: db.query("SELECT * FROM calls ORDER BY id").all(), attempts: db.query("SELECT * FROM call_attempts ORDER BY id").all(), warnings: db.query("SELECT * FROM usage_budget_warnings").all() });
+      const before = snapshot();
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Usage browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `usage-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: "usage", args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} usage step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished")).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.error !== true) expect(validOperationResult("usage", output?.["data"])).toBe(true);
+          if (step.check !== undefined) expect(output, `${transport} ${String(index)}`).toMatchObject({ data: step.check });
+          expect(snapshot()).toEqual(before);
+          results.push(JSON.parse(JSON.stringify(observed).replaceAll(rid, `usage-${String(index)}`)) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+  test("TCP and browser cancellation preserve tool effects and resumable compaction outcomes", async () => {
+    const outcomes: unknown[] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n[tools.bash]\ntimeout = "6s"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const cleanup = new AbortController();
+      const compactStream = compactionFixture(cleanup.signal);
+      let compactionCalls = 0;
+      const chat = scriptedProvider("Stored fixture reply");
+      const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+        if (request.context?.call_type === "compaction") { compactionCalls += 1; yield* compactStream(request, signal); } else yield* chat.stream(request, signal);
+      } };
+      const daemon = await start(place, [], { anthropic: provider }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const seen = tcp?.frames ?? frames;
+      let sequence = 0;
+      const send = (request: BrowserRequest): string => {
+        if (browser !== undefined) return browser.client.submit(request).rid;
+        const rid = `cancellation-${String(++sequence)}`; required(tcp).send({ ...request, rid }); return rid;
+      };
+      const finish = async (rid: string) => {
+        await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} cancelled work did not settle`);
+        expect(seen.find((frame) => frame["type"] === "request_finished" && frame["rid"] === rid)).toMatchObject({ outcome: "completed" });
+        return seen.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+      };
+      const cancel = () => { if (browser !== undefined) browser.client.cancel(); else required(tcp).send({ type: "cancel" }); };
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Cancellation browser did not connect"); }
+        const before = join(place.root, "tool-started"); const after = join(place.root, "tool-finished");
+        const toolRid = send({ type: "command", name: "run_tool", args: { tool: "bash", input: { command: `printf started > '${before}'; sleep 60; printf finished > '${after}'` } } });
+        await until(() => existsSync(before), "The actual Bash tool did not start");
+        cancel();
+        const tool = await finish(toolRid);
+        expect(tool).toMatchObject({ ok: false, rejected: false });
+        expect(await readFile(before, "utf8")).toBe("started"); expect(existsSync(after)).toBe(false);
+        for (const text of ["cancel memory once", "Keep the recent turn"]) await finish(send({ type: "message", text, stream: true, images: [], image_data: [] }));
+        const rid = send({ type: "command", name: "compact", args: { keep_turns: 1 } });
+        await until(() => seen.some((frame) => frame["rid"] === rid && frame["type"] === "stream_chunk" && frame["text"] === "Waiting for compaction cancellation"), "Compaction did not reach its held provider call");
+        cancel();
+        const paused = await finish(rid);
+        expect(paused).toMatchObject({ status: "paused" });
+        const config = daemon.runtime.registry.globalConfig();
+        const memory = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "fixture.md");
+        const beforeResume = await readFile(memory, "utf8");
+        expect(beforeResume).toContain("Memory write 1");
+        expect(await loadCompactionCheckpoint(config.dirs.data, "ada", "main")).toMatchObject({ state: "paused" });
+        const conversation = () => MessageStore.load(threadFile(config.dirs.data, "ada", "main", "active.jsonl"));
+        expect([...(await conversation()).messages()].filter((message) => message.role === "user")).toHaveLength(2);
+        const resumed = await finish(send({ type: "command", name: "compact", args: { keep_turns: 1 } }));
+        expect(resumed).toMatchObject({ status: "compacted", retained_turns: 1 });
+        expect(await readFile(memory, "utf8")).toBe(beforeResume);
+        expect([...(await conversation()).messages()].filter((message) => message.role === "user")).toHaveLength(1);
+        const history = await segments(config.dirs.data, "ada", "main", {});
+        if (!("segments" in history)) throw new Error("Missing segment listing");
+        outcomes.push({ memory: beforeResume, archived: history.segments.map((segment) => segment.message_count) });
+        await finish(send({ type: "command", name: "create_thread", args: { name: "tool-cancel" } }));
+        await finish(send({ type: "command", name: "switch_thread", args: { name: "tool-cancel", resync: true } }));
+        for (const text of ["cancel memory tool once", "Keep the tool turn"]) await finish(send({ type: "message", text, stream: true, images: [], image_data: [] }));
+        const toolCompaction = send({ type: "command", name: "compact", args: { keep_turns: 1 } });
+        const toolPid = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "cancel-pid");
+        const unexpected = join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "cancel-finished");
+        await until(() => existsSync(toolPid), "Compaction's actual tool did not start");
+        cancel();
+        expect(await finish(toolCompaction)).toMatchObject({ status: "paused" });
+        const pid = Number(await readFile(toolPid, "utf8"));
+        await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, "Compaction's tool is still running");
+        expect(existsSync(unexpected)).toBe(false);
+        const previousCalls = compactionCalls;
+        expect(await finish(send({ type: "command", name: "compact", args: { keep_turns: 1 } }))).toMatchObject({ status: "compacted" });
+        expect(compactionCalls).toBeGreaterThan(previousCalls);
+        expect(await readFile(toolPid, "utf8")).toBe(String(pid));
+        expect(existsSync(unexpected)).toBe(false);
+      } finally { cleanup.abort(); unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+
+  test("a compaction pass cancelled after its final model turn keeps history for explicit resume", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("Stored fixture reply") }, false);
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    try {
+      await client.awaitFrame("history");
+      for (const [index, text] of ["Remember this turn", "Keep this recent turn"].entries()) {
+        const rid = `archive-race-${String(index)}`;
+        client.send({ type: "message", text, stream: true, images: [], image_data: [], rid });
+        await until(() => client.frames.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), "Conversation did not finish");
+      }
+      const config = daemon.runtime.registry.globalConfig();
+      const active = threadFile(config.dirs.data, "ada", "main", "active.jsonl");
+      const before = readDurable(active);
+      const controller = new AbortController();
+      const outcome = await runCompactionPass("ada", {
+        config, env: place.env, signal: controller.signal,
+        generate: async (request, _model, _character, _sink, phase) => {
+          const response = await cacheFixture(request);
+          await phase?.onTurn?.(response);
+          controller.abort(new DOMException("Cancelled after model completion", "AbortError"));
+          return response;
+        },
+      }, { keepTurnsOverride: 1 });
+      expect(outcome?.kind).toBe("paused");
+      expect(readDurable(active)).toBe(before);
+      expect(await loadCompactionCheckpoint(config.dirs.data, "ada", "main")).toMatchObject({ state: "paused" });
+      const resumed = await runCompactionPass("ada", {
+        config, env: place.env, generate: () => { throw new Error("Completed model work must not replay"); },
+      }, { keepTurnsOverride: 1 });
+      expect(resumed?.kind).toBe("compacted");
+      expect(readDurable(active)).not.toBe(before);
+    } finally { client.close(); daemon.stop(); await daemon.done; }
+  });
+
+  test("manual tool progress and image results are correlated through both native and browser sessions", async () => {
+    const data = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==";
+    const observed: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], { anthropic: scriptedProvider("Fixture") }, false);
+      const config = daemon.runtime.registry.globalConfig();
+      await writeFile(join(characterWorkspaceDir(config.dirs.config, "ada", config.dirs.workspace), "manual.png"), Buffer.from(data, "base64"));
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Manual image browser did not connect"); }
+        const seen = tcp?.frames ?? frames;
+        seen.length = 0;
+        const command = { type: "command" as const, name: "run_tool", args: { tool: "read", input: { file_path: "manual.png" } } };
+        let rid = "manual-image";
+        if (tcp !== undefined) tcp.send({ ...command, rid });
+        else if (browser !== undefined) { const ticket = browser.client.submit(command); rid = ticket.rid; await ticket.finished; }
+        await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), "Manual image did not finish");
+        const activity = seen.filter((frame) => ["tool_call", "send_image", "tool_result"].includes(String(frame["type"])));
+        expect(activity.map((frame) => frame["type"])).toEqual(["tool_call", "send_image", "tool_result"]);
+        expect(activity.every((frame) => frame["rid"] === rid)).toBe(true);
+        expect(activity[0]?.["tool_id"]).toBe(activity[2]?.["tool_id"]);
+        expect(activity[1]?.["data"]).toBe(data);
+        const output = seen.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+        expect(validOperationResult("run_tool", output)).toBe(true);
+        if (!validOperationResult("run_tool", output) || "mode" in output) throw new Error("Missing tool report");
+        expect(output.images).toHaveLength(1);
+        expect(output.images?.[0]?.data).toBe(transport === "tcp" ? data : undefined);
+        expect(output.images?.[0]?.path).toBe(activity[1]?.["path"] as string);
+        observed.push([output.ok, output.images?.map((image) => [image.caption?.replaceAll(place.root, "<root>"), image.data ?? activity[1]?.["data"]]), activity.map((frame) => [frame["type"], frame["tool_name"], frame["is_error"]])]);
+        expect(seen.findIndex((frame) => frame["type"] === "tool_call")).toBeLessThan(seen.findIndex((frame) => frame["type"] === "request_finished"));
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(observed[0]).toEqual(observed[1]);
+  });
+
+  test("manual tools agree across independent TCP and browser workspaces, schemas and nested results", async () => {
+    const steps: { args: Record<string, unknown>; error?: boolean; check?: Record<string, unknown>; file: string | null }[] = [
+      { args: { tool: "bash", describe: true }, check: { mode: "tool_definition", enabled: false }, file: null },
+      { args: { tool: "bash", input: { command: "printf 'first\\nold old\\nlast' > tool.txt" } }, check: { ok: true }, file: "first\nold old\nlast" },
+      { args: { tool: "bash", input: { command: "sed -i 's/old/new/g' tool.txt" } }, check: { ok: true }, file: "first\nnew new\nlast" },
+      { args: { tool: "activity_heatmap", input: { days: 9 }, pairs: { days: "2" }, raw: true }, check: { ok: true, input: { days: 2 } }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "cat tool.txt", workdir: 5 } }, check: { rejected: true, ok: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: null }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "activity_heatmap", pairs: { days: 1 } }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "missing_tool", describe: true }, error: true, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "cat missing.txt" } }, check: { ok: false, rejected: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "ask_worker", describe: true }, check: { mode: "tool_definition", kind: "subagent", enabled: false }, file: "first\nnew new\nlast" },
+      { args: { tool: "ask_worker", input: { query: "Inspect the workspace" }, raw: true }, check: { ok: true, calls: [{ tool: "bash", subagent: "worker", ok: true }] }, file: "first\nnew new\nlast" },
+      { args: { tool: "mcp__tool_fixture__nested", describe: true }, check: { mode: "tool_definition", kind: "mcp" }, file: "first\nnew new\nlast" },
+      { args: { tool: "mcp__tool_fixture__nested", input: { entries: [{ text: "nested\ntext", enabled: null }], mode: "all", metadata: { source: "transport" } } }, check: { ok: true }, file: "first\nnew new\nlast" },
+      { args: { tool: "bash", input: { command: "printf 'x%.0s' $(seq 150) > tool.txt" } }, check: { ok: true }, file: "x".repeat(150) },
+      { args: { tool: "bash", input: { command: "cat tool.txt" }, raw: true }, check: { ok: true, truncated: true }, file: "x".repeat(150) },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = []\n[tools.bash]\nmax_result_chars = 64\n[subagents]\nenabled = []\n[subagents.worker]\ndescription = "Inspect the fixture workspace"\nprompt = "Read the workspace"\nmodel = "anthropic:claude-opus-4-8"\ntools = ["bash"]\n[mcp.tool_fixture]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["run", ${JSON.stringify(join(import.meta.dir, "support/mcp_tool_fixture.ts"))}]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], { anthropic: { stream: toolFixture, generate: cacheFixture } }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Tool browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `tool-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          const request = { type: "command" as const, name: "run_tool", args: step.args };
+          if (tcp !== undefined) tcp.send({ ...request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} tool step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.error !== true) expect(validOperationResult("run_tool", output?.["data"])).toBe(true);
+          if (step.check !== undefined) expect(output).toMatchObject({ data: step.check });
+          const config = daemon.runtime.registry.globalConfig();
+          const file = await readFile(join(characterWorkspaceDir(config.dirs.config, "ada", config.dirs.workspace), "tool.txt"), "utf8").catch(() => null);
+          expect(file).toBe(step.file);
+          const serialized = JSON.stringify({ observed, file }, (key, value: unknown) => key === "duration_ms" ? 0 : value).replaceAll(place.root, "<root>").replaceAll(rid, `tool-${String(index)}`);
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+  test("memory operations agree across independent TCP and browser histories, files and checkpoints", async () => {
+    const command = (name: string, args: Record<string, unknown> = {}): BrowserRequest => ({ type: "command", name, args });
+    const message = (text: string): BrowserRequest => ({ type: "message", text, stream: true, images: [], image_data: [] });
+    const steps: { request: BrowserRequest; error?: boolean; report?: string }[] = [
+      { request: command("segments") }, { request: command("clear"), error: true }, { request: command("compact", { dry_run: "true" }), error: true },
+      { request: message("Archive the older fact") }, { request: message("Retain the newer fact") },
+      { request: command("compact", { dry_run: true, keep_turns: 1 }), report: "dry_run" }, { request: command("compact", { keep_turns: 1 }), report: "compacted" },
+      { request: command("segments", { action: "show", index: 0 }) },
+      { request: command("segments", { action: "label", index: 0, value: "first" }) }, { request: command("segments", { action: "note", index: 0, value: "archive note" }) },
+      { request: command("segments", { action: "exclude", index: 0 }) }, { request: command("segments", { action: "include", index: 0 }) },
+      { request: command("segments", { action: "note", index: 0, value: null }) }, { request: command("segments", { action: "label", index: 0, value: "" }) },
+      { request: command("segments", { action: "note", index: 0 }), error: true },
+      { request: command("segments", { action: "show", index: 9999 }), error: true }, { request: command("clear", { exclude: true, note: "manual archive" }), report: "clear" },
+      { request: message("pause memory once") }, { request: command("compact", { keep_turns: 0 }), report: "paused" }, { request: command("compact"), report: "compacted" },
+      { request: message("truncate memory once") }, { request: command("compact", { keep_turns: 0 }), report: "truncated" }, { request: command("compact", { restart: true, keep_turns: 0 }), report: "compacted" },
+      { request: command("config", { key: "compaction.write_memory", value: "false" }) }, { request: message("archive-only fact") },
+      { request: command("compact", { dry_run: true, keep_turns: 0 }), report: "rotated" }, { request: command("compact", { keep_turns: 0 }), report: "rotated" },
+      { request: command("create_thread", { name: "side" }) }, { request: command("switch_thread", { name: "side", resync: true }) },
+      { request: command("segments") }, { request: message("side thread fact") }, { request: command("clear", { note: null }), report: "clear" }, { request: command("segments", { action: "show", index: 0 }) },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const compactStream = compactionFixture();
+      const chat = scriptedProvider("Stored fixture reply");
+      const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+        if (request.context?.call_type === "compaction") yield* compactStream(request, signal); else yield* chat.stream(request, signal);
+      } };
+      const daemon = await start(place, [], { anthropic: provider }, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      const results: unknown[] = [];
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Memory browser did not connect"); }
+        for (const [index, step] of steps.entries()) {
+          let rid = `memory-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ ...step.request, rid });
+          else if (browser !== undefined) { const ticket = browser.client.submit(step.request); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} memory step ${String(index)} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)} ${JSON.stringify(observed)}`).toMatchObject({ outcome: step.error === true ? "failed" : "completed" });
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          if (step.request.type === "command" && step.error !== true) {
+            if (!isOperationName(step.request.name)) throw new Error(`Missing contract: ${step.request.name}`);
+            expect(validOperationResult(step.request.name, output?.["data"])).toBe(true);
+          }
+          if (step.report !== undefined) expect(output).toMatchObject({ data: { status: step.report } });
+          const config = daemon.runtime.registry.globalConfig();
+          const history = await segments(config.dirs.data, "ada", "main", {});
+          const side = await segments(config.dirs.data, "ada", "side", {});
+          const active = [...(await MessageStore.load(threadFile(config.dirs.data, "ada", "main", "active.jsonl"))).messages()].map(({ role, content }) => ({ role, content }));
+          const checkpoint = await loadCompactionCheckpoint(config.dirs.data, "ada", "main");
+          const memory = await readFile(join(characterMemoryDir(config.dirs.config, "ada", config.dirs.workspace), "fixture.md"), "utf8").catch(() => null);
+          if (index === 5) { expect(active).toHaveLength(4); expect(history).toMatchObject({ count: 0 }); expect(memory).toBeNull(); expect(checkpoint).toBeUndefined(); }
+          if (index === 6) { expect(active).toHaveLength(2); expect(history).toMatchObject({ count: 1 }); expect(memory).toContain("Memory write 2"); }
+          if (step.report === "paused" || step.report === "truncated") { expect(active).toHaveLength(2); expect(memory).not.toBeNull(); }
+          if (step.report === "paused") expect(checkpoint).toMatchObject({ state: "paused" });
+          if (step.report === "compacted" || step.report === "clear") { expect(checkpoint).toBeUndefined(); expect(daemon.runtime.cache.get("ada")).toBeDefined(); }
+          const serialized = JSON.stringify({ observed, history, side, active, memory, checkpoint: checkpoint === undefined ? null : { state: checkpoint.state, reason: checkpoint.pauseReason, writes: checkpoint.loop.writesApplied.length } }, (key, value: unknown) => {
+            if (["memory_before", "memory_after", "new_conversation_id", "checkpoint_id", "msg_id", "turn_id", "parent_turn_id", "version"].includes(key) && typeof value === "string") return `<${key}>`;
+            return value;
+          }).replaceAll(place.root, "<root>").replaceAll(rid, `memory-${String(index)}`).replaceAll(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)/g, "<timestamp>");
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+  test("diagnostics and runtime actions agree across independent TCP and browser sessions", async () => {
+    const steps = [
+      { name: "status", args: {} }, { name: "error_log", args: { count: 0 } },
+      { name: "heartbeat_log", args: { count: 0 } }, { name: "call_log", args: { count: 0 } },
+      { name: "call_log", args: { call_type: "diagnostic_fixture", character: "ada", count: 2 } },
+      { name: "call_log", args: { id: 2, wire: true, diff: true, against: 1 } },
+      { name: "call_log", args: { id: 9999 }, error: true },
+      { name: "call_log", args: { id: 2, diff: true, against: 9999 }, error: true },
+      { name: "transcript", args: { source: "heartbeat", count: 1 } },
+      { name: "transcript", args: { source: "bad-source" }, error: true },
+      { name: "subagent_trace", args: { ids: ["parent-fixture"], count: 1 } },
+      { name: "subagent_trace", args: { count: 2 } },
+      { name: "session_activate", args: {} },
+      { name: "heartbeat_set_dormant", args: {} }, { name: "status", args: {} },
+      { name: "heartbeat_set_active", args: {} }, { name: "heartbeat_log", args: { count: 20 } },
+      { name: "keepalive_ping_now", args: {} }, { name: "heartbeat_tick_now", args: {} },
+    ] as const;
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+      const daemon = await start(place, [], { anthropic: { ...scriptedProvider("Diagnostic fixture"), generate: cacheFixture } }, false);
+      await seedDiagnosticFixture(daemon.runtime, "ada");
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Diagnostic browser did not connect"); }
+        const results: unknown[] = [];
+        for (const [index, step] of steps.entries()) {
+          let rid = `diagnostic-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ type: "command", rid, ...step });
+          else if (browser !== undefined) { const ticket = browser.client.submit({ type: "command", name: step.name, args: step.args }); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} ${step.name} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          const expectedError = "error" in step;
+          expect(observed.find((frame) => frame["type"] === "request_finished"), `${transport} ${String(index)}: ${JSON.stringify(observed)}`).toMatchObject({ outcome: expectedError ? "failed" : "completed" });
+          if (expectedError) { expect(output).toBeUndefined(); expect(observed.find((frame) => frame["type"] === "error")).toMatchObject({ code: "invalid_request" }); }
+          else { expect(output).toMatchObject({ name: step.name }); expect(validOperationResult(step.name, output?.["data"])).toBe(true); }
+          if (index === 5) expect(output).toMatchObject({ data: { call: { id: 2, request: { api_key: "[redacted]" } }, wire: [{ request_headers: [["Authorization", "[redacted]"], ["x-request-id", "diagnostic-call-1"]] }], diff: { from_call: 1, to_call: 2 } } });
+          if (index === 14) expect(output).toMatchObject({ data: { autonomy: { heartbeat_state: "Dormant" } } });
+          const state = daemon.runtime.autonomy.status("ada");
+          const serialized = JSON.stringify({ observed, state: state === undefined ? null : { heartbeat: state.heartbeat_state, ticks: state.ticks_without_user } }, (key, value: unknown) => ["seconds_until_wake", "seconds_until_ping", "seconds_since_user"].includes(key) && typeof value === "number" ? "<relative-time>" : value)
+            .replaceAll(place.root, "<root>").replaceAll(rid, `diagnostic-${String(index)}`).replaceAll(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)/g, "<timestamp>");
+          results.push(JSON.parse(serialized) as unknown);
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[0]).toEqual(outcomes[1]);
+  });
+
+  test("model operations agree over TCP and WebSocket on results, errors and persisted preferences", async () => {
+    const config = `${MODEL_CONFIG}\n[chat."anthropic:fast"]\nsdk = "anthropic"\n[chat."openrouter:vendor"]\nsdk = "openrouter"\n[subagents.worker]\ndescription = "test"\nprompt = "test"\nmodel = "anthropic:fast"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
+    const steps = [
+      { name: "list_models", args: {} },
+      { name: "favorite_model", args: { name: "anthropic:fast", favorite: true } },
+      { name: "favorite_model", args: { name: "anthropic:fast", favorite: true } },
+      { name: "list_models", args: { favorites_only: true } },
+      { name: "switch_model", args: { name: "anthropic:fast" } },
+      { name: "set_model_setting", args: { name: "anthropic:fast", key: "temperature", value: 0.6, scope: "global" } },
+      { name: "set_model_setting", args: { key: "temperature", value: 0.2, scope: "character" } },
+      { name: "model_settings", args: {} },
+      { name: "model_info", args: {} },
+      { name: "set_model_setting", args: { name: "openrouter:vendor", key: "openrouter_provider", value: { order: ["provider-a"], allow_fallbacks: false }, scope: "global" } },
+      { name: "switch_model", args: { name: "anthropic:fast", background_task: "heartbeat" } },
+      { name: "switch_model", args: { name: "openrouter:vendor", background_task: "compaction" } },
+      { name: "model_settings", args: { background_task: "all" } },
+      { name: "switch_model", args: { name: "anthropic:fast", subagent: "all" } },
+      { name: "switch_model", args: { name: "openrouter:vendor", subagent: "worker" } },
+      { name: "set_model_setting", args: { subagent: "worker", key: "top_p", value: 0.7, scope: "global" } },
+      { name: "model_settings", args: { subagent: "worker" } },
+      { name: "model_info", args: { subagent: "worker" } },
+      { name: "model_settings", args: { overview: true } },
+      { name: "reset_model", args: { background_task: "all" } },
+      { name: "reset_model", args: { subagent: "all" } },
+      { name: "set_model_setting", args: { key: "temperature", value: null, scope: "character" } },
+      { name: "model_settings", args: {} },
+      { name: "switch_model", args: { name: "not-a-model" } },
+      { name: "set_model_setting", args: { key: "top_p", value: 0.5, scope: "not-a-scope" } },
+      { name: "reset_model", args: {} },
+      { name: "list_models", args: { include_hidden: true } },
+    ];
+    const outcomes: unknown[][] = [];
+    for (const transport of ["tcp", "web"] as const) {
+      const place = await layout(config);
+      const daemon = await start(place, [], {}, false);
+      const tcp = transport === "tcp" ? await Client.open(daemon.port, "ada", ["request-lifecycle"]) : undefined;
+      const browser = transport === "web" ? browserConnection(required(daemon.web).origin, { character: "ada", thread: "main" }) : undefined;
+      const frames: Record<string, unknown>[] = [];
+      const unsubscribe = browser?.client.subscribe((update) => { if (update.kind === "frame") frames.push(update.message); });
+      try {
+        if (tcp !== undefined) await tcp.awaitFrame("history");
+        if (browser !== undefined) { await browser.client.signIn(TEST_TOKEN); await until(() => browser.client.status === "ready", "Model browser did not connect"); }
+        const results: unknown[] = [];
+        const data = daemon.runtime.registry.globalConfig().dirs.data;
+        const readOptional = async (path: string) => existsSync(path) ? await readFile(path, "utf8") : null;
+        for (const [index, step] of steps.entries()) {
+          let rid = `model-conformance-${String(index)}`;
+          const seen = tcp?.frames ?? frames;
+          seen.length = 0;
+          if (tcp !== undefined) tcp.send({ type: "command", rid, ...step });
+          else if (browser !== undefined) { const ticket = browser.client.submit({ type: "command", ...step }); rid = ticket.rid; await ticket.finished; }
+          await until(() => seen.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${transport} ${step.name} did not finish`);
+          const observed = seen.filter((frame) => frame["rid"] === rid && ["command_output", "error", "request_finished"].includes(String(frame["type"])));
+          const normalized = JSON.parse(JSON.stringify(observed).replaceAll(place.root, "<root>").replaceAll(rid, `model-conformance-${String(index)}`)) as unknown;
+          const threads = await readThreadsIndex(data, "ada");
+          const saved = {
+            config: (await readFile(place.configPath, "utf8")).replaceAll(place.root, "<root>"),
+            global: await readOptional(globalPreferencesPath(data)), character: await readOptional(characterPreferencesPath(data, "ada")),
+            model: threads?.threads.find((thread) => thread.id === "main")?.chat_model ?? null,
+          };
+          if (index === 4) expect(saved.model).toBe("anthropic:fast");
+          const output = observed.find((frame) => frame["type"] === "command_output");
+          const error = observed.find((frame) => frame["type"] === "error");
+          const expectedError = index === 23 ? "not_found" : index === 12 || index === 24 ? "invalid_request" : undefined;
+          if (expectedError === undefined) {
+            expect(error, `${transport} ${String(index)} ${step.name}`).toBeUndefined();
+            expect(output).toMatchObject({ name: step.name });
+          } else {
+            expect(output).toBeUndefined();
+            expect(error).toMatchObject({ code: expectedError });
+          }
+          expect(observed.find((frame) => frame["type"] === "request_finished")).toMatchObject({ outcome: expectedError === undefined ? "completed" : "failed" });
+          if (index === 7) expect(output).toMatchObject({ data: { effective_sampler: { temperature: 0.2 }, saved_global: { temperature: 0.6 } } });
+          if (step.name === "model_info" && "subagent" in step.args) expect(output).toMatchObject({ data: { effective_sampler: { top_p: 0.7 } } });
+          results.push({ observed: normalized, saved });
+        }
+        outcomes.push(results);
+      } finally { unsubscribe?.(); browser?.client.stop(); tcp?.close(); daemon.stop(); await daemon.done; }
+    }
+    expect(outcomes[1]).toEqual(outcomes[0]);
+  }, 20_000);
+
+  test("global configuration reload retains restart requirements and redacts rejected secret edits", async () => {
+    const original = `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`;
+    const place = await layout(original, []);
+    const daemon = await start(place, [], {}, false);
+    const browser = browserConnection(required(daemon.web).origin, { character: null, thread: null });
+    const actions = new OperationClient(browser.client);
+    try {
+      await browser.client.signIn(TEST_TOKEN);
+      await until(() => browser.client.status === "ready", "Empty settings session did not connect");
+      const changed = `${original}\n[notifications]\ntopic = "external-fixture-secret"\n`;
+      await writeFile(place.configPath, changed);
+      expect(await actions.run("config_reload", {})).toMatchObject({ applied: false, character: null, restart_required: ["[notifications]"] });
+      expect(daemon.runtime.registry.globalConfig().app.notifications.ntfy.topic).toBe("");
+      expect(await actions.run("config_reload", { apply: true })).toMatchObject({ applied: true, character: null, restart_required: ["[notifications]"], invalidated: { merged_character_configs: true } });
+      expect(daemon.runtime.registry.globalConfig().app.notifications.ntfy.topic).toBe("external-fixture-secret");
+      const redacted = await actions.run("config", { key: "notifications.topic" });
+      expect(redacted).toMatchObject({ config: "<redacted>", defaults: "" });
+      await actions.run("create_character", { name: "nova" });
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "config-read", name: "config", args: { key: "notifications.topic" } });
+        expect<unknown>((await tcp.awaitFrame("command_output"))["data"]).toEqual(redacted);
+      } finally { tcp.close(); }
+      const invalid = `${changed}\n[unknown_section]\nvalue = true\n`;
+      await writeFile(place.configPath, invalid);
+      let failure: unknown;
+      try { await actions.run("config", { key: "notifications.topic", value: "rejected-fixture-secret" }); }
+      catch (error) { failure = error; }
+      expect(String(failure)).toContain("was rejected");
+      expect(String(failure)).not.toContain("rejected-fixture-secret");
+      expect(await readFile(place.configPath, "utf8")).toBe(invalid);
+    } finally { browser.client.stop(); }
+  });
   test("the registry records the port the kernel chose, not the one asked for", async () => {
     const place = await layout();
     const daemon = await start(place);
@@ -402,6 +1013,329 @@ describe("what a client gets", () => {
     } finally {
       client.close();
     }
+  });
+});
+
+describe("registered operation socket flows", () => {
+  test("an empty installation validates creation before writing and selects the new character", async () => {
+    const place = await layout("", []);
+    const daemon = await start(place);
+    const client = await Client.open(daemon.port, null);
+    const workspace = join(place.root, "config", "characters", "nova", "workspace");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "command", rid: "bad-create", name: "create_character", args: { name: "nova", unexpected: true } });
+      expect(await client.awaitFrame("error")).toMatchObject({ rid: "bad-create", code: "invalid_request" });
+      expect(existsSync(workspace)).toBe(false);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "create", name: "create_character", data: {
+          character: "nova", workspace_dir: workspace,
+          config_dir: join(place.root, "config", "characters", "nova"),
+          created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"],
+        },
+      });
+      expect(await readFile(join(workspace, "SOUL.md"), "utf8")).toBe("You are nova.\n");
+      expect(await readFile(join(workspace, "USER.md"), "utf8")).toBe("");
+      expect(await readFile(join(workspace, "AGENTS.md"), "utf8")).not.toBe("");
+      expect(await readFile(join(workspace, "TOOLS.md"), "utf8")).toBe("");
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "select", name: "switch_character", data: { character: "nova", selected_character: "nova", changed: true, active_model: null },
+      });
+      expect(await client.awaitFrame("history")).toMatchObject({ rid: "select", messages: [] });
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a fork validates advanced options and selecting it exposes the actual copied turns", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    const engine = await daemon.runtime.registry.getOrCreate("ada");
+    for (const [index, content] of ["first", "first answer", "second", "second answer"].entries()) {
+      await engine.appendMessage({
+        msg_id: `source_${index}`, role: index % 2 === 0 ? "user" : "assistant", content,
+        images: [], content_blocks: [{ type: "text", text: content }], timestamp: new Date().toISOString(),
+      });
+    }
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("history");
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "bad-fork", name: "fork_thread", args: { name: "branch", from: "main", turns: "1" } });
+      expect(await client.awaitFrame("error")).toMatchObject({ rid: "bad-fork", code: "invalid_request" });
+      expect(daemon.runtime.registry.listThreads("ada").map((thread) => thread.id)).toEqual(["main"]);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "fork", name: "fork_thread", args: { name: "branch", from: "main", turns: 1 } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "fork", name: "fork_thread", data: {
+          character: "ada", current: "main", home: "main",
+          fork: { thread: "branch", source: "main", messages: 2, turns: 1, scope: "last_turns", requested_turns: 1 },
+        },
+      });
+      expect(engine.historySnapshot({}).messages.map((message) => message.content)).toEqual(["first", "first answer", "second", "second answer"]);
+      client.frames.length = 0;
+      client.send({ type: "command", rid: "select-fork", name: "switch_thread", args: { name: "branch", resync: true } });
+      expect(await client.awaitFrame("command_output")).toMatchObject({
+        rid: "select-fork", name: "switch_thread", data: { thread: "branch", selected_thread: "branch", changed: true },
+      });
+      expect(await client.awaitFrame("history")).toMatchObject({
+        rid: "select-fork", messages: [{ content: "second" }, { content: "second answer" }],
+      });
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe("optional browser transport", () => {
+  test("typed browser actions discover an empty installation and edit, page, select alternatives and delete persisted conversation", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+    let generations = 0;
+    const provider: SidecarProvider = {
+      async *stream(request, signal) {
+        generations += 1;
+        yield* scriptedProvider(`answer ${String(generations)}`).stream(request, signal);
+      },
+      generate() { throw new Error("Unexpected non-streaming call"); },
+    };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const b = browserConnection(required(daemon.web).origin, { character: null, thread: null });
+    const actions = new OperationClient(b.client);
+    try {
+      await b.client.signIn(TEST_TOKEN);
+      await until(() => b.client.status === "ready", "Empty browser did not connect");
+      const empty = await actions.run("discover_operations", {});
+      expect(empty.operations.find((operation) => operation.name === "create_character")?.available).toBe(true);
+      expect(empty.operations.find((operation) => operation.name === "edit")?.available).toBe(false);
+      await actions.run("create_character", { name: "nova" });
+      await actions.run("switch_character", { name: "nova" });
+      const available = await actions.run("discover_operations", {});
+      expect(available.operations.find((operation) => operation.name === "edit")?.available).toBe(true);
+      expect((await b.client.submit({ type: "message", text: "original question", stream: true, images: [], image_data: [] }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "regen", stream: true, guidance: "Another answer" }).finished).outcome).toBe("completed");
+      expect((await actions.run("list_alternatives", {})).alternatives.map((alternative) => alternative.content)).toEqual(["answer 1", "answer 2"]);
+      expect(await actions.run("alt", { index: 0, position: 2, direction: "last" })).toMatchObject({ position: 1, content: "answer 1" });
+      expect(await actions.run("edit", { ref: "1", content: "edited question" })).toMatchObject({ edited: true });
+      expect(await actions.run("get", { ref: "-1", role: "user" })).toMatchObject({ content: "edited question" });
+      await actions.run("inject_system", { text: "Keep the context" });
+      const page = await actions.run("log", { count: 1 });
+      expect(page.messages.map((message) => message.content)).toEqual(["Keep the context"]);
+      expect(page.has_more_before).toBe(true);
+      expect((await actions.run("history_page", { before: page.next_before, count: 1 })).messages.map((message) => message.content)).toEqual(["answer 1"]);
+      expect(actions.run("edit", { ref: "missing-message", content: "rejected" })).rejects.toThrow("message not found");
+      const removed = await actions.run("delete", { refs: ["1", "last"] });
+      expect(removed.deleted).toHaveLength(2);
+      const browserHistory = await actions.run("log", {});
+      expect(browserHistory.messages.map((message) => message.content)).toEqual(["answer 1"]);
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "tcp-log", name: "log", args: {} });
+        const result = await tcp.awaitFrame("command_output");
+        expect<unknown>(result["data"]).toEqual(browserHistory);
+      } finally { tcp.close(); }
+      expect((await daemon.runtime.registry.getOrCreate("nova", "main")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["answer 1"]);
+    } finally { b.client.stop(); }
+  });
+
+  test("a browser can reopen persisted history containing structured tool results and inline images", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    const daemon = await start(place, [], {}, false);
+    const engine = await daemon.runtime.registry.getOrCreate("ada", "main");
+    const base = { images: [], timestamp: "2026-09-12T00:00:00Z" };
+    await engine.appendMessage({ ...base, msg_id: "tool-start", role: "assistant", content: "", content_blocks: [{ type: "tool_use", id: "read-image", name: "read_image", input: { path: "example.png" } }] });
+    await engine.appendMessage({ ...base, msg_id: "tool-image", role: "user", content: "", content_blocks: [{ type: "tool_result", tool_use_id: "read-image", content: [{ type: "text", text: "image result" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==" } }] }] });
+    await engine.appendMessage({ ...base, msg_id: "tool-answer", role: "assistant", content: "I can see the image", content_blocks: [{ type: "text", text: "I can see the image" }] });
+    const b = browserConnection(required(daemon.web).origin);
+    try {
+      await b.client.signIn(TEST_TOKEN);
+      await until(() => b.client.status === "ready" || b.client.status === "error", "Browser did not receive persisted history");
+      expect(b.client.status).toBe("ready");
+      const history = b.updates.find((update) => update.kind === "frame" && update.message.type === "history");
+      if (history?.kind !== "frame" || history.message.type !== "history") throw new Error("Missing image history");
+      expect(history.message.messages[0]?.content_blocks).toMatchObject([
+        { type: "tool_use", id: "read-image" },
+        { type: "tool_result", content: [{ type: "text", text: "image result" }, { type: "image", source: { media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==" } }] },
+        { type: "text", text: "I can see the image" },
+      ]);
+    } finally { b.client.stop(); }
+  });
+
+  test("the browser connection restores its selected conversation after a daemon restart without signing in again", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("persisted answer") }, false);
+    const web = required(daemon.web);
+    const b = browserConnection(web.origin);
+    try {
+      await b.client.signIn(TEST_TOKEN); await until(() => b.client.status === "ready", "Browser did not connect");
+      expect((await b.client.submit({ type: "command", name: "create_thread", args: { name: "side" } }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "command", name: "switch_thread", args: { name: "side", resync: true } }).finished).outcome).toBe("completed");
+      expect((await b.client.submit({ type: "message", text: "persisted question", stream: true, images: [], image_data: [] }).finished).outcome).toBe("completed");
+      daemon.stop(); await daemon.done;
+      await until(() => b.client.status !== "ready", "Browser did not observe shutdown");
+      b.updates.length = 0;
+      await writeFile(place.configPath, `${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${new URL(web.origin).port}"\n`);
+      const restarted = await start(place, [], { anthropic: scriptedProvider("should not be called") }, false);
+      expect(required(restarted.web).origin).toBe(web.origin);
+      await until(() => b.client.status === "ready", "Browser did not reconnect with its existing session");
+      expect(b.client.selection).toMatchObject({ character: "ada", thread: "side" });
+      const history = b.updates.find((update) => update.kind === "frame" && update.message.type === "history");
+      if (history?.kind !== "frame" || history.message.type !== "history") throw new Error("Missing restored history");
+      expect(history.message.messages.map((message) => message.content)).toEqual(["persisted question", "persisted answer"]);
+      expect((await restarted.runtime.registry.getOrCreate("ada", "side")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["persisted question", "persisted answer"]);
+      expect(b.client.pendingCount).toBe(0);
+    } finally { b.client.stop(); }
+  });
+
+  test("a browser learns that an earlier thread's request finished without receiving its stream in the selected thread", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "main answer", () => {}) }, false);
+    const web = required(daemon.web);
+    const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) });
+    const browser = new BrowserSocket(web.origin, required(login.headers.get("set-cookie")?.split(";", 1)[0]));
+    try {
+      await browser.attach();
+      browser.send({ type: "command", rid: "create-side", name: "create_thread", args: { name: "side" } });
+      await browser.frame("request_finished", "create-side");
+      browser.send({ type: "message", rid: "main-turn", text: "question on main", stream: true });
+      await browser.frame("stream_start", "main-turn");
+      browser.send({ type: "command", rid: "select-side", name: "switch_thread", args: { name: "side", resync: true } });
+      expect(await browser.frame("history", "select-side")).toMatchObject({ selected_thread: "side", messages: [] });
+      await browser.frame("request_finished", "select-side");
+      release();
+      expect(await browser.frame("request_finished", "main-turn")).toMatchObject({ outcome: "completed" });
+      expect(browser.messages.some((frame) => frame.type === "stream_end" && frame.rid === "main-turn")).toBe(false);
+      expect((await daemon.runtime.registry.getOrCreate("ada", "main")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["question on main", "main answer"]);
+    } finally { release(); await browser.close(); }
+  });
+
+  test("disabled serving creates no web listener and TCP commands still work", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    expect(daemon.web).toBeUndefined();
+    expect(existsSync(join(place.root, "cache", "shore", "web"))).toBe(false);
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "command", rid: "still-tcp", name: "list_characters", args: {} });
+      expect(await client.awaitFrame("command_output")).toMatchObject({ rid: "still-tcp", data: { characters: [{ name: "ada" }] } });
+    } finally { client.close(); }
+  });
+
+  test("an authenticated browser creates a character, forks its thread and observes the same persisted history as TCP", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("browser answer") }, false);
+    const web = required(daemon.web);
+    const response = await fetch(`${web.origin}/api/login`, {
+      method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }),
+    });
+    expect(response.status).toBe(200);
+    const cookie = required(response.headers.get("set-cookie")?.split(";", 1)[0]);
+    const browser = new BrowserSocket(web.origin, cookie);
+    try {
+      await browser.attach();
+      browser.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
+      expect(await browser.frame("command_output", "create")).toMatchObject({ data: { character: "nova", created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] } });
+      expect(daemon.runtime.historyIndex.registeredCharacters()).toContain("nova");
+      expect(daemon.runtime.workspaceIndex.registeredCharacters()).toContain("nova");
+      expect(daemon.runtime.autonomy.status("nova")).toBeDefined();
+      expect(await readFile(join(place.root, "config", "characters", "nova", "workspace", "SOUL.md"), "utf8")).toBe("You are nova.\n");
+      browser.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });
+      expect(await browser.frame("command_output", "select")).toMatchObject({ data: { selected_character: "nova" } });
+      await browser.frame("history", "select");
+      browser.send({ type: "message", rid: "turn", text: "browser question", stream: true, images: [] });
+      expect(await browser.frame("stream_end", "turn")).toMatchObject({ content: "browser answer", is_final: true });
+      browser.send({ type: "command", rid: "fork", name: "fork_thread", args: { name: "branch", from: "main", turns: 1 } });
+      expect(await browser.frame("command_output", "fork")).toMatchObject({ data: { fork: { thread: "branch", source: "main", messages: 2, turns: 1, scope: "last_turns", requested_turns: 1 } } });
+      browser.send({ type: "command", rid: "select-fork", name: "switch_thread", args: { name: "branch", resync: true } });
+      const webHistory = await browser.frame("history", "select-fork");
+      expect(webHistory).toMatchObject({ selected_character: "nova", selected_thread: "branch", messages: [{ content: "browser question" }, { content: "browser answer" }] });
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "tcp-select", name: "switch_thread", args: { name: "branch", resync: true } });
+        const tcpHistory = await tcp.awaitFrame("history");
+        if (webHistory.type !== "history") throw new Error("Expected browser history");
+        expect(tcpHistory["messages"]).toEqual(webHistory.messages);
+        expect((await daemon.runtime.registry.getOrCreate("nova", "branch")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["browser question", "browser answer"]);
+      } finally { tcp.close(); }
+    } finally { await browser.close(); }
+  });
+
+  test("a failed web bind releases the TCP listener and data-directory lease before opening stores", async () => {
+    const occupied = createServer();
+    await new Promise<void>((resolve) => { occupied.listen(0, "127.0.0.1", resolve); });
+    const address = occupied.address();
+    if (address === null || typeof address === "string") throw new Error("Expected address");
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
+    try {
+      expect(start(place)).rejects.toThrow("Failed to start browser transport");
+      await until(() => !existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE)), "lease was not released");
+      expect(existsSync(place.instancesPath)).toBe(false);
+      expect(existsSync(join(place.root, "data", "shore", "shore.db"))).toBe(false);
+    } finally { await new Promise<void>((resolve) => { occupied.close(() => resolve()); }); }
+  });
+
+  test("runtime initialization failure closes the already-bound web listener and unregisters the instance", async () => {
+    const probe = createServer();
+    await new Promise<void>((resolve) => { probe.listen(0, "127.0.0.1", resolve); });
+    const address = probe.address();
+    if (address === null || typeof address === "string") throw new Error("Expected address");
+    await new Promise<void>((resolve) => { probe.close(() => resolve()); });
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
+    await mkdir(join(place.root, "data", "shore", "shore.db"), { recursive: true });
+    let failure: unknown;
+    try { await start(place); } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(StartupError);
+    expect(String(failure)).toContain("Failed to initialize shore-daemon");
+    expect(existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE))).toBe(false);
+    expect(await instances(place)).toEqual([]);
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(address.port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => { probe.close(() => resolve()); });
+  });
+
+  test("browser cancellation settles its original request and permits another turn while the provider is held", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let stopped = 0;
+    const provider: SidecarProvider = {
+      async *stream(req, signal) {
+        yield { type: "start", model: req.model };
+        try {
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) resolve();
+            else signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+        } finally { stopped += 1; }
+      },
+      generate() { throw new Error("Unexpected non-streaming call"); },
+    };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const web = required(daemon.web);
+    const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) });
+    const browser = new BrowserSocket(web.origin, required(login.headers.get("set-cookie")?.split(";", 1)[0]));
+    try {
+      await browser.attach();
+      for (let i = 0; i < 33; i += 1) {
+        const rid = `held-${String(i)}`;
+        browser.send({ type: "message", rid, text: "hold this turn", stream: true });
+        await browser.frame("stream_start", rid);
+        browser.send({ type: "cancel" });
+        expect(await browser.frame("stream_end", rid)).toMatchObject({ finish_reason: "cancelled", is_final: true });
+        await until(() => stopped > i, "Provider was not cancelled");
+        expect(await browser.frame("request_finished", rid)).toMatchObject({ outcome: "cancelled" });
+      }
+      browser.send({ type: "command", rid: "still-live", name: "list_threads", args: {} });
+      expect(await browser.frame("command_output", "still-live")).toMatchObject({ name: "list_threads" });
+    } finally { await browser.close(); }
   });
 });
 

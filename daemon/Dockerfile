@@ -48,12 +48,14 @@ RUN addgroup -g "$USER_GID" "$USERNAME" \
 
 WORKDIR /app
 COPY --chown=${USER_UID}:${USER_GID} ./daemon .
+COPY ./docs/capabilities /docs/capabilities
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /usr/local/bin/shore-apply-patch
 COPY --from=patch-builder /build/daemon/dist/codex-apply-patch.LICENSE /build/daemon/dist/codex-apply-patch.NOTICE /usr/local/share/licenses/shore/
 ENV SHORE_APPLY_PATCH_PATH=/usr/local/bin/shore-apply-patch
 
 USER ${USERNAME}
 RUN bun install 
+RUN bun run browser:build
 
 ENV SHORE_ADDR=shore-daemon:7320
 ENV SHORE_CONFIG_DIR=/config
@@ -61,5 +63,6 @@ ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 EXPOSE 7320
+EXPOSE 7340
 
 CMD ["bun", "run", "start"]

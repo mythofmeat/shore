@@ -21,7 +21,7 @@ let scanned = 0;
 let generated = 0;
 
 for (const root of ROOTS)
-for (const rel of new Glob("**/*.ts").scanSync(root)) {
+for (const rel of new Glob("**/*.{ts,tsx}").scanSync(root)) {
   const abs = join(root, rel);
   const text = readFileSync(abs, "utf8");
   if (GENERATED.test(text)) {

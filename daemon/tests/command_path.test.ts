@@ -26,6 +26,7 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { existsSync } from "node:fs";
 import { testTmp } from "./support/tmp.ts";
 import { SnapshotGate } from "../src/snapshot_gate.ts";
+import { parseOperationResult } from "../src/operations/contracts.ts";
 
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
 
@@ -208,12 +209,44 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
   };
 }
 
+test("discovery remains available when character configuration cannot load", async () => {
+  const h = await harness(["ada"]);
+  h.deps.registry.effectiveConfig = () => { throw new Error("bad character configuration"); };
+  const frame = await dispatchCommand(h.deps, { name: "discover_operations", args: {} }, meta("ada", "discover"));
+  expect(frame).toMatchObject({ type: "command_output", rid: "discover" });
+  if (frame.type !== "command_output") throw new Error("Missing discovery result");
+  const catalogue = parseOperationResult("discover_operations", frame.data);
+  expect(catalogue.operations.find((operation) => operation.name === "create_character")?.available).toBe(true);
+  expect(catalogue.operations.find((operation) => operation.name === "edit")?.available).toBe(false);
+});
+
+test("all provider operations remain global and reject malformed requests before discovery", async () => {
+  const h = await harness([]);
+  h.deps.registry.resolveCharacter = () => { throw new Error("Provider operations must not resolve a character"); };
+  let fetched = false;
+  h.deps.commands.fetchImpl = Object.assign(async () => { fetched = true; throw new Error("Unexpected provider request"); }, { preconnect: fetch.preconnect });
+  const discovered = await dispatchCommand(h.deps, { name: "discover_operations", args: {} }, meta(null, "discover"));
+  if (discovered.type !== "command_output") throw new Error("Missing discovery result");
+  const operations = parseOperationResult("discover_operations", discovered.data).operations.filter((operation) => operation.category === "Providers");
+  expect(operations).toHaveLength(4);
+  expect(operations.every((operation) => operation.scope === "global" && operation.available === true)).toBe(true);
+  const all = await dispatchCommand(h.deps, { name: "refresh_all_provider_models", args: {} }, meta(null, "all"));
+  expect(all).toMatchObject({ type: "command_output", rid: "all", data: { results: [], skipped: [] } });
+  const one = await dispatchCommand(h.deps, { name: "refresh_provider_models", args: { provider: "absent" } }, meta(null, "one"));
+  expect(one).toMatchObject({ type: "error", rid: "one", message: 'provider "absent" is not configured' });
+  for (const [name, args] of [["refresh_provider_models", {}], ["refresh_all_provider_models", { provider: "unexpected" }], ["list_provider_models", { provider: "fixture", include_hidden: "true" }]] as const) {
+    const frame = await dispatchCommand(h.deps, { name, args }, meta(null, "invalid"));
+    expect(frame).toMatchObject({ type: "error", rid: "invalid", code: "invalid_request" });
+  }
+  expect(fetched).toBe(false);
+});
+
 for (const thread of ["main", "side"]) {
   test(`resync restores full ${thread} history after a filtered log loses the delta anchor`, async () => {
     const h = await harness(["ada"]);
     const sent: ServerMessage[] = [];
     const registry = await CharacterRegistry.create(h.dirs.config, h.dirs.data, h.deps.globalConfig(),
-      history => sent.push({ type: "history", ...history } as ServerMessage));
+      history => sent.push({ type: "history", ...history }));
     if (thread !== MAIN_THREAD) await registry.createThread("ada", thread);
     h.deps.registry = registry;
     h.deps.commands.threads = registry;
@@ -482,7 +515,9 @@ test("progress frames from a command reach the session that asked, stamped with 
     task_id: null,
   });
 
-  expect(sent).toHaveLength(2);
+  emit({ type: "send_image", path: "image.png", data: "bytes", caption: "Image", subagent: "worker" });
+  expect(sent).toHaveLength(3);
+  expect(sent[2]?.[1]).toMatchObject({ type: "send_image", path: "image.png", subagent: "worker", rid: "r-compact" });
   expect(sent[0]?.[0]).toBe(7);
   expect(sent[0]?.[1]).toMatchObject({ phase: "compacting round 1", rid: "r-compact" });
   expect(sent[1]?.[1]).toMatchObject({
@@ -552,6 +587,31 @@ describe("deleting a character through the command path", () => {
 });
 
 describe("an export abandoned while it waits for the snapshot", () => {
+  test("trusted browser budgets reach archive handlers without leaking into native requests", async () => {
+    const source = await harness(["ada"]); source.wireArchive(new SnapshotGate());
+    const request = meta(null, "browser-archive");
+    const limited = { ...request, session: { ...request.session, archiveLimits: { bytes: 1, entries: 100 } } };
+    const output = join(source.dirs.cache, "limited.tar.gz");
+    const refusedExport = await dispatchCommand(source.deps, { name: "export_character", args: { character: "ada", output } }, limited);
+    expect(refusedExport).toMatchObject({ type: "error", rid: "browser-archive" });
+    if (refusedExport.type !== "error") throw new Error("Browser export exceeded its processing budget");
+    expect(refusedExport.message).toContain("browser archive processing limits");
+    expect(existsSync(output)).toBe(false);
+    expect(await dispatchCommand(source.deps, { name: "export_character", args: { character: "ada", output } }, request))
+      .toMatchObject({ type: "command_output", name: "export_character" });
+    expect(source.deps.commands.archive?.limits).toBeUndefined();
+    const target = await harness([]); target.wireArchive(new SnapshotGate());
+    const refusedImport = await dispatchCommand(target.deps, { name: "import_character", args: { archive: output } }, limited);
+    expect(refusedImport).toMatchObject({ type: "error", rid: "browser-archive" });
+    if (refusedImport.type !== "error") throw new Error("Browser import exceeded its processing budget");
+    expect(refusedImport.message).toContain("browser processing limit");
+    expect(existsSync(join(target.dirs.config, "characters", "ada"))).toBe(false);
+    expect(await dispatchCommand(target.deps, { name: "import_character", args: { archive: output } }, request))
+      .toMatchObject({ type: "command_output", name: "import_character" });
+    expect(existsSync(join(target.dirs.config, "characters", "ada", "workspace", "SOUL.md"))).toBe(true);
+    expect(target.deps.commands.archive?.limits).toBeUndefined();
+  });
+
   test("dispatchCommand does not stage the character after its client leaves", async () => {
     const h = await harness(["ada"]);
     const gate = new SnapshotGate();

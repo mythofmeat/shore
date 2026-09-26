@@ -1,5 +1,6 @@
 import { contentForClient } from "./content_projection.ts";
 import { TOKEN_ENV, TOKEN_FILE } from "../config/token.ts";
+import { setTimeout as timerDelay } from "node:timers/promises";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
@@ -15,10 +16,10 @@ import {
   type ByteSink,
 } from "./framing";
 import {
-  eventMatchesSession,
   msgTypeName,
   resolveHandshakeCharacter,
   routeClientMessage,
+  sessionReceives,
 } from "./routing";
 import { sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
 
@@ -82,16 +83,14 @@ export interface ConnectionContext {
 
 export interface PingClock {
   readonly now: () => number;
-  readonly sleepUntil: (deadline: number) => Promise<void>;
+  readonly sleepUntil: (deadline: number, signal: AbortSignal) => Promise<void>;
 }
 
 const REAL_PING_CLOCK: PingClock = {
   now: () => Date.now(),
-  sleepUntil: (deadline) => {
+  sleepUntil: (deadline, signal) => {
     const delay = Math.max(0, deadline - Date.now());
-    return new Promise((resolve) => {
-      setTimeout(resolve, delay);
-    });
+    return timerDelay(delay, undefined, { signal });
   },
 };
 
@@ -258,6 +257,18 @@ export async function messageLoop(
   session: SessionMeta,
   ctx: ConnectionContext,
 ): Promise<void> {
+  const lifetime = new AbortController();
+  try { await runMessageLoop(reader, sink, session, ctx, lifetime.signal); }
+  finally { lifetime.abort(); }
+}
+
+async function runMessageLoop(
+  reader: WireReader,
+  sink: ByteSink,
+  session: SessionMeta,
+  ctx: ConnectionContext,
+  signal: AbortSignal,
+): Promise<void> {
   const period = ctx.pingIntervalMs ?? PING_INTERVAL_MS;
   const clock = ctx.pingClock ?? REAL_PING_CLOCK;
   const started = clock.now();
@@ -276,7 +287,7 @@ export async function messageLoop(
     );
     pendingEvent ??= ctx.events.recv().then((value) => ({ src: "event", value }) as const);
     pendingPing ??= clock
-      .sleepUntil(nextTick(started, period, tick))
+      .sleepUntil(nextTick(started, period, tick), signal)
       .then(() => ({ src: "ping" }) as const);
 
     const wake = await Promise.race([pendingClient, pendingEvent, pendingPing, pendingShutdown]);
@@ -341,15 +352,7 @@ export async function messageLoop(
           break;
         }
         consecutiveLags = 0;
-        if (
-          eventMatchesSession(
-            result.msg,
-            ctx.router.characterFor(session.sessionId),
-            ctx.router.has(session.sessionId),
-            ctx.router.receivesAllCharacters(session.sessionId),
-            ctx.router.threadFor(session.sessionId),
-          )
-        ) {
+        if (sessionReceives(ctx.router, session.sessionId, result.msg)) {
           const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !session.capabilities.includes("history-deltas")
             ? historyMessage(await (ctx.handshake ?? DEFAULT_HANDSHAKE).history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
             : result.msg;
@@ -372,4 +375,3 @@ function ticksElapsed(now: number, started: number, period: number): number {
 function nextTick(started: number, period: number, tick: number): number {
   return started + tick * period;
 }
-

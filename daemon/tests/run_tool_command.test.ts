@@ -14,6 +14,7 @@ import {
   parseRunToolArgs,
   resolveTool,
   runTool,
+  toolRunImages,
   type RunToolContext,
 } from "../src/commands/run_tool.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -504,4 +505,29 @@ describe("a run_tool command that is cancelled", () => {
     expect(await call.then(() => false, () => true)).toBe(true);
     expect(reached).toBe(false);
   });
+});
+
+
+test("manual image reads forward live frames and retain the original image in their report", async () => {
+  const setup = await world();
+  const data = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==";
+  await writeFile(join(setup.workspace, "manual.png"), Buffer.from(data, "base64"));
+  const frames: ServerMessage[] = [];
+  const report = await runTool("ada", { ...setup.ctx, emit: (frame) => { frames.push(frame); } }, { tool: "read", input: { file_path: "manual.png" } });
+  expect(frames.map((frame) => frame.type)).toEqual(["tool_call", "send_image", "tool_result"]);
+  expect(report.ok).toBe(true);
+  expect(report.images).toHaveLength(1);
+  expect(report.images?.[0]?.data).toBe(data);
+  expect(report.images?.[0]?.caption).toContain("manual.png");
+});
+
+test("manual image reports reconcile live originals, prepared copies, missing bytes and failed-tool images", () => {
+  const original: ServerMessage = { type: "send_image", path: "first.png", data: "original", caption: "Original caption" };
+  const tool: ServerMessage = { type: "tool_result", tool_id: "read", tool_name: "read", is_error: false, output: "done", images: [{ path: "first.png", data: "prepared", caption: "Prepared caption" }, { path: "second.png", data: "second" }] };
+  const images = toolRunImages([original, tool, { type: "send_image", path: "first.png" }, { type: "send_image", path: "failed.png", data: "failed-original" }]);
+  expect(images.map((item) => item.path)).toEqual(["first.png", "second.png", "failed.png"]);
+  expect(images[0]?.data).toBe("original");
+  expect(images[0]?.caption).toBe("Original caption");
+  expect(images[1]?.data).toBe("second");
+  expect(images[2]?.data).toBe("failed-original");
 });

@@ -1,0 +1,80 @@
+[
+  {
+    "character": "ada",
+    "message_count": 4,
+    "compacted_turns": 1,
+    "status": "compacted",
+    "turn_count": 2,
+    "retained_count": 2,
+    "retained_turns": 1,
+    "memory_files_written": [
+      "memory/fact.md"
+    ],
+    "new_conversation_id": "conversation-2",
+    "tool_rounds": 2,
+    "tools_called": [
+      "edit"
+    ]
+  },
+  {
+    "character": "ada",
+    "message_count": 4,
+    "compacted_turns": 1,
+    "status": "rotated",
+    "turn_count": 2,
+    "retained_count": 2,
+    "retained_turns": 1,
+    "dry_run": true,
+    "memory_files_written": [],
+    "archived_messages": 2
+  },
+  {
+    "character": "ada",
+    "message_count": 4,
+    "compacted_turns": 1,
+    "status": "dry_run",
+    "turn_count": 2,
+    "retained_count": 2,
+    "retained_turns": 1,
+    "would_write_files": 1,
+    "file_ops_preview": [
+      {
+        "path": "memory/fact.md",
+        "content_preview": "A lasting fact"
+      }
+    ],
+    "tool_rounds": 2,
+    "tools_called": [
+      "edit"
+    ]
+  },
+  {
+    "character": "ada",
+    "message_count": 4,
+    "compacted_turns": 1,
+    "status": "paused",
+    "checkpoint_id": "checkpoint-1",
+    "tool_rounds": 2,
+    "tools_called": [
+      "edit"
+    ],
+    "reason": "provider_error",
+    "detail": "fixture failure",
+    "resume_at": null
+  },
+  {
+    "character": "ada",
+    "message_count": 4,
+    "compacted_turns": 1,
+    "status": "truncated",
+    "turn_count": 2,
+    "tool_rounds": 2,
+    "tools_called": [
+      "edit"
+    ],
+    "truncated_turns": 1,
+    "partial_writes": [
+      "memory/fact.md"
+    ]
+  }
+]

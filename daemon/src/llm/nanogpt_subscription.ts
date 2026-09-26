@@ -14,21 +14,9 @@ import {
 
 export const NANOGPT_SUBSCRIPTION_TTL_MS = 5 * 60 * 1000;
 
-export interface NanoGptWeeklyInputTokens {
-  used: number;
-  remaining: number;
-  limit: number;
-  resetAt: string;
-}
+export type NanoGptWeeklyInputTokens = import("../protocol/NanoGptWeeklyInputTokens.ts").NanoGptWeeklyInputTokens;
 
-export interface NanoGptSubscriptionState {
-  version: 1;
-  fetched_at: string;
-  active: boolean;
-  state: "active" | "grace" | "inactive";
-  weeklyInputTokens?: NanoGptWeeklyInputTokens;
-  routing?: { recommendedMode?: string };
-}
+export type NanoGptSubscriptionState = import("../protocol/NanoGptSubscriptionState.ts").NanoGptSubscriptionState;
 
 export function nanoGptSubscriptionPath(cacheDir: string): string {
   return join(cacheDir, "providers", NANOGPT_PROVIDER, "subscription.json");

@@ -1,0 +1,521 @@
+{
+  "cases": [
+    {
+      "label": "automatic compares warning-aware headlines",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "always",
+      "expected": {
+        "name": "Monthly",
+        "scope": "cap",
+        "percent_used": 0.7,
+        "visible": true
+      }
+    },
+    {
+      "label": "pace selects a different budget",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "pace",
+      "mode": "always",
+      "expected": {
+        "name": "Weekly",
+        "scope": "pace",
+        "percent_used": 0.55,
+        "visible": true
+      }
+    },
+    {
+      "label": "named focus ignores the higher budget",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "wEeKlY",
+      "mode": "always",
+      "expected": {
+        "name": "Weekly",
+        "scope": "pace",
+        "percent_used": 0.55,
+        "visible": true
+      }
+    },
+    {
+      "label": "cap scope retains a pace warning",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "Weekly:cap",
+      "mode": "warn",
+      "expected": {
+        "name": "Weekly",
+        "scope": "cap",
+        "percent_used": 0.4,
+        "visible": true
+      }
+    },
+    {
+      "label": "warn hides calm cap and pace",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "Monthly",
+      "mode": "warn",
+      "expected": {
+        "name": "Monthly",
+        "scope": "cap",
+        "percent_used": 0.7,
+        "visible": false
+      }
+    },
+    {
+      "label": "off hides warnings",
+      "budgets": [
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "off",
+      "expected": {
+        "name": "Weekly",
+        "scope": "pace",
+        "percent_used": 0.55,
+        "visible": false
+      }
+    },
+    {
+      "label": "pace warning precedes a higher calm cap",
+      "budgets": [
+        {
+          "name": "Warn",
+          "percent_used": 0.8,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.51,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "always",
+      "expected": {
+        "name": "Warn",
+        "scope": "pace",
+        "percent_used": 0.51,
+        "visible": true
+      }
+    },
+    {
+      "label": "cap warning precedes a higher calm pace",
+      "budgets": [
+        {
+          "name": "Cap",
+          "percent_used": 0.4,
+          "crossed_warn_at": [
+            0.5
+          ],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.9,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "always",
+      "expected": {
+        "name": "Cap",
+        "scope": "cap",
+        "percent_used": 0.4,
+        "visible": true
+      }
+    },
+    {
+      "label": "both warn chooses larger percentage",
+      "budgets": [
+        {
+          "name": "Both",
+          "percent_used": 1.2,
+          "crossed_warn_at": [],
+          "over_limit": true,
+          "pace": {
+            "percent_used": 1.5,
+            "crossed_warn_at": [],
+            "over_limit": true
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "warn",
+      "expected": {
+        "name": "Both",
+        "scope": "pace",
+        "percent_used": 1.5,
+        "visible": true
+      }
+    },
+    {
+      "label": "missing pace falls back to cap",
+      "budgets": [
+        {
+          "name": "Only",
+          "percent_used": 0.63,
+          "crossed_warn_at": [],
+          "over_limit": false
+        }
+      ],
+      "focus": "pace",
+      "mode": "always",
+      "expected": {
+        "name": "Only",
+        "scope": "cap",
+        "percent_used": 0.63,
+        "visible": true
+      }
+    },
+    {
+      "label": "ties between levels select cap",
+      "budgets": [
+        {
+          "name": "Tie",
+          "percent_used": 0.5,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.5,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "auto",
+      "mode": "always",
+      "expected": {
+        "name": "Tie",
+        "scope": "cap",
+        "percent_used": 0.5,
+        "visible": true
+      }
+    },
+    {
+      "label": "ties between budgets select last",
+      "budgets": [
+        {
+          "name": "First",
+          "percent_used": 0.5,
+          "crossed_warn_at": [],
+          "over_limit": false
+        },
+        {
+          "name": "Last",
+          "percent_used": 0.5,
+          "crossed_warn_at": [],
+          "over_limit": false
+        }
+      ],
+      "focus": "cap",
+      "mode": "always",
+      "expected": {
+        "name": "Last",
+        "scope": "cap",
+        "percent_used": 0.5,
+        "visible": true
+      }
+    },
+    {
+      "label": "unavailable name hides the chip",
+      "budgets": [
+        {
+          "name": "Monthly",
+          "percent_used": 0.7,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.2,
+            "crossed_warn_at": [],
+            "over_limit": false
+          }
+        },
+        {
+          "name": "Weekly",
+          "percent_used": 0.4,
+          "crossed_warn_at": [],
+          "over_limit": false,
+          "pace": {
+            "percent_used": 0.55,
+            "crossed_warn_at": [
+              0.5
+            ],
+            "over_limit": false
+          }
+        }
+      ],
+      "focus": "Missing",
+      "mode": "always",
+      "expected": null
+    },
+    {
+      "label": "no budgets hides the chip",
+      "budgets": [],
+      "focus": "auto",
+      "mode": "always",
+      "expected": null
+    }
+  ],
+  "parsers": [
+    {
+      "input": " AUTO ",
+      "name": null,
+      "scope": "auto"
+    },
+    {
+      "input": "budget",
+      "name": null,
+      "scope": "cap"
+    },
+    {
+      "input": " CAP ",
+      "name": null,
+      "scope": "cap"
+    },
+    {
+      "input": "PACE",
+      "name": null,
+      "scope": "pace"
+    },
+    {
+      "input": "Named",
+      "name": "Named",
+      "scope": "auto"
+    },
+    {
+      "input": " Named ",
+      "name": " Named ",
+      "scope": "auto"
+    },
+    {
+      "input": " Named : BUDGET ",
+      "name": "Named",
+      "scope": "cap"
+    },
+    {
+      "input": "Named:PACE",
+      "name": "Named",
+      "scope": "pace"
+    }
+  ],
+  "invalid": [
+    "",
+    "  ",
+    ":cap",
+    "Named:",
+    "Named:auto",
+    "Named:pace:cap",
+    "Named:unknown"
+  ],
+  "metadata": [
+    {
+      "previous": null,
+      "incoming": {
+        "model": "first",
+        "tokens": {
+          "input": 4,
+          "output": 2,
+          "cache_read": 3,
+          "cache_write": 1
+        },
+        "timing": {
+          "total_ms": 20,
+          "ttft_ms": 5
+        }
+      },
+      "expected": {
+        "model": "first",
+        "tokens": {
+          "input": 4,
+          "output": 2,
+          "cache_read": 3,
+          "cache_write": 1
+        },
+        "timing": {
+          "total_ms": 20,
+          "ttft_ms": 5
+        }
+      }
+    },
+    {
+      "previous": {
+        "model": "first",
+        "tokens": {
+          "input": 4000000000,
+          "output": 2,
+          "cache_read": 3,
+          "cache_write": 1
+        },
+        "timing": {
+          "total_ms": 4294967290,
+          "ttft_ms": 5
+        }
+      },
+      "incoming": {
+        "model": "second",
+        "tokens": {
+          "input": 2000000000,
+          "output": 8,
+          "cache_read": 10,
+          "cache_write": 4
+        },
+        "timing": {
+          "total_ms": 20,
+          "ttft_ms": 9
+        }
+      },
+      "expected": {
+        "model": "second",
+        "tokens": {
+          "input": 6000000000,
+          "output": 10,
+          "cache_read": 13,
+          "cache_write": 5
+        },
+        "timing": {
+          "total_ms": 4294967295,
+          "ttft_ms": 5
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,22 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use shore_common::protocol::operations::{
+    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ClearArgs,
+    ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
+    ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
+    DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
+    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
+    InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs, ListProviderModels,
+    ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings,
+    ModelSettingsArgs, Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
+    ReadHeartbeatLog, ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
+    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
+    SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
+    SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
+    TranscriptArgs, TranscriptSource,
+};
+use shore_common::protocol::types::Role;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 const LEADING_HEADING: &str = "Options — must come before the command";
@@ -871,11 +888,11 @@ pub(crate) enum BackgroundTarget {
 }
 
 impl BackgroundTarget {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub(crate) fn as_protocol_target(self) -> BackgroundModelTarget {
         match self {
-            BackgroundTarget::All => "all",
-            BackgroundTarget::Heartbeat => "heartbeat",
-            BackgroundTarget::Compaction => "compaction",
+            Self::All => BackgroundModelTarget::All,
+            Self::Heartbeat => BackgroundModelTarget::Heartbeat,
+            Self::Compaction => BackgroundModelTarget::Compaction,
         }
     }
 }
@@ -891,11 +908,11 @@ pub(crate) enum LogRole {
 }
 
 impl LogRole {
-    pub(crate) fn as_protocol_role(self) -> &'static str {
+    pub(crate) fn as_protocol_role(self) -> Role {
         match self {
-            Self::User => "user",
-            Self::Assistant | Self::Character => "assistant",
-            Self::System => "system",
+            Self::User => Role::User,
+            Self::Assistant | Self::Character => Role::Assistant,
+            Self::System => Role::System,
         }
     }
 }
@@ -913,14 +930,15 @@ pub(crate) enum UsageDimension {
 }
 
 impl UsageDimension {
-    fn wire(self) -> &'static str {
+    fn wire(self) -> shore_common::protocol::operations::UsageDimension {
+        use shore_common::protocol::operations::UsageDimension as CanonicalDimension;
         match self {
-            Self::Model => "model",
-            Self::Provider => "provider",
-            Self::CallType => "call_type",
-            Self::Kind => "kind",
-            Self::ApiKey => "api_key",
-            Self::CostSource => "cost_source",
+            Self::Model => CanonicalDimension::Model,
+            Self::Provider => CanonicalDimension::Provider,
+            Self::CallType => CanonicalDimension::CallType,
+            Self::Kind => CanonicalDimension::Kind,
+            Self::ApiKey => CanonicalDimension::ApiKey,
+            Self::CostSource => CanonicalDimension::CostSource,
         }
     }
 }
@@ -1072,13 +1090,11 @@ impl ModelTarget {
         !self.chat && self.background.is_none() && self.subagent.is_none()
     }
 
-    pub(crate) fn write_into(&self, obj: &mut serde_json::Map<String, serde_json::Value>) {
-        use serde_json::json;
-        if let Some(task) = self.background {
-            let _ignored = obj.insert("background_task".into(), json!(task.as_str()));
-        }
-        if let Some(name) = &self.subagent {
-            let _ignored = obj.insert("subagent".into(), json!(name));
+    pub(crate) fn operation_args(&self) -> ModelInfoArgs {
+        ModelInfoArgs {
+            name: None,
+            background_task: self.background.map(BackgroundTarget::as_protocol_target),
+            subagent: self.subagent.clone(),
         }
     }
 }
@@ -1479,7 +1495,7 @@ pub(crate) enum DebugCommand {
         /// Whole argument object as JSON, for nested or array values.
         /// `key=value` pairs win where both set the same key.
         #[arg(long, value_parser = parse_json_object)]
-        input: Option<serde_json::Value>,
+        input: Option<BTreeMap<String, serde_json::Value>>,
 
         /// Print the tool's definition as the character receives it, instead
         /// of running it. Any arguments given are ignored
@@ -1526,23 +1542,14 @@ fn parse_key_value(raw: &str) -> Result<(String, String), String> {
     }
 }
 
-fn parse_json_object(raw: &str) -> Result<serde_json::Value, String> {
+fn parse_json_object(raw: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| format!("not valid JSON: {e}"))?;
     if value.is_object() {
-        Ok(value)
+        serde_json::from_value(value).map_err(|error| error.to_string())
     } else {
         Err("must be a JSON object, e.g. '{\"path\":\"notes.md\"}'".to_owned())
     }
-}
-
-fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
-    serde_json::Value::Object(
-        pairs
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect(),
-    )
 }
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
@@ -1595,7 +1602,7 @@ pub(crate) struct PaletteCatalog {
     pub tools: Vec<PaletteValue>,
     pub subagents: Vec<PaletteValue>,
     pub setting_keys: Vec<PaletteValue>,
-    pub setting_values: std::collections::BTreeMap<String, Vec<PaletteValue>>,
+    pub setting_values: BTreeMap<String, Vec<PaletteValue>>,
     pub message_refs: Vec<PaletteValue>,
     pub config_keys: Vec<PaletteValue>,
     pub config_sections: Vec<PaletteValue>,
@@ -2294,35 +2301,43 @@ pub(crate) fn to_swp_command(
             output,
             ..
         } => {
+            use shore_common::protocol::operations::{ExportCharacter, ExportCharacterArgs};
             let fallback = PathBuf::from(format!("{export_character}.shore.tar.gz"));
-            Some((
-                "export_character",
-                json!({
-                    "character": export_character,
-                    "output": absolute_path(output.as_deref().unwrap_or(&fallback)),
-                }),
-            ))
+            operation_to_swp::<ExportCharacter>(ExportCharacterArgs {
+                character: export_character.clone(),
+                output: absolute_path(output.as_deref().unwrap_or(&fallback)),
+            })
         }
-        CliCommand::Import { archive, .. } => Some((
-            "import_character",
-            json!({ "archive": absolute_path(archive) }),
-        )),
+        CliCommand::Import { archive, .. } => {
+            use shore_common::protocol::operations::{ImportCharacter, ImportCharacterArgs};
+            operation_to_swp::<ImportCharacter>(ImportCharacterArgs {
+                archive: absolute_path(archive),
+            })
+        }
 
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
-        CliCommand::Status { .. } => Some(("status", json!({}))),
+        CliCommand::Status { .. } => operation_to_swp::<ReadStatus>(EmptyOperationArgs {}),
 
         CliCommand::Debug { subcommand: None } => None,
         CliCommand::Debug {
             subcommand: Some(subcommand),
         } => match subcommand {
-            DebugCommand::TickNow => Some(("heartbeat_tick_now", json!({}))),
-            DebugCommand::StatusDormant => Some(("heartbeat_set_dormant", json!({}))),
-            DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
-            DebugCommand::KeepalivePingNow => Some(("keepalive_ping_now", json!({}))),
-            DebugCommand::SessionActivate => Some(("session_activate", json!({}))),
+            DebugCommand::TickNow => operation_to_swp::<ScheduleHeartbeat>(EmptyOperationArgs {}),
+            DebugCommand::StatusDormant => {
+                operation_to_swp::<SetHeartbeatDormant>(EmptyOperationArgs {})
+            }
+            DebugCommand::StatusActive => {
+                operation_to_swp::<SetHeartbeatActive>(EmptyOperationArgs {})
+            }
+            DebugCommand::KeepalivePingNow => {
+                operation_to_swp::<PingKeepalive>(EmptyOperationArgs {})
+            }
+            DebugCommand::SessionActivate => {
+                operation_to_swp::<ActivateSession>(EmptyOperationArgs {})
+            }
             DebugCommand::Tool {
                 name,
                 args,
@@ -2330,27 +2345,25 @@ pub(crate) fn to_swp_command(
                 raw,
                 describe,
                 ..
-            } => Some((
-                "run_tool",
-                json!({
-                    "tool": name,
-                    "input": input.clone().unwrap_or_else(|| json!({})),
-                    "pairs": pairs_object(args),
-                    "raw": raw,
-                    "describe": describe,
-                }),
-            )),
+            } => operation_to_swp::<ExecuteTool>(RunToolArgs {
+                tool: name.clone(),
+                input: Some(input.clone().unwrap_or_default()),
+                pairs: Some(args.iter().cloned().collect()),
+                raw: Some(*raw),
+                describe: Some(*describe),
+            }),
             DebugCommand::Subagent {
                 name, query, raw, ..
-            } => Some((
-                "run_tool",
-                json!({
-                    "tool": format!("ask_{name}"),
-                    "input": { "query": query.join(" ") },
-                    "pairs": {},
-                    "raw": raw,
-                }),
-            )),
+            } => operation_to_swp::<ExecuteTool>(RunToolArgs {
+                tool: format!("ask_{name}"),
+                input: Some(BTreeMap::from([(
+                    "query".to_owned(),
+                    json!(query.join(" ")),
+                )])),
+                pairs: Some(BTreeMap::new()),
+                raw: Some(*raw),
+                describe: None,
+            }),
         },
 
         CliCommand::Model { .. } => model_to_swp(cmd),
@@ -2361,48 +2374,64 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Segments { subcommand, .. } => {
             let (action, segment_index, field_value) = match subcommand {
-                None => ("list", None, None),
-                Some(SegmentsCommand::Show { index }) => ("show", Some(index), None),
-                Some(SegmentsCommand::Exclude { index }) => ("exclude", Some(index), None),
-                Some(SegmentsCommand::Include { index }) => ("include", Some(index), None),
-                Some(SegmentsCommand::Label { index, label }) => {
-                    ("label", Some(index), Some(label))
+                None => (SegmentAction::List, None, None),
+                Some(SegmentsCommand::Show { index }) => (SegmentAction::Show, Some(index), None),
+                Some(SegmentsCommand::Exclude { index }) => {
+                    (SegmentAction::Exclude, Some(index), None)
                 }
-                Some(SegmentsCommand::Note { index, note }) => ("note", Some(index), Some(note)),
+                Some(SegmentsCommand::Include { index }) => {
+                    (SegmentAction::Include, Some(index), None)
+                }
+                Some(SegmentsCommand::Label { index, label }) => {
+                    (SegmentAction::Label, Some(index), Some(label))
+                }
+                Some(SegmentsCommand::Note { index, note }) => {
+                    (SegmentAction::Note, Some(index), Some(note))
+                }
             };
-            let mut args = serde_json::Map::new();
-            _ = args.insert("action".into(), json!(action));
-            if let Some(selected_index) = segment_index {
-                _ = args.insert("index".into(), json!(selected_index));
-            }
-            if let Some(selected_value) = field_value {
-                _ = args.insert("value".into(), json!(selected_value));
-            }
-            Some(("segments", serde_json::Value::Object(args)))
+            operation_to_swp::<InspectSegments>(SegmentsArgs {
+                action: Some(action),
+                index: segment_index.map(|index| u64::from(*index)),
+                value: field_value.cloned(),
+            })
         }
 
         CliCommand::Clear { exclude, note, .. } => {
-            Some(("clear", json!({ "exclude": exclude, "note": note })))
+            operation_to_swp::<ClearConversation>(ClearArgs {
+                exclude: Some(*exclude),
+                note: Some(note.clone()),
+            })
         }
 
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
-        } => Some(("tools", json!({}))),
+        } => operation_to_swp::<ToolAccessListing>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Keys { .. }),
             ..
-        } => Some(("config_schema", json!({}))),
+        } => operation_to_swp::<ConfigurationSchema>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Get { key, .. }),
             ..
-        } => Some(("config", json!({ "key": key }))),
+        } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: Some(key.clone()),
+            value: None,
+        }),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Set { key, value, .. }),
             ..
-        } => Some(("config", json!({ "key": key, "value": value }))),
-        CliCommand::Config { check: true, .. } => Some(("config_check", json!({}))),
-        CliCommand::Config { .. } => Some(("config", json!({ "key": null, "value": null }))),
+        } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: Some(key.clone()),
+            value: Some(value.clone()),
+        }),
+        CliCommand::Config { check: true, .. } => {
+            operation_to_swp::<CheckConfiguration>(EmptyOperationArgs {})
+        }
+        CliCommand::Config { .. } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: None,
+            value: None,
+        }),
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }
@@ -2419,29 +2448,33 @@ pub(crate) fn absolute_path(path: &Path) -> String {
 }
 
 fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
     match cmd {
         MsgCommand::Send { system: false, .. } | MsgCommand::Regen { .. } => None,
         MsgCommand::Send {
             system: true,
             message,
             ..
-        } => Some(("inject_system", json!({ "text": message.join(" ") }))),
+        } => operation_to_swp::<InjectSystem>(InjectSystemArgs {
+            text: message.join(" "),
+        }),
         MsgCommand::Alt {
             selector, msg_ref, ..
         } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
         MsgCommand::Edit {
             msg_ref, content, ..
-        } => Some((
-            "edit",
-            json!({ "ref": msg_ref, "content": content.join(" ") }),
-        )),
-        MsgCommand::Delete { msg_refs, .. } => Some(("delete", json!({ "refs": msg_refs }))),
+        } => operation_to_swp::<EditMessage>(EditMessageArgs {
+            reference: msg_ref.clone(),
+            content: content.join(" "),
+        }),
+        MsgCommand::Delete { msg_refs, .. } => {
+            operation_to_swp::<DeleteMessages>(DeleteMessagesArgs {
+                refs: MessageReferences::Many(msg_refs.clone()),
+            })
+        }
     }
 }
 
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Log {
         msg_ref,
         role,
@@ -2452,23 +2485,23 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     if let Some(r) = msg_ref {
-        let mut args = Map::new();
-        let _ignored = args.insert("ref".into(), json!(r));
-        if let Some(role_filter) = role {
-            _ = args.insert("role".into(), json!(role_filter.as_protocol_role()));
-        }
-        return Some(("get", Value::Object(args)));
+        return operation_to_swp::<GetMessage>(GetMessageArgs {
+            reference: r.clone(),
+            role: role.map(LogRole::as_protocol_role),
+        });
     }
-    let mut args = Map::new();
-    let _ignored = args.insert("turns".into(), json!(count));
-    if let Some(role_filter) = role {
-        _ = args.insert("role".into(), json!(role_filter.as_protocol_role()));
-    }
-    Some(("log", Value::Object(args)))
+    operation_to_swp::<ConversationLog>(ConversationLogArgs {
+        turns: Some(u64::from(*count)),
+        count: None,
+        role: role.map(LogRole::as_protocol_role),
+    })
+}
+
+fn operation_to_swp<O: Operation>(input: O::Input) -> Option<(&'static str, serde_json::Value)> {
+    serde_json::to_value(input).ok().map(|args| (O::NAME, args))
 }
 
 fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Trace {
         subcommand: Some(subcommand),
     } = cmd
@@ -2476,19 +2509,27 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     match subcommand {
-        TraceCommand::Heartbeat { count, .. } => Some((
-            "transcript",
-            json!({ "source": "heartbeat", "count": count }),
-        )),
-        TraceCommand::Errors { count, .. } => Some(("error_log", json!({ "count": count }))),
-        TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
+        TraceCommand::Heartbeat { count, .. } => {
+            operation_to_swp::<ReadTranscript>(TranscriptArgs {
+                source: Some(TranscriptSource::Heartbeat),
+                count: Some(*count),
+            })
+        }
+        TraceCommand::Errors { count, .. } => {
+            operation_to_swp::<ReadErrorLog>(DiagnosticCountArgs {
+                count: Some(*count),
+            })
+        }
+        TraceCommand::Events { count, .. } => {
+            operation_to_swp::<ReadHeartbeatLog>(DiagnosticCountArgs {
+                count: Some(*count),
+            })
+        }
         TraceCommand::Subagent { id, count, .. } => {
-            let mut args = Map::new();
-            match id {
-                Some(one) => _ = args.insert("ids".into(), json!([one])),
-                None => _ = args.insert("count".into(), json!(count)),
-            }
-            Some(("subagent_trace", Value::Object(args)))
+            operation_to_swp::<ReadSubagentTraces>(SubagentTraceArgs {
+                ids: id.as_ref().map(|one| vec![one.clone()]),
+                count: id.is_none().then_some(*count),
+            })
         }
         TraceCommand::Calls {
             id,
@@ -2498,32 +2539,23 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             against,
             wire,
             ..
-        } => {
-            let mut args = Map::new();
-            if let Some(one) = id {
-                _ = args.insert("id".into(), json!(one));
-                if *wire {
-                    _ = args.insert("wire".into(), json!(true));
-                }
-                if *diff {
-                    _ = args.insert("diff".into(), json!(true));
-                    if let Some(other) = against {
-                        _ = args.insert("against".into(), json!(other));
-                    }
-                }
+        } => operation_to_swp::<InspectCalls>(CallLogArgs {
+            id: *id,
+            count: id.is_none().then_some(*count),
+            call_type: call_type.clone(),
+            character: None,
+            diff: (id.is_some() && *diff).then_some(true),
+            against: if id.is_some() && *diff {
+                *against
             } else {
-                _ = args.insert("count".into(), json!(count));
-            }
-            if let Some(ct) = call_type {
-                _ = args.insert("call_type".into(), json!(ct));
-            }
-            Some(("call_log", Value::Object(args)))
-        }
+                None
+            },
+            wire: (id.is_some() && *wire).then_some(true),
+        }),
     }
 }
 
 fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Model {
         subcommand,
         info,
@@ -2535,115 +2567,112 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     else {
         return None;
     };
-    if let Some(ModelCommand::Info {
-        name: info_name,
-        target,
-    }) = subcommand
-    {
-        let mut obj = Map::new();
-        let _ignored = obj.insert("name".into(), json!(info_name.clone().unwrap_or_default()));
-        target.write_into(&mut obj);
-        return Some(("model_info", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Use { name, target }) = subcommand {
-        let mut obj = Map::new();
-        let _ignored = obj.insert("name".into(), json!(name));
-        target.write_into(&mut obj);
-        return Some(("switch_model", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Fav { name }) = subcommand {
-        return Some(("favorite_model", json!({ "name": name, "favorite": true })));
-    }
-    if let Some(ModelCommand::Unfav { name }) = subcommand {
-        return Some(("favorite_model", json!({ "name": name, "favorite": false })));
-    }
-    if let Some(ModelCommand::Reset { target }) = subcommand {
-        let mut obj = Map::new();
-        target.write_into(&mut obj);
-        return Some(("reset_model", Value::Object(obj)));
-    }
-    if let Some(ModelCommand::Setting {
-        key,
-        value,
-        global,
-        reset: setting_reset,
-        target,
-        model: setting_model,
-        ..
-    }) = subcommand
-    {
-        let scope = if *global { "global" } else { "character" };
-        let with_target = |mut obj: Map<String, Value>| -> Value {
-            target.write_into(&mut obj);
-            if let Some(name) = setting_model {
-                let _ignored = obj.insert("name".into(), json!(name));
+    match subcommand {
+        Some(ModelCommand::Info { name, target }) => {
+            operation_to_swp::<InspectModel>(ModelInfoArgs {
+                name: Some(name.clone().unwrap_or_default()),
+                ..target.operation_args()
+            })
+        }
+        Some(ModelCommand::Use { name, target }) => {
+            let selected = target.operation_args();
+            operation_to_swp::<SwitchModel>(SwitchModelArgs {
+                name: Some(name.clone()),
+                include_hidden: all.then_some(true),
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        Some(ModelCommand::Fav { name }) => operation_to_swp::<FavoriteModel>(FavoriteModelArgs {
+            name: name.clone(),
+            favorite: Some(true),
+        }),
+        Some(ModelCommand::Unfav { name }) => {
+            operation_to_swp::<FavoriteModel>(FavoriteModelArgs {
+                name: name.clone(),
+                favorite: Some(false),
+            })
+        }
+        Some(ModelCommand::Reset { target }) => {
+            let selected = target.operation_args();
+            operation_to_swp::<ResetModel>(ResetModelArgs {
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        Some(ModelCommand::Setting {
+            key,
+            value,
+            global,
+            reset: setting_reset,
+            target,
+            model,
+            ..
+        }) => {
+            let selected = target.operation_args();
+            if let Some(setting_key) = key
+                && (*setting_reset || value.is_some())
+            {
+                return operation_to_swp::<SetModelSetting>(SetModelSettingArgs {
+                    key: setting_key.clone(),
+                    name: model.clone(),
+                    value: if *setting_reset {
+                        Some(serde_json::Value::Null)
+                    } else {
+                        value
+                            .as_ref()
+                            .map(|raw_value| parse_setting_value(setting_key, raw_value))
+                    },
+                    scope: Some(if *global {
+                        ModelPreferenceScope::Global
+                    } else {
+                        ModelPreferenceScope::Character
+                    }),
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                });
             }
-            Value::Object(obj)
-        };
-        let untargeted = target.is_bare() && setting_model.is_none();
-        return match (key.as_deref(), value.as_deref(), *setting_reset) {
-            (Some(k), _, true) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                _ = obj.insert("value".into(), Value::Null);
-                _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_target(obj)))
-            }
-            (None, _, _) if untargeted => Some(("model_settings", json!({ "overview": true }))),
-            (None, _, _) => Some(("model_settings", with_target(Map::new()))),
-            (Some(k), None, false) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                Some(("model_settings", with_target(obj)))
-            }
-            (Some(k), Some(v), false) => {
-                let mut obj = Map::new();
-                let _ignored = obj.insert("key".into(), json!(k));
-                _ = obj.insert("value".into(), parse_setting_value(k, v));
-                _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_target(obj)))
-            }
-        };
+            operation_to_swp::<ModelSettings>(ModelSettingsArgs {
+                name: model.clone(),
+                key: key.clone(),
+                overview: (key.is_none() && target.is_bare() && model.is_none()).then_some(true),
+                background_task: selected.background_task,
+                subagent: selected.subagent,
+            })
+        }
+        None if *reset => operation_to_swp::<ResetModel>(ResetModelArgs::default()),
+        None if *info => operation_to_swp::<InspectModel>(ModelInfoArgs::default()),
+        None => operation_to_swp::<ListModels>(ListModelsArgs {
+            include_hidden: all.then_some(true),
+            favorites_only: favorites.then_some(true),
+        }),
     }
-
-    if *reset {
-        return Some(("reset_model", json!({})));
-    }
-    if *info {
-        return Some(("model_info", json!({})));
-    }
-    let mut args = Map::new();
-    if *all {
-        let _ignored = args.insert("include_hidden".into(), json!(true));
-    }
-    if *favorites {
-        let _ignored = args.insert("favorites_only".into(), json!(true));
-    }
-    Some(("list_models", Value::Object(args)))
 }
 
 fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
     let CliCommand::Provider { subcommand, .. } = cmd else {
         return None;
     };
     match subcommand {
-        Some(ProviderCommand::Models { name, all, .. }) => Some((
-            "list_provider_models",
-            json!({ "provider": name, "include_hidden": *all }),
-        )),
-        Some(ProviderCommand::Refresh { name: Some(n), .. }) => {
-            Some(("refresh_provider_models", json!({ "provider": n })))
+        Some(ProviderCommand::Models { name, all, .. }) => {
+            operation_to_swp::<ListProviderModels>(ProviderModelsArgs {
+                provider: name.clone(),
+                include_hidden: Some(*all),
+            })
         }
+        Some(ProviderCommand::Refresh {
+            name: Some(name), ..
+        }) => operation_to_swp::<RefreshProviderModels>(ProviderArgs {
+            provider: name.clone(),
+        }),
         Some(ProviderCommand::Refresh { name: None, .. }) => {
-            Some(("refresh_all_provider_models", json!({})))
+            operation_to_swp::<RefreshAllProviderModels>(EmptyOperationArgs {})
         }
-        None => Some(("list_providers", json!({}))),
+        None => operation_to_swp::<ListProviders>(EmptyOperationArgs {}),
     }
 }
 
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{Map, Value, json};
     let CliCommand::Compact {
         keep_turns,
         restart,
@@ -2652,21 +2681,18 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     else {
         return None;
     };
-    let mut args = Map::new();
-    if let Some(n) = keep_turns {
-        let _ignored = args.insert("keep_turns".into(), json!(n));
-    }
-    if *restart {
-        let _ignored = args.insert("restart".into(), json!(true));
-    }
-    Some(("compact", Value::Object(args)))
+    operation_to_swp::<CompactConversation>(CompactArgs {
+        dry_run: None,
+        keep_turns: keep_turns.map(u64::from),
+        restart: restart.then_some(true),
+    })
 }
 
 fn usage_to_swp(
     cmd: &CliCommand,
     selected: Option<&str>,
 ) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
+    use shore_common::protocol::operations::{UsageArgs, UsageReport};
     let CliCommand::Usage {
         subcommand,
         last,
@@ -2698,22 +2724,19 @@ fn usage_to_swp(
         Some(UsageCommand::By { dimension }) => Some(dimension.wire()),
         _ => None,
     };
-    Some((
-        "usage",
-        json!({
-            "last": last,
-            "character": selected,
-            "provider": provider,
-            "api_key": api_key,
-            "model": model,
-            "call_type": call_type,
-            "group_by": group_by,
-            "budget": budget,
-            "anomalies": anomalies,
-            "export_csv": tab_separated == Some(false),
-            "export_tsv": tab_separated == Some(true),
-        }),
-    ))
+    operation_to_swp::<UsageReport>(UsageArgs {
+        last: Some(last.clone()),
+        character: Some(selected.map(str::to_owned)),
+        provider: Some(provider.clone()),
+        api_key: Some(api_key.clone()),
+        model: Some(model.clone()),
+        call_type: Some(call_type.clone()),
+        group_by: Some(group_by),
+        budget: Some(budget),
+        anomalies: Some(anomalies),
+        export_csv: Some(tab_separated == Some(false)),
+        export_tsv: Some(tab_separated == Some(true)),
+    })
 }
 
 #[cfg(test)]
@@ -2899,7 +2922,7 @@ mod tests {
             tools: vec![PaletteValue::plain("read")],
             subagents: vec![PaletteValue::plain("librarian")],
             setting_keys: vec![PaletteValue::plain("temperature")],
-            setting_values: std::collections::BTreeMap::from([(
+            setting_values: BTreeMap::from([(
                 "temperature".into(),
                 vec![PaletteValue::plain("0.125")],
             )]),
@@ -3220,10 +3243,7 @@ mod tests {
                 &["clear", "--exclude", "--note", "bad branch"],
                 Some(("clear", json!({"exclude": true, "note": "bad branch"}))),
             ),
-            (
-                &["config"],
-                Some(("config", json!({"key": null, "value": null}))),
-            ),
+            (&["config"], Some(("config", json!({})))),
             (
                 &["config", "get", "chat.model"],
                 Some(("config", json!({"key": "chat.model"}))),

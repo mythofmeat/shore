@@ -15,9 +15,10 @@ import {
 } from "../commands/dispatch.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import { switchCharacter, type Args } from "../commands/navigation.ts";
+import { runRegisteredOperation, isRegisteredOperation, commandOperations } from "../commands/registry.ts";
+import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
-import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
+import { afterConfigurationCommand, afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import type { FrameSink } from "../llm/stream.ts";
@@ -50,19 +51,28 @@ export function makeDispatchCommand(
 }
 
 export async function dispatchCommand(
-  deps: CommandPathDeps,
+  originalDeps: CommandPathDeps,
   cmd: Command,
   meta: RequestMeta,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<ServerMessage> {
+  const archive = originalDeps.commands.archive;
+  const deps = archive === undefined || meta.session.archiveLimits === undefined ? originalDeps : {
+    ...originalDeps, commands: { ...originalDeps.commands, archive: { ...archive, limits: meta.session.archiveLimits } },
+  };
   const sessionId = meta.session.sessionId;
   const selected = meta.session.selectedCharacter ?? undefined;
   const rid = meta.rid ?? undefined;
 
-  if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
+  if (isRegisteredOperation(cmd.name)) {
+    try {
+      parseOperationInput(cmd.name, cmd.args);
+    } catch (error) {
+      return frameWithRid(commandFrame(cmd.name, { err: error }), rid);
+    }
   }
-  if (cmd.name === "refresh_provider_models") {
+
+  if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
     return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
   if (cmd.name === "switch_character") {
@@ -70,19 +80,23 @@ export async function dispatchCommand(
   }
 
   let character: string;
+  const optionalCharacter = isRegisteredOperation(cmd.name) && commandOperations[cmd.name].presentation.scope === "optional_character";
   try {
     character = deps.registry.resolveCharacter(selected);
   } catch (e) {
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof CharacterError ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: invalidRequest(message) }), rid);
   }
 
-  const config = deps.registry.effectiveConfig(character);
-  const thread = liveThread(deps.registry, character, meta.session.selectedThread);
+  let config: LoadedConfig;
   let engine: ConversationEngine;
   try {
+    config = deps.registry.effectiveConfig(character);
+    const thread = liveThread(deps.registry, character, meta.session.selectedThread);
     engine = await deps.registry.getOrCreate(character, thread);
   } catch (e) {
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof Error ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
@@ -101,7 +115,7 @@ export async function dispatchCommand(
       router: deps.router,
       handshake: deps.handshake,
     });
-    frame = commandFrame(cmd.name, { ok: annotated });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }
@@ -129,12 +143,17 @@ async function switchCharacterCommand(
 
   let frame: ServerMessage;
   try {
-    const data = switchCharacter(
-      globalConfig.dirs.config,
-      pinned,
-      (cmd.args ?? {}) as Args,
-      globalConfig.dirs.workspace,
-    );
+    const data = await runRegisteredOperation("switch_character", {
+      session: {
+        config: globalConfig,
+        configPath: deps.configPath,
+        dataDir: deps.dataDir,
+        characterName: pinned,
+        activeModel: undefined,
+        runtime: deps.runtime,
+      },
+      deps: deps.commands,
+    }, cmd.args);
     const annotated = await afterCommand(cmd.name, cmd.args, data, {
       character: data.character,
       config: deps.registry.effectiveConfig(data.character),
@@ -144,7 +163,7 @@ async function switchCharacterCommand(
       router: deps.router,
       handshake: deps.handshake,
     });
-    frame = commandFrame(cmd.name, { ok: annotated });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }
@@ -173,31 +192,14 @@ async function characterlessCommand(
 
   let frame: ServerMessage;
   try {
-    const data =
-      cmd.name === "refresh_provider_models"
-        ? await refreshProviderModels(session, deps, cmd)
-        : await runCharacterlessCommand(session, deps.commands, cmd);
-    frame = commandFrame(cmd.name, { ok: data });
+    const data = await runCharacterlessCommand(session, deps.commands, cmd);
+    const annotated = await afterConfigurationCommand(cmd.name, cmd.args, data, { config: session.config, runtime: deps.dispatchRuntime });
+    frame = commandFrame(cmd.name, { ok: isRegisteredOperation(cmd.name) ? parseOperationResult(cmd.name, annotated) : annotated });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }
 
   return frameWithRid(frame, rid);
-}
-
-async function refreshProviderModels(
-  session: CommandSession,
-  deps: CommandPathDeps,
-  cmd: Command,
-): Promise<unknown> {
-  const { refreshProviderModels: refresh } = await import("../commands/providers.ts");
-  return await refresh(
-    {
-      config: session.config,
-      ...(deps.commands.fetchImpl === undefined ? {} : { fetchImpl: deps.commands.fetchImpl }),
-    },
-    (cmd.args ?? {}) as Args,
-  );
 }
 
 function characterSession(
@@ -257,6 +259,7 @@ function frameWithRid(frame: ServerMessage, rid: string | undefined): ServerMess
     case "phase":
     case "tool_call":
     case "tool_result":
+    case "send_image":
       return { ...frame, rid };
     default:
       return frame;

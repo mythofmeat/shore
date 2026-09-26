@@ -1,5 +1,7 @@
 mod ansi;
 mod app;
+#[cfg(test)]
+mod capability_inventory;
 mod clipboard;
 mod command_output;
 mod connection;
@@ -29,6 +31,9 @@ use ratatui::Terminal;
 use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
+use shore_common::protocol::operations::{
+    ConfigReloadArgs, ConfigReloadResult, Operation, ReloadConfiguration, UsageArgs, UsageReport,
+};
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
 use tracing::{info, instrument, warn};
@@ -1052,12 +1057,20 @@ fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
     app.history_version = app.history_version.wrapping_add(1);
 }
 
-fn usage_budget_conn_command() -> ConnCommand {
-    ConnCommand::Send(ClientMessage::Command(Command {
-        rid: None,
-        name: "usage".into(),
-        args: serde_json::json!({ "budget": true }),
-    }))
+fn usage_budget_conn_commands(app: &mut App) -> Vec<ConnCommand> {
+    match UsageReport::command(
+        UsageArgs {
+            budget: Some(true),
+            ..UsageArgs::default()
+        },
+        None,
+    ) {
+        Ok(command) => vec![ConnCommand::Send(ClientMessage::Command(command))],
+        Err(error) => {
+            app.set_error(error.to_string());
+            vec![]
+        }
+    }
 }
 
 async fn handle_conn_event_and_send(
@@ -1537,7 +1550,9 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.set_status("connected");
             let mut cmds = if has_selected_character {
-                vec![usage_budget_conn_command(), thread_refresh_command(app)]
+                let mut commands = usage_budget_conn_commands(app);
+                commands.push(thread_refresh_command(app));
+                commands
             } else {
                 vec![]
             };
@@ -1835,7 +1850,7 @@ fn blocks_from_content(
                     tool_name: (*name).to_owned(),
                     output,
                     images,
-                    is_error: *is_error,
+                    is_error: is_error.unwrap_or(false),
                 });
             }
             ContentBlock::Text { text } => {
@@ -1895,6 +1910,7 @@ fn restore_unpersisted_user_draft(app: &mut App) -> bool {
 }
 
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
+    let images = msg.display_images();
     if msg.role == Role::System {
         entries.push(ConversationEntry::System {
             msg_id: Some(msg.msg_id),
@@ -1911,7 +1927,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
             msg.role,
             msg_id,
             msg.content,
-            msg.images,
+            images,
             msg.timestamp,
             None,
         )));
@@ -1925,7 +1941,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
         role: msg.role,
         msg_id: Some(msg.msg_id),
         blocks,
-        images: msg.images,
+        images,
         timestamp: msg.timestamp,
         state: TurnState::Complete,
         metadata: None,
@@ -2120,6 +2136,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2276,6 +2293,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => false,
     }
 }
@@ -2334,6 +2352,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2443,6 +2462,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.tokens = end.metadata.tokens.clone();
 
             let final_phase = end.finish_reason != "tool_use";
+            let image_scope = end
+                .msg_id
+                .as_deref()
+                .or(end.rid.as_deref())
+                .unwrap_or("stream");
+            let terminal = end.terminal_content_blocks.as_deref().unwrap_or_default();
 
             let target_pos = end
                 .msg_id
@@ -2463,12 +2488,17 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
             match target_pos.and_then(|pos| app.entries.get_mut(pos)?.as_turn_mut()) {
                 Some(turn) => {
+                    shore_common::protocol::types::append_inline_images(
+                        &mut turn.images,
+                        image_scope,
+                        terminal,
+                    );
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
                         turn.msg_id.clone_from(&end.msg_id);
                     }
                     if final_phase {
-                        if let Some(terminal) = &end.terminal_content_blocks {
+                        if end.terminal_content_blocks.is_some() {
                             let tool_names = tool_name_map(terminal);
                             let authoritative = blocks_from_content(terminal, &tool_names);
                             let replace_from = turn
@@ -2491,22 +2521,41 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 None if final_phase => {
                     let mut metadata = None;
                     accumulate_metadata(&mut metadata, &end.metadata);
-                    app.entries.push(ConversationEntry::Turn(Turn::text(
+                    let mut images = Vec::new();
+                    shore_common::protocol::types::append_inline_images(
+                        &mut images,
+                        image_scope,
+                        terminal,
+                    );
+                    let mut turn = Turn::text(
                         Role::Assistant,
                         end.msg_id.clone(),
                         end.content.clone(),
-                        vec![],
+                        images,
                         String::new(),
                         metadata,
-                    )));
+                    );
+                    if end.terminal_content_blocks.is_some() {
+                        turn.blocks = blocks_from_content(terminal, &tool_name_map(terminal));
+                    }
+                    app.entries.push(ConversationEntry::Turn(turn));
                 }
                 None => {
                     let turn = app.ensure_streaming_turn();
+                    shore_common::protocol::types::append_inline_images(
+                        &mut turn.images,
+                        image_scope,
+                        terminal,
+                    );
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
                         turn.msg_id.clone_from(&end.msg_id);
                     }
                 }
+            }
+
+            if !shore_common::protocol::types::inline_images(terminal).is_empty() {
+                transmit_entry_images(app);
             }
 
             if final_phase {
@@ -2518,7 +2567,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.scroll_to_bottom();
                 }
                 return UiEffect {
-                    cmds: vec![usage_budget_conn_command()],
+                    cmds: usage_budget_conn_commands(app),
                     redraw: RedrawEffect::ImmediateFull,
                 };
             }
@@ -2595,7 +2644,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             let palette_command = app.take_palette_command(co.rid.as_deref());
             if co.name == "config_reload"
-                && co.data.get("applied").is_none()
+                && co.data.get("applied").and_then(serde_json::Value::as_bool) == Some(false)
                 && let Some((command_text, yes)) = palette_command.as_deref().and_then(|text| {
                     let parsed = crate::cli::parse_palette_command(text).ok()?;
                     let crate::cli::CliCommand::Config {
@@ -2608,14 +2657,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     Some((text.to_owned(), yes))
                 })
             {
-                let changed = co
-                    .data
-                    .get("changed_prompt_files")
-                    .and_then(serde_json::Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(serde_json::Value::as_str)
-                    .collect::<Vec<_>>();
+                let preview = match serde_json::from_value::<ConfigReloadResult>(co.data.clone()) {
+                    Ok(preview) => preview,
+                    Err(error) => {
+                        app.set_error(format!("Invalid configuration preview: {error}"));
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                };
+                let changed = preview.changed_prompt_files;
                 if !changed.is_empty() && !yes {
                     app.set_warning(format!(
                         "System prompt files changed: {}. Config reloaded without activating them; review them, then run `:config reload --yes`.",
@@ -2623,15 +2672,21 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     ));
                 }
                 let rid = app.begin_palette_command(&command_text);
+                let command = match ReloadConfiguration::command(
+                    ConfigReloadArgs {
+                        apply: Some(true),
+                        refresh_prompts: Some(yes && !changed.is_empty()),
+                    },
+                    Some(rid),
+                ) {
+                    Ok(command) => command,
+                    Err(error) => {
+                        app.set_error(error.to_string());
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                };
                 return UiEffect {
-                    cmds: vec![ConnCommand::Send(ClientMessage::Command(Command {
-                        rid: Some(rid),
-                        name: "config_reload".into(),
-                        args: serde_json::json!({
-                            "apply": true,
-                            "refresh_prompts": yes && !changed.is_empty()
-                        }),
-                    }))],
+                    cmds: vec![ConnCommand::Send(ClientMessage::Command(command))],
                     redraw: RedrawEffect::Immediate,
                 };
             }
@@ -3380,6 +3435,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::Hello(_)
         | ServerMessage::Shutdown(_)
         | ServerMessage::Ping(_)
+        | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => RedrawEffect::Immediate,
     };
     UiEffect::redraw(redraw)
@@ -3393,6 +3449,79 @@ mod redraw_tests {
         CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+    #[test]
+    fn structured_history_images_reach_the_existing_tui_viewer() {
+        let ServerMessage::History(history) = serde_json::from_str(include_str!(
+            "../../../../fixtures/protocol/rich-history.json"
+        ))
+        .unwrap() else {
+            panic!("Missing history fixture");
+        };
+        let entries = build_history_entries(history.messages, 0);
+        let turn = entries.first().unwrap().as_turn().unwrap();
+        assert!(turn.images.is_empty());
+        let images: Vec<_> = turn
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::ToolResult { images, .. } => Some(images),
+                Block::Text(_)
+                | Block::Thinking(_)
+                | Block::ToolUse { .. }
+                | Block::SubagentBegin(_)
+                | Block::SubagentEnd(_) => None,
+            })
+            .flatten()
+            .collect();
+        assert_eq!(images.len(), 1);
+        assert!(
+            images
+                .first()
+                .unwrap()
+                .data
+                .as_ref()
+                .unwrap()
+                .starts_with("iVBOR")
+        );
+        assert!(turn.blocks.iter().any(|block| matches!(block, Block::ToolResult { output, is_error: false, .. } if output == "Image result")));
+    }
+
+    #[test]
+    fn structured_terminal_images_repair_a_missing_stream_in_the_tui() {
+        let ServerMessage::History(history) = serde_json::from_str(include_str!(
+            "../../../../fixtures/protocol/rich-history.json"
+        ))
+        .unwrap() else {
+            panic!("Missing history fixture");
+        };
+        let blocks = &history.messages.first().unwrap().content_blocks;
+        let end = serde_json::from_value(serde_json::json!({
+            "type": "stream_end", "rid": "image-request", "msg_id": "image-answer", "content": "Image result", "terminal_content_blocks": blocks,
+            "is_final": true, "finish_reason": "end_turn", "metadata": { "model": "test", "tokens": { "input": 1, "output": 1, "cache_read": 0, "cache_write": 0 }, "timing": { "total_ms": 1, "ttft_ms": 1 } }
+        })).unwrap();
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some("image-request".into()),
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        let _ = handle_server_message(&mut app, end);
+        let turn = app.entries.last().unwrap().as_turn().unwrap();
+        assert!(turn.images.is_empty());
+        assert!(
+            turn.blocks.iter().any(
+                |block| matches!(block, Block::ToolResult { images, .. } if images.len() == 1)
+            )
+        );
+        assert!(turn.blocks.iter().any(
+            |block| matches!(block, Block::ToolResult { output, .. } if output == "Image result")
+        ));
+    }
 
     fn with_isolated_session(name: &str, check: impl FnOnce()) {
         const CHILD_TEST: &str = "SHORE_SESSION_TEST_CHILD";
@@ -4577,7 +4706,10 @@ mod redraw_tests {
             ServerMessage::CommandOutput(CommandOutput {
                 rid: Some(rid.clone()),
                 name: "status".into(),
-                data: serde_json::json!({ "daemon": { "state": "running" } }),
+                data: serde_json::from_str(include_str!(
+                    "../../tests/fixtures/diagnostic_status.json"
+                ))
+                .unwrap(),
             }),
         );
 
@@ -4720,6 +4852,7 @@ mod redraw_tests {
                 rid: Some(check_rid),
                 name: "config_reload".into(),
                 data: serde_json::json!({
+                    "applied": false, "config_path": "fixture.toml", "character": "ada",
                     "changed_prompt_files": ["system.md"]
                 }),
             }),

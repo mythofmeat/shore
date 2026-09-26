@@ -85,6 +85,42 @@ fn item<T>(items: &[T], index: usize) -> &T {
 }
 
 #[test]
+fn request_finished_preserves_correlation_and_failure() {
+    let frame: ServerMessage = assert_golden(
+        r#"{
+        "type": "request_finished", "rid": "background-request", "outcome": "failed",
+        "error": {"code": "provider_error", "message": "Provider unavailable", "retry_after_ms": 500}
+    }"#,
+    );
+    assert_eq!(frame.request_id(), Some("background-request"));
+    assert_variant!(frame, ServerMessage::RequestFinished(done) => {
+        assert_eq!(done.outcome, RequestOutcome::Failed);
+        assert_eq!(done.error.unwrap().retry_after_ms, Some(500));
+    });
+    for outcome in ["completed", "cancelled", "superseded"] {
+        let json = format!(r#"{{"type":"request_finished","rid":"r","outcome":"{outcome}"}}"#);
+        let _: ServerMessage = assert_golden(&json);
+    }
+}
+
+#[test]
+fn structured_image_history_preserves_nested_wire_data_and_display_images() {
+    let frame: ServerMessage =
+        assert_golden(include_str!("../../../fixtures/protocol/rich-history.json"));
+    assert_variant!(frame, ServerMessage::History(history) => {
+        let message = history.messages.first().unwrap();
+        let ContentBlock::ToolResult { content, is_error, .. } = message.content_blocks.get(1).unwrap() else { panic!("Missing structured tool result"); };
+        assert_eq!(content.display_text(), "Image result\n[Image attached]");
+        assert!(!is_error.unwrap_or(false));
+        assert_eq!(inline_images(&message.content_blocks).len(), 1);
+        assert!(message.display_images().is_empty());
+        let images = inline_images(&message.content_blocks);
+        let ImageSource::Base64 { data, .. } = images.first().unwrap();
+        assert!(data.starts_with("iVBOR"));
+    });
+}
+
+#[test]
 fn server_hello_golden() {
     let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("server_hello")));
     assert_variant!(
@@ -835,6 +871,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {
                 panic!("unexpected message for missing rid test");
             }

@@ -241,6 +241,7 @@ describe("routed messages", () => {
     });
 
     const received = h.frames.get(1) ?? [];
+    expect(received.find((frame) => frame.type === "stream_end" && frame.rid === "r1")).toMatchObject({ finish_reason: "cancelled", is_final: true });
     expect(
       stripAbsent({
         launched,
@@ -330,7 +331,9 @@ describe("routed messages", () => {
 
     expect({ generation_running: h.started.length === 2 }).toEqual(c.output as never);
     expect(firstSignal).toBeDefined();
-    expect((h.frames.get(1) ?? []).filter((f) => f.type === "stream_end")).toHaveLength(0);
+    expect((h.frames.get(1) ?? []).filter((f) => f.type === "stream_end")).toMatchObject([
+      { rid: "r1", finish_reason: "cancelled", is_final: true },
+    ]);
   });
   test("a hello on the engine path is ignored", async () => {
     const c = caseByName(routed, "a hello on the engine path is ignored");
@@ -461,6 +464,51 @@ describe("what a generation is handed", () => {
 });
 
 describe("session state lifecycle", () => {
+  test.each(["cancelled", "superseded"] as const)("%s requests finish only after the provider actually settles", async (outcome) => {
+    const finishes: (() => void)[] = [];
+    const h = harness(["Alice"], 1, () => new Promise<void>((resolve) => { finishes.push(resolve); }));
+    h.router.setSelectedCharacter(1, "Alice");
+    const request = (rid: string): RequestMeta => {
+      const base = meta("Alice", 1, rid, "message");
+      return { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } };
+    };
+    await h.handler.handleRouted({ kind: "engine", msg: message("first", "hello", true), meta: request("first") });
+    if (outcome === "cancelled") await h.handler.cancelGeneration(1, null, "user cancelled");
+    else await h.handler.handleRouted({ kind: "engine", msg: message("second", "again", true), meta: request("second") });
+    expect(h.started[0]?.signal.aborted).toBe(true);
+    expect(h.frames.get(1)?.map((frame) => frame.type)).toEqual(["stream_end"]);
+    for (const finish of finishes) finish();
+    await h.handler.drain();
+    expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished" && frame.rid === "first")).toMatchObject({ outcome });
+    if (outcome === "superseded") expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished" && frame.rid === "second")).toMatchObject({ outcome: "completed" });
+  });
+
+  test("a synchronous provider failure also finishes its request and releases session state", async () => {
+    const h = harness(["Alice"], 1, () => { throw new Error("synchronous provider failure"); });
+    const request = meta("Alice", 1, "failure", "message");
+    await h.handler.handleRouted({ kind: "engine", msg: message("failure", "hello", true), meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } } });
+    await h.handler.drain();
+    expect(h.frames.get(1)?.find((frame) => frame.type === "request_finished")).toMatchObject({ outcome: "failed", error: { message: "synchronous provider failure" } });
+    expect(h.handler.sessionStateCount).toBe(0);
+  });
+
+  test("opted-in clients receive failure details after moving away from the request's thread", async () => {
+    let fail = (_error: Error) => {};
+    const h = harness(["Alice"], 1, () => new Promise<void>((_resolve, reject) => { fail = reject; }));
+    const request = meta("Alice", 1, "background", "message");
+    h.router.setSelectedCharacter(1, "Alice");
+    await h.handler.handleRouted({
+      kind: "engine", msg: message("background", "hello", true),
+      meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } },
+    });
+    h.router.setSelectedThread(1, "other");
+    fail(new Error("background request failed"));
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([
+      { type: "request_finished", rid: "background", outcome: "failed", error: { code: "internal_error", message: "background request failed" } },
+    ]);
+  });
+
   test("a completed generation releases its session state", async () => {
     let finish: (() => void) | undefined;
     const h = harness(
@@ -927,6 +975,48 @@ describe("per-session routing queues", () => {
   });
 });
 
+test("cancel bypasses a blocked command, isolates its session and preserves its confirmed result", async () => {
+  const { dispatch, gate, signals } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 2, undefined, dispatch);
+  const base = meta("ada", 1, "held-request", "command");
+  const request = { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } };
+  handler.enqueueRouted({ kind: "command", cmd: command("held"), meta: request });
+  handler.enqueueRouted({ kind: "command", cmd: command("other"), meta: meta("ada", 2, null, "command") });
+  try {
+    await settle();
+    handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+    await settle();
+    expect(required(signals.get("held")).aborted).toBe(true);
+    expect(required(signals.get("other")).aborted).toBe(false);
+    gate("held").resolve();
+    await settle();
+    expect(names(required(frames.get(1)))).toEqual(["held", "request_finished"]);
+    expect(frames.get(1)?.at(-1)).toMatchObject({ type: "request_finished", rid: "held-request", outcome: "completed" });
+  } finally {
+    gate("held").resolve(); gate("other").resolve(); await handler.drain();
+  }
+});
+
+test.each([false, true])("cancel prevents queued mutations from starting and leaves later requests usable (started: %s)", async (started) => {
+  const { dispatch, gate, started: calls } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+  const request = (rid: string) => { const base = meta("ada", 1, rid, "command"); return { ...base, session: { ...base.session, capabilities: ["request-lifecycle"] } }; };
+  handler.enqueueRouted({ kind: "command", cmd: command("first"), meta: request("first-rid") });
+  handler.enqueueRouted({ kind: "command", cmd: command("queued"), meta: request("queued-rid") });
+  if (started) await settle();
+  handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+  gate("first").resolve(); gate("queued").resolve();
+  await handler.drain();
+  expect(calls).toEqual(started ? ["first"] : []);
+  expect(frames.get(1)?.filter((frame) => frame.type === "request_finished")).toMatchObject([
+    { rid: "first-rid", outcome: started ? "completed" : "cancelled" },
+    { rid: "queued-rid", outcome: "cancelled" },
+  ]);
+  handler.enqueueRouted({ kind: "command", cmd: command("after"), meta: request("after-rid") });
+  gate("after").resolve(); await handler.drain();
+  expect(frames.get(1)?.at(-1)).toMatchObject({ type: "request_finished", rid: "after-rid", outcome: "completed" });
+});
+
 describe("a session that disconnects mid-command", () => {
   test("aborts the in-flight command and suppresses its reply", async () => {
     const { dispatch, gate, signals } = gatedDispatch();
@@ -979,7 +1069,7 @@ test("different threads can generate in one session without cancelling or mixing
   await main.send({ type: "stream_chunk", text: "main", content_type: "text" });
   await scratch.send({ type: "stream_chunk", text: "scratch", content_type: "text" });
   expect(h.frames.get(1)).toEqual([{ type: "stream_chunk", text: "scratch", content_type: "text" }]);
-  await h.handler.cancelGeneration(1, "user cancelled");
+  await h.handler.cancelGeneration(1, null, "user cancelled");
   expect(scratch.signal.aborted).toBe(true);
   expect(main.signal.aborted).toBe(false);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "scratch", finish_reason: "cancelled" });
@@ -987,4 +1077,46 @@ test("different threads can generate in one session without cancelling or mixing
   await h.handler.drain();
   expect(main.signal.aborted).toBe(true);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "main", finish_reason: "cancelled" });
+});
+
+test("the shared engine handler preserves all conversation fields from its executable registrations", async () => {
+  const h = harness(["Alice"], 1);
+  const request: ClientMessage = { type: "message", rid: "all-fields", text: "hello", stream: false, images: ["original.png"], image_data: [{ filename: "upload.png", data: "YWJj", mime_type: "image/png" }], absence_seconds: 120 };
+  await h.handler.handleEngine(request, meta("Alice", 1, "all-fields", "message"));
+  expect(h.started[0]?.body).toEqual({ rid: "all-fields", text: "hello", stream: false, images: ["original.png"], image_data: [{ filename: "upload.png", data: "YWJj", mime_type: "image/png" }], absence_seconds: 120 });
+  expect(h.started[0]?.regen).toBe(false);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+  expect(h.started[0]?.signal.aborted).toBe(true);
+  await h.handler.handleEngine({ type: "regen", rid: "regen-fields", stream: false, guidance: "new perspective" }, meta("Alice", 1, "regen-fields", "regen"));
+  expect(h.started[1]?.body).toEqual({ rid: "regen-fields", text: "", stream: false, images: [], image_data: [], guidance: "new perspective" });
+  expect(h.started[1]?.regen).toBe(true);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+});
+
+test("non-streaming requests wait for the completed response while spectators still receive progress", async () => {
+  const h = harness(["Alice"], 2);
+  h.leases.observe("Alice", 2, "message");
+  await h.handler.handleEngine({ type: "regen", rid: "quiet", stream: false }, meta("Alice", 1, "quiet", "regen"));
+  const generation = required(h.started[0]);
+  const frames: ServerMessage[] = [
+    { type: "stream_start", rid: "quiet", regen: true },
+    { type: "stream_chunk", rid: "quiet", content_type: "thinking", text: "thinking" },
+    { type: "stream_chunk", rid: "quiet", content_type: "text", text: "partial" },
+    { type: "stream_end", rid: "quiet", content: "completed", is_final: true, metadata: { model: "fixture", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } },
+  ];
+  for (const frame of frames) await generation.send(frame);
+  expect(h.frames.get(1)).toEqual([required(frames[3])]);
+  expect(h.frames.get(2)).toEqual(frames);
+  await h.handler.handleEngine({ type: "cancel" }, meta("Alice", 1, null, "cancel"));
+});
+
+
+test("cancel reports each skipped command to clients without request lifecycle", async () => {
+  const { dispatch, gate, started } = gatedDispatch();
+  const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+  handler.enqueueRouted({ kind: "command", cmd: command("queued"), meta: meta("ada", 1, "queued-rid", "command") });
+  handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "cancel") });
+  gate("queued").resolve(); await handler.drain();
+  expect(started).toEqual([]);
+  expect(frames.get(1)).toContainEqual({ type: "error", rid: "queued-rid", code: "invalid_request", message: "Command cancelled before completion" });
 });

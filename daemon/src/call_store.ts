@@ -6,7 +6,7 @@ import { chmodSync } from "node:fs";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import { splitJsonPayload } from "./payload_split.ts";
-import { rateLimitSnapshot, type RateLimitSnapshot } from "./llm/retry_after.ts";
+import { rateLimitSnapshot } from "./llm/retry_after.ts";
 
 const ZSTD_LEVEL = 3;
 
@@ -98,12 +98,7 @@ const HASH_BYTES = 16;
 const BLOB_RAW_UNDER = 256;
 const MAX_PAYLOAD_BYTES = 33_554_432;
 
-export interface Usage {
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-}
+export type Usage = import("./protocol/DiagnosticUsage.ts").DiagnosticUsage;
 
 export const ZERO_USAGE: Usage = {
   input_tokens: 0,
@@ -142,40 +137,14 @@ export interface TranscriptRecord {
   entry_json: string;
 }
 
-export interface CallSummary {
-  id: number;
-  call_id: string;
-  ts: string;
-  call_type: string | null;
-  character: string | null;
-  model: string | null;
-  provider: string | null;
-  finish_reason: string | null;
-  usage: Usage;
-  duration_ms: number | null;
-  error: string | null;
-  request_bytes: number;
-  response_bytes: number;
-}
+export type CallSummary = import("./protocol/CallSummary.ts").CallSummary;
 
 export interface CallPayload extends CallSummary {
   request: string | null;
   response: string | null;
 }
 
-export interface TranscriptRow {
-  id: number;
-  ts: string;
-  source: string;
-  character: string | null;
-  call_type: string | null;
-  iteration: number;
-  model: string | null;
-  provider: string | null;
-  finish_reason: string | null;
-  usage: Usage;
-  entry: unknown;
-}
+export type TranscriptRow = import("./protocol/TranscriptRow.ts").TranscriptRow;
 
 export interface HttpExchangeRecord {
   call_id: string;
@@ -218,10 +187,7 @@ export interface HttpExchangeRow {
   response_bytes: number;
 }
 
-export interface RateLimitReading extends RateLimitSnapshot {
-  host: string;
-  observed_at: string;
-}
+export type RateLimitReading = import("./protocol/UsageRateLimitReading.ts").UsageRateLimitReading;
 
 export interface PayloadChunk {
   hash: string;
@@ -229,14 +195,9 @@ export interface PayloadChunk {
   text: string | null;
 }
 
-export type DiffOp = "equal" | "added" | "removed";
+export type DiffOp = import("./protocol/PayloadDiffOperation.ts").PayloadDiffOperation;
 
-export interface PayloadDiffEntry {
-  op: DiffOp;
-  hash: string;
-  bytes: number;
-  text: string | null;
-}
+export type PayloadDiffEntry = import("./protocol/PayloadDiffEntry.ts").PayloadDiffEntry;
 
 export interface PayloadDiff {
   from_payload: number;
@@ -246,11 +207,7 @@ export interface PayloadDiff {
   entries: PayloadDiffEntry[];
 }
 
-export interface CallDiff extends PayloadDiff {
-  from_call: number;
-  to_call: number;
-  source: "wire" | "internal";
-}
+export type CallDiff = import("./protocol/CallDiff.ts").CallDiff;
 
 export interface CallFilter {
   call_type?: string | null;

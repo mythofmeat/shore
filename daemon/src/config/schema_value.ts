@@ -71,6 +71,15 @@ function enumLiteral(raw: string, variants: readonly string[]): string {
 function splitList(raw: string): string[] {
   const trimmed = raw.trim();
   if (trimmed === "" || trimmed === "[]") return [];
+  if (trimmed.startsWith("[")) {
+    let parsed: unknown;
+    try { parsed = (Bun.TOML.parse(`items = ${trimmed}`) as Record<string, unknown>)["items"]; } catch { parsed = undefined; }
+    if (Array.isArray(parsed)) {
+      if (!parsed.every((item: unknown) => typeof item === "string" || typeof item === "number" || typeof item === "boolean")) throw new SchemaValueError("expected a list of scalar values");
+      return parsed.map((item: unknown) => String(item));
+    }
+    if (/^\[\s*["']/.test(trimmed)) throw new SchemaValueError("expected a valid quoted list");
+  }
   const inner = trimmed.startsWith("[") && trimmed.endsWith("]") ? trimmed.slice(1, -1) : trimmed;
   return inner
     .split(",")

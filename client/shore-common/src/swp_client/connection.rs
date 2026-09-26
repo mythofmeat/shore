@@ -163,7 +163,8 @@ impl SWPConnection {
                 | ServerMessage::ProviderWarning(_)
                 | ServerMessage::ProviderFallbackWarning(_)
                 | ServerMessage::UsageWarning(_)
-                | ServerMessage::ConfigWarning(_)) => {
+                | ServerMessage::ConfigWarning(_)
+                | ServerMessage::RequestFinished(_)) => {
                     error!("expected server hello, got unexpected message");
                     return Err(ClientError::Protocol(format!(
                         "expected server hello, got: {other:?}"
@@ -204,7 +205,8 @@ impl SWPConnection {
                 | ServerMessage::ProviderWarning(_)
                 | ServerMessage::ProviderFallbackWarning(_)
                 | ServerMessage::UsageWarning(_)
-                | ServerMessage::ConfigWarning(_)) => {
+                | ServerMessage::ConfigWarning(_)
+                | ServerMessage::RequestFinished(_)) => {
                     error!("expected history, got unexpected message");
                     return Err(ClientError::Protocol(format!(
                         "expected history, got: {other:?}"
@@ -321,6 +323,16 @@ impl SWPConnection {
             guidance,
         });
         self.send(&msg).await?;
+        Ok(rid)
+    }
+
+    pub async fn send_operation<O: crate::protocol::operations::Operation>(
+        &mut self,
+        input: O::Input,
+    ) -> Result<Option<String>> {
+        let rid = Some(request_id());
+        let command = O::command(input, rid.clone()).map_err(ClientError::Serialize)?;
+        self.send(&ClientMessage::Command(command)).await?;
         Ok(rid)
     }
 

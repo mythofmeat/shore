@@ -88,3 +88,16 @@ test("archive import reuses shared payloads without disturbing another character
     for (const row of store.queryCalls({ limit: 0 })) expect(store.getCall(row.id)?.request).toContain("shared-payload");
   } finally { store.close(); }
 });
+
+
+test("export size is scoped to the character rather than the shared database", () => {
+  const source = dirs(); initializeDatabase(source.data);
+  withStorage(source.data, db => {
+    db.query("INSERT INTO state_files VALUES (?1, ?2, ?3)").run("large", "other", new Uint8Array(2 * 1024 * 1024));
+  });
+  const archive = join(source.root, "small.db");
+  expect(() => exportUnifiedDatabase(databasePath(source.data), "ada", archive, 1024 * 1024)).not.toThrow();
+  const exported = new Database(archive, { readonly: true });
+  try { expect(exported.query("SELECT * FROM state_files").all()).toEqual([]); } finally { exported.close(); }
+  expect(() => exportUnifiedDatabase(databasePath(source.data), "other", join(source.root, "large.db"), 1024 * 1024)).toThrow("processing limit");
+});

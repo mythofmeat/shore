@@ -19,11 +19,13 @@ for a port, and `instances.json` has to record the one it got. A bind that
 reported the requested address instead would write a literal `:0` and send
 every discovery client to a port nobody opened.
 
-**Writing out.** Every connection writes one last frame — the shutdown notice
-— and a write to a socket whose peer has already gone must *settle*. Bun does
-not always call the write callback for a destroyed socket, and one unsettled
-write wedges `serve`, which waits on every connection before returning. That
-mutant times out rather than failing, which is why the timeout is a kill here.
+**Writing out.** Every connection writes one last frame — the shutdown notice.
+Bun 1.4.2 settles failed writes, so removing Shore's closed-socket guard no
+longer reliably hangs shutdown. It can still reject the history write after
+handshake registration, before the connection has received its session handle.
+The real socket test closes during history loading and checks that shutdown
+leaves neither a session nor a spurious handler error. Bun's matching source is
+https://github.com/oven-sh/bun/blob/bun-v1.4.2/src/js/node/net.ts.
 
 **Routing.** A message that never reaches the queue is a message the handler
 never answers, and the client waits for a reply that is not coming.
@@ -43,6 +45,10 @@ TESTS = ["tests/swp_server.test.ts"]
 
 # (label, file, find, replace)
 MUTANTS = [
+    ("startup: early TCP clients remain open before the daemon can serve them",
+     S,
+     '      if (!this.#serving || this.#stopped) { socket.destroy(); return; }',
+     '      if (this.#stopped) { socket.destroy(); return; }'),
     # --- the handshake --------------------------------------------------------
     ("handshake: captured at construction, so setting one afterwards does nothing",
      S,
@@ -72,7 +78,7 @@ MUTANTS = [
      "    return { host: address.address, port: 0 };"),
 
     # --- writing out ----------------------------------------------------------
-    ("write: a write to a socket whose peer has gone never settles, wedging shutdown",
+    ("write: replying after disconnect leaves a session or reports a handler error",
      S,
      "              if (socket.destroyed || socket.writableEnded) {\n"
      "                resolve();\n"

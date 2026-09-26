@@ -15,7 +15,7 @@ import {
 import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
-import { redactSecrets, serializeConfigValue } from "../config/serialize.ts";
+import { isSecretConfigPath, REDACTED, redactSecrets, serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
@@ -29,10 +29,14 @@ import { restartRequiredChanges } from "../config/restart.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
-import type { Args } from "./navigation.ts";
 import { formatConfigPath, parseConfigPath, publicConfig } from "../config/surface.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { ConfigSources } from "../protocol/ConfigSources.ts";
+import type { ConfigSetResult } from "../protocol/ConfigSetResult.ts";
+export type { ConfigSetResult } from "../protocol/ConfigSetResult.ts";
 
 export interface ConfigRuntime {
+  globalConfig?(): LoadedConfig;
   reloadRuntimeConfig(fresh: LoadedConfig): void;
   adoptGlobalConfig(fresh: LoadedConfig): void;
   notifyPromptSnapshotRefreshed(character: string): void;
@@ -47,9 +51,6 @@ export interface ConfigContext {
   runtime: ConfigRuntime;
   env?: Env;
 }
-
-const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
-const asBool = (v: unknown): boolean => v === true;
 
 const message = (e: unknown): string =>
   e instanceof ConfigError ? e.display : e instanceof Error ? e.message : String(e);
@@ -70,7 +71,7 @@ function toolResolver(ctx: ConfigContext): (tool: string) => boolean {
   };
 }
 
-export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unknown {
+export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): OperationResult<"tools"> {
   const cfg = ctx.config.app.tools;
   const subagents = ctx.config.app.subagents;
   const known = { has: toolResolver(ctx) };
@@ -88,7 +89,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unk
     return {
       name,
       enabled: cfg.enabled_subagents.includes(name),
-      tools: sa.tools,
+      tools: [...sa.tools],
       model: sa.model ?? null,
     };
   });
@@ -111,7 +112,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unk
   return { tools: toolRows, subagents: subagentRows, mcp: [...mcpTools].sort(), warnings };
 }
 
-export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process.env): unknown {
+export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process.env): OperationResult<"config_check"> {
   const warnings: string[] = [];
   const info: string[] = [];
 
@@ -148,7 +149,7 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     }
   }
 
-  return {
+  const checked: OperationResult<"config_check"> = {
     valid: warnings.length === 0,
     warnings,
     info,
@@ -158,11 +159,12 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     chat_models: ctx.config.models.chat.size,
     providers: providerCount,
   };
+  return checked;
 }
 
-export function config(ctx: ConfigContext, args: Args): unknown {
-  const key = asStr(args["key"]);
-  const value = asStr(args["value"]);
+export function config(ctx: ConfigContext, args: OperationInput<"config">): OperationResult<"config"> & { replacement?: string } {
+  const key = args.key ?? undefined;
+  const value = args.value ?? undefined;
   if (key !== undefined && value !== undefined) return configSet(ctx, key, value);
 
   const app = reportedConfig(ctx);
@@ -233,7 +235,7 @@ export function schemaOf(ctx: ConfigContext): SchemaEntry[] {
   return configSchema(liveInstances(ctx));
 }
 
-function valueSources(ctx: ConfigContext): Record<string, string[]> {
+function valueSources(ctx: ConfigContext): ConfigSources {
   const sorted = (names: Iterable<string>): string[] => [...names].sort();
   return {
     chat_models: sorted(ctx.config.models.chat.keys()),
@@ -246,10 +248,9 @@ function valueSources(ctx: ConfigContext): Record<string, string[]> {
   };
 }
 
-export function configSchemaCommand(ctx: ConfigContext): unknown {
-  return {
-    schema: schemaOf(ctx), sources: valueSources(ctx),
-  };
+export function configSchemaCommand(ctx: ConfigContext) {
+  const base: OperationResult<"config_schema"> = { schema: schemaOf(ctx), sources: valueSources(ctx) };
+  return base;
 }
 
 function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: string): void {
@@ -349,7 +350,7 @@ function commitConfigKey(
     throw invalidRequest(`${rejection} was rejected: ${message(e)}`);
   }
 
-  const restart = restartRequiredChanges(ctx.config, fresh);
+  const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
   const previous = walkConfigKey(reportedConfig(ctx), key)?.value ?? null;
   adopt(ctx, fresh);
 
@@ -362,16 +363,6 @@ function commitConfigKey(
     restart_required: restart,
     masked_by_preference: preferredModelMask(ctx, key),
   };
-}
-
-export interface ConfigSetResult {
-  set: string;
-  value: unknown;
-  previous: unknown;
-  file: string;
-  action: string;
-  restart_required: readonly string[];
-  masked_by_preference: string | null;
 }
 
 export function setConfigKey(
@@ -401,7 +392,7 @@ export function setConfigKey(
       const source = formatConfigPath(owned) === key ? before : unsetTomlValue(before, owned).text;
       return setTomlValue(source, path, literal);
     },
-    `${key} = ${literal}`,
+    `${key} = ${isSecretConfigPath(parseConfigPath(key)) ? REDACTED : literal}`,
   );
 }
 
@@ -418,7 +409,7 @@ export function clearConfigKey(ctx: ConfigContext, key: string): ConfigSetResult
   );
 }
 
-const configSet = (ctx: ConfigContext, rawKey: string, value: string): unknown =>
+const configSet = (ctx: ConfigContext, rawKey: string, value: string): ConfigSetResult =>
   setConfigKey(ctx, rawKey, value);
 
 function preferredModelMask(ctx: ConfigContext, key: string): string | null {
@@ -430,9 +421,9 @@ function preferredModelMask(ctx: ConfigContext, key: string): string | null {
 const loaderOptions = (ctx: ConfigContext): { env?: Env; deferEnvironment: boolean } =>
   ({ ...(ctx.env === undefined ? {} : { env: ctx.env }), deferEnvironment: true });
 
-export async function configReload(ctx: ConfigContext, args: Args): Promise<unknown> {
-  const apply = asBool(args["apply"]);
-  const refreshPrompts = asBool(args["refresh_prompts"]);
+export async function configReload(ctx: ConfigContext, args: OperationInput<"config_reload">): Promise<OperationResult<"config_reload">> {
+  const apply = args.apply === true;
+  const refreshPrompts = args.refresh_prompts === true;
 
   let fresh: LoadedConfig;
   try {
@@ -449,13 +440,10 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
     }
   }
 
+  const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
   const character = ctx.characterName;
-  if (character === undefined) {
-    throw invalidRequest("config_reload requires a character context");
-  }
-
-  const characterDataDir = join(ctx.config.dirs.data, character);
-  const changed = await changedPromptFiles(
+  const characterDataDir = character === undefined ? undefined : join(ctx.config.dirs.data, character);
+  const changed = characterDataDir === undefined || character === undefined ? [] : await changedPromptFiles(
     characterDataDir,
     fresh.dirs.config,
     character,
@@ -466,14 +454,16 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
   if (!apply) {
     return {
       applied: false,
+      ...(restart.length === 0 ? {} : { restart_required: restart }),
       config_path: ctx.configPath,
-      character,
+      character: character ?? null,
       changed_prompt_files: changed,
     };
   }
 
   let promptsRefreshed = false;
   if (refreshPrompts) {
+    if (character === undefined || characterDataDir === undefined) throw invalidRequest("Refreshing prompts requires a character context");
     try {
       await applyDeferredEdits(
         characterDataDir,
@@ -493,8 +483,9 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
 
   return {
     applied: true,
+    ...(restart.length === 0 ? {} : { restart_required: restart }),
     config_path: ctx.configPath,
-    character,
+    character: character ?? null,
     changed_prompt_files: changed,
     prompts_refreshed: promptsRefreshed,
   };

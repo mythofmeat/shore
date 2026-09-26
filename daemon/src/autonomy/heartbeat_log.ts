@@ -5,19 +5,7 @@ import { characterScope, insertEvent, readEvents, withStorage } from "../storage
 
 export const HEARTBEAT_LOG_CAPACITY = 100;
 
-export type HeartbeatEventKind =
-  | "tick_fired"
-  | "call_failed"
-  | "message_sent"
-  | "message_skipped"
-  | "tool_use"
-  | "dormant"
-  | "wake"
-  | "timeout"
-  | "dormant_ping"
-  | "budget_paused"
-  | "recap_written"
-  | "recap_missing";
+export type HeartbeatEventKind = import("../protocol/HeartbeatEventKind.ts").HeartbeatEventKind;
 
 const KNOWN_KINDS = new Set<string>([
   "tick_fired",
@@ -34,11 +22,7 @@ const KNOWN_KINDS = new Set<string>([
   "recap_missing",
 ]);
 
-export interface HeartbeatEvent {
-  readonly timestamp: string;
-  readonly kind: HeartbeatEventKind;
-  readonly detail: string;
-}
+export type HeartbeatEvent = import("../protocol/HeartbeatEvent.ts").HeartbeatEvent;
 
 export function encodeEvent(event: HeartbeatEvent): string {
   return JSON.stringify({

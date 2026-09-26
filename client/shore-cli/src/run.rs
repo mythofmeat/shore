@@ -1,3 +1,10 @@
+use shore_common::protocol::operations::{
+    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, DeleteCharacter,
+    DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs, NamedOperationArgs,
+    Operation, OperationResponse, ReadStatus, ReloadConfiguration, ResetModel, ResetModelArgs,
+    SwitchCharacter, SwitchModel, SwitchModelArgs, SwitchThread, SwitchThreadArgs,
+    is_registered_operation,
+};
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -383,6 +390,7 @@ async fn handle_generic_swp_command(
     };
     _ = conn.send_command(name, args).await?;
     let data = recv_command_data(conn).await?;
+    validate_registered_output(name, &data)?;
     if toml_mode {
         print_config_toml(&data, show_all)?;
     } else if json_mode {
@@ -402,6 +410,18 @@ async fn handle_generic_swp_command(
     } else {
         output::format_command(name, &data);
     }
+    Ok(())
+}
+
+pub(crate) fn validate_registered_output(
+    name: &str,
+    data: &serde_json::Value,
+) -> Result<(), serde_json::Error> {
+    if !is_registered_operation(name) {
+        return Ok(());
+    }
+    let _: OperationResponse =
+        serde_json::from_value(serde_json::json!({ "name": name, "data": data }))?;
     Ok(())
 }
 
@@ -457,21 +477,16 @@ async fn handle_config_reload(
     };
     let (auto_yes, json_mode) = (*yes, *json);
 
-    _ = conn
-        .send_command("config_reload", serde_json::json!({}))
-        .await?;
-    let check = recv_command_data(conn).await?;
+    let check = execute_operation::<ReloadConfiguration>(
+        conn,
+        ConfigReloadArgs {
+            apply: None,
+            refresh_prompts: None,
+        },
+    )
+    .await?;
 
-    let changed: Vec<String> = check
-        .get("changed_prompt_files")
-        .and_then(serde_json::Value::as_array)
-        .map(|files| {
-            files
-                .iter()
-                .filter_map(|f| f.as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default();
+    let changed = check.changed_prompt_files;
 
     let refresh_prompts = if changed.is_empty() {
         false
@@ -497,13 +512,14 @@ async fn handle_config_reload(
         false
     };
 
-    _ = conn
-        .send_command(
-            "config_reload",
-            serde_json::json!({ "apply": true, "refresh_prompts": refresh_prompts }),
-        )
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ReloadConfiguration>(
+        conn,
+        ConfigReloadArgs {
+            apply: Some(true),
+            refresh_prompts: Some(refresh_prompts),
+        },
+    )
+    .await?;
 
     if json_mode {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
@@ -554,18 +570,15 @@ async fn handle_log_command(
         return Ok(());
     }
 
-    let mut args = serde_json::Map::new();
-    _ = args.insert("turns".into(), serde_json::json!(count));
-    if let Some(role_filter) = role {
-        _ = args.insert(
-            "role".into(),
-            serde_json::json!(role_filter.as_protocol_role()),
-        );
-    }
-    _ = conn
-        .send_command("log", serde_json::Value::Object(args))
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ConversationLog>(
+        conn,
+        ConversationLogArgs {
+            turns: Some(u64::from(*count)),
+            count: None,
+            role: role.map(LogRole::as_protocol_role),
+        },
+    )
+    .await?;
 
     render_log_list(&data, *json, *content, display_character, filter)?;
 
@@ -616,18 +629,15 @@ async fn fetch_single_message(
     msg_ref: &str,
     role: Option<&LogRole>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let mut args = serde_json::Map::new();
-    _ = args.insert("ref".into(), serde_json::json!(msg_ref));
-    if let Some(role_filter) = role {
-        _ = args.insert(
-            "role".into(),
-            serde_json::json!(role_filter.as_protocol_role()),
-        );
-    }
-    _ = conn
-        .send_command("get", serde_json::Value::Object(args))
-        .await?;
-    recv_command_data(conn).await
+    let (_, data) = execute_operation_with_raw::<GetMessage>(
+        conn,
+        GetMessageArgs {
+            reference: msg_ref.to_owned(),
+            role: role.copied().map(LogRole::as_protocol_role),
+        },
+    )
+    .await?;
+    Ok(data)
 }
 
 fn render_log_list(
@@ -724,6 +734,7 @@ async fn follow_log_stream(
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -898,8 +909,7 @@ async fn handle_status_command(
     let CliCommand::Status { section, json, .. } = cmd else {
         return Ok(());
     };
-    _ = conn.send_command("status", serde_json::json!({})).await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ReadStatus>(conn, EmptyOperationArgs {}).await?;
     match section {
         Some(s) => {
             let known = output::status::sections_of(&data);
@@ -966,27 +976,33 @@ async fn apply_model_change(
         ModelChange::Reset(target) => target,
         ModelChange::SwitchTo(_, target) => Some(target),
     };
-    let with_target = |mut args: serde_json::Map<String, serde_json::Value>| {
-        if let Some(selected) = target {
-            selected.write_into(&mut args);
+    let selected = target.map(ModelTarget::operation_args).unwrap_or_default();
+    let (command, data) = match change {
+        ModelChange::Reset(_) => {
+            let (_, data) = execute_operation_with_raw::<ResetModel>(
+                conn,
+                ResetModelArgs {
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                },
+            )
+            .await?;
+            (ResetModel::NAME, data)
         }
-        args
-    };
-    let (command, args) = match change {
-        ModelChange::Reset(_) => ("reset_model", with_target(serde_json::Map::new())),
         ModelChange::SwitchTo(name, _) => {
-            let mut args = serde_json::Map::new();
-            _ = args.insert("name".into(), serde_json::json!(name));
-            if *all {
-                _ = args.insert("include_hidden".into(), serde_json::json!(true));
-            }
-            ("switch_model", with_target(args))
+            let (_, data) = execute_operation_with_raw::<SwitchModel>(
+                conn,
+                SwitchModelArgs {
+                    name: Some(name.to_owned()),
+                    include_hidden: all.then_some(true),
+                    background_task: selected.background_task,
+                    subagent: selected.subagent,
+                },
+            )
+            .await?;
+            (SwitchModel::NAME, data)
         }
     };
-    _ = conn
-        .send_command(command, serde_json::Value::Object(args))
-        .await?;
-    let data = recv_command_data(conn).await?;
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
@@ -1095,10 +1111,13 @@ async fn handle_switch_character(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(character = name, "Switching active character");
-    let _ignored = conn
-        .send_command("switch_character", serde_json::json!({ "name": name }))
-        .await?;
-    _ = recv_command_data(conn).await?;
+    let _selection = execute_operation::<SwitchCharacter>(
+        conn,
+        NamedOperationArgs {
+            name: name.to_owned(),
+        },
+    )
+    .await?;
     state::write_active_character(name)?;
     cli_out!("Switched to character: {name}");
     cli_out!("To override per-terminal: export SHORE_CHARACTER={name}");
@@ -1111,10 +1130,14 @@ async fn handle_switch_thread(
     character: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(thread = name, "Switching active thread");
-    let _ignored = conn
-        .send_command("switch_thread", serde_json::json!({ "name": name }))
-        .await?;
-    _ = recv_command_data(conn).await?;
+    let _selection = execute_operation::<SwitchThread>(
+        conn,
+        SwitchThreadArgs {
+            name: name.to_owned(),
+            resync: None,
+        },
+    )
+    .await?;
     state::write_active_thread(character, name)?;
     cli_out!("Talking in thread: {name}");
     cli_out!("To override per-terminal: export SHORE_THREAD={name}");
@@ -1160,22 +1183,19 @@ async fn handle_create_character(
     conn: &mut SWPConnection,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ignored = conn
-        .send_command("create_character", serde_json::json!({ "name": name }))
-        .await?;
-    let data = recv_command_data(conn).await?;
+    let data = execute_operation::<CreateCharacter>(
+        conn,
+        NamedOperationArgs {
+            name: name.to_owned(),
+        },
+    )
+    .await?;
 
-    let workspace = data
-        .get("workspace_dir")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
+    let workspace = data.workspace_dir;
     cli_out!("Created character scaffold: {workspace}");
 
     for (file, purpose) in SCAFFOLD_GUIDE {
-        let created = data
-            .get("created_files")
-            .and_then(serde_json::Value::as_array)
-            .is_some_and(|files| files.iter().any(|f| f.as_str() == Some(file)));
+        let created = data.created_files.iter().any(|created| created == file);
         if created {
             cli_out!("  {file:<10} {purpose}");
         }
@@ -1197,31 +1217,24 @@ async fn handle_delete_character(
     }
 
     info!(character = name, "Deleting character");
-    let args = match archive {
-        Some(path) => serde_json::json!({
-            "character": name,
-            "confirm": name,
-            "archive": crate::cli::absolute_path(path),
-        }),
-        None => serde_json::json!({ "character": name, "confirm": name }),
-    };
-    let _ignored = conn.send_command("delete_character", args).await?;
-    let data = recv_command_data(conn).await?;
+    let (data, raw) = execute_operation_with_raw::<DeleteCharacter>(
+        conn,
+        DeleteCharacterArgs {
+            character: name.to_owned(),
+            confirm: name.to_owned(),
+            archive: archive.map(crate::cli::absolute_path),
+        },
+    )
+    .await?;
 
     if json {
-        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+        cli_out!("{}", serde_json::to_string_pretty(&raw)?);
     } else {
-        if let Some(written) = data.get("archive").and_then(serde_json::Value::as_str) {
+        if let Some(written) = data.archive {
             cli_out!("Backed up to {written}");
         }
         cli_out!("Deleted character: {name}");
-        for path in data
-            .get("removed")
-            .and_then(serde_json::Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(serde_json::Value::as_str)
-        {
+        for path in data.removed {
             cli_out!("  removed {path}");
         }
     }
@@ -1908,9 +1921,26 @@ async fn recv_streaming_response(
             | ServerMessage::CommandOutput(_)
             | ServerMessage::NewMessage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }
+}
+
+async fn execute_operation<O: Operation>(
+    conn: &mut SWPConnection,
+    input: O::Input,
+) -> Result<O::Output, Box<dyn std::error::Error>> {
+    Ok(execute_operation_with_raw::<O>(conn, input).await?.0)
+}
+
+async fn execute_operation_with_raw<O: Operation>(
+    conn: &mut SWPConnection,
+    input: O::Input,
+) -> Result<(O::Output, serde_json::Value), Box<dyn std::error::Error>> {
+    let _request = conn.send_operation::<O>(input).await?;
+    let data = recv_command_data(conn).await?;
+    Ok((serde_json::from_value(data.clone())?, data))
 }
 
 async fn recv_command_data(
@@ -1953,6 +1983,7 @@ async fn recv_command_data(
             | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }

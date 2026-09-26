@@ -298,6 +298,9 @@ pub(crate) fn render(
                 ),
         );
     }
+    if let Err(error) = crate::run::validate_registered_output(wire_name, data) {
+        return Some(format!("Invalid operation result: {error}"));
+    }
     let specialized_json = matches!(
         &command,
         CliCommand::Log { json: true, .. } | CliCommand::Status { json: true, .. }
@@ -529,6 +532,28 @@ pub(crate) fn render(
 }
 
 #[cfg(test)]
+mod provider_contract_tests {
+    use super::render;
+
+    #[test]
+    fn provider_palette_rejects_malformed_data_and_keeps_additive_json_fields() {
+        let invalid = render(
+            "provider",
+            "list_providers",
+            &serde_json::json!({"providers":[{"name":"incomplete"}]}),
+            "ada",
+        );
+        assert!(invalid.is_some_and(|text| text.starts_with("Invalid operation result:")));
+        let data = serde_json::json!({"providers":[],"future":"inspectable"});
+        let output = render("provider --json", "list_providers", &data, "ada").unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&output).unwrap(),
+            data
+        );
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::tui::ansi;
@@ -538,10 +563,8 @@ mod tests {
         let rendered = render(
             "status --section daemon",
             "status",
-            &serde_json::json!({
-                "daemon": { "state": "running" },
-                "session": { "turns": 4 }
-            }),
+            &serde_json::from_str(include_str!("../../tests/fixtures/diagnostic_status.json"))
+                .unwrap(),
             "ada",
         )
         .expect("rendered");
@@ -557,9 +580,10 @@ mod tests {
             "config_schema",
             &serde_json::json!({
                 "schema": [
-                    { "key": "cache.ttl", "type": "duration", "settable": true },
-                    { "key": "daemon.addr", "type": "string", "settable": true }
-                ]
+                    { "key": "cache.ttl", "type": "duration", "kind": "duration", "settable": true, "optional": false, "restart_required": false, "secret": false, "values": ["1h"] },
+                    { "key": "daemon.addr", "type": "string", "kind": "string", "settable": true, "optional": false, "restart_required": true, "secret": false, "values": [] }
+                ],
+                "sources": {"chat_models":[],"embedding_models":[],"image_models":[],"tools":[],"subagents":[],"characters":[],"providers":[]}
             }),
             "ada",
         )
@@ -572,8 +596,14 @@ mod tests {
     #[test]
     fn trace_calls_uses_the_human_formatter_unless_json_was_requested() {
         let data = serde_json::json!({
+            "enabled": true,
             "entries": [{
                 "id": 7,
+                "call_id": "fixture-call",
+                "ts": "2026-09-12T10:00:00Z",
+                "character": "ada",
+                "finish_reason": "end_turn",
+                "error": null,
                 "call_type": "message",
                 "provider": "anthropic",
                 "model": "claude",
@@ -597,8 +627,10 @@ mod tests {
 
     #[test]
     fn a_setting_is_saved_quietly_unless_the_daemon_warns() {
-        let saved =
-            serde_json::json!({"key": "cache_keepalive", "value": "55m", "scope": "character"});
+        let saved = serde_json::json!({
+            "changed": true, "scope": "character", "model": "anthropic:opus",
+            "provider": "anthropic", "model_id": "opus", "key": "cache_keepalive", "value": "55m"
+        });
         assert_eq!(
             render(
                 "model setting cache_keepalive 55m",
@@ -610,7 +642,8 @@ mod tests {
         );
 
         let warned = serde_json::json!({
-            "key": "cache_keepalive", "value": "1h", "scope": "character",
+            "changed": true, "scope": "character", "model": "anthropic:opus",
+            "provider": "anthropic", "model_id": "opus", "key": "cache_keepalive", "value": "1h",
             "warning": "cache_keepalive is not shorter than this model's 1h cache TTL"
         });
         let rendered = render(

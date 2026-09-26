@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ClientHello {
     pub client_type: String,
@@ -15,7 +15,7 @@ pub struct ClientHello {
     pub token: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageUpload {
     pub filename: String,
@@ -24,7 +24,7 @@ pub struct ImageUpload {
     pub mime_type: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ClientMessageBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,7 +41,7 @@ pub struct ClientMessageBody {
     pub absence_seconds: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Regen {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -52,7 +52,7 @@ pub struct Regen {
     pub guidance: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Command {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -63,11 +63,11 @@ pub struct Command {
     pub args: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Cancel {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {

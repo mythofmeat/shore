@@ -10,7 +10,12 @@ import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import { invalidRequest } from "./errors.ts";
 import { historyIndexSection, type HistoryIndexSource } from "./history_index.ts";
 import { workspaceIndexSection, type WorkspaceIndexSource } from "./workspace_index.ts";
-import type { Args, Json } from "./conversation.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { AutonomyStatusReport } from "../protocol/AutonomyStatusReport.ts";
+import type { McpStatusReport } from "../protocol/McpStatusReport.ts";
+import type { ActivityStatusReport } from "../protocol/ActivityStatusReport.ts";
+
+type Args = OperationInput<"error_log">;
 
 export interface StatusConfigView {
   app: { defaults: { model: string | undefined } };
@@ -50,7 +55,7 @@ export const untilSecs = (at: number, now: number): number => Math.trunc((at - n
 
 const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((now - at) / 1000));
 
-export function autonomyWire(autonomy: AutonomyStatus, now: number): Json {
+export function autonomyWire(autonomy: AutonomyStatus, now: number): AutonomyStatusReport {
   const wake = autonomy.next_wake_at;
   const user = autonomy.last_user_at;
   return {
@@ -71,7 +76,7 @@ export function autonomyWire(autonomy: AutonomyStatus, now: number): Json {
   };
 }
 
-export function mcpWire(servers: readonly McpServerStatus[]): Json {
+export function mcpWire(servers: readonly McpServerStatus[]): McpStatusReport {
   return {
     configured: servers.length,
     connected: servers.filter((server) => server.state === "connected").length,
@@ -88,10 +93,10 @@ export function mcpWire(servers: readonly McpServerStatus[]): Json {
   };
 }
 
-function activityWire(stats: ActivitySource, recorded: number): Json {
+function activityWire(stats: ActivitySource, recorded: number): ActivityStatusReport {
   return {
-    hour_histogram: stats.hourHistogram,
-    hour_classifications: stats.hourClassifications,
+    hour_histogram: [...stats.hourHistogram],
+    hour_classifications: [...stats.hourClassifications],
     has_sufficient_heatmap: stats.hasSufficientHeatmap,
     engagement_score: stats.engagementScore,
     sessions_per_day: stats.sessionsPerDay,
@@ -108,7 +113,7 @@ interface ActivitySource {
   sessionsPerDay: number;
 }
 
-export async function status(ctx: StatusContext): Promise<Json> {
+export async function status(ctx: StatusContext): Promise<OperationResult<"status">> {
   const now = ctx.now();
   const report = ctx.autonomy.activityStats(ctx.characterName, ctx.localNow());
   const state = ctx.autonomy.status(ctx.characterName);
@@ -156,7 +161,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
   };
 }
 
-export function errorLog(ctx: StatusContext, args: Args): Json {
+export function errorLog(ctx: StatusContext, args: OperationInput<"error_log">): OperationResult<"error_log"> {
   return ctx.diagnostics.toJson(countArg(args, 20));
 }
 
@@ -171,7 +176,7 @@ async function heartbeatEvents(
   return (await HeartbeatLog.load(path)).recent(limit);
 }
 
-export async function heartbeatLog(ctx: StatusContext, args: Args): Promise<Json> {
+export async function heartbeatLog(ctx: StatusContext, args: OperationInput<"heartbeat_log">): Promise<OperationResult<"heartbeat_log">> {
   const events = await heartbeatEvents(ctx, countArg(args, 20));
   return {
     events: events.map((e) => ({ timestamp: e.timestamp, kind: e.kind, detail: e.detail })),
@@ -181,7 +186,7 @@ export async function heartbeatLog(ctx: StatusContext, args: Args): Promise<Json
 const noState = (character: string): Error =>
   invalidRequest(`No autonomy state for character '${character}'`);
 
-export function heartbeatTickNow(ctx: StatusContext): Json {
+export function heartbeatTickNow(ctx: StatusContext): OperationResult<"heartbeat_tick_now"> {
   const dormant = ctx.autonomy.forceHeartbeatNow(ctx.characterName);
   if (dormant === undefined) throw noState(ctx.characterName);
   return {
@@ -198,14 +203,14 @@ export function heartbeatTickNow(ctx: StatusContext): Json {
   };
 }
 
-export function heartbeatSetDormant(ctx: StatusContext): Json {
+export function heartbeatSetDormant(ctx: StatusContext): OperationResult<"heartbeat_set_dormant"> {
   if (!ctx.autonomy.forceHeartbeatState(ctx.characterName, "dormant")) {
     throw noState(ctx.characterName);
   }
   return { status: "dormant", character: ctx.characterName };
 }
 
-export function heartbeatSetActive(ctx: StatusContext): Json {
+export function heartbeatSetActive(ctx: StatusContext): OperationResult<"heartbeat_set_active"> {
   if (!ctx.autonomy.forceHeartbeatState(ctx.characterName, "active")) {
     throw noState(ctx.characterName);
   }

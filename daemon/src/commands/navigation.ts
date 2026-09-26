@@ -18,6 +18,10 @@ import {
 } from "../config/dirs.ts";
 import { builtinSystemPrompt } from "../engine/prompt.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
+import type { CharacterCreated } from "../protocol/CharacterCreated.ts";
+import type { CharacterDetails } from "../protocol/CharacterDetails.ts";
+import type { CharacterListing } from "../protocol/CharacterListing.ts";
+import type { CharacterSelection } from "../protocol/CharacterSelection.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
 import { invalidRequest, notFound } from "./errors.ts";
 
@@ -57,7 +61,7 @@ export function listCharacters(
   configDir: string,
   active?: string,
   workspaceRoot?: string,
-): { characters: CharacterInfo[] } {
+): CharacterListing {
   const characters = active === undefined ? [] : [characterMetadata(configDir, active)];
   for (const name of discoverCharacters(configDir, workspaceRoot)) {
     if (name !== active) characters.push(characterMetadata(configDir, name));
@@ -68,7 +72,7 @@ export function listCharacters(
 export const listCharactersStandalone = (
   configDir: string,
   workspaceRoot?: string,
-): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);
+): CharacterListing => listCharacters(configDir, undefined, workspaceRoot);
 
 const PREVIEW_CHARS = 500;
 
@@ -79,7 +83,7 @@ export interface CharacterInfoContext {
   workspaceRoot?: string | undefined;
 }
 
-export async function characterInfo(ctx: CharacterInfoContext, args: Args): Promise<unknown> {
+export async function characterInfo(ctx: CharacterInfoContext, args: Args): Promise<CharacterDetails> {
   const requested = asStr(args["name"]);
   const name = requested === undefined || requested === "" ? ctx.active : requested;
   requireUsableCharacterName(name);
@@ -136,7 +140,7 @@ export function createCharacter(
   configDir: string,
   args: Args,
   workspaceRoot?: string,
-): unknown {
+): CharacterCreated {
   const name = asStr(args["name"]);
   if (name === undefined || name === "") {
     throw invalidRequest("Missing required argument: name");
@@ -165,10 +169,7 @@ export function createCharacter(
   };
 }
 
-export interface CharacterSwitch {
-  character: string;
-  changed: boolean;
-}
+export type CharacterSwitch = CharacterSelection;
 
 export function switchCharacter(
   configDir: string,

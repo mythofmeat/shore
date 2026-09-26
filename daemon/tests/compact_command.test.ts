@@ -30,6 +30,7 @@ import {
   type CompactContext,
 } from "../src/commands/compact.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import { testTmp } from "./support/tmp.ts";
 import { DEFAULT_COMPACT_PROMPT } from "../src/memory/compaction/prompts.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
@@ -133,9 +134,14 @@ async function refusal(call: () => Promise<unknown>): Promise<Record<string, unk
 }
 
 describe("parseCompactArgs", () => {
+  const rejected = new Set([
+    'dry_run as the string "true"', "dry_run as 1", "keep_turns negative", "keep_turns fractional",
+    "keep_turns as a string", "keep_turns as a bool", "an argument object with something else in it", 'restart as the string "true"',
+  ]);
   for (const c of fixture.parse_args) {
     test(c.note, () => {
-      const got = parseCompactArgs(c.args);
+      if (rejected.has(c.note)) { expect(() => parseOperationInput("compact", c.args)).toThrow(); return; }
+      const got = parseCompactArgs(parseOperationInput("compact", c.args));
       expect(got.dryRun).toBe(c.dry_run);
       expect(got.restart).toBe(("restart" in c ? c.restart : false) as never);
       expect(got.keepTurnsOverride).toBe((c.keep_turns ?? undefined) as never);

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::protocol::error::ErrorCode;
 use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, StreamMetadata};
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ServerHello {
     pub v: u32,
@@ -12,7 +12,7 @@ pub struct ServerHello {
     pub characters: Vec<CharacterInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct History {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -34,7 +34,7 @@ pub struct History {
     pub revision: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct HistoryDelta {
     #[ts(type = "number")]
@@ -50,15 +50,15 @@ fn is_zero(value: &usize) -> bool {
     *value == 0
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Shutdown {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Ping {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CommandOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,7 +68,7 @@ pub struct CommandOutput {
     pub data: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Error {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,7 +80,7 @@ pub struct Error {
     pub retry_after_ms: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamStart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,7 +93,7 @@ pub struct StreamStart {
     pub task_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamChunk {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -111,7 +111,7 @@ fn default_content_type() -> String {
     "text".to_owned()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamEnd {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -139,7 +139,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Phase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -151,7 +151,7 @@ pub struct Phase {
 
 pub use crate::protocol::types::MessageOrigin;
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct NewMessage {
     #[serde(default)]
@@ -165,7 +165,7 @@ pub struct NewMessage {
     pub message: Message,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -180,7 +180,7 @@ pub struct ToolCall {
     pub task_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -199,7 +199,7 @@ pub struct ToolResult {
     pub task_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct SendImage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -215,14 +215,14 @@ pub struct SendImage {
     pub task_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CacheWarning {
     pub expected_tokens: u32,
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,7 +230,7 @@ pub struct ProviderWarning {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderFallbackWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -244,7 +244,7 @@ pub struct ProviderFallbackWarning {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct UsageWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -264,7 +264,7 @@ pub struct UsageWarning {
     pub scope: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ConfigWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -275,7 +275,26 @@ pub struct ConfigWarning {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+#[serde(rename_all = "snake_case")]
+pub enum RequestOutcome {
+    Completed,
+    Failed,
+    Cancelled,
+    Superseded,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct RequestFinished {
+    pub rid: String,
+    pub outcome: RequestOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Error>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
@@ -298,8 +317,10 @@ pub enum ServerMessage {
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
     ConfigWarning(ConfigWarning),
+    RequestFinished(RequestFinished),
     #[serde(other)]
     #[ts(skip)]
+    #[schemars(skip)]
     Unknown,
 }
 
@@ -320,6 +341,7 @@ impl ServerMessage {
             Self::ProviderFallbackWarning(frame) => frame.rid.as_deref(),
             Self::UsageWarning(frame) => frame.rid.as_deref(),
             Self::ConfigWarning(frame) => frame.rid.as_deref(),
+            Self::RequestFinished(frame) => Some(&frame.rid),
             Self::Hello(_)
             | Self::Shutdown(_)
             | Self::Ping(_)
@@ -351,6 +373,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
         }
     }
@@ -377,6 +400,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
         }
     }
@@ -403,6 +427,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }
     }

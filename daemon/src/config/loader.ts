@@ -5,6 +5,7 @@ import { hardcodedProviderBaseUrl } from "../llm/request.ts";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { compareByCodePoint } from "../util/sort.ts";
+import { webBinding } from "../web/policy.ts";
 import {
   budgetPeriodRank,
   parseAppConfig,
@@ -487,6 +488,10 @@ function validateConfig(
   validateDefaultEmbedding(providers, app.defaults.embedding, onWarn);
   validateDefaultImageGeneration(providers, app.defaults.image_generation, onWarn);
   validateUsageConfig(app.usage);
+  if (app.daemon.web.enabled) {
+    try { webBinding(app.daemon.web); }
+    catch (error) { throw validationError(error instanceof Error ? error.message : String(error)); }
+  }
 
   const compaction = validateCompaction(app.memory.compaction);
   if (compaction !== undefined) throw validationError(compaction);

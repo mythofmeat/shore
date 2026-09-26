@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { CallStore } from "../call_store.ts";
@@ -8,10 +8,12 @@ import { Ledger } from "../ledger/store.ts";
 import { copyArchiveTables, HISTORY_TABLES } from "./archive_rows.ts";
 import { openStorage, pack, unpack, STORAGE_SCHEMA } from "./store.ts";
 
-export function exportUnifiedDatabase(path: string, character: string, output: string): void {
+export function exportUnifiedDatabase(path: string, character: string, output: string, maxBytes?: number): void {
   if (!existsSync(path)) openStorage(dirname(path)).close();
   const source = new Database(path, { readonly: true });
-  try { writeFileSync(output, source.serialize()); }
+  try {
+    source.query("VACUUM INTO ?1").run(output);
+  }
   finally { source.close(); }
   CallStore.open(output).close();
   Ledger.create(output, undefined, false).close();
@@ -38,6 +40,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
   const compacted = new Database(output);
   try { compacted.run("PRAGMA journal_mode = DELETE; VACUUM;"); }
   finally { compacted.close(); }
+  if (maxBytes !== undefined && statSync(output).size > maxBytes) throw new Error("Database snapshot exceeds the browser archive processing limit");
 }
 
 export function importUnifiedDatabase(path: string, sourcePath: string, character: string, sourceData?: string, destinationData?: string): void {

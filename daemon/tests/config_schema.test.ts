@@ -120,6 +120,9 @@ describe("configSchema", () => {
 
   test("the keys that need a daemon restart say so", () => {
     expect(byKey.get("daemon.listen_addr")?.restart_required).toBe(true);
+    for (const key of ["enabled", "bind_addr", "public_origin", "tls_cert", "tls_key", "max_connections", "max_queued_bytes"]) {
+      expect(byKey.get(`daemon.web.${key}`)).toMatchObject({ restart_required: true, settable: true });
+    }
     expect(byKey.get("daemon.cache_forensics")?.restart_required).toBe(true);
     expect(byKey.get("compaction.idle_after")?.restart_required).toBe(false);
     expect(byKey.get("heartbeat.enabled")?.restart_required).toBe(false);
@@ -183,6 +186,14 @@ describe("schemaValueLiteral", () => {
     expect(schemaValueLiteral(at("tools.enabled"), "read, edit")).toBe('["read", "edit"]');
     expect(schemaValueLiteral(at("tools.enabled"), "")).toBe("[]");
     expect(schemaValueLiteral(at("tools.enabled"), "[read, edit]")).toBe('["read", "edit"]');
+  });
+
+  test("quoted lists preserve embedded commas, quotes and empty arguments", () => {
+    const values = ["notify-send", "a,b", 'a"quote', "", "line\nbreak"];
+    const entry = at("notifications.command");
+    const literal = schemaValueLiteral(entry, JSON.stringify(values));
+    expect(Bun.TOML.parse(`items = ${literal}`)).toEqual({ items: values });
+    expect(() => schemaValueLiteral(entry, '["unfinished]')).toThrow("valid quoted list");
   });
 
   test("every settable key produces a literal the parser accepts", async () => {

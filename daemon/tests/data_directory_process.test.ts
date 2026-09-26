@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { connect } from "node:net";
 
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 
@@ -135,6 +136,40 @@ async function exitWithin(
 }
 
 describe("daemon processes owning data directories", () => {
+  test("disconnecting an authenticated TCP client does not leave a ping timer holding the process open", async () => {
+    const root = await processRoot("tcp-shutdown");
+    const layout = await processLayout(root, "daemon", join(root, "data"));
+    const child = spawnDaemon(layout, "tcp-shutdown");
+    await waitUntilReady(layout, "tcp-shutdown");
+    const entries = JSON.parse(await readFile(layout.instancesPath, "utf8")) as Array<{ addr: string }>;
+    const port = Number(entries[0]?.addr.split(":").at(-1));
+    const socket = connect({ host: "127.0.0.1", port });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let buffered = "";
+        socket.once("error", reject);
+        socket.once("connect", () => socket.write(`${JSON.stringify({ type: "hello", client_type: "cli", client_name: "shutdown-test", capabilities: [], token: TOKEN })}\n`));
+        socket.on("data", (chunk: Buffer) => {
+          buffered += chunk.toString();
+          for (;;) {
+            const end = buffered.indexOf("\n"); if (end < 0) break;
+            const message = JSON.parse(buffered.slice(0, end)) as { type: string };
+            buffered = buffered.slice(end + 1);
+            if (message.type === "history") resolve();
+          }
+        });
+      });
+      socket.destroy();
+      child.kill("SIGTERM");
+      const deadline = setTimeout(() => child.kill("SIGKILL"), 2000);
+      try { expect(await child.exited).toBe(0); }
+      finally { clearTimeout(deadline); }
+    } finally {
+      socket.destroy();
+      child.kill("SIGKILL");
+    }
+  });
+
   test("a second process cannot open the same data directory", async () => {
     const root = await processRoot("same");
     const dataDir = join(root, "shared-data");

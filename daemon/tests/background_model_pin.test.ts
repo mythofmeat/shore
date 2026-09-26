@@ -1,3 +1,4 @@
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -132,8 +133,8 @@ describe("pinning a background model", () => {
 
   test("an unknown task is an error", async () => {
     const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
-    expect(() => switchModel(ctx, { name: "kimi-id", background_task: "dreaming" })).toThrow(
-      /unknown background task/,
+    expect(() => switchModel(ctx, parseOperationInput("switch_model", { name: "kimi-id", background_task: "dreaming" }))).toThrow(
+      /background_task/,
     );
   });
 });
@@ -163,6 +164,31 @@ model = "kimi-id"
     expect(written).not.toContain("compaction =");
     expect(roleOf(ctx, "heartbeat")?.source).toBe("inherits chat");
     expect(roleOf(ctx, "compaction")?.source).toBe("inherits chat");
+  });
+
+  test("`all` reports each task's model when a thread pin makes them diverge", async () => {
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n\n[heartbeat]\nmodel = \"kimi-id\"\n");
+    ctx.threadModel = "anthropic:haiku-id";
+    ctx.thread = "side";
+
+    const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
+
+    expect(result["roles"]).toEqual([
+      { role: "heartbeat", model: "anthropic:opus-id", source: "inherits chat" },
+      { role: "compaction", model: "anthropic:haiku-id", source: "inherits chat" },
+    ]);
+    expect(result["active"]).toBeNull();
+    expect(result["source"]).toBeNull();
+    expect(result["reset_to"]).toBe("per-task defaults");
+  });
+
+  test("`all` reports the shared model when every task agrees", async () => {
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+    const result = resetModel(ctx, { background_task: "all" }) as Record<string, unknown>;
+
+    expect(result["active"]).toBe("anthropic:opus-id");
+    expect(result["source"]).toBe("inherits chat");
+    expect(result["roles"]).toHaveLength(2);
   });
 
   test("clearing a key that was never set is not an error", async () => {

@@ -1,4 +1,4 @@
-export type CacheState = "cold" | "warm";
+export type CacheState = import("../protocol/UsageCacheState.ts").UsageCacheState;
 
 export type Anomaly =
   | "unexpected_write"

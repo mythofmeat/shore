@@ -1,0 +1,28 @@
+:root {
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius: 9px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --sidebar-width: 272px;
+  --drawer-width: min(308px, 86vw);
+  --content-width: 800px;
+  --topbar-height: 58px;
+  --gutter: 16px;
+  --touch: 44px;
+  --icon-button: 34px;
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-md: 13.5px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 17px;
+  --text-2xl: 24px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-menu: 50;
+  --z-dialog: 60;
+  --z-toast: 70;
+}

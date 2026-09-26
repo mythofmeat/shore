@@ -1,3 +1,4 @@
+import { parseOperationInput } from "../src/operations/contracts.ts";
 import { recordedValue, recording } from "./support/rerecord.ts";
 import { writePromptSnapshotFile } from "./support/storage.ts";
 import { required } from "../src/util/required.ts";
@@ -20,8 +21,8 @@ import {
   type ConfigRuntime,
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
-import { loadConfig } from "../src/config/loader.ts";
-import { switchModel } from "../src/commands/models.ts";
+import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
+import { modelInfo, modelRoles, resetModel, switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
 
 interface Row {
@@ -109,6 +110,18 @@ test("the background model command accepts an explicit SDK model absent from dis
   expect(selected).toMatchObject({ active: "claude_agent:claude-opus-4-8", role: "compaction" });
   expect(loadConfig(w.ctx.configPath, { env: required(w.ctx.env) }).app.defaults.background.compaction)
     .toBe("claude_agent:claude-opus-4-8");
+});
+
+test("resetting compaction inherits the thread model while heartbeat and subagents inherit the character model", async () => {
+  const w = await build("ada", '[chat]\nmodel = "anthropic:beta-id"\n[chat."anthropic:alpha-id"]\n[chat."anthropic:beta-id"]\n');
+  const ctx = { ...w.ctx, dataDir: w.ctx.config.dirs.data, thread: "side", threadModel: "anthropic:alpha-id" };
+  switchModel(ctx, { name: "anthropic:beta-id", background_task: "compaction" });
+  expect(modelRoles(ctx).find((role) => role.role === "compaction")).toMatchObject({ model: "anthropic:beta-id", source: "compaction.model" });
+  expect(resetModel(ctx, { background_task: "compaction" })).toMatchObject({ active: "anthropic:alpha-id", source: "inherits chat" });
+  expect(modelInfo(ctx, { background_task: "compaction" })).toMatchObject({ qualified_name: "anthropic:alpha-id" });
+  expect(modelRoles(ctx).find((role) => role.role === "compaction")).toMatchObject({ model: "anthropic:alpha-id", source: "inherits chat" });
+  expect(resetModel(ctx, { background_task: "heartbeat" })).toMatchObject({ active: "anthropic:beta-id" });
+  expect(resetModel(ctx, { subagent: "all" })).toMatchObject({ active: "anthropic:beta-id" });
 });
 
 const scrub = (value: unknown, root: string): unknown =>
@@ -278,7 +291,7 @@ describe("config read", () => {
     for (const key of ["tools", "subagents"]) {
       expect(config(w.ctx, { key })).toEqual({ key, config: result.config[key], defaults: reportedDefaults()[key] });
     }
-    expect(config(w.ctx, { key: 7 })).toEqual(result);
+    expect(() => parseOperationInput("config", { key: 7 })).toThrow();
     expect(config(w.ctx, { value: "true" })).toEqual(result);
     expect(() => config(w.ctx, { key: "nosuchsection" })).toThrow("Config section not found");
   });
@@ -390,11 +403,9 @@ describe("configReload", () => {
     expect(w.calls).toEqual([]);
   });
 
-  test("a truthy non-boolean apply is not an apply", async () => {
+  test("a truthy non-boolean apply is rejected before configuration effects", async () => {
     const w = await build("mid", FURNISHED);
-    await check(row("config_reload", "a truthy non-boolean apply is not an apply"), w, () =>
-      configReload(w.ctx, { apply: 1, refresh_prompts: 1 }),
-    );
+    expect(() => parseOperationInput("config_reload", { apply: 1, refresh_prompts: 1 })).toThrow();
     expect(w.calls).toEqual([]);
   });
 
@@ -431,11 +442,15 @@ describe("configReload", () => {
     expect(w.calls).toEqual([]);
   });
 
-  test("reload with no character context", async () => {
+  test("reload with no character context previews and applies global configuration", async () => {
     const w = await build(undefined, FURNISHED);
-    await check(row("config_reload", "reload with no character context"), w, () =>
-      configReload(w.ctx, {}),
-    );
+    expect(await configReload(w.ctx, {})).toMatchObject({ applied: false, character: null, changed_prompt_files: [] });
+    expect(w.calls).toEqual([]);
+    expect(await configReload(w.ctx, { apply: null, refresh_prompts: null })).toMatchObject({ applied: false, character: null });
+    expect(w.calls).toEqual([]);
+    expect(await configReload(w.ctx, { apply: true })).toMatchObject({ applied: true, character: null, prompts_refreshed: false });
+    expect(w.calls).toEqual(["adoptGlobalConfig", "reloadRuntimeConfig"]);
+    expect(configReload(w.ctx, { apply: true, refresh_prompts: true })).rejects.toThrow("requires a character context");
   });
 
   test("check mode lists the prompt files that differ", async () => {
@@ -543,4 +558,18 @@ Authorization = "Bearer hdr_do_not_leak"
     const w = await build(undefined, '[mcp.weather]\ncommand="weather-mcp"\n[mcp.weather.env]\nWEATHER_API_KEY=""');
     expect(config(w.ctx, { key: "mcp.weather.env.WEATHER_API_KEY" })).toMatchObject({ config: "" });
   });
+});
+
+
+test("config reload compares restart sections with the adopted global configuration", async () => {
+  const w = await build("ada", "[notifications]\nvia = \"off\"\n");
+  const global = w.ctx.config;
+  const overlay = join(global.dirs.config, "characters", "ada");
+  await mkdir(overlay, { recursive: true });
+  await writeFile(join(overlay, "config.toml"), "[notifications]\nvia = \"notify_send\"\n");
+  w.ctx.config = required(loadCharacterConfig(global, "ada"));
+  w.ctx.runtime.globalConfig = () => global;
+  expect((await configReload(w.ctx, {})).restart_required).toBeUndefined();
+  await writeFile(w.ctx.configPath, "[notifications]\nvia = \"notify_send\"\n");
+  expect((await configReload(w.ctx, {})).restart_required).toEqual(["[notifications]"]);
 });

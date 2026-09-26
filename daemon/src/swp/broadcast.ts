@@ -1,3 +1,4 @@
+import { OutboundQueue, type QueueLimits } from "./outbound.ts";
 import type { ServerMessage } from "../protocol/ServerMessage";
 
 export const BROADCAST_CAPACITY = 256;
@@ -8,24 +9,25 @@ export type RecvResult =
   | { readonly kind: "closed" };
 
 export class Subscription {
-  readonly #queue: ServerMessage[] = [];
-  readonly #capacity: number;
+  readonly #queue: OutboundQueue;
+  readonly #matches: ((msg: ServerMessage) => boolean) | undefined;
   #skipped = 0;
   #closed = false;
   #wake: (() => void) | null = null;
   #detach: (() => void) | null = null;
 
-  constructor(capacity: number, detach: () => void) {
-    this.#capacity = capacity;
+  constructor(capacity: number, detach: () => void, byteLimit?: number, matches?: (msg: ServerMessage) => boolean, options?: QueueLimits) {
+    this.#queue = new OutboundQueue({ ...options, messages: capacity, bytes: byteLimit ?? Infinity });
     this.#detach = detach;
+    this.#matches = matches;
   }
 
   push(msg: ServerMessage): void {
-    if (this.#queue.length >= this.#capacity) {
-      this.#queue.shift();
+    if (this.#closed || this.#matches?.(msg) === false) return;
+    while (!this.#queue.push(msg)) {
       this.#skipped += 1;
+      if (this.#queue.shift() === undefined) break;
     }
-    this.#queue.push(msg);
     this.#signal();
   }
 
@@ -48,7 +50,9 @@ export class Subscription {
         return { kind: "lagged", skipped };
       }
       const next = this.#queue.shift();
-      if (next !== undefined) return { kind: "message", msg: next };
+      if (next !== undefined) {
+        return { kind: "message", msg: next };
+      }
       if (this.#closed) return { kind: "closed" };
       await new Promise<void>((resolve) => {
         this.#wake = resolve;
@@ -59,6 +63,8 @@ export class Subscription {
   unsubscribe(): void {
     this.#detach?.();
     this.#detach = null;
+    this.#queue.clear();
+    this.#skipped = 0;
     this.close();
   }
 }
@@ -72,10 +78,10 @@ export class Broadcast {
     this.#capacity = capacity;
   }
 
-  subscribe(): Subscription {
-    const sub: Subscription = new Subscription(this.#capacity, () => {
+  subscribe(limits?: QueueLimits, matches?: (msg: ServerMessage) => boolean): Subscription {
+    const sub: Subscription = new Subscription(Math.min(this.#capacity, limits?.messages ?? this.#capacity), () => {
       this.#subscribers.delete(sub);
-    });
+    }, limits?.bytes, matches, limits);
     this.#subscribers.add(sub);
     if (this.#closed) sub.close();
     return sub;

@@ -1,12 +1,15 @@
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Command } from "../protocol/Command";
 import type { ServerMessage } from "../protocol/ServerMessage";
+import type { ArchiveLimits } from "../commands/archive.ts";
 
 export type RequestKind = "message" | "regen" | "command" | "cancel";
 
 export const ALL_CHARACTERS_CAPABILITY = "all_characters";
+export const REQUEST_LIFECYCLE_CAPABILITY = "request-lifecycle";
 
 export interface ClientInfo {
+  readonly archiveLimits?: ArchiveLimits;
   readonly id: number;
   readonly clientType: string;
   readonly clientName: string;
@@ -16,6 +19,7 @@ export interface ClientInfo {
 }
 
 export interface SessionMeta {
+  readonly archiveLimits?: ArchiveLimits;
   readonly clientId: number;
   readonly sessionId: number;
   readonly clientType: string;
@@ -54,6 +58,7 @@ export function isControlRoutedMessage(msg: RoutedMessage): msg is ControlRouted
 
 export function sessionMetaOf(client: ClientInfo): SessionMeta {
   return {
+    ...(client.archiveLimits === undefined ? {} : { archiveLimits: client.archiveLimits }),
     clientId: client.id,
     sessionId: client.id,
     clientType: client.clientType,

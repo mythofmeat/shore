@@ -1,0 +1,250 @@
+[
+  {
+    "mode": "summary",
+    "period": "budget",
+    "period_since": "2026-09-01T00:00:00Z",
+    "timezone": "utc",
+    "summary": [
+      {
+        "provider": "anthropic",
+        "model": "usage-model-a",
+        "call_count": 1,
+        "total_input": 1000,
+        "total_output": 100,
+        "total_cache_read": 1000,
+        "total_cache_write": 0,
+        "total_cost": 3.5
+      }
+    ],
+    "cache_health": [
+      {
+        "character": "nova",
+        "state": "warm",
+        "streak": 1
+      }
+    ],
+    "anomaly_count_7d": 1,
+    "anomaly_counts_7d": [
+      {
+        "anomaly": "unexpected_write",
+        "calls": 1,
+        "cache_write_tokens": 2500
+      }
+    ],
+    "cache_coverage": [
+      {
+        "state": "cold",
+        "reason": "prefix changed",
+        "calls": 1,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 2500
+      }
+    ],
+    "cost_sources": [
+      {
+        "cost_source": "pricing_catalog",
+        "calls": 1,
+        "unpriced_calls": 0,
+        "total_cost": 3.5
+      }
+    ],
+    "rate_limits": [
+      {
+        "host": "api.anthropic.com",
+        "observed_at": "2026-09-10T00:00:00Z",
+        "requests_remaining": 12.0,
+        "requests_limit": 1000.0,
+        "input_tokens_remaining": 1200.0,
+        "input_tokens_limit": 100000.0,
+        "output_tokens_remaining": 100.0,
+        "output_tokens_limit": 1000.0,
+        "resets_at": "2026-09-11T00:00:00Z"
+      }
+    ],
+    "nanogpt_subscription": {
+      "version": 1,
+      "fetched_at": "2026-09-10T00:00:00Z",
+      "active": true,
+      "state": "active",
+      "weeklyInputTokens": {
+        "used": 12000000.0,
+        "remaining": 48000000.0,
+        "limit": 60000000.0,
+        "resetAt": "2026-09-14T00:00:00Z"
+      },
+      "routing": {
+        "recommendedMode": "subscription"
+      }
+    },
+    "call_attempts": {
+      "pending": 0,
+      "unresolved": 1,
+      "estimated_cost_at_risk": 0.25
+    },
+    "budgets": [
+      {
+        "name": "Nova monthly",
+        "period": "month",
+        "period_start": "2026-09-01T00:00:00Z",
+        "period_end": "2026-10-01T00:00:00Z",
+        "reset_at": "2026-10-01T00:00:00Z",
+        "timezone": "utc",
+        "current_cost": 3.75,
+        "cost_limit": 2.0,
+        "percent_used": 1.875,
+        "status": "over_limit",
+        "action": "warn",
+        "effective_action": "warn",
+        "warning_thresholds": [
+          0.5,
+          1.0
+        ],
+        "crossed_warn_at": [
+          0.5,
+          1.0
+        ],
+        "over_limit": true,
+        "compaction_allowed_over_budget": false,
+        "filters": {
+          "character": "nova",
+          "provider": null,
+          "api_key": null,
+          "model": null,
+          "call_type": null,
+          "usage_kind": []
+        },
+        "pace": {
+          "period": "day",
+          "window_start": "2026-09-10T00:00:00Z",
+          "window_end": "2026-09-11T00:00:00Z",
+          "allowance": 1.0,
+          "base_allowance": 1.0,
+          "rollover": 0.0,
+          "debt_adjustment": 0.0,
+          "current_cost": 3.75,
+          "remaining": -2.75,
+          "percent_used": 3.75,
+          "periods_remaining": 20,
+          "status": "over_limit",
+          "action": "warn",
+          "effective_action": "warn",
+          "warning_thresholds": [
+            0.5,
+            1.0
+          ],
+          "crossed_warn_at": [
+            0.5,
+            1.0
+          ],
+          "over_limit": true
+        }
+      }
+    ]
+  },
+  {
+    "mode": "summary_by",
+    "dimension": "cost_source",
+    "period": "all",
+    "summary": [
+      {
+        "group": "pricing_catalog",
+        "call_count": 1,
+        "total_input": 1000,
+        "total_output": 100,
+        "total_cache_read": 1000,
+        "total_cache_write": 0,
+        "total_cost": 3.5
+      }
+    ]
+  },
+  {
+    "mode": "budget",
+    "timezone": "utc",
+    "budgets": [
+      {
+        "name": "Nova monthly",
+        "period": "month",
+        "period_start": "2026-09-01T00:00:00Z",
+        "period_end": "2026-10-01T00:00:00Z",
+        "reset_at": "2026-10-01T00:00:00Z",
+        "timezone": "utc",
+        "current_cost": 3.75,
+        "cost_limit": 2.0,
+        "percent_used": 1.875,
+        "status": "over_limit",
+        "action": "warn",
+        "effective_action": "warn",
+        "warning_thresholds": [
+          0.5,
+          1.0
+        ],
+        "crossed_warn_at": [
+          0.5,
+          1.0
+        ],
+        "over_limit": true,
+        "compaction_allowed_over_budget": false,
+        "filters": {
+          "character": "nova",
+          "provider": null,
+          "api_key": null,
+          "model": null,
+          "call_type": null,
+          "usage_kind": []
+        },
+        "pace": {
+          "period": "day",
+          "window_start": "2026-09-10T00:00:00Z",
+          "window_end": "2026-09-11T00:00:00Z",
+          "allowance": 1.0,
+          "base_allowance": 1.0,
+          "rollover": 0.0,
+          "debt_adjustment": 0.0,
+          "current_cost": 3.75,
+          "remaining": -2.75,
+          "percent_used": 3.75,
+          "periods_remaining": 20,
+          "status": "over_limit",
+          "action": "warn",
+          "effective_action": "warn",
+          "warning_thresholds": [
+            0.5,
+            1.0
+          ],
+          "crossed_warn_at": [
+            0.5,
+            1.0
+          ],
+          "over_limit": true
+        }
+      }
+    ],
+    "call_attempts": {
+      "pending": 0,
+      "unresolved": 1,
+      "estimated_cost_at_risk": 0.25
+    }
+  },
+  {
+    "mode": "anomalies",
+    "anomalies": [
+      {
+        "ts": "2026-09-10T00:00:00Z",
+        "character": "nova",
+        "model": "usage-model-a",
+        "call_type": "heartbeat",
+        "anomaly": "unexpected_write",
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 2500
+      }
+    ]
+  },
+  {
+    "mode": "csv",
+    "data": "ts,character,provider\n2026-09-10,nova,anthropic"
+  },
+  {
+    "mode": "tsv",
+    "data": "ts\tcharacter\tprovider\n2026-09-10\tnova\tanthropic"
+  }
+]

@@ -16,6 +16,13 @@ import {
 import { renderTemplate } from "../engine/prompt.ts";
 import { invalidRequest } from "./errors.ts";
 import type { Args } from "./navigation.ts";
+import type { OperationInput } from "../operations/types.ts";
+import type { ToolDescription } from "../protocol/ToolDescription.ts";
+import type { ToolRunReport } from "../protocol/ToolRunReport.ts";
+import type { NestedToolCall } from "../protocol/NestedToolCall.ts";
+import type { ImageRef } from "../protocol/ImageRef.ts";
+import type { ToolKind } from "../protocol/ToolKind.ts";
+export type { ToolKind } from "../protocol/ToolKind.ts";
 
 const NESTED_OUTPUT_CHARS = 600;
 
@@ -35,6 +42,7 @@ export interface RunToolContext {
   newMessageId?: () => string;
   toolUseId?: () => string;
   signal?: AbortSignal;
+  emit?: (message: ServerMessage) => void;
 }
 
 export interface RunToolRequest {
@@ -44,21 +52,13 @@ export interface RunToolRequest {
   raw: boolean;
 }
 
-export type ToolKind = "builtin" | "subagent" | "mcp";
-
 export interface ResolvedTool {
   kind: ToolKind;
   schema: CompiledToolSchema | undefined;
   enabled: boolean;
 }
 
-export interface NestedCall {
-  tool: string;
-  subagent: string | null;
-  ok: boolean;
-  input: string;
-  output: string;
-}
+export type NestedCall = NestedToolCall;
 
 export function parseRunToolArgs(args: Args): RunToolRequest {
   const tool = args["tool"];
@@ -181,11 +181,11 @@ function coerceValue(key: string, value: string, type: string | undefined): unkn
   }
 }
 
-export function describeTool(character: string, ctx: RunToolContext, args: Args): unknown {
+export function describeTool(character: string, ctx: RunToolContext, args: OperationInput<"run_tool">): ToolDescription {
   const { tool } = parseRunToolArgs(args);
   const cfg = ctx.config.app.tools;
   const vars = templateVars(character, resolveDisplayName(ctx.config.app.defaults));
-  const seen = (kind: string, enabled: boolean, description: string, schema: unknown) => ({
+  const seen = (kind: ToolKind, enabled: boolean, description: string, schema: Record<string, unknown>): ToolDescription => ({
     mode: "tool_definition",
     tool,
     kind,
@@ -231,15 +231,16 @@ export function describeTool(character: string, ctx: RunToolContext, args: Args)
 export async function runTool(
   character: string,
   ctx: RunToolContext,
-  args: Args,
-): Promise<unknown> {
+  args: OperationInput<"run_tool">,
+): Promise<ToolRunReport> {
   const request = parseRunToolArgs(args);
   const resolved = resolveTool(request.tool, ctx.config, ctx.mcpTools());
   const input = { ...request.input, ...coercePairs(request.pairs, resolved.schema) };
 
   const frames: ServerMessage[] = [];
   const send = (message: ServerMessage): void => {
-    frames.push(message);
+    if (message.type === "tool_call" || message.type === "tool_result" || message.type === "send_image") frames.push(message);
+    ctx.emit?.(message);
   };
   const now = ctx.now ?? (() => new Date().toISOString());
   const newMessageId = ctx.newMessageId ?? (() => `m_${crypto.randomUUID()}`);
@@ -278,6 +279,7 @@ export async function runTool(
 
   const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec, []);
   const output = run.output;
+  const images = toolRunImages(frames);
 
   return {
     tool: request.tool,
@@ -293,7 +295,23 @@ export async function runTool(
     result_chars: run.window?.originalChars ?? Array.from(run.raw).length,
     raw: request.raw ? run.raw : null,
     calls: nestedCalls(frames, toolUseId, request.raw),
+    ...(images.length === 0 ? {} : { images }),
   };
+}
+
+export function toolRunImages(frames: readonly ServerMessage[]): ImageRef[] {
+  const images = new Map<string, ImageRef>();
+  for (const frame of frames) {
+    if (frame.type === "send_image") {
+      images.set(frame.path, { path: frame.path, caption: frame.caption ?? images.get(frame.path)?.caption ?? null, data: frame.data ?? images.get(frame.path)?.data ?? null });
+    } else if (frame.type === "tool_result") {
+      for (const image of frame.images ?? []) {
+        const original = images.get(image.path);
+        images.set(image.path, { ...image, caption: original?.caption ?? image.caption ?? null, data: original?.data ?? image.data ?? null });
+      }
+    }
+  }
+  return [...images.values()];
 }
 
 export function nestedCalls(

@@ -42,6 +42,10 @@ export function commentRanges(text: string): CommentRange[] {
   for (;;) {
     let kind = scanner.scan();
     if (kind === SyntaxKind.EndOfFile) break;
+    if (scanner.getTokenEnd() === scanner.getTokenStart()) {
+      scanner.resetTokenState(scanner.getTokenEnd() + 1);
+      continue;
+    }
 
     if (isTriviaKind(kind)) {
       if (kind === SyntaxKind.SingleLineCommentTrivia || kind === SyntaxKind.MultiLineCommentTrivia) {

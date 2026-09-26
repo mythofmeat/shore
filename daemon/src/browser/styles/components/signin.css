@@ -1,0 +1,36 @@
+.signin {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px var(--gutter);
+}
+
+.signin-form {
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.signin-form .wordmark {
+  font-size: calc(var(--wordmark-size) + 3px);
+}
+
+.signin-form h1 {
+  margin: 0 0 4px;
+  font-size: var(--text-xl);
+  font-weight: 500;
+}
+
+.signin-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--text-md);
+}
+
+.signin-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-md);
+}
