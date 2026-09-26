@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
 import { ConversationRequests } from "../chat/requests.ts";
+import { Notifier, type NotifySnapshot } from "../notifications.ts";
 import { DisplayPreferences, type ViewValues } from "../preferences.ts";
 import { ThemeStore, type ThemeId } from "../theme.ts";
 import { Workspace, type WorkspaceSnapshot } from "../workspace.ts";
@@ -25,7 +26,10 @@ export const workspace = new Workspace(new BrowserConnection({
 export const conversation = new ConversationRequests(workspace.connection);
 export const themes = new ThemeStore();
 export const display = new DisplayPreferences(browserStorage());
-addEventListener("storage", () => { themes.reload(); display.reload(); });
+export const notifier = new Notifier({ storage: browserStorage() });
+workspace.connection.subscribe((update) => { notifier.observe(update, workspace.getSnapshot()); });
+addEventListener("storage", () => { themes.reload(); display.reload(); notifier.reload(); });
+addEventListener("focus", () => { notifier.markRead(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
@@ -33,6 +37,10 @@ export function useWorkspace(): WorkspaceSnapshot {
 
 export function useTheme(): ThemeId {
   return useSyncExternalStore(themes.subscribe, themes.getSnapshot);
+}
+
+export function useNotifications(): NotifySnapshot {
+  return useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
 }
 
 export function useDisplay(): ViewValues {

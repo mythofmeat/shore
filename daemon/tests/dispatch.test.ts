@@ -1,5 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { describe, expect, test } from "bun:test";
 
 import fixture from "./tools_captures/dispatch.json" with { type: "json" };
 
@@ -23,9 +22,6 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import { defaultToolsConfig, type SubagentConfig } from "../src/config/app.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
-import { requestBody } from "./support/fetch.ts";
-
-afterAll(restoreTestEnv);
 
 const STUB_EMBEDDER: Embedder = {
   embed: async () => [],
@@ -42,12 +38,6 @@ function bareContext(over: Partial<ToolContext> = {}): ToolContext {
   historyDbPath: "/tmp/history.db",
     characterName: "",
     configDir: "",
-    searchConfig: {
-      api_key_env: "TAVILY_API_KEY",
-      result_limit: 5,
-      search_depth: "basic",
-      include_answer: true,
-    },
     retrievalConfig: DEFAULT_RETRIEVAL_CONFIG,
     retrievalMode: "auto",
     ...over,
@@ -144,8 +134,8 @@ describe("routing, wired", () => {
     expect(await route("bash", null)).toEqual(
       (fixture.routing as Record<string, unknown>)["bash"],
     );
-    expect(await route("web_search", undefined)).toEqual(
-      (fixture.routing as Record<string, unknown>)["web_search"],
+    expect(await route("generate_image", undefined)).toEqual(
+      (fixture.routing as Record<string, unknown>)["generate_image"],
     );
   });
 
@@ -295,39 +285,6 @@ describe("context fields reach their handler argument", () => {
     >;
     expect(String(result["path"])).toStartWith(`${imageDir}/`);
     expect(await Bun.file(String(result["path"])).exists()).toBe(true);
-  });
-
-  test("web_search reads the context's search config", async () => {
-    const seen: unknown[] = [];
-    const ctx = bareContext({
-      searchConfig: {
-        api_key_env: "DISPATCH_TEST_KEY",
-        result_limit: 7,
-        search_depth: "advanced",
-        include_answer: false,
-      },
-      fetchImpl: async (_input, init) => {
-        seen.push(JSON.parse(requestBody(init)));
-        return new Response(JSON.stringify({ results: [] }), {
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-    setTestEnv("DISPATCH_TEST_KEY", "secret");
-    try {
-      await dispatchTool("web_search", { query: "x" }, ctx);
-    } finally {
-      unsetTestEnv("DISPATCH_TEST_KEY");
-    }
-    expect(seen).toEqual([
-      {
-        api_key: "secret",
-        query: "x",
-        max_results: 7,
-        search_depth: "advanced",
-        include_answer: false,
-      },
-    ]);
   });
 
   test("git commits as the context's character", async () => {

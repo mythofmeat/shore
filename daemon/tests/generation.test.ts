@@ -15,7 +15,6 @@ import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import {
   defaultAppConfig,
-  defaultSearchConfig,
   type AppConfig,
   type RetrievalMode,
 } from "../src/config/app.ts";
@@ -112,7 +111,6 @@ interface Knobs {
   image_generation?: string | null;
   embedding?: string | null;
   embedding_key_set?: boolean;
-  search_depth?: string | null;
   max_retries?: number | null;
   with_model?: boolean;
 }
@@ -188,7 +186,6 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   }
   if (present(knobs.image_generation)) app.defaults.image_generation = knobs.image_generation;
   if (present(knobs.embedding)) app.defaults.embedding = knobs.embedding;
-  if (present(knobs.search_depth)) app.tools.web_search.search_depth = knobs.search_depth;
   if (present(knobs.max_retries)) app.advanced.max_retries = knobs.max_retries;
 
   const models = emptyCatalog();
@@ -344,10 +341,6 @@ describe("buildToolContext", () => {
         expect(ctx.imageGenConfig?.size).toBe(cfg.size);
       }
 
-      expect(ctx.searchConfig.search_depth).toBe(
-        caseInput.search_depth ?? defaultSearchConfig().search_depth,
-      );
-      expect(ctx.searchConfig.result_limit).toBe(defaultSearchConfig().result_limit);
       expect(ctx.retrievalConfig.maxFileBytes).toBe(
         out["memory_retrieval_config"]["max_file_bytes"],
       );

@@ -99,15 +99,6 @@ export function formatToolOutput(name: string, value: unknown): string {
       return heatmapText(value as HeatmapResult);
     case "model_history":
       return modelHistoryText(value as ModelHistoryResult);
-    case "web_search": {
-      const result = value as { query: string; results: { title: string; url: string; content: string }[]; answer?: string };
-      const lines = [`Web search ${JSON.stringify(result.query)}: ${result.results.length} results`];
-      if (result.answer) lines.push("", `Search provider summary: ${result.answer}`);
-      for (const [index, row] of result.results.entries()) {
-        lines.push("", `${index + 1}. ${oneLine(row.title)}`, row.url, row.content);
-      }
-      return lines.join("\n");
-    }
     default:
       return payloadText(value);
   }

@@ -139,3 +139,23 @@ test("the Sodium fog theme applies before first paint after a reload", async ({ 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "default");
   await check();
 });
+
+test("while the tab is unfocused a reply shows a desktop notification and an unread count in the title", async ({ page }) => {
+  const check = await watchPage(page);
+  await page.addInitScript("window.shoreNotifications = []; window.Notification = class { static permission = 'default'; static requestPermission() { window.Notification.permission = 'granted'; return Promise.resolve('granted'); } constructor(title, options) { this.onclick = null; window.shoreNotifications.push({ title, body: options.body, tag: options.tag }); } close() {} };");
+  await signIn(page);
+  await createCharacter(page, "nova");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  const toggle = page.getByRole("switch", { name: "Notify when unfocused" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await page.evaluate("document.hasFocus = () => false");
+  await send(page, "Ping while away");
+  await expect(page).toHaveTitle("(1) nova · Shore");
+  expect(await page.evaluate("window.shoreNotifications")).toEqual([{ title: "nova", body: expect.stringContaining("Ping while away") as unknown, tag: "shore:nova/main" }]);
+  await page.evaluate("document.hasFocus = () => true; window.dispatchEvent(new Event('focus'))");
+  await expect(page).toHaveTitle("nova · Shore");
+  await check();
+});

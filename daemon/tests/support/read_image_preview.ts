@@ -24,7 +24,6 @@ export async function readImagePreview(markdown: boolean): Promise<unknown> {
       ctx: {
         workspaceDir: root, characterName: "Ada", characterDataDir: root, imageDir: "",
         conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-        searchConfig: { api_key_env: "UNUSED", result_limit: 5, search_depth: "basic", include_answer: false },
         retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
       },
       sendDirect: (frame) => { live.push(frame); },

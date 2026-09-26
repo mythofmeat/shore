@@ -6,9 +6,9 @@ import { describe, expect, test } from "bun:test";
 
 import rawFixture from "./tools_captures/tool_registry.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
+import { anyToolEnabled, defaultToolsConfig } from "../src/config/app.ts";
 import {
   ALL_TOOLS,
-  anyEnabled,
   assembleToolSurface,
   availableTools,
   renderToolDefs,
@@ -52,6 +52,10 @@ function cfg(enabledTools: string[], enabledSubagents: string[] = []): ToolsConf
   return { enabled_tools: enabledTools, enabled_subagents: enabledSubagents };
 }
 
+function anyEnabled(view: ToolsConfigView): boolean {
+  return anyToolEnabled({ ...defaultToolsConfig(), ...view });
+}
+
 const subagentConfig: ReadonlyMap<string, SubagentConfigView> = new Map(
   fx.subagent_config.map((s) => [s.name, { description: s.description }]),
 );
@@ -70,7 +74,6 @@ describe("the registry itself", () => {
     (name, tool) => {
       expect(tool.description.length, `${name} says what it is for`).toBeGreaterThan(0);
       expect(tool.description.endsWith("\n"), `${name} carries no trailing newline`).toBe(false);
-      expect(["web", "other"], `${name} is filed under a known category`).toContain(tool.category);
 
       const schema = tool.parameters as {
         type?: string;
