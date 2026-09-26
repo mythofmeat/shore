@@ -654,6 +654,30 @@ button.chip:hover {
   margin-left: -6px;
 }
 
+.effort-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.effort-chip:hover,
+.effort-chip[aria-expanded="true"] {
+  border-color: var(--line-3);
+  color: var(--text);
+}
+
+.effort-name {
+  color: var(--text-3);
+}
+
 .composer-status {
   flex: 1;
   color: var(--text-3);

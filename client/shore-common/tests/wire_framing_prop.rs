@@ -430,6 +430,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
         (0_u64..100, prop::option::of(arb_ident()), arb_message()).prop_map(
             |(revision, character, message)| {
                 ServerMessage::NewMessage(NewMessage {
+                    rid: None,
                     thread: None,
                     revision,
                     character,

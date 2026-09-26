@@ -64,6 +64,7 @@ ${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""
 ${process.env["SHORE_BROWSER_CALM_BUDGET"] === "true" ? '[[budgets]]\nname = "Quiet"\nperiod = "month"\ncost_usd = 10\nwarn_fractions = [0.5]\ncharacter = "quiet"\n' : ""}
 `);
 let generation = 0;
+const answered = new Set<string>();
 const cleanup = new AbortController();
 const memoryStream = compactionFixture(cleanup.signal);
 const provider: SidecarProvider = {
@@ -106,6 +107,11 @@ const provider: SidecarProvider = {
       yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
       return;
     }
+    if (question.includes("hold regenerations") && answered.has(question)) {
+      await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+      return;
+    }
+    answered.add(question);
     if (question.includes("hold this request")) {
       await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
       return;

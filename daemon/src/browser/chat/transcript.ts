@@ -122,6 +122,16 @@ export function visibleStreams<T extends { subagent: string | null; final: boole
   return streams.filter((stream) => stream.subagent === null && (!stream.final || (!messages.some((message) => message.msg_id === stream.msgId) && stream.rid !== null && active.has(stream.rid))));
 }
 
+const realUserTurn = (message: Message): boolean => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every((block) => block.type === "tool_result"));
+
+export function regenStart(messages: readonly Message[], activeStart: number): number {
+  return Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart);
+}
+
+export function regenInFlight(visible: readonly { regen?: boolean; rid?: string | null }[], pendingRegens: readonly string[], regens: readonly string[] = []): boolean {
+  return pendingRegens.length > 0 || visible.some((stream) => stream.regen === true || (typeof stream.rid === "string" && regens.includes(stream.rid)));
+}
+
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {
   let phase: { id: number; text: string } | null = null;
   let finished = -1;

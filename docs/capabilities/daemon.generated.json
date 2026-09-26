@@ -1206,6 +1206,12 @@
                   "null"
                 ]
               },
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "msg_id": {
                 "type": "string"
               },
@@ -2577,6 +2583,12 @@
                   "null"
                 ]
               },
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "msg_id": {
                 "type": "string"
               },
@@ -3305,7 +3317,7 @@
     "NanoGptSubscriptionState": "{ version: 1, fetched_at: string, active: boolean, state: NanoGptAccountState, weeklyInputTokens?: NanoGptWeeklyInputTokens, routing?: NanoGptRouting, }",
     "NanoGptWeeklyInputTokens": "{ used: number, remaining: number, limit: number, resetAt: string, }",
     "NestedToolCall": "{ tool: string, subagent: string | null, ok: boolean, input: string, output: string, }",
-    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, rid?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
     "OperationCatalogue": "{ operations: Array<OperationDescriptor>, requests: Array<OperationDescriptor>, }",
     "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\" | \"Providers\" | \"Configuration\" | \"Models\" | \"Diagnostics\" | \"Memory\" | \"Tools\" | \"Usage\"",
     "OperationChoices": "\"characters\" | \"threads\" | \"models\" | \"providers\" | \"config_keys\" | \"subagents\" | \"model_settings\" | \"tools\"",

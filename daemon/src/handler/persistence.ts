@@ -200,6 +200,7 @@ export function emitNewMessageEvent(
   revision: number,
   msg: Message,
   thread = "main",
+  rid: string | null = null,
 ): void {
   const wireMsg: Message = { ...msg, origin };
   embedImageData(wireMsg.images);
@@ -208,6 +209,7 @@ export function emitNewMessageEvent(
     revision,
     character,
     thread,
+    ...(rid === null ? {} : { rid }),
     ...wireMsg,
   });
 }

@@ -848,6 +848,21 @@ impl App {
         self.stream.reset();
         self.stream.active = true;
         self.stream.regen = true;
+        let tail = self
+            .entries
+            .iter()
+            .rposition(|entry| match entry {
+                ConversationEntry::Turn(turn) => turn.is_real_user_turn(),
+                ConversationEntry::ArchiveBoundary { .. } => true,
+                ConversationEntry::System { .. } => false,
+            })
+            .map_or(0, |index| index.saturating_add(1));
+        self.stream.replacing = self
+            .entries
+            .iter()
+            .skip(tail)
+            .filter_map(|entry| entry.msg_id().map(str::to_owned))
+            .collect();
         self.spinner_frame = 0;
         self.scroll_to_bottom();
     }
