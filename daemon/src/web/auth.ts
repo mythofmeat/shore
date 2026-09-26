@@ -2,6 +2,8 @@ import { Cookie, CookieMap } from "bun";
 import { createHash, randomBytes } from "node:crypto";
 import { sessionDigest, type WebRecovery } from "./recovery.ts";
 
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
 export interface WebSession {
   readonly id: string;
   readonly expiresAt: number;
@@ -10,7 +12,7 @@ export interface WebSession {
 
 interface StoredSession extends WebSession {
   controller: AbortController;
-  timer: ReturnType<typeof setTimeout>;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 export class WebSessions {
@@ -65,13 +67,17 @@ export class WebSessions {
 
   #restore(id: string, expiresAt: number): WebSession {
     const controller = new AbortController();
-    const session: StoredSession = {
-      id, controller, signal: controller.signal,
-      expiresAt,
-      timer: setTimeout(() => { this.revoke(session); }, Math.max(1, expiresAt - Date.now())),
-    };
+    const session: StoredSession = { id, controller, signal: controller.signal, expiresAt };
+    this.#arm(session);
     this.#sessions.set(id, session);
     return session;
+  }
+
+  #arm(session: StoredSession): void {
+    const remaining = session.expiresAt - Date.now();
+    session.timer = remaining <= MAX_TIMER_MS
+      ? setTimeout(() => { this.revoke(session); }, Math.max(1, remaining))
+      : setTimeout(() => { this.#arm(session); }, MAX_TIMER_MS);
   }
 
   cookie(session?: WebSession, secure = this.#secure): string {

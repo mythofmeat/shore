@@ -262,6 +262,17 @@ describe("browser connection state", () => {
     } finally { stale.client.stop(); current.client.stop(); }
   });
 
+  test("a session lifetime beyond the timer limit keeps the browser signed in", async () => {
+    const f = await fixture({ sessionLifetimeMs: 90 * 24 * 60 * 60 * 1000 }); f.web.activate();
+    const b = browserConnection(f.web.origin);
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      await Bun.sleep(50);
+      expect(b.client.status).toBe("ready");
+      b.client.reconnect(); await until(() => b.client.status === "ready");
+    } finally { b.client.stop(); }
+  });
+
   test("future events remain inspectable but invalid known events halt the connection", async () => {
     const f = await fixture(); f.web.activate();
     const b = browserConnection(f.web.origin);

@@ -8,7 +8,6 @@ export const WEB_LIMITS = {
   pendingRequests: 32,
   requestsPerSecond: 128,
   loginAttemptsPerMinute: 60,
-  sessionLifetimeMs: 8 * 60 * 60 * 1000,
   handshakeTimeoutMs: 10_000,
   drainTimeoutMs: 10_000,
 } as const;
@@ -27,6 +26,8 @@ export function webBinding(config: WebConfig): { hostname: string; port: number;
   if (!Number.isSafeInteger(config.max_queued_bytes) || config.max_queued_bytes < 1024 || config.max_queued_bytes > 128 * 1024 * 1024) {
     throw new Error("daemon.web.max_queued_bytes must be between 1024 and 134217728");
   }
+  const lifetime = config.session_lifetime.asMillisExact();
+  if (lifetime < 60_000n || lifetime > 365n * 86_400_000n) throw new Error("daemon.web.session_lifetime must be between 1m and 365d");
   let origin: URL | undefined;
   if (config.public_origin !== undefined) {
     origin = new URL(config.public_origin);
