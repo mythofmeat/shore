@@ -111,12 +111,12 @@ packaging_arch() {
     cd "$root"/contrib/arch
     makepkg
     pkg="$(find . -name "*.pkg.tar.zst")"
-    gh release upload "$(current_versions)" "$pkg"
+    gh release upload "v$(current_versions)" "$pkg"
     rm -f "$pkg"
 }
 
 release_gh_final() {
-    gh release edit "$(current_versions)" --draft=false
+    gh release edit "$v(current_versions)" --draft=false
 }
 
 #####
