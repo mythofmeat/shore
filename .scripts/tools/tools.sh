@@ -60,7 +60,7 @@ bump_version_to() {
     sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
     sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
     sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
-    git commit -am "chore(release): v$version" --no-verify
+    git commit --no-verify -am "chore(release): v$version"
 }
 
 version_increment() {
