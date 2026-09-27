@@ -29,6 +29,7 @@ bump_version() {
 
 update_deps
 bump_version
+git push
 ./release-gh.sh
 
 main
