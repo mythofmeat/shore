@@ -34,5 +34,6 @@ main() {
 }
 
 update_deps
+bump_version
 
 main
