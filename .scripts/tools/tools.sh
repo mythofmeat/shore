@@ -74,6 +74,6 @@ bump_version_to() {
 }
 
 update_deps
-bump_version_to "4.16.12"
+bump_version_to "4.16.13"
 git push --tags
 "$root"/.scripts/release-gh.sh

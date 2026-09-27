@@ -1879,7 +1879,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "shore-cli"
-version = "4.16.12"
+version = "4.16.13"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -1906,7 +1906,7 @@ dependencies = [
 
 [[package]]
 name = "shore-common"
-version = "4.16.12"
+version = "4.16.13"
 dependencies = [
  "base64 0.23.1",
  "dirs",
