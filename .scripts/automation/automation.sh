@@ -24,7 +24,7 @@ bump_version() {
     )
     "$srcdir"/.scripts/version-bump.sh "$bumped_ver"
     git commit -am "chore(release): v$bumped_ver" --no-verify
-    git tag "$bumped_ver"
+    git tag v"$bumped_ver"
 }
 
 update_deps
