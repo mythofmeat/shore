@@ -1,6 +1,7 @@
 import { required } from "../util/required.ts";
 
-import { enforceBudgetForCall, type BudgetBlock } from "./budget.ts";
+import { enforceBudgetForCall, type BudgetBlock, type CallBlock } from "./budget.ts";
+import { claudePlanBlockFor } from "./plan_limits.ts";
 import { recentCallCost } from "./query.ts";
 import { ledgerFor } from "./record.ts";
 import type { CallContext, SidecarRequest } from "../llm/types.ts";
@@ -8,11 +9,19 @@ import type { CallContext, SidecarRequest } from "../llm/types.ts";
 export function budgetBlockFor(
   request: SidecarRequest,
   now: number = Date.now(),
-): BudgetBlock | undefined {
+): CallBlock | undefined {
   const context: CallContext | undefined = request.context;
   if (context === undefined) {
     return undefined;
   }
+  return costBudgetBlock(request, context, now) ?? claudePlanBlockFor(request, now);
+}
+
+function costBudgetBlock(
+  request: SidecarRequest,
+  context: CallContext,
+  now: number,
+): BudgetBlock | undefined {
   const budgets = context.usage?.budgets ?? [];
   if (context.ledger === undefined || budgets.length === 0) {
     return undefined;

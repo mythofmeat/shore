@@ -22,6 +22,7 @@ import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { BudgetBlocked } from "../src/llm/generate.ts";
+import type { BudgetBlock } from "../src/ledger/budget.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -241,6 +242,19 @@ describe("delivering what a tick asked to say", () => {
 
   test("a budget stop is a pause naming the budget, not a call failure", async () => {
     const notes: { kind: string; detail: string }[] = [];
+    const pace: BudgetBlock = {
+      budget_name: "brainwife",
+      action: "pause_heartbeat",
+      current_cost: 1.371,
+      cost_limit: 2.08,
+      period: "day",
+      reset_at: "2026-08-23T07:00:00+00:00",
+      scope: "pace",
+      warn_threshold: 0.65,
+      message: "the long form nobody wants in a log line",
+      summary:
+        'budget "brainwife" day pace reached 65% ($1.37/$2.08); resets 2026-08-23 05:00 PM',
+    };
 
     await persistHeartbeatMessage(
       "ada",
@@ -249,19 +263,7 @@ describe("delivering what a tick asked to say", () => {
         sendMessageText: undefined,
         images: [],
         failedRound: 0,
-        failure: BudgetBlocked.from({
-          budget_name: "brainwife",
-          action: "pause_heartbeat",
-          current_cost: 1.371,
-          cost_limit: 2.08,
-          period: "day",
-          reset_at: "2026-08-23T07:00:00+00:00",
-          scope: "pace",
-          warn_threshold: 0.65,
-          message: "the long form nobody wants in a log line",
-          summary:
-            'budget "brainwife" day pace reached 65% ($1.37/$2.08); resets 2026-08-23 05:00 PM',
-        }),
+        failure: BudgetBlocked.from(pace),
       },
       { engine: async () => recordingEngine([]) },
       (kind, detail) => notes.push({ kind, detail }),

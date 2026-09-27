@@ -171,6 +171,11 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
         write_nanogpt_subscription(out, subscription);
     }
 
+    if let Some(plan) = claude_plan_of(data) {
+        blank(out);
+        write_claude_plan(out, plan);
+    }
+
     let mut headline = Rows::new();
     add_cache_rows(&mut headline, data);
     if !headline.is_empty() {
@@ -200,6 +205,84 @@ fn write_nanogpt_subscription<W: Write>(out: &mut W, subscription: &Value) {
         let mut rows = Rows::new();
         quota(&mut rows, row, "weekly input", "remaining", "limit");
         rows.write(out);
+    }
+}
+
+fn claude_plan_of(data: &Value) -> Option<&Value> {
+    data.get("claude_plan_limits")
+        .filter(|value| value.is_object())
+}
+
+fn plan_window_label(window: &str) -> &str {
+    match window {
+        "five_hour" => "5-hour",
+        "seven_day" => "weekly",
+        other => other,
+    }
+}
+
+#[expect(
+    clippy::float_arithmetic,
+    reason = "a plan limit is a fraction shown as a whole percentage"
+)]
+fn whole_percent(fraction: f64) -> f64 {
+    (fraction * 100.0).round()
+}
+
+fn write_claude_plan<W: Write>(out: &mut W, plan: &Value) {
+    let subscription = text(plan, "subscription_type");
+    let mut header = Rows::new();
+    header.add(
+        "Claude plan",
+        if subscription.is_empty() {
+            "subscription"
+        } else {
+            subscription
+        },
+    );
+    header.write(out);
+
+    let windows = rows_of(plan, "windows");
+    let width = windows
+        .iter()
+        .map(|window| plan_window_label(text(window, "window")).chars().count())
+        .max()
+        .unwrap_or(0);
+    for window in windows {
+        let label = plan_window_label(text(window, "window"));
+        let reset = text(window, "resets_at");
+        let detail = if reset.is_empty() {
+            String::new()
+        } else {
+            format!("resets {}", short_when(reset))
+        };
+        Meter::new(decimal(window, "percent_used"), 1.0).write_row(out, label, width, &detail);
+    }
+    for window in windows.iter().filter(|window| {
+        window
+            .get("over_limit")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }) {
+        note(
+            out,
+            &format!(
+                "{} is past its {}% limit and {}",
+                plan_window_label(text(window, "window")),
+                whole_percent(decimal(window, "limit_at")),
+                plan_action_phrase(text(window, "action"))
+            ),
+        );
+    }
+}
+
+fn plan_action_phrase(action: &str) -> String {
+    match action {
+        "block" => "blocks Claude calls".to_owned(),
+        "warn" => "only warns".to_owned(),
+        "pause_heartbeat" => "pauses the heartbeat".to_owned(),
+        "pause_background" => "pauses background work".to_owned(),
+        other => other.replace('_', " "),
     }
 }
 
@@ -280,8 +363,15 @@ fn write_budget_meters<W: Write>(out: &mut W, budget: &Value) {
 pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
     let budgets = rows_of(data, "budgets");
     section(out, View::Budgets.title(), period_of(data).as_deref());
+    let plan = claude_plan_of(data);
+    if let Some(claude) = plan {
+        write_claude_plan(out, claude);
+        blank(out);
+    }
     if budgets.is_empty() {
-        empty(out, "no budgets configured");
+        if plan.is_none() {
+            empty(out, "no budgets configured");
+        }
         return;
     }
     for budget in budgets {
@@ -552,6 +642,65 @@ mod tests {
                 "{column} must total to {sum} on the total line: {total}"
             );
         }
+    }
+
+    fn claude_plan() -> Value {
+        json!({
+            "updated_at": "2026-09-27T06:00:00+00:00",
+            "subscription_type": "max",
+            "windows": [
+                {"window": "five_hour", "percent_used": 0.31, "resets_at": null, "status": "ok",
+                 "warning_thresholds": [0.8], "crossed_warn_at": [], "limit_at": 1.0,
+                 "action": "pause_background", "over_limit": false},
+                {"window": "seven_day", "percent_used": 0.92, "resets_at": null, "status": "over_limit",
+                 "warning_thresholds": [0.8], "crossed_warn_at": [0.8], "limit_at": 0.9,
+                 "action": "block", "over_limit": true}
+            ]
+        })
+    }
+
+    #[test]
+    fn the_summary_shows_both_claude_plan_windows() {
+        let mut payload = summary_payload();
+        let _ = payload
+            .as_object_mut()
+            .unwrap()
+            .insert("claude_plan_limits".to_owned(), claude_plan());
+        let out = render(|buf| write_summary(buf, &payload));
+        assert!(out.contains("Claude plan") && out.contains("max"), "{out}");
+        let five = out
+            .lines()
+            .find(|line| line.contains("5-hour"))
+            .unwrap_or_default();
+        let week = out
+            .lines()
+            .find(|line| line.contains("weekly") && line.contains('%'))
+            .unwrap_or_default();
+        assert!(five.contains("31%"), "{out}");
+        assert!(week.contains("92%"), "{out}");
+        assert!(
+            out.contains("weekly is past its 90% limit and blocks Claude calls"),
+            "a window past its limit says what that does: {out}"
+        );
+    }
+
+    #[test]
+    fn the_budgets_view_leads_with_the_claude_plan_when_it_applies() {
+        let out = render(|buf| {
+            write_budgets(
+                buf,
+                &json!({"mode": "budget", "budgets": [], "claude_plan_limits": claude_plan()}),
+            );
+        });
+        assert!(
+            out.contains("Claude plan") && out.contains("5-hour"),
+            "{out}"
+        );
+        assert!(!out.contains("no budgets configured"), "{out}");
+
+        let bare = render(|buf| write_budgets(buf, &json!({"mode": "budget", "budgets": []})));
+        assert!(bare.contains("no budgets configured"), "{bare}");
+        assert!(!bare.contains("Claude plan"), "{bare}");
     }
 
     #[test]

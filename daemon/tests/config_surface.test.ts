@@ -203,6 +203,23 @@ temperature = 0.25
 
 
 
+  test("plan limits have their own section and each window keeps defaults it does not override", () => {
+    const cfg = read(`
+[plan_limits.seven_day]
+warn_fractions = [0.5]
+limit_fraction = 0.9
+limit_action = "block"
+`);
+    expect(cfg.app.usage.plan_limits.seven_day).toEqual({ warn_fractions: [0.5], limit_fraction: 0.9, limit_action: "block" });
+    expect(cfg.app.usage.plan_limits.five_hour).toEqual({ warn_fractions: [0.8, 0.95], limit_fraction: 1, limit_action: "pause_background" });
+    expect(publicConfig(serializeConfigValue(cfg.app) as Record<string, unknown>)).toMatchObject({
+      plan_limits: { seven_day: { limit_fraction: 0.9, limit_action: "block" } },
+    });
+    expect(() => read('[plan_limits.monthly]\nlimit_fraction = 0.5')).toThrow("unknown field");
+    expect(() => read('[plan_limits.five_hour]\nlimit_action = "stop"')).toThrow("must be warn, block, pause_background, pause_heartbeat");
+    expect(() => read('[usage.plan_limits.five_hour]\nlimit_fraction = 0.5')).toThrow("unknown field");
+  });
+
   test("unknown fields and malformed canonical containers fail", () => {
     expect(() => read('[heartbeat]\nintervall="1h"')).toThrow();
     expect(() => read('[heartbeat]\ninterval="1h"')).toThrow("unknown field");

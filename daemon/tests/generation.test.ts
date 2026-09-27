@@ -16,6 +16,7 @@ import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import {
   defaultAppConfig,
+  defaultPlanLimitsConfig,
   type AppConfig,
   type RetrievalMode,
 } from "../src/config/app.ts";
@@ -630,7 +631,7 @@ describe("runGeneration", () => {
             ...(rest["context"] as Record<string, unknown>),
             ledger: join(run.dataDir, "shore.db"),
             keepalive_window_secs: 0,
-            usage: { budgets: [], timezone: "local" },
+            usage: { budgets: [], timezone: "local", plan_limits: defaultPlanLimitsConfig() },
           },
         }),
       );

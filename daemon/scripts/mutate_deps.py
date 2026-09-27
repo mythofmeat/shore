@@ -136,12 +136,12 @@ MUTANTS = [
      "  const ledgerPath = dataDir;"),
     ("budget: the ledger is opened on every turn, whether or not a budget exists",
      D,
-     "    if (config === undefined || (config.budgets ?? []).length === 0) {\n"
+     "    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {\n"
      "      return Promise.resolve([]);\n    }",
      "    if (config === undefined) {\n      return Promise.resolve([]);\n    }"),
     ("budget: a configured budget is skipped, so nothing is ever warned about",
      D,
-     "    if (config === undefined || (config.budgets ?? []).length === 0) {",
+     "    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {",
      "    if (true as boolean) {\n      return Promise.resolve([]);\n    }\n    if (config === undefined) {"),
     ("budget: an unopenable ledger fails the turn instead of reporting nothing",
      D,

@@ -27,6 +27,10 @@ export function focusedBudget(budgets: readonly DisplayBudget[], value: string):
   return budget === undefined ? undefined : { budget, ...budgetLevel(budget, focus.scope) };
 }
 
+export function showPlanLimit(mode: string, limit: DisplayLevel): boolean {
+  return showUsage(mode, { name: "", percent_used: limit.percent_used, over_limit: limit.over_limit, crossed_warn_at: limit.crossed_warn_at });
+}
+
 export function showUsage(mode: string, budget: DisplayBudget): boolean {
   switch (mode) {
     case "off": return false;

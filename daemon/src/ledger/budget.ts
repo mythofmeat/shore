@@ -2,7 +2,8 @@ import { shoreLog } from "../log.ts";
 
 import type { Database } from "bun:sqlite";
 
-import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
+import type { UsageConfig as AppUsageConfig, PlanLimitsConfig } from "../config/app.ts";
+import type { ClaudePlanWindow } from "../protocol/ClaudePlanWindow.ts";
 
 import { isSubscriptionCall } from "./store.ts";
 import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
@@ -61,6 +62,7 @@ export interface UsageBudgetConfig {
 export interface UsageConfig {
   timezone?: string;
   budgets?: UsageBudgetConfig[];
+  plan_limits?: PlanLimitsConfig;
 }
 
 export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
@@ -69,6 +71,7 @@ export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
     budgets: cfg.budgets.map(
       (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
     ),
+    plan_limits: cfg.plan_limits,
   };
 }
 
@@ -174,7 +177,7 @@ export interface UsageBudgetWarningEvent {
   cost_limit: number;
   percent_used: number;
   crossed_warn_at: number[];
-  period: UsageBudgetPeriod;
+  period: UsageBudgetPeriod | ClaudePlanWindow;
   period_start: string;
   reset_at: string;
   reset_at_display: string;
@@ -189,24 +192,28 @@ export interface BudgetCallContext {
   character: string;
 }
 
-export interface BudgetBlock {
+export interface CallBlock {
   budget_name: string;
+  scope: BudgetScope;
+  reset_at?: string;
+  message: string;
+  summary: string;
+}
+
+export interface BudgetBlock extends CallBlock {
   action: UsageBudgetAction;
   current_cost: number;
   cost_limit: number;
   period: UsageBudgetPeriod;
   reset_at: string;
-  scope: BudgetScope;
   projected_cost?: number;
   warn_threshold?: number;
-  message: string;
-  summary: string;
 }
 
-export type BudgetScope = "budget" | "pace";
+export type BudgetScope = "budget" | "pace" | "plan";
 
 const thresholdPrefix = (scope: BudgetScope): string =>
-  scope === "pace" ? "pace:" : "";
+  scope === "budget" ? "" : `${scope}:`;
 
 export interface BudgetOptions {
   localZone?: string;
@@ -771,7 +778,7 @@ function paceStatus(
   };
 }
 
-function crossedThresholds(
+export function crossedThresholds(
   configured: readonly number[],
   percentUsed: number,
 ): [number[], number[]] {
@@ -798,7 +805,7 @@ function effectiveAction(
   return warnAction;
 }
 
-function levelName(overLimit: boolean, crossed: readonly number[]): BudgetStatus["status"] {
+export function levelName(overLimit: boolean, crossed: readonly number[]): BudgetStatus["status"] {
   if (overLimit) {
     return "over_limit";
   }
@@ -1068,6 +1075,10 @@ function shouldBlock(
   if (callType === "compaction" && compactionAllowed(budget)) {
     return false;
   }
+  return actionBlocks(action, callType);
+}
+
+export function actionBlocks(action: UsageBudgetAction, callType: string): boolean {
   switch (action) {
     case "warn":
       return false;
@@ -1086,7 +1097,7 @@ function compactionAllowed(
   return budget.allow_compaction_over_budget ?? false;
 }
 
-function isBackgroundCall(callType: string): boolean {
+export function isBackgroundCall(callType: string): boolean {
   return (
     isHeartbeatCall(callType) ||
     callType === "keepalive" ||
@@ -1230,7 +1241,7 @@ function fractionToPercent(fraction: number): number {
   return fraction * 100;
 }
 
-function recordBudgetWarningThreshold(
+export function recordBudgetWarningThreshold(
   db: Database,
   name: string,
   scope: BudgetScope,

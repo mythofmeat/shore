@@ -95,6 +95,18 @@ describe("configSchema", () => {
     expect(rows.some((row) => row.key.startsWith("tools.max_inline_image_bytes."))).toBe(false);
   });
 
+  test("plan limit policies are described per window in fractions of the plan", () => {
+    for (const window of ["five_hour", "seven_day"]) {
+      expect(byKey.get(`plan_limits.${window}.warn_fractions`)).toMatchObject({
+        units: "fraction", settable: true,
+        description: "Claude plan utilization fractions that trigger warnings (0.8 means 80% of the window).",
+      });
+      expect(byKey.get(`plan_limits.${window}.limit_fraction`)).toMatchObject({ kind: "float", units: "fraction", settable: true });
+      expect(byKey.get(`plan_limits.${window}.limit_action`)?.values).toEqual(["warn", "block", "pause_background", "pause_heartbeat"]);
+    }
+    expect(byKey.get('budgets."<index>".warn_fractions')?.description).toBe("Budget fractions that trigger warnings (0.9 means 90%).");
+  });
+
   test("booleans and enums carry their candidate values", () => {
     expect(byKey.get("heartbeat.enabled")?.values).toEqual(["true", "false"]);
     expect(byKey.get("chat.user_timestamps")?.values).toEqual([

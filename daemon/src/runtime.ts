@@ -37,6 +37,7 @@ import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
 import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
+import { configureClaudePlanLimits, type ClaudePlanLimitsOptions } from "./ledger/plan_limits.ts";
 import { captureProviders } from "./llm/capture.ts";
 import { withResolvedCredential, withWorkspaceDir } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
@@ -130,6 +131,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   );
 
   applySubscriptionProviders(registry);
+  configureClaudePlanLimits({ cacheDir: config.dirs.cache, ...claudePlanFetcher(options.providers.claude_agent) });
 
   historyIndex = new HistoryIndexService();
   workspaceIndex = new WorkspaceIndexService();
@@ -507,6 +509,10 @@ export function sharedToolDeps(
       );
     },
   };
+}
+
+function claudePlanFetcher(provider: SidecarProvider | undefined): Pick<ClaudePlanLimitsOptions, "fetch"> {
+  return provider === undefined ? {} : { fetch: () => provider.planLimits?.() ?? Promise.resolve(undefined) };
 }
 
 export function applySubscriptionProviders(registry: CharacterRegistry): void {

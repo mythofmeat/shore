@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_CONTROLS, VIEW_KEYS, budgetFocus, cycleView, defaultViews, readViews } from "../src/browser/preferences.ts";
 import { VIEW_PREFERENCES } from "../src/browser/preferences.generated.ts";
-import { focusedBudget, showUsage } from "../src/browser/budget_display.ts";
+import { focusedBudget, showPlanLimit, showUsage } from "../src/browser/budget_display.ts";
 import { assertDisplayCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import fixtures from "../../client/shore-cli/tests/fixtures/display_budgets.json" with { type: "json" };
 
@@ -33,6 +33,10 @@ for (const fixture of fixtures.cases) test(`browser budget conformance: ${fixtur
   expect<string | undefined>(selected?.scope).toBe(fixture.expected.scope);
   expect(selected?.level.percent_used).toBe(fixture.expected.percent_used);
   expect(selected === undefined ? undefined : showUsage(fixture.mode, selected.budget)).toBe(fixture.expected.visible);
+});
+
+for (const fixture of fixtures.plan) test(`browser plan conformance: ${fixture.label}`, () => {
+  expect(fixture.windows.filter((limit) => showPlanLimit(fixture.mode, limit)).map((limit) => limit.window)).toEqual(fixture.visible);
 });
 
 test("budget focus accepts the same scopes, aliases, names and invalid tokens as the terminal", () => {

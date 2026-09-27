@@ -12,7 +12,7 @@ import { subagentTrace } from "./subagent_trace.ts";
 import { keepalivePingNowCommand } from "./keepalive.ts";
 import { sessionActivateCommand } from "./activate.ts";
 import type { OperationPrerequisite } from "../protocol/OperationPrerequisite.ts";
-import { changeThreadModel, listModels, favoriteModel, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "./models.ts";
+import { changeThreadModel, effectiveChatModel, listModels, favoriteModel, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "./models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { OperationInput, OperationName, OperationResult } from "../operations/contracts.ts";
 import { assertContractBindings } from "../operations/contracts.ts";
@@ -114,7 +114,8 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     export_csv: { label: "Export CSV", hint: "Full filtered ledger; takes precedence over grouping and anomalies" }, export_tsv: { label: "Export TSV", hint: "Full filtered ledger; takes precedence over CSV" },
   } }, ({ session, deps }, args) => {
     if (deps.ledgerPath === undefined) throw internalError(LEDGER_UNAVAILABLE);
-    return usage({ ledger: deps.ledgerPath, cacheDir: session.config.dirs.cache, usage: usageConfigView(session.config.app.usage), callStore: deps.callStore }, args);
+    const chatModel = effectiveChatModel(session.config, session.characterName, session.threadModel);
+    return usage({ ledger: deps.ledgerPath, cacheDir: session.config.dirs.cache, usage: usageConfigView(session.config.app.usage), callStore: deps.callStore, claudePlanLimits: chatModel?.sdk === "claude_agent" }, args);
   }),
   run_tool: register("run_tool", { category: "Tools", scope: "character", prerequisites: ["tool_execution"], effects: ["workspace_write", "history_write", "config_write", "provider_call"], confirmation: "execute", label: "Run tool", fields: {
     tool: { label: "Tool", choices: "tools", hint: "Built-in tool, configured ask_<subagent>, or connected MCP tool" },

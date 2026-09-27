@@ -22,6 +22,7 @@ import {
   type UsageConfig,
 } from "../ledger/budget.ts";
 import { ledgerFor } from "../ledger/record.ts";
+import { claudePlanLimitsState, newlyCrossedPlanLimitWarnings } from "../ledger/plan_limits.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
@@ -195,12 +196,16 @@ export function usageBudgetWarnings(
   const clock = now ?? (() => Date.now());
   return (character) => {
     const config = usage(character);
-    if (config === undefined || (config.budgets ?? []).length === 0) {
+    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {
       return Promise.resolve([]);
     }
     const ledger = ledgerFor(ledgerPath);
     if (ledger === null) return Promise.resolve([]);
-    return Promise.resolve(newlyCrossedBudgetWarnings(ledger.database, config, clock()));
+    const at = clock();
+    return Promise.resolve([
+      ...newlyCrossedBudgetWarnings(ledger.database, config, at),
+      ...newlyCrossedPlanLimitWarnings(ledger.database, config, at),
+    ]);
   };
 }
 

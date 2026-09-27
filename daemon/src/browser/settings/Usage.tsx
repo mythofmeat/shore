@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import type { ClaudePlanLimit } from "../../protocol/ClaudePlanLimit.ts";
+import type { ClaudePlanLimitsReport } from "../../protocol/ClaudePlanLimitsReport.ts";
 import type { UsageArgs } from "../../protocol/UsageArgs.ts";
 import type { UsageBudget } from "../../protocol/UsageBudget.ts";
 import type { UsageDimension } from "../../protocol/UsageDimension.ts";
@@ -24,6 +26,26 @@ export function BudgetBar({ budget }: { budget: UsageBudget }) {
   </div>;
 }
 
+const PLAN_WINDOW_NAMES = { five_hour: "Claude 5-hour limit", seven_day: "Claude weekly limit" } as const;
+
+const PLAN_ACTIONS = { warn: "warns only", block: "blocks Claude calls", pause_background: "pauses background work", pause_heartbeat: "pauses the heartbeat" } as const;
+
+export function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
+  const used = limit.percent_used * 100;
+  const percent = Math.min(100, Math.max(0, used));
+  const name = PLAN_WINDOW_NAMES[limit.window];
+  const past = limit.over_limit ? ` · past its ${String(Math.round(limit.limit_at * 100))}% limit, so it ${PLAN_ACTIONS[limit.action]}` : "";
+  return <div className="budget">
+    <div className="budget-head"><span className="setting-label">{name}</span><span className="mono">{Math.round(used)}% of the plan</span></div>
+    <div className={`budget-track ${limit.status}`} role="progressbar" aria-label={name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><span style={{ width: `${String(percent)}%` }} /></div>
+    <div className="setting-description">{limit.resets_at === null ? "no reset reported" : `resets ${formatTime(limit.resets_at)}`}{past}</div>
+  </div>;
+}
+
+function PlanLimits({ report }: { report: ClaudePlanLimitsReport }) {
+  return <div className="budgets">{report.windows.map((limit) => <PlanLimitBar key={limit.window} limit={limit} />)}</div>;
+}
+
 function Table({ head, rows }: { head: (string | [string, "number"])[]; rows: ReactNode[][] }) {
   return <div className="table-wrap"><table className="data-table">
     <thead><tr>{head.map((cell, index) => typeof cell === "string" ? <th key={index}>{cell}</th> : <th key={index} className="number">{cell[0]}</th>)}</tr></thead>
@@ -40,6 +62,7 @@ export function UsageReport({ result }: { result: UsageResult }) {
     case "summary": return <>
       <Table head={["Provider", "Model", ...TOTAL_HEAD]} rows={result.summary.map((row) => [row.provider, <span className="mono">{row.model}</span>, ...totals(row)])} />
       {result.budgets.length === 0 ? null : <div className="budgets">{result.budgets.map((budget) => <BudgetBar key={budget.name} budget={budget} />)}</div>}
+      {result.claude_plan_limits === null ? null : <PlanLimits report={result.claude_plan_limits} />}
       <dl className="kv usage-facts">
         <div className="kv-row"><dt>Period</dt><dd>{result.period}{result.period_since === undefined ? "" : ` since ${formatTime(result.period_since)}`} ({result.timezone})</dd></div>
         <div className="kv-row"><dt>Anomalies (7 days)</dt><dd>{result.anomaly_count_7d}</dd></div>
@@ -50,7 +73,12 @@ export function UsageReport({ result }: { result: UsageResult }) {
       </dl>
     </>;
     case "summary_by": return <Table head={[DIMENSIONS.find(([key]) => key === result.dimension)?.[1] ?? "Group", ...TOTAL_HEAD]} rows={result.summary.map((row) => [<span className="mono">{row.group}</span>, ...totals(row)])} />;
-    case "budget": return result.budgets.length === 0 ? <p className="settings-empty">No budgets are configured. Add a <code>[[budgets]]</code> section to the daemon configuration.</p> : <div className="budgets">{result.budgets.map((budget) => <BudgetBar key={budget.name} budget={budget} />)}</div>;
+    case "budget": return <>
+      {result.claude_plan_limits === undefined ? null : <PlanLimits report={result.claude_plan_limits} />}
+      {result.budgets.length === 0
+        ? result.claude_plan_limits === undefined ? <p className="settings-empty">No budgets are configured. Add a <code>[[budgets]]</code> section to the daemon configuration.</p> : null
+        : <div className="budgets">{result.budgets.map((budget) => <BudgetBar key={budget.name} budget={budget} />)}</div>}
+    </>;
     case "anomalies": return <Table head={["Time", "Character", "Model", "Call type", "Issue", ["Cache read", "number"], ["Cache write", "number"]]} rows={result.anomalies.map((item) => [formatTime(item.ts), item.character, <span className="mono">{item.model}</span>, item.call_type, item.anomaly ?? "—", formatNumber(item.cache_read_tokens), formatNumber(item.cache_write_tokens)])} />;
     case "csv": return <p className="settings-description">CSV export ready ({formatNumber(result.data.length)} characters).</p>;
     case "tsv": return <p className="settings-description">TSV export ready ({formatNumber(result.data.length)} characters).</p>;

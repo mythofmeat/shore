@@ -1,3 +1,5 @@
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
 import type { SidecarProvider, SidecarRequest } from "../types.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { ClaudeAgentProvider } from "./claude_agent.ts";
@@ -11,7 +13,7 @@ const openai = new OpenAIProvider();
 
 export const DEFAULT_PROVIDERS: Partial<Record<SidecarRequest["sdk"], SidecarProvider>> = {
   anthropic: new AnthropicProvider(),
-  claude_agent: new ClaudeAgentProvider(),
+  claude_agent: new ClaudeAgentProvider({ planQuery: query }),
   gemini: new GeminiProvider(),
   openrouter: vercel,
   openai,
