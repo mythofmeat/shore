@@ -233,11 +233,33 @@ mod tests {
             task_id: None,
             rid: Some("msg_01".into()),
             regen: false,
+            replaces: Vec::new(),
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "stream_start");
         assert_eq!(field(&json, "rid"), "msg_01");
         assert_eq!(field(&json, "regen"), false);
+        assert!(json.get("replaces").is_none());
+    }
+
+    #[test]
+    fn server_regen_stream_start_carries_replaced_ids() {
+        let msg = ServerMessage::StreamStart(StreamStart {
+            subagent: None,
+            task_id: None,
+            rid: Some("msg_01".into()),
+            regen: true,
+            replaces: vec!["m_old".into(), "m_tool".into()],
+        });
+        let (json, back) = round_trip(&msg);
+        assert_eq!(
+            field(&json, "replaces"),
+            &serde_json::json!(["m_old", "m_tool"])
+        );
+        let ServerMessage::StreamStart(start) = back else {
+            panic!("expected stream_start");
+        };
+        assert_eq!(start.replaces, ["m_old", "m_tool"]);
     }
 
     #[test]
@@ -334,6 +356,7 @@ mod tests {
     #[test]
     fn server_new_message_round_trip() {
         let msg = ServerMessage::NewMessage(NewMessage {
+            rid: None,
             thread: None,
             revision: 3,
             character: Some("Alice".into()),

@@ -38,8 +38,8 @@ export interface RequestMeta {
 export type RoutedMessage =
   | { readonly kind: "engine"; readonly msg: ClientMessage; readonly meta: RequestMeta }
   | { readonly kind: "command"; readonly cmd: Command; readonly meta: RequestMeta }
-  | { readonly kind: "session_disconnected"; readonly sessionId: number }
-  | { readonly kind: "all_clients_disconnected" };
+  | { readonly kind: "session_connected"; readonly sessionId: number }
+  | { readonly kind: "session_disconnected"; readonly sessionId: number };
 
 export type ControlRoutedMessage =
   | {
@@ -47,11 +47,11 @@ export type ControlRoutedMessage =
       readonly msg: Extract<ClientMessage, { readonly type: "cancel" }>;
       readonly meta: RequestMeta;
     }
-  | { readonly kind: "session_disconnected"; readonly sessionId: number }
-  | { readonly kind: "all_clients_disconnected" };
+  | { readonly kind: "session_connected"; readonly sessionId: number }
+  | { readonly kind: "session_disconnected"; readonly sessionId: number };
 
 export function isControlRoutedMessage(msg: RoutedMessage): msg is ControlRoutedMessage {
-  return msg.kind === "all_clients_disconnected" ||
+  return msg.kind === "session_connected" ||
     msg.kind === "session_disconnected" ||
     (msg.kind === "engine" && msg.msg.type === "cancel");
 }
@@ -80,9 +80,21 @@ export function withSelectedCharacter(
 
 export type DirectSender = (msg: ServerMessage) => Promise<void>;
 
+export type RequestObserver = (sessionId: number, msg: ServerMessage) => void;
+
 export class SessionRouter {
   readonly #clients = new Map<number, ClientInfo>();
   readonly #senders = new Map<number, DirectSender>();
+  readonly #requestObservers = new Set<RequestObserver>();
+
+  observeRequests(observer: RequestObserver): () => void {
+    this.#requestObservers.add(observer);
+    return () => { this.#requestObservers.delete(observer); };
+  }
+
+  reportRequest(sessionId: number, msg: ServerMessage): void {
+    for (const observer of this.#requestObservers) observer(sessionId, msg);
+  }
 
   registerSession(client: ClientInfo, send: DirectSender): void {
     this.#clients.set(client.id, client);

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import type { ConfigRuntime } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import {
+  modelInfo,
   modelRoles,
   resetModel,
   switchModel,
@@ -136,6 +137,29 @@ describe("pinning a background model", () => {
     expect(() => switchModel(ctx, parseOperationInput("switch_model", { name: "kimi-id", background_task: "dreaming" }))).toThrow(
       /background_task/,
     );
+  });
+});
+
+describe("inheriting the chat model", () => {
+  test("heartbeat follows the home thread's pin, compaction the viewed thread's", async () => {
+    const { ctx } = await build("[chat]\nmodel = \"opus-id\"\n");
+    ctx.homeThreadModel = "anthropic:haiku-id";
+    ctx.threadModel = "openrouter:kimi-id";
+    ctx.thread = "side";
+
+    expect(roleOf(ctx, "heartbeat")).toEqual({ role: "heartbeat", model: "anthropic:haiku-id", source: "inherits chat" });
+    expect(roleOf(ctx, "compaction")).toEqual({ role: "compaction", model: "openrouter:kimi-id", source: "inherits chat" });
+    expect(modelInfo(ctx, { background_task: "heartbeat" }).qualified_name).toBe("anthropic:haiku-id");
+  });
+
+  test("heartbeat uses the home thread's model over the catalog fallback", async () => {
+    const { ctx } = await build("");
+    ctx.homeThreadModel = "openrouter:kimi-id";
+    ctx.threadModel = "openrouter:kimi-id";
+    ctx.thread = "main";
+
+    expect(roleOf(ctx, "heartbeat")?.model).toBe("openrouter:kimi-id");
+    expect(roleOf(ctx, "compaction")?.model).toBe("openrouter:kimi-id");
   });
 });
 

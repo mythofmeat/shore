@@ -37,6 +37,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 P = "src/autonomy/in_process.ts"
 T = "src/transcript_capture.ts"
+TOOLS = "src/tools/dispatch.ts"
 
 TESTS = ["tests/autonomy_in_process.test.ts", "tests/transcript_capture.test.ts"]
 
@@ -76,19 +77,17 @@ MUTANTS = [
 
     # --- what the model is told back ------------------------------------------
     ("wake: the model is told the hours it asked for, not the hours it got",
-     P,
-     "        const used = hooks.scheduleNextWake(hours, reason);\n"
-     "        return `Scheduled next moment in ${used.toFixed(1)} hours.`;",
-     "        hooks.scheduleNextWake(hours, reason);\n"
-     "        return `Scheduled next moment in ${hours.toFixed(1)} hours.`;"),
+     TOOLS,
+     "      return `Scheduled next moment in ${used.toFixed(1)} hours.`;",
+     "      return `Scheduled next moment in ${hours.toFixed(1)} hours.`;"),
     ("wake: the clock is never moved, so the character schedules nothing",
      P,
-     "        const used = hooks.scheduleNextWake(hours, reason);",
-     "        const used = hours;"),
+     "          scheduleNextWake: (_character, hours, reason) => hooks.scheduleNextWake(hours, reason),",
+     "          scheduleNextWake: (_character, hours) => hours,"),
     ("wake: the reason is dropped from the log line the clock writes",
      P,
-     "        const used = hooks.scheduleNextWake(hours, reason);",
-     '        const used = hooks.scheduleNextWake(hours, "");'),
+     "hooks.scheduleNextWake(hours, reason)",
+     'hooks.scheduleNextWake(hours, "")'),
 
     # --- which toggle a notification obeys ------------------------------------
     ("notify: the deep archive announces itself as an autonomous message",

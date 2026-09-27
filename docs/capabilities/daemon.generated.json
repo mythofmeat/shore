@@ -978,6 +978,12 @@
                 "type": "boolean",
                 "default": false
               },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "subagent": {
                 "type": [
                   "string",
@@ -1201,6 +1207,12 @@
                 ]
               },
               "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rid": {
                 "type": [
                   "string",
                   "null"
@@ -2349,6 +2361,12 @@
                 "type": "boolean",
                 "default": false
               },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "subagent": {
                 "type": [
                   "string",
@@ -2572,6 +2590,12 @@
                 ]
               },
               "thread": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rid": {
                 "type": [
                   "string",
                   "null"
@@ -3305,7 +3329,7 @@
     "NanoGptSubscriptionState": "{ version: 1, fetched_at: string, active: boolean, state: NanoGptAccountState, weeklyInputTokens?: NanoGptWeeklyInputTokens, routing?: NanoGptRouting, }",
     "NanoGptWeeklyInputTokens": "{ used: number, remaining: number, limit: number, resetAt: string, }",
     "NestedToolCall": "{ tool: string, subagent: string | null, ok: boolean, input: string, output: string, }",
-    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, rid?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
     "OperationCatalogue": "{ operations: Array<OperationDescriptor>, requests: Array<OperationDescriptor>, }",
     "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\" | \"Providers\" | \"Configuration\" | \"Models\" | \"Diagnostics\" | \"Memory\" | \"Tools\" | \"Usage\"",
     "OperationChoices": "\"characters\" | \"threads\" | \"models\" | \"providers\" | \"config_keys\" | \"subagents\" | \"model_settings\" | \"tools\"",
@@ -3377,7 +3401,7 @@
     "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
     "StreamMetadata": "{ tokens: TokenCounts, timing: TimingInfo, model: string, }",
-    "StreamStart": "{ rid?: string | null, regen: boolean, subagent?: string | null, task_id?: string | null, }",
+    "StreamStart": "{ rid?: string | null, regen: boolean, replaces?: Array<string>, subagent?: string | null, task_id?: string | null, }",
     "SubagentAccess": "{ name: string, enabled: boolean, tools: Array<string>, model: string | null, }",
     "SubagentTraceArgs": "{ ids?: Array<string> | null, count?: number | null, }",
     "SubagentTraceResult": "{ character: string, requested_ids?: Array<string>, entries: Array<StoredSubagentTrace>, }",

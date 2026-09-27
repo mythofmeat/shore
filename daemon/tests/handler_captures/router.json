@@ -24,7 +24,6 @@
       },
       "output": {
         "launched": true,
-        "lease_taken": true,
         "cancel_frame": {
           "type": "stream_end",
           "rid": "r1",
@@ -49,15 +48,14 @@
       }
     },
     {
-      "name": "a regen launches without taking the lease",
-      "note": "the lease is a guess at where the human is sitting, and only typing proves it",
+      "name": "a regen launches",
+      "note": "a regen is a generation like any other",
       "input": {
         "routed": "regen",
         "rid": "r1"
       },
       "output": {
-        "generation_running": true,
-        "lease_taken": false
+        "generation_running": true
       }
     },
     {
@@ -81,10 +79,10 @@
       }
     },
     {
-      "name": "all clients disconnected cancels every session",
-      "note": "and clears the leases: a lease names a session, and there are none",
+      "name": "disconnecting leaves every generation running",
+      "note": "only an explicit cancel stops a turn; the reply is saved for whoever reconnects",
       "input": {
-        "routed": "all_clients_disconnected",
+        "routed": "session_disconnected",
         "sessions": 2
       },
       "output": {
@@ -93,50 +91,10 @@
           true
         ],
         "running_after": [
-          false,
-          false
+          true,
+          true
         ],
-        "leases_after": 0,
-        "last_frame_1": {
-          "type": "stream_end",
-          "rid": "r1",
-          "content": "",
-          "metadata": {
-            "tokens": {
-              "input": 0,
-              "output": 0,
-              "cache_read": 0,
-              "cache_write": 0
-            },
-            "timing": {
-              "total_ms": 0,
-              "ttft_ms": 0
-            },
-            "model": ""
-          },
-          "finish_reason": "cancelled",
-          "is_final": true
-        },
-        "last_frame_2": {
-          "type": "stream_end",
-          "rid": "r1",
-          "content": "",
-          "metadata": {
-            "tokens": {
-              "input": 0,
-              "output": 0,
-              "cache_read": 0,
-              "cache_write": 0
-            },
-            "timing": {
-              "total_ms": 0,
-              "ttft_ms": 0
-            },
-            "model": ""
-          },
-          "finish_reason": "cancelled",
-          "is_final": true
-        }
+        "frames": []
       }
     },
     {
@@ -152,14 +110,14 @@
       }
     },
     {
-      "name": "a request from a vanished session launches nothing",
-      "note": "it asked, then hung up; there is nobody to stream to",
+      "name": "a request from a vanished session still launches",
+      "note": "it asked, then hung up; the reply is saved for whoever reconnects",
       "input": {
         "routed": "message",
         "session_registered": false
       },
       "output": {
-        "generation_running": false
+        "generation_running": true
       }
     },
     {

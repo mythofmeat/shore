@@ -370,14 +370,20 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                     retry_after_ms,
                 }),
             ),
-        (prop::option::of(arb_ident()), any::<bool>()).prop_map(|(rid, regen)| {
-            ServerMessage::StreamStart(StreamStart {
-                subagent: None,
-                task_id: None,
-                rid,
-                regen,
-            })
-        }),
+        (
+            prop::option::of(arb_ident()),
+            any::<bool>(),
+            prop::collection::vec(arb_ident(), 0..4)
+        )
+            .prop_map(|(rid, regen, replaces)| {
+                ServerMessage::StreamStart(StreamStart {
+                    subagent: None,
+                    task_id: None,
+                    rid,
+                    regen,
+                    replaces,
+                })
+            }),
         (
             prop::option::of(arb_ident()),
             arb_small_string(),
@@ -430,6 +436,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
         (0_u64..100, prop::option::of(arb_ident()), arb_message()).prop_map(
             |(revision, character, message)| {
                 ServerMessage::NewMessage(NewMessage {
+                    rid: None,
                     thread: None,
                     revision,
                     character,

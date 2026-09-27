@@ -167,6 +167,10 @@ export class ConversationEngine {
     return this.#messages.messagesThroughLastUserTurn();
   }
 
+  messagesAfterLastUserTurn(): Message[] {
+    return this.#messages.messagesAfterLastUserTurn();
+  }
+
   pendingRegenAlt(): PendingAlt | undefined {
     return this.#messages.pendingRegenAlt();
   }
@@ -304,9 +308,9 @@ export class ConversationEngine {
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
     return await withConversation(this.#conversationDir, "rewrite", async () => {
-      const lastUser = this.#messages.messages().findLastIndex(message => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every(block => block.type === "tool_result")));
-      this.#tailStart = lastUser + 1;
-      this.#tailAnchor = this.#messages.messages()[lastUser]?.msg_id ?? null;
+      const messages = this.#messages.messages();
+      this.#tailStart = messages.length - this.#messages.messagesAfterLastUserTurn().length;
+      this.#tailAnchor = messages[this.#tailStart - 1]?.msg_id ?? null;
       const removed = await this.#messages.replaceAfterLastUserTurn(newMessages);
       this.#advanceRewrite();
       this.#broadcastDelta();

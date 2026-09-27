@@ -2367,7 +2367,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         .pending_navigation
         .as_deref()
         .is_some_and(|rid| Some(rid) == msg.request_id());
-    if !navigation_response && app.stale_request(msg.request_id()) {
+    let adopting = matches!(msg, ServerMessage::StreamStart(_))
+        && !app.stream.active
+        && msg.task_id().is_none()
+        && msg.subagent().is_none();
+    if !navigation_response && !adopting && app.stale_request(msg.request_id()) {
         return UiEffect::redraw(RedrawEffect::None);
     }
     if app.pending_navigation.is_some()
@@ -2422,14 +2426,19 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
             app.spinner_frame = 0;
-            if start.regen {
-                app.begin_regen_optimistic();
-            } else if !app.stream.active {
+            if !app.stream.active {
                 app.stream.reset();
                 app.stream.active = true;
+                if start.regen {
+                    app.scroll_to_bottom();
+                }
             } else {
                 app.stream.phase = "responding".into();
                 app.stream.tool_name = None;
+            }
+            if start.regen {
+                app.stream.regen = true;
+                app.stream.replacing = start.replaces;
             }
             app.stream.rid.clone_from(&start.rid);
             RedrawEffect::Immediate
@@ -3506,6 +3515,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: Some("image-request".into()),
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -4152,6 +4162,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -5707,6 +5718,56 @@ mod redraw_tests {
     }
 
     #[test]
+    fn a_turn_replayed_after_reconnecting_is_adopted_rather_than_treated_as_stale() {
+        let mut app = App::default();
+        let rid = app.next_request_id("message");
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some(rid.clone()),
+                regen: false,
+                replaces: Vec::new(),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        prepare_for_reconnect(&mut app);
+        assert!(!app.stream.active);
+        assert!(app.stale_request(Some(&rid)));
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some(rid.clone()),
+                regen: false,
+                replaces: Vec::new(),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: Some(rid.clone()),
+                text: "so far".into(),
+                content_type: "text".into(),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+
+        assert!(app.stream.active);
+        assert_eq!(app.stream.rid.as_deref(), Some(rid.as_str()));
+        let turn = app
+            .entries
+            .last()
+            .and_then(ConversationEntry::as_turn)
+            .expect("replayed turn is shown");
+        assert!(turn.is_streaming());
+        assert_eq!(turn.joined_text(), "so far");
+    }
+
+    #[test]
     fn final_stream_end_requests_full_redraw() {
         let mut app = App::default();
         let _ = handle_server_message(
@@ -5714,6 +5775,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -5827,6 +5889,103 @@ mod redraw_tests {
     }
 
     #[test]
+    fn spectated_regen_hides_only_the_reply_it_replaces() {
+        let start = || {
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some("r_regen".into()),
+                regen: true,
+                replaces: vec!["m_old".into()],
+                subagent: None,
+                task_id: None,
+            })
+        };
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::Turn(Turn::text(
+            Role::User,
+            Some("m_user".into()),
+            "question".into(),
+            vec![],
+            "t1".into(),
+            None,
+        )));
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_old".into()),
+            "old reply".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
+
+        let _ = handle_server_message(&mut app, start());
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_round".into()),
+            "first tool round of the new reply".into(),
+            vec![],
+            "t3".into(),
+            None,
+        ));
+        let _ = handle_server_message(&mut app, start());
+
+        let hidden: Vec<_> = app
+            .entries
+            .iter()
+            .filter(|entry| app.stream.hides(entry))
+            .filter_map(ConversationEntry::msg_id)
+            .collect();
+        assert_eq!(hidden, vec!["m_old"]);
+
+        app.abort_stream();
+        assert!(!app.entries.iter().any(|entry| app.stream.hides(entry)));
+    }
+
+    #[test]
+    fn regen_hides_the_messages_the_daemon_lists_over_the_local_guess() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::Turn(Turn::text(
+            Role::User,
+            Some("m_user".into()),
+            "question".into(),
+            vec![],
+            "t1".into(),
+            None,
+        )));
+        for id in ["m_kept", "m_old"] {
+            app.entries.push(ConversationEntry::assistant(
+                Some(id.into()),
+                "reply".into(),
+                vec![],
+                "t2".into(),
+                None,
+            ));
+        }
+        let hidden = |state: &App| -> Vec<String> {
+            state
+                .entries
+                .iter()
+                .filter(|entry| state.stream.hides(entry))
+                .filter_map(ConversationEntry::msg_id)
+                .map(str::to_owned)
+                .collect()
+        };
+
+        app.begin_regen_optimistic();
+        app.stream.rid = Some("r_regen".into());
+        assert_eq!(hidden(&app), vec!["m_kept", "m_old"]);
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: Some("r_regen".into()),
+                regen: true,
+                replaces: vec!["m_old".into()],
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        assert_eq!(hidden(&app), vec!["m_old"]);
+    }
+
+    #[test]
     fn tool_use_stream_end_keeps_regular_redraw() {
         let mut app = App::default();
         let _ = handle_server_message(
@@ -5834,6 +5993,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -5901,6 +6061,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -5928,6 +6089,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),
@@ -5989,6 +6151,7 @@ mod redraw_tests {
             ServerMessage::StreamStart(StreamStart {
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
                 subagent: None,
                 task_id: None,
             }),

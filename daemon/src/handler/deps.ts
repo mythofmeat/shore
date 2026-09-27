@@ -26,7 +26,11 @@ import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
 import type { NotificationService } from "../notifications.ts";
+import type { Command } from "../protocol/Command.ts";
+import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import { commandCatalogue } from "../commands/registry.ts";
+import { changesState } from "../operations/policy.ts";
 import {
   applySubscriptionProviders,
   mcpConfigView,
@@ -47,7 +51,6 @@ import {
   type GenerationRegistry,
   type SubagentTurn,
 } from "./generation.ts";
-import { StreamLeases } from "./lease.ts";
 import type {
   GenerationParams,
   HandlerNotifier,
@@ -162,6 +165,10 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       (dir, path) => queueDeferredEdit(dir, path, turn.thread),
     ),
+    scheduleNextWake: (character, hours, reason) =>
+      runtime.autonomy.heartbeatsRunning(character)
+        ? runtime.autonomy.scheduleNextWake(character, hours, reason)
+        : undefined,
   };
 }
 
@@ -239,8 +246,8 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
-    leases: new StreamLeases(a.log),
     registry: handlerRegistry(a.runtime.registry),
+    commandChangesState,
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
@@ -262,7 +269,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
 }
 
 export function handlerRegistry(
-  registry: Pick<CharacterRegistry, "resolveCharacter">,
+  registry: Pick<CharacterRegistry, "resolveCharacter"> & Partial<Pick<CharacterRegistry, "homeThread" | "listThreads">>,
 ): HandlerRegistry {
   return {
     resolveCharacter: (selected) => {
@@ -272,7 +279,21 @@ export function handlerRegistry(
         return { error: e instanceof CharacterError ? e.message : String(e) };
       }
     },
+    resolveThread: (character, selected) => {
+      if (registry.listThreads === undefined || registry.homeThread === undefined) return selected;
+      if (selected !== null && registry.listThreads(character).some((thread) => thread.id === selected)) return selected;
+      return registry.homeThread(character);
+    },
   };
+}
+
+const commandDescriptors = new Map<string, OperationDescriptor>(commandCatalogue().map((operation) => [operation.name, operation]));
+
+export function commandChangesState(cmd: Command): boolean {
+  const descriptor = commandDescriptors.get(cmd.name);
+  if (descriptor === undefined) return true;
+  const input = typeof cmd.args === "object" && cmd.args !== null && !Array.isArray(cmd.args) ? cmd.args as Record<string, unknown> : {};
+  return changesState(descriptor, input);
 }
 
 export function handlerNotifier(

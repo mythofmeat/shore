@@ -220,6 +220,7 @@ export interface WebConfig {
   tls_key: string | undefined;
   max_connections: number;
   max_queued_bytes: number;
+  session_lifetime: ConfigDuration;
 }
 
 export const defaultWebConfig = (): WebConfig => ({
@@ -230,6 +231,7 @@ export const defaultWebConfig = (): WebConfig => ({
   tls_key: undefined,
   max_connections: 16,
   max_queued_bytes: 32 * 1024 * 1024,
+  session_lifetime: ConfigDuration.fromSecs(30 * 24 * 60 * 60),
 });
 
 const WEB: StructSpec<WebConfig> = {
@@ -243,6 +245,7 @@ const WEB: StructSpec<WebConfig> = {
     tls_key: optional(readString),
     max_connections: readUsize,
     max_queued_bytes: readUsize,
+    session_lifetime: readDuration,
   },
 };
 

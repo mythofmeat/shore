@@ -21,6 +21,7 @@ export interface TurnEngine {
   currentRevision(): number;
   turnCount(): number;
   pendingRegenAlt(): PendingAlt | undefined;
+  messagesAfterLastUserTurn(): readonly Message[];
   segments(): { segmentCount(): number; readSegment(index: number): Promise<Message[]> };
   reload(): Promise<void>;
 }
@@ -60,6 +61,7 @@ export async function appendUserTurn(
   charName: string,
   body: TurnBody,
   regen: boolean,
+  rid: string | null = null,
 ): Promise<PendingAlt | undefined> {
   if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };
   if (!bodyHasContent(body)) return undefined;
@@ -94,6 +96,7 @@ export async function appendUserTurn(
     engine.currentRevision(),
     { ...userMsg, images: userMsg.images.map((i) => ({ ...i })) },
     engine.thread,
+    rid,
   );
 
   return undefined;

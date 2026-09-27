@@ -1035,6 +1035,12 @@
             "type": "boolean",
             "default": false
           },
+          "replaces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "subagent": {
             "type": [
               "string",
@@ -1258,6 +1264,12 @@
             ]
           },
           "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rid": {
             "type": [
               "string",
               "null"

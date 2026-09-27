@@ -122,6 +122,17 @@ export function visibleStreams<T extends { subagent: string | null; final: boole
   return streams.filter((stream) => stream.subagent === null && (!stream.final || (!messages.some((message) => message.msg_id === stream.msgId) && stream.rid !== null && active.has(stream.rid))));
 }
 
+const realUserTurn = (message: Message): boolean => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every((block) => block.type === "tool_result"));
+
+export function optimisticRegenReplaces(messages: readonly Message[], activeStart: number): string[] {
+  return messages.slice(Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart)).map((message) => message.msg_id);
+}
+
+export function regenReplaces(messages: readonly Message[], activeStart: number, visible: readonly { replaces?: readonly string[] }[], pendingRegen: boolean): string[] {
+  const listed = visible.flatMap((stream) => stream.replaces ?? []);
+  return [...new Set(pendingRegen ? [...listed, ...optimisticRegenReplaces(messages, activeStart)] : listed)];
+}
+
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {
   let phase: { id: number; text: string } | null = null;
   let finished = -1;

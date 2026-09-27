@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, CONTROL_KINDS, controlFor, initialValue } from "../src/browser/forms.ts";
 import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
-import { BrowserConnection, type ConnectionUpdate } from "../src/browser/connection.ts";
+import { BrowserConnection, type BrowserRequest, type ConnectionUpdate } from "../src/browser/connection.ts";
+import { ConversationRequests } from "../src/browser/chat/requests.ts";
+import { regenReplaces, visibleStreams } from "../src/browser/chat/transcript.ts";
+import type { RequestFinished } from "../src/protocol/RequestFinished.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
 import type { History } from "../src/protocol/History.ts";
 import { configSchema } from "../src/config/schema.ts";
@@ -102,6 +106,48 @@ test("every registered action field reaches an implemented control, and every kn
 
 const message = (id: string): Message => ({ msg_id: id, role: "user", content: id, images: [], content_blocks: [], timestamp: "now" });
 
+test("a dropped request's notice clears when its outcome arrives, and a failure is reported", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    emit(update: ConnectionUpdate) { for (const listener of this.listeners) listener(update); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const selection = { character: "nova", thread: "main", messageRevision: 0, snapshotRevision: 0 };
+  for (const rid of ["sent", "compacted"]) connection.emit({ kind: "uncertain", rid, request: { type: "command", name: "compact", args: {} }, selection });
+  expect(workspace.getSnapshot().uncertain.map((item) => item.rid)).toEqual(["sent", "compacted"]);
+  connection.emit({ kind: "frame", message: { type: "request_finished", rid: "sent", outcome: "completed" } });
+  expect(workspace.getSnapshot().uncertain.map((item) => item.rid)).toEqual(["compacted"]);
+  expect(workspace.getSnapshot().error).toBe("");
+  connection.emit({ kind: "frame", message: { type: "request_finished", rid: "compacted", outcome: "failed", error: { code: "provider_error", message: "overloaded" } } });
+  expect(workspace.getSnapshot().uncertain).toEqual([]);
+  expect(workspace.getSnapshot().error).toBe("overloaded");
+});
+
+test("a regeneration started in another client hides exactly the messages its stream_start lists", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const reply = (id: string): Message => ({ ...message(id), role: "assistant" });
+  connection.frame({ type: "history", config: {}, revision: 1, selected_character: "nova", selected_thread: "main", messages: [message("question"), reply("kept"), reply("old")] });
+  const hidden = () => {
+    const state = workspace.getSnapshot();
+    return regenReplaces(state.messages, state.activeStart, visibleStreams(state.streams, state.messages, new Set()), false);
+  };
+  connection.frame({ type: "stream_start", rid: "elsewhere", regen: false });
+  expect(hidden()).toEqual([]);
+  connection.frame({ type: "stream_start", rid: "regen", regen: true, replaces: ["old"] });
+  expect(hidden()).toEqual(["old"]);
+  connection.frame({ type: "stream_chunk", rid: "regen", content_type: "text", text: "new" });
+  connection.frame({ type: "stream_start", rid: "regen", regen: true, replaces: ["old"] });
+  expect(hidden()).toEqual(["old"]);
+});
+
 test("history-only updates retain configuration until it is replaced or the conversation changes", () => {
   class Connection extends BrowserConnection {
     listeners = new Set<(update: ConnectionUpdate) => void>();
@@ -129,6 +175,50 @@ test("history-only updates retain configuration until it is replaced or the conv
   expect(workspace.getSnapshot().config).toEqual({});
   connection.history({ ...history, config: updated });
   expect(workspace.getSnapshot().config).toEqual(updated);
+});
+
+test("conversation requests track when the daemon saved the message and when the reply started streaming", async () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    finish = new Map<string, (result: RequestFinished) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    override submit(_request: BrowserRequest) {
+      const rid = `r${String(this.finish.size + 1)}`;
+      return { rid, finished: new Promise<RequestFinished>((resolve) => { this.finish.set(rid, resolve); }) };
+    }
+    frame(event: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: event }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const requests = new ConversationRequests(connection);
+  const accepted: string[] = [];
+  const sent = requests.submit("message", { stream: true, text: "hello", image_data: [] }, () => accepted.push("r1"));
+  const regen = requests.submit("regen", { stream: true });
+  const echo = (rid: string, role: "user" | "assistant"): ServerMessage => ({ type: "new_message", revision: 1, rid, msg_id: `${role}-${rid}`, role, content: "hello", images: [], content_blocks: [], timestamp: "now" });
+  connection.frame(echo("r1", "assistant"));
+  connection.frame(echo("other", "user"));
+  expect(accepted).toEqual([]);
+  connection.frame(echo("r1", "user"));
+  connection.frame(echo("r1", "user"));
+  expect(accepted).toEqual(["r1"]);
+  expect(requests.pendingRegens()).toEqual(["r2"]);
+  expect(requests.pendingRegens({ character: null, thread: null })).toEqual(["r2"]);
+  expect(requests.pendingRegens({ character: "ada", thread: "side" })).toEqual([]);
+  expect(requests.regens({ character: null, thread: null })).toEqual(["r2"]);
+  expect(requests.awaitingStream({ character: "ada", thread: "side" })).toBeUndefined();
+  expect(requests.awaitingStream()).toBe("r1");
+  connection.frame({ type: "stream_start", rid: "r1", regen: false, subagent: null });
+  expect(requests.awaitingStream()).toBe("r2");
+  connection.frame({ type: "stream_start", rid: "r2", regen: true, subagent: "worker" });
+  expect(requests.pendingRegens()).toEqual(["r2"]);
+  const before = requests.getSnapshot();
+  connection.frame({ type: "stream_start", rid: "r2", regen: true, subagent: null });
+  expect(requests.pendingRegens()).toEqual([]);
+  expect(requests.awaitingStream()).toBeUndefined();
+  expect(requests.getSnapshot()).not.toBe(before);
+  connection.finish.get("r1")?.({ rid: "r1", outcome: "completed" });
+  connection.finish.get("r2")?.({ rid: "r2", outcome: "cancelled" });
+  await Promise.all([sent, regen]);
+  expect(requests.getSnapshot().size).toBe(0);
 });
 
 test("history deltas replace the suffix, preserve archived pages, and detect absent anchors", () => {

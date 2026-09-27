@@ -94,6 +94,7 @@
           {
             "type": "new_message",
             "thread": "main",
+            "rid": "r-1",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -285,7 +286,10 @@
           {
             "type": "stream_start",
             "rid": "r-2",
-            "regen": true
+            "regen": true,
+            "replaces": [
+              "m_seed_first answer"
+            ]
           },
           {
             "type": "stream_chunk",
@@ -537,7 +541,8 @@
             "role": "user",
             "timestamp": "<minted_timestamp>",
             "type": "new_message",
-            "thread": "main"
+            "thread": "main",
+            "rid": "r-3"
           }
         ],
         "conversation": [
@@ -679,7 +684,8 @@
             "role": "user",
             "timestamp": "<minted_timestamp>",
             "type": "new_message",
-            "thread": "main"
+            "thread": "main",
+            "rid": "r-err"
           }
         ],
         "conversation": [
@@ -1088,6 +1094,7 @@
           {
             "type": "new_message",
             "thread": "main",
+            "rid": "r-tool",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -1226,7 +1233,8 @@
               "activity_heatmap",
               "search",
               "search_chat_logs",
-              "model_history"
+              "model_history",
+              "set_next_wake"
             ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1354,6 +1362,7 @@
           {
             "type": "new_message",
             "thread": "main",
+            "rid": "r-4",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",

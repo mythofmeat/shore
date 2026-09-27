@@ -18,7 +18,7 @@ export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "u
   return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, "value") ? { value: "<redacted>" } : {}) } };
 }
 
-export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean }
+export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
 export interface Activity { id: number; type: string; data: unknown; previewLimited: boolean }
 export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
@@ -112,7 +112,10 @@ export class Workspace {
     let media = this.#state.media;
     let mediaLimited = this.#state.mediaLimited;
     switch (message.type) {
-      case "stream_start": next.final = false; break;
+      case "stream_start":
+        next.final = false;
+        if (message.regen) next.replaces = message.replaces ?? [];
+        break;
       case "stream_chunk":
         if (message.content_type === "thinking") next.reasoning += message.text;
         else next.text += message.text;
@@ -192,6 +195,10 @@ export class Workspace {
       case "error": this.report(message.message); this.#activity(message.type, message); return;
       case "request_finished":
         if (message.outcome !== "completed" || this.actions.pendingOperation(message.rid) === "run_tool") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
+        if (this.#state.uncertain.some((item) => item.rid === message.rid)) {
+          this.acknowledge(message.rid);
+          if (message.outcome === "failed") this.report(message.error?.message ?? "A request that was in flight when the connection dropped failed.");
+        }
         this.#activity(message.type, message); return;
       case "send_image": {
         const previous = this.#state.media.find((image) => image.path === message.path);

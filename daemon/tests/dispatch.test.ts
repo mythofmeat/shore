@@ -152,11 +152,52 @@ describe("routing, wired", () => {
     expect(seen).toEqual([null]);
   });
 
-  test("set_next_wake reaches the heartbeat hook when one is wired", async () => {
-    const ctx = bareContext({ scheduleNextWake: async (input) => ({ echoed: input }) });
-    expect(await dispatchTool("set_next_wake", { minutes: 30 }, ctx)).toEqual({
-      echoed: { minutes: 30 },
+  test("set_next_wake asks the clock for what the model asked and quotes what it got", async () => {
+    const asked: [number, string][] = [];
+    const ctx = bareContext({
+      scheduleNextWake: (hours, reason) => {
+        asked.push([hours, reason]);
+        return 48;
+      },
     });
+    expect(await dispatchTool("set_next_wake", { hours_from_now: 900, reason: "the essay" }, ctx)).toBe(
+      "Scheduled next moment in 48.0 hours.",
+    );
+    expect(asked).toEqual([[900, "the essay"]]);
+  });
+
+  test("set_next_wake defaults to an hour with no reason", async () => {
+    const asked: [number, string][] = [];
+    const ctx = bareContext({
+      scheduleNextWake: (hours, reason) => {
+        asked.push([hours, reason]);
+        return hours;
+      },
+    });
+    await dispatchTool("set_next_wake", {}, ctx);
+    expect(asked).toEqual([[1, ""]]);
+  });
+
+  test("set_next_wake says so when the character has no heartbeat to move", async () => {
+    const ctx = bareContext({ scheduleNextWake: () => undefined });
+    expect(await route("set_next_wake", { hours_from_now: 2, reason: "later" }, ctx)).toEqual({
+      err: "io: heartbeats are not running for this character",
+    });
+  });
+
+  test("a dry run leaves the heartbeat schedule alone", async () => {
+    const asked: number[] = [];
+    const ctx = bareContext({
+      dryRun: true,
+      scheduleNextWake: (hours) => {
+        asked.push(hours);
+        return hours;
+      },
+    });
+    expect(await route("set_next_wake", { hours_from_now: 2, reason: "later" }, ctx)).toEqual({
+      err: "io: set_next_wake blocked: dry-run tools cannot change files or external state",
+    });
+    expect(asked).toEqual([]);
   });
 });
 

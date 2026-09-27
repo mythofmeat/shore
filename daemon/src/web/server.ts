@@ -211,7 +211,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   origin = config.public_origin ?? server.url.origin;
   try {
     recovery = options.recovery === undefined ? undefined : new WebRecovery(options.recovery, origin);
-    sessions = new WebSessions(origin, config.max_connections * 2, options.sessionLifetimeMs ?? WEB_LIMITS.sessionLifetimeMs, recovery);
+    sessions = new WebSessions(origin, config.max_connections * 2, options.sessionLifetimeMs ?? config.session_lifetime.asMillis(), recovery);
     closeSessions = () => sessions.close();
     archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits, recovery);
     archives.restore(sessions);

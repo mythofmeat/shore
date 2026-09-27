@@ -120,7 +120,7 @@ describe("configSchema", () => {
 
   test("the keys that need a daemon restart say so", () => {
     expect(byKey.get("daemon.listen_addr")?.restart_required).toBe(true);
-    for (const key of ["enabled", "bind_addr", "public_origin", "tls_cert", "tls_key", "max_connections", "max_queued_bytes"]) {
+    for (const key of ["enabled", "bind_addr", "public_origin", "tls_cert", "tls_key", "max_connections", "max_queued_bytes", "session_lifetime"]) {
       expect(byKey.get(`daemon.web.${key}`)).toMatchObject({ restart_required: true, settable: true });
     }
     expect(byKey.get("daemon.cache_forensics")?.restart_required).toBe(true);

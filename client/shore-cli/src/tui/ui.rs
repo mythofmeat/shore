@@ -954,7 +954,9 @@ fn build_conversation_lines(
     let settled_entries = app
         .entries
         .iter()
-        .position(|entry| entry.as_turn().is_some_and(|turn| turn.is_streaming()))
+        .position(|entry| {
+            entry.as_turn().is_some_and(|turn| turn.is_streaming()) || app.stream.hides(entry)
+        })
         .unwrap_or(app.entries.len());
     let reuse = app.conv_cache.settled_fingerprint == settled_fingerprint
         && app.conv_cache.settled_entries <= settled_entries;
@@ -983,6 +985,9 @@ fn build_conversation_lines(
     app.conv_cache.settled_fingerprint = settled_fingerprint;
 
     for (index, entry) in app.entries.iter().enumerate().skip(first) {
+        if app.stream.hides(entry) {
+            continue;
+        }
         let from = lines.len();
         match entry {
             ConversationEntry::Turn(turn) => {
@@ -1897,6 +1902,7 @@ mod subagent_panel_tests {
                 ServerMessage::StreamStart(shore_common::protocol::server_msg::StreamStart {
                     rid: None,
                     regen: false,
+                    replaces: Vec::new(),
                     subagent: None,
                     task_id: None,
                 }),
@@ -5885,6 +5891,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6012,6 +6019,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6073,6 +6081,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6230,6 +6239,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6383,6 +6393,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         let _ = crate::tui::handle_server_message(
@@ -6539,6 +6550,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
 
@@ -6614,6 +6626,7 @@ pub(crate) mod scenario_tests {
                 task_id: None,
                 rid: None,
                 regen: false,
+                replaces: Vec::new(),
             }),
         );
         for chunk in reply.as_bytes().chunks(96) {
@@ -7205,7 +7218,7 @@ pub(crate) mod scenario_tests {
             "t1".into(),
         ));
         h.app.entries.push(ConversationEntry::assistant(
-            None,
+            Some("m_joke".into()),
             "Why did the chicken cross the road?".into(),
             vec![],
             "t2".into(),
@@ -7218,22 +7231,16 @@ pub(crate) mod scenario_tests {
             "original response visible"
         );
 
-        h.app.stream.reset();
-        h.app.stream.active = true;
-        h.app.stream.regen = true;
-        if let Some(pos) = h
-            .app
-            .entries
-            .iter()
-            .rposition(|e| matches!(e.as_turn(), Some(t) if t.role == Role::Assistant))
-        {
-            h.app.entries.truncate(pos);
-        }
+        h.app.begin_regen_optimistic();
 
         let regen_started = h.render("regen started");
         assert!(
             !regen_started.contains("chicken"),
-            "original response should be removed during regen"
+            "original response should be hidden during regen"
+        );
+        assert!(
+            regen_started.contains("Tell me a joke"),
+            "the prompt stays visible during regen"
         );
 
         h.stream_chunk("A better joke: ");
@@ -7257,6 +7264,36 @@ pub(crate) mod scenario_tests {
             !regen_complete.contains("regenerating"),
             "regen indicator gone after completion"
         );
+    }
+
+    #[test]
+    fn scenario_cancelled_regeneration_restores_the_reply() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.entries.push(ConversationEntry::user(
+            "Tell me a joke".into(),
+            vec![],
+            "t1".into(),
+        ));
+        h.app.entries.push(ConversationEntry::assistant(
+            Some("m_joke".into()),
+            "Why did the chicken cross the road?".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
+
+        h.app.begin_regen_optimistic();
+        h.stream_chunk("A better");
+        assert!(!h.render("regen streaming").contains("chicken"));
+
+        h.app.abort_stream();
+        let cancelled = h.render("regen cancelled");
+        assert!(
+            cancelled.contains("chicken"),
+            "the original reply returns when the regen is cancelled"
+        );
+        assert!(!cancelled.contains("A better"));
     }
 
     #[test]

@@ -20,7 +20,6 @@ import {
   type RoutedMessage,
   type SessionRouter,
 } from "../swp/session.ts";
-import type { LeaseRouter, StreamLeases } from "./lease.ts";
 
 const RID_BEARING: ReadonlySet<string> = new Set([
   "history",
@@ -84,6 +83,7 @@ function cancelledStreamEnd(rid: string | null): ServerMessage {
 
 export interface HandlerRegistry {
   resolveCharacter(selected: string | null): { name: string } | { error: string };
+  resolveThread?(character: string, selected: string | null): string | null;
 }
 
 export type RunGeneration = (params: GenerationParams) => Promise<void>;
@@ -113,8 +113,7 @@ export interface HandlerNotifier {
 }
 
 export interface MessageHandlerDeps {
-  readonly router: SessionRouter & LeaseRouter;
-  readonly leases: StreamLeases;
+  readonly router: SessionRouter;
   readonly registry: HandlerRegistry;
   readonly notifier: HandlerNotifier;
   readonly dispatchCommand: (
@@ -123,6 +122,7 @@ export interface MessageHandlerDeps {
     signal: AbortSignal,
   ) => Promise<ServerMessage>;
   readonly runGeneration: RunGeneration;
+  readonly commandChangesState?: (cmd: Command) => boolean;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     error?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -131,24 +131,66 @@ export interface MessageHandlerDeps {
 
 export { sanitiseRid } from "../swp/admission.ts";
 
+const REPLAYED: ReadonlySet<string> = new Set([
+  "stream_start",
+  "stream_chunk",
+  "stream_end",
+  "tool_call",
+  "tool_result",
+]);
+
+interface Viewer {
+  readonly character: string | null;
+  readonly thread: string | null;
+}
+
 interface ActiveGeneration {
+  readonly scope: string;
   readonly abort: () => void;
   readonly rid: string | null;
+  readonly viewers: Map<number, Viewer>;
+  readonly replay: ServerMessage[];
+  readonly send: DirectSender;
+  finished: boolean;
   outcome?: "cancelled" | "superseded";
+}
+
+interface ActiveCommand {
+  readonly controller: AbortController;
+  readonly sessionId: number;
+  readonly scope: string;
+  readonly changesState: boolean;
+}
+
+function recordReplay(generation: ActiveGeneration, msg: ServerMessage): void {
+  if (generation.finished || !REPLAYED.has(msg.type)) return;
+  if ("subagent" in msg && msg.subagent !== undefined && msg.subagent !== null) return;
+  if ("task_id" in msg && msg.task_id !== undefined && msg.task_id !== null) return;
+  if (msg.type === "stream_end" && msg.is_final) {
+    generation.finished = true;
+    generation.replay.length = 0;
+    return;
+  }
+  const last = generation.replay.at(-1);
+  if (msg.type === "stream_chunk" && last?.type === "stream_chunk" && last.content_type === msg.content_type) {
+    generation.replay[generation.replay.length - 1] = { ...last, text: last.text + msg.text };
+    return;
+  }
+  generation.replay.push(msg);
 }
 
 export class MessageHandler {
   readonly #deps: MessageHandlerDeps;
-  readonly #sessions = new Map<number, Map<string, ActiveGeneration>>();
+  readonly #generations = new Map<string, ActiveGeneration>();
   readonly #queues = new Map<number, Promise<void>>();
-  readonly #commandAborts = new Map<number, Set<AbortController>>();
+  readonly #commands = new Set<ActiveCommand>();
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
   }
 
-  get sessionStateCount(): number {
-    return this.#sessions.size;
+  get generationCount(): number {
+    return this.#generations.size;
   }
 
   get queuedSessionCount(): number {
@@ -171,12 +213,11 @@ export class MessageHandler {
     }
 
     const sessionId = routed.meta.session.sessionId;
-    const controller = routed.kind === "command" ? this.#commandController(sessionId) : undefined;
+    const command = routed.kind === "command" ? this.#registerCommand(routed.cmd, routed.meta) : undefined;
     const tail = this.#queues.get(sessionId) ?? Promise.resolve();
     const settled = this.#guard(
       tail.then(async () => {
-        if (routed.kind === "command") { await this.#runCommand(routed.cmd, routed.meta, controller); return; }
-        if (!this.#deps.router.has(sessionId)) return;
+        if (routed.kind === "command") { await this.#runCommand(routed.cmd, routed.meta, command); return; }
         await this.handleRouted(routed);
       }),
     );
@@ -196,33 +237,74 @@ export class MessageHandler {
       case "engine":
         await this.handleEngine(routed.msg, routed.meta);
         return;
-      case "session_disconnected":
-      case "all_clients_disconnected": {
+      case "session_connected":
+      case "session_disconnected": {
         await this.handleControl(routed);
       }
     }
   }
 
-  #commandController(sessionId: number): AbortController {
-    const controller = new AbortController();
-    const registered = this.#commandAborts.get(sessionId) ?? new Set<AbortController>();
-    registered.add(controller);
-    this.#commandAborts.set(sessionId, registered);
-    return controller;
+  #scope(character: string | null, thread: string | null): string {
+    const resolved = this.#deps.registry.resolveCharacter(character);
+    if (!("name" in resolved)) return JSON.stringify([null, thread]);
+    return JSON.stringify([resolved.name, this.#deps.registry.resolveThread?.(resolved.name, thread) ?? thread]);
   }
 
-  async #runCommand(cmd: Command, meta: RequestMeta, controller = this.#commandController(meta.session.sessionId)): Promise<void> {
+  #sessionScope(sessionId: number): string {
+    return this.#scope(this.#deps.router.characterFor(sessionId), this.#deps.router.threadFor(sessionId));
+  }
+
+  #viewer(sessionId: number): Viewer {
+    return { character: this.#deps.router.characterFor(sessionId), thread: this.#deps.router.threadFor(sessionId) };
+  }
+
+  #join(sessionId: number): void {
+    for (const generation of this.#generations.values()) generation.viewers.delete(sessionId);
+    const send = this.#deps.router.senderFor(sessionId);
+    if (send === undefined) return;
+    const generation = this.#generations.get(this.#sessionScope(sessionId));
+    if (generation === undefined || generation.finished) return;
+    generation.viewers.set(sessionId, this.#viewer(sessionId));
+    for (const frame of generation.replay) void this.#deliver(send, frame, sessionId);
+  }
+
+  async #deliver(send: DirectSender, msg: ServerMessage, sessionId: number): Promise<void> {
+    try {
+      await send(msg);
+    } catch (error) {
+      this.#deps.log?.error?.("failed to deliver stream frame", {
+        session_id: sessionId,
+        frame_type: msg.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  #registerCommand(cmd: Command, meta: RequestMeta): ActiveCommand {
+    const command: ActiveCommand = {
+      controller: new AbortController(),
+      sessionId: meta.session.sessionId,
+      scope: this.#scope(meta.session.selectedCharacter, meta.session.selectedThread),
+      changesState: this.#deps.commandChangesState?.(cmd) ?? true,
+    };
+    this.#commands.add(command);
+    return command;
+  }
+
+  async #runCommand(cmd: Command, meta: RequestMeta, command = this.#registerCommand(cmd, meta)): Promise<void> {
     const sessionId = meta.session.sessionId;
+    const controller = command.controller;
+    const before = this.#sessionScope(sessionId);
     let outcome: RequestOutcome = "completed";
     let failure: ProtocolError | undefined;
 
     try {
-      if (!this.#deps.router.has(sessionId)) return;
       controller.signal.throwIfAborted();
       const result = await this.#deps.dispatchCommand(cmd, meta, controller.signal);
-      if (!this.#deps.router.has(sessionId)) return;
       if (result.type === "error") { outcome = "failed"; failure = result; }
+      this.#deps.router.reportRequest(sessionId, result);
       await this.#deps.router.sendToSession(sessionId, result);
+      if (this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);
     } catch (error) {
       outcome = controller.signal.aborted ? "cancelled" : "failed";
       failure = { code: "internal_error", message: describeError(error) };
@@ -231,53 +313,54 @@ export class MessageHandler {
         await this.#deps.router.sendToSession(sessionId, withRid({ type: "error", code: "invalid_request", message: "Command cancelled before completion" }, meta.rid));
       }
     } finally {
-      const live = this.#commandAborts.get(sessionId);
-      if (live !== undefined) {
-        live.delete(controller);
-        if (live.size === 0) this.#commandAborts.delete(sessionId);
-      }
+      this.#commands.delete(command);
       await this.#finishRequest(meta, meta.rid, outcome, failure);
     }
   }
 
   async #finishRequest(meta: RequestMeta, rid: string | null, outcome: RequestOutcome, error?: ProtocolError): Promise<void> {
-    if (rid === null || !this.#deps.router.has(meta.session.sessionId) || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
-    await this.#deps.router.sendToSession(meta.session.sessionId, {
-      type: "request_finished", rid, outcome, ...(error === undefined ? {} : { error }),
-    });
+    if (rid === null) return;
+    const finished: ServerMessage = { type: "request_finished", rid, outcome, ...(error === undefined ? {} : { error }) };
+    this.#deps.router.reportRequest(meta.session.sessionId, finished);
+    if (!this.#deps.router.has(meta.session.sessionId) || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
+    await this.#deps.router.sendToSession(meta.session.sessionId, finished);
   }
 
   async handleControl(routed: ControlRoutedMessage): Promise<void> {
     if (routed.kind === "engine") {
-      this.#abortSessionCommands(routed.meta.session.sessionId, "User requested cancellation");
-      await this.cancelGeneration(
-        routed.meta.session.sessionId,
-        routed.meta.rid,
-        "user cancelled",
-      );
+      await this.#cancel(routed.meta.session.sessionId, routed.meta.rid);
       return;
     }
-    if (routed.kind === "session_disconnected") {
-      this.#abortSessionCommands(routed.sessionId, "Client disconnected");
-      this.#queues.delete(routed.sessionId);
+    if (routed.kind === "session_connected") {
+      this.#join(routed.sessionId);
       return;
     }
-    for (const sessionId of this.#sessions.keys()) {
-      await this.cancelGeneration(sessionId, null, "all clients disconnected");
-    }
-    this.#deps.leases.clear();
+    this.#abortCommands(
+      (command) => command.sessionId === routed.sessionId && !command.changesState,
+      "Client disconnected",
+    );
+    for (const generation of this.#generations.values()) generation.viewers.delete(routed.sessionId);
+    this.#queues.delete(routed.sessionId);
   }
 
-  #abortSessionCommands(sessionId: number, reason: string): void {
-    const registered = this.#commandAborts.get(sessionId);
-    if (registered === undefined) return;
-    this.#deps.log?.info?.("cancelling session commands", {
-      session_id: sessionId,
-      commands: registered.size,
-      reason,
-    });
-    for (const controller of registered) controller.abort(new DOMException(reason, "AbortError"));
-    this.#commandAborts.delete(sessionId);
+  async #cancel(sessionId: number, rid: string | null): Promise<void> {
+    const scope = this.#sessionScope(sessionId);
+    this.#abortCommands(
+      (command) => command.sessionId === sessionId ||
+        (command.changesState && command.scope === scope && !this.#deps.router.has(command.sessionId)),
+      "User requested cancellation",
+    );
+    await this.cancelGeneration(sessionId, rid, "user cancelled");
+  }
+
+  #abortCommands(selected: (command: ActiveCommand) => boolean, reason: string): void {
+    const aborted = [...this.#commands].filter(selected);
+    if (aborted.length === 0) return;
+    this.#deps.log?.info?.("cancelling commands", { commands: aborted.length, reason });
+    for (const command of aborted) {
+      command.controller.abort(new DOMException(reason, "AbortError"));
+      this.#commands.delete(command);
+    }
   }
 
   #guard(work: Promise<void>): Promise<void> {
@@ -297,8 +380,7 @@ export class MessageHandler {
     if (msg.type === "hello" || msg.type === "command") return;
     const plan = coreRequests[msg.type].invoke(msg);
     if (plan.kind === "cancel") {
-      this.#abortSessionCommands(meta.session.sessionId, "User requested cancellation");
-      await this.cancelGeneration(meta.session.sessionId, meta.rid, "user cancelled");
+      await this.#cancel(meta.session.sessionId, meta.rid);
       return;
     }
 
@@ -315,8 +397,6 @@ export class MessageHandler {
       return;
     }
 
-    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);
-
     await this.launchGeneration(meta, plan.body, plan.regen, resolved.name);
   }
 
@@ -326,43 +406,54 @@ export class MessageHandler {
     regen: boolean,
     charName: string,
   ): Promise<void> {
-    const issuerSend = this.#deps.router.senderFor(meta.session.sessionId);
-    if (issuerSend === undefined) return;
-
+    const issuer = meta.session.sessionId;
     const rid = sanitiseRid(body.rid);
-    const thread = meta.session.selectedThread;
-    const scope = JSON.stringify([charName, thread]);
-    const selectedCharacter = this.#deps.router.characterFor(meta.session.sessionId);
-    const inSelectedThread = () =>
-      this.#deps.router.characterFor(meta.session.sessionId) === selectedCharacter &&
-      this.#deps.router.threadFor(meta.session.sessionId) === thread;
-    const send = this.#deps.leases.fanout(
-      charName,
-      meta.session.sessionId,
-      async (msg) => {
-        if (!inSelectedThread()) return;
-        if (!body.stream && (msg.type === "stream_start" || msg.type === "stream_chunk")) return;
-        await issuerSend(msg);
-      },
-      this.#deps.router,
-      undefined,
-      thread,
-    );
+    const scope = this.#scope(charName, meta.session.selectedThread);
 
-    const generations = this.#sessions.get(meta.session.sessionId) ?? new Map<string, ActiveGeneration>();
-    const previous = generations.get(scope);
+    const previous = this.#generations.get(scope);
     if (previous !== undefined) {
       this.#deps.log?.info?.("aborting previous generation (superseded by new request)");
+      this.#generations.delete(scope);
       previous.outcome = "superseded";
       previous.abort();
-      if (previous.rid !== null) await issuerSend(cancelledStreamEnd(previous.rid));
+      if (previous.rid !== null) await previous.send(cancelledStreamEnd(previous.rid));
+    }
+
+    const viewers = new Map<number, Viewer>();
+    for (const [sessionId] of this.#deps.router.sessions()) {
+      if (this.#sessionScope(sessionId) === scope) viewers.set(sessionId, this.#viewer(sessionId));
     }
 
     const controller = new AbortController();
-    const abort = () => controller.abort();
-    const generation: ActiveGeneration = { abort, rid };
-    generations.set(scope, generation);
-    this.#sessions.set(meta.session.sessionId, generations);
+    const generation: ActiveGeneration = {
+      scope,
+      abort: () => controller.abort(),
+      rid,
+      viewers,
+      replay: [],
+      finished: false,
+      send: async (msg) => {
+        recordReplay(generation, msg);
+        let issuerDelivery: Promise<void> | undefined;
+        for (const [sessionId, viewer] of generation.viewers) {
+          const target = this.#deps.router.senderFor(sessionId);
+          const current = this.#viewer(sessionId);
+          if (target === undefined || current.character !== viewer.character || current.thread !== viewer.thread) {
+            generation.viewers.delete(sessionId);
+            continue;
+          }
+          if (sessionId !== issuer) {
+            void this.#deliver(target, msg, sessionId);
+            continue;
+          }
+          if (!body.stream && (msg.type === "stream_chunk" || (msg.type === "stream_start" && !msg.regen))) continue;
+          issuerDelivery = target(msg);
+        }
+        await issuerDelivery;
+      },
+    };
+    this.#generations.set(scope, generation);
+    const send = generation.send;
 
     const params: GenerationParams = {
       meta,
@@ -401,10 +492,7 @@ export class MessageHandler {
         }
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
       } finally {
-        if (generations.get(scope) === generation) {
-          generations.delete(scope);
-          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);
-        }
+        if (this.#generations.get(scope) === generation) this.#generations.delete(scope);
         await this.#finishRequest(meta, rid, generation.outcome ?? (failure === undefined ? "completed" : "failed"), failure);
       }
     })();
@@ -417,28 +505,20 @@ export class MessageHandler {
     rid: string | null,
     reason: string,
   ): Promise<void> {
-    const generations = this.#sessions.get(sessionId);
-    if (generations === undefined) return;
-    const resolved = this.#deps.registry.resolveCharacter(this.#deps.router.characterFor(sessionId));
-    const scope = JSON.stringify([
-      "name" in resolved ? resolved.name : null, this.#deps.router.threadFor(sessionId),
-    ]);
-    const selected = reason === "all clients disconnected"
-      ? [...generations.entries()]
-      : [...generations.entries()].filter(([key]) => key === scope);
-    if (selected.length === 0) return;
+    const scope = this.#sessionScope(sessionId);
+    const generation = this.#generations.get(scope);
+    if (generation === undefined) return;
     this.#deps.log?.info?.("cancelling active generation", { reason });
-    for (const [key, generation] of selected) {
-      generation.outcome = "cancelled";
-      generation.abort();
-      generations.delete(key);
-    }
-    if (generations.size === 0) this.#sessions.delete(sessionId);
-    const correlations = new Set(selected.map(([, generation]) => generation.rid));
+    this.#generations.delete(scope);
+    generation.outcome = "cancelled";
+    generation.abort();
+    const correlations = new Set([generation.rid]);
     if (rid !== null) correlations.add(rid);
     if (correlations.size > 1) correlations.delete(null);
     for (const correlation of correlations) {
-      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(correlation));
+      const frame = cancelledStreamEnd(correlation);
+      await generation.send(frame);
+      if (!generation.viewers.has(sessionId)) await this.#deps.router.sendToSession(sessionId, frame);
     }
   }
 

@@ -18,7 +18,7 @@ import type { FallbackEvent } from "../llm/fallback.ts";
 import type { CallRecorder } from "../llm/capture.ts";
 import { describeError } from "../llm/errors.ts";
 import { runGeneration as runModelGeneration } from "../llm/generate.ts";
-import type { StreamResult } from "../llm/stream.ts";
+import type { RegenStart, StreamResult } from "../llm/stream.ts";
 import type {
   CallContext,
   ProviderOptions,
@@ -77,6 +77,7 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
     currentRevision: () => engine.currentRevision(),
     turnCount: () => engine.turnCount(),
     pendingRegenAlt: () => engine.pendingRegenAlt(),
+    messagesAfterLastUserTurn: () => engine.messagesAfterLastUserTurn(),
     reload: () => engine.reload(),
   };
 }
@@ -248,7 +249,8 @@ async function runGenerationCore(
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }
 
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen);
+  const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
+  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid);
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
@@ -302,7 +304,7 @@ async function runGenerationCore(
     charName,
     resolved,
     request,
-    regen,
+    regen: regen && { replaces },
     conversation: subagentHistory,
     send: (message) => void params.send(message),
     ...(params.rid === null ? {} : { rid: params.rid }),
@@ -378,7 +380,7 @@ interface StreamTurnParams {
   charName: string;
   resolved: ResolvedModel;
   request: SidecarRequest;
-  regen: boolean;
+  regen: RegenStart;
   conversation: Message[];
   send: (message: ServerMessage) => void;
   rid?: string;

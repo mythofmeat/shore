@@ -49,7 +49,6 @@ function thinking(t: string): ContentBlock {
 interface World {
   notes: string[];
   dispatched: { name: string; input: unknown }[];
-  wakes: { hours: number; reason: string }[];
   transcript: TranscriptRound[];
   deps: HeartbeatLoopDeps;
 }
@@ -64,24 +63,18 @@ function world(
 ): World {
   const notes: string[] = [];
   const dispatched: { name: string; input: unknown }[] = [];
-  const wakes: { hours: number; reason: string }[] = [];
   const transcript: TranscriptRound[] = [];
   let round = 0;
 
   return {
     notes,
     dispatched,
-    wakes,
     transcript,
     deps: {
       character: "ada",
       dispatch: async (name, input) => {
         dispatched.push({ name, input });
         return toolResult(name, input);
-      },
-      scheduleNextWake: (hours, reason) => {
-        wakes.push({ hours, reason });
-        return `Scheduled next moment in ${hours.toFixed(1)} hours.`;
       },
       note: (t) => notes.push(t),
       recordTranscript: (r) => transcript.push(r),
@@ -92,6 +85,42 @@ function world(
     },
   };
 }
+
+describe("the tool surface a tick sends", () => {
+  test("is the chat request's, byte for byte, so the tick reads the prefix chat cached", async () => {
+    const tools = [
+      { name: "read", description: "Read a file.", input_schema: { type: "object" } },
+      { name: "set_next_wake", description: "Schedule the next heartbeat.", input_schema: { type: "object" } },
+      { name: "mcp__notes__append", description: "Append a note.", input_schema: { type: "object" } },
+    ];
+    const sent: SidecarRequest[] = [];
+    const w = world([], {
+      generate: async (call) => {
+        sent.push(call);
+        return response([text("HEARTBEAT_OK")]);
+      },
+    });
+
+    await runHeartbeatToolLoop({ ...request(), tools }, w.deps);
+
+    expect(sent[0]?.tools).toEqual(tools);
+  });
+
+  test("declares no heartbeat-only tools of its own", async () => {
+    const tools = [{ name: "read", description: "Read a file.", input_schema: { type: "object" } }];
+    const sent: SidecarRequest[] = [];
+    const w = world([], {
+      generate: async (call) => {
+        sent.push(call);
+        return response([text("HEARTBEAT_OK")]);
+      },
+    });
+
+    await runHeartbeatToolLoop({ ...request(), tools }, w.deps);
+
+    expect(sent[0]?.tools?.map((tool) => tool.name)).toEqual(["read"]);
+  });
+});
 
 describe("what a tick asks to say", () => {
   test("takes the last <sendMessage> when the model writes several in one response", async () => {
@@ -419,46 +448,37 @@ describe("the loop's rounds", () => {
 describe("the tools the loop answers itself", () => {
   const noop = {
     dispatch: async (): Promise<HeartbeatToolResult> => ({ output: "", isError: false }),
-    scheduleNextWake: () => "scheduled",
     note: () => {},
   };
 
-  test("set_next_wake never reaches the tool registry", async () => {
-    const dispatched: string[] = [];
-    const wakes: { hours: number; reason: string }[] = [];
+  test("set_next_wake goes to the registry like any tool, and the clock writes its only log line", async () => {
+    const dispatched: { name: string; input: unknown }[] = [];
     const notes: string[] = [];
 
     const out = await dispatchHeartbeatTools([["t1", "set_next_wake", { hours_from_now: 6, reason: "the essay" }]], {
-      dispatch: async (name) => {
-        dispatched.push(name);
-        return { output: "", isError: false };
-      },
-      scheduleNextWake: (hours, reason) => {
-        wakes.push({ hours, reason });
-        return `Scheduled next moment in ${hours.toFixed(1)} hours.`;
+      dispatch: async (name, input) => {
+        dispatched.push({ name, input });
+        return { output: "Scheduled next moment in 6.0 hours.", isError: false };
       },
       note: (t) => notes.push(t),
     });
 
-    expect(dispatched).toEqual([]);
-    expect(wakes).toEqual([{ hours: 6, reason: "the essay" }]);
+    expect(dispatched).toEqual([{ name: "set_next_wake", input: { hours_from_now: 6, reason: "the essay" } }]);
     expect((out.results[0] as { content: string }).content).toBe(
       "Scheduled next moment in 6.0 hours.",
     );
     expect(notes).toEqual([]);
   });
 
-  test("set_next_wake defaults to an hour with no reason", async () => {
-    const wakes: { hours: number; reason: string }[] = [];
-    await dispatchHeartbeatTools([["t1", "set_next_wake", {}]], {
+  test("a refused set_next_wake still leaves a ring-buffer line", async () => {
+    const notes: string[] = [];
+    await dispatchHeartbeatTools([["t1", "set_next_wake", { hours_from_now: 6, reason: "the essay" }]], {
       ...noop,
-      scheduleNextWake: (hours, reason) => {
-        wakes.push({ hours, reason });
-        return "scheduled";
-      },
+      dispatch: async () => ({ output: "this tool is not available in the current tool set", isError: true }),
+      note: (t) => notes.push(t),
     });
 
-    expect(wakes).toEqual([{ hours: 1, reason: "" }]);
+    expect(notes).toEqual(["Tool: set_next_wake → this tool is not available in the current tool set"]);
   });
 
   test("sendMessage is acknowledged as delivered rather than refused", async () => {

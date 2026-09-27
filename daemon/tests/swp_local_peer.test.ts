@@ -34,7 +34,7 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
 
   const routed: RoutedMessage[] = [];
   const routing = (async () => {
-    for await (const message of server.routes()) routed.push(message);
+    for await (const message of server.routes()) if (message.kind !== "session_connected") routed.push(message);
   })();
 
   cleanups.push(async () => {
@@ -309,10 +309,7 @@ describe("what the peer receives", () => {
     expect(server.sessionRouter.sessions()).toEqual([]);
     expect(await peer.events().next()).toMatchObject({ done: true });
     await settle();
-    expect(routed).toEqual([
-      { kind: "session_disconnected", sessionId: peer.session.sessionId },
-      { kind: "all_clients_disconnected" },
-    ]);
+    expect(routed).toEqual([{ kind: "session_disconnected", sessionId: peer.session.sessionId }]);
   });
 
   test("overflow in the broadcast relay detaches instead of silently skipping state", async () => {
@@ -442,46 +439,21 @@ describe("what the peer receives", () => {
   });
 });
 
-describe("all_clients_disconnected, which is where the shapes differ", () => {
-  test("a socket client leaving does not fire it while the bridge is attached", async () => {
+describe("disconnects are per session", () => {
+  test("a socket client leaving routes only its own disconnect, bridge or not", async () => {
     const { server, routed, addr } = await fixture(["ada"]);
-    await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });
+    const bridge = await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });
 
     const socket = await socketClient(addr);
     socket.destroy();
     await settle();
-
-    expect(routed.filter((r) => r.kind === "all_clients_disconnected")).toHaveLength(0);
-  });
-
-  test("without the bridge, the same disconnect fires it", async () => {
-    const { routed, addr } = await fixture(["ada"]);
-
-    const socket = await socketClient(addr);
-    socket.destroy();
+    await bridge.detach();
+    await bridge.detach();
     await settle();
 
-    expect(routed.filter((r) => r.kind === "all_clients_disconnected")).toHaveLength(1);
-  });
-
-  test("the bridge detaching last fires it, so nothing is left generating", async () => {
-    const { server, routed } = await fixture(["ada"]);
-    const peer = await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });
-
-    await peer.detach();
-    await settle();
-
-    expect(routed.filter((r) => r.kind === "all_clients_disconnected")).toHaveLength(1);
-  });
-
-  test("detaching twice is quiet", async () => {
-    const { server, routed } = await fixture(["ada"]);
-    const peer = await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });
-
-    await peer.detach();
-    await peer.detach();
-    await settle();
-
-    expect(routed.filter((r) => r.kind === "all_clients_disconnected")).toHaveLength(1);
+    const disconnected = routed.filter((r) => r.kind === "session_disconnected");
+    expect(disconnected).toHaveLength(2);
+    expect(disconnected).toContainEqual({ kind: "session_disconnected", sessionId: bridge.session.sessionId });
+    expect(routed.map((r) => r.kind).filter((kind) => kind !== "session_disconnected")).toEqual([]);
   });
 });

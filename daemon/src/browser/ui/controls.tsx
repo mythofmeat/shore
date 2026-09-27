@@ -7,13 +7,19 @@ export function IconButton({ icon, label, size = 18, className = "", ...props }:
 
 export type MenuItem = { label: string; icon?: IconName; onSelect: () => void; danger?: boolean; disabled?: boolean; detail?: string } | "separator";
 
-export function Menu({ label, items, trigger, triggerClassName = "icon-button", align = "end", icon = "more" }: {
-  label: string; items: readonly MenuItem[]; trigger?: ReactNode; triggerClassName?: string; align?: "start" | "end"; icon?: IconName;
+export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "icon-button", align = "end", placement = "below", openEvent, defaultOpen = false, icon = "more" }: {
+  label: string; items: readonly MenuItem[]; trigger?: ReactNode; triggerLabel?: string; triggerClassName?: string; align?: "start" | "end"; placement?: "below" | "above"; openEvent?: string; defaultOpen?: boolean; icon?: IconName;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();
+  useEffect(() => {
+    if (openEvent === undefined) return;
+    const show = () => setOpen(true);
+    addEventListener(openEvent, show);
+    return () => removeEventListener(openEvent, show);
+  }, [openEvent]);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -32,10 +38,10 @@ export function Menu({ label, items, trigger, triggerClassName = "icon-button", 
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
     if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
   }}>
-    <button type="button" className={triggerClassName} aria-label={trigger === undefined ? label : undefined} title={trigger === undefined ? label : undefined} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
+    <button type="button" className={triggerClassName} aria-label={triggerLabel ?? (trigger === undefined ? label : undefined)} title={triggerLabel ?? (trigger === undefined ? label : undefined)} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
       {trigger ?? <Icon name={icon} />}
     </button>
-    {open ? <div className={`menu-list align-${align}`} role="menu" id={id} aria-label={label} ref={list}>
+    {open ? <div className={`menu-list align-${align} ${placement}`} role="menu" id={id} aria-label={label} ref={list}>
       {items.map((item, index) => item === "separator" ? <div key={index} className="menu-separator" role="separator" /> :
         <button key={index} type="button" role="menuitem" className={item.danger === true ? "danger" : ""} disabled={item.disabled} onClick={() => { setOpen(false); item.onSelect(); }}>
           {item.icon === undefined ? null : <Icon name={item.icon} size={16} />}<span className="menu-label">{item.label}</span>{item.detail === undefined ? null : <span className="menu-detail">{item.detail}</span>}

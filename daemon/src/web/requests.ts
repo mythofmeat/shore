@@ -5,7 +5,7 @@ import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
 import type { WebRequestList } from "../protocol/WebRequestList.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import { commandCatalogue } from "../commands/registry.ts";
-import { operationPolicy } from "../operations/policy.ts";
+import { changesState } from "../operations/policy.ts";
 import { validWebRequestInfo } from "./contracts.ts";
 import type { WebSession, WebSessions } from "./auth.ts";
 import type { WebRecovery } from "./recovery.ts";
@@ -19,8 +19,11 @@ export class RequestHistoryError extends Error {
 
 interface SavedRequest { owner: string; info: WebRequestInfo }
 
+export interface SettledRequest { readonly owner: string; readonly finished: Extract<ServerMessage, { type: "request_finished" }> }
+
 export class RequestHistory {
   readonly #records = new Map<string, SavedRequest>();
+  readonly #live = new Map<string, string>();
   #sessions: WebSessions | undefined;
   constructor(readonly recovery?: WebRecovery) {}
 
@@ -40,7 +43,11 @@ export class RequestHistory {
     this.#records.set(info.id, { owner, info: structuredClone(info) });
   }
 
-  #remove(id: string): void { this.recovery?.removeRequest(id); this.#records.delete(id); }
+  #remove(id: string): void {
+    this.recovery?.removeRequest(id);
+    this.#records.delete(id);
+    for (const [key, live] of this.#live) if (live === id) this.#live.delete(key);
+  }
 
   #prune(): void {
     for (const [id, record] of this.#records) {
@@ -76,7 +83,7 @@ export class RequestHistory {
       const descriptor = catalogue.get(message.name);
       if (descriptor === undefined) return undefined;
       const input = typeof message.args === "object" && message.args !== null && !Array.isArray(message.args) ? message.args as Record<string, unknown> : {};
-      if (!operationPolicy(descriptor, input).effects.some((effect) => effect !== "read" && effect !== "selection")) return undefined;
+      if (!changesState(descriptor, input)) return undefined;
       operation = message.name; label = descriptor.label;
     } else { operation = message.type; label = message.type === "message" ? "Send message" : "Regenerate response"; }
     if (typeof message.rid !== "string") throw new RequestHistoryError(400, "A request needs a correlation ID");
@@ -95,32 +102,47 @@ export class RequestHistory {
       character: selected.selectedCharacter, thread: selected.selectedThread, started_at: Date.now(),
       expires_at: session.expiresAt, phase: "running", result_omitted: false };
     this.#save(session.id, info);
+    this.#live.set(JSON.stringify([selected.sessionId, info.rid]), info.id);
     return info.id;
   }
 
-  observe(session: WebSession, id: string, message: ServerMessage): void {
-    const record = this.#records.get(id);
-    if (record === undefined || record.owner !== session.id || session.signal.aborted || record.info.expires_at <= Date.now() || record.info.phase !== "running") return;
+  settle(sessionId: number, message: ServerMessage): SettledRequest | undefined {
+    if ((message.type !== "command_output" && message.type !== "request_finished") || typeof message.rid !== "string") return undefined;
+    const key = JSON.stringify([sessionId, message.rid]);
+    const id = this.#live.get(key);
+    const record = id === undefined ? undefined : this.#records.get(id);
+    if (record === undefined) return undefined;
+    if (message.type === "request_finished") this.#live.delete(key);
+    if (this.#sessions?.get(record.owner) === undefined) return undefined;
+    this.#apply(record, message);
+    return message.type === "request_finished" ? { owner: record.owner, finished: message } : undefined;
+  }
+
+  #apply(record: SavedRequest, message: ServerMessage): void {
+    if (record.info.expires_at <= Date.now()) return;
     const info = record.info;
     if (message.type === "command_output" && message.rid === info.rid) {
       const result = { name: message.name, data: message.data };
       const candidate = { ...info, result };
       if (info.result !== undefined || info.result_omitted || message.name !== info.operation || Buffer.byteLength(JSON.stringify(result)) > REQUEST_HISTORY_LIMITS.resultBytes || !validWebRequestInfo(candidate)) {
         const { result: _previous, ...withoutResult } = info;
-        this.#save(record.owner, { ...withoutResult, result_omitted: true });
-      } else this.#save(record.owner, candidate);
+        this.#store(record.owner, { ...withoutResult, result_omitted: true });
+      } else this.#store(record.owner, candidate);
     }
     if (message.type === "request_finished" && message.rid === info.rid) {
       const error = message.error === undefined || message.error === null ? undefined : { ...message.error, message: message.error.message.slice(0, 4096) };
-      this.#save(record.owner, { ...info, phase: message.outcome, ...(error === undefined ? {} : { error }) });
+      this.#store(record.owner, { ...info, phase: message.outcome, ...(error === undefined ? {} : { error }) });
     }
+  }
+
+  #store(owner: string, info: WebRequestInfo): void {
+    try { this.#save(owner, info); }
+    catch { this.#records.set(info.id, { owner, info: structuredClone(info) }); }
   }
 
   interrupt(session: WebSession, id: string): void {
     const record = this.#records.get(id);
     if (record?.owner !== session.id || record.info.phase !== "running" || session.signal.aborted) return;
-    const info = { ...record.info, phase: "uncertain" as const };
-    try { this.#save(record.owner, info); }
-    catch { this.#records.set(id, { owner: record.owner, info }); }
+    this.#store(record.owner, { ...record.info, phase: "uncertain" });
   }
 }

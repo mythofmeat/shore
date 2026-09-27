@@ -13,7 +13,7 @@ import {
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative } from "./types";
-import { alternativeVersionOf, newMessageVersion, versionOf } from "./versions.ts";
+import { alternativeVersionOf, isRealUserTurn, newMessageVersion, versionOf } from "./versions.ts";
 
 export class MessageNotFound extends Error {
   constructor(msgId: string) {
@@ -175,8 +175,6 @@ export function isToolResultOnly(m: Message): boolean {
     m.content_blocks.every((b) => b.type === "tool_result")
   );
 }
-
-const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
 function toolUseIdsOffered(msg: Message | undefined): Set<string> {
   if (msg === undefined || msg.role !== "assistant") return new Set();
@@ -396,6 +394,10 @@ export class MessageStore {
 
   messagesThroughLastUserTurn(): Message[] {
     return this.#messages.slice(0, this.#keepIndex());
+  }
+
+  messagesAfterLastUserTurn(): Message[] {
+    return this.#messages.slice(this.#keepIndex());
   }
 
   async clear(): Promise<void> {

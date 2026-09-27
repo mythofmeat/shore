@@ -91,6 +91,15 @@ impl Turn {
     pub(crate) fn is_streaming(&self) -> bool {
         self.state == TurnState::Streaming
     }
+
+    pub(crate) fn is_real_user_turn(&self) -> bool {
+        self.role == Role::User
+            && (self.blocks.is_empty()
+                || self
+                    .blocks
+                    .iter()
+                    .any(|block| !matches!(block, Block::ToolResult { .. })))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +143,14 @@ impl ConversationEntry {
             timestamp,
             metadata,
         ))
+    }
+
+    pub(crate) fn msg_id(&self) -> Option<&str> {
+        match self {
+            ConversationEntry::Turn(turn) => turn.msg_id.as_deref(),
+            ConversationEntry::System { msg_id, .. } => msg_id.as_deref(),
+            ConversationEntry::ArchiveBoundary { .. } => None,
+        }
     }
 
     pub(crate) fn as_turn(&self) -> Option<&Turn> {
