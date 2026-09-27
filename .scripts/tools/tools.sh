@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 set -eu
-cd "$(dirname "$0")"
 
 root="$(git rev-parse --show-toplevel)"
 
@@ -61,10 +60,10 @@ bump_version_to() {
     sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
     sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
     sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
+    git commit -am "chore(release): v$version" --no-verify
 }
 
 version_increment() {
-    current_versions
     ver="$(current_versions)"
     IFS='.' read -ra ver_parts <<<"$ver"
     case "$1" in
@@ -83,11 +82,36 @@ version_increment() {
         echo "${ver_parts[*]}"
     )
     echo "$bumped_ver"
-    # git commit -am "chore(release): v$bumped_ver" --no-verify
-    # git tag v"$bumped_ver"
 }
 
-# update_deps
-version_increment major
-bump_version_to "4.16.14"
-# git push --tags
+release_gh() {
+    command -v gh
+    command -v jq
+
+    local_ver="$(current_versions)"
+    gh_ver=$(gh release list --json tagName | jq -r .[0].tagName)
+    IFS='.' read -ra local_ver_parts <<<"$local_ver"
+    IFS='.' read -ra gh_ver_parts <<<"$gh_ver"
+
+    for i in {0..2}; do
+        [ "${local_ver_parts[$i]#v}" -ge "${gh_ver_parts[$i]#v}" ] ||
+            return 1
+    done
+
+    git tag v"$bumped_ver"
+    git push --tags
+    gh release create v"$local_ver" --generate-notes --draft --verify-tag
+
+}
+
+packaging_arch() {
+    cd "$root"/contrib/arch
+    makepkg
+    pkg="$(find . -name "*.pkg.tar.zst")"
+    gh release upload "$(current_versions)" "$pkg"
+    rm -f "$pkg"
+}
+
+release_gh_final() {
+    gh release edit "$(current_versions)" --draft=false
+}
