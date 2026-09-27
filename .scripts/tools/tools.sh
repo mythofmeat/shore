@@ -98,7 +98,7 @@ release_gh() {
             return 1
     done
 
-    git tag v"$bumped_ver"
+    git tag v"$local_ver"
     git push --tags
     gh release create v"$local_ver" --generate-notes --draft --verify-tag
 
