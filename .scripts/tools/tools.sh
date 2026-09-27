@@ -20,19 +20,21 @@ update_deps() {
 
     update_rust() {
         cd "$root/client"
-        run cargo upgrade --incompatible
-        run cargo update
+        cargo upgrade --incompatible
+        cargo update
     }
 
     update_tools
     update_bun
     update_rust
+}
 
-    if ! [ -n "$(git status --porcelain)" ]; then
-        echo "No dependency updates!"
-        exit 0
-    else
+is_updated() {
+    if [ -n "$(git status --porcelain)" ]; then
         git commit -am "chore(deps): update"
+    else
+        echo "No dependency updates!"
+        return 1
     fi
 }
 
@@ -114,4 +116,19 @@ packaging_arch() {
 
 release_gh_final() {
     gh release edit "$(current_versions)" --draft=false
+}
+
+#####
+
+release_and_package() {
+    bump_version_to "$(version_increment "$1")"
+    release_gh
+    packaging_arch
+    release_gh_final
+}
+
+#####
+unattended_upgrade() {
+    update_deps
+    is_updated && release_and_package patch
 }
