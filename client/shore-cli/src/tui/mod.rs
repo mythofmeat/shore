@@ -4815,6 +4815,35 @@ mod redraw_tests {
     }
 
     #[test]
+    fn a_usage_summary_never_decides_whether_the_plan_bar_shows() {
+        let mut app = App::default();
+        let summary = |plan: serde_json::Value| {
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "usage".into(),
+                data: serde_json::json!({
+                    "mode": "summary",
+                    "budgets": [{ "name": "daily", "percent_used": 0.2, "crossed_warn_at": [], "over_limit": false }],
+                    "claude_plan_limits": plan
+                }),
+            })
+        };
+
+        let _ = handle_server_message(&mut app, summary(plan_report()));
+        assert!(
+            app.plan_limits.is_none(),
+            "the summary reports the plan whatever model the conversation runs on"
+        );
+
+        let _ = handle_server_message(&mut app, budget_report(Some(plan_report())));
+        let _ = handle_server_message(&mut app, summary(serde_json::Value::Null));
+        assert!(
+            app.plan_limits.is_some(),
+            "a summary without a plan reading leaves a Claude conversation's bar alone"
+        );
+    }
+
+    #[test]
     fn a_plan_warning_moves_its_window_on_the_bar() {
         let mut app = App {
             usage_display: UsageDisplay::Always,

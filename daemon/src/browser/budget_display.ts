@@ -1,3 +1,4 @@
+import type { ClaudePlanWindow } from "../protocol/ClaudePlanWindow.ts";
 import type { UsageBudget } from "../protocol/UsageBudget.ts";
 import type { UsagePace } from "../protocol/UsagePace.ts";
 import { budgetFocus, type BudgetScope } from "./preferences.ts";
@@ -27,8 +28,13 @@ export function focusedBudget(budgets: readonly DisplayBudget[], value: string):
   return budget === undefined ? undefined : { budget, ...budgetLevel(budget, focus.scope) };
 }
 
+export const PLAN_WINDOWS: Readonly<Record<ClaudePlanWindow, { short: string; name: string }>> = {
+  five_hour: { short: "5h", name: "Claude 5-hour limit" },
+  seven_day: { short: "7d", name: "Claude weekly limit" },
+};
+
 export function showPlanLimit(mode: string, limit: DisplayLevel): boolean {
-  return showUsage(mode, { name: "", percent_used: limit.percent_used, over_limit: limit.over_limit, crossed_warn_at: limit.crossed_warn_at });
+  return showUsage(mode, { ...limit, name: "" });
 }
 
 export function showUsage(mode: string, budget: DisplayBudget): boolean {

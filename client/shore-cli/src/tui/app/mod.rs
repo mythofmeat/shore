@@ -1541,9 +1541,11 @@ impl App {
                 pace: b.get("pace").and_then(usage_level_from_json),
             })
             .collect();
-        self.plan_limits = data
-            .get("claude_plan_limits")
-            .and_then(plan_limits_from_json);
+        if data.get("mode").and_then(serde_json::Value::as_str) == Some("budget") {
+            self.plan_limits = data
+                .get("claude_plan_limits")
+                .and_then(plan_limits_from_json);
+        }
     }
 
     pub(crate) fn apply_plan_limit_warning(

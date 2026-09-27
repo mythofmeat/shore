@@ -7,6 +7,7 @@ import type { UsageDimension } from "../../protocol/UsageDimension.ts";
 import type { UsageResult } from "../../protocol/UsageResult.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { budgetFocus, VIEW_CONTROLS } from "../preferences.ts";
+import { PLAN_WINDOWS } from "../budget_display.ts";
 import { toasts } from "../ui/toast.tsx";
 import { display, useDisplay, workspace } from "../app/state.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
@@ -26,14 +27,12 @@ export function BudgetBar({ budget }: { budget: UsageBudget }) {
   </div>;
 }
 
-const PLAN_WINDOW_NAMES = { five_hour: "Claude 5-hour limit", seven_day: "Claude weekly limit" } as const;
-
 const PLAN_ACTIONS = { warn: "warns only", block: "blocks Claude calls", pause_background: "pauses background work", pause_heartbeat: "pauses the heartbeat" } as const;
 
 export function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
   const used = limit.percent_used * 100;
   const percent = Math.min(100, Math.max(0, used));
-  const name = PLAN_WINDOW_NAMES[limit.window];
+  const name = PLAN_WINDOWS[limit.window].name;
   const past = limit.over_limit ? ` · past its ${String(Math.round(limit.limit_at * 100))}% limit, so it ${PLAN_ACTIONS[limit.action]}` : "";
   return <div className="budget">
     <div className="budget-head"><span className="setting-label">{name}</span><span className="mono">{Math.round(used)}% of the plan</span></div>

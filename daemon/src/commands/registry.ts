@@ -114,7 +114,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     export_csv: { label: "Export CSV", hint: "Full filtered ledger; takes precedence over grouping and anomalies" }, export_tsv: { label: "Export TSV", hint: "Full filtered ledger; takes precedence over CSV" },
   } }, ({ session, deps }, args) => {
     if (deps.ledgerPath === undefined) throw internalError(LEDGER_UNAVAILABLE);
-    const chatModel = effectiveChatModel(session.config, session.characterName, session.threadModel);
+    const chatModel = args.budget === true ? effectiveChatModel(session.config, session.characterName, session.threadModel) : undefined;
     return usage({ ledger: deps.ledgerPath, cacheDir: session.config.dirs.cache, usage: usageConfigView(session.config.app.usage), callStore: deps.callStore, claudePlanLimits: chatModel?.sdk === "claude_agent" }, args);
   }),
   run_tool: register("run_tool", { category: "Tools", scope: "character", prerequisites: ["tool_execution"], effects: ["workspace_write", "history_write", "config_write", "provider_call"], confirmation: "execute", label: "Run tool", fields: {

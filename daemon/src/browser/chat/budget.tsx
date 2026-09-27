@@ -1,25 +1,22 @@
 import { useEffect, useState } from "react";
 import type { ClaudePlanLimit } from "../../protocol/ClaudePlanLimit.ts";
 import type { ClaudePlanLimitsReport } from "../../protocol/ClaudePlanLimitsReport.ts";
-import type { ClaudePlanWindow } from "../../protocol/ClaudePlanWindow.ts";
 import type { UsageBudget } from "../../protocol/UsageBudget.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
-import { focusedBudget, levelWarning, showPlanLimit, showUsage } from "../budget_display.ts";
+import { focusedBudget, levelWarning, PLAN_WINDOWS, showPlanLimit, showUsage } from "../budget_display.ts";
 import { configAt } from "../settings_forms.ts";
 import { navigate } from "../app/route.ts";
 import { useDisplay, workspace } from "../app/state.ts";
-
-const PLAN_WINDOWS: Record<ClaudePlanWindow, [string, string]> = { five_hour: ["5h", "Claude 5-hour limit"], seven_day: ["7d", "Claude weekly limit"] };
 
 function PlanChip({ plan, mode }: { plan: ClaudePlanLimitsReport; mode: string }) {
   let shown: ClaudePlanLimit[];
   try { shown = plan.windows.filter((limit) => showPlanLimit(mode, limit)); } catch { shown = []; }
   if (shown.length === 0) return null;
   const percentOf = (fraction: number) => Math.round(fraction * 100);
-  return <button type="button" className="budget-chip" title={shown.map((limit) => `${PLAN_WINDOWS[limit.window][1]}: ${String(percentOf(limit.percent_used))}% used`).join(" · ")} onClick={() => navigate({ view: "settings", page: "usage" })}>
+  return <button type="button" className="budget-chip" title={shown.map((limit) => `${PLAN_WINDOWS[limit.window].name}: ${String(percentOf(limit.percent_used))}% used`).join(" · ")} onClick={() => navigate({ view: "settings", page: "usage" })}>
     {shown.map((limit) => <span key={limit.window} className={`budget-chip-window ${levelWarning(limit) ? "warning" : ""}`}>
       <span className="budget-chip-bar"><span style={{ width: `${String(Math.min(100, percentOf(limit.percent_used)))}%` }} /></span>
-      <span>{PLAN_WINDOWS[limit.window][0]} {percentOf(limit.percent_used)}%</span>
+      <span>{PLAN_WINDOWS[limit.window].short} {percentOf(limit.percent_used)}%</span>
     </span>)}
   </button>;
 }
