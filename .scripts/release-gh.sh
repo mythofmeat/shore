@@ -4,7 +4,9 @@ set -eu
 
 command -v gh
 command -v jq
-cd "$(dirname "$0")"
+
+echo "$(dirname "$0")"
+false
 
 srcdir="$(git rev-parse --show-toplevel)"
 cd $srcdir/.scripts/
