@@ -411,7 +411,7 @@ pub(crate) enum CliCommand {
         /// Character to back up
         character: String,
 
-        /// Archive path on the daemon host (defaults to <character>.shore.tar.gz)
+        /// Archive path on the daemon host (defaults to `<character>.shore.tar.gz`)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -1078,7 +1078,7 @@ pub(crate) struct ModelTarget {
     )]
     pub(crate) background: Option<BackgroundTarget>,
 
-    /// Sub-agents: bare means all; naming one requires --subagent=<name>
+    /// Sub-agents: bare means all; naming one requires `--subagent=<name>`
     #[arg(
         long,
         num_args = 0..=1,
@@ -1112,9 +1112,9 @@ pub(crate) enum ModelCommand {
     ///
     /// Bare, this pins the chat model for the current thread until changed or reset.
     /// Every other target writes the config file,
-    /// which is global: --background=<task> writes <task>.model,
-    /// bare --background writes both heartbeat.model and compaction.model; --subagent=<name> writes subagents.<name>.model,
-    /// and bare --subagent writes subagents.model.
+    /// which is global: `--background=<task>` writes `<task>.model`,
+    /// bare `--background` writes both `heartbeat.model` and `compaction.model`; `--subagent=<name>` writes `subagents.<name>.model`,
+    /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
         name: String,
@@ -1402,7 +1402,7 @@ pub(crate) enum ConfigCommand {
     ///
     /// The value is checked against the setting's type before anything is
     /// written, and the file is restored if the result would not load. Keys
-    /// under [daemon], [notifications] and [matrix] need a daemon
+    /// under `[daemon]`, `[notifications]` and `[matrix]` need a daemon
     /// restart to take effect; `set` says so when you touch one.
     ///
     /// `shore config set chat.model anthropic:claude-opus-4-5`
