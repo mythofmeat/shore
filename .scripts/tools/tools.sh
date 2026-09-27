@@ -53,6 +53,7 @@ current_versions() {
 }
 
 bump_version_to() {
+    cd "$root"
     if [ "$#" -ne 1 ]; then
         printf 'Usage: %s <version>\n' "$0" >&2
         return 2
