@@ -116,7 +116,7 @@ packaging_arch() {
 }
 
 release_gh_final() {
-    gh release edit "$v(current_versions)" --draft=false
+    gh release edit "v$(current_versions)" --draft=false
 }
 
 #####
