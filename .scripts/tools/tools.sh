@@ -61,19 +61,33 @@ bump_version_to() {
     sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
     sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
     sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
-    ver=$("$root"/.scripts/check-version.sh)
+}
+
+version_increment() {
+    current_versions
+    ver="$(current_versions)"
     IFS='.' read -ra ver_parts <<<"$ver"
-    ver_parts[2]=$((${ver_parts[2]#v} + 1))
+    case "$1" in
+    "major")
+        ver_parts[0]=$((${ver_parts[0]#v} + 1))
+        ;;
+    "minor")
+        ver_parts[1]=$((${ver_parts[1]#v} + 1))
+        ;;
+    "patch")
+        ver_parts[2]=$((${ver_parts[2]#v} + 1))
+        ;;
+    esac
     bumped_ver=$(
         IFS='.'
         echo "${ver_parts[*]}"
     )
-
-    git commit -am "chore(release): v$bumped_ver" --no-verify
-    git tag v"$bumped_ver"
+    echo "$bumped_ver"
+    # git commit -am "chore(release): v$bumped_ver" --no-verify
+    # git tag v"$bumped_ver"
 }
 
-update_deps
-bump_version_to "4.16.13"
-git push --tags
-"$root"/.scripts/release-gh.sh
+# update_deps
+version_increment major
+bump_version_to "4.16.14"
+# git push --tags
