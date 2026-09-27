@@ -2,7 +2,7 @@
 
 pkgname=shore-cli
 pkgbase=shore
-pkgver=4.16.10
+pkgver=4.16.11
 pkgrel=1
 pkgdesc="Persistent AI character engine — CLI and terminal chat client"
 arch=('x86_64')
