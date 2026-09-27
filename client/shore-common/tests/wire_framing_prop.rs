@@ -320,12 +320,14 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
         (
             1_u32..3,
             arb_ident(),
+            prop::option::of(arb_ident()),
             prop::collection::vec(arb_character_info(), 0..3)
         )
             .prop_map(
-                |(v, server_name, characters)| ServerMessage::Hello(ServerHello {
+                |(v, server_name, server_version, characters)| ServerMessage::Hello(ServerHello {
                     v,
                     server_name,
+                    server_version,
                     characters,
                 }),
             ),

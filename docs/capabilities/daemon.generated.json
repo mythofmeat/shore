@@ -475,6 +475,12 @@
               "server_name": {
                 "type": "string"
               },
+              "server_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "characters": {
                 "type": "array",
                 "items": {
@@ -1857,6 +1863,12 @@
               },
               "server_name": {
                 "type": "string"
+              },
+              "server_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "characters": {
                 "type": "array",
@@ -3389,7 +3401,7 @@
     "SegmentSummary": "{ index: number, first_message_at: string | null, last_message_at: string | null, compacted_at: string, message_count: number, excluded: boolean, label: string | null, note: string | null, memory_before: string | null, memory_after: string | null, }",
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
-    "ServerHello": "{ v: number, server_name: string, characters: Array<CharacterInfo>, }",
+    "ServerHello": "{ v: number, server_name: string, server_version?: string | null, characters: Array<CharacterInfo>, }",
     "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
     "SessionActivated": "{ character: string, registered: boolean, keepalive: KeepaliveActivation, heartbeat: ActivatedHeartbeat | null, }",
     "SetModelSettingArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, key: string, scope?: ModelPreferenceScope | null, value?: unknown, }",

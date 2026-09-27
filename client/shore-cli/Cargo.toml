@@ -1,5 +1,6 @@
 [package]
 name = "shore-cli"
+version.workspace = true
 publish.workspace = true
 edition.workspace = true
 license.workspace = true

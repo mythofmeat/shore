@@ -69,6 +69,7 @@ export interface Duplex {
 export interface ConnectionContext {
   readonly clientId: number;
   readonly serverName: string;
+  readonly serverVersion?: string;
   readonly router: SessionRouter;
   readonly events: Subscription;
   readonly handshake: HandshakeProvider;
@@ -121,19 +122,21 @@ export async function performHandshake(
   reader: WireReader,
   sink: ByteSink,
   ctx: ConnectionContext,
-): Promise<SessionMeta> {
+): Promise<SessionMeta | null> {
   const hello = await ctx.handshake.hello();
 
   await writeMessage(sink, {
     type: "hello",
     v: SWP_V1,
     server_name: ctx.serverName,
+    ...(ctx.serverVersion === undefined ? {} : { server_version: ctx.serverVersion }),
     characters: hello.characters as CharacterInfo[],
   });
 
   const first = await reader.readMessage();
   if (first === null) {
-    throw new HandshakeError("Client disconnected before hello");
+    ctx.log?.info?.("Client closed before hello", { client_id: ctx.clientId });
+    return null;
   }
   if (first.type !== "hello") {
     await writeMessage(sink, {
@@ -230,6 +233,7 @@ export async function handleConnection(duplex: Duplex, ctx: ConnectionContext): 
 
   try {
     session = await performHandshake(reader, sink, ctx);
+    if (session === null) return;
     await ctx.route({ kind: "session_connected", sessionId: session.sessionId });
     await messageLoop(reader, sink, session, ctx);
   } finally {

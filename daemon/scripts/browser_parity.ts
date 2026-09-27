@@ -18,7 +18,7 @@ const roleTiers: Record<string, Tier> = { background: "settings", subagent: "set
 const usage = { last: "usage.last", provider: "usage.provider", api_key: "usage.api_key", model: "usage.model", call_type: "usage.call_type" };
 
 export const TERMINAL_ROUTES: Record<string, Route> = {
-  shore: route("inline", "switch_character switch_thread", { character: "switch_character.name", thread: "switch_thread.name", addr: "@origin" }),
+  shore: route("inline", "switch_character switch_thread", { character: "switch_character.name", thread: "switch_thread.name", addr: "@origin", version: "@version" }),
   "shore msg": route("inline", ""),
   "shore msg send": route("inline", "message inject_system", { message: "message.text inject_system.text", images: "message.images message.image_data @attachments", system: "inject_system.text" }, { system: "advanced" }),
   "shore msg regen": route("inline", "regen", { guidance: "regen.guidance" }),

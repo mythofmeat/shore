@@ -27,6 +27,7 @@ import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
 import type { RunningWebServer } from "../web/server.ts";
 import { localRfc3339 } from "../util/time.ts";
+import { version as DAEMON_VERSION } from "../../package.json";
 import { startAutoDiscovery } from "./auto_discovery.ts";
 import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
@@ -148,6 +149,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   const server = new Server({
     addr: startup.bindAddr,
     serverName: "shore-daemon",
+    serverVersion: DAEMON_VERSION,
     authenticate: (presented) => tokenMatches(startup.token.token, presented),
     ...(log === undefined ? {} : { log }),
   });

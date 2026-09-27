@@ -64,6 +64,7 @@ mod tests {
             let server_hello = ServerMessage::Hello(ServerHello {
                 v: SWP_V1,
                 server_name: "test-daemon".into(),
+                server_version: None,
                 characters: vec![CharacterInfo::new("alice")],
             });
             write_json_line(&mut w, &server_hello).await;
@@ -135,6 +136,7 @@ mod tests {
             let bad_hello = ServerMessage::Hello(ServerHello {
                 v: 999,
                 server_name: "bad".into(),
+                server_version: None,
                 characters: vec![],
             });
             write_json_line(&mut w, &bad_hello).await;
@@ -183,6 +185,7 @@ mod tests {
             let server_hello = ServerMessage::Hello(ServerHello {
                 v: SWP_V1,
                 server_name: "test-daemon".into(),
+                server_version: None,
                 characters: vec![CharacterInfo::new("alice")],
             });
             write_json_line(&mut w, &server_hello).await;

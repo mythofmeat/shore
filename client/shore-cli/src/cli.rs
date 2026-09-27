@@ -24,9 +24,9 @@ const LEADING_HEADING: &str = "Options — must come before the command";
 #[derive(Parser, Debug)]
 #[command(
     name = "shore",
-    version = env!("SHORE_VERSION"),
     about = "Shore chat client",
-    disable_help_subcommand = true
+    disable_help_subcommand = true,
+    disable_version_flag = true
 )]
 pub(crate) struct Cli {
     /// Character to talk to (overrides SHORE_CHARACTER env var)
@@ -50,6 +50,10 @@ pub(crate) struct Cli {
     /// TCP address of the daemon (overrides discovery)
     #[arg(long, env = "SHORE_ADDR", help_heading = LEADING_HEADING)]
     pub addr: Option<String>,
+
+    /// Print version, plus the version of the daemon it connects to
+    #[arg(short = 'V', long)]
+    pub version: bool,
 
     #[command(subcommand)]
     pub command: Option<CliCommand>,

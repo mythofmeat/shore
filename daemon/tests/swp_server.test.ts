@@ -103,6 +103,63 @@ describe("binding", () => {
   });
 });
 
+describe("the server hello", () => {
+  test("carries the daemon's version before the client authenticates", async () => {
+    const server = new Server({
+      addr: "127.0.0.1:0",
+      serverName: "shore-test",
+      serverVersion: "1.2.3",
+      authenticate: () => false,
+    });
+    const { port } = await server.bind();
+    const running = server.serve();
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    try {
+      const hello = await firstFrame(socket);
+      expect(hello).toMatchObject({ type: "hello", server_name: "shore-test", server_version: "1.2.3" });
+    } finally {
+      socket.destroy();
+      server.stop();
+      await running;
+    }
+  });
+
+  test("a client that reads the hello and hangs up is not a failure", async () => {
+    const warnings: string[] = [];
+    const server = new Server({
+      addr: "127.0.0.1:0",
+      serverName: "shore-test",
+      serverVersion: "1.2.3",
+      authenticate: OPEN,
+      log: { warn: (msg) => warnings.push(msg), error: (msg) => warnings.push(msg) },
+    });
+    const { port } = await server.bind();
+    const running = server.serve();
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    const closed = new Promise<void>((resolve) => {
+      socket.once("close", () => resolve());
+    });
+    await firstFrame(socket);
+    socket.end();
+    await closed;
+    await Bun.sleep(50);
+    server.stop();
+    await running;
+    expect(warnings).toEqual([]);
+  });
+
+  test("leaves the version out when none is configured", async () => {
+    const { port, stop } = await serving();
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    try {
+      expect(await firstFrame(socket)).not.toHaveProperty("server_version");
+    } finally {
+      socket.destroy();
+      await stop();
+    }
+  });
+});
+
 describe("the handshake provider", () => {
   test("a connection reads the one set after construction", async () => {
     const { server, port, stop } = await serving();
