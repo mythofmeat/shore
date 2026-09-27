@@ -5,10 +5,17 @@ cd "$(dirname -- "$0")"
 srcdir="$(git rev-parse --show-toplevel)"
 cd "$srcdir/.scripts"
 
-main() {
+update_deps() {
+    ./update-deps.sh
+    if ! [ -n "$(git status --porcelain)" ]; then
+        echo "No dependency updates!"
+        exit 0
+    else
+        git commit -am "chore(deps): scheduled update"
+    fi
+}
 
-    git commit -am "chore(deps): scheduled update"
-
+bump_version() {
     ver=$(./check-version.sh)
     IFS='.' read -ra ver_parts <<<"$ver"
     ver_parts[2]=$((${ver_parts[2]#v} + 1))
@@ -16,18 +23,14 @@ main() {
         IFS='.'
         echo "${ver_parts[*]}"
     )
-
     ./version-bump.sh "$bumped_ver"
-    # TODO: THERE NEEDS TO BE SOMETHING THAT COMMITS THE CHANGES LOL
-    git commit -am "chore(release ) "
-    ./release-gh.sh # TODO: TEST
-    ./check-version.sh
+    git commit -am "chore(release): $bumped_ver"
 }
 
-./update-deps.sh
-if ! [ -n "$(git status --porcelain)" ]; then
-    echo "No dependency updates!"
-    exit 0
-else
-    main
-fi
+main() {
+
+    ./release-gh.sh
+
+}
+
+main
