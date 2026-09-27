@@ -1,6 +1,6 @@
 {
   "name": "@shore/daemon",
-  "version": "4.16.11",
+  "version": "1",
   "private": true,
   "type": "module",
   "scripts": {
