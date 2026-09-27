@@ -33,4 +33,6 @@ main() {
 
 }
 
+update_deps
+
 main
