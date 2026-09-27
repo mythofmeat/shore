@@ -1566,6 +1566,69 @@
               "reset_at_display"
             ]
           },
+          "ClaudePlanWindow": {
+            "type": "string",
+            "enum": [
+              "five_hour",
+              "seven_day"
+            ]
+          },
+          "PlanLimitWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "window": {
+                "$ref": "#/$defs/ClaudePlanWindow"
+              },
+              "limit": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "limit_at": {
+                "type": "number",
+                "format": "double"
+              },
+              "over_limit": {
+                "type": "boolean"
+              },
+              "resets_at": {
+                "type": "string"
+              },
+              "resets_at_display": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "window",
+              "limit",
+              "message",
+              "percent_used",
+              "crossed_warn_at",
+              "limit_at",
+              "over_limit",
+              "resets_at",
+              "resets_at_display"
+            ]
+          },
           "ConfigWarning": {
             "type": "object",
             "properties": {
@@ -2949,6 +3012,69 @@
               "reset_at_display"
             ]
           },
+          "ClaudePlanWindow": {
+            "type": "string",
+            "enum": [
+              "five_hour",
+              "seven_day"
+            ]
+          },
+          "PlanLimitWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "window": {
+                "$ref": "#/$defs/ClaudePlanWindow"
+              },
+              "limit": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "limit_at": {
+                "type": "number",
+                "format": "double"
+              },
+              "over_limit": {
+                "type": "boolean"
+              },
+              "resets_at": {
+                "type": "string"
+              },
+              "resets_at_display": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "window",
+              "limit",
+              "message",
+              "percent_used",
+              "crossed_warn_at",
+              "limit_at",
+              "over_limit",
+              "resets_at",
+              "resets_at_display"
+            ]
+          },
           "ConfigWarning": {
             "type": "object",
             "properties": {
@@ -3352,6 +3478,7 @@
     "PayloadDiffOperation": "\"equal\" | \"added\" | \"removed\"",
     "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
     "Ping": "Record<symbol, never>",
+    "PlanLimitWarning": "{ rid?: string | null, window: ClaudePlanWindow, limit: string, message: string, percent_used: number, crossed_warn_at: Array<number>, limit_at: number, over_limit: boolean, resets_at: string, resets_at_display: string, }",
     "PrimedKeepalivePing": "{ input_tokens: number, cache_read_tokens: number, cache_creation_tokens: number, wrote_cache: boolean, interval_secs: number, next_ping_at: string, seconds_until_ping: number, }",
     "ProviderArgs": "{ provider: string, }",
     "ProviderCacheStatus": "{ present: boolean, models: number, visible: number, hidden: number, fetched_at: string | null, }",
@@ -3393,7 +3520,7 @@
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
     "ServerHello": "{ v: number, server_name: string, characters: Array<CharacterInfo>, }",
-    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
+    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"plan_limit_warning\" } & PlanLimitWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
     "SessionActivated": "{ character: string, registered: boolean, keepalive: KeepaliveActivation, heartbeat: ActivatedHeartbeat | null, }",
     "SetModelSettingArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, key: string, scope?: ModelPreferenceScope | null, value?: unknown, }",
     "Shutdown": "Record<symbol, never>",

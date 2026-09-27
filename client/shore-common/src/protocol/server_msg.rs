@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::error::ErrorCode;
+use crate::protocol::operations::ClaudePlanWindow;
 use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, StreamMetadata};
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
@@ -271,6 +272,23 @@ pub struct UsageWarning {
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct PlanLimitWarning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rid: Option<String>,
+    pub window: ClaudePlanWindow,
+    pub limit: String,
+    pub message: String,
+    pub percent_used: f64,
+    pub crossed_warn_at: Vec<f64>,
+    pub limit_at: f64,
+    pub over_limit: bool,
+    pub resets_at: String,
+    #[serde(default)]
+    pub resets_at_display: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ConfigWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -321,6 +339,7 @@ pub enum ServerMessage {
     ProviderWarning(ProviderWarning),
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
+    PlanLimitWarning(PlanLimitWarning),
     ConfigWarning(ConfigWarning),
     RequestFinished(RequestFinished),
     #[serde(other)]
@@ -345,6 +364,7 @@ impl ServerMessage {
             Self::ProviderWarning(frame) => frame.rid.as_deref(),
             Self::ProviderFallbackWarning(frame) => frame.rid.as_deref(),
             Self::UsageWarning(frame) => frame.rid.as_deref(),
+            Self::PlanLimitWarning(frame) => frame.rid.as_deref(),
             Self::ConfigWarning(frame) => frame.rid.as_deref(),
             Self::RequestFinished(frame) => Some(&frame.rid),
             Self::Hello(_)
@@ -377,6 +397,7 @@ impl ServerMessage {
             | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::PlanLimitWarning(_)
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
@@ -404,6 +425,7 @@ impl ServerMessage {
             | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::PlanLimitWarning(_)
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
@@ -431,6 +453,7 @@ impl ServerMessage {
             | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::PlanLimitWarning(_)
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}

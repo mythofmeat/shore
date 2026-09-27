@@ -16,17 +16,21 @@ which is exactly when a paused heartbeat would wake into a spent window.
 
 **A poll that costs more than it should.** Every poll starts a Claude Code
 process. Two callers racing must share one poll, a failed poll must back off,
-and a conversation turn must never wait for one. A background turn must, since
-it is the one the gate is deciding about.
+and neither a conversation turn nor a usage report may wait for one. A
+background turn must, since it is the one the gate is deciding about. A poll
+is a snapshot from when it started, so a rate-limit event that lands while it
+runs is the newer figure and must survive it.
 
 **A gate that holds back the wrong calls.** Pausing background work at the
 limit is the default precisely because conversation should carry on. Blocking
 every call, ignoring the configured policy, or holding back providers that
 never touch the Claude plan all read as the daemon being broken.
 
-**Warnings that repeat or never come.** The reported reset jitters by a
-fraction of a second between polls, so the window is keyed to the minute; key
-it to the raw string and every poll re-arms every threshold.
+**Warnings that repeat, never come, or go to the wrong conversation.** The
+reported reset jitters by a fraction of a second between polls, so the window
+is keyed to the minute; key it to the raw string and every poll re-arms every
+threshold. Only a turn that ran on the Claude plan hears about it, since the
+threshold it spends is gone for every other character.
 
 A mutant is KILLED if the plan limit tests fail with it applied.
 
@@ -46,11 +50,13 @@ REGISTRY = "src/commands/registry.ts"
 PROVIDERS = "src/config/providers.ts"
 AGENT = "src/llm/providers/claude_agent.ts"
 DEPS = "src/handler/deps.ts"
+PERSISTENCE = "src/handler/persistence.ts"
 
 TESTS = [
     "tests/plan_limits.test.ts",
     "tests/claude_plan_limits.test.ts",
     "tests/handler_deps.test.ts",
+    "tests/stream.test.ts",
 ]
 
 # (label, file, find, replace)
@@ -100,8 +106,16 @@ MUTANTS = [
      ""),
     ("poll: a reading is never cached, so a restart forgets it",
      PLAN,
-     "    seven_day: poll.seven_day,\n  };\n  await persist();",
-     "    seven_day: poll.seven_day,\n  };\n  await Promise.resolve();"),
+     '    seven_day: newer("seven_day"),\n  };\n  await persist();',
+     '    seven_day: newer("seven_day"),\n  };\n  await Promise.resolve();'),
+    ("poll: a poll overwrites a rate-limit event that arrived while it ran",
+     PLAN,
+     "    observed[window] === seen[window] ? poll[window] : prior?.[window] ?? null;",
+     "    poll[window];"),
+    ("poll: rate-limit events are never counted, so a poll overwrites them",
+     PLAN,
+     "  observed[window] += 1;\n",
+     ""),
     ("poll: the cache is never read back",
      PLAN,
      "  current = cacheDir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(cacheDir));",
@@ -136,7 +150,7 @@ MUTANTS = [
      "    await refresh;"),
     ("poll: a report shows a stale reading without polling",
      USAGE,
-     "  await refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now);\n",
+     "  void refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now);\n",
      ""),
 
     # --- the gate -------------------------------------------------------------
@@ -146,8 +160,8 @@ MUTANTS = [
      "  return costBudgetBlock(request, context, now);"),
     ("gate: providers that never touch the plan are held back by it",
      PLAN,
-     '  if (request.sdk !== "claude_agent" || context === undefined) return undefined;',
-     "  if (context === undefined) return undefined;"),
+     '  return request.sdk === "claude_agent";',
+     "  return true;"),
     ("gate: the action is ignored, so conversation stops at the limit too",
      PLAN,
      "  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context.call_type));",
@@ -174,20 +188,24 @@ MUTANTS = [
      PLAN,
      "    const reached = limit.over_limit ? [...limit.crossed_warn_at, limit.limit_at] : limit.crossed_warn_at;",
      "    const reached = limit.crossed_warn_at;"),
-    ("warnings: a character with no budgets never hears about the plan",
+    ("warnings: a character with no usage config never hears about the plan",
      DEPS,
-     "    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {",
-     "    if (config === undefined || (config.budgets ?? []).length === 0) {"),
+     "    if (claudePlanLimitsState() === undefined) return Promise.resolve([]);",
+     "    if (usage(character) === undefined) return Promise.resolve([]);"),
+    ("warnings: a turn on another provider spends the plan's thresholds",
+     PERSISTENCE,
+     "  if (params.onClaudePlan === true) await emitPlanLimitWarnings(ctx, charName, request.rid);",
+     "  await emitPlanLimitWarnings(ctx, charName, request.rid);"),
     ("warnings: plan warnings are computed and dropped",
-     DEPS,
-     "      ...newlyCrossedPlanLimitWarnings(ledger.database, config, at),\n",
+     PERSISTENCE,
+     "    ctx.sendDirect({ type: \"plan_limit_warning\", rid: rid ?? null, ...warning });\n",
      ""),
 
     # --- reports and accounting -----------------------------------------------
     ("report: every conversation's budget report carries the plan",
      USAGE,
-     "    const plan = request.claudePlanLimits === true ? await freshClaudePlanLimits(config, now) : undefined;",
-     "    const plan = await freshClaudePlanLimits(config, now);"),
+     "    const plan = request.claudePlanLimits === true ? currentClaudePlanLimits(config, now) : undefined;",
+     "    const plan = currentClaudePlanLimits(config, now);"),
     ("report: a Claude conversation's budget report leaves the plan out",
      REGISTRY,
      'claudePlanLimits: chatModel?.sdk === "claude_agent"',

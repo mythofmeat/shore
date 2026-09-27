@@ -22,7 +22,7 @@ import {
   type UsageConfig,
 } from "../ledger/budget.ts";
 import { ledgerFor } from "../ledger/record.ts";
-import { claudePlanLimitsState, newlyCrossedPlanLimitWarnings } from "../ledger/plan_limits.ts";
+import { claudePlanLimitsState, newlyCrossedPlanLimitWarnings, type PlanLimitWarningEvent } from "../ledger/plan_limits.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
@@ -93,6 +93,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     },
     compaction: chatCompactionRunner(a),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
+    newlyCrossedPlanLimitWarnings: planLimitWarnings(ledgerPath, usage, a.now),
     ledgerPath,
     tools: (charName, turn) => chatToolDeps(a, charName, turn),
     ...(a.env === undefined ? {} : { env: a.env }),
@@ -196,16 +197,26 @@ export function usageBudgetWarnings(
   const clock = now ?? (() => Date.now());
   return (character) => {
     const config = usage(character);
-    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {
+    if (config === undefined || (config.budgets ?? []).length === 0) {
       return Promise.resolve([]);
     }
     const ledger = ledgerFor(ledgerPath);
     if (ledger === null) return Promise.resolve([]);
-    const at = clock();
-    return Promise.resolve([
-      ...newlyCrossedBudgetWarnings(ledger.database, config, at),
-      ...newlyCrossedPlanLimitWarnings(ledger.database, config, at),
-    ]);
+    return Promise.resolve(newlyCrossedBudgetWarnings(ledger.database, config, clock()));
+  };
+}
+
+export function planLimitWarnings(
+  ledgerPath: string,
+  usage: (character: string) => UsageConfig | undefined,
+  now: (() => number) | undefined,
+): (character: string) => Promise<PlanLimitWarningEvent[]> {
+  const clock = now ?? (() => Date.now());
+  return (character) => {
+    if (claudePlanLimitsState() === undefined) return Promise.resolve([]);
+    const ledger = ledgerFor(ledgerPath);
+    if (ledger === null) return Promise.resolve([]);
+    return Promise.resolve(newlyCrossedPlanLimitWarnings(ledger.database, usage(character), clock()));
   };
 }
 

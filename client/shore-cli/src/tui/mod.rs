@@ -2135,6 +2135,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
@@ -2292,6 +2293,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => false,
@@ -2351,6 +2353,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
@@ -3344,20 +3347,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::UsageWarning(w) => {
             if app.usage_display == UsageDisplay::Off {
                 app.set_warning(w.message.clone());
-            } else if w.scope.as_deref() == Some("plan") {
-                let applied = app::PlanWindow::from_token(&w.period).is_some_and(|window| {
-                    app.apply_plan_limit_warning(
-                        window,
-                        UsageLevel {
-                            percent_used: w.percent_used,
-                            crossed_warn_at: w.crossed_warn_at.clone(),
-                            over_limit: w.current_cost >= w.cost_limit,
-                        },
-                    )
-                });
-                if !applied {
-                    app.set_warning(w.message.clone());
-                }
             } else {
                 let scope = if w.scope.as_deref() == Some("pace") {
                     UsageScope::Pace
@@ -3373,6 +3362,22 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         over_limit: w.percent_used >= 1.0,
                     },
                 );
+            }
+            RedrawEffect::Immediate
+        }
+
+        ServerMessage::PlanLimitWarning(w) => {
+            let applied = app.usage_display != UsageDisplay::Off
+                && app.apply_plan_limit_warning(
+                    w.window.into(),
+                    UsageLevel {
+                        percent_used: w.percent_used,
+                        crossed_warn_at: w.crossed_warn_at.clone(),
+                        over_limit: w.over_limit,
+                    },
+                );
+            if !applied {
+                app.set_warning(w.message.clone());
             }
             RedrawEffect::Immediate
         }
@@ -3482,6 +3487,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 mod redraw_tests {
     use super::*;
     use shore_common::protocol::error::ErrorCode;
+    use shore_common::protocol::operations::ClaudePlanWindow;
     use shore_common::protocol::server_msg::{
         CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
     };
@@ -4750,20 +4756,18 @@ mod redraw_tests {
         assert_eq!(app.focused_budget().unwrap().name, "monthly");
     }
 
-    fn plan_warning(window: &str, percent: f64, limit: f64) -> ServerMessage {
-        ServerMessage::UsageWarning(shore_common::protocol::server_msg::UsageWarning {
+    fn plan_warning(window: ClaudePlanWindow, percent: f64, limit: f64) -> ServerMessage {
+        ServerMessage::PlanLimitWarning(shore_common::protocol::server_msg::PlanLimitWarning {
             rid: None,
-            budget: "Claude weekly limit".into(),
+            window,
+            limit: "Claude weekly limit".into(),
             message: "Claude weekly limit is at 91%".into(),
-            current_cost: percent,
-            cost_limit: limit,
             percent_used: percent,
             crossed_warn_at: vec![0.8],
-            period: window.into(),
-            period_start: "2026-10-02T03:00:00+00:00".into(),
-            reset_at: "2026-10-02T03:00:00+00:00".into(),
-            reset_at_display: String::new(),
-            scope: Some("plan".into()),
+            limit_at: limit,
+            over_limit: percent >= limit,
+            resets_at: "2026-10-02T03:00:00+00:00".into(),
+            resets_at_display: String::new(),
         })
     }
 
@@ -4851,7 +4855,10 @@ mod redraw_tests {
         };
         let _ = handle_server_message(&mut app, budget_report(Some(plan_report())));
 
-        let _ = handle_server_message(&mut app, plan_warning("seven_day", 0.91, 0.9));
+        let _ = handle_server_message(
+            &mut app,
+            plan_warning(ClaudePlanWindow::SevenDay, 0.91, 0.9),
+        );
 
         let week = app
             .plan_limits
@@ -4877,7 +4884,10 @@ mod redraw_tests {
             ..Default::default()
         };
 
-        let _ = handle_server_message(&mut app, plan_warning("seven_day", 0.91, 1.0));
+        let _ = handle_server_message(
+            &mut app,
+            plan_warning(ClaudePlanWindow::SevenDay, 0.91, 1.0),
+        );
 
         assert_eq!(app.notifications.len(), 1);
         assert!(app.usage_budgets.is_empty());

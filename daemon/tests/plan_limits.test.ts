@@ -206,6 +206,25 @@ describe("rate-limit events", () => {
     expect(claudePlanLimitsState()).toEqual(before);
   });
 
+  test("an event that arrives while a poll runs is newer than the poll", async () => {
+    const hold = gate();
+    const probe = counting(async () => {
+      if (probe.calls === 1) return poll(0.2, 0.3);
+      await hold.opened;
+      return poll(0.98, 0.35);
+    });
+    configureClaudePlanLimits({ fetch: probe.fetch });
+    await refreshClaudePlanLimits(0, NOW);
+
+    const polling = refreshClaudePlanLimits(0, NOW + 1_000);
+    observeClaudeRateLimit({ status: "rejected", rateLimitType: "five_hour" }, NOW + 2_000);
+    hold.open();
+    await polling;
+
+    expect(claudePlanLimitsState()?.five_hour?.percent_used, "the rejection stands").toBe(1);
+    expect(claudePlanLimitsState()?.seven_day, "a window no event named takes the poll").toEqual(reading(0.35, WEEK_RESET));
+  });
+
   test("an event before any poll starts a reading that a poll still refreshes", async () => {
     const probe = counting(() => Promise.resolve(poll(0.6, 0.4)));
     configureClaudePlanLimits({ fetch: probe.fetch });
@@ -295,17 +314,15 @@ describe("plan limit warnings", () => {
     await seed(poll(0.82, 0.3));
     const first = newlyCrossedPlanLimitWarnings(db, undefined, NOW, { localZone: "UTC" });
     expect(first).toEqual([{
-      budget: "Claude 5-hour limit",
+      window: "five_hour",
+      limit: "Claude 5-hour limit",
       message: "Claude 5-hour limit is at 82%; resets at 2026-09-27 09:00 AM.",
-      current_cost: 0.82,
-      cost_limit: 1,
       percent_used: 0.82,
       crossed_warn_at: [0.8],
-      period: "five_hour",
-      period_start: FIVE_RESET,
-      reset_at: FIVE_RESET,
-      reset_at_display: "2026-09-27 09:00 AM",
-      scope: "plan",
+      limit_at: 1,
+      over_limit: false,
+      resets_at: FIVE_RESET,
+      resets_at_display: "2026-09-27 09:00 AM",
     }]);
     expect(newlyCrossedPlanLimitWarnings(db, undefined, NOW, { localZone: "UTC" })).toEqual([]);
 
@@ -333,8 +350,9 @@ describe("plan limit warnings", () => {
     const [event] = newlyCrossedPlanLimitWarnings(db, usage, NOW, { localZone: "UTC" });
     expect(event).toMatchObject({
       crossed_warn_at: [0.8, 0.9],
-      current_cost: 0.93,
-      cost_limit: 0.9,
+      percent_used: 0.93,
+      limit_at: 0.9,
+      over_limit: true,
       message: "Claude 5-hour limit is at 93% (limit 90%, heartbeat paused); resets at 2026-09-27 09:00 AM.",
     });
   });
@@ -362,15 +380,29 @@ describe("usage reports", () => {
     expect(after.claude_plan_limits?.subscription_type).toBe("max");
   });
 
-  test("a report polls again once the reading is more than a minute old", async () => {
+  test("a report starts a poll once the reading is more than a minute old, without waiting for it", async () => {
     const path = ledger();
-    const probe = counting(() => Promise.resolve(poll(0.5, 0.6)));
+    const hold = gate();
+    let answer = poll(0.5, 0.6);
+    const probe = counting(async () => {
+      if (probe.calls > 1) await hold.opened;
+      return answer;
+    });
     configureClaudePlanLimits({ fetch: probe.fetch });
     await refreshClaudePlanLimits(0, NOW);
+    const budget = async (now: number) =>
+      ((await usageReport({ ledger: path, args: { budget: true }, usage: {}, claudePlanLimits: true }, { now })) as Extract<UsageResult, { mode: "budget" }>)
+        .claude_plan_limits?.windows[0]?.percent_used;
 
-    await usageReport({ ledger: path, args: { budget: true }, usage: {}, claudePlanLimits: true }, { now: NOW + 30_000 });
+    expect(await budget(NOW + 30_000)).toBe(0.5);
     expect(probe.calls).toBe(1);
-    await usageReport({ ledger: path, args: { budget: true }, usage: {}, claudePlanLimits: true }, { now: NOW + 61_000 });
+
+    answer = poll(0.7, 0.6);
+    expect(await budget(NOW + 61_000), "the report answers from the cached reading while the poll runs").toBe(0.5);
+    expect(probe.calls).toBe(2);
+    hold.open();
+    await refreshClaudePlanLimits(CLAUDE_PLAN_REFRESH_MS, NOW + 61_000);
+    expect(await budget(NOW + 62_000)).toBe(0.7);
     expect(probe.calls).toBe(2);
   });
 });

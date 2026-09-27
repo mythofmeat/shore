@@ -11,6 +11,7 @@ import type { SidecarRequest } from "../llm/types.ts";
 import type { ClaudePlanLimit } from "../protocol/ClaudePlanLimit.ts";
 import type { ClaudePlanLimitsReport } from "../protocol/ClaudePlanLimitsReport.ts";
 import type { ClaudePlanWindow } from "../protocol/ClaudePlanWindow.ts";
+import type { PlanLimitWarning } from "../protocol/PlanLimitWarning.ts";
 import {
   actionBlocks,
   crossedThresholds,
@@ -19,7 +20,6 @@ import {
   type BudgetOptions,
   type CallBlock,
   type UsageBudgetAction,
-  type UsageBudgetWarningEvent,
   type UsageConfig,
 } from "./budget.ts";
 import { formatLocalAmPm, toRfc3339, zoneFor } from "./zoned.ts";
@@ -51,6 +51,8 @@ export interface ClaudePlanLimitsState extends ClaudePlanPoll {
   polled_at: string | null;
 }
 
+export type PlanLimitWarningEvent = Omit<PlanLimitWarning, "rid">;
+
 export type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
 
 export interface ClaudePlanLimitsOptions {
@@ -75,6 +77,7 @@ let fetcher: ClaudePlanFetcher | undefined;
 let current: ClaudePlanLimitsState | undefined;
 let attemptedAt = Number.NEGATIVE_INFINITY;
 let refreshing: Promise<void> | undefined;
+let observed: Record<ClaudePlanWindow, number> = { five_hour: 0, seven_day: 0 };
 let persisting: Promise<void> = Promise.resolve();
 
 export function claudePlanLimitsPath(dir: string): string {
@@ -87,6 +90,7 @@ export function configureClaudePlanLimits(options: ClaudePlanLimitsOptions = {})
   current = cacheDir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(cacheDir));
   attemptedAt = Number.NEGATIVE_INFINITY;
   refreshing = undefined;
+  observed = { five_hour: 0, seven_day: 0 };
 }
 
 export function claudePlanLimitsState(): ClaudePlanLimitsState | undefined {
@@ -111,6 +115,7 @@ function lastAttempt(): number {
 
 async function pollClaudePlanLimits(fetch: ClaudePlanFetcher, now: number): Promise<void> {
   attemptedAt = now;
+  const seen = { ...observed };
   let poll: ClaudePlanPoll | undefined;
   try {
     poll = await fetch();
@@ -120,13 +125,16 @@ async function pollClaudePlanLimits(fetch: ClaudePlanFetcher, now: number): Prom
   }
   if (poll === undefined) return;
   const stamp = toRfc3339(now);
+  const prior = current;
+  const newer = (window: ClaudePlanWindow): ClaudePlanReading | null =>
+    observed[window] === seen[window] ? poll[window] : prior?.[window] ?? null;
   current = {
     version: 1,
     updated_at: stamp,
     polled_at: stamp,
     subscription_type: poll.subscription_type,
-    five_hour: poll.five_hour,
-    seven_day: poll.seven_day,
+    five_hour: newer("five_hour"),
+    seven_day: newer("seven_day"),
   };
   await persist();
 }
@@ -140,6 +148,7 @@ export function observeClaudeRateLimit(info: SDKRateLimitInfo, now: number = Dat
   const prior = current;
   const resets_at = info.resetsAt === undefined ? prior?.[window]?.resets_at ?? null : claudePlanInstant(info.resetsAt);
   const reading = { percent_used: percent, resets_at };
+  observed[window] += 1;
   current = {
     version: 1,
     updated_at: toRfc3339(now),
@@ -268,9 +277,13 @@ export function claudePlanLimitsReport(
   return { updated_at: state.updated_at, subscription_type: state.subscription_type, windows };
 }
 
+export function runsOnClaudePlan(request: Pick<SidecarRequest, "sdk">): boolean {
+  return request.sdk === "claude_agent";
+}
+
 export function claudePlanBlockFor(request: SidecarRequest, now: number = Date.now()): CallBlock | undefined {
   const context = request.context;
-  if (request.sdk !== "claude_agent" || context === undefined) return undefined;
+  if (!runsOnClaudePlan(request) || context === undefined) return undefined;
   const report = claudePlanLimitsReport(context.usage, now);
   const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context.call_type));
   return limit === undefined ? undefined : planBlock(limit, zoneFor(context.usage?.timezone ?? "local"));
@@ -294,11 +307,11 @@ export function newlyCrossedPlanLimitWarnings(
   config: UsageConfig | undefined,
   now: number,
   opts: BudgetOptions = {},
-): UsageBudgetWarningEvent[] {
+): PlanLimitWarningEvent[] {
   const report = claudePlanLimitsReport(config, now);
   if (report === undefined) return [];
   const zone = zoneFor("local", opts.localZone);
-  const events: UsageBudgetWarningEvent[] = [];
+  const events: PlanLimitWarningEvent[] = [];
   for (const limit of report.windows) {
     const resets = limit.resets_at;
     if (resets === null) continue;
@@ -312,17 +325,15 @@ export function newlyCrossedPlanLimitWarnings(
       ? ` (limit ${percentOf(limit.limit_at)}%, ${ACTION_PHRASES[limit.action]})`
       : "";
     events.push({
-      budget: name,
+      window: limit.window,
+      limit: name,
       message: `${name} is at ${percentOf(limit.percent_used)}%${standing}; resets at ${display}.`,
-      current_cost: limit.percent_used,
-      cost_limit: limit.limit_at,
       percent_used: limit.percent_used,
       crossed_warn_at: fresh,
-      period: limit.window,
-      period_start: window,
-      reset_at: resets,
-      reset_at_display: display,
-      scope: "plan",
+      limit_at: limit.limit_at,
+      over_limit: limit.over_limit,
+      resets_at: resets,
+      resets_at_display: display,
     });
   }
   return events;

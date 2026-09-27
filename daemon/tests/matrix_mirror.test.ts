@@ -179,18 +179,16 @@ describe("warnings, errors and command output", () => {
 
   test("a Claude plan warning is a share of the plan, not money", () => {
     const route = routeMirror({
-      type: "usage_warning",
-      budget: "Claude weekly limit",
+      type: "plan_limit_warning",
+      window: "seven_day",
+      limit: "Claude weekly limit",
       message: "Claude weekly limit is at 84%; resets at 2026-10-02 03:00 AM.",
-      current_cost: 0.84,
-      cost_limit: 1,
       percent_used: 0.84,
       crossed_warn_at: [0.8],
-      period: "seven_day",
-      period_start: "2026-10-02T03:00:00+00:00",
-      reset_at: "2026-10-02T03:00:00+00:00",
-      reset_at_display: "2026-10-02 03:00 AM",
-      scope: "plan",
+      limit_at: 1,
+      over_limit: false,
+      resets_at: "2026-10-02T03:00:00+00:00",
+      resets_at_display: "2026-10-02 03:00 AM",
     });
     expect(route).toEqual({ kind: "notice", text: "⚠️ Claude weekly limit is at 84%; resets at 2026-10-02 03:00 AM." });
   });

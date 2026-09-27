@@ -220,7 +220,7 @@ export async function usageReport(
   const { filter, last, periodSince } = buildFilter(args, timezone, opts, now, config);
 
   if (flag(args, "budget")) {
-    const plan = request.claudePlanLimits === true ? await freshClaudePlanLimits(config, now) : undefined;
+    const plan = request.claudePlanLimits === true ? currentClaudePlanLimits(config, now) : undefined;
     return budgetPayload(db, config, now, opts, plan);
   }
   if (flag(args, "export_tsv")) {
@@ -260,12 +260,12 @@ export async function usageReport(
     request.cacheDir === undefined
       ? undefined
       : readNanoGptSubscriptionSync(nanoGptSubscriptionPath(request.cacheDir)),
-    claudePlanLimitsState() === undefined ? undefined : await freshClaudePlanLimits(config, now),
+    claudePlanLimitsState() === undefined ? undefined : currentClaudePlanLimits(config, now),
   );
 }
 
-async function freshClaudePlanLimits(config: UsageConfig, now: number): Promise<ClaudePlanLimitsReport | undefined> {
-  await refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now);
+function currentClaudePlanLimits(config: UsageConfig, now: number): ClaudePlanLimitsReport | undefined {
+  void refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now);
   return claudePlanLimitsReport(config, now);
 }
 

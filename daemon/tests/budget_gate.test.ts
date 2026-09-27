@@ -512,6 +512,7 @@ async function chatTurn(
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
+    newlyCrossedPlanLimitWarnings: async () => [],
     ledgerPath: ledger,
     sleep: async () => {
       sleeps += 1;

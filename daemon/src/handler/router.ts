@@ -35,6 +35,7 @@ const RID_BEARING: ReadonlySet<string> = new Set([
   "provider_fallback_warning",
   "provider_warning",
   "usage_warning",
+  "plan_limit_warning",
 ]);
 
 function generationErrorCode(error: unknown): ErrorCode {

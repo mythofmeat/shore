@@ -1,3 +1,5 @@
+use shore_common::protocol::operations::ClaudePlanWindow;
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UsageBudget {
     pub name: String,
@@ -114,6 +116,15 @@ impl PlanWindow {
             "five_hour" => Some(PlanWindow::FiveHour),
             "seven_day" => Some(PlanWindow::SevenDay),
             _ => None,
+        }
+    }
+}
+
+impl From<ClaudePlanWindow> for PlanWindow {
+    fn from(window: ClaudePlanWindow) -> Self {
+        match window {
+            ClaudePlanWindow::FiveHour => PlanWindow::FiveHour,
+            ClaudePlanWindow::SevenDay => PlanWindow::SevenDay,
         }
     }
 }

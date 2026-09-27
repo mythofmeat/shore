@@ -63,11 +63,13 @@ export function routeMirror(msg: ServerMessage): MirrorAction {
     case "usage_warning":
       return {
         kind: "notice",
-        text: msg.scope === "plan"
-          ? `⚠️ ${msg.message}`
-          : `⚠️ ${msg.message} — $${msg.current_cost.toFixed(2)} of ` +
-            `$${msg.cost_limit.toFixed(2)} (${Math.round(msg.percent_used * 100)}%) this ${msg.period}`,
+        text:
+          `⚠️ ${msg.message} — $${msg.current_cost.toFixed(2)} of ` +
+          `$${msg.cost_limit.toFixed(2)} (${Math.round(msg.percent_used * 100)}%) this ${msg.period}`,
       };
+
+    case "plan_limit_warning":
+      return { kind: "notice", text: `⚠️ ${msg.message}` };
 
     case "provider_warning":
       return { kind: "notice", text: `⚠️ ${msg.message}` };

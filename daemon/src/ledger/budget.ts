@@ -3,7 +3,6 @@ import { shoreLog } from "../log.ts";
 import type { Database } from "bun:sqlite";
 
 import type { UsageConfig as AppUsageConfig, PlanLimitsConfig } from "../config/app.ts";
-import type { ClaudePlanWindow } from "../protocol/ClaudePlanWindow.ts";
 
 import { isSubscriptionCall } from "./store.ts";
 import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
@@ -177,7 +176,7 @@ export interface UsageBudgetWarningEvent {
   cost_limit: number;
   percent_used: number;
   crossed_warn_at: number[];
-  period: UsageBudgetPeriod | ClaudePlanWindow;
+  period: UsageBudgetPeriod;
   period_start: string;
   reset_at: string;
   reset_at_display: string;

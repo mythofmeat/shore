@@ -33,7 +33,7 @@ export const EVENT_POLICIES = {
   tool_call: "stream", tool_result: "stream", send_image: "media",
   phase: "activity", command_output: "result", error: "warning",
   cache_warning: "warning", provider_warning: "warning", provider_fallback_warning: "warning",
-  usage_warning: "warning", config_warning: "warning", request_finished: "completion",
+  usage_warning: "warning", plan_limit_warning: "warning", config_warning: "warning", request_finished: "completion",
   ping: "connection", shutdown: "connection",
 } satisfies Record<ServerMessage["type"], string>;
 
@@ -208,7 +208,7 @@ export class Workspace {
         this.#activity(message.type, message); return;
       }
       case "command_output": case "phase": case "cache_warning": case "provider_warning":
-      case "provider_fallback_warning": case "usage_warning": case "config_warning": case "shutdown":
+      case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "ping": break;
     }

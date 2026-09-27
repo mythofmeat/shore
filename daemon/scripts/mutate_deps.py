@@ -136,17 +136,17 @@ MUTANTS = [
      "  const ledgerPath = dataDir;"),
     ("budget: the ledger is opened on every turn, whether or not a budget exists",
      D,
-     "    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {\n"
+     "    if (config === undefined || (config.budgets ?? []).length === 0) {\n"
      "      return Promise.resolve([]);\n    }",
      "    if (config === undefined) {\n      return Promise.resolve([]);\n    }"),
     ("budget: a configured budget is skipped, so nothing is ever warned about",
      D,
-     "    if (config === undefined || ((config.budgets ?? []).length === 0 && claudePlanLimitsState() === undefined)) {",
+     "    if (config === undefined || (config.budgets ?? []).length === 0) {",
      "    if (true as boolean) {\n      return Promise.resolve([]);\n    }\n    if (config === undefined) {"),
     ("budget: an unopenable ledger fails the turn instead of reporting nothing",
      D,
-     "    if (ledger === null) return Promise.resolve([]);",
-     '    if (ledger === null) throw new Error("no ledger");'),
+     "    if (ledger === null) return Promise.resolve([]);\n    return Promise.resolve(newlyCrossedBudgetWarnings(",
+     '    if (ledger === null) throw new Error("no ledger");\n    return Promise.resolve(newlyCrossedBudgetWarnings('),
 
     # --- the command path -----------------------------------------------------
     ("config: reloads guess the path instead of re-reading the file startup read",

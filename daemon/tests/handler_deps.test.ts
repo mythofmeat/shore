@@ -22,6 +22,7 @@ import {
   commandChangesState,
   handlerRegistry,
   turnAutonomy,
+  planLimitWarnings,
   usageBudgetWarnings,
   type CommandAssembly,
   type HandlerAssembly,
@@ -756,7 +757,7 @@ describe("the budget check", () => {
     }
   });
 
-  test("a Claude plan reading warns after a turn even with no budgets configured", async () => {
+  test("a Claude plan reading warns even for a character with no usage config", async () => {
     const root = await mkdtemp(join(tmpdir(), "shore-deps-plan-"));
     const resets = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     try {
@@ -764,9 +765,9 @@ describe("the budget check", () => {
         fetch: () => Promise.resolve({ subscription_type: "max", five_hour: { percent_used: 0.9, resets_at: resets }, seven_day: null }),
       });
       await refreshClaudePlanLimits(0);
-      const warnings = usageBudgetWarnings(join(root, "shore.db"), () => ({ budgets: [] }), undefined);
+      const warnings = planLimitWarnings(join(root, "shore.db"), () => undefined, undefined);
       const first = await warnings("aria");
-      expect(first.map((warning) => [warning.budget, warning.scope, warning.crossed_warn_at])).toEqual([["Claude 5-hour limit", "plan", [0.8]]]);
+      expect(first.map((warning) => [warning.limit, warning.window, warning.crossed_warn_at])).toEqual([["Claude 5-hour limit", "five_hour", [0.8]]]);
       expect(await warnings("aria"), "each threshold is announced once per window").toEqual([]);
     } finally {
       configureClaudePlanLimits();
