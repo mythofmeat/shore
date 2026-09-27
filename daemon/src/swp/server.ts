@@ -35,6 +35,7 @@ import {
 export interface ServerConfig {
   readonly addr: string;
   readonly serverName: string;
+  readonly serverVersion?: string;
   readonly handshake?: HandshakeProvider;
   readonly authenticate: (token: string | null | undefined) => boolean;
   readonly log?: Logger;
@@ -436,6 +437,7 @@ export class Server {
       {
         clientId,
         serverName: this.#config.serverName,
+        ...(this.#config.serverVersion === undefined ? {} : { serverVersion: this.#config.serverVersion }),
         router: this.#router,
         events: this.#events.subscribe(undefined, this.#queuedFor(clientId)),
         handshake: this.#handshake ?? DEFAULT_HANDSHAKE,

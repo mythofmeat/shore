@@ -89,6 +89,9 @@ fn main() -> ExitCode {
     };
 
     let outcome: Result<ExitCode, Box<dyn std::error::Error>> = match cli.command {
+        _ if cli.version => rt
+            .block_on(run::print_version(cli.addr))
+            .map(|()| ExitCode::SUCCESS),
         Some(command) => rt
             .block_on(run::execute(
                 cli.character,
