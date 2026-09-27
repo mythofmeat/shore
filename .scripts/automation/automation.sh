@@ -24,16 +24,11 @@ bump_version() {
         echo "${ver_parts[*]}"
     )
     ./version-bump.sh "$bumped_ver"
-    git commit -am "chore(release): $bumped_ver"
-}
-
-main() {
-
-    ./release-gh.sh
-
+    git commit -am "chore(release): $bumped_ver" --no-verify
 }
 
 update_deps
 bump_version
+./release-gh.sh
 
 main
