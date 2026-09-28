@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 set -eu
-cd "$(dirname "$0")"
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 root="$(git rev-parse --show-toplevel)"
 
@@ -31,7 +31,8 @@ update_deps() {
 }
 
 is_updated() {
-    if [ -n "$(git status --porcelain)" ]; then
+    cd "$root"
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
         git commit -am "chore(deps): update"
     else
         echo "No dependency updates!"
@@ -41,7 +42,7 @@ is_updated() {
 
 current_versions() {
     cd "$root"
-    versions="client/Cargo.toml $(sed -n 's/^version = "\(.*\)"$/\1/p' client/Cargo.toml)
+    versions="client/Cargo.toml $(sed -n '/^\[workspace\.package\]$/,/^\[/s/^version = "\(.*\)"$/\1/p' client/Cargo.toml)
     client/Cargo.lock:shore-cli $(sed -n '/^name = "shore-cli"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock)
     client/Cargo.lock:shore-common $(sed -n '/^name = "shore-common"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock)
     daemon/package.json $(sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json)
@@ -56,29 +57,41 @@ current_versions() {
 bump_version_to() {
     cd "$root"
     if [ "$#" -ne 1 ]; then
-        printf 'Usage: %s <version>\n' "$0" >&2
+        printf 'Usage: bump_version_to <version>\n' >&2
         return 2
     fi
-    version=$1
-    sed -i "s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
+    version=${1#v}
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        printf 'Not a MAJOR.MINOR.PATCH version: %s\n' "$version" >&2
+        return 2
+    fi
+    sed -i "/^\[workspace\.package\]$/,/^\[/s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
     sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
     sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
     sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
-    git commit --no-verify -am "chore(release): v$version"
+    [ "$(current_versions)" = "$version" ]
+    # Only the version files: anything else in the working tree stays out of
+    # the release commit.
+    git commit --no-verify -m "chore(release): v$version" -- \
+        client/Cargo.toml client/Cargo.lock daemon/package.json contrib/arch/PKGBUILD
 }
 
 version_increment() {
     ver="$(current_versions)"
-    IFS='.' read -ra ver_parts <<<"$ver"
+    IFS='.' read -ra ver_parts <<<"${ver#v}"
     case "$1" in
     "major")
-        ver_parts[0]=$((${ver_parts[0]#v} + 1))
+        ver_parts=($((ver_parts[0] + 1)) 0 0)
         ;;
     "minor")
-        ver_parts[1]=$((${ver_parts[1]#v} + 1))
+        ver_parts=("${ver_parts[0]}" $((ver_parts[1] + 1)) 0)
         ;;
     "patch")
-        ver_parts[2]=$((${ver_parts[2]#v} + 1))
+        ver_parts=("${ver_parts[0]}" "${ver_parts[1]}" $((ver_parts[2] + 1)))
+        ;;
+    *)
+        printf 'Usage: version_increment major|minor|patch\n' >&2
+        return 2
         ;;
     esac
     bumped_ver=$(
@@ -92,26 +105,28 @@ release_gh() {
     command -v gh
     command -v jq
 
+    cd "$root"
     local_ver="$(current_versions)"
-    gh_ver=$(gh release list --json tagName | jq -r .[0].tagName)
-    IFS='.' read -ra local_ver_parts <<<"$local_ver"
-    IFS='.' read -ra gh_ver_parts <<<"$gh_ver"
+    gh_ver=$(gh release list --limit 1 --json tagName | jq -r '.[0].tagName // "v0.0.0"')
+    gh_ver=${gh_ver#v}
 
-    for i in {0..2}; do
-        [ "${local_ver_parts[$i]#v}" -ge "${gh_ver_parts[$i]#v}" ] ||
-            return 1
-    done
+    # Must be strictly newer than the latest GitHub release.
+    if [ "$local_ver" = "$gh_ver" ] ||
+        [ "$(printf '%s\n%s\n' "$local_ver" "$gh_ver" | sort -V | tail -n1)" != "$local_ver" ]; then
+        printf 'Local version %s is not newer than released %s\n' "$local_ver" "$gh_ver" >&2
+        return 1
+    fi
 
     git tag v"$local_ver"
-    git push --tags
+    # The release commit and its tag go up together.
+    git push --atomic origin HEAD "refs/tags/v$local_ver"
     gh release create v"$local_ver" --generate-notes --draft --verify-tag
-
 }
 
 packaging_arch() {
     cd "$root"/contrib/arch
-    makepkg
-    pkg="$(find . -name "*.pkg.tar.zst")"
+    makepkg -f
+    pkg="$(find . -maxdepth 1 -name "*.pkg.tar.zst")"
     gh release upload "v$(current_versions)" "$pkg"
     rm -f "$pkg"
 }
