@@ -545,6 +545,12 @@
           "server_name": {
             "type": "string"
           },
+          "server_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "characters": {
             "type": "array",
             "items": {

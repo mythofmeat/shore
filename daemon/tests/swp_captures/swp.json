@@ -1255,7 +1255,7 @@
         }
       ],
       "result": {
-        "err": "Client disconnected before hello"
+        "closed": true
       },
       "registered_clients": []
     },

@@ -127,6 +127,7 @@ mod tests {
         let msg = ServerMessage::Hello(ServerHello {
             v: SWP_V1,
             server_name: "shore-daemon".into(),
+            server_version: None,
             characters: vec![CharacterInfo::new("alice")],
         });
         let (json, _back) = round_trip(&msg);

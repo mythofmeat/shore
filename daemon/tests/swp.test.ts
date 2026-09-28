@@ -465,7 +465,11 @@ describe("handshake", () => {
         .map((l) => JSON.parse(l) as ServerMessage);
       expect(frames).toEqual(c.server_frames as ServerMessage[]);
 
-      if ("err" in c.result) {
+      if ("closed" in c.result) {
+        expect(error).toBeNull();
+        expect(session).toBeNull();
+        expect(router.sessions()).toEqual([]);
+      } else if ("err" in c.result) {
         expect(error).not.toBeNull();
         expect(session).toBeNull();
         expect(router.sessions()).toEqual([]);

@@ -9,6 +9,8 @@ use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, Str
 pub struct ServerHello {
     pub v: u32,
     pub server_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_version: Option<String>,
     #[serde(default)]
     pub characters: Vec<CharacterInfo>,
 }

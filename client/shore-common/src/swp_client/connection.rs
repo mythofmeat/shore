@@ -86,6 +86,18 @@ impl SWPConnection {
         })?
     }
 
+    pub async fn probe(addr: &ServerAddr, deadline: std::time::Duration) -> Result<ServerHello> {
+        tokio::time::timeout(deadline, async {
+            let mut conn = Self::open(addr).await?;
+            conn.recv_server_hello().await
+        })
+        .await
+        .map_err(|_| ClientError::Timeout {
+            message: "daemon did not say hello in time".into(),
+            retry_after_ms: None,
+        })?
+    }
+
     async fn do_handshake(
         &mut self,
         client_type: String,

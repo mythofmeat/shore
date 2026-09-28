@@ -20,6 +20,7 @@ use crate::output;
 use crate::state;
 
 static SESSION_DISPLAY_CHARACTER: OnceLock<String> = OnceLock::new();
+const VERSION_PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(2);
 
 fn log_role_matches(filter: Option<&LogRole>, role: &Role) -> bool {
     match filter {
@@ -70,6 +71,7 @@ pub(crate) async fn execute(
         character: requested_character,
         thread: requested_thread,
         addr: requested_addr,
+        version: false,
         command: Some(cli_command),
     };
     if let Some(result) = try_handle_local_only(&cli).await {
@@ -1807,6 +1809,34 @@ fn edit_text_with(editor: &str, seed: &str) -> Result<String, Box<dyn std::error
     Ok(content)
 }
 
+pub(crate) async fn print_version(
+    requested_addr: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    cli_out!("shore {}", env!("CARGO_PKG_VERSION"));
+    let addr = match requested_addr {
+        Some(addr) => ServerAddr(addr),
+        None => match shore_common::swp_client::discover_or_default(None) {
+            Ok(addr) => addr,
+            Err(e) => {
+                cli_out!("daemon: not found ({e})");
+                return Ok(());
+            }
+        },
+    };
+    match SWPConnection::probe(&addr, VERSION_PROBE_DEADLINE).await {
+        Ok(hello) => cli_out!(
+            "daemon {} at {}",
+            hello
+                .server_version
+                .as_deref()
+                .unwrap_or("unknown (too old to report it)"),
+            addr.0
+        ),
+        Err(e) => cli_out!("daemon: not reachable at {} ({e})", addr.0),
+    }
+    Ok(())
+}
+
 fn resolve_addr(cli: &Cli) -> Result<ServerAddr, shore_common::swp_client::ClientError> {
     if let Some(addr) = &cli.addr {
         return Ok(ServerAddr(addr.clone()));
@@ -2108,6 +2138,7 @@ mod tests {
         let hello = ServerMessage::Hello(ServerHello {
             v: SWP_V1,
             server_name: "test-daemon".into(),
+            server_version: None,
             characters: vec![],
         });
         write_json_line(&mut w, &hello).await;
@@ -2237,6 +2268,7 @@ mod tests {
             addr: None,
             character: None,
             thread: None,
+            version: false,
             command: Some(command),
         }
     }
