@@ -43,7 +43,7 @@ use tracing_subscriber::EnvFilter;
 use app::UsageBudget;
 use app::{
     AltChoice, App, Block, COMPACTION_SUBAGENT, CompactionRun, ConnectionStatus, ConversationEntry,
-    EffectiveSamplerSnapshot, InputState, SubagentSection, Turn, TurnState, UsageDisplay,
+    EffectiveSamplerSnapshot, InputState, Replaced, SubagentSection, Turn, TurnState, UsageDisplay,
     UsageLevel, UsageScope, compaction_round_from_phase,
 };
 use connection::{ConnCommand, ConnEvent};
@@ -1612,6 +1612,7 @@ fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<Con
 }
 
 fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>, active_start: usize) {
+    app.replaced.rebuilt_from(0, &messages);
     app.entries = build_history_entries(messages, active_start);
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
     app.grew_above_viewport = true;
@@ -1645,7 +1646,10 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
             })
         })
         .or_else(|| match app.entries.last() {
-            Some(entry) if matches!(entry.as_turn(), Some(t) if matches!(t.role, Role::Assistant)) => {
+            Some(entry)
+                if matches!(entry.as_turn(), Some(t) if matches!(t.role, Role::Assistant))
+                    && !entry.msg_id().is_some_and(|id| app.replaced.replaces(id)) =>
+            {
                 Some(app.entries.len().saturating_sub(1))
             }
             Some(_) | None => None,
@@ -1737,13 +1741,13 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
         {
             *archived_count = archived_count.saturating_add(loaded_turns);
         }
-        drop(app.entries.splice(0..0, page_entries));
     } else {
         page_entries.push(ConversationEntry::ArchiveBoundary {
             archived_count: loaded_turns,
         });
-        drop(app.entries.splice(0..0, page_entries));
     }
+    app.replaced.prepended(page_entries.len());
+    drop(app.entries.splice(0..0, page_entries));
 
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
     app.grew_above_viewport = true;
@@ -2436,6 +2440,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.stream.reset();
                 app.stream.active = true;
                 if start.regen {
+                    app.replaced = Replaced::tail_of(&app.entries);
                     app.scroll_to_bottom();
                 }
             } else {
@@ -2444,7 +2449,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             if start.regen {
                 app.stream.regen = true;
-                app.stream.replacing = start.replaces;
+                app.replaced.ids = start.replaces;
             }
             app.stream.rid.clone_from(&start.rid);
             RedrawEffect::Immediate
@@ -2484,22 +2489,19 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 .unwrap_or("stream");
             let terminal = end.terminal_content_blocks.as_deref().unwrap_or_default();
 
-            let target_pos = end
-                .msg_id
-                .as_deref()
-                .and_then(|target| {
-                    app.entries.iter().rposition(|e| {
-                        matches!(
-                            e.as_turn(),
-                            Some(Turn { msg_id: Some(id), .. }) if id == target
-                        )
-                    })
+            let landed_pos = end.msg_id.as_deref().and_then(|target| {
+                app.entries.iter().rposition(|e| {
+                    matches!(
+                        e.as_turn(),
+                        Some(Turn { msg_id: Some(id), .. }) if id == target
+                    )
                 })
-                .or_else(|| {
-                    app.entries
-                        .iter()
-                        .rposition(|e| matches!(e.as_turn(), Some(t) if t.is_streaming()))
-                });
+            });
+            let target_pos = landed_pos.or_else(|| {
+                app.entries
+                    .iter()
+                    .rposition(|e| matches!(e.as_turn(), Some(t) if t.is_streaming()))
+            });
 
             match target_pos.and_then(|pos| app.entries.get_mut(pos)?.as_turn_mut()) {
                 Some(turn) => {
@@ -2574,6 +2576,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
 
             if final_phase {
+                if app.stream.regen {
+                    match end.msg_id.filter(|_| landed_pos.is_none()) {
+                        Some(replacement) => app.replaced.replacement = Some(replacement),
+                        None => app.replaced = Replaced::default(),
+                    }
+                }
                 app.stream.reset();
                 if matches!(end.finish_reason.as_str(), "max_tokens" | "length") {
                     app.set_status("reply truncated at the max_tokens ceiling");
@@ -3438,6 +3446,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         }
                     }
                 }
+                app.replaced.rebuilt_from(keep, &messages);
                 let suffix = app.entries.split_off(keep);
                 let mut prefix = std::mem::replace(&mut app.entries, suffix);
                 reconcile_streaming_turn(app, messages, 0);
@@ -3467,6 +3476,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.thread_name = thread;
             }
             app.image_cache.clear();
+            app.replaced.rebuilt_from(0, &hist.messages);
             reconcile_streaming_turn(app, hist.messages, hist.active_start);
             reset_history_paging(app);
             app.history_version = app.history_version.wrapping_add(1);
@@ -3493,7 +3503,8 @@ mod redraw_tests {
     use shore_common::protocol::error::ErrorCode;
     use shore_common::protocol::operations::ClaudePlanWindow;
     use shore_common::protocol::server_msg::{
-        CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
+        CommandOutput, Error as CommandError, History, HistoryDelta, StreamChunk, StreamEnd,
+        StreamStart,
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
@@ -6141,17 +6152,19 @@ mod redraw_tests {
             None,
         ));
         let _ = handle_server_message(&mut app, start());
-
-        let hidden: Vec<_> = app
-            .entries
-            .iter()
-            .filter(|entry| app.stream.hides(entry))
-            .filter_map(ConversationEntry::msg_id)
-            .collect();
-        assert_eq!(hidden, vec!["m_old"]);
+        assert_eq!(hidden_ids(&app), ["m_old"]);
 
         app.abort_stream();
-        assert!(!app.entries.iter().any(|entry| app.stream.hides(entry)));
+        assert!(hidden_ids(&app).is_empty());
+    }
+
+    fn hidden_ids(app: &App) -> Vec<&str> {
+        app.entries
+            .iter()
+            .enumerate()
+            .filter(|(index, entry)| app.replaced.hides(*index, entry))
+            .filter_map(|(_, entry)| entry.msg_id())
+            .collect()
     }
 
     #[test]
@@ -6165,28 +6178,20 @@ mod redraw_tests {
             "t1".into(),
             None,
         )));
-        for id in ["m_kept", "m_old"] {
+        for (id, text) in [("m_kept", "kept reply"), ("m_old", "old reply")] {
             app.entries.push(ConversationEntry::assistant(
                 Some(id.into()),
-                "reply".into(),
+                text.into(),
                 vec![],
                 "t2".into(),
                 None,
             ));
         }
-        let hidden = |state: &App| -> Vec<String> {
-            state
-                .entries
-                .iter()
-                .filter(|entry| state.stream.hides(entry))
-                .filter_map(ConversationEntry::msg_id)
-                .map(str::to_owned)
-                .collect()
-        };
 
         app.begin_regen_optimistic();
         app.stream.rid = Some("r_regen".into());
-        assert_eq!(hidden(&app), vec!["m_kept", "m_old"]);
+        assert_eq!(hidden_ids(&app), ["m_kept", "m_old"]);
+        assert!(!screen(&mut app).contains("kept reply"));
 
         let _ = handle_server_message(
             &mut app,
@@ -6198,7 +6203,355 @@ mod redraw_tests {
                 task_id: None,
             }),
         );
-        assert_eq!(hidden(&app), vec!["m_old"]);
+        assert_eq!(hidden_ids(&app), ["m_old"]);
+        let listed = screen(&mut app);
+        assert!(
+            listed.contains("kept reply"),
+            "the daemon's list must repaint over the guess\n{listed}"
+        );
+        assert!(!listed.contains("old reply"), "{listed}");
+    }
+
+    fn joke_prompt(app: &mut App) {
+        app.entries.push(ConversationEntry::Turn(Turn::text(
+            Role::User,
+            Some("m_user".into()),
+            "Tell me a joke".into(),
+            vec![],
+            "t1".into(),
+            None,
+        )));
+    }
+
+    fn saved_joke(app: &mut App) {
+        joke_prompt(app);
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_old".into()),
+            "Why did the chicken cross the road?".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
+    }
+
+    fn partial_reply_without_an_id(app: &mut App, text: &str) {
+        app.stream.active = true;
+        app.stream.rid = Some("r_send".into());
+        let _ = handle_server_message(app, chunk_of("r_send", text));
+        let _ = handle_server_message(app, failed("r_send"));
+        app.dismiss_notifications();
+    }
+
+    fn start_regen(app: &mut App) {
+        app.begin_regen_optimistic();
+        app.stream.rid = Some("r_regen".into());
+    }
+
+    fn regen_start(replaces: &[&str]) -> ServerMessage {
+        ServerMessage::StreamStart(StreamStart {
+            rid: Some("r_regen".into()),
+            regen: true,
+            replaces: replaces.iter().map(|id| (*id).to_owned()).collect(),
+            subagent: None,
+            task_id: None,
+        })
+    }
+
+    fn chunk_of(rid: &str, text: &str) -> ServerMessage {
+        ServerMessage::StreamChunk(StreamChunk {
+            rid: Some(rid.into()),
+            text: text.into(),
+            content_type: "text".into(),
+            subagent: None,
+            task_id: None,
+        })
+    }
+
+    fn reply_end(msg_id: &str, content: &str) -> ServerMessage {
+        ServerMessage::StreamEnd(StreamEnd {
+            subagent: None,
+            task_id: None,
+            rid: Some("r_regen".into()),
+            msg_id: Some(msg_id.into()),
+            revision: Some(2),
+            terminal_content_blocks: None,
+            content: content.into(),
+            metadata: metadata(),
+            finish_reason: "end_turn".into(),
+            is_final: true,
+        })
+    }
+
+    fn failed(rid: &str) -> ServerMessage {
+        ServerMessage::Error(CommandError {
+            rid: Some(rid.into()),
+            code: ErrorCode::ProviderError,
+            message: "overloaded".into(),
+            retry_after_ms: None,
+        })
+    }
+
+    fn tail_after_prompt(messages: Vec<Message>) -> ServerMessage {
+        ServerMessage::History(History {
+            delta: Some(HistoryDelta {
+                base_revision: 1,
+                after: Some("m_user".into()),
+            }),
+            rid: None,
+            messages,
+            active_start: 0,
+            config: serde_json::json!({}),
+            selected_character: None,
+            selected_thread: None,
+            revision: 2,
+        })
+    }
+
+    fn whole_thread(thread: Option<&str>) -> ServerMessage {
+        ServerMessage::History(History {
+            delta: None,
+            rid: None,
+            messages: vec![
+                simple_message(Role::User, "m_user", "Tell me a joke"),
+                simple_message(
+                    Role::Assistant,
+                    "m_old",
+                    "Why did the chicken cross the road?",
+                ),
+            ],
+            active_start: 0,
+            config: serde_json::json!({}),
+            selected_character: None,
+            selected_thread: thread.map(str::to_owned),
+            revision: 3,
+        })
+    }
+
+    fn new_reply_saved() -> ServerMessage {
+        tail_after_prompt(vec![simple_message(
+            Role::Assistant,
+            "m_new",
+            "Dark mode, because",
+        )])
+    }
+
+    fn screen(app: &mut App) -> String {
+        render_app_to_string(app, 80, 30).unwrap()
+    }
+
+    fn replaces_nothing(app: &App) -> bool {
+        app.replaced.ids.is_empty()
+            && app.replaced.tail.is_empty()
+            && app.replaced.replacement.is_none()
+    }
+
+    #[test]
+    fn the_old_reply_stays_hidden_until_the_history_that_drops_it() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+        let _ = handle_server_message(&mut app, reply_end("m_new", "Dark mode, because"));
+        let ended = screen(&mut app);
+        assert!(
+            !ended.contains("chicken"),
+            "the old reply comes back before the history drops it\n{ended}"
+        );
+        assert!(ended.contains("Dark mode"), "{ended}");
+
+        let _ = handle_server_message(&mut app, new_reply_saved());
+        let landed = screen(&mut app);
+        assert!(!landed.contains("chicken"), "{landed}");
+        assert!(landed.contains("Dark mode"), "{landed}");
+        assert_eq!(
+            app.entries
+                .iter()
+                .filter_map(ConversationEntry::msg_id)
+                .collect::<Vec<_>>(),
+            ["m_user", "m_new"]
+        );
+        assert!(replaces_nothing(&app));
+    }
+
+    #[test]
+    fn a_history_that_lands_before_the_stream_end_also_ends_the_regen() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+        let _ = handle_server_message(&mut app, new_reply_saved());
+        let _ = handle_server_message(&mut app, reply_end("m_new", "Dark mode, because"));
+
+        let ended = screen(&mut app);
+        assert!(!ended.contains("chicken"), "{ended}");
+        assert_eq!(ended.matches("Dark mode").count(), 1, "{ended}");
+        assert!(replaces_nothing(&app));
+    }
+
+    #[test]
+    fn a_regen_hides_a_partial_reply_that_never_got_an_id() {
+        let mut app = App::default();
+        joke_prompt(&mut app);
+        partial_reply_without_an_id(&mut app, "Why did the chicken");
+        assert!(screen(&mut app).contains("Why did the chicken"));
+
+        start_regen(&mut app);
+        let started = screen(&mut app);
+        assert!(!started.contains("chicken"), "{started}");
+        assert!(started.contains("Tell me a joke"), "{started}");
+
+        let _ = handle_server_message(&mut app, regen_start(&[]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+        let streaming = screen(&mut app);
+        assert!(!streaming.contains("chicken"), "{streaming}");
+        assert!(streaming.contains("Dark mode"), "{streaming}");
+
+        let _ = handle_server_message(&mut app, reply_end("m_new", "Dark mode, because"));
+        let ended = screen(&mut app);
+        assert!(!ended.contains("chicken"), "{ended}");
+
+        let _ = handle_server_message(&mut app, new_reply_saved());
+        let landed = screen(&mut app);
+        assert!(!landed.contains("chicken"), "{landed}");
+        assert!(landed.contains("Dark mode"), "{landed}");
+    }
+
+    #[test]
+    fn a_regen_from_another_client_hides_a_partial_reply_here_too() {
+        let mut app = App::default();
+        joke_prompt(&mut app);
+        partial_reply_without_an_id(&mut app, "Why did the chicken");
+
+        let _ = handle_server_message(&mut app, regen_start(&[]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+
+        let spectated = screen(&mut app);
+        assert!(!spectated.contains("chicken"), "{spectated}");
+        assert!(spectated.contains("Dark mode"), "{spectated}");
+    }
+
+    #[test]
+    fn a_failed_regen_brings_back_everything_it_hid() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+        partial_reply_without_an_id(&mut app, "Why did the chicken");
+
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let hidden = screen(&mut app);
+        assert!(!hidden.contains("chicken"), "{hidden}");
+
+        let _ = handle_server_message(&mut app, failed("r_regen"));
+        let restored = screen(&mut app);
+        assert_eq!(
+            restored.matches("Why did the chicken").count(),
+            2,
+            "both the saved reply and the partial one come back\n{restored}"
+        );
+    }
+
+    #[test]
+    fn a_later_request_failing_does_not_bring_back_a_replaced_reply() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+        let _ = handle_server_message(&mut app, reply_end("m_new", "Dark mode, because"));
+
+        partial_reply_without_an_id(&mut app, "Knock knock");
+
+        let failed_later = screen(&mut app);
+        assert!(failed_later.contains("Knock knock"), "{failed_later}");
+        assert!(!failed_later.contains("chicken"), "{failed_later}");
+    }
+
+    #[test]
+    fn a_fork_opened_before_the_regen_lands_shows_its_own_copy_of_the_reply() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+        let _ = handle_server_message(&mut app, reply_end("m_new", "Dark mode, because"));
+
+        let _ = handle_server_message(&mut app, whole_thread(Some("fork")));
+
+        let fork = screen(&mut app);
+        assert!(fork.contains("chicken"), "{fork}");
+    }
+
+    #[test]
+    fn older_history_loaded_during_a_regen_keeps_the_same_entries_hidden() {
+        let mut app = App::default();
+        joke_prompt(&mut app);
+        partial_reply_without_an_id(&mut app, "Why did the chicken");
+        start_regen(&mut app);
+
+        prepend_history_page(
+            &mut app,
+            &serde_json::json!({
+                "messages": [
+                    simple_message(Role::User, "m_earlier", "Knock knock"),
+                    simple_message(Role::Assistant, "m_earlier_reply", "Who is there?"),
+                ],
+                "has_more_before": false,
+            }),
+        );
+
+        let paged = screen(&mut app);
+        assert!(paged.contains("Who is there?"), "{paged}");
+        assert!(!paged.contains("chicken"), "{paged}");
+    }
+
+    #[test]
+    fn a_listing_printed_after_the_tail_is_dropped_stays_visible() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+        partial_reply_without_an_id(&mut app, "Why did the chicken");
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+        let _ = handle_server_message(
+            &mut app,
+            tail_after_prompt(vec![simple_message(
+                Role::Assistant,
+                "m_round",
+                "Let me look that up.",
+            )]),
+        );
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "list_characters".into(),
+                data: serde_json::json!({"characters": [{"name": "ada"}], "active": "ada"}),
+            }),
+        );
+
+        let listed = screen(&mut app);
+        assert!(listed.contains("Characters:"), "{listed}");
+        assert!(listed.contains("Let me look that up."), "{listed}");
+        assert!(!listed.contains("chicken"), "{listed}");
+    }
+
+    #[test]
+    fn a_full_history_during_a_regen_does_not_stream_into_the_old_reply() {
+        let mut app = App::default();
+        saved_joke(&mut app);
+        start_regen(&mut app);
+        let _ = handle_server_message(&mut app, regen_start(&["m_old"]));
+
+        let _ = handle_server_message(&mut app, whole_thread(None));
+        let _ = handle_server_message(&mut app, chunk_of("r_regen", "Dark mode, because"));
+
+        let streaming = screen(&mut app);
+        assert!(!streaming.contains("chicken"), "{streaming}");
+        assert!(streaming.contains("Dark mode"), "{streaming}");
     }
 
     #[test]
