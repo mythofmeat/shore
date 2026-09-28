@@ -21,6 +21,8 @@ import {
   writeNanoGptSubscription,
 } from "../llm/nanogpt_subscription.ts";
 import { NANOGPT_BASE_URL, isNanoGptProvider } from "../llm/providers/nanogpt_config.ts";
+import { CLAUDE_PLAN_REFRESH_MS, refreshClaudePlanLimits } from "./plan_limits.ts";
+import { isBackgroundCall } from "./budget.ts";
 import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 const ledgers = new Map<string, Ledger | null>();
@@ -36,6 +38,11 @@ export async function prepareCallAccounting(
   fetchImpl: typeof fetch = fetch,
   now: number = Date.now(),
 ): Promise<void> {
+  if (req.sdk === "claude_agent") {
+    const refresh = refreshClaudePlanLimits(CLAUDE_PLAN_REFRESH_MS, now);
+    if (isBackgroundCall(req.context?.call_type ?? "message")) await refresh;
+    return;
+  }
   const provider = req.provider_key ?? req.sdk;
   if (!isNanoGptProvider(provider) || nanoGptCacheDir === undefined) return;
   const path = nanoGptSubscriptionPath(nanoGptCacheDir);

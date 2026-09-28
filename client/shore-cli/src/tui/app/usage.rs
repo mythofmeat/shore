@@ -1,3 +1,5 @@
+use shore_common::protocol::operations::ClaudePlanWindow;
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UsageBudget {
     pub name: String,
@@ -93,6 +95,59 @@ impl BudgetFocus {
             _ => Some(Self::named(token)),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PlanWindow {
+    FiveHour,
+    SevenDay,
+}
+
+impl PlanWindow {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            PlanWindow::FiveHour => "5h",
+            PlanWindow::SevenDay => "7d",
+        }
+    }
+
+    pub(crate) fn from_token(token: &str) -> Option<Self> {
+        match token {
+            "five_hour" => Some(PlanWindow::FiveHour),
+            "seven_day" => Some(PlanWindow::SevenDay),
+            _ => None,
+        }
+    }
+}
+
+impl From<ClaudePlanWindow> for PlanWindow {
+    fn from(window: ClaudePlanWindow) -> Self {
+        match window {
+            ClaudePlanWindow::FiveHour => PlanWindow::FiveHour,
+            ClaudePlanWindow::SevenDay => PlanWindow::SevenDay,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PlanLimit {
+    pub window: PlanWindow,
+    pub level: UsageLevel,
+}
+
+pub(crate) fn plan_limits_from_json(value: &serde_json::Value) -> Option<Vec<PlanLimit>> {
+    let limits: Vec<PlanLimit> = value
+        .get("windows")?
+        .as_array()?
+        .iter()
+        .filter_map(|window| {
+            Some(PlanLimit {
+                window: PlanWindow::from_token(window.get("window")?.as_str()?)?,
+                level: usage_level_from_json(window)?,
+            })
+        })
+        .collect();
+    (!limits.is_empty()).then_some(limits)
 }
 
 pub(crate) fn usage_level_from_json(value: &serde_json::Value) -> Option<UsageLevel> {

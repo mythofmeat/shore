@@ -53,8 +53,16 @@ describe("executable operation contracts", () => {
       }
     }
     const summary = usageReports[0];
-    for (const changed of [{ cache_health: [{ character: "nova", state: "hot", streak: 1 }] }, { budgets: [{ name: "missing fields" }] }, { rate_limits: [{ host: "fixture" }] }, { nanogpt_subscription: { version: 2, fetched_at: "now", active: true, state: "active" } }, { call_attempts: { pending: 0, unresolved: 1 } }, { period_since: null }, { summary: [{ provider: "fixture", model: "fixture", call_count: 1 }] }]) {
+    const unknownWindow = { updated_at: "now", subscription_type: null, windows: [{ window: "monthly", percent_used: 0.5, resets_at: null, status: "ok", warning_thresholds: [], crossed_warn_at: [], limit_at: 1, action: "warn", over_limit: false }] };
+    for (const changed of [{ cache_health: [{ character: "nova", state: "hot", streak: 1 }] }, { budgets: [{ name: "missing fields" }] }, { rate_limits: [{ host: "fixture" }] }, { nanogpt_subscription: { version: 2, fetched_at: "now", active: true, state: "active" } }, { claude_plan_limits: unknownWindow }, { call_attempts: { pending: 0, unresolved: 1 } }, { period_since: null }, { summary: [{ provider: "fixture", model: "fixture", call_count: 1 }] }]) {
       expect(validOperationResult("usage", { ...summary, ...changed })).toBe(false);
+    }
+    const budget = usageReports.find((result) => result.mode === "budget");
+    const plan = summary === undefined || !("claude_plan_limits" in summary) ? undefined : summary.claude_plan_limits;
+    expect(plan).toBeDefined();
+    expect(validOperationResult("usage", { ...budget, claude_plan_limits: plan })).toBe(true);
+    for (const changed of [{ claude_plan_limits: null }, { claude_plan_limits: unknownWindow }]) {
+      expect(validOperationResult("usage", { ...budget, ...changed })).toBe(false);
     }
     const operation = commandCatalogue().find((item) => item.name === "usage");
     expect(operation).toMatchObject({ scope: "optional_character", prerequisites: ["ledger"], confirmation: "none", effects: ["read"] });

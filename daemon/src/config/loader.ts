@@ -592,6 +592,16 @@ function validateUsageConfig(config: UsageConfig): void {
     }
     names.add(name);
   }
+
+  for (const window of ["five_hour", "seven_day"] as const) {
+    const policy = config.plan_limits[window];
+    if (!(policy.limit_fraction > 0.0)) {
+      throw validationError(`plan_limits.${window}.limit_fraction must be greater than 0`);
+    }
+    if (policy.warn_fractions.some((threshold) => !(threshold > 0.0))) {
+      throw validationError(`plan_limits.${window}.warn_fractions values must be greater than 0`);
+    }
+  }
 }
 
 function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {

@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use shore_common::protocol::SWP_V1;
 use shore_common::protocol::client_msg::*;
 use shore_common::protocol::error::*;
+use shore_common::protocol::operations::ClaudePlanWindow;
 use shore_common::protocol::server_msg::*;
 use shore_common::protocol::types::*;
 
@@ -440,6 +441,20 @@ fn usage_warning_pace_golden() {
         assert_eq!(w.scope.as_deref(), Some("pace"));
         assert_eq!(w.budget, "weekly");
         assert_eq!(w.period, "day", "the pace sub-window period, not the budget's");
+    }
+    );
+}
+
+#[test]
+fn plan_limit_warning_golden() {
+    let msg: ServerMessage = assert_golden(&shared_fixture("server", Some("plan_limit_warning")));
+    assert_variant!(
+    msg,
+    ServerMessage::PlanLimitWarning(w) => {
+        assert_eq!(w.rid.as_deref(), Some("msg_03"));
+        assert!(matches!(w.window, ClaudePlanWindow::SevenDay));
+        assert_eq!(w.crossed_warn_at, vec![0.8, 0.95]);
+        assert!(w.over_limit);
     }
     );
 }
@@ -895,6 +910,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::PlanLimitWarning(_)
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)

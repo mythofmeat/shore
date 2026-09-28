@@ -8,6 +8,7 @@ import { embedImageData } from "../engine/wire_images.ts";
 import { rustTrim } from "../memory/lines.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
 import type { UsageBudgetWarningEvent } from "../ledger/budget.ts";
+import type { PlanLimitWarningEvent } from "../ledger/plan_limits.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
 import type { KeepaliveArming } from "../cache/last_request.ts";
@@ -44,6 +45,7 @@ export interface PersistContext {
   autonomy: PersistAutonomy;
   notifier: NotificationService;
   newlyCrossedUsageBudgetWarnings: (character: string) => Promise<UsageBudgetWarningEvent[]>;
+  newlyCrossedPlanLimitWarnings: (character: string) => Promise<PlanLimitWarningEvent[]>;
   now: () => string;
   newMessageId: () => string;
 }
@@ -51,6 +53,7 @@ export interface PersistContext {
 export interface PersistParams {
   charName: string;
   resolvedProviderKey: string;
+  onClaudePlan?: boolean;
   result: StreamResult;
   request: WireRequest;
   keepaliveIntervalMs: number | undefined;
@@ -111,6 +114,7 @@ export async function persistAndNotify(
     params.wallClockMs,
   );
   await emitUsageBudgetWarnings(ctx, charName, request.rid);
+  if (params.onClaudePlan === true) await emitPlanLimitWarnings(ctx, charName, request.rid);
 }
 
 export function lastRequestWithResponse(
@@ -189,6 +193,25 @@ async function emitUsageBudgetWarnings(
       reset_at_display: warning.reset_at_display,
       scope: warning.scope === "budget" ? null : warning.scope,
     });
+    ctx.notifier.notify("usage_warning", "Shore usage warning", warning.message);
+  }
+}
+
+async function emitPlanLimitWarnings(
+  ctx: PersistContext,
+  charName: string,
+  rid: string | undefined,
+): Promise<void> {
+  let warnings: PlanLimitWarningEvent[];
+  try {
+    warnings = await ctx.newlyCrossedPlanLimitWarnings(charName);
+  } catch (e) {
+    shoreLog.warn(`shore: plan limit warning check failed: ${String(e)}`);
+    return;
+  }
+
+  for (const warning of warnings) {
+    ctx.sendDirect({ type: "plan_limit_warning", rid: rid ?? null, ...warning });
     ctx.notifier.notify("usage_warning", "Shore usage warning", warning.message);
   }
 }

@@ -24,6 +24,17 @@ allow_compaction = true
 ` },
   { title: "Notifications and an MCP server", text: "[notifications]\ntoken_env = \"NTFY_TOKEN\"\nevents = [\"error\", \"message_complete\"]\nmin_generation_duration = \"10s\"\nurl = \"https://ntfy.example.invalid\"\ntopic = \"your-private-topic\"\nvia = \"ntfy\"\n\n[mcp.reference]\nurl = \"https://mcp.example.invalid\"\n" },
   { title: "A character override", text: "budgets = [{ name = \"this-character\", cost_usd = 5, period = \"day\", limit_action = \"block\", allow_compaction = false }]\n\n[chat]\nmodel = \"anthropic:claude-opus-4-8\"\n\n[heartbeat]\nenabled = false\n" },
+  { title: "Claude plan limits", text: `[plan_limits.five_hour]
+warn_fractions = [0.8, 0.95]
+limit_fraction = 1.0
+limit_action = "pause_background"
+
+[plan_limits.seven_day]
+warn_fractions = [0.75, 0.9]
+limit_fraction = 0.9
+limit_action = "pause_background"
+` },
+  { title: "A character whose heartbeat stops early in the week", text: "[plan_limits.seven_day]\nlimit_fraction = 0.6\nlimit_action = \"pause_heartbeat\"\n" },
 ] as const;
 
 for (const example of CONFIG_EXAMPLES) test(`configuration example: ${example.title}`, () => {

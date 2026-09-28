@@ -1572,6 +1572,69 @@
               "reset_at_display"
             ]
           },
+          "ClaudePlanWindow": {
+            "type": "string",
+            "enum": [
+              "five_hour",
+              "seven_day"
+            ]
+          },
+          "PlanLimitWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "window": {
+                "$ref": "#/$defs/ClaudePlanWindow"
+              },
+              "limit": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "limit_at": {
+                "type": "number",
+                "format": "double"
+              },
+              "over_limit": {
+                "type": "boolean"
+              },
+              "resets_at": {
+                "type": "string"
+              },
+              "resets_at_display": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "window",
+              "limit",
+              "message",
+              "percent_used",
+              "crossed_warn_at",
+              "limit_at",
+              "over_limit",
+              "resets_at",
+              "resets_at_display"
+            ]
+          },
           "ConfigWarning": {
             "type": "object",
             "properties": {
@@ -2972,6 +3035,69 @@
               "reset_at_display"
             ]
           },
+          "ClaudePlanWindow": {
+            "type": "string",
+            "enum": [
+              "five_hour",
+              "seven_day"
+            ]
+          },
+          "PlanLimitWarning": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "window": {
+                "$ref": "#/$defs/ClaudePlanWindow"
+              },
+              "limit": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "percent_used": {
+                "type": "number",
+                "format": "double"
+              },
+              "crossed_warn_at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "limit_at": {
+                "type": "number",
+                "format": "double"
+              },
+              "over_limit": {
+                "type": "boolean"
+              },
+              "resets_at": {
+                "type": "string"
+              },
+              "resets_at_display": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "window",
+              "limit",
+              "message",
+              "percent_used",
+              "crossed_warn_at",
+              "limit_at",
+              "over_limit",
+              "resets_at",
+              "resets_at_display"
+            ]
+          },
           "ConfigWarning": {
             "type": "object",
             "properties": {
@@ -3242,6 +3368,9 @@
     "CharacterModelReset": "{ active: string | null, previous_provider: string | null, previous_model_id: string | null, reset_to: string, invalidated?: ModelInvalidated, }",
     "CharacterModelSelected": "{ shadowed_by_thread?: string | null, active: string, qualified_name: string, provider: string, model_id: string, changed: boolean, invalidated?: ModelInvalidated, }",
     "CharacterSelection": "{ character: string, changed: boolean, selected_character?: string, active_model?: string | null, }",
+    "ClaudePlanLimit": "{ window: ClaudePlanWindow, percent_used: number, resets_at: string | null, status: UsageBudgetLevel, warning_thresholds: Array<number>, crossed_warn_at: Array<number>, limit_at: number, action: UsageBudgetAction, over_limit: boolean, }",
+    "ClaudePlanLimitsReport": "{ updated_at: string, subscription_type: string | null, windows: Array<ClaudePlanLimit>, }",
+    "ClaudePlanWindow": "\"five_hour\" | \"seven_day\"",
     "ClearArgs": "{ exclude?: boolean | null, note?: string | null, }",
     "ClearResult": "{ \"status\": \"clear\", character: string, thread: string, message_count: number, segment: SegmentSummary | null, }",
     "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, token?: string | null, }",
@@ -3383,6 +3512,7 @@
     "PayloadDiffOperation": "\"equal\" | \"added\" | \"removed\"",
     "Phase": "{ rid?: string | null, phase: string, model?: string | null, }",
     "Ping": "Record<symbol, never>",
+    "PlanLimitWarning": "{ rid?: string | null, window: ClaudePlanWindow, limit: string, message: string, percent_used: number, crossed_warn_at: Array<number>, limit_at: number, over_limit: boolean, resets_at: string, resets_at_display: string, }",
     "PrimedKeepalivePing": "{ input_tokens: number, cache_read_tokens: number, cache_creation_tokens: number, wrote_cache: boolean, interval_secs: number, next_ping_at: string, seconds_until_ping: number, }",
     "ProviderArgs": "{ provider: string, }",
     "ProviderCacheStatus": "{ present: boolean, models: number, visible: number, hidden: number, fetched_at: string | null, }",
@@ -3425,7 +3555,7 @@
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
     "ServerHello": "{ v: number, server_name: string, server_version?: string | null, characters: Array<CharacterInfo>, }",
-    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_accepted\" } & RequestAccepted | { \"type\": \"request_finished\" } & RequestFinished",
+    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"plan_limit_warning\" } & PlanLimitWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_accepted\" } & RequestAccepted | { \"type\": \"request_finished\" } & RequestFinished",
     "SessionActivated": "{ character: string, registered: boolean, keepalive: KeepaliveActivation, heartbeat: ActivatedHeartbeat | null, }",
     "SetModelSettingArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, key: string, scope?: ModelPreferenceScope | null, value?: unknown, }",
     "Shutdown": "Record<symbol, never>",
@@ -3477,7 +3607,7 @@
     "UsageBudgetFilters": "{ character: string | null, provider: string | null, api_key: string | null, model: string | null, call_type: string | null, usage_kind: Array<string>, }",
     "UsageBudgetLevel": "\"ok\" | \"warning\" | \"over_limit\"",
     "UsageBudgetPeriod": "\"hour\" | \"day\" | \"week\" | \"month\"",
-    "UsageBudgetReport": "{ timezone: string, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, }",
+    "UsageBudgetReport": "{ timezone: string, budgets: Array<UsageBudget>, call_attempts: UsageCallAttempts, claude_plan_limits?: ClaudePlanLimitsReport, }",
     "UsageCacheCoverage": "{ state: string, reason: string | null, calls: number, cache_read_tokens: number, cache_write_tokens: number, }",
     "UsageCacheHealth": "{ character: string, state: UsageCacheState, streak: number, }",
     "UsageCacheState": "\"cold\" | \"warm\"",
@@ -3489,7 +3619,7 @@
     "UsagePace": "{ period: UsageBudgetPeriod, window_start: string, window_end: string, allowance: number, base_allowance: number, rollover: number, debt_adjustment: number, current_cost: number, remaining: number, percent_used: number, periods_remaining: number, status: UsageBudgetLevel, action: UsageBudgetAction, effective_action: UsageBudgetAction, warning_thresholds: Array<number>, crossed_warn_at: Array<number>, over_limit: boolean, }",
     "UsageRateLimitReading": "{ host: string, observed_at: string, requests_remaining?: number, requests_limit?: number, input_tokens_remaining?: number, input_tokens_limit?: number, output_tokens_remaining?: number, output_tokens_limit?: number, resets_at?: string, }",
     "UsageResult": "{ \"mode\": \"summary\" } & UsageSummaryReport | { \"mode\": \"summary_by\" } & UsageGroupedReport | { \"mode\": \"budget\" } & UsageBudgetReport | { \"mode\": \"anomalies\" } & UsageAnomaliesReport | { \"mode\": \"csv\" } & UsageExportReport | { \"mode\": \"tsv\" } & UsageExportReport",
-    "UsageSummaryReport": "{ period: string, period_since?: string, timezone: string, summary: Array<UsageSummaryRow>, cache_health: Array<UsageCacheHealth>, anomaly_count_7d: number, anomaly_counts_7d: Array<UsageAnomalyCount>, cache_coverage: Array<UsageCacheCoverage>, cost_sources: Array<UsageCostSource>, rate_limits: Array<UsageRateLimitReading>, nanogpt_subscription: NanoGptSubscriptionState | null, call_attempts: UsageCallAttempts, budgets: Array<UsageBudget>, }",
+    "UsageSummaryReport": "{ period: string, period_since?: string, timezone: string, summary: Array<UsageSummaryRow>, cache_health: Array<UsageCacheHealth>, anomaly_count_7d: number, anomaly_counts_7d: Array<UsageAnomalyCount>, cache_coverage: Array<UsageCacheCoverage>, cost_sources: Array<UsageCostSource>, rate_limits: Array<UsageRateLimitReading>, nanogpt_subscription: NanoGptSubscriptionState | null, claude_plan_limits: ClaudePlanLimitsReport | null, call_attempts: UsageCallAttempts, budgets: Array<UsageBudget>, }",
     "UsageSummaryRow": "{ provider: string, model: string, call_count: number, total_input: number, total_output: number, total_cache_read: number, total_cache_write: number, total_cost: number, }",
     "UsageTotals": "{ call_count: number, total_input: number, total_output: number, total_cache_read: number, total_cache_write: number, total_cost: number, }",
     "UsageWarning": "{ rid?: string | null, budget: string, message: string, current_cost: number, cost_limit: number, percent_used: number, crossed_warn_at: Array<number>, period: string, period_start: string, reset_at: string, reset_at_display: string, scope?: string | null, }",

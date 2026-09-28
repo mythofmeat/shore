@@ -27,6 +27,7 @@ import type {
   WireMessage,
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
+import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
 import { anyToolEnabled } from "../config/app.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
@@ -117,6 +118,7 @@ export interface GenerationDeps {
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered" | "call">;
   compaction: CompactionRunner;
   newlyCrossedUsageBudgetWarnings: PersistContext["newlyCrossedUsageBudgetWarnings"];
+  newlyCrossedPlanLimitWarnings: PersistContext["newlyCrossedPlanLimitWarnings"];
   ledgerPath?: string;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   now?: () => string;
@@ -330,6 +332,7 @@ async function runGenerationCore(
     autonomy,
     notifier: deps.notifier,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
+    newlyCrossedPlanLimitWarnings: deps.newlyCrossedPlanLimitWarnings,
     now,
     newMessageId,
   };
@@ -337,6 +340,7 @@ async function runGenerationCore(
   await persistAndNotify(persistCtx, engine, {
     charName,
     resolvedProviderKey: resolved.providerKey,
+    onClaudePlan: runsOnClaudePlan(request),
     result,
     request: {
       ...sentBody,

@@ -59,6 +59,7 @@ export class SyncState {
       case "provider_warning":
       case "provider_fallback_warning":
       case "usage_warning":
+      case "plan_limit_warning":
       case "config_warning":
       case "request_accepted":
       case "request_finished":

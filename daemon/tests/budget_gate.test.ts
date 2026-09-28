@@ -18,7 +18,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
-import type { UsageConfig } from "../src/ledger/budget.ts";
+import type { BudgetBlock, UsageConfig } from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
@@ -30,6 +30,9 @@ import {
   runGeneration,
   type GenerationDeps,
 } from "../src/handler/generation.ts";
+
+const costBlock = (request: SidecarRequest): BudgetBlock | undefined =>
+  budgetBlockFor(request) as BudgetBlock | undefined;
 
 afterAll(restoreTestEnv);
 
@@ -251,14 +254,14 @@ test("a loop that would breach the budget is refused before it starts", () => {
   const single = budgetBlockFor(req(ledger, TEN_DOLLAR_BUDGET));
   expect(single, "one call on its own still fits").toBeUndefined();
 
-  const loop = budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
+  const loop = costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
   expect(loop?.budget_name).toBe("ten");
   expect(loop?.projected_cost).toBeCloseTo(9.0, 5);
 });
 
 test("the refusal says it is a projection, and reports what was actually spent", () => {
   const ledger = ledgerWithHistory(4, 1.0);
-  const block = budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
+  const block = costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
 
   expect(block?.message).toContain("would be exceeded by this tool loop");
   expect(block?.message).toContain("$4.00 spent");
@@ -379,7 +382,7 @@ test("the estimate follows the recent window, not the whole history", () => {
   for (let i = 0; i < RECENT_COST_SAMPLE; i++) insert(1.0);
   db.close();
 
-  const block = budgetBlockFor(loopReq(f.path, RECENT_WINDOW_BUDGET, 10));
+  const block = costBlock(loopReq(f.path, RECENT_WINDOW_BUDGET, 10));
   expect(block?.projected_cost).toBeCloseTo(9.0, 5);
 });
 
@@ -402,7 +405,7 @@ test("free rows do not drag the mean toward zero", () => {
   insert(1.0);
   db.close();
 
-  const block = budgetBlockFor(loopReq(f.path, TEN_DOLLAR_BUDGET, 10));
+  const block = costBlock(loopReq(f.path, TEN_DOLLAR_BUDGET, 10));
   expect(block?.projected_cost).toBeCloseTo(9.0, 5);
 });
 
@@ -509,6 +512,7 @@ async function chatTurn(
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
+    newlyCrossedPlanLimitWarnings: async () => [],
     ledgerPath: ledger,
     sleep: async () => {
       sleeps += 1;

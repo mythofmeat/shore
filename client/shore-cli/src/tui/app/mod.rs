@@ -363,6 +363,7 @@ pub(crate) struct App {
     pub output_pager: Option<OutputPager>,
     pub keymap: crate::tui::keymap::Keymap,
     pub usage_budgets: Vec<UsageBudget>,
+    pub plan_limits: Option<Vec<PlanLimit>>,
     pub pending_images: Vec<String>,
     pub paste_temp_paths: Vec<std::path::PathBuf>,
     pub editing_ref: Option<String>,
@@ -453,6 +454,7 @@ impl Default for App {
             output_pager: None,
             keymap: crate::tui::keymap::Keymap::default(),
             usage_budgets: Vec::new(),
+            plan_limits: None,
             pending_images: Vec::new(),
             paste_temp_paths: Vec::new(),
             editing_ref: None,
@@ -1539,6 +1541,32 @@ impl App {
                 pace: b.get("pace").and_then(usage_level_from_json),
             })
             .collect();
+        if data.get("mode").and_then(serde_json::Value::as_str) == Some("budget") {
+            self.plan_limits = data
+                .get("claude_plan_limits")
+                .and_then(plan_limits_from_json);
+        }
+    }
+
+    pub(crate) fn apply_plan_limit_warning(
+        &mut self,
+        window: PlanWindow,
+        level: UsageLevel,
+    ) -> bool {
+        let Some(limit) = self
+            .plan_limits
+            .as_mut()
+            .and_then(|limits| limits.iter_mut().find(|limit| limit.window == window))
+        else {
+            return false;
+        };
+        limit.level = level;
+        true
+    }
+
+    pub(crate) fn clear_usage_limits(&mut self) {
+        self.usage_budgets.clear();
+        self.plan_limits = None;
     }
 
     pub(crate) fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {

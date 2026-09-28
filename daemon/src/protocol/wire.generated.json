@@ -462,6 +462,19 @@
         "properties": {
           "type": {
             "type": "string",
+            "const": "plan_limit_warning"
+          }
+        },
+        "$ref": "#/$defs/PlanLimitWarning",
+        "required": [
+          "type"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
             "const": "config_warning"
           }
         },
@@ -1640,6 +1653,69 @@
           "period_start",
           "reset_at",
           "reset_at_display"
+        ]
+      },
+      "ClaudePlanWindow": {
+        "type": "string",
+        "enum": [
+          "five_hour",
+          "seven_day"
+        ]
+      },
+      "PlanLimitWarning": {
+        "type": "object",
+        "properties": {
+          "rid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "window": {
+            "$ref": "#/$defs/ClaudePlanWindow"
+          },
+          "limit": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "crossed_warn_at": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "limit_at": {
+            "type": "number",
+            "format": "double"
+          },
+          "over_limit": {
+            "type": "boolean"
+          },
+          "resets_at": {
+            "type": "string"
+          },
+          "resets_at_display": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "required": [
+          "window",
+          "limit",
+          "message",
+          "percent_used",
+          "crossed_warn_at",
+          "limit_at",
+          "over_limit",
+          "resets_at",
+          "resets_at_display"
         ]
       },
       "ConfigWarning": {

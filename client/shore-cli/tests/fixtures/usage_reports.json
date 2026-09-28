@@ -76,6 +76,42 @@
         "recommendedMode": "subscription"
       }
     },
+    "claude_plan_limits": {
+      "updated_at": "2026-09-10T00:00:00Z",
+      "subscription_type": "max",
+      "windows": [
+        {
+          "window": "five_hour",
+          "percent_used": 0.42,
+          "resets_at": "2026-09-10T03:00:00Z",
+          "status": "ok",
+          "warning_thresholds": [
+            0.8,
+            0.95
+          ],
+          "crossed_warn_at": [],
+          "limit_at": 1.0,
+          "action": "pause_background",
+          "over_limit": false
+        },
+        {
+          "window": "seven_day",
+          "percent_used": 0.91,
+          "resets_at": "2026-09-14T00:00:00Z",
+          "status": "over_limit",
+          "warning_thresholds": [
+            0.8,
+            0.95
+          ],
+          "crossed_warn_at": [
+            0.8
+          ],
+          "limit_at": 0.9,
+          "action": "block",
+          "over_limit": true
+        }
+      ]
+    },
     "call_attempts": {
       "pending": 0,
       "unresolved": 1,

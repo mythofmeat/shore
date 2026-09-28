@@ -43,7 +43,7 @@ export async function reliabilityGeneration(provider: SidecarProvider, thread = 
     diagnostics: { key_fallbacks: { push: () => {} } }, emitEvent: (frame) => { frames.push(frame); },
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
-    newlyCrossedUsageBudgetWarnings: async () => [], env: { SHORE_RELIABILITY_KEY: "fixture" },
+    newlyCrossedUsageBudgetWarnings: async () => [], newlyCrossedPlanLimitWarnings: async () => [], env: { SHORE_RELIABILITY_KEY: "fixture" },
     sleep: async () => {},
   };
   return {

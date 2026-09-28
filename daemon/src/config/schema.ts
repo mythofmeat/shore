@@ -195,8 +195,16 @@ function modelInfo(field: string): ConfigTypeInfo {
   return { kind: "string", optional: true };
 }
 
+const PLAN_LIMIT_DESCRIPTIONS: Record<string, string> = {
+  warn_fractions: "Claude plan utilization fractions that trigger warnings (0.8 means 80% of the window).",
+  limit_fraction: "Claude plan utilization fraction at which limit_action applies; 1.0 is the whole window.",
+  limit_action: "What reaching limit_fraction does to calls on the Claude subscription: warn, block, pause_background or pause_heartbeat.",
+};
+
 function describeOption(path: readonly string[]): string {
   const leaf = path.at(-1) ?? "configuration";
+  const plan = path[0] === "plan_limits" ? PLAN_LIMIT_DESCRIPTIONS[leaf] : undefined;
+  if (plan !== undefined) return plan;
   const descriptions: Record<string, string> = {
     model: "Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.",
     enabled: "Enable this feature or select the names granted access.",
@@ -221,7 +229,7 @@ function describeOption(path: readonly string[]): string {
 
 function unitsOf(path: readonly string[]): string | undefined {
   const leaf = path.at(-1) ?? "";
-  return leaf.endsWith("_bytes") ? "bytes" : leaf.endsWith("_chars") ? "characters" : leaf.endsWith("_tokens") ? "tokens" : leaf.endsWith("_fractions") ? "fraction" : leaf === "cost_usd" ? "USD" : undefined;
+  return leaf.endsWith("_bytes") ? "bytes" : leaf.endsWith("_chars") ? "characters" : leaf.endsWith("_tokens") ? "tokens" : leaf.endsWith("_fractions") || leaf === "limit_fraction" ? "fraction" : leaf === "cost_usd" ? "USD" : undefined;
 }
 
 export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): SchemaEntry | undefined {

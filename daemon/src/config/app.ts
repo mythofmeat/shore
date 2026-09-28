@@ -959,14 +959,57 @@ export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
   return budget.pace_warn_at ?? budget.warn_at;
 }
 
+export interface PlanLimitPolicyConfig {
+  warn_fractions: number[];
+  limit_fraction: number;
+  limit_action: UsageBudgetAction;
+}
+
+export const defaultPlanLimitPolicy = (): PlanLimitPolicyConfig => ({
+  warn_fractions: [0.8, 0.95],
+  limit_fraction: 1,
+  limit_action: "pause_background",
+});
+
+const PLAN_LIMIT_POLICY: StructSpec<PlanLimitPolicyConfig> = {
+  name: "PlanLimitPolicyConfig",
+  make: defaultPlanLimitPolicy,
+  fields: {
+    warn_fractions: readF64Seq,
+    limit_fraction: readF64,
+    limit_action: readEnum(BUDGET_ACTIONS),
+  },
+};
+
+export interface PlanLimitsConfig {
+  five_hour: PlanLimitPolicyConfig;
+  seven_day: PlanLimitPolicyConfig;
+}
+
+export const defaultPlanLimitsConfig = (): PlanLimitsConfig => ({
+  five_hour: defaultPlanLimitPolicy(),
+  seven_day: defaultPlanLimitPolicy(),
+});
+
+const PLAN_LIMITS: StructSpec<PlanLimitsConfig> = {
+  name: "PlanLimitsConfig",
+  make: defaultPlanLimitsConfig,
+  fields: {
+    five_hour: struct(PLAN_LIMIT_POLICY),
+    seven_day: struct(PLAN_LIMIT_POLICY),
+  },
+};
+
 export interface UsageConfig {
   timezone: string;
   budgets: UsageBudgetConfig[];
+  plan_limits: PlanLimitsConfig;
 }
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
   budgets: [],
+  plan_limits: defaultPlanLimitsConfig(),
 });
 
 const USAGE: StructSpec<UsageConfig> = {
@@ -975,6 +1018,7 @@ const USAGE: StructSpec<UsageConfig> = {
   fields: {
     timezone: readString,
     budgets: readSeq(struct(BUDGET)),
+    plan_limits: struct(PLAN_LIMITS),
   },
 };
 

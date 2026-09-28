@@ -1097,6 +1097,7 @@ function makeContext(): {
       recordingSink(notified),
     ),
     newlyCrossedUsageBudgetWarnings: () => Promise.resolve([]),
+    newlyCrossedPlanLimitWarnings: () => Promise.resolve([]),
     now: () => "2026-08-03T00:00:00+00:00",
     newMessageId: () => `m_${(n += 1)}`,
   };
@@ -1379,6 +1380,54 @@ describe("persist_and_notify", () => {
     expect((direct[1] as unknown as Row)["scope"]).toBe("pace");
     expect((direct[0] as unknown as Row)["rid"]).toBe("req-1");
     expect(notified).toContain("notify_send:Shore usage warning:over budget");
+  });
+
+  test("plan warnings go out only after a turn that ran on the Claude plan", async () => {
+    const { ctx, direct, notified } = makeContext();
+    ctx.newlyCrossedPlanLimitWarnings = () =>
+      Promise.resolve([
+        {
+          window: "five_hour",
+          limit: "Claude 5-hour limit",
+          message: "Claude 5-hour limit is at 82%",
+          percent_used: 0.82,
+          crossed_warn_at: [0.8],
+          limit_at: 1,
+          over_limit: false,
+          resets_at: "r",
+          resets_at_display: "d",
+        },
+      ]);
+    const turn = (onClaudePlan: boolean) =>
+      persistAndNotify(ctx, new FakeEngine(), {
+        charName: "Alice",
+        resolvedProviderKey: "p",
+        onClaudePlan,
+        result: resultWith("hi", [{ type: "text", text: "hi" }]),
+        request: { model: "m", messages: [], rid: "req-1" },
+        keepaliveIntervalMs: undefined,
+        toolIntermediateMessages: [],
+        wallClockMs: 1,
+      });
+
+    await turn(false);
+    expect(direct, "a turn on another provider says nothing about the Claude plan").toEqual([]);
+
+    await turn(true);
+    expect(direct).toEqual([{
+      type: "plan_limit_warning",
+      rid: "req-1",
+      window: "five_hour",
+      limit: "Claude 5-hour limit",
+      message: "Claude 5-hour limit is at 82%",
+      percent_used: 0.82,
+      crossed_warn_at: [0.8],
+      limit_at: 1,
+      over_limit: false,
+      resets_at: "r",
+      resets_at_display: "d",
+    }]);
+    expect(notified).toContain("notify_send:Shore usage warning:Claude 5-hour limit is at 82%");
   });
 
   test("a failing budget check does not fail the persistence", async () => {

@@ -17,7 +17,7 @@ import type { Message } from "../engine/types.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { budgetStopIn, describeError } from "../llm/errors.ts";
 import { truncateSummary } from "../notifications.ts";
-import type { BudgetBlock } from "../ledger/budget.ts";
+import type { CallBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
 
@@ -40,7 +40,7 @@ export interface HeartbeatTickDeps
   notify?: (title: string, body: string) => void;
   newId?: () => string;
   nowIso?: () => string;
-  budgetBlockFor?: (request: SidecarRequest) => BudgetBlock | undefined;
+  budgetBlockFor?: (request: SidecarRequest) => CallBlock | undefined;
 }
 
 function shortPreview(text: string): string {

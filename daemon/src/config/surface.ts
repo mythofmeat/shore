@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -55,6 +55,7 @@ export const CONFIG_FIELDS: readonly ConfigField[] = [
   field("notifications.ntfy.topic", "notifications.topic"),
   field("mcp.*.cwd", "mcp.*.working_dir"),
   field("usage.budgets", "budgets"),
+  field("usage.plan_limits", "plan_limits"),
   field("image_generation", "image"),
   field("providers.*.discovery.enabled", "providers.*.discover"),
   field("providers.*.discovery.ignore", "providers.*.ignore_models"),
