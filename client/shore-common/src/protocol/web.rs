@@ -124,6 +124,9 @@ pub struct WebRequestInfo {
     #[ts(type = "number")]
     pub expires_at: u64,
     pub phase: WebRequestPhase,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
+    pub accepted: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub result: Option<super::operations::OperationResponse>,

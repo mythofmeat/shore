@@ -1662,6 +1662,17 @@
               "message"
             ]
           },
+          "RequestAccepted": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "rid"
+            ]
+          },
           "RequestOutcome": {
             "type": "string",
             "enum": [
@@ -3114,6 +3125,17 @@
               "message"
             ]
           },
+          "RequestAccepted": {
+            "type": "object",
+            "properties": {
+              "rid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "rid"
+            ]
+          },
           "RequestOutcome": {
             "type": "string",
             "enum": [
@@ -3511,6 +3533,7 @@
     "ProviderWarning": "{ rid?: string | null, message: string, }",
     "RateLimitSnapshot": "{ requests_remaining?: number, requests_limit?: number, input_tokens_remaining?: number, input_tokens_limit?: number, output_tokens_remaining?: number, output_tokens_limit?: number, resets_at?: string, }",
     "Regen": "{ rid?: string | null, stream: boolean, guidance?: string | null, }",
+    "RequestAccepted": "{ rid: string, }",
     "RequestFinished": "{ rid: string, outcome: RequestOutcome, error?: Error | null, }",
     "RequestOutcome": "\"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "ResetModelArgs": "{ background_task?: BackgroundModelTarget | null, subagent?: string | null, }",
@@ -3532,7 +3555,7 @@
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
     "ServerHello": "{ v: number, server_name: string, server_version?: string | null, characters: Array<CharacterInfo>, }",
-    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"plan_limit_warning\" } & PlanLimitWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_finished\" } & RequestFinished",
+    "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"plan_limit_warning\" } & PlanLimitWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_accepted\" } & RequestAccepted | { \"type\": \"request_finished\" } & RequestFinished",
     "SessionActivated": "{ character: string, registered: boolean, keepalive: KeepaliveActivation, heartbeat: ActivatedHeartbeat | null, }",
     "SetModelSettingArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, key: string, scope?: ModelPreferenceScope | null, value?: unknown, }",
     "Shutdown": "Record<symbol, never>",
@@ -3608,7 +3631,7 @@
     "WebLogin": "{ token: string, }",
     "WebProblem": "{ code: WebProblemCode, message: string, }",
     "WebProblemCode": "\"unauthorized\" | \"forbidden\" | \"invalid_request\" | \"too_many_requests\" | \"reload_required\" | \"unavailable\" | \"not_found\"",
-    "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, result?: OperationResponse, result_omitted: boolean, error?: Error, }",
+    "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, accepted?: boolean, result?: OperationResponse, result_omitted: boolean, error?: Error, }",
     "WebRequestList": "{ requests: Array<WebRequestInfo>, max_records: number, max_result_bytes: number, }",
     "WebRequestPhase": "\"running\" | \"uncertain\" | \"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }",

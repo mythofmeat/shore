@@ -488,6 +488,19 @@
         "properties": {
           "type": {
             "type": "string",
+            "const": "request_accepted"
+          }
+        },
+        "$ref": "#/$defs/RequestAccepted",
+        "required": [
+          "type"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
             "const": "request_finished"
           }
         },
@@ -1730,6 +1743,17 @@
         "required": [
           "path",
           "message"
+        ]
+      },
+      "RequestAccepted": {
+        "type": "object",
+        "properties": {
+          "rid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rid"
         ]
       },
       "RequestOutcome": {

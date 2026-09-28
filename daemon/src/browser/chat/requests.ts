@@ -14,9 +14,8 @@ export class ConversationRequests {
   constructor(readonly connection: BrowserConnection) {
     connection.subscribe((update) => {
       if (update.kind !== "frame") return;
-      if (update.message.type === "new_message") {
-        const { rid, role } = update.message;
-        if (role !== "user" || typeof rid !== "string") return;
+      if (update.message.type === "request_accepted") {
+        const { rid } = update.message;
         this.#accepted.get(rid)?.();
         this.#accepted.delete(rid);
         return;
@@ -36,10 +35,10 @@ export class ConversationRequests {
     const sent = this.#scopes.get(rid);
     return sent !== undefined && sent.character === scope.character && sent.thread === scope.thread;
   }
-  async submit(name: "message" | "regen", values: Record<string, unknown>, accepted?: () => void): Promise<RequestFinished> {
+  async submit(name: "message" | "regen", values: Record<string, unknown>, { rid: chosen, accepted }: { rid?: string; accepted?: () => void } = {}): Promise<RequestFinished> {
     const request = conversationRequest(name, values);
     const { character, thread } = this.connection.selection;
-    const { rid, finished } = this.connection.submit(request);
+    const { rid, finished } = this.connection.submit(request, chosen);
     this.#scopes.set(rid, { character, thread });
     if (name === "regen") this.#regens.add(rid);
     if (accepted !== undefined) this.#accepted.set(rid, accepted);

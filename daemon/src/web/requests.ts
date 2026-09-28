@@ -107,7 +107,7 @@ export class RequestHistory {
   }
 
   settle(sessionId: number, message: ServerMessage): SettledRequest | undefined {
-    if ((message.type !== "command_output" && message.type !== "request_finished") || typeof message.rid !== "string") return undefined;
+    if ((message.type !== "command_output" && message.type !== "request_accepted" && message.type !== "request_finished") || typeof message.rid !== "string") return undefined;
     const key = JSON.stringify([sessionId, message.rid]);
     const id = this.#live.get(key);
     const record = id === undefined ? undefined : this.#records.get(id);
@@ -121,6 +121,7 @@ export class RequestHistory {
   #apply(record: SavedRequest, message: ServerMessage): void {
     if (record.info.expires_at <= Date.now()) return;
     const info = record.info;
+    if (message.type === "request_accepted" && message.rid === info.rid && info.accepted !== true) this.#store(record.owner, { ...info, accepted: true });
     if (message.type === "command_output" && message.rid === info.rid) {
       const result = { name: message.name, data: message.data };
       const candidate = { ...info, result };

@@ -71,3 +71,6 @@ independent of current selection. Outcomes are completed, failed, cancelled or s
 structured error details when applicable. Completion follows actual handler/provider settlement;
 an immediate cancelled `stream_end` alone does not mean the work has released its resources.
 Web peers opt into this capability. Existing terminal peers retain their existing event sequence.
+A message request's peer also receives `request_accepted` directly once the daemon has saved the
+user turn, before `request_finished` and whatever the peer has selected since. If the reply fails
+after that, the message is still in the conversation.

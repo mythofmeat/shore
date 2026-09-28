@@ -10,6 +10,7 @@ import type { Ping } from "./Ping";
 import type { PlanLimitWarning } from "./PlanLimitWarning";
 import type { ProviderFallbackWarning } from "./ProviderFallbackWarning";
 import type { ProviderWarning } from "./ProviderWarning";
+import type { RequestAccepted } from "./RequestAccepted";
 import type { RequestFinished } from "./RequestFinished";
 import type { SendImage } from "./SendImage";
 import type { ServerHello } from "./ServerHello";
@@ -21,4 +22,4 @@ import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
 import type { UsageWarning } from "./UsageWarning";
 
-export type ServerMessage = { "type": "hello" } & ServerHello | { "type": "history" } & History | { "type": "shutdown" } & Shutdown | { "type": "ping" } & Ping | { "type": "command_output" } & CommandOutput | { "type": "error" } & Error | { "type": "stream_start" } & StreamStart | { "type": "stream_chunk" } & StreamChunk | { "type": "stream_end" } & StreamEnd | { "type": "phase" } & Phase | { "type": "new_message" } & NewMessage | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "send_image" } & SendImage | { "type": "cache_warning" } & CacheWarning | { "type": "provider_warning" } & ProviderWarning | { "type": "provider_fallback_warning" } & ProviderFallbackWarning | { "type": "usage_warning" } & UsageWarning | { "type": "plan_limit_warning" } & PlanLimitWarning | { "type": "config_warning" } & ConfigWarning | { "type": "request_finished" } & RequestFinished;
+export type ServerMessage = { "type": "hello" } & ServerHello | { "type": "history" } & History | { "type": "shutdown" } & Shutdown | { "type": "ping" } & Ping | { "type": "command_output" } & CommandOutput | { "type": "error" } & Error | { "type": "stream_start" } & StreamStart | { "type": "stream_chunk" } & StreamChunk | { "type": "stream_end" } & StreamEnd | { "type": "phase" } & Phase | { "type": "new_message" } & NewMessage | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "send_image" } & SendImage | { "type": "cache_warning" } & CacheWarning | { "type": "provider_warning" } & ProviderWarning | { "type": "provider_fallback_warning" } & ProviderFallbackWarning | { "type": "usage_warning" } & UsageWarning | { "type": "plan_limit_warning" } & PlanLimitWarning | { "type": "config_warning" } & ConfigWarning | { "type": "request_accepted" } & RequestAccepted | { "type": "request_finished" } & RequestFinished;

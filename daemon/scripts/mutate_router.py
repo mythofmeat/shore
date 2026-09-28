@@ -69,6 +69,20 @@ ROUTER = "src/handler/router.ts"
 
 # (label, find, replace)
 MUTANTS = [
+    # ── acceptance ──────────────────────────────────────────────────────
+    ("acceptance only reaches a session still viewing the thread",
+     "    const send = this.#lifecycle(meta) ? this.#deps.router.senderFor(meta.session.sessionId) : undefined;",
+     "    const send = this.#lifecycle(meta) && this.#deps.router.threadFor(meta.session.sessionId) === meta.session.selectedThread ? this.#deps.router.senderFor(meta.session.sessionId) : undefined;"),
+    ("acceptance is sent to clients that never asked for the request lifecycle",
+     "    const send = this.#lifecycle(meta) ? this.#deps.router.senderFor(meta.session.sessionId) : undefined;",
+     "    const send = this.#deps.router.senderFor(meta.session.sessionId);"),
+    ("acceptance is never reported to request history",
+     "    this.#deps.router.reportRequest(meta.session.sessionId, accepted);\n",
+     ""),
+    ("the generation is never told how to confirm acceptance",
+     "      accepted: () => this.#acceptRequest(meta, rid),\n",
+     ""),
+
     # ── the launch decision ─────────────────────────────────────────────
     ("an unresolvable character launches anyway",
      '    if ("error" in resolved) {',

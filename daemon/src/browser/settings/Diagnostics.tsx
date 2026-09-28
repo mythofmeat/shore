@@ -2,20 +2,14 @@ import { useEffect, useState } from "react";
 import type { StatusReport } from "../../protocol/StatusReport.ts";
 import type { WebRequestList } from "../../protocol/WebRequestList.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
-import { validWebRequestList } from "../validators.generated.js";
 import { errorText, workspace } from "../app/state.ts";
+import { listRequests, requestHistory } from "../request_history.ts";
 import { fieldLabel } from "../ui/Field.tsx";
 import { SettingsSection } from "./layout.tsx";
 import { formatNumber, formatTime, Loading, NeedsCharacter, useAction, useOperation } from "./shared.tsx";
 import { Tree } from "./tree.tsx";
 import { requestStatus } from "./format.ts";
 
-
-async function requestHistory(path: string): Promise<Response> {
-  const response = await fetch(`/api/requests${path}`, { method: "POST", credentials: "same-origin", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error("Couldn’t load request history. Try again after reconnecting.");
-  return response;
-}
 
 export function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
   const [listing, setListing] = useState<WebRequestList>();
@@ -26,9 +20,7 @@ export function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    void requestHistory("/list").then(async (response) => {
-      const value: unknown = await response.json();
-      if (!validWebRequestList(value)) throw new Error("The daemon sent an unexpected request history. Reload the page.");
+    void listRequests().then((value) => {
       if (!alive) return;
       setListing(value); setError("");
       for (const item of workspace.getSnapshot().uncertain) if (value.requests.some((request) => request.rid === item.rid)) workspace.acknowledge(item.rid);

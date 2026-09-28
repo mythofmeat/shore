@@ -182,8 +182,7 @@ test("conversation requests track when the daemon saved the message and when the
     listeners = new Set<(update: ConnectionUpdate) => void>();
     finish = new Map<string, (result: RequestFinished) => void>();
     override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-    override submit(_request: BrowserRequest) {
-      const rid = `r${String(this.finish.size + 1)}`;
+    override submit(_request: BrowserRequest, rid = `r${String(this.finish.size + 1)}`) {
       return { rid, finished: new Promise<RequestFinished>((resolve) => { this.finish.set(rid, resolve); }) };
     }
     frame(event: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: event }); }
@@ -191,14 +190,15 @@ test("conversation requests track when the daemon saved the message and when the
   const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
   const requests = new ConversationRequests(connection);
   const accepted: string[] = [];
-  const sent = requests.submit("message", { stream: true, text: "hello", image_data: [] }, () => accepted.push("r1"));
+  const sent = requests.submit("message", { stream: true, text: "hello", image_data: [] }, { rid: "r1", accepted: () => accepted.push("r1") });
   const regen = requests.submit("regen", { stream: true });
   const echo = (rid: string, role: "user" | "assistant"): ServerMessage => ({ type: "new_message", revision: 1, rid, msg_id: `${role}-${rid}`, role, content: "hello", images: [], content_blocks: [], timestamp: "now" });
   connection.frame(echo("r1", "assistant"));
-  connection.frame(echo("other", "user"));
+  connection.frame(echo("r1", "user"));
+  connection.frame({ type: "request_accepted", rid: "other" });
   expect(accepted).toEqual([]);
-  connection.frame(echo("r1", "user"));
-  connection.frame(echo("r1", "user"));
+  connection.frame({ type: "request_accepted", rid: "r1" });
+  connection.frame({ type: "request_accepted", rid: "r1" });
   expect(accepted).toEqual(["r1"]);
   expect(requests.pendingRegens()).toEqual(["r2"]);
   expect(requests.pendingRegens({ character: null, thread: null })).toEqual(["r2"]);

@@ -62,6 +62,31 @@ test("messages and regeneration are tracked with the same lifecycle", () => {
   expect(JSON.stringify(f.history.list(f.session))).not.toContain("private guidance");
 });
 
+test("a saved message is recorded as accepted, survives a restart and outlives the request's outcome", async () => {
+  const config = await options(); const a = open(config);
+  const sent = { type: "message" as const, rid: crypto.randomUUID(), text: "private user text", images: [], stream: true };
+  const other = { type: "message" as const, rid: crypto.randomUUID(), text: "never saved", images: [], stream: true };
+  idOf(a.history.begin(a.session, selection, sent)); idOf(a.history.begin(a.session, selection, other));
+  a.history.settle(selection.sessionId, { type: "request_accepted", rid: "unrelated" });
+  a.history.settle(selection.sessionId + 1, { type: "request_accepted", rid: other.rid });
+  expect(a.history.list(a.session).requests.some((request) => request.accepted === true)).toBe(false);
+  a.history.settle(selection.sessionId, { type: "request_accepted", rid: sent.rid });
+  const accepted = (history: RequestHistory, session: typeof a.session) => Object.fromEntries(history.list(session).requests.map((request) => [request.rid, [request.phase, request.accepted ?? false]]));
+  expect(accepted(a.history, a.session)).toEqual({ [sent.rid]: ["running", true], [other.rid]: ["running", false] });
+  a.close();
+  const b = open(config); const owner = b.sessions.read(new Request(origin, { headers: { cookie: a.cookie } }));
+  if (owner === undefined) throw new Error("Missing restored sign-in");
+  expect(accepted(b.history, owner)).toEqual({ [sent.rid]: ["uncertain", true], [other.rid]: ["uncertain", false] });
+});
+
+test("the outcome of an accepted message keeps its acceptance", () => {
+  const f = open(); const sent = { type: "message" as const, rid: crypto.randomUUID(), text: "hello", images: [], stream: true };
+  idOf(f.history.begin(f.session, selection, sent));
+  f.history.settle(selection.sessionId, { type: "request_accepted", rid: sent.rid });
+  f.history.settle(selection.sessionId, { type: "request_finished", rid: sent.rid, outcome: "failed", error: { code: "provider_error", message: "reply failed" } });
+  expect(f.history.list(f.session).requests[0]).toMatchObject({ phase: "failed", accepted: true });
+});
+
 test("results are correlated, bounded, typed and detached from caller mutations", () => {
   const f = open(); const request = edit(); const id = idOf(f.history.begin(f.session, selection, request));
   const data = { ref: "1", edited: true, future_detail: "kept" };

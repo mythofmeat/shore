@@ -2137,6 +2137,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::UsageWarning(_)
         | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }
@@ -2295,6 +2296,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::UsageWarning(_)
         | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => false,
     }
@@ -2355,6 +2357,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::UsageWarning(_)
         | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }
@@ -3477,6 +3480,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::Hello(_)
         | ServerMessage::Shutdown(_)
         | ServerMessage::Ping(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => RedrawEffect::Immediate,
     };
