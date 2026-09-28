@@ -954,8 +954,10 @@ fn build_conversation_lines(
     let settled_entries = app
         .entries
         .iter()
-        .position(|entry| {
-            entry.as_turn().is_some_and(|turn| turn.is_streaming()) || app.stream.hides(entry)
+        .enumerate()
+        .position(|(index, entry)| {
+            entry.as_turn().is_some_and(|turn| turn.is_streaming())
+                || app.replaced.hides(index, entry)
         })
         .unwrap_or(app.entries.len());
     let reuse = app.conv_cache.settled_fingerprint == settled_fingerprint
@@ -985,7 +987,7 @@ fn build_conversation_lines(
     app.conv_cache.settled_fingerprint = settled_fingerprint;
 
     for (index, entry) in app.entries.iter().enumerate().skip(first) {
-        if app.stream.hides(entry) {
+        if app.replaced.hides(index, entry) {
             continue;
         }
         let from = lines.len();
@@ -3325,6 +3327,11 @@ pub(crate) mod scenario_tests {
         fn thinking_chunk(&mut self, text: &str) {
             self.app.stream_append_thinking(text);
             self.app.stream.phase = "thinking".into();
+        }
+
+        fn receive(&mut self, frame: serde_json::Value) {
+            let message = serde_json::from_value(frame).expect("server frame");
+            let _ = crate::tui::handle_server_message(&mut self.app, message);
         }
 
         fn stream_end(&mut self, content: &str) {
@@ -7376,13 +7383,16 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::user(
+        h.app.entries.push(ConversationEntry::Turn(Turn::text(
+            Role::User,
+            Some("m_prompt".into()),
             "Tell me a joke".into(),
             vec![],
             "t1".into(),
-        ));
+            None,
+        )));
         h.app.entries.push(ConversationEntry::assistant(
-            Some("m_joke".into()),
+            None,
             "Why did the chicken cross the road?".into(),
             vec![],
             "t2".into(),
@@ -7418,7 +7428,16 @@ pub(crate) mod scenario_tests {
             "new response streaming"
         );
 
-        h.stream_end("A better joke: Why do programmers prefer dark mode?");
+        let reply = "A better joke: Why do programmers prefer dark mode?";
+        h.receive(serde_json::json!({
+            "type": "stream_end", "msg_id": "m_dark", "content": reply, "finish_reason": "end_turn",
+            "terminal_content_blocks": [{"type": "text", "text": reply}],
+            "metadata": {
+                "model": "test-model",
+                "tokens": {"input": 1, "output": 1, "cache_read": 0, "cache_write": 0},
+                "timing": {"total_ms": 1, "ttft_ms": 1}
+            }
+        }));
         let regen_complete = h.render("regen complete");
         assert!(
             regen_complete.contains("dark mode"),
@@ -7427,6 +7446,33 @@ pub(crate) mod scenario_tests {
         assert!(
             !regen_complete.contains("regenerating"),
             "regen indicator gone after completion"
+        );
+        assert!(
+            !regen_complete.contains("chicken"),
+            "the original stays hidden until the history that drops it"
+        );
+
+        h.receive(serde_json::json!({
+            "type": "history", "revision": 2,
+            "delta": {"base_revision": 1, "after": "m_prompt"},
+            "messages": [{
+                "msg_id": "m_dark", "role": "assistant", "content": reply,
+                "images": [], "content_blocks": [], "timestamp": "t3"
+            }]
+        }));
+        let history_applied = h.render("history applied");
+        assert!(
+            history_applied.contains("dark mode"),
+            "the saved reply replaces the streamed one"
+        );
+        assert!(
+            !history_applied.contains("chicken"),
+            "the history dropped the original"
+        );
+        assert_eq!(
+            history_applied.matches("dark mode").count(),
+            1,
+            "the reply shows once"
         );
     }
 
