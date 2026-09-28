@@ -1878,6 +1878,111 @@
           }
         }
       },
+      "ClaudePlanLimitsReport": {
+        "type": "object",
+        "properties": {
+          "updated_at": {
+            "type": "string"
+          },
+          "subscription_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudePlanLimit"
+            }
+          }
+        },
+        "required": [
+          "updated_at",
+          "subscription_type",
+          "windows"
+        ]
+      },
+      "ClaudePlanLimit": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "$ref": "#/$defs/ClaudePlanWindow"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/$defs/UsageBudgetLevel"
+          },
+          "warning_thresholds": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "crossed_warn_at": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "limit_at": {
+            "type": "number",
+            "format": "double"
+          },
+          "action": {
+            "$ref": "#/$defs/UsageBudgetAction"
+          },
+          "over_limit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "window",
+          "percent_used",
+          "resets_at",
+          "status",
+          "warning_thresholds",
+          "crossed_warn_at",
+          "limit_at",
+          "action",
+          "over_limit"
+        ]
+      },
+      "ClaudePlanWindow": {
+        "type": "string",
+        "enum": [
+          "five_hour",
+          "seven_day"
+        ]
+      },
+      "UsageBudgetLevel": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "warning",
+          "over_limit"
+        ]
+      },
+      "UsageBudgetAction": {
+        "type": "string",
+        "enum": [
+          "warn",
+          "block",
+          "pause_background",
+          "pause_heartbeat"
+        ]
+      },
       "UsageCallAttempts": {
         "type": "object",
         "properties": {
@@ -1998,23 +2103,6 @@
           "day",
           "week",
           "month"
-        ]
-      },
-      "UsageBudgetLevel": {
-        "type": "string",
-        "enum": [
-          "ok",
-          "warning",
-          "over_limit"
-        ]
-      },
-      "UsageBudgetAction": {
-        "type": "string",
-        "enum": [
-          "warn",
-          "block",
-          "pause_background",
-          "pause_heartbeat"
         ]
       },
       "UsageBudgetFilters": {
@@ -2221,6 +2309,16 @@
               }
             ]
           },
+          "claude_plan_limits": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaudePlanLimitsReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "call_attempts": {
             "$ref": "#/$defs/UsageCallAttempts"
           },
@@ -2242,6 +2340,7 @@
           "cost_sources",
           "rate_limits",
           "nanogpt_subscription",
+          "claude_plan_limits",
           "call_attempts",
           "budgets"
         ]
@@ -2342,6 +2441,9 @@
           },
           "call_attempts": {
             "$ref": "#/$defs/UsageCallAttempts"
+          },
+          "claude_plan_limits": {
+            "$ref": "#/$defs/ClaudePlanLimitsReport"
           }
         },
         "required": [
@@ -9769,6 +9871,111 @@
           }
         }
       },
+      "ClaudePlanLimitsReport": {
+        "type": "object",
+        "properties": {
+          "updated_at": {
+            "type": "string"
+          },
+          "subscription_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudePlanLimit"
+            }
+          }
+        },
+        "required": [
+          "updated_at",
+          "subscription_type",
+          "windows"
+        ]
+      },
+      "ClaudePlanLimit": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "$ref": "#/$defs/ClaudePlanWindow"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/$defs/UsageBudgetLevel"
+          },
+          "warning_thresholds": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "crossed_warn_at": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "limit_at": {
+            "type": "number",
+            "format": "double"
+          },
+          "action": {
+            "$ref": "#/$defs/UsageBudgetAction"
+          },
+          "over_limit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "window",
+          "percent_used",
+          "resets_at",
+          "status",
+          "warning_thresholds",
+          "crossed_warn_at",
+          "limit_at",
+          "action",
+          "over_limit"
+        ]
+      },
+      "ClaudePlanWindow": {
+        "type": "string",
+        "enum": [
+          "five_hour",
+          "seven_day"
+        ]
+      },
+      "UsageBudgetLevel": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "warning",
+          "over_limit"
+        ]
+      },
+      "UsageBudgetAction": {
+        "type": "string",
+        "enum": [
+          "warn",
+          "block",
+          "pause_background",
+          "pause_heartbeat"
+        ]
+      },
       "UsageCallAttempts": {
         "type": "object",
         "properties": {
@@ -9889,23 +10096,6 @@
           "day",
           "week",
           "month"
-        ]
-      },
-      "UsageBudgetLevel": {
-        "type": "string",
-        "enum": [
-          "ok",
-          "warning",
-          "over_limit"
-        ]
-      },
-      "UsageBudgetAction": {
-        "type": "string",
-        "enum": [
-          "warn",
-          "block",
-          "pause_background",
-          "pause_heartbeat"
         ]
       },
       "UsageBudgetFilters": {
@@ -10112,6 +10302,16 @@
               }
             ]
           },
+          "claude_plan_limits": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaudePlanLimitsReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "call_attempts": {
             "$ref": "#/$defs/UsageCallAttempts"
           },
@@ -10133,6 +10333,7 @@
           "cost_sources",
           "rate_limits",
           "nanogpt_subscription",
+          "claude_plan_limits",
           "call_attempts",
           "budgets"
         ]
@@ -10233,6 +10434,9 @@
           },
           "call_attempts": {
             "$ref": "#/$defs/UsageCallAttempts"
+          },
+          "claude_plan_limits": {
+            "$ref": "#/$defs/ClaudePlanLimitsReport"
           }
         },
         "required": [

@@ -1221,20 +1221,24 @@ fn render_images(
     clippy::float_arithmetic,
     reason = "the bounded ten-cell usage gauge converts a clamped percentage to discrete cells"
 )]
+fn usage_gauge(percent_used: f64) -> String {
+    const CELLS: usize = 10;
+    let filled = ((percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
+    let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
+    let pct = (percent_used * 100.0).round() as i64;
+    format!("[{bar}] {pct}%")
+}
+
 fn usage_chip(
     budget: &crate::tui::app::UsageBudget,
     focus: &crate::tui::app::BudgetFocus,
 ) -> (String, Color) {
-    const CELLS: usize = 10;
     let level = budget.level(focus.scope);
     let prefix = if budget.level_is_pace(focus.scope) {
         "pace "
     } else {
         ""
     };
-    let filled = ((level.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
-    let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
-    let pct = (level.percent_used * 100.0).round() as i64;
     let color = if level.over_limit {
         Color::Red
     } else if budget.in_warning() {
@@ -1242,7 +1246,36 @@ fn usage_chip(
     } else {
         Color::DarkGray
     };
-    (format!("{prefix}[{bar}] {pct}%"), color)
+    (
+        format!("{prefix}{}", usage_gauge(level.percent_used)),
+        color,
+    )
+}
+
+fn plan_chip(limit: &crate::tui::app::PlanLimit) -> (String, Color) {
+    let color = if limit.level.over_limit {
+        Color::Red
+    } else if limit.level.in_warning() {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
+    (
+        format!(
+            "{} {}",
+            limit.window.label(),
+            usage_gauge(limit.level.percent_used)
+        ),
+        color,
+    )
+}
+
+fn usage_shown(display: crate::tui::app::UsageDisplay, in_warning: bool) -> bool {
+    match display {
+        crate::tui::app::UsageDisplay::Off => false,
+        crate::tui::app::UsageDisplay::Always => true,
+        crate::tui::app::UsageDisplay::Warn => in_warning,
+    }
 }
 
 fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -1385,14 +1418,20 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
             SUBAGENT_COLOR,
         ));
     }
-    if let Some(budget) = app.focused_budget() {
-        let show = match app.usage_display {
-            crate::tui::app::UsageDisplay::Off => false,
-            crate::tui::app::UsageDisplay::Always => true,
-            crate::tui::app::UsageDisplay::Warn => budget.in_warning(),
-        };
-        if show {
-            indicators.push(usage_chip(budget, &app.budget_focus));
+    match &app.plan_limits {
+        Some(limits) => indicators.extend(
+            limits
+                .iter()
+                .filter(|limit| usage_shown(app.usage_display, limit.level.in_warning()))
+                .map(plan_chip),
+        ),
+        None => {
+            if let Some(budget) = app
+                .focused_budget()
+                .filter(|budget| usage_shown(app.usage_display, budget.in_warning()))
+            {
+                indicators.push(usage_chip(budget, &app.budget_focus));
+            }
         }
     }
     if !indicators.is_empty() {
@@ -4128,6 +4167,52 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
+    fn shared_plan_fixtures_match_terminal_rendering() {
+        use crate::tui::app::{PlanLimit, PlanWindow, UsageDisplay, usage_level_from_json};
+        let fixtures: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/display_budgets.json"
+        )))
+        .unwrap();
+        for fixture in fixtures.get("plan").unwrap().as_array().unwrap() {
+            let label = fixture["label"].as_str().unwrap();
+            let mut h = Harness::new();
+            h.app.connection_status = ConnectionStatus::Connected;
+            h.app.input.mode = InputMode::Insert;
+            h.app.usage_display =
+                UsageDisplay::from_token(fixture["mode"].as_str().unwrap()).unwrap();
+            let windows: Vec<(String, PlanLimit)> = fixture["windows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| {
+                    let token = value["window"].as_str().unwrap();
+                    let limit = PlanLimit {
+                        window: PlanWindow::from_token(token).unwrap(),
+                        level: usage_level_from_json(value).unwrap(),
+                    };
+                    (token.to_owned(), limit)
+                })
+                .collect();
+            h.app.plan_limits = Some(windows.iter().map(|(_, limit)| limit.clone()).collect());
+            let visible: Vec<&str> = fixture["visible"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect();
+            let frame = h.render_quiet();
+            for (token, limit) in &windows {
+                assert_eq!(
+                    frame.contains(&format!("{} [", limit.window.label())),
+                    visible.contains(&token.as_str()),
+                    "{label}: {token}\n{frame}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn usage_chip_shows_on_input_border_when_enabled() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
@@ -4206,6 +4291,85 @@ pub(crate) mod scenario_tests {
         assert!(
             paced.contains("55%"),
             "a pace-only warning reveals the chip; frame:\n{paced}"
+        );
+    }
+
+    fn plan_limit(
+        window: crate::tui::app::PlanWindow,
+        percent_used: f64,
+        crossed_warn_at: Vec<f64>,
+        over_limit: bool,
+    ) -> crate::tui::app::PlanLimit {
+        crate::tui::app::PlanLimit {
+            window,
+            level: crate::tui::app::UsageLevel {
+                percent_used,
+                crossed_warn_at,
+                over_limit,
+            },
+        }
+    }
+
+    #[test]
+    fn plan_limits_replace_the_budget_chip_with_both_windows() {
+        use crate::tui::app::PlanWindow;
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Insert;
+        h.app.usage_display = crate::tui::app::UsageDisplay::Always;
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
+            name: "monthly".into(),
+            percent_used: 0.47,
+            crossed_warn_at: vec![],
+            over_limit: false,
+            pace: None,
+        }];
+        h.app.plan_limits = Some(vec![
+            plan_limit(PlanWindow::FiveHour, 0.31, vec![], false),
+            plan_limit(PlanWindow::SevenDay, 0.58, vec![], false),
+        ]);
+
+        let planned = h.render("plan limits");
+        assert!(
+            planned.contains("5h [███░░░░░░░] 31%") && planned.contains("7d [██████░░░░] 58%"),
+            "both windows are always tracked; frame:\n{planned}"
+        );
+        assert!(
+            !planned.contains("47%"),
+            "the plan bar replaces the budget chip; frame:\n{planned}"
+        );
+
+        h.app.plan_limits = None;
+        let budgeted = h.render("budget chip");
+        assert!(
+            budgeted.contains("47%") && !budgeted.contains("5h ["),
+            "another model shows the budget chip again; frame:\n{budgeted}"
+        );
+    }
+
+    #[test]
+    fn plan_limits_in_warn_mode_show_only_windows_past_a_threshold() {
+        use crate::tui::app::PlanWindow;
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Insert;
+        h.app.usage_display = crate::tui::app::UsageDisplay::Warn;
+        h.app.plan_limits = Some(vec![
+            plan_limit(PlanWindow::FiveHour, 0.31, vec![], false),
+            plan_limit(PlanWindow::SevenDay, 0.84, vec![0.8], false),
+        ]);
+
+        let warned = h.render("warn mode");
+        assert!(
+            warned.contains("7d [████████░░] 84%") && !warned.contains("31%"),
+            "only the window past a threshold shows; frame:\n{warned}"
+        );
+
+        h.app.usage_display = crate::tui::app::UsageDisplay::Off;
+        let hidden = h.render("off");
+        assert!(
+            !hidden.contains("84%"),
+            "off hides the plan bar; frame:\n{hidden}"
         );
     }
 

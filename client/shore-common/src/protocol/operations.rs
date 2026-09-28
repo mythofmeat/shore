@@ -254,6 +254,9 @@ wire_types! {
     #[serde(rename_all = "snake_case")]
     pub enum NanoGptAccountState { Active, Grace, Inactive }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum ClaudePlanWindow { FiveHour, SevenDay }
+
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
     pub struct UsageArgs {
@@ -484,6 +487,26 @@ wire_types! {
         pub routing: Option<NanoGptRouting>,
     }
 
+    pub struct ClaudePlanLimit {
+        pub window: ClaudePlanWindow,
+        pub percent_used: f64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub resets_at: Option<String>,
+        pub status: UsageBudgetLevel,
+        pub warning_thresholds: Vec<f64>,
+        pub crossed_warn_at: Vec<f64>,
+        pub limit_at: f64,
+        pub action: UsageBudgetAction,
+        pub over_limit: bool,
+    }
+
+    pub struct ClaudePlanLimitsReport {
+        pub updated_at: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub subscription_type: Option<String>,
+        pub windows: Vec<ClaudePlanLimit>,
+    }
+
     pub struct UsageSummaryReport {
         pub period: String,
         #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
@@ -500,6 +523,8 @@ wire_types! {
         pub rate_limits: Vec<UsageRateLimitReading>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub nanogpt_subscription: Option<NanoGptSubscriptionState>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub claude_plan_limits: Option<ClaudePlanLimitsReport>,
         pub call_attempts: UsageCallAttempts,
         pub budgets: Vec<UsageBudget>,
     }
@@ -518,6 +543,10 @@ wire_types! {
         pub timezone: String,
         pub budgets: Vec<UsageBudget>,
         pub call_attempts: UsageCallAttempts,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "ClaudePlanLimitsReport")]
+        #[ts(optional)]
+        pub claude_plan_limits: Option<ClaudePlanLimitsReport>,
     }
 
     pub struct UsageAnomaliesReport {
@@ -2471,6 +2500,29 @@ mod tests {
             "../../../shore-cli/tests/fixtures/usage_reports.json"
         ))
         .unwrap();
+        let plan = reports
+            .first()
+            .and_then(|summary| summary.get("claude_plan_limits"))
+            .cloned()
+            .unwrap();
+        assert!(plan.is_object());
+        let budget = reports
+            .iter()
+            .find(|report| report.get("mode").and_then(serde_json::Value::as_str) == Some("budget"))
+            .unwrap()
+            .clone();
+        let mut planned = budget.clone();
+        let _ = planned
+            .as_object_mut()
+            .unwrap()
+            .insert("claude_plan_limits".to_owned(), plan);
+        assert!(serde_json::from_value::<UsageResult>(planned).is_ok());
+        let mut nulled = budget;
+        let _ = nulled
+            .as_object_mut()
+            .unwrap()
+            .insert("claude_plan_limits".to_owned(), serde_json::Value::Null);
+        assert!(serde_json::from_value::<UsageResult>(nulled).is_err());
         for report in reports {
             assert!(serde_json::from_value::<UsageResult>(report.clone()).is_ok());
             for key in report

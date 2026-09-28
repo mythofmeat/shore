@@ -177,6 +177,22 @@ describe("warnings, errors and command output", () => {
     });
   });
 
+  test("a Claude plan warning is a share of the plan, not money", () => {
+    const route = routeMirror({
+      type: "plan_limit_warning",
+      window: "seven_day",
+      limit: "Claude weekly limit",
+      message: "Claude weekly limit is at 84%; resets at 2026-10-02 03:00 AM.",
+      percent_used: 0.84,
+      crossed_warn_at: [0.8],
+      limit_at: 1,
+      over_limit: false,
+      resets_at: "2026-10-02T03:00:00+00:00",
+      resets_at_display: "2026-10-02 03:00 AM",
+    });
+    expect(route).toEqual({ kind: "notice", text: "⚠️ Claude weekly limit is at 84%; resets at 2026-10-02 03:00 AM." });
+  });
+
   test("a provider fallback names both keys, with and without a status", () => {
     const withStatus = routeMirror({
       type: "provider_fallback_warning",

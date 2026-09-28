@@ -42,6 +42,8 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
+import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
+import { claudePlanUsageEnvironment, fetchClaudePlanLimits, type ClaudePlanUsageQuery } from "../claude_plan_limits.ts";
 import { cacheTtlTier } from "../cache_capability.ts";
 import { hostZone } from "../../ledger/zoned.ts";
 import {
@@ -422,6 +424,7 @@ function endsATurn(event: RawMessageStreamEvent): boolean {
 function captureAgentEvent(msg: SDKMessage): void {
   if (msg.type === "rate_limit_event") {
     recordProviderEvent("claude_agent", msg);
+    observeClaudeRateLimit(msg.rate_limit_info);
   } else if (msg.type === "result") {
     recordProviderEvent("claude_agent", {
       type: msg.type,
@@ -669,15 +672,24 @@ async function keepaliveUsage(run: AsyncIterable<SDKMessage>): Promise<Usage> {
 export interface ClaudeAgentDeps {
   runQuery?: AgentQuery;
   bookPath?: () => string;
+  planQuery?: ClaudePlanUsageQuery;
 }
 
 export class ClaudeAgentProvider implements SidecarProvider {
   readonly #runQuery: AgentQuery;
   readonly #bookPath: () => string;
+  readonly #planQuery: ClaudePlanUsageQuery | undefined;
 
   constructor(deps: ClaudeAgentDeps = {}) {
     this.#runQuery = deps.runQuery ?? query;
     this.#bookPath = deps.bookPath ?? bookPath;
+    this.#planQuery = deps.planQuery;
+  }
+
+  planLimits(): Promise<ClaudePlanPoll | undefined> {
+    const planQuery = this.#planQuery;
+    if (planQuery === undefined) return Promise.resolve(undefined);
+    return fetchClaudePlanLimits(planQuery, claudePlanUsageEnvironment(claudeAgentEnvironment()));
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {

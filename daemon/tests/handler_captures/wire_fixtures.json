@@ -215,6 +215,22 @@
       "reset_at_display": "2026-05-22 06:00 AM",
       "scope": "pace"
     },
+    "plan_limit_warning": {
+      "type": "plan_limit_warning",
+      "rid": "msg_03",
+      "window": "seven_day",
+      "limit": "Claude weekly limit",
+      "message": "Claude weekly limit is at 96% (limit 95%, background work paused); resets at 2026-10-02 1:00 PM.",
+      "percent_used": 0.96,
+      "crossed_warn_at": [
+        0.8,
+        0.95
+      ],
+      "limit_at": 0.95,
+      "over_limit": true,
+      "resets_at": "2026-10-02T03:00:00Z",
+      "resets_at_display": "2026-10-02 1:00 PM"
+    },
     "config_warning": {
       "type": "config_warning",
       "path": "/home/u/.config/shore/characters/frank/config.toml",

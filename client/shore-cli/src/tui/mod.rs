@@ -684,7 +684,7 @@ fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&st
     persist_conversation(app);
     app.scroll_offset = 0;
     app.auto_scroll = true;
-    app.usage_budgets.clear();
+    app.clear_usage_limits();
     if let Some(dir) = &root {
         restore_draft(app, dir);
     }
@@ -1149,7 +1149,7 @@ fn prepare_for_reconnect(app: &mut App) {
     app.invalidate_palette_catalog();
     app.history_page_loading = false;
     app.pending_subagent_trace_ids.clear();
-    app.usage_budgets.clear();
+    app.clear_usage_limits();
 }
 
 async fn handle_action(
@@ -1532,7 +1532,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.pending_sampler_settings_rid = None;
             app.pending_palette_commands.clear();
             app.invalidate_palette_catalog();
-            app.usage_budgets.clear();
+            app.clear_usage_limits();
             app.characters.clone_from(&characters);
 
             app.character_name = next_character;
@@ -2135,6 +2135,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
@@ -2292,6 +2293,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => false,
@@ -2351,6 +2353,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
+        | ServerMessage::PlanLimitWarning(_)
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
@@ -2727,6 +2730,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
+            let mut refresh_usage = false;
             match co.name.as_str() {
                 "log" => {
                     if let Some(messages) = co.data.get("messages").and_then(|v| v.as_array()) {
@@ -2850,9 +2854,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         }
                     }
                 }
-                "create_thread" | "archive_thread" | "thread_home" | "thread_label"
-                | "thread_model" => {
+                "create_thread" | "archive_thread" | "thread_home" | "thread_label" => {
                     absorb_thread_listing(app, &co.data);
+                }
+                "thread_model" => {
+                    absorb_thread_listing(app, &co.data);
+                    refresh_usage = true;
                 }
                 "fork_thread" => {
                     absorb_thread_listing(app, &co.data);
@@ -2894,8 +2901,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.subagent_traces.clear();
                         app.pending_subagent_trace_ids.clear();
                         app.effective_sampler = None;
+                        let mut cmds = vec![thread_refresh_command(app)];
+                        cmds.extend(usage_budget_conn_commands(app));
                         return UiEffect {
-                            cmds: vec![thread_refresh_command(app)],
+                            cmds,
                             redraw: RedrawEffect::Immediate,
                         };
                     }
@@ -2925,6 +2934,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
                         app.set_status(format!("switched to {name}"));
                     }
+                    refresh_usage = true;
                 }
                 "create_character" => {
                     if let Some(name) = co
@@ -3095,6 +3105,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.set_status(format!("model: {name}"));
                     }
                     app.effective_sampler = None;
+                    refresh_usage = true;
                 }
                 "favorite_model" => {
                     if let Some(names) = co.data.get("favorites").and_then(|v| v.as_array()) {
@@ -3253,6 +3264,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
                 app.push_command_text(&command, rendered);
             }
+            if refresh_usage {
+                return UiEffect {
+                    cmds: usage_budget_conn_commands(app),
+                    redraw: RedrawEffect::Immediate,
+                };
+            }
             RedrawEffect::Immediate
         }
 
@@ -3345,6 +3362,22 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         over_limit: w.percent_used >= 1.0,
                     },
                 );
+            }
+            RedrawEffect::Immediate
+        }
+
+        ServerMessage::PlanLimitWarning(w) => {
+            let applied = app.usage_display != UsageDisplay::Off
+                && app.apply_plan_limit_warning(
+                    w.window.into(),
+                    UsageLevel {
+                        percent_used: w.percent_used,
+                        crossed_warn_at: w.crossed_warn_at.clone(),
+                        over_limit: w.over_limit,
+                    },
+                );
+            if !applied {
+                app.set_warning(w.message.clone());
             }
             RedrawEffect::Immediate
         }
@@ -3454,6 +3487,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 mod redraw_tests {
     use super::*;
     use shore_common::protocol::error::ErrorCode;
+    use shore_common::protocol::operations::ClaudePlanWindow;
     use shore_common::protocol::server_msg::{
         CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
     };
@@ -3889,7 +3923,22 @@ mod redraw_tests {
                     Some("eval"),
                     "the switch has to reach the file the next client reads",
                 );
-                assert_eq!(effect.cmds.len(), 1, "the roster is refetched");
+                let requested: Vec<&str> = effect
+                    .cmds
+                    .iter()
+                    .filter_map(|cmd| {
+                        if let ConnCommand::Send(ClientMessage::Command(command)) = cmd {
+                            Some(command.name.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                assert_eq!(
+                    requested,
+                    vec!["list_threads", "usage"],
+                    "the roster and the usage bar are refetched, since a thread can pin its own model"
+                );
             },
         );
     }
@@ -4705,6 +4754,169 @@ mod redraw_tests {
         assert_eq!(system_entry_count(&app), 0, "background poll is silent");
         assert_eq!(app.usage_budgets.len(), 2);
         assert_eq!(app.focused_budget().unwrap().name, "monthly");
+    }
+
+    fn plan_warning(window: ClaudePlanWindow, percent: f64, limit: f64) -> ServerMessage {
+        ServerMessage::PlanLimitWarning(shore_common::protocol::server_msg::PlanLimitWarning {
+            rid: None,
+            window,
+            limit: "Claude weekly limit".into(),
+            message: "Claude weekly limit is at 91%".into(),
+            percent_used: percent,
+            crossed_warn_at: vec![0.8],
+            limit_at: limit,
+            over_limit: percent >= limit,
+            resets_at: "2026-10-02T03:00:00+00:00".into(),
+            resets_at_display: String::new(),
+        })
+    }
+
+    fn plan_report() -> serde_json::Value {
+        serde_json::json!({
+            "updated_at": "2026-09-27T06:00:00+00:00",
+            "subscription_type": "max",
+            "windows": [
+                { "window": "five_hour", "percent_used": 0.31, "resets_at": null, "status": "ok", "warning_thresholds": [0.8], "crossed_warn_at": [], "limit_at": 1.0, "action": "pause_background", "over_limit": false },
+                { "window": "seven_day", "percent_used": 0.58, "resets_at": null, "status": "ok", "warning_thresholds": [0.8], "crossed_warn_at": [], "limit_at": 1.0, "action": "pause_background", "over_limit": false }
+            ]
+        })
+    }
+
+    fn budget_report(plan: Option<serde_json::Value>) -> ServerMessage {
+        let mut data = serde_json::json!({
+            "mode": "budget",
+            "budgets": [{ "name": "daily", "percent_used": 0.2, "crossed_warn_at": [], "over_limit": false }]
+        });
+        if let (Some(report), Some(fields)) = (plan, data.as_object_mut()) {
+            let _ = fields.insert("claude_plan_limits".to_owned(), report);
+        }
+        ServerMessage::CommandOutput(CommandOutput {
+            rid: None,
+            name: "usage".into(),
+            data,
+        })
+    }
+
+    #[test]
+    fn a_budget_report_for_a_claude_conversation_carries_both_plan_windows() {
+        let mut app = App::default();
+
+        let _ = handle_server_message(&mut app, budget_report(Some(plan_report())));
+        let windows: Vec<(&str, f64)> = app
+            .plan_limits
+            .iter()
+            .flatten()
+            .map(|limit| (limit.window.label(), limit.level.percent_used))
+            .collect();
+        assert_eq!(windows, vec![("5h", 0.31), ("7d", 0.58)]);
+
+        let _ = handle_server_message(&mut app, budget_report(None));
+        assert!(
+            app.plan_limits.is_none(),
+            "a report for another model brings the budget chip back"
+        );
+        assert_eq!(app.usage_budgets.len(), 1);
+    }
+
+    #[test]
+    fn a_usage_summary_never_decides_whether_the_plan_bar_shows() {
+        let mut app = App::default();
+        let summary = |plan: serde_json::Value| {
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "usage".into(),
+                data: serde_json::json!({
+                    "mode": "summary",
+                    "budgets": [{ "name": "daily", "percent_used": 0.2, "crossed_warn_at": [], "over_limit": false }],
+                    "claude_plan_limits": plan
+                }),
+            })
+        };
+
+        let _ = handle_server_message(&mut app, summary(plan_report()));
+        assert!(
+            app.plan_limits.is_none(),
+            "the summary reports the plan whatever model the conversation runs on"
+        );
+
+        let _ = handle_server_message(&mut app, budget_report(Some(plan_report())));
+        let _ = handle_server_message(&mut app, summary(serde_json::Value::Null));
+        assert!(
+            app.plan_limits.is_some(),
+            "a summary without a plan reading leaves a Claude conversation's bar alone"
+        );
+    }
+
+    #[test]
+    fn a_plan_warning_moves_its_window_on_the_bar() {
+        let mut app = App {
+            usage_display: UsageDisplay::Always,
+            ..Default::default()
+        };
+        let _ = handle_server_message(&mut app, budget_report(Some(plan_report())));
+
+        let _ = handle_server_message(
+            &mut app,
+            plan_warning(ClaudePlanWindow::SevenDay, 0.91, 0.9),
+        );
+
+        let week = app
+            .plan_limits
+            .iter()
+            .flatten()
+            .find(|limit| limit.window == app::PlanWindow::SevenDay)
+            .expect("weekly window");
+        assert!((week.level.percent_used - 0.91).abs() < f64::EPSILON);
+        assert!(week.level.over_limit, "past its configured limit of 90%");
+        assert!(
+            app.usage_budgets
+                .iter()
+                .all(|budget| budget.name != "Claude weekly limit"),
+            "a plan warning never becomes a budget"
+        );
+        assert!(app.notifications.is_empty());
+    }
+
+    #[test]
+    fn a_plan_warning_without_a_plan_bar_is_still_shown() {
+        let mut app = App {
+            usage_display: UsageDisplay::Always,
+            ..Default::default()
+        };
+
+        let _ = handle_server_message(
+            &mut app,
+            plan_warning(ClaudePlanWindow::SevenDay, 0.91, 1.0),
+        );
+
+        assert_eq!(app.notifications.len(), 1);
+        assert!(app.usage_budgets.is_empty());
+    }
+
+    #[test]
+    fn switching_the_chat_model_refreshes_the_usage_bar() {
+        let mut app = App::default();
+
+        let effect = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "switch_model".into(),
+                data: serde_json::json!({
+                    "active": "claude_agent:claude-opus-5",
+                    "qualified_name": "claude_agent:claude-opus-5",
+                    "provider": "claude_agent",
+                    "model_id": "claude-opus-5",
+                    "changed": true
+                }),
+            }),
+        );
+
+        let Some(ConnCommand::Send(ClientMessage::Command(command))) = effect.cmds.first() else {
+            panic!("expected a usage refresh, got {:?}", effect.cmds);
+        };
+        assert_eq!(command.name, "usage");
+        assert_eq!(command.args.get("budget"), Some(&serde_json::json!(true)));
     }
 
     #[test]

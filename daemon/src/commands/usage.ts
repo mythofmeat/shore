@@ -10,6 +10,7 @@ export interface UsageContext {
   cacheDir?: string;
   usage: UsageConfig;
   callStore?: CallStore | undefined;
+  claudePlanLimits?: boolean;
 }
 
 export async function usage(ctx: UsageContext, args: Args): Promise<UsageResult> {
@@ -21,6 +22,7 @@ export async function usage(ctx: UsageContext, args: Args): Promise<UsageResult>
       args,
       usage: ctx.usage,
       ...(store === undefined ? {} : { rateLimits: () => store.latestRateLimits() }),
+      ...(ctx.claudePlanLimits === true ? { claudePlanLimits: true } : {}),
     });
   } catch (e) {
     if (e instanceof UsageArgumentError) throw invalidRequest(e.message);

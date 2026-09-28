@@ -2,6 +2,7 @@ import { shoreLog } from "../log.ts";
 import type { UsageResult } from "../protocol/UsageResult.ts";
 import type { UsageRateLimitReading } from "../protocol/UsageRateLimitReading.ts";
 import type { UsageCallAttempts } from "../protocol/UsageCallAttempts.ts";
+import type { ClaudePlanLimitsReport } from "../protocol/ClaudePlanLimitsReport.ts";
 
 import type { Database } from "bun:sqlite";
 
@@ -33,6 +34,12 @@ import {
   type QueryFilter,
 } from "./query.ts";
 import { ledgerFor } from "./record.ts";
+import {
+  CLAUDE_PLAN_REPORT_REFRESH_MS,
+  claudePlanLimitsReport,
+  claudePlanLimitsState,
+  refreshClaudePlanLimits,
+} from "./plan_limits.ts";
 import type { Ledger } from "./store.ts";
 import {
   nanoGptSubscriptionPath,
@@ -63,6 +70,7 @@ export interface UsageRequest {
   args?: Record<string, unknown> | undefined;
   usage?: UsageConfig | undefined;
   rateLimits?: () => UsageRateLimitReading[];
+  claudePlanLimits?: boolean;
 }
 
 export interface UsageOptions extends BudgetOptions {
@@ -212,7 +220,8 @@ export async function usageReport(
   const { filter, last, periodSince } = buildFilter(args, timezone, opts, now, config);
 
   if (flag(args, "budget")) {
-    return budgetPayload(db, config, now, opts);
+    const plan = request.claudePlanLimits === true ? currentClaudePlanLimits(config, now) : undefined;
+    return budgetPayload(db, config, now, opts, plan);
   }
   if (flag(args, "export_tsv")) {
     return { mode: "tsv", data: exportTsv(db, filter) };
@@ -251,7 +260,13 @@ export async function usageReport(
     request.cacheDir === undefined
       ? undefined
       : readNanoGptSubscriptionSync(nanoGptSubscriptionPath(request.cacheDir)),
+    claudePlanLimitsState() === undefined ? undefined : currentClaudePlanLimits(config, now),
   );
+}
+
+function currentClaudePlanLimits(config: UsageConfig, now: number): ClaudePlanLimitsReport | undefined {
+  void refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now);
+  return claudePlanLimitsReport(config, now);
 }
 
 function budgetPayload(
@@ -259,12 +274,14 @@ function budgetPayload(
   config: UsageConfig,
   now: number,
   opts: UsageOptions,
+  claudePlanLimits: ClaudePlanLimitsReport | undefined,
 ): Extract<UsageResult, { mode: "budget" }> {
   return {
     mode: "budget",
     timezone: config.timezone ?? "local",
     budgets: budgetStatuses(db, config, now, opts),
     call_attempts: callAttemptStatus(db),
+    ...(claudePlanLimits === undefined ? {} : { claude_plan_limits: claudePlanLimits }),
   };
 }
 
@@ -319,6 +336,7 @@ function summaryPayload(
   now: number,
   rateLimits: UsageRateLimitReading[],
   nanoGptSubscription: NanoGptSubscriptionState | undefined,
+  claudePlanLimits: ClaudePlanLimitsReport | undefined,
 ): Extract<UsageResult, { mode: "summary" }> {
   const cacheHealth = activeAnthropicCharacters(db, filter).map(([character, lastRow]) => ({
     character,
@@ -350,6 +368,7 @@ function summaryPayload(
     nanogpt_subscription: nanoGptSubscription ?? null,
     call_attempts: callAttemptStatus(db),
     budgets: budgetStatuses(db, config, now, opts),
+    claude_plan_limits: claudePlanLimits ?? null,
   };
 }
 

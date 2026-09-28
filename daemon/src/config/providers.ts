@@ -7,7 +7,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import type { ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
+import { isKeylessSdk, type ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 import { ZAI_SUB_PROVIDER } from "../llm/providers/zai_config.ts";
 
 export type ProviderRegistryErrorKind =
@@ -128,6 +128,7 @@ export const DEFAULT_SUBSCRIPTION_PROVIDERS: readonly string[] = [
   "opencode-go",
   "opencode",
   ZAI_SUB_PROVIDER,
+  "claude_agent",
 ];
 const DEFAULT_SUBSCRIPTION_SET = new Set(DEFAULT_SUBSCRIPTION_PROVIDERS);
 
@@ -294,6 +295,7 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
     const sdk = sdkFromWire(value["sdk"]);
     if (sdk === undefined) return { err: `unknown variant \`${value["sdk"]}\`` };
     out.sdk = sdk;
+    if (value["subscription"] === undefined && isKeylessSdk(sdk)) out.subscription = true;
   }
   for (const [field, key] of [
     ["baseUrl", "base_url"],

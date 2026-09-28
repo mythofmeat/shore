@@ -145,8 +145,8 @@ MUTANTS = [
      "    if (true as boolean) {\n      return Promise.resolve([]);\n    }\n    if (config === undefined) {"),
     ("budget: an unopenable ledger fails the turn instead of reporting nothing",
      D,
-     "    if (ledger === null) return Promise.resolve([]);",
-     '    if (ledger === null) throw new Error("no ledger");'),
+     "    if (ledger === null) return Promise.resolve([]);\n    return Promise.resolve(newlyCrossedBudgetWarnings(",
+     '    if (ledger === null) throw new Error("no ledger");\n    return Promise.resolve(newlyCrossedBudgetWarnings('),
 
     # --- the command path -----------------------------------------------------
     ("config: reloads guess the path instead of re-reading the file startup read",

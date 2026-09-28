@@ -150,6 +150,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
+    newlyCrossedPlanLimitWarnings: async () => [],
     now: () => NOW,
     newMessageId: () => `m_${crypto.randomUUID()}`,
     monotonicMs: () => 0,
