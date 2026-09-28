@@ -1,5 +1,6 @@
 #!/usr/bin/bash
 set -eu
+cd "$(dirname "$0")"
 
 root="$(git rev-parse --show-toplevel)"
 
