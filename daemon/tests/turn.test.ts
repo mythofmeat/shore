@@ -216,6 +216,23 @@ describe("appendUserTurn", () => {
     }
   });
 
+  test("acceptance is confirmed only once the user turn is on disk, and never for a regen or an empty body", async () => {
+    const root = await tempRoot();
+    try {
+      const dataDir = await seedCharacter(root, []);
+      const rec = recorder();
+      const saved: number[] = [];
+      const ctx: TurnContext = { ...rec.ctx, accepted: async () => { saved.push((await ConversationEngine.load("ada", dataDir)).messages().length); } };
+      const engine = await ConversationEngine.load("ada", dataDir);
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, false, "empty");
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "hello", images: [], image_data: [] }, false, "send-1");
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, true, "regen-1");
+      expect(saved).toEqual([1]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a minted id is a uuid and a minted timestamp is local rfc3339", () => {
     let checked = 0;
     for (const c of fixture.append_user_turn) {

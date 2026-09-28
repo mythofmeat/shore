@@ -104,6 +104,15 @@ fn request_finished_preserves_correlation_and_failure() {
 }
 
 #[test]
+fn request_accepted_names_the_request_whose_message_was_saved() {
+    let frame: ServerMessage = assert_golden(r#"{"type": "request_accepted", "rid": "send-1"}"#);
+    assert_eq!(frame.request_id(), Some("send-1"));
+    assert_variant!(frame, ServerMessage::RequestAccepted(accepted) => {
+        assert_eq!(accepted.rid, "send-1");
+    });
+}
+
+#[test]
 fn structured_image_history_preserves_nested_wire_data_and_display_images() {
     let frame: ServerMessage =
         assert_golden(include_str!("../../../fixtures/protocol/rich-history.json"));
@@ -887,6 +896,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {
                 panic!("unexpected message for missing rid test");

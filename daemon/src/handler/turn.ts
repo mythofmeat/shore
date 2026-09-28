@@ -39,6 +39,7 @@ export interface TurnAutonomy {
 export interface TurnContext {
   emitEvent: (message: ServerMessage) => void;
   sendDirect: (message: ServerMessage) => void;
+  accepted?: () => Promise<void>;
   autonomy: TurnAutonomy;
   now: () => string;
   newMessageId: () => string;
@@ -98,6 +99,7 @@ export async function appendUserTurn(
     engine.thread,
     rid,
   );
+  await ctx.accepted?.();
 
   return undefined;
 }

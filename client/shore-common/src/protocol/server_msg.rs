@@ -294,6 +294,12 @@ pub enum RequestOutcome {
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct RequestAccepted {
+    pub rid: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct RequestFinished {
     pub rid: String,
     pub outcome: RequestOutcome,
@@ -324,6 +330,7 @@ pub enum ServerMessage {
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
     ConfigWarning(ConfigWarning),
+    RequestAccepted(RequestAccepted),
     RequestFinished(RequestFinished),
     #[serde(other)]
     #[ts(skip)]
@@ -348,6 +355,7 @@ impl ServerMessage {
             Self::ProviderFallbackWarning(frame) => frame.rid.as_deref(),
             Self::UsageWarning(frame) => frame.rid.as_deref(),
             Self::ConfigWarning(frame) => frame.rid.as_deref(),
+            Self::RequestAccepted(frame) => Some(&frame.rid),
             Self::RequestFinished(frame) => Some(&frame.rid),
             Self::Hello(_)
             | Self::Shutdown(_)
@@ -380,6 +388,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
         }
@@ -407,6 +416,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => None,
         }
@@ -434,6 +444,7 @@ impl ServerMessage {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => {}
         }

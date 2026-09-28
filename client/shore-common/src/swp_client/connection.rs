@@ -176,6 +176,7 @@ impl SWPConnection {
                 | ServerMessage::ProviderFallbackWarning(_)
                 | ServerMessage::UsageWarning(_)
                 | ServerMessage::ConfigWarning(_)
+                | ServerMessage::RequestAccepted(_)
                 | ServerMessage::RequestFinished(_)) => {
                     error!("expected server hello, got unexpected message");
                     return Err(ClientError::Protocol(format!(
@@ -218,6 +219,7 @@ impl SWPConnection {
                 | ServerMessage::ProviderFallbackWarning(_)
                 | ServerMessage::UsageWarning(_)
                 | ServerMessage::ConfigWarning(_)
+                | ServerMessage::RequestAccepted(_)
                 | ServerMessage::RequestFinished(_)) => {
                     error!("expected history, got unexpected message");
                     return Err(ClientError::Protocol(format!(

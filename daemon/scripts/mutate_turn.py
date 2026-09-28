@@ -82,6 +82,14 @@ MUTANTS = [
      "  if (!bodyHasContent(body)) return undefined;\n",
      ""),
 
+    # --- acceptance -----------------------------------------------------------
+    ("accept: acceptance is confirmed before the turn is saved",
+     "  await engine.appendMessage(userMsg);\n",
+     "  await ctx.accepted?.();\n  await engine.appendMessage(userMsg);\n"),
+    ("accept: a saved turn is never confirmed",
+     "  await ctx.accepted?.();\n",
+     ""),
+
     # --- regen ----------------------------------------------------------------
     ("regen: a regen falls through and appends the body it was sent",
      "  if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };\n",

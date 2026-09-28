@@ -96,6 +96,7 @@ export interface GenerationParams {
   readonly rid: string | null;
   readonly send: DirectSender;
   readonly signal: AbortSignal;
+  readonly accepted?: () => Promise<void>;
 }
 
 export interface EngineBody {
@@ -322,8 +323,20 @@ export class MessageHandler {
     if (rid === null) return;
     const finished: ServerMessage = { type: "request_finished", rid, outcome, ...(error === undefined ? {} : { error }) };
     this.#deps.router.reportRequest(meta.session.sessionId, finished);
-    if (!this.#deps.router.has(meta.session.sessionId) || !meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return;
+    if (!this.#lifecycle(meta)) return;
     await this.#deps.router.sendToSession(meta.session.sessionId, finished);
+  }
+
+  async #acceptRequest(meta: RequestMeta, rid: string | null): Promise<void> {
+    if (rid === null) return;
+    const accepted: ServerMessage = { type: "request_accepted", rid };
+    this.#deps.router.reportRequest(meta.session.sessionId, accepted);
+    const send = this.#lifecycle(meta) ? this.#deps.router.senderFor(meta.session.sessionId) : undefined;
+    if (send !== undefined) await this.#deliver(send, accepted, meta.session.sessionId);
+  }
+
+  #lifecycle(meta: RequestMeta): boolean {
+    return this.#deps.router.has(meta.session.sessionId) && meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY);
   }
 
   async handleControl(routed: ControlRoutedMessage): Promise<void> {
@@ -463,6 +476,7 @@ export class MessageHandler {
       rid,
       send,
       signal: controller.signal,
+      accepted: () => this.#acceptRequest(meta, rid),
     };
 
     let failure: ProtocolError | undefined;

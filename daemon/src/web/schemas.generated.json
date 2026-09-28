@@ -481,6 +481,9 @@
       "phase": {
         "$ref": "#/$defs/WebRequestPhase"
       },
+      "accepted": {
+        "type": "boolean"
+      },
       "result": {
         "anyOf": [
           {
@@ -8371,6 +8374,9 @@
           },
           "phase": {
             "$ref": "#/$defs/WebRequestPhase"
+          },
+          "accepted": {
+            "type": "boolean"
           },
           "result": {
             "anyOf": [

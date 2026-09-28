@@ -73,6 +73,7 @@ const provider: SidecarProvider = {
     if (request.context?.call_type === "subagent") { yield* toolFixture(request, signal); return; }
     generation += 1;
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
+    if (question.includes("fail this reply")) throw Object.assign(new Error("Fixture reply failure"), { status: 400 });
     yield { type: "start", model: request.model };
     yield { type: "thinking", text: "Considering the question" };
     if (question.includes("long live preview fixture")) {

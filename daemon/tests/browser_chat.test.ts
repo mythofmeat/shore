@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ImageUpload } from "../src/protocol/ImageUpload.ts";
 import type { Message } from "../src/protocol/Message.ts";
+import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
+import { checkAttachments, restoredDraft } from "../src/browser/request_forms.ts";
+import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/chat/sending.ts";
+import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
 import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
@@ -96,6 +101,43 @@ test("a started regeneration hides exactly the messages its stream_start lists",
   expect(regenReplaces(messages, 0, [{ replaces: ["old"] }, {}], false)).toEqual(["old"]);
   expect(regenReplaces(messages, 0, [{}, { replaces: [] }], false)).toEqual([]);
   expect(regenReplaces(messages, 0, [], false)).toEqual([]);
+});
+
+test("a message that wasn't saved comes back ahead of the draft and the draft stays sendable", () => {
+  const image = (name: string, bytes = 3): ImageUpload => ({ filename: name, data: "A".repeat(bytes / 3 * 4), mime_type: "image/png" });
+  const none: ImageUpload[] = [];
+  const sent = { text: "sent", images: [image("s1"), image("s2")] };
+  expect(restoredDraft(sent, { text: "", images: none, options: { stream: false } })).toEqual({ content: { text: "sent", images: sent.images, options: { stream: false } }, dropped: 0 });
+  expect(restoredDraft({ text: "", images: none }, { text: "typed", images: none }).content.text).toBe("typed");
+  const typed = Array.from({ length: MAX_ATTACHMENTS }, (_, index) => image(`t${String(index)}`));
+  const crowded = restoredDraft(sent, { text: "typed since", images: typed });
+  expect(crowded.content.text).toBe("sent\n\ntyped since");
+  expect(crowded.content.images.map((item) => item.filename)).toEqual(["s1", "s2", ...typed.slice(0, MAX_ATTACHMENTS - 2).map((item) => item.filename)]);
+  expect(crowded.dropped).toBe(2);
+  expect(() => checkAttachments(crowded.content.images)).not.toThrow();
+  const large = image("large", 4.5 * 1024 * 1024);
+  const heavy = restoredDraft({ text: "", images: [large, large, large, large] }, { text: "", images: [large, image("small")] });
+  expect(heavy.content.images.map((item) => item.filename)).toEqual(["large", "large", "large", "large", "small"]);
+  expect(heavy.dropped).toBe(1);
+  expect(() => checkAttachments(heavy.content.images)).not.toThrow();
+  expect(droppedNotice(0)).toBe("");
+  expect(droppedNotice(1)).toContain("1 image attached while it was sending didn’t fit and was removed");
+  expect(droppedNotice(2)).toContain("2 images attached while it was sending didn’t fit and were removed");
+});
+
+test("after a reload a sent message is kept only while the daemon may still save it", () => {
+  const request = (phase: WebRequestInfo["phase"], accepted?: boolean): WebRequestInfo => ({ id: "id", rid: "rid", operation: "message", label: "Send message", character: "nova", thread: "main", started_at: 0, expires_at: 1, phase, result_omitted: false, ...(accepted === undefined ? {} : { accepted }) });
+  expect(sentFate(undefined)).toBe("unsent");
+  expect(sentFate(request("running"))).toBe("waiting");
+  expect(sentFate(request("running", true))).toBe("saved");
+  for (const phase of ["uncertain", "failed", "cancelled", "superseded"] as const) {
+    expect(sentFate(request(phase))).toBe("unsent");
+    expect(sentFate(request(phase, true))).toBe("saved");
+  }
+  expect(sentFate(request("completed"))).toBe("saved");
+  expect(conversationCharacter(JSON.stringify(["nova", "side"]))).toBe("nova");
+  expect(conversationCharacter(JSON.stringify([null, null]))).toBeUndefined();
+  expect(conversationCharacter("not json")).toBeUndefined();
 });
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

@@ -214,6 +214,7 @@ async function runGenerationCore(
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
     sendDirect: (message) => void params.send(message),
+    ...(params.accepted === undefined ? {} : { accepted: params.accepted }),
     autonomy,
     now,
     newMessageId,

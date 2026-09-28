@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import type { ImageUpload } from "../../protocol/ImageUpload.ts";
+import type { RequestFinished } from "../../protocol/RequestFinished.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
-import { browserDraft, type DraftContent } from "../drafts.ts";
+import { InterruptedRequestError } from "../connection.ts";
+import { browserDraft, forgetSending, handOverSending, type DraftContent } from "../drafts.ts";
+import { randomUUID } from "../platform.ts";
 import { checkAttachments, imageUpload } from "../request_forms.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
 import { IconButton } from "../ui/controls.tsx";
@@ -10,6 +13,7 @@ import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
 import { swipe } from "./actions.ts";
 import { EffortChip } from "./effort.tsx";
+import { droppedNotice } from "./sending.ts";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
@@ -30,7 +34,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const [store] = useState(() => browserDraft(key));
   const [draft, setDraft] = useState<DraftContent>({ text: "", images: [] });
   const current = useRef(draft);
-  const mounted = useRef(true);
+  const submitting = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
@@ -47,11 +51,10 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   };
   useEffect(() => {
     let alive = true;
-    mounted.current = true;
     const unsubscribe = store.subscribe((value) => { current.current = value; setDraft(value); setUnsaved(store.unsaved && !store.saving); });
     void store.load().then((value) => { if (alive) { const latest = store.current ?? value; current.current = latest; setDraft(latest); setLoaded(true); } })
       .catch(() => { if (alive) { setLoaded(true); setUnsaved(true); } });
-    return () => { alive = false; mounted.current = false; unsubscribe(); };
+    return () => { alive = false; unsubscribe(); };
   }, [store]);
   useLayoutEffect(() => {
     const node = area.current;
@@ -74,34 +77,45 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   };
   const send = async () => {
     const submitted = current.current;
-    if (!loaded || !ready) return;
+    if (!loaded || !ready || submitting.current) return;
     if (submitted.text.trim() === "" && submitted.images.length === 0) return;
     if (streaming) { toasts.show("Wait for the reply to finish, or stop it, before sending again.", "error"); return; }
     const connection = workspace.connection;
-    const selected = workspace.getSnapshot();
-    const synced = connection.selection;
-    if (connection.status !== "ready" || selected.character !== state.character || selected.thread !== state.thread || synced.character !== state.character || synced.thread !== state.thread) {
-      toasts.show("The conversation changed before sending. Your draft was kept.", "error");
-      return;
-    }
-    try { checkAttachments(submitted.images); } catch (error) { toasts.show(errorText(error), "error"); return; }
-    let accepted = false;
-    const finished = conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images }, () => { accepted = true; });
-    void finished.catch(() => {});
-    const restore = async () => {
-      if (accepted) return;
-      const value = store.current ?? current.current;
-      const next = { ...value, text: [submitted.text, value.text].filter((part) => part !== "").join("\n\n"), images: [...submitted.images, ...value.images] };
-      if (mounted.current) await change(next); else await store.save(next).catch(() => {});
+    const unchanged = () => {
+      const selected = workspace.getSnapshot();
+      const synced = connection.selection;
+      return connection.status === "ready" && selected.character === state.character && selected.thread === state.thread && synced.character === state.character && synced.thread === state.thread;
     };
-    await change({ ...submitted, text: "", images: [] });
+    if (!unchanged()) { toasts.show("The conversation changed before sending. Your draft was kept.", "error"); return; }
+    try { checkAttachments(submitted.images); } catch (error) { toasts.show(errorText(error), "error"); return; }
+    const rid = randomUUID();
+    let kept = true;
+    let accepted = false;
+    const restore = async (notice?: string) => {
+      let dropped = 0;
+      try { ({ dropped } = await store.restore(rid, kept ? undefined : submitted)); } catch (error) { workspace.report(error); }
+      if (notice !== undefined) toasts.show(`${notice}${droppedNotice(dropped)}`, "error");
+    };
+    let finished: Promise<RequestFinished>;
+    submitting.current = true;
+    try {
+      await store.send(rid, submitted).catch((error: unknown) => { kept = false; setUnsaved(true); workspace.report(error); });
+      if (!unchanged()) { await restore("The conversation changed before sending. Your draft was kept."); return; }
+      finished = conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images }, { rid, accepted: () => { accepted = true; void forgetSending(rid).catch(() => {}); } });
+    } finally { submitting.current = false; }
     try {
       const result = await finished;
-      if (result.outcome === "completed") return;
-      if (accepted) { if (result.outcome === "failed") toasts.show(result.error?.message ?? "The reply failed.", "error"); return; }
-      await restore();
-      if (result.outcome !== "cancelled") toasts.show(result.error?.message ?? `The message wasn’t sent (${result.outcome}). Your draft was restored.`, "error");
-    } catch (error) { await restore(); toasts.show(errorText(error), "error"); }
+      if (result.outcome === "completed" || accepted) {
+        await forgetSending(rid).catch(() => {});
+        if (accepted && result.outcome === "failed") toasts.show(result.error?.message ?? "The reply failed.", "error");
+        return;
+      }
+      await restore(result.outcome === "cancelled" ? undefined : result.error?.message ?? `The message wasn’t sent (${result.outcome}). Your draft was restored.`);
+    } catch (error) {
+      if (accepted) return;
+      if (error instanceof InterruptedRequestError) { handOverSending(rid); return; }
+      await restore(errorText(error));
+    }
   };
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));

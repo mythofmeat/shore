@@ -300,6 +300,7 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
         | ServerMessage::ToolResult(_)
         | ServerMessage::SendImage(_)
         | ServerMessage::CacheWarning(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }

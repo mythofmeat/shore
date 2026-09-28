@@ -108,6 +108,7 @@ impl SyncState {
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
+            | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::Unknown => SyncDecision::Deliver,
         }
