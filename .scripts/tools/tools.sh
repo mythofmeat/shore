@@ -35,7 +35,7 @@ is_updated() {
         git commit -am "chore(deps): update"
     else
         echo "No dependency updates!"
-        return 1
+        exit 0
     fi
 }
 
