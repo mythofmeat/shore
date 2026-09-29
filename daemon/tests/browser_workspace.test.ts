@@ -5,7 +5,7 @@ import { actionControl, CONTROL_KINDS, controlFor, initialValue } from "../src/b
 import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
 import { BrowserConnection, type BrowserRequest, type ConnectionUpdate } from "../src/browser/connection.ts";
 import { ConversationRequests } from "../src/browser/chat/requests.ts";
-import { regenReplaces, visibleStreams } from "../src/browser/chat/transcript.ts";
+import { blockViews, regenReplaces, replyBlocks, savedPart, visibleStreams } from "../src/browser/chat/transcript.ts";
 import type { RequestFinished } from "../src/protocol/RequestFinished.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
@@ -146,6 +146,44 @@ test("a regeneration started in another client hides exactly the messages its st
   connection.frame({ type: "stream_chunk", rid: "regen", content_type: "text", text: "new" });
   connection.frame({ type: "stream_start", rid: "regen", regen: true, replaces: ["old"] });
   expect(hidden()).toEqual(["old"]);
+});
+
+test("a tool loop's saved rounds and its live stream show each step once", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const saved = (id: string, revision: number, ...content_blocks: Message["content_blocks"]): ServerMessage => ({ type: "history", config: {}, revision, selected_character: "nova", selected_thread: "main", delta: { base_revision: revision - 1, after: "question" }, messages: [{ ...message(id), role: "assistant", content_blocks }] });
+  const use = { type: "tool_use" as const, id: "t1", name: "read", input: { path: "notes.md" } };
+  const result = { type: "tool_result" as const, tool_use_id: "t1", content: "contents" };
+  const shown = () => {
+    const state = workspace.getSnapshot();
+    const [stream] = visibleStreams(state.streams, state.messages, new Set(["r1"]));
+    if (stream === undefined) return state.messages.map((item) => item.msg_id);
+    const part = savedPart(state.messages, stream);
+    const rest = state.messages.filter((item) => item !== part).map((item) => item.msg_id);
+    return [...rest, blockViews(replyBlocks(stream, part)).map((view) => view.kind === "tool" ? `${view.id}:${view.output ?? "running"}` : view.kind === "thinking" ? `thinking:${view.text}` : view.kind === "text" ? `text:${view.text}` : view.kind)];
+  };
+  connection.frame({ type: "history", config: {}, revision: 1, selected_character: "nova", selected_thread: "main", messages: [message("question")] });
+  connection.frame({ type: "stream_start", rid: "r1", regen: false });
+  connection.frame({ type: "stream_chunk", rid: "r1", content_type: "thinking", text: "Looking" });
+  expect(shown()).toEqual(["question", ["thinking:Looking"]]);
+  connection.frame(saved("round-1", 2, { type: "thinking", thinking: "Looking" }, use));
+  expect(shown()).toEqual(["question", ["thinking:Looking", "t1:running"]]);
+  connection.frame({ type: "tool_call", rid: "r1", tool_id: "t1", tool_name: "read", input: { path: "notes.md" } });
+  connection.frame({ type: "tool_result", rid: "r1", tool_id: "t1", tool_name: "read", output: "contents", is_error: false });
+  expect(shown()).toEqual(["question", ["thinking:Looking", "t1:contents"]]);
+  connection.frame(saved("round-1", 3, { type: "thinking", thinking: "Looking" }, use, result));
+  connection.frame({ type: "stream_chunk", rid: "r1", content_type: "thinking", text: "Checking" });
+  connection.frame({ type: "stream_chunk", rid: "r1", content_type: "text", text: "All done." });
+  expect(shown()).toEqual(["question", ["thinking:Looking", "t1:contents", "thinking:Checking", "text:All done."]]);
+  connection.frame({ type: "stream_end", rid: "r1", msg_id: "final", content: "All done.", terminal_content_blocks: [{ type: "thinking", thinking: "Checking" }, { type: "text", text: "All done." }], finish_reason: "end_turn", is_final: true, metadata: { model: "m", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } });
+  expect(shown()).toEqual(["question", ["thinking:Looking", "t1:contents", "thinking:Checking", "text:All done."]]);
+  connection.frame(saved("final", 4, { type: "thinking", thinking: "Looking" }, use, result, { type: "thinking", thinking: "Checking" }, { type: "text", text: "All done." }));
+  expect(shown()).toEqual(["question", "final"]);
 });
 
 test("history-only updates retain configuration until it is replaced or the conversation changes", () => {

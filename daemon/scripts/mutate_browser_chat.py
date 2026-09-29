@@ -4,6 +4,7 @@ import sys
 from mutation import run
 
 T = "src/browser/chat/transcript.ts"
+W = "src/browser/workspace.ts"
 M = "src/browser/markdown.tsx"
 H = "src/browser/theme.ts"
 S = "src/browser/app/shortcuts.ts"
@@ -20,6 +21,27 @@ MUTANTS = [
     ("previous swipe allowed on the first response", T, 'canPrevious: position > 1', 'canPrevious: position > 0'),
     ("finished streams from other requests reappear", T, 'stream.rid !== null && active.has(stream.rid)', 'true'),
     ("finished stream shown alongside its message", T, '!messages.some((message) => message.msg_id === stream.msgId) && stream.rid', 'stream.rid'),
+    ("every step gets its own box", T, 'else if (last?.kind === "activity") last.steps.push(view);', 'else if (false) last.steps.push(view);'),
+    ("a finished reply still says Thinking", T, 'if (live && latest?.kind === "thinking")', 'if (latest?.kind === "thinking")'),
+    ("a finished reply names its last tool instead of summarising", T, 'if (live && latest?.kind === "tool" && latest.output === null)', 'if (latest?.kind === "tool" && latest.output === null)'),
+    ("a running tool is summarised instead of named", T, 'if (live && latest?.kind === "tool" && latest.output === null)', 'if (false)'),
+    ("the summary ignores reasoning", T, 'steps.some((step) => step.kind === "thinking") ? `Reasoned and used ${count}` : `Used ${count}`', '`Used ${count}`'),
+    ("long tool lists are not shortened", T, 'names.length > 3 ?', 'false ?'),
+    ("a reply's saved rounds are not recognised by their tool calls", T, 'const shared = toolUseIds(last.content_blocks).some((id) => stream.tools.includes(id));', 'const shared = false;'),
+    ("a round saved before its tool calls arrive is not recognised", T, 'const awaitingTools = stream.tools.length === 0 && ', 'const awaitingTools = false && '),
+    ("an earlier reply ending in a tool call is claimed", T, 'const awaitingTools = stream.tools.length === 0 && ', 'const awaitingTools = '),
+    ("saved tool calls repeat in the live reply", T, '? !ids.includes(block.id) :', '? true :'),
+    ("a live result replaces the saved one", T, 'block.type === "tool_result" && !answered.has(block.tool_use_id)', 'block.type === "tool_result"'),
+    ("a round saved after its tool calls arrived shows twice", T, '(stream.round.tools.includes(latest) || !stream.tools.includes(latest))', '!stream.tools.includes(latest)'),
+    ("a round saved before its tool calls arrived shows twice", T, '(stream.round.tools.includes(latest) || !stream.tools.includes(latest))', 'stream.round.tools.includes(latest)'),
+    ("earlier rounds vanish before any are saved", T, 'const unsaved = saved === undefined ? stream :', 'const unsaved = saved === undefined ? stream.round :'),
+    ("empty reasoning makes an empty reply look started", T, 'unsaved.reasoning === "" ? [] :', 'false ? [] :'),
+    ("empty text makes an empty reply look started", T, 'unsaved.text === "" ? [] :', 'false ? [] :'),
+    ("a new model call keeps the previous round's text", W, 'const round = next.round.tools.length > 0 ? { reasoning: "", text: "", tools: [] } : next.round;', 'const round = next.round;'),
+    ("the current round drops its reasoning", W, '{ ...round, reasoning: round.reasoning + message.text }', '{ ...round }'),
+    ("the current round drops its text", W, '{ ...round, text: round.text + message.text }', '{ ...round }'),
+    ("tool calls are not remembered for the reply", W, 'next.tools = [...next.tools, message.tool_id];', ''),
+    ("tool calls are not remembered for the current round", W, 'next.round = { ...next.round, tools: [...next.round.tools, message.tool_id] };', ''),
     ("compaction notice survives its request", T, 'if (phase === null || phase.id < finished) return null;', 'if (phase === null) return null;'),
     ("tool summary shows raw objects", T, 'values.find((value): value is string => typeof value === "string" && value.trim() !== "")', 'values.find((value): value is string => value !== undefined)'),
     ("unsafe link schemes become clickable", M, 'const SAFE_LINK = /^(https?:|mailto:)/i;', 'const SAFE_LINK = /^/i;'),
@@ -43,4 +65,4 @@ MUTANTS = [
 ]
 
 if __name__ == "__main__":
-    sys.exit(run(MUTANTS, ["tests/browser_chat.test.ts", "tests/browser_settings.test.ts", "tests/browser_parity.test.ts"]))
+    sys.exit(run(MUTANTS, ["tests/browser_chat.test.ts", "tests/browser_workspace.test.ts", "tests/browser_settings.test.ts", "tests/browser_parity.test.ts"]))

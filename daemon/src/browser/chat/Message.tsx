@@ -13,7 +13,7 @@ import { Dialog, IconButton, Menu, Spinner, type MenuItem } from "../ui/controls
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
-import { blockViews, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView } from "./transcript.ts";
+import { activityHeadline, blockViews, bodyItems, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { swipe as swipeTo } from "./actions.ts";
 
 export type OpenImage = (source: string, caption: string) => void;
@@ -54,19 +54,43 @@ export function ImageThumb({ source, caption, open }: { source: string; caption:
   return <button type="button" className="image-thumb" onClick={() => open(source, caption)} aria-label={`Open ${caption}`}><img src={source} alt={caption} loading="lazy" /></button>;
 }
 
-export function MessageBody({ message, display, openImage, live = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean }) {
+function Step({ step, live, openImage }: { step: StepView; live: boolean; openImage: OpenImage }) {
+  return step.kind === "thinking" ? <ReasoningChip text={step.text} redacted={step.redacted} live={live} /> : <ToolChip view={step} openImage={openImage} />;
+}
+
+export function Activity({ steps, live, openImage, expanded = false }: { steps: StepView[]; live: boolean; openImage: OpenImage; expanded?: boolean }) {
+  const [open, setOpen] = useState(expanded);
+  const [only] = steps;
+  if (only !== undefined && steps.length === 1) return <Step step={only} live={live} openImage={openImage} />;
+  const { label, detail } = activityHeadline(steps, live);
+  const failed = steps.filter((step) => step.kind === "tool" && step.error).length;
+  return <div className={`activity ${open ? "open" : ""}`}>
+    <button type="button" className="activity-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+      <span className="activity-label">{label}</span>
+      {detail === "" ? null : <span className="activity-detail mono">{detail}</span>}
+      {failed === 0 ? null : <span className="tool-status error"><Icon name="alert" size={14} />{failed} failed</span>}
+      {live ? <span className="spinner" aria-label="Working" /> : null}
+    </button>
+    {open ? <div className="activity-steps">{steps.map((step, index) => <Step key={step.key} step={step} live={live && index === steps.length - 1} openImage={openImage} />)}</div> : null}
+  </div>;
+}
+
+export function MessageBody({ message, display, openImage, live = false, expanded = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean; expanded?: boolean }) {
   const views = message.content_blocks.length === 0 ? [{ kind: "text" as const, key: "content", text: message.content }] : blockViews(message.content_blocks);
+  const shown = views.filter((view) => view.kind === "thinking" ? display.thinking !== "off" : view.kind === "tool" ? display.tools !== "off" : view.kind !== "image" || display.images !== "off");
+  const items = bodyItems(shown);
   const images = display.images === "off" ? [] : message.images.flatMap((image) => {
     const source = mediaSource(image.data);
     return source === undefined ? [] : [{ source, caption: image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Image" }];
   });
   return <>
-    {views.map((view): ReactNode => {
-      switch (view.kind) {
-        case "text": return <Markdown key={view.key} text={view.text} />;
-        case "thinking": return display.thinking === "off" ? null : <ReasoningChip key={view.key} text={view.text} redacted={view.redacted} live={live} />;
-        case "tool": return display.tools === "off" ? null : <ToolChip key={view.key} view={view} openImage={openImage} />;
-        case "image": return display.images === "off" ? null : <div key={view.key} className="images"><ImageThumb source={view.source} caption="Image" open={openImage} /></div>;
+    {items.map((item, index): ReactNode => {
+      const latest = live && index === items.length - 1;
+      switch (item.kind) {
+        case "text": return <Markdown key={item.key} text={item.text} className={latest ? "prose streaming-text" : "prose"} />;
+        case "image": return <div key={item.key} className="images"><ImageThumb source={item.source} caption="Image" open={openImage} /></div>;
+        case "activity": return <Activity key={item.key} steps={item.steps} live={latest} openImage={openImage} expanded={expanded} />;
       }
     })}
     {images.length === 0 ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}

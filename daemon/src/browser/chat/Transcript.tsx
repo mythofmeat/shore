@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { LiveTurn, WorkspaceSnapshot } from "../workspace.ts";
+import type { Message } from "../../protocol/Message.ts";
+import { liveTurn, type LiveTurn, type WorkspaceSnapshot } from "../workspace.ts";
 import { mediaSource } from "../media.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
@@ -7,8 +8,8 @@ import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
 import { conversation, perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
 import { navigate } from "../app/route.ts";
-import { ImageThumb, MessageBody, MessageRow, ReasoningChip, type OpenImage } from "./Message.tsx";
-import { compactionPhase, regenReplaces, transcriptItems, visibleStreams } from "./transcript.ts";
+import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
+import { compactionPhase, regenReplaces, replyBlocks, savedPart, transcriptItems, visibleStreams } from "./transcript.ts";
 
 function Lightbox({ image, close }: { image: { source: string; caption: string }; close: () => void }) {
   return <Dialog title={image.caption} close={close} wide>
@@ -27,13 +28,13 @@ function SubagentChip({ stream, openImage }: { stream: LiveTurn; openImage: Open
     </button>
     {open ? <Dialog title={`Subagent ${name}`} close={() => setOpen(false)} wide>
       <p className="form-text">{stream.final ? "Finished." : "Working…"}</p>
-      <MessageBody message={{ content: "", images: [], content_blocks: stream.blocks.filter((block) => block.type !== "text") }} display={display} openImage={openImage} live={!stream.final} />
+      <MessageBody message={{ content: "", images: [], content_blocks: stream.blocks.filter((block) => block.type !== "text") }} display={display} openImage={openImage} live={!stream.final} expanded />
       {stream.text === "" ? null : <Markdown text={stream.text} />}
     </Dialog> : null}
   </>;
 }
 
-function StreamingMessage({ stream, character, state, openImage, mobile }: { stream: LiveTurn; character: string; state: WorkspaceSnapshot; openImage: OpenImage; mobile: boolean }) {
+function StreamingMessage({ stream, saved, character, state, openImage, mobile }: { stream: LiveTurn; saved: Message | undefined; character: string; state: WorkspaceSnapshot; openImage: OpenImage; mobile: boolean }) {
   const display = useDisplay();
   const images = state.media.filter((image) => image.rid === stream.rid && image.subagent === null).flatMap((image) => {
     const source = mediaSource(image.previewData ?? image.data);
@@ -41,16 +42,13 @@ function StreamingMessage({ stream, character, state, openImage, mobile }: { str
   });
   const subagents = display.subagent === "off" ? [] : state.streams.filter((item) => item.rid === stream.rid && item.subagent !== null);
   const character_ = state.characters.find((item) => item.name === character);
-  const empty = stream.text === "" && stream.blocks.length === 0;
+  const blocks = replyBlocks(stream, saved);
   return <article className="message assistant streaming" aria-label={`${character}, responding`} aria-busy="true" data-role="assistant">
     <Avatar name={character} avatar={character_?.avatar} size={mobile ? 32 : 36} />
     <div className="message-main">
       <div className="message-meta"><span className="message-name">{character}</span><span className="responding">{stream.final ? "finishing…" : "responding…"}</span></div>
       <div className="message-body">
-        {stream.reasoning !== "" && display.thinking !== "off" ? <ReasoningChip text={stream.reasoning} live={stream.text === ""} /> : null}
-        <MessageBody message={{ content: "", images: [], content_blocks: stream.blocks.filter((block) => block.type !== "text" && block.type !== "thinking" && block.type !== "redacted_thinking") }} display={display} openImage={openImage} live />
-        {stream.text === "" ? null : <Markdown text={stream.text} className="prose streaming-text" />}
-        {empty && stream.reasoning === "" ? <div className="typing" aria-label="Waiting for the response"><span /><span /><span /></div> : null}
+        {blocks.length === 0 ? <div className="typing" aria-label="Waiting for the response"><span /><span /><span /></div> : <MessageBody message={{ content: "", images: [], content_blocks: blocks }} display={display} openImage={openImage} live={!stream.final} />}
         {images.length === 0 || display.images === "off" ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}
         {subagents.map((item) => <SubagentChip key={item.key} stream={item} openImage={openImage} />)}
         {stream.previewLimited === true ? <p className="notice-inline">Showing the most recent part of a long response.</p> : null}
@@ -86,7 +84,12 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
     const hidden = new Set(replaced.split("\n"));
     return state.messages.filter((message) => !hidden.has(message.msg_id));
   }, [replaced, state.messages]);
-  const items = useMemo(() => transcriptItems(shown, state.activeStart), [shown, state.activeStart]);
+  const savedParts = streams.map((stream) => savedPart(shown, stream));
+  const streaming = savedParts.flatMap((message) => message === undefined ? [] : [message.msg_id]).join("\n");
+  const items = useMemo(() => {
+    const merged = new Set(streaming.split("\n"));
+    return transcriptItems(shown.filter((message) => !merged.has(message.msg_id)), state.activeStart);
+  }, [shown, streaming, state.activeStart]);
   const lastUser = state.messages.findLast((message) => message.role === "user")?.msg_id;
   const waiting = streams.length === 0 ? conversation.awaitingStream(scope) : undefined;
   const info = state.characters.find((item) => item.name === character);
@@ -143,8 +146,8 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
               metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} />;
           }
         })}
-        {streams.map((stream) => <StreamingMessage key={stream.key} stream={stream} character={character} state={state} openImage={openImage} mobile={mobile} />)}
-        {waiting === undefined ? null : <StreamingMessage stream={{ key: waiting, rid: waiting, subagent: null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null }} character={character} state={state} openImage={openImage} mobile={mobile} />}
+        {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}
+        {waiting === undefined ? null : <StreamingMessage stream={liveTurn(waiting, waiting, null)} saved={undefined} character={character} state={state} openImage={openImage} mobile={mobile} />}
         {compacting === null ? null : <div className="divider context" role="status"><span className="spinner" aria-hidden="true" />{compacting}</div>}
         {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
           <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.</span>
