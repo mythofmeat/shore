@@ -6,7 +6,7 @@ type ImageSource = Extract<ContentBlock, { type: "image" }>["source"];
 
 const MAX_BASE64_BYTES = 1_000_000;
 export const MAX_PREPARED_IMAGE_BYTES = MAX_BASE64_BYTES / 4 * 3;
-const MAX_IMAGE_EDGE = 2000;
+export const MAX_IMAGE_EDGE = 2000;
 const MAX_CACHED_IMAGES = 32;
 const shrunk = new Map<string, ImageSource>();
 

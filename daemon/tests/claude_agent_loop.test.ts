@@ -577,3 +577,120 @@ test.each([false, true])("native retry only repeats a run before effects (%s)", 
   expect(attempts).toBe(checkpointed ? 1 : 2);
   expect("ok" in outcome).toBe(!checkpointed);
 });
+
+describe("a round the CLI sent again without streaming", () => {
+  test("the reply it carries is still the turn's answer", async () => {
+    const tools = phase();
+    const { events } = await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read" }] },
+        {
+          blocks: [
+            { kind: "thinking", text: "they will like these", signature: "signed" },
+            { kind: "text", text: "all three are saved now" },
+          ],
+          unstreamed: true,
+        },
+      ],
+    }, tools);
+    const finished = done(events);
+    expect(finished.content).toBe("all three are saved now");
+    expect(finished.finish_reason).toBe("end_turn");
+    expect(finished.content_blocks).toEqual([
+      { type: "thinking", thinking: "they will like these", signature: "signed" },
+      { type: "text", text: "all three are saved now" },
+    ]);
+  });
+
+  test("a call it carries is still dispatched and recorded", async () => {
+    const tools = phase();
+    const { events } = await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read", input: { path: "SOUL.md" } }], unstreamed: true },
+        { blocks: [{ kind: "text", text: "it says Brian." }] },
+      ],
+    }, tools);
+    expect(events.filter((e) => e.type === "error")).toEqual([]);
+    expect(tools.dispatched.map((use) => use.input)).toEqual([{ path: "SOUL.md" }]);
+    expect(tools.recorded.map((r) => r.role)).toEqual(["assistant", "user"]);
+    expect(done(events).content).toBe("it says Brian.");
+  });
+
+  test("the attempt that broke off leaves none of its words behind", async () => {
+    const tools = phase();
+    const { events } = await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read" }] },
+        {
+          abandoned: [{ kind: "text", text: "half a thou" }],
+          blocks: [{ kind: "text", text: "the whole thought" }],
+          unstreamed: true,
+        },
+      ],
+    }, tools);
+    expect(done(events).content).toBe("the whole thought");
+    expect(done(events).content_blocks).toEqual([{ type: "text", text: "the whole thought" }]);
+  });
+
+  test("a turn with no tools gets the reply too, without the broken-off attempt", async () => {
+    const tools = phase();
+    const { events } = await drive(
+      {
+        rounds: [{
+          abandoned: [{ kind: "text", text: "half a thou" }],
+          blocks: [{ kind: "text", text: "just talking" }],
+          unstreamed: true,
+        }],
+      },
+      tools,
+      request({ tools: [] }),
+    );
+    expect(done(events).content).toBe("just talking");
+    expect(done(events).content_blocks).toEqual([{ type: "text", text: "just talking" }]);
+  });
+
+  test("a plain call gets the reply alone, without the broken-off attempt", async () => {
+    const path = join(await mkdtemp(join(tmpdir(), "shore-agent-generate-")), "sessions.json");
+    const agent = fakeAgent({
+      rounds: [{
+        abandoned: [{ kind: "text", text: "half a thou" }],
+        blocks: [{ kind: "text", text: "just talking" }],
+        unstreamed: true,
+      }],
+    });
+    const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+    const response = await provider.generate(request({ tools: [] }));
+    expect(response.content).toBe("just talking");
+    expect(response.content_blocks).toEqual([{ type: "text", text: "just talking" }]);
+  });
+
+  test("the session book keeps the reply so the next turn continues instead of reseeding", async () => {
+    const tools = phase();
+    const { path } = await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read" }] },
+        { blocks: [{ kind: "text", text: "it says Brian." }], unstreamed: true },
+      ],
+    }, tools);
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_1_asst"]);
+  });
+
+  test("an API error the CLI reports in place of a reply is not passed off as one", async () => {
+    const tools = phase();
+    const { events } = await drive(
+      { rounds: [{ blocks: [{ kind: "text", text: "API Error: overloaded" }], apiError: "overloaded" }] },
+      tools,
+    );
+    expect(done(events).content).toBe("");
+  });
+
+  test("a placeholder the CLI writes itself is not passed off as a reply", async () => {
+    const tools = phase();
+    const { events } = await drive(
+      { rounds: [{ blocks: [{ kind: "text", text: "No response requested." }], synthetic: true }] },
+      tools,
+    );
+    expect(done(events).content).toBe("");
+  });
+});

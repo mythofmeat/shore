@@ -5,10 +5,17 @@ import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
+import { MAX_IMAGE_EDGE } from "../llm/prepare_images.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
+
+const PIXELS_PER_IMAGE_TOKEN = 750;
+
+const IMAGE_TOKENS = Math.ceil((MAX_IMAGE_EDGE * MAX_IMAGE_EDGE) / PIXELS_PER_IMAGE_TOKEN);
+
+export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
 
 
 const TIME_GAP_THRESHOLD_SECS = 1_800;
@@ -169,31 +176,30 @@ export function stripOneTrailingNewline(raw: string): string {
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
 }
 
-function estimateMessageTokens(msg: Message): number {
-  let total = 0;
-  for (const block of msg.content_blocks) {
-    switch (block.type) {
-      case "text":
-        total += estimateTokens(block.text);
-        break;
-      case "thinking":
-        total += estimateTokens(block.thinking);
-        break;
-      case "tool_use":
-        total += estimateTokens(block.name) + estimateTokens(JSON.stringify(block.input));
-        break;
-      case "redacted_thinking":
-        break;
-      case "tool_result":
-        total += estimateTokens(
-          typeof block.content === "string" ? block.content : JSON.stringify(block.content),
-        );
-        break;
-      default:
-        break;
-    }
+function estimateBlockTokens(block: ContentBlock): number {
+  switch (block.type) {
+    case "text":
+      return estimateTokens(block.text);
+    case "thinking":
+      return estimateTokens(block.thinking);
+    case "tool_use":
+      return estimateTokens(block.name) + estimateTokens(JSON.stringify(block.input));
+    case "redacted_thinking":
+      return 0;
+    case "tool_result":
+      return typeof block.content === "string"
+        ? estimateTokens(block.content)
+        : block.content.reduce((total, inner) => total + estimateBlockTokens(inner), 0);
+    case "image":
+      return IMAGE_TOKENS;
   }
-  return total;
+}
+
+function estimateMessageTokens(msg: Message): number {
+  return msg.content_blocks.reduce(
+    (total, block) => total + estimateBlockTokens(block),
+    msg.images.length * IMAGE_TOKENS,
+  );
 }
 
 export function estimateHistoryTokens(messages: readonly Message[]): number {
@@ -286,7 +292,7 @@ function trimMessages(
   mode: UserTimestampMode,
   timeZone: string,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -304,6 +310,7 @@ function trimMessages(
         ...(msg.model !== undefined ? { model: msg.model } : {}),
       },
       ts: msg.timestamp,
+      heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
     });
   }
   selected.reverse();
@@ -319,8 +326,10 @@ function trimMessages(
   let firstUserPending = true;
   const result: PromptMessage[] = [];
 
-  for (const { pm, ts } of selected) {
+  for (const { pm, ts, heartbeat } of selected) {
     const currentMs = parseRfc3339(ts);
+
+    if (heartbeat) result.push(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone)));
 
     if (pm.role === "user" && currentMs !== undefined) {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
@@ -357,5 +366,19 @@ function trimMessages(
     result.push(pm);
   }
 
+  if (result.find((m) => m.role !== "system")?.role === "assistant") {
+    result.unshift(syntheticUserTurn(EARLIER_CONVERSATION_NOT_SHOWN));
+  }
+
   return result;
+}
+
+function syntheticUserTurn(text: string): PromptMessage {
+  return { role: "user", content: text, images: [], content_blocks: [{ type: "text", text }] };
+}
+
+function heartbeatMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
+  return mode === "never" || instantMs === undefined
+    ? "[heartbeat]"
+    : `[heartbeat · ${formatWallClock(instantMs, timeZone)}]`;
 }

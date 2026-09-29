@@ -29,6 +29,10 @@ export interface FakeRound {
   startUsage?: FakeUsage;
   deltaUsage?: FakeUsage;
   nested?: boolean;
+  unstreamed?: boolean;
+  abandoned?: FakeBlock[];
+  apiError?: string;
+  synthetic?: boolean;
 }
 
 export interface FakeScript {
@@ -192,24 +196,17 @@ function requestedBlocks(round: FakeRound, index: number): FakeBlock[] {
   return [...round.blocks, ...asked];
 }
 
-function* roundFrames(
-  round: FakeRound,
-  index: number,
+function* streamedBlocks(
+  messageId: string,
+  blocks: readonly FakeBlock[],
+  usage: FakeUsage,
+  wrap: (event: unknown, uuid: string) => Record<string, unknown>,
+  parent: string | null,
   sessionId: string,
 ): Generator<Record<string, unknown>> {
-  const messageId = `msg_${String(index)}`;
-  const parent = round.nested === true ? `toolu_nested_${String(index)}` : null;
-  const wrap = (event: unknown, uuid: string): Record<string, unknown> => ({
-    type: "stream_event",
-    event,
-    parent_tool_use_id: parent,
-    uuid,
-    session_id: sessionId,
-  });
+  yield wrap(messageStart(messageId, usage), `${messageId}_start`);
 
-  yield wrap(messageStart(messageId, round.startUsage ?? {}), `${messageId}_start`);
-
-  for (const [at, block] of requestedBlocks(round, index).entries()) {
+  for (const [at, block] of blocks.entries()) {
     yield wrap(blockStart(at, block), `${messageId}_bs_${String(at)}`);
     for (const [n, delta] of blockDeltas(at, block).entries()) {
       yield wrap(delta, `${messageId}_bd_${String(at)}_${String(n)}`);
@@ -226,13 +223,59 @@ function* roundFrames(
         content: [finishedBlock(block)],
         stop_reason: null,
         stop_sequence: null,
-        usage: usageBlock(round.startUsage ?? {}),
+        usage: usageBlock(usage),
       },
       parent_tool_use_id: parent,
       uuid: `${messageId}_asst_${String(at)}`,
       session_id: sessionId,
     };
   }
+}
+
+function* roundFrames(
+  round: FakeRound,
+  index: number,
+  sessionId: string,
+): Generator<Record<string, unknown>> {
+  const messageId = `msg_${String(index)}`;
+  const parent = round.nested === true ? `toolu_nested_${String(index)}` : null;
+  const wrap = (event: unknown, uuid: string): Record<string, unknown> => ({
+    type: "stream_event",
+    event,
+    parent_tool_use_id: parent,
+    uuid,
+    session_id: sessionId,
+  });
+
+  if (round.abandoned !== undefined) {
+    yield* streamedBlocks(`${messageId}_abandoned`, round.abandoned, round.startUsage ?? {}, wrap, parent, sessionId);
+  }
+
+  if (round.unstreamed === true || round.apiError !== undefined || round.synthetic === true) {
+    yield {
+      type: "assistant",
+      message: {
+        id: messageId,
+        type: "message",
+        role: "assistant",
+        model: round.synthetic === true ? "<synthetic>" : "claude-opus-5",
+        content: requestedBlocks(round, index).map(finishedBlock),
+        container: null,
+        context_management: null,
+        stop_reason: stopReasonOf(round),
+        stop_sequence: null,
+        stop_details: null,
+        usage: usageBlock({ ...round.startUsage, ...round.deltaUsage }),
+      },
+      parent_tool_use_id: parent,
+      ...(round.apiError === undefined ? {} : { error: round.apiError }),
+      uuid: `${messageId}_asst`,
+      session_id: sessionId,
+    };
+    return;
+  }
+
+  yield* streamedBlocks(messageId, requestedBlocks(round, index), round.startUsage ?? {}, wrap, parent, sessionId);
 
   yield wrap(
     {
