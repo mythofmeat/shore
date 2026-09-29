@@ -91,6 +91,44 @@ test("sending clears the message box at once and regenerating replaces the reply
   await check();
 });
 
+test("a tool loop streams as one reply and its steps collapse into one summary", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "orbit");
+  const box = page.getByLabel("Message", { exact: true });
+  await box.fill("Please hold the tool loop fixture");
+  await box.press("Enter");
+  const replies = page.locator("article.message.assistant");
+  const streaming = page.locator("article.message.assistant.streaming");
+  await expect(streaming).toContainText("Found both notes.");
+  await expect(replies).toHaveCount(1);
+  const activity = streaming.locator(".activity");
+  await expect(activity).toHaveCount(1);
+  await expect(activity.locator(".activity-head")).toContainText("Reasoned and used 2 tools");
+  await expect(activity.locator(".activity-head")).toContainText("bash");
+  await expect(streaming.locator(".tool")).toHaveCount(0);
+  await activity.locator(".activity-head").click();
+  await expect(activity.locator(".tool")).toHaveCount(2);
+  await expect(activity.locator(".reasoning")).toHaveCount(3);
+  await expect(activity.locator(".tool-summary")).toHaveText(["echo loop-1", "echo loop-2"]);
+
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(streaming).toHaveCount(0);
+  await expect(replies).toHaveCount(1);
+  await expect(replies.locator(".activity-head")).toContainText("Reasoned and used 2 tools");
+  await expect(replies).not.toContainText("Found both notes.");
+
+  await box.fill("Please run the tool loop fixture");
+  await box.press("Enter");
+  const settled = page.locator("article.message.assistant:not(.streaming)");
+  await expect(settled).toHaveCount(2);
+  await expect(settled.last()).toContainText("Found both notes.");
+  await expect(settled.last().locator(".activity")).toHaveCount(1);
+  await expect(settled.last().locator(".activity-head")).toContainText("Reasoned and used 2 tools");
+  await expect(settled.last().locator(".tool")).toHaveCount(0);
+  await check();
+});
+
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const frameType = (frame: string | Buffer): unknown => { try { return (JSON.parse(frame.toString()) as { type?: unknown }).type; } catch { return undefined; } };
 const unconfirmedSends = (page: Page) => page.evaluate("new Promise((resolve, reject) => { const open = indexedDB.open('shore-drafts'); open.onerror = () => reject(open.error); open.onsuccess = () => { const count = open.result.transaction('sending').objectStore('sending').count(); count.onsuccess = () => { open.result.close(); resolve(count.result); }; }; })");

@@ -1,6 +1,6 @@
 import { expect, test, spyOn } from "bun:test";
 import { BrowserConnection, type ConnectionUpdate } from "../src/browser/connection.ts";
-import { Workspace, type LiveTurn } from "../src/browser/workspace.ts";
+import { Workspace, liveTurn, type LiveTurn } from "../src/browser/workspace.ts";
 import { conversationImages, imageFilename, MAX_LIVE_IMAGES, mediaSource } from "../src/browser/media.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL } from "../src/web/contract.ts";
 import type { Message } from "../src/protocol/Message.ts";
@@ -38,7 +38,7 @@ test("image sources allow raster data only and download names cannot escape thei
 
 test("gallery includes attachment captions, nested tool images and live media without repeating reconciled sources", () => {
   const stored = { ...message("one"), images: [{ path: "C:\\pictures\\first.png", data: png }, { path: "missing.png", caption: "Unavailable picture" }], content_blocks: [{ type: "tool_result" as const, tool_use_id: "tool", content: [block] }] };
-  const stream: LiveTurn = { key: "live", rid: "live", subagent: "worker", text: "", reasoning: "", blocks: [block], final: false, msgId: null, metadata: null };
+  const stream: LiveTurn = { ...liveTurn("live", "live", "worker"), blocks: [block] };
   const entries = conversationImages([stored], [stream, { ...stream, key: "finished", final: true, msgId: "one" }], [{ path: "C:\\pictures\\first.png", data: png }, { path: "live.png", caption: "Tool picture", data: png }]);
   expect(entries.map((item) => item.caption)).toEqual(["first.png", "Unavailable picture", "Inline image", "Inline image", "Tool picture"]);
   expect(entries[1]?.data).toBeUndefined();

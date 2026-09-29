@@ -49,6 +49,10 @@ test("live text and reasoning retain bounded recent content without splitting a 
   expect(stream?.reasoning.length).toBeLessThanOrEqual(MAX_LIVE_TEXT);
   expect(stream?.text).toEndWith("😀TAILLATEST");
   expect(stream?.reasoning).toEndWith("😀TAILLATEST");
+  expect(stream?.round.text.length).toBeLessThanOrEqual(MAX_LIVE_TEXT);
+  expect(stream?.round.reasoning.length).toBeLessThanOrEqual(MAX_LIVE_TEXT);
+  expect(stream?.round.text).toEndWith("😀TAILLATEST");
+  expect(stream?.round.reasoning).toEndWith("😀TAILLATEST");
   expect(stream?.previewLimited).toBe(true);
   expect(recentText("😀tail", 5)).toBe("tail");
   frame({ type: "stream_end", metadata: { model: "fixture", tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, timing: { total_ms: 0, ttft_ms: 0 } }, rid: "live", content: long, is_final: true, msg_id: "answer" });

@@ -103,6 +103,24 @@ const provider: SidecarProvider = {
       }
       return;
     }
+    const looped = request.messages.at(-1)?.content.flatMap((block) => block.type === "tool_result" && block.tool_use_id.startsWith("loop-") ? [block.tool_use_id] : []) ?? [];
+    if (question.includes("tool loop fixture") || looped.length > 0) {
+      const asked = request.messages.findLast((message) => message.role === "user" && message.content.some((block) => block.type === "text"))?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
+      const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      if (!looped.includes("loop-2")) {
+        const id = looped.includes("loop-1") ? "loop-2" : "loop-1";
+        yield { type: "tool_use", id, name: "bash", input: { command: `echo ${id}` } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+        return;
+      }
+      yield { type: "text", text: "Found both notes." };
+      if (asked.includes("hold")) {
+        await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+        return;
+      }
+      yield { type: "done", content: "Found both notes.", finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      return;
+    }
     if (question.includes("run worker display fixture")) {
       yield { type: "tool_use", id: "display-worker", name: "ask_worker", input: { query: "Inspect the tool fixture" } };
       yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };

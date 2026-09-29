@@ -73,7 +73,7 @@ export function blockViews(blocks: readonly ContentBlock[]): BlockView[] {
       case "redacted_thinking": views.push({ kind: "thinking", key, text: "", redacted: true }); break;
       case "image": views.push({ kind: "image", key, source: `data:${block.source.media_type};base64,${block.source.data}` }); break;
       case "tool_use": {
-        const view = { kind: "tool" as const, key, id: block.id, name: block.name, input: block.input, output: null, error: false, images: [] };
+        const view = { kind: "tool" as const, key: `tool:${block.id}`, id: block.id, name: block.name, input: block.input, output: null, error: false, images: [] };
         tools.set(block.id, view); views.push(view); break;
       }
       case "tool_result": {
@@ -87,6 +87,60 @@ export function blockViews(blocks: readonly ContentBlock[]): BlockView[] {
     }
   });
   return views;
+}
+
+export type StepView = Extract<BlockView, { kind: "thinking" | "tool" }>;
+export type BodyItem = Exclude<BlockView, StepView> | { kind: "activity"; key: string; steps: StepView[] };
+
+export function bodyItems(views: readonly BlockView[]): BodyItem[] {
+  const items: BodyItem[] = [];
+  for (const view of views) {
+    const last = items.at(-1);
+    if (view.kind !== "thinking" && view.kind !== "tool") items.push(view);
+    else if (last?.kind === "activity") last.steps.push(view);
+    else items.push({ kind: "activity", key: `activity:${view.key}`, steps: [view] });
+  }
+  return items;
+}
+
+export function activityHeadline(steps: readonly StepView[], live: boolean): { label: string; detail: string } {
+  const latest = steps.at(-1);
+  if (live && latest?.kind === "thinking") return { label: "Thinking…", detail: "" };
+  if (live && latest?.kind === "tool" && latest.output === null) return { label: latest.name, detail: toolSummary(latest.input) };
+  const names = [...new Set(steps.flatMap((step) => step.kind === "tool" ? [step.name] : []))];
+  const calls = steps.filter((step) => step.kind === "tool").length;
+  const count = `${String(calls)} tool${calls === 1 ? "" : "s"}`;
+  const label = calls === 0 ? "Reasoning" : steps.some((step) => step.kind === "thinking") ? `Reasoned and used ${count}` : `Used ${count}`;
+  const detail = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${String(names.length - 3)} more` : names.join(", ");
+  return { label, detail };
+}
+
+export interface LiveReply { reasoning: string; text: string; blocks: readonly ContentBlock[]; tools: readonly string[]; round: { reasoning: string; text: string; tools: readonly string[] } }
+
+const toolUseIds = (blocks: readonly ContentBlock[]): string[] => blocks.flatMap((block) => block.type === "tool_use" ? [block.id] : []);
+
+export function savedPart(messages: readonly Message[], stream: Pick<LiveReply, "tools">): Message | undefined {
+  const last = messages.at(-1);
+  if (last === undefined) return undefined;
+  const shared = toolUseIds(last.content_blocks).some((id) => stream.tools.includes(id));
+  const awaitingTools = stream.tools.length === 0 && last.content_blocks.at(-1)?.type === "tool_use";
+  return shared || awaitingTools ? last : undefined;
+}
+
+export function replyBlocks(stream: LiveReply, saved: Message | undefined): ContentBlock[] {
+  const blocks = saved?.content_blocks ?? [];
+  const ids = toolUseIds(blocks);
+  const answered = new Set(blocks.flatMap((block) => block.type === "tool_result" ? [block.tool_use_id] : []));
+  const tools = stream.blocks.filter((block) => block.type === "tool_use" ? !ids.includes(block.id) : block.type === "tool_result" && !answered.has(block.tool_use_id));
+  const latest = ids.at(-1);
+  const roundSaved = latest !== undefined && (stream.round.tools.includes(latest) || !stream.tools.includes(latest));
+  const unsaved = saved === undefined ? stream : roundSaved ? { reasoning: "", text: "" } : stream.round;
+  return [
+    ...blocks,
+    ...(unsaved.reasoning === "" ? [] : [{ type: "thinking" as const, thinking: unsaved.reasoning }]),
+    ...(unsaved.text === "" ? [] : [{ type: "text" as const, text: unsaved.text }]),
+    ...tools,
+  ];
 }
 
 function scalar(value: unknown): string | undefined {

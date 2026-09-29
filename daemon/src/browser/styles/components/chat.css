@@ -367,6 +367,88 @@ button.chip:hover {
   overflow-wrap: anywhere;
 }
 
+.activity {
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--surface-input);
+  vertical-align: top;
+}
+
+.activity.open {
+  display: block;
+}
+
+.activity-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.activity-head:hover {
+  color: var(--text);
+}
+
+.activity-label {
+  color: var(--text-body);
+  white-space: nowrap;
+}
+
+.activity-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-head .tool-status {
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.activity-steps {
+  padding: 2px 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.activity-steps .tool,
+.activity-steps .tool:not(.open) {
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.activity-steps .tool-head {
+  background: transparent;
+}
+
+.activity-steps .chip {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.activity-steps .reasoning-text {
+  margin: 0 12px 8px;
+}
+
 .images {
   display: flex;
   flex-wrap: wrap;
