@@ -26,6 +26,7 @@ RUN apk add \
     python3 \
     ripgrep \
     sed \
+    tzdata \
     yq-go
 
 COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
