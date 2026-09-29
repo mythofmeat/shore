@@ -15,6 +15,7 @@ import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { toolLoopEvents } from "../src/llm/tool_loop.ts";
 import { withCallCapture } from "../src/llm/capture.ts";
 import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.ts";
+import { EARLIER_CONVERSATION_NOT_SHOWN } from "../src/engine/prompt.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
 import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
 import { consumeStream } from "../src/llm/stream.ts";
@@ -503,3 +504,15 @@ function collectingPhase(): ToolPhase {
       }),
   };
 }
+
+describe("a heartbeat message with no user turn before it", () => {
+  test("the next chat turn still opens on the user's side, with the heartbeat as the assistant's", async () => {
+    const h = await harness([{ kind: "text", text: "yay" }]);
+    await h.store.append({ ...assistantFrom([{ type: "text", text: "made you something" }]), origin: "autonomous" });
+    await h.say("i love it");
+    const sent = required(h.fake.seen[0]);
+    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(sent.messages[0]?.content.map((b) => b["text"])).toEqual([EARLIER_CONVERSATION_NOT_SHOWN]);
+    expect(sent.messages[1]?.content.map((b) => b["text"])).toEqual(["made you something"]);
+  });
+});

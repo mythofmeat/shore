@@ -9,6 +9,7 @@ import {
   withSafetyMargin,
 } from "../src/engine/tokens.ts";
 import { estimateHistoryTokens } from "../src/engine/prompt.ts";
+import type { ContentBlock, ImageRef, Message } from "../src/engine/types.ts";
 
 interface Corpus {
   host: string;
@@ -91,4 +92,54 @@ test("history tokens count the active messages once", () => {
   expect(estimateHistoryTokens(messages)).toBe(
     estimateTokens("hello") + estimateTokens("read") + estimateTokens(JSON.stringify({ path: "a" })),
   );
+});
+
+describe("images in the history", () => {
+  const picture = (kib: number) => ({
+    type: "image" as const,
+    source: { type: "base64" as const, media_type: "image/jpeg", data: "A".repeat(kib * 1024) },
+  });
+
+  const holding = (content_blocks: ContentBlock[], images: ImageRef[] = []): Message[] => [{
+    msg_id: "u1",
+    role: "user",
+    content: "",
+    images,
+    content_blocks,
+    timestamp: "2026-01-01T00:00:00Z",
+  }];
+
+  test("a picture in a tool result costs the same however many base64 bytes carry it", () => {
+    const small = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(10)] }]);
+    const large = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(400)] }]);
+    expect(estimateHistoryTokens(large)).toBe(estimateHistoryTokens(small));
+  });
+
+  test("seven pictures are counted in thousands of tokens, not hundreds of thousands", () => {
+    const seven = holding([{
+      type: "tool_result",
+      tool_use_id: "t1",
+      content: Array.from({ length: 7 }, () => picture(250)),
+    }]);
+    expect(estimateHistoryTokens(seven)).toBeLessThan(50_000);
+  });
+
+  test("text beside a picture in a tool result is counted as its text alone", () => {
+    const bare = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(10)] }]);
+    const captioned = holding([{
+      type: "tool_result",
+      tool_use_id: "t1",
+      content: [{ type: "text", text: "photos/1.jpg" }, picture(10)],
+    }]);
+    expect(estimateHistoryTokens(captioned) - estimateHistoryTokens(bare)).toBe(
+      estimateTokens("photos/1.jpg"),
+    );
+  });
+
+  test("a picture sent in the conversation is not free, whether inline or attached", () => {
+    const inline = holding([picture(10)]);
+    const attached = holding([], [{ path: "a.png" }]);
+    expect(estimateHistoryTokens(inline)).toBeGreaterThan(0);
+    expect(estimateHistoryTokens(attached)).toBe(estimateHistoryTokens(inline));
+  });
 });

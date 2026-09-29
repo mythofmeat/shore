@@ -5,10 +5,17 @@ import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
+import { MAX_IMAGE_EDGE } from "../llm/prepare_images.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
+
+const PIXELS_PER_IMAGE_TOKEN = 750;
+
+const IMAGE_TOKENS = Math.ceil((MAX_IMAGE_EDGE * MAX_IMAGE_EDGE) / PIXELS_PER_IMAGE_TOKEN);
+
+export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
 
 
 const TIME_GAP_THRESHOLD_SECS = 1_800;
@@ -169,31 +176,30 @@ export function stripOneTrailingNewline(raw: string): string {
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
 }
 
-function estimateMessageTokens(msg: Message): number {
-  let total = 0;
-  for (const block of msg.content_blocks) {
-    switch (block.type) {
-      case "text":
-        total += estimateTokens(block.text);
-        break;
-      case "thinking":
-        total += estimateTokens(block.thinking);
-        break;
-      case "tool_use":
-        total += estimateTokens(block.name) + estimateTokens(JSON.stringify(block.input));
-        break;
-      case "redacted_thinking":
-        break;
-      case "tool_result":
-        total += estimateTokens(
-          typeof block.content === "string" ? block.content : JSON.stringify(block.content),
-        );
-        break;
-      default:
-        break;
-    }
+function estimateBlockTokens(block: ContentBlock): number {
+  switch (block.type) {
+    case "text":
+      return estimateTokens(block.text);
+    case "thinking":
+      return estimateTokens(block.thinking);
+    case "tool_use":
+      return estimateTokens(block.name) + estimateTokens(JSON.stringify(block.input));
+    case "redacted_thinking":
+      return 0;
+    case "tool_result":
+      return typeof block.content === "string"
+        ? estimateTokens(block.content)
+        : block.content.reduce((total, inner) => total + estimateBlockTokens(inner), 0);
+    case "image":
+      return IMAGE_TOKENS;
   }
-  return total;
+}
+
+function estimateMessageTokens(msg: Message): number {
+  return msg.content_blocks.reduce(
+    (total, block) => total + estimateBlockTokens(block),
+    msg.images.length * IMAGE_TOKENS,
+  );
 }
 
 export function estimateHistoryTokens(messages: readonly Message[]): number {
@@ -318,6 +324,15 @@ function trimMessages(
   let lastMarkerMs: number | undefined;
   let firstUserPending = true;
   const result: PromptMessage[] = [];
+
+  if (selected.find(({ pm }) => pm.role !== "system")?.pm.role === "assistant") {
+    result.push({
+      role: "user",
+      content: EARLIER_CONVERSATION_NOT_SHOWN,
+      images: [],
+      content_blocks: [{ type: "text", text: EARLIER_CONVERSATION_NOT_SHOWN }],
+    });
+  }
 
   for (const { pm, ts } of selected) {
     const currentMs = parseRfc3339(ts);
