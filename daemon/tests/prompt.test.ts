@@ -363,3 +363,59 @@ describe("what an image costs the prompt", () => {
     ]);
   });
 });
+
+describe("a heartbeat message in the history", () => {
+  const NEW_YORK = "America/New_York";
+
+  const turn = (msg_id: string, role: Role, text: string, timestamp: string, heartbeat = false): Message => ({
+    msg_id,
+    role,
+    content: text,
+    images: [],
+    content_blocks: [{ type: "text", text }],
+    timestamp,
+    ...(heartbeat ? { origin: "autonomous" as const } : {}),
+  });
+
+  const assembled = (messages: Message[], mode: UserTimestampMode, has_prior_context = false) =>
+    assemblePrompt(
+      { character_name: "char", display_name: "user", has_prior_context, messages, user_timestamp_mode: mode },
+      NEW_YORK,
+    ).messages.map((m) => [m.role, m.content]);
+
+  const goodnight = turn("u1", "user", "goodnight", "2026-09-29T12:00:00Z");
+  const night = turn("a1", "assistant", "night night", "2026-09-29T12:00:30Z");
+  const drew = turn("h1", "assistant", "made you something", "2026-09-29T16:30:00Z", true);
+  const again = turn("h2", "assistant", "are you up yet?", "2026-09-29T20:30:00Z", true);
+  const love = turn("u2", "user", "i love it", "2026-09-29T21:30:00Z");
+
+  test("after the assistant's reply it is a turn of its own, stamped with when it was sent", () => {
+    expect(assembled([goodnight, night, drew, love], "auto")).toEqual([
+      ["user", "goodnight"],
+      ["assistant", "night night"],
+      ["user", "[heartbeat · Tuesday 2026-09-29 · 12:30 PM]"],
+      ["assistant", "made you something"],
+      ["user", "[5 hours later · Tuesday 2026-09-29 · 5:30 PM]\n\ni love it"],
+    ]);
+  });
+
+  test("a window that opens on one opens on its marker, not the generic lead-in", () => {
+    expect(assembled([drew, love], "never", true)).toEqual([
+      ["user", "[heartbeat]"],
+      ["assistant", "made you something"],
+      ["user", "i love it"],
+    ]);
+  });
+
+  test("two in a row are two turns, and with timestamps off the marker only names it", () => {
+    expect(assembled([goodnight, night, drew, again, love], "never")).toEqual([
+      ["user", "goodnight"],
+      ["assistant", "night night"],
+      ["user", "[heartbeat]"],
+      ["assistant", "made you something"],
+      ["user", "[heartbeat]"],
+      ["assistant", "are you up yet?"],
+      ["user", "i love it"],
+    ]);
+  });
+});

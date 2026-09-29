@@ -292,7 +292,7 @@ function trimMessages(
   mode: UserTimestampMode,
   timeZone: string,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -310,6 +310,7 @@ function trimMessages(
         ...(msg.model !== undefined ? { model: msg.model } : {}),
       },
       ts: msg.timestamp,
+      heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
     });
   }
   selected.reverse();
@@ -325,17 +326,10 @@ function trimMessages(
   let firstUserPending = true;
   const result: PromptMessage[] = [];
 
-  if (selected.find(({ pm }) => pm.role !== "system")?.pm.role === "assistant") {
-    result.push({
-      role: "user",
-      content: EARLIER_CONVERSATION_NOT_SHOWN,
-      images: [],
-      content_blocks: [{ type: "text", text: EARLIER_CONVERSATION_NOT_SHOWN }],
-    });
-  }
-
-  for (const { pm, ts } of selected) {
+  for (const { pm, ts, heartbeat } of selected) {
     const currentMs = parseRfc3339(ts);
+
+    if (heartbeat) result.push(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone)));
 
     if (pm.role === "user" && currentMs !== undefined) {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
@@ -372,5 +366,19 @@ function trimMessages(
     result.push(pm);
   }
 
+  if (result.find((m) => m.role !== "system")?.role === "assistant") {
+    result.unshift(syntheticUserTurn(EARLIER_CONVERSATION_NOT_SHOWN));
+  }
+
   return result;
+}
+
+function syntheticUserTurn(text: string): PromptMessage {
+  return { role: "user", content: text, images: [], content_blocks: [{ type: "text", text }] };
+}
+
+function heartbeatMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
+  return mode === "never" || instantMs === undefined
+    ? "[heartbeat]"
+    : `[heartbeat · ${formatWallClock(instantMs, timeZone)}]`;
 }

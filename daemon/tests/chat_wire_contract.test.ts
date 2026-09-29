@@ -506,13 +506,41 @@ function collectingPhase(): ToolPhase {
 }
 
 describe("a heartbeat message with no user turn before it", () => {
-  test("the next chat turn still opens on the user's side, with the heartbeat as the assistant's", async () => {
+  const heartbeat = (text: string): Message => ({
+    ...assistantFrom([{ type: "text", text }]),
+    origin: "autonomous",
+    timestamp: "2026-08-13T04:30:00Z",
+  });
+
+  const textOf = (m: { content: Array<Record<string, unknown>> } | undefined) => m?.content.map((b) => b["text"]);
+
+  test("a conversation that starts on one opens on the heartbeat's own turn", async () => {
     const h = await harness([{ kind: "text", text: "yay" }]);
-    await h.store.append({ ...assistantFrom([{ type: "text", text: "made you something" }]), origin: "autonomous" });
+    await h.store.append(heartbeat("made you something"));
     await h.say("i love it");
     const sent = required(h.fake.seen[0]);
     expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
-    expect(sent.messages[0]?.content.map((b) => b["text"])).toEqual([EARLIER_CONVERSATION_NOT_SHOWN]);
-    expect(sent.messages[1]?.content.map((b) => b["text"])).toEqual(["made you something"]);
+    expect(String(textOf(sent.messages[0])?.[0])).toMatch(/^\[heartbeat · .+\]$/);
+    expect(textOf(sent.messages[1])).toEqual(["made you something"]);
+  });
+
+  test("one sent after a reply reaches the model as its own turn, not the end of that reply", async () => {
+    const h = await harness([{ kind: "text", text: "night night" }, { kind: "text", text: "yay" }]);
+    await h.say("goodnight");
+    await h.store.append(heartbeat("made you something"));
+    await h.say("i love it");
+    const sent = required(h.fake.seen[1]);
+    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+    expect(String(textOf(sent.messages[2])?.[0])).toMatch(/^\[heartbeat · .+\]$/);
+    expect(textOf(sent.messages[3])).toEqual(["made you something"]);
+  });
+
+  test("a window that opens on an ordinary reply still opens on the user's side", async () => {
+    const h = await harness([{ kind: "text", text: "yay" }]);
+    await h.store.append(assistantFrom([{ type: "text", text: "where were we" }]));
+    await h.say("hi");
+    const sent = required(h.fake.seen[0]);
+    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(textOf(sent.messages[0])).toEqual([EARLIER_CONVERSATION_NOT_SHOWN]);
   });
 });
