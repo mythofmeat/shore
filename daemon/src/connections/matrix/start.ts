@@ -67,7 +67,10 @@ export interface StartOptions {
   readonly login?: typeof MatrixBot.login;
 }
 
-export async function attemptMatrixBridge(options: StartOptions): Promise<StartOutcome> {
+export async function attemptMatrixBridge(
+  options: StartOptions,
+  stopSignal?: AbortSignal,
+): Promise<StartOutcome> {
   const matrix = options.config.app.connections.matrix;
   if (matrix === undefined || !matrix.enabled) return { kind: "off", reason: undefined };
 
@@ -96,10 +99,11 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
       ...(credentials.password === undefined ? {} : { password: credentials.password }),
       ...(credentials.deviceId === undefined ? {} : { deviceId: credentials.deviceId }),
       ...(options.log === undefined ? {} : { log: options.log }),
+      ...(stopSignal === undefined ? {} : { signal: stopSignal }),
     });
     await bot.start();
   } catch (e) {
-    options.log?.warn?.(`Matrix bridge not started: ${String(e)}`);
+    if (stopSignal?.aborted !== true) options.log?.warn?.(`Matrix bridge not started: ${String(e)}`);
     return { kind: "failed", error: e };
   }
 

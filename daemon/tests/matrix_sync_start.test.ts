@@ -68,6 +68,22 @@ describe("waiting for the first sync", () => {
     expect(client.listenerCount).toBe(0);
   });
 
+  test("a bot stopped while it waits rejects at once and unsubscribes", async () => {
+    const client = new FakeClient();
+    const stop = new AbortController();
+    const waiting = awaitInitialSync(client.asClient(), 10_000, stop.signal);
+    stop.abort();
+    expect(waiting).rejects.toThrow("stopped before its sync started");
+    expect(client.listenerCount).toBe(0);
+  });
+
+  test("a bot already stopped does not wait at all", async () => {
+    const client = new FakeClient();
+    const waiting = awaitInitialSync(client.asClient(), 10_000, AbortSignal.abort());
+    expect(waiting).rejects.toThrow("stopped before its sync started");
+    expect(client.listenerCount).toBe(0);
+  });
+
   test("transient states are not failures on their own", async () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000);
