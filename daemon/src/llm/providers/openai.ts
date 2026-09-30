@@ -1,5 +1,5 @@
 import { coalesceToolResults } from "../tool_result_messages.ts";
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import OpenAI from "openai";
 import type {
   ChatCompletionAssistantMessageParam,
@@ -36,7 +36,7 @@ import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const { client, params } = buildOpenAICall(req, true);
     const stream = (await client.chat.completions.create(
       params,
@@ -46,7 +46,7 @@ export class OpenAIProvider implements SidecarProvider {
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const startedAt = Date.now();
     const { client, params } = buildOpenAICall(req, false);
     const completion = await client.chat.completions.create(

@@ -77,3 +77,22 @@ export function resolveImage(
 export function imageLabel(ref: ImageRef): string {
   return path.basename(ref.path);
 }
+
+const MODEL_COPY_TYPES: readonly (readonly [string, string])[] = [["png", "image/png"], ["jpg", "image/jpeg"], ["webp", "image/webp"]];
+
+function modelCopyAt(original: string, extension: string): string {
+  return path.join(path.dirname(original), "model", `${path.basename(original)}.${extension}`);
+}
+
+export function modelCopyPath(original: string, mediaType: string): string | undefined {
+  const extension = MODEL_COPY_TYPES.find(([, type]) => type === mediaType)?.[0];
+  return extension === undefined ? undefined : modelCopyAt(original, extension);
+}
+
+export function findModelCopy(original: string): { path: string; mediaType: string } | undefined {
+  for (const [extension, mediaType] of MODEL_COPY_TYPES) {
+    const candidate = modelCopyAt(original, extension);
+    if (fs.statSync(candidate, { throwIfNoEntry: false })?.isFile() === true) return { path: candidate, mediaType };
+  }
+  return undefined;
+}

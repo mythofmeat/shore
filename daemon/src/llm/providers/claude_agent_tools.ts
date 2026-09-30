@@ -1,4 +1,5 @@
-import { prepareImageBlock } from "../prepare_images.ts";
+import { limitImageBlock } from "../prepare_images.ts";
+import { MANY_IMAGES_MAX_EDGE } from "../image_settings.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   CallToolRequestSchema,
@@ -139,7 +140,7 @@ export function shoreToolServer(
   server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const bare = request.params.name;
     if (names.wireOf(bare) === undefined) throw new UnknownShoreTool(bare);
-    return toCallToolResult(await prepareImageBlock(await run(bare, request.params.arguments ?? {})));
+    return toCallToolResult(await limitImageBlock(await run(bare, request.params.arguments ?? {}), MANY_IMAGES_MAX_EDGE));
   });
 
   return server;

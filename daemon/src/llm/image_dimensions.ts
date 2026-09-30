@@ -38,6 +38,30 @@ export function fileImageDimensions(path: string): ImageDimensions | undefined {
   }
 }
 
+export function mayBeTransparent(bytes: Buffer): boolean {
+  if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return pngMayBeTransparent(bytes);
+  if (ascii(bytes, 0, 4) !== "RIFF" || ascii(bytes, 8, 4) !== "WEBP") return false;
+  switch (ascii(bytes, 12, 4)) {
+    case "VP8X":
+      return bytes.length > 20 && ((bytes[20] as number) & 0x10) !== 0;
+    case "VP8L":
+      return bytes.length >= 25 && ((bytes.readUInt32LE(21) >>> 28) & 1) === 1;
+    default:
+      return false;
+  }
+}
+
+function pngMayBeTransparent(bytes: Buffer): boolean {
+  if (bytes.length < 26 || [4, 6].includes(bytes[25] as number)) return true;
+  for (let offset = 8; offset + 8 <= bytes.length;) {
+    const type = ascii(bytes, offset + 4, 4);
+    if (type === "tRNS") return true;
+    if (type === "IDAT" || type === "IEND") return false;
+    offset += 12 + bytes.readUInt32BE(offset);
+  }
+  return false;
+}
+
 function dimensionsFrom(read: Reader): ImageDimensions | undefined {
   return png(read) ?? gif(read) ?? webp(read) ?? jpeg(read);
 }

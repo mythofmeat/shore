@@ -6,7 +6,8 @@ import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
-import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, type ImageTier } from "../llm/image_tokens.ts";
+import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
+import { findModelCopy } from "../llm/images.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
@@ -190,11 +191,13 @@ function estimateBlockTokens(block: ContentBlock, tier: ImageTier): number {
         ? estimateTokens(block.content)
         : block.content.reduce((total, inner) => total + estimateBlockTokens(inner, tier), 0);
     case "image":
-      return imageTokens(base64ImageDimensions(block.source.data), tier);
+      return sentImageTokens(base64ImageDimensions(block.source.data), tier);
   }
 }
 
 function attachedImageTokens(image: ImageRef, tier: ImageTier): number {
+  const copy = findModelCopy(image.path);
+  if (copy !== undefined) return sentImageTokens(fileImageDimensions(copy.path), tier);
   const dimensions = image.data !== undefined && image.data.length > 0
     ? base64ImageDimensions(image.data)
     : fileImageDimensions(image.path);

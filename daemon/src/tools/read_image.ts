@@ -18,7 +18,7 @@ export async function readImage(file: FileHandle, path: string, mime: string, si
   if (metadata === undefined) throw new ToolIoError(`${path}: image could not be decoded`);
   return {
     description: `${path}: ${mime}, ${metadata.width}×${metadata.height}, ${data.length} bytes`,
-    image: { mime_type: mime, data: data.toString("base64"), label: path },
+    image: { mime_type: mime, data: data.toString("base64"), label: path, path },
   };
 }
 

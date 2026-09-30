@@ -1,4 +1,4 @@
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import {
   GoogleGenAI,
   HarmBlockThreshold,
@@ -42,14 +42,14 @@ const SAFETY_CATEGORIES = [
 
 export class GeminiProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const { client, params } = buildGeminiCall(req, signal);
     const stream = await client.models.generateContentStream(params);
     yield* geminiStreamEvents(req.model, stream);
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const startedAt = Date.now();
     const { client, params } = buildGeminiCall(req, signal);
     const response = await client.models.generateContent(params);

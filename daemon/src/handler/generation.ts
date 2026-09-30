@@ -28,7 +28,8 @@ import type {
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
-import { anyToolEnabled } from "../config/app.ts";
+import { anyToolEnabled, imageSettingsFor } from "../config/app.ts";
+import { imageLimitsFor } from "../llm/prepare_images.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
@@ -253,7 +254,7 @@ async function runGenerationCore(
   }
 
   const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid);
+  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
@@ -450,6 +451,7 @@ async function streamTurn(
         sendDirect: sink,
         ctx: toolCtx,
         limits: toolLimits(config),
+        imageLimits: imageLimitsFor(call.sdk, call.model),
         ...(params.rid === undefined ? {} : { rid: params.rid }),
         now: params.now,
         newMessageId: params.newMessageId,

@@ -13,6 +13,8 @@ import type { ToolPhase } from "../src/tools/execute.ts";
 import { required } from "../src/util/required.ts";
 import { oversizedImage, wideImage } from "./support/oversized_image.ts";
 import { prepareImageBlocks } from "../src/llm/prepare_images.ts";
+import { MAX_SENT_IMAGE_BYTES } from "../src/llm/image_settings.ts";
+import { base64Bytes } from "../src/util/base64.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 
 
@@ -57,7 +59,7 @@ test("the real SDK accepts an upload and then the same image in a rebuilt heartb
     const sent = required(mock.requests.at(-1)).body.messages as WireMessage[];
     const imported = sent.flatMap(message => message.content).find(block => block.type === "image");
     if (imported?.type !== "image") throw new Error("heartbeat lost its historical image");
-    expect(imported.source.data.length).toBeLessThanOrEqual(1_000_000);
+    expect(base64Bytes(imported.source.data)).toBeLessThanOrEqual(MAX_SENT_IMAGE_BYTES);
     const importedWide = sent.flatMap(message => message.content).filter(block => block.type === "image")[1];
     if (importedWide?.type !== "image") throw new Error("heartbeat lost its wide image");
     expect(await new Bun.Image(Buffer.from(importedWide.source.data, "base64")).metadata()).toMatchObject({ width: 2000, height: 500 });

@@ -94,6 +94,7 @@ export async function buildToolContext(
     conversation: deps.conversation ?? [],
     ...(deps.dryRun === undefined ? {} : { dryRun: deps.dryRun }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+    images: config.app.images,
     imageDir: characterMediaDir(dataDir, charName),
     workspaceDir,
     characterDataDir: charDataDir,

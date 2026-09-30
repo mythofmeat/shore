@@ -10,7 +10,7 @@ import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import type { Message } from "../src/engine/types.ts";
+import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { recordImageRejection } from "../src/llm/image_support.ts";
@@ -21,6 +21,8 @@ import {
 } from "../src/handler/generation.ts";
 import { ImagesUnsupportedError } from "../src/handler/setup.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
+import { required } from "../src/util/required.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 afterAll(restoreTestEnv);
 
@@ -39,13 +41,13 @@ const DONE: StreamEvent[] = [
   },
 ];
 
-function model(supportsImages: boolean | undefined): ResolvedModel {
+function model(supportsImages: boolean | undefined, sdk: ResolvedModel["sdk"] = "anthropic"): ResolvedModel {
   return {
     name: "fixture",
     qualifiedName: "chat.fixture",
     category: "chat",
     providerKey: "opencode-go",
-    sdk: "anthropic",
+    sdk,
     modelId: "glm-5.3",
     apiKeyEnv: MODEL_KEY_ENV,
     maxContextTokens: 200_000,
@@ -54,7 +56,7 @@ function model(supportsImages: boolean | undefined): ResolvedModel {
   };
 }
 
-async function loadedConfig(root: string, supportsImages: boolean | undefined): Promise<LoadedConfig> {
+async function loadedConfig(root: string, supportsImages: boolean | undefined, sdk: ResolvedModel["sdk"] = "anthropic"): Promise<LoadedConfig> {
   const dirs = {
     config: join(root, "config"),
     data: join(root, "data"),
@@ -66,7 +68,7 @@ async function loadedConfig(root: string, supportsImages: boolean | undefined): 
   const app: AppConfig = defaultAppConfig();
   app.tools.enabled_tools = [];
   const models = emptyCatalog();
-  models.chat.set("chat.fixture", model(supportsImages));
+  models.chat.set("chat.fixture", model(supportsImages, sdk));
   app.defaults.model = "fixture";
 
   return { app, models, providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
@@ -80,6 +82,10 @@ interface RunOutcome {
 }
 
 interface RunInputs {
+  configure?: (app: AppConfig) => void;
+  sdk?: ResolvedModel["sdk"];
+  workspaceImage?: Buffer;
+  toolResults?: ContentBlock[];
   supportsImages?: boolean | undefined;
   history?: Message[];
   text: string;
@@ -90,11 +96,15 @@ interface RunInputs {
 
 async function run(inputs: RunInputs): Promise<RunOutcome> {
   const root = await mkdtemp(testTmp("shore-imgsup-"));
-  const config = await loadedConfig(root, inputs.supportsImages);
+  const config = await loadedConfig(root, inputs.supportsImages, inputs.sdk);
+  inputs.configure?.(config.app);
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
   await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada");
+  if (inputs.workspaceImage !== undefined) {
+    await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "sheet.png"), inputs.workspaceImage);
+  }
   const charDir = join(config.dirs.data, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
 
@@ -116,6 +126,11 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
     },
     generate: () => {
       throw new Error("unused");
+    },
+    async *streamWithTools(req, phase) {
+      requests.push(req);
+      inputs.toolResults?.push(await phase.runTool({ id: "toolu_read", name: "read", input: { file_path: "sheet.png" } }));
+      yield* DONE;
     },
   };
 
@@ -142,7 +157,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
       listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
     },
     dataDir: config.dirs.data,
-    providers: { anthropic: provider },
+    providers: { [inputs.sdk ?? "anthropic"]: provider },
     autonomy,
     notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
     diagnostics: { key_fallbacks: { push: () => {} } },
@@ -241,6 +256,49 @@ function imageBlocksIn(request: SidecarRequest | undefined): number {
   }
   return n;
 }
+
+describe("an image a user sends", () => {
+  test("reaches the model at the upload settings, with no note that it was reduced", async () => {
+    const dir = await mkdtemp(testTmp("shore-img-"));
+    const path = join(dir, "photo.png");
+    await writeFile(path, await sizedImage(4000, 3000));
+    const out = await run({
+      supportsImages: true,
+      text: "what is this",
+      imagePaths: [path],
+      configure: (app) => { app.images.upload.max_edge = 1024; app.images.max_edge = 512; },
+    });
+    expect(out.error).toBeUndefined();
+    const content = out.requests[0]?.messages.flatMap((message) => message.content) ?? [];
+    const image = content.find((block) => block.type === "image");
+    if (image?.type !== "image") throw new Error("the image did not reach the model");
+    expect(await new Bun.Image(Buffer.from(image.source.data, "base64")).metadata()).toMatchObject({ width: 1024, height: 768 });
+    expect(JSON.stringify(content)).not.toContain("reduced");
+    expect(await readFile(required(out.history[0]?.images[0]).path)).toEqual(await readFile(path));
+  });
+});
+
+describe("an image a tool reads during a turn", () => {
+  for (const [sdk, width, height] of [["anthropic", 2576, 1717], ["claude_agent", 2000, 1333]] as const) {
+    test(`is held to what ${sdk} can carry`, async () => {
+      const toolResults: ContentBlock[] = [];
+      const out = await run({
+        sdk,
+        supportsImages: true,
+        text: "look at the sheet",
+        workspaceImage: await sizedImage(3000, 2000),
+        toolResults,
+        configure: (app) => { app.tools.enabled_tools = ["read"]; app.images.read.max_edge = 2576; },
+      });
+      expect(out.error).toBeUndefined();
+      const result = toolResults[0];
+      if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("the read did not run");
+      const image = result.content.find((block) => block.type === "image");
+      if (image?.type !== "image") throw new Error("the read returned no image");
+      expect(await new Bun.Image(Buffer.from(image.source.data, "base64")).metadata()).toMatchObject({ width, height });
+    });
+  }
+});
 
 describe("sending new images to a model that cannot read them", () => {
   test("the turn is refused before anything reaches the provider", async () => {

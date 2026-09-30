@@ -17,7 +17,7 @@ import {
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
-import type { SubagentConfig, ToolsConfig } from "../config/app.ts";
+import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
@@ -30,6 +30,7 @@ export interface ToolContext {
   dryRun?: boolean;
   maxResultChars?: number;
   maxInlineImageBytes?: number;
+  images?: ImagesConfig;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
@@ -149,7 +150,7 @@ export async function dispatchTool(
 
   switch (name) {
     case "read":
-      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars, ctx.maxInlineImageBytes);
+      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars, ctx.maxInlineImageBytes, ctx.images);
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(ctx.workspaceDir,
