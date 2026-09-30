@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { parseToolArgs } from "../src/llm/tool_args.ts";
 import { argumentRejection, executeToolUse, type ToolExecution } from "../src/tools/execute.ts";
-import { ALL_TOOLS, BUILTIN_TOOL_SCHEMAS } from "../src/tools/registry.ts";
+import { ALL_TOOLS } from "../src/tools/registry.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import {
   compileToolSchema,
   InvalidToolSchema,

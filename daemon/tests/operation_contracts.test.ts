@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { commandCatalogue, commandOperations, type CommandOperationContext } from "../src/commands/registry.ts";
-import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
+import { assertContractBindings, parseOperationInput, parseOperationResult, type OperationName } from "../src/operations/contracts.ts";
+import { CommandError } from "../src/commands/errors.ts";
+import operationSchemas from "../src/operations/schemas.generated.json" with { type: "json" };
+import * as webContracts from "../src/web/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
 import { isOperationName, validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
@@ -12,6 +15,52 @@ import usageReports from "../../client/shore-cli/tests/fixtures/usage_reports.js
 import archiveReports from "../../client/shore-cli/tests/fixtures/character_archives.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
+const PROBE_MS = 10_000;
+const CONTRACTS = new URL("../src/operations/contracts.ts", import.meta.url).pathname;
+const WEB_CONTRACTS = new URL("../src/web/contracts.ts", import.meta.url).pathname;
+const AJV_2020 = Bun.resolveSync("ajv/dist/2020.js", import.meta.dir);
+
+describe("contract validators compile when first used", () => {
+  test("loading the contracts compiles nothing, and each validator compiles once", async () => {
+    const script = [
+      `const { default: Ajv2020 } = await import(${JSON.stringify(AJV_2020)});`,
+      "let compiled = 0;",
+      "const compile = Ajv2020.prototype.compile;",
+      "Ajv2020.prototype.compile = function (...args) { compiled += 1; return compile.apply(this, args); };",
+      `const { parseOperationInput } = await import(${JSON.stringify(CONTRACTS)});`,
+      `const { validWebProblem } = await import(${JSON.stringify(WEB_CONTRACTS)});`,
+      "const counts = [compiled];",
+      'try { parseOperationInput("usage", {}); } catch {}',
+      "counts.push(compiled);",
+      'try { parseOperationInput("usage", { group_by: "nope" }); } catch {}',
+      "validWebProblem({});",
+      "counts.push(compiled);",
+      "validWebProblem({});",
+      "counts.push(compiled);",
+      "console.log(JSON.stringify(counts));",
+    ].join("\n");
+    const probe = Bun.spawn(["bun", "-e", script], { stdout: "pipe", stderr: "pipe" });
+    const finished = await Promise.race([probe.exited.then(() => true), Bun.sleep(PROBE_MS).then(() => false)]);
+    probe.kill();
+    expect(finished).toBe(true);
+    expect(JSON.parse(await new Response(probe.stdout).text())).toEqual([0, 1, 2, 2]);
+  }, PROBE_MS + 5_000);
+
+  test("every operation and web contract compiles", () => {
+    const compiles = (use: () => unknown, what: string) => {
+      try {
+        use();
+      } catch (error) {
+        expect(error, what).toBeInstanceOf(CommandError);
+      }
+    };
+    for (const { name } of operationSchemas) {
+      compiles(() => parseOperationInput(name as OperationName, {}), `${name} input`);
+      compiles(() => parseOperationResult(name as OperationName, {}), `${name} output`);
+    }
+    for (const [name, valid] of Object.entries(webContracts)) expect(typeof valid({}), name).toBe("boolean");
+  }, 30_000);
+});
 
 describe("executable operation contracts", () => {
   test("archive operations have closed inputs, complete results and daemon-host path controls", () => {
