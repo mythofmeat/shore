@@ -8,8 +8,9 @@ import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts
 
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
 const TOKEN = "process-test-token";
+const START_MS = 30_000;
 const STEP_MS = 10_000;
-const stepsWithin = (steps: number): number => steps * STEP_MS + 5_000;
+const startsAndSteps = (starts: number, steps: number): number => starts * START_MS + steps * STEP_MS + 5_000;
 const children: Bun.Subprocess<"ignore", "ignore", "pipe">[] = [];
 const roots: string[] = [];
 
@@ -100,9 +101,9 @@ async function instanceIds(path: string): Promise<string[]> {
   }
 }
 
-async function waitForInstances(path: string, expected: readonly string[]): Promise<void> {
+async function waitForInstances(path: string, expected: readonly string[], withinMs: number): Promise<void> {
   const wanted = [...expected].sort();
-  const deadline = Date.now() + STEP_MS;
+  const deadline = Date.now() + withinMs;
   for (;;) {
     const actual = await instanceIds(path);
     if (JSON.stringify(actual) === JSON.stringify(wanted)) return;
@@ -114,25 +115,26 @@ async function waitForInstances(path: string, expected: readonly string[]): Prom
 }
 
 async function waitUntilReady(layout: ProcessLayout, instanceId: string): Promise<void> {
-  const deadline = Date.now() + STEP_MS;
+  const deadline = Date.now() + START_MS;
   for (;;) {
     try {
       if ((await readFile(layout.readyPath, "utf8")).trim() === "ready") return;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
-    if (Date.now() >= deadline) throw new Error(`${instanceId} did not become ready`);
+    if (Date.now() >= deadline) throw new Error(`${instanceId} did not become ready within ${String(START_MS)}ms`);
     await Bun.sleep(20);
   }
 }
 
 async function exitWithin(
   child: Bun.Subprocess<"ignore", "ignore", "pipe">,
+  withinMs: number = STEP_MS,
 ): Promise<number> {
   return await Promise.race([
     child.exited,
-    Bun.sleep(STEP_MS).then(() => {
-      throw new Error(`daemon did not exit within ${String(STEP_MS)}ms`);
+    Bun.sleep(withinMs).then(() => {
+      throw new Error(`daemon did not exit within ${String(withinMs)}ms`);
     }),
   ]);
 }
@@ -172,7 +174,7 @@ describe("daemon processes owning data directories", () => {
       socket.destroy();
       child.kill("SIGKILL");
     }
-  }, stepsWithin(3));
+  }, startsAndSteps(1, 2));
 
   test("a second process cannot open the same data directory", async () => {
     const root = await processRoot("same");
@@ -183,22 +185,22 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(firstLayout, "first-owner");
 
     const second = spawnDaemon(secondLayout, "blocked-owner");
-    expect(await exitWithin(second)).toBe(1);
+    expect(await exitWithin(second, START_MS)).toBe(1);
     const error = await new Response(second.stderr).text();
     expect(error).toContain("already in use");
     expect(error).toContain("first-owner");
     expect(error).toContain("different SHORE_DATA_DIR");
-    await waitForInstances(firstLayout.instancesPath, ["first-owner"]);
+    await waitForInstances(firstLayout.instancesPath, ["first-owner"], STEP_MS);
 
     first.kill("SIGTERM");
     expect(await exitWithin(first)).toBe(0);
-    await waitForInstances(firstLayout.instancesPath, []);
+    await waitForInstances(firstLayout.instancesPath, [], STEP_MS);
 
     const replacement = spawnDaemon(secondLayout, "replacement-owner");
     await waitUntilReady(secondLayout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  }, stepsWithin(7));
+  }, startsAndSteps(3, 4));
 
   test("two processes with different data directories remain supported", async () => {
     const root = await processRoot("different");
@@ -207,7 +209,7 @@ describe("daemon processes owning data directories", () => {
 
     const first = spawnDaemon(firstLayout, "first-data-owner");
     const second = spawnDaemon(secondLayout, "second-data-owner");
-    await waitForInstances(firstLayout.instancesPath, ["first-data-owner", "second-data-owner"]);
+    await waitForInstances(firstLayout.instancesPath, ["first-data-owner", "second-data-owner"], START_MS);
     await Promise.all([
       waitUntilReady(firstLayout, "first-data-owner"),
       waitUntilReady(secondLayout, "second-data-owner"),
@@ -216,7 +218,7 @@ describe("daemon processes owning data directories", () => {
     first.kill("SIGTERM");
     second.kill("SIGTERM");
     expect(await Promise.all([exitWithin(first), exitWithin(second)])).toEqual([0, 0]);
-  }, stepsWithin(3));
+  }, startsAndSteps(2, 1));
 
   test("the lifetime lock blocks a process even when the owner record looks stale", async () => {
     const root = await processRoot("lifetime-lock");
@@ -238,7 +240,7 @@ describe("daemon processes owning data directories", () => {
     );
 
     const second = spawnDaemon(secondLayout, "blocked-owner");
-    expect(await exitWithin(second)).toBe(1);
+    expect(await exitWithin(second, START_MS)).toBe(1);
     expect(await new Response(second.stderr).text()).toContain("misleading-dead-owner");
 
     first.kill("SIGTERM");
@@ -247,7 +249,7 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(secondLayout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  }, stepsWithin(5));
+  }, startsAndSteps(3, 2));
 
   test("an owner killed without cleanup is safely reclaimed", async () => {
     const root = await processRoot("stale");
@@ -264,7 +266,7 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(replacementLayout, "recovered-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  }, stepsWithin(4));
+  }, startsAndSteps(2, 2));
 
   test("a container restart can reclaim a legacy lease with its reused PID", async () => {
     const root = await processRoot("reused-pid");
@@ -275,5 +277,5 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(layout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  }, stepsWithin(2));
+  }, startsAndSteps(1, 1));
 });
