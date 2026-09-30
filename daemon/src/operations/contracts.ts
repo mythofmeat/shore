@@ -1,17 +1,19 @@
-import type { ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
-import { contractValidator } from "./validation.ts";
+import { operationValidator, type ContractError, type ContractValidator } from "./validators.generated.js";
 import type { OperationInput, OperationName, OperationResult } from "./types.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
 export type { OperationInput, OperationName, OperationResult } from "./types.ts";
 
-const validator = contractValidator();
-
-const contracts = new Map<string, { input: ValidateFunction; output: ValidateFunction; schemas: typeof schemas[number] }>();
+const contracts = new Map<string, { input: ContractValidator; output: ContractValidator; schemas: typeof schemas[number] }>();
 for (const schema of schemas) {
   if (contracts.has(schema.name)) throw new Error(`Duplicate operation contract: ${schema.name}`);
-  contracts.set(schema.name, { input: validator.compile(schema.input), output: validator.compile(schema.output), schemas: schema });
+  const input = operationValidator("input", schema.name);
+  const output = operationValidator("output", schema.name);
+  if (input === undefined || output === undefined) {
+    throw new Error(`No generated validator for operation ${schema.name}; run bun run contracts:generate`);
+  }
+  contracts.set(schema.name, { input, output, schemas: schema });
 }
 
 export function operationSchema(name: OperationName): typeof schemas[number] {
@@ -20,7 +22,7 @@ export function operationSchema(name: OperationName): typeof schemas[number] {
   return contract.schemas;
 }
 
-function violation(errors: ErrorObject[] | null | undefined): string {
+function violation(errors: ContractError[] | null | undefined): string {
   return (errors ?? []).map((error) => {
     if (error.keyword === "required") return `Missing required argument: ${String(error.params["missingProperty"])}`;
     return `${error.instancePath || "arguments"} ${error.message ?? "does not match the contract"}`;

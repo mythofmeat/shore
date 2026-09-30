@@ -2,7 +2,7 @@ import type { OperationInput, OperationName, OperationResult } from "../operatio
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { BrowserConnection } from "./connection.ts";
-import { isOperationName, validOperationInput, validOperationResult } from "./operation_validators.generated.js";
+import { isOperationName, validOperationInput, validOperationResult } from "../operations/validators.generated.js";
 
 export class OperationFailure extends Error {
   constructor(readonly operation: OperationName, readonly completion: RequestFinished) {

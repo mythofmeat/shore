@@ -61,10 +61,13 @@ exposes genuinely future event tags separately. Invalid known events stop the co
 JavaScript integer formats reject values outside the safe integer range rather than rounding
 revision counters silently.
 
-From `daemon/`, `bun run browser:generate` precompiles browser validators with Ajv's standalone
-generator; `bun run browser:check` verifies reproducibility. Browser bundles do not compile schemas
-at runtime or require dynamic code evaluation. `tests/browser_wire.test.ts` fails if the validators
-no longer regenerate exactly from the Rust schemas, so the daemon test suite catches drift.
+From `daemon/`, `bun run browser:generate` precompiles the browser's wire validators with Ajv's
+standalone generator, and `bun run contracts:generate` precompiles the operation validators the
+daemon and the browser share and the daemon's web API validators; `browser:check` and
+`contracts:check` verify reproducibility. Neither the browser nor the daemon compiles these schemas
+at runtime, and the browser needs no dynamic code evaluation. `tests/browser_wire.test.ts` and
+`tests/operation_contracts.test.ts` fail if the validators no longer regenerate exactly from the
+Rust schemas, so the daemon test suite catches drift.
 
 Peers announcing `request-lifecycle` receive `request_finished` directly from the shared handler,
 independent of current selection. Outcomes are completed, failed, cancelled or superseded, with

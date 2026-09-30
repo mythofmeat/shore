@@ -39,7 +39,7 @@ import { MessageStore } from "../src/engine/message_store.ts";
 import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
-import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { isOperationName, validOperationResult } from "../src/operations/validators.generated.js";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];

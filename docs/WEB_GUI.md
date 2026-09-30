@@ -95,8 +95,8 @@ it is for SWP envelopes and events (`daemon/src/protocol/README.md`):
 - Inputs are validated against the schema before the handler runs. Results are validated after the
   handler, and again after the after-command annotations in `daemon/src/handler/command_dispatch.ts`.
   Domain validation stays in the handlers.
-- The browser uses Ajv validators precompiled from the same schemas (`bun run browser:generate`).
-  `tests/browser_wire.test.ts` fails if they drift.
+- The daemon and the browser use the same Ajv validators, precompiled from these schemas
+  (`bun run contracts:generate`). `tests/operation_contracts.test.ts` fails if they drift.
 
 ## Developing the browser client
 

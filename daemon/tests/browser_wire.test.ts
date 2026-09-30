@@ -37,7 +37,7 @@ test("the browser wire bundle runs with dynamic code generation disabled", async
 });
 
 test("browser operation validators run without dynamic code generation", async () => {
-  const bundle = await Bun.build({ entrypoints: [new URL("../src/browser/operation_validators.generated.js", import.meta.url).pathname], target: "browser", format: "cjs", minify: true });
+  const bundle = await Bun.build({ entrypoints: [new URL("../src/operations/validators.generated.js", import.meta.url).pathname], target: "browser", format: "cjs", minify: true });
   expect(bundle.success).toBe(true);
   const script = await bundle.outputs.at(0)?.text();
   expect(script).toBeDefined();

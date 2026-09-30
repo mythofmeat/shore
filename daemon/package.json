@@ -19,6 +19,8 @@
     "inventory:generate": "bun run scripts/capability_inventory.ts --write",
     "browser:generate": "bun run scripts/browser_validators.ts --write",
     "browser:check": "bun run scripts/browser_validators.ts && bun run scripts/build_browser.ts --check",
+    "contracts:generate": "bun run scripts/contract_validators.ts --write",
+    "contracts:check": "bun run scripts/contract_validators.ts",
     "browser:build": "bun run scripts/build_browser.ts",
     "test:browser": "bun run build && playwright test",
     "inventory:check": "bun run scripts/capability_inventory.ts"

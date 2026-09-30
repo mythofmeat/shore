@@ -1,6 +1,6 @@
 import { VIEW_PREFERENCES } from "./preferences.generated.ts";
 import { VIEW_CONTROLS, viewValue, type ViewKey } from "./preferences.ts";
-import { isOperationName, validOperationInput } from "./operation_validators.generated.js";
+import { isOperationName, validOperationInput } from "../operations/validators.generated.js";
 import { conversationRequest } from "./request_forms.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";

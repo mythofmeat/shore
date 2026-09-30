@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { contractValidators } from "../scripts/contract_validators.ts";
 import { commandCatalogue, commandOperations, type CommandOperationContext } from "../src/commands/registry.ts";
 import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
-import { isOperationName, validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { isOperationName, validOperationInput, validOperationResult } from "../src/operations/validators.generated.js";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { operationPolicy } from "../src/operations/policy.ts";
 import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
@@ -12,6 +14,25 @@ import usageReports from "../../client/shore-cli/tests/fixtures/usage_reports.js
 import archiveReports from "../../client/shore-cli/tests/fixtures/character_archives.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
+const PROBE_MS = 10_000;
+const CONTRACT_MODULES = ["../src/operations/contracts.ts", "../src/web/contracts.ts"].map((path) => new URL(path, import.meta.url).pathname);
+
+describe("precompiled contract validators", () => {
+  test("regenerate exactly from the operation and web schemas", async () => {
+    for (const [name, source] of Object.entries(contractValidators())) {
+      expect(await readFile(new URL(`../src/${name}`, import.meta.url), "utf8"), name).toBe(source);
+    }
+  }, 30_000);
+
+  test("load without Ajv's schema compiler", async () => {
+    const script = `${CONTRACT_MODULES.map((path) => `await import(${JSON.stringify(path)});`).join(" ")} console.log(JSON.stringify(Object.keys(require.cache).filter((path) => path.includes("/node_modules/ajv/") && !path.includes("/node_modules/ajv/dist/runtime/"))));`;
+    const probe = Bun.spawn(["bun", "-e", script], { stdout: "pipe", stderr: "pipe" });
+    const finished = await Promise.race([probe.exited.then(() => true), Bun.sleep(PROBE_MS).then(() => false)]);
+    probe.kill();
+    expect(finished).toBe(true);
+    expect(JSON.parse(await new Response(probe.stdout).text())).toEqual([]);
+  }, PROBE_MS + 5_000);
+});
 
 describe("executable operation contracts", () => {
   test("archive operations have closed inputs, complete results and daemon-host path controls", () => {
