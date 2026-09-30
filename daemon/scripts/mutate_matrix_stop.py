@@ -46,6 +46,16 @@ a login, the wait for the first sync.
 of waiting for the homeserver, and a bridge that comes up after the stop was
 asked for is stopped rather than left running.
 
+**The start's deadline** (#276). `startClient()` waits for
+`/_matrix/client/versions` before it starts the sync, and that request has no
+timeout of its own. The sync-start clock used to begin only once
+`startClient()` had returned, so a homeserver that accepted the connection and
+then said nothing held each attempt for Bun's own fetch timeout (360s when
+measured) and the 60s after it: seven minutes before the supervisor could begin
+to back off. The clock now runs alongside `startClient()`, from the moment the
+start is asked for. A start it times out is stopped like any other that failed,
+which is what hangs up on the request still in flight.
+
 Each group runs against the one test file that watches it, because a mutant
 here shows up as a hung test and a hung test costs its whole timeout. The last
 group is what only a draining event loop can catch: `tests/matrix_shutdown.test.ts`
@@ -114,10 +124,10 @@ BOT = [
      B,
      "  stopSignal.throwIfAborted();\n  const stopped = abortRejection(stopSignal);",
      "  const stopped = abortRejection(stopSignal);"),
-    ("wait: a start waits for the homeserver's first answer whatever happens",
+    ("wait: a start the stop cut short is reported as a sync that never started",
      B,
-     "await this.#whileRunning(() => this.#client.startClient({ initialSyncLimit: 0 }));",
-     "await this.#client.startClient({ initialSyncLimit: 0 });"),
+     "      await this.#whileRunning(() =>\n        Promise.all([",
+     "      await ((ask: () => Promise<unknown>) => ask())(() =>\n        Promise.all(["),
     ("wait: a send waits for the homeserver whatever happens",
      B,
      "      const sent = await this.#whileRunning(() =>\n"
@@ -172,6 +182,17 @@ BOT = [
      B,
      "      if (!this.#stopSignal.aborted && isTimeoutError(e)) {",
      "      if (isTimeoutError(e)) {"),
+
+    # --- the start's deadline (#276) ------------------------------------------
+    ("start: the sync-start clock starts only once the homeserver has answered",
+     B,
+     "        Promise.all([\n"
+     "          this.#client.startClient({ initialSyncLimit: 0 }),\n"
+     "          awaitInitialSync(this.#client, syncStartTimeoutMs, this.#stopSignal),\n"
+     "        ]),",
+     "        this.#client\n"
+     "          .startClient({ initialSyncLimit: 0 })\n"
+     "          .then(() => awaitInitialSync(this.#client, syncStartTimeoutMs, this.#stopSignal)),"),
 
     # --- the signal a bot is given --------------------------------------------
     ("signal: the bot ignores the signal it was given",
@@ -237,8 +258,8 @@ EVENT_LOOP = [
      "    } catch (e) {\n      throw e;\n    }"),
     ("start: the wait for the first sync does not hear the stop",
      B,
-     "await awaitInitialSync(this.#client, SYNC_START_TIMEOUT_MS, this.#stopSignal);",
-     "await awaitInitialSync(this.#client, SYNC_START_TIMEOUT_MS);"),
+     "awaitInitialSync(this.#client, syncStartTimeoutMs, this.#stopSignal),",
+     "awaitInitialSync(this.#client, syncStartTimeoutMs),"),
 ]
 
 GROUPS = [

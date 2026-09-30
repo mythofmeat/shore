@@ -146,10 +146,14 @@ export class MatrixBot {
     return this.#faulted;
   }
 
-  async start(): Promise<void> {
+  async start(syncStartTimeoutMs: number = SYNC_START_TIMEOUT_MS): Promise<void> {
     try {
-      await this.#whileRunning(() => this.#client.startClient({ initialSyncLimit: 0 }));
-      await awaitInitialSync(this.#client, SYNC_START_TIMEOUT_MS, this.#stopSignal);
+      await this.#whileRunning(() =>
+        Promise.all([
+          this.#client.startClient({ initialSyncLimit: 0 }),
+          awaitInitialSync(this.#client, syncStartTimeoutMs, this.#stopSignal),
+        ]),
+      );
     } catch (e) {
       this.stop();
       throw e;
