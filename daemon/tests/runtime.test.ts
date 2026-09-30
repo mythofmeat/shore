@@ -23,6 +23,7 @@ import type { McpClient } from "../src/mcp/client.ts";
 import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
 import { required } from "../src/util/required.ts";
 import { until } from "./support/until.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 async function dirsUnder(prefix: string): Promise<{ root: string; config: LoadedConfig }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -175,7 +176,7 @@ describe("what assembly creates", () => {
       await mkdir(config.dirs.cache, { recursive: true });
       await mkdir(join(config.dirs.data, "shore.db"), { recursive: true });
 
-      expect(createRuntime({ config, providers: {}, connectMcp: NO_MCP })).rejects.toThrow();
+      expect(await outcomeOf(createRuntime({ config, providers: {}, connectMcp: NO_MCP }))).toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }

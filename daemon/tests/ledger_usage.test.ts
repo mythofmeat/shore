@@ -14,6 +14,7 @@ import {
 import { PRICING_TTL_MS, setSubscriptionProviders } from "../src/ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: Array<() => void> = [];
 const realFetch = globalThis.fetch;
@@ -314,7 +315,7 @@ test("a period nobody recognises is refused instead of quietly meaning all time"
   const ledger = ledgerWith([{ ts: "2024-01-01T10:00:00+00:00", total_cost: 500 }]);
 
   for (const last of ["1m", "1mo", "banana", "", "M"]) {
-    expect(summaryFor(ledger, last), `'${last}' must be refused`).rejects.toThrow(
+    expect(await outcomeOf(summaryFor(ledger, last)), `'${last}' must be refused`).toThrow(
       `unknown usage period '${last}' (expected today, week, month, all, or a count like 4h, 7d, 2w, 1M)`,
     );
   }

@@ -15,6 +15,7 @@ import { discoverCharacters, type ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 
@@ -115,8 +116,8 @@ describe("deleting a character", () => {
   test("a name nothing knows about is a not-found, not a silent success", async () => {
     const dirs = await root("missing");
 
-    expect(deleteCharacter(context(dirs, new Set(), []), { character: "ada", confirm: "ada" }))
-      .rejects.toThrow("Character not found: ada");
+    expect(await outcomeOf(deleteCharacter(context(dirs, new Set(), []), { character: "ada", confirm: "ada" })))
+      .toThrow("Character not found: ada");
   });
 
   test("without the name repeated back, nothing is touched", async () => {
@@ -126,8 +127,8 @@ describe("deleting a character", () => {
 
     for (const confirm of [undefined, "", "yes", "Ada"]) {
       expect(
-        deleteCharacter(context(dirs, new Set(["ada"]), events), { character: "ada", confirm }),
-      ).rejects.toThrow("cannot be undone");
+        await outcomeOf(deleteCharacter(context(dirs, new Set(["ada"]), events), { character: "ada", confirm })),
+      ).toThrow("cannot be undone");
     }
 
     expect(events).toEqual([]);
@@ -158,12 +159,12 @@ describe("deleting a character", () => {
     await seedCharacter(dirs, "ada");
 
     expect(
-      deleteCharacter(context(dirs, new Set(["ada"]), []), {
+      await outcomeOf(deleteCharacter(context(dirs, new Set(["ada"]), []), {
         character: "ada",
         confirm: "ada",
         archive: join(dirs.runtime, "no", "such", "dir", "ada.tar.gz"),
-      }),
-    ).rejects.toThrow("Archive directory does not exist");
+      })),
+    ).toThrow("Archive directory does not exist");
     expect(existsSync(join(dirs.workspace as string, "ada"))).toBe(true);
   });
 });

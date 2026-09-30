@@ -9,6 +9,7 @@ import type { Message } from "../src/engine/types.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { handleSearchHistory } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 function message(id: string, content: string): Message {
   return {
@@ -119,8 +120,8 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
     "compact-2",
   );
 
-  expect(access(join(characterDir, "threads", "main", "segments"))).rejects.toThrow();
-  expect(access(join(characterDir, "threads", "main", "compaction.json"))).rejects.toThrow();
+  expect(await outcomeOf(access(join(characterDir, "threads", "main", "segments")))).toThrow();
+  expect(await outcomeOf(access(join(characterDir, "threads", "main", "compaction.json")))).toThrow();
   const reader = await SegmentReader.load({
     dir: join(characterDir, "threads", "main"),
     dbPath,

@@ -25,6 +25,7 @@ import {
   RealCompactionLlm,
 } from "../src/memory/compaction/llm";
 import { CompactionError } from "../src/memory/compaction/types";
+import { outcomeOf } from "./support/outcome.ts";
 
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
@@ -291,8 +292,8 @@ describe("RealCompactionLlm.generate", () => {
       cacheDir: cacheScratch(),
     });
     expect(
-      llm.generate({ messages: [] } as unknown as SidecarRequest),
-    ).rejects.toThrow("llm: upstream is down");
+      await outcomeOf(llm.generate({ messages: [] } as unknown as SidecarRequest)),
+    ).toThrow("llm: upstream is down");
   });
 
   test("passes the request, model and character through unchanged", async () => {
@@ -399,10 +400,10 @@ describe("RealCompactionLlm.generate", () => {
     });
 
     expect(
-      llm.generate({
+      await outcomeOf(llm.generate({
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-      } as unknown as SidecarRequest),
-    ).rejects.toThrow("llm: 400 messages.content.type is invalid");
+      } as unknown as SidecarRequest)),
+    ).toThrow("llm: 400 messages.content.type is invalid");
     expect(calls).toBe(1);
     expect(readLearnedImageSupport(cacheDir, "zai-sub")["glm-5.3"]).toBeUndefined();
   });

@@ -17,6 +17,7 @@ import type {
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -59,7 +60,7 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   expect(deferred).toEqual(["MEMORY.md"]);
 
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
-  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
 test("a pass that ends cleanly still archives", async () => {

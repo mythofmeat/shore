@@ -8,6 +8,7 @@ import { shouldRetryError } from "../src/llm/retry.ts";
 import { StreamAccumulator } from "../src/llm/stream.ts";
 import { streamErrorEvent } from "../src/llm/types.ts";
 import type { Usage } from "../src/llm/types.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 const usage: Usage = {
   input_tokens: 0,
@@ -93,7 +94,7 @@ describe("streamWithRetry", () => {
   test("an aborted error is not reissued at full price", async () => {
     let calls = 0;
     expect(
-      streamWithRetry(
+      await rejectionOf(streamWithRetry(
         async () => {
           calls += 1;
           throw { kind: "aborted", message: "Request was aborted." } satisfies LlmError;
@@ -101,8 +102,8 @@ describe("streamWithRetry", () => {
         { maxRetries: 2, backoffBaseMs: 1 },
         undefined,
         async () => {},
-      ),
-    ).rejects.toMatchObject({ kind: "aborted" });
+      )),
+    ).toMatchObject({ kind: "aborted" });
     expect(calls).toBe(1);
   });
 
@@ -110,7 +111,7 @@ describe("streamWithRetry", () => {
     const controller = new AbortController();
     let calls = 0;
     expect(
-      streamWithRetry(
+      await rejectionOf(streamWithRetry(
         async () => {
           calls += 1;
           controller.abort();
@@ -120,8 +121,8 @@ describe("streamWithRetry", () => {
         undefined,
         async () => {},
         { signal: controller.signal },
-      ),
-    ).rejects.toMatchObject({ kind: "stream_errored" });
+      )),
+    ).toMatchObject({ kind: "stream_errored" });
     expect(calls).toBe(1);
   });
 });

@@ -11,6 +11,7 @@ import {
   type FetchLike,
 } from "../src/tools/web.ts";
 import { decodeDataUrl, handleGenerateImage } from "../src/tools/images.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const fx = fixture as unknown as {
   strip_html: { label: string; input: string; output: string }[];
@@ -175,7 +176,7 @@ describe("handleFetchUrl", () => {
   const pub: FetchUrlPolicy = { lookup: async () => ["93.184.216.34"] };
 
   test("a missing url is an argument error", async () => {
-    expect(handleFetchUrl({}, html(""))).rejects.toThrow(
+    expect(await outcomeOf(handleFetchUrl({}, html("")))).toThrow(
       "invalid args: missing 'url' field",
     );
   });
@@ -216,13 +217,13 @@ describe("handleFetchUrl", () => {
 
   test("a non-2xx response names the status and the url", async () => {
     expect(
-      handleFetchUrl(
+      await outcomeOf(handleFetchUrl(
         { url: "https://x.example/y" },
         async () => new Response("", { status: 404 }),
         undefined,
         pub,
-      ),
-    ).rejects.toThrow("http: HTTP 404 for https://x.example/y");
+      )),
+    ).toThrow("http: HTTP 404 for https://x.example/y");
   });
 
   test("an oversized body is truncated and says so", async () => {
@@ -234,7 +235,7 @@ describe("handleFetchUrl", () => {
 
   test("only http and https can be fetched", async () => {
     for (const url of ["file:///etc/passwd", "gopher://x.example/", "data:text/plain,hi"]) {
-      expect(handleFetchUrl({ url }, html("x"), undefined, pub)).rejects.toThrow(
+      expect(await outcomeOf(handleFetchUrl({ url }, html("x"), undefined, pub))).toThrow(
         "only http and https URLs can be fetched",
       );
     }
@@ -256,21 +257,21 @@ describe("handleFetchUrl", () => {
     ];
     for (const url of blocked) {
       expect(
-        handleFetchUrl({ url }, html("x"), undefined, {
+        await outcomeOf(handleFetchUrl({ url }, html("x"), undefined, {
           lookup: () => {
             throw new Error("must not resolve a literal address");
           },
-        }),
-      ).rejects.toThrow("private or local address");
+        })),
+      ).toThrow("private or local address");
     }
   });
 
   test("a name that resolves to a private address is refused", async () => {
     expect(
-      handleFetchUrl({ url: "http://sneaky.example/x" }, html("x"), undefined, {
+      await outcomeOf(handleFetchUrl({ url: "http://sneaky.example/x" }, html("x"), undefined, {
         lookup: async () => ["93.184.216.34", "192.168.1.5"],
-      }),
-    ).rejects.toThrow("it resolves to a private or local address");
+      })),
+    ).toThrow("it resolves to a private or local address");
   });
 
   test("a redirect into a private address is refused at the hop", async () => {
@@ -279,7 +280,7 @@ describe("handleFetchUrl", () => {
         ? new Response("", { status: 302, headers: { location: "http://169.254.169.254/creds" } })
         : new Response("secrets", { status: 200 });
 
-    expect(handleFetchUrl({ url: U }, redirecting, undefined, pub)).rejects.toThrow(
+    expect(await outcomeOf(handleFetchUrl({ url: U }, redirecting, undefined, pub))).toThrow(
       "private or local address",
     );
   });
@@ -293,7 +294,7 @@ describe("handleFetchUrl", () => {
         headers: { location: `https://example.com/${String(hops.length)}` },
       });
     };
-    expect(handleFetchUrl({ url: U }, looping, undefined, pub)).rejects.toThrow(
+    expect(await outcomeOf(handleFetchUrl({ url: U }, looping, undefined, pub))).toThrow(
       "too many redirects",
     );
     expect(hops.length).toBeLessThan(10);
@@ -349,18 +350,18 @@ describe("handleGenerateImage", () => {
   };
 
   test("a missing prompt is an argument error", async () => {
-    expect(handleGenerateImage({}, "/tmp/x", config, gen)).rejects.toThrow(
+    expect(await outcomeOf(handleGenerateImage({}, "/tmp/x", config, gen))).toThrow(
       "invalid args: missing 'prompt' field",
     );
   });
 
   test("no generator and no profile both report io, not not-implemented", async () => {
     expect(
-      handleGenerateImage({ prompt: "p" }, "/tmp/x", config, undefined),
-    ).rejects.toThrow("io: image generation not available: no LLM client");
+      await outcomeOf(handleGenerateImage({ prompt: "p" }, "/tmp/x", config, undefined)),
+    ).toThrow("io: image generation not available: no LLM client");
     expect(
-      handleGenerateImage({ prompt: "p" }, "/tmp/x", undefined, gen),
-    ).rejects.toThrow("io: no [image_generation] profile configured");
+      await outcomeOf(handleGenerateImage({ prompt: "p" }, "/tmp/x", undefined, gen)),
+    ).toThrow("io: no [image_generation] profile configured");
   });
 
   test("a data URL is written under generated/ with a timestamped name", async () => {
@@ -397,9 +398,9 @@ describe("handleGenerateImage", () => {
 
   test("a generation failure is reported as http", async () => {
     expect(
-      handleGenerateImage({ prompt: "p" }, "/tmp/x", config, async () => {
+      await outcomeOf(handleGenerateImage({ prompt: "p" }, "/tmp/x", config, async () => {
         throw new Error("boom");
-      }),
-    ).rejects.toThrow("http: image generation failed");
+      })),
+    ).toThrow("http: image generation failed");
   });
 });

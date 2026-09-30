@@ -24,6 +24,7 @@ import { CommandError } from "../src/commands/errors.ts";
 import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
 import { modelInfo, modelRoles, resetModel, switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 interface Row {
   name: string;
@@ -461,7 +462,7 @@ describe("configReload", () => {
     expect(w.calls).toEqual([]);
     expect(await configReload(w.ctx, { apply: true })).toMatchObject({ applied: true, character: null, prompts_refreshed: false });
     expect(w.calls).toEqual(["adoptGlobalConfig", "reloadRuntimeConfig"]);
-    expect(configReload(w.ctx, { apply: true, refresh_prompts: true })).rejects.toThrow("requires a character context");
+    expect(await outcomeOf(configReload(w.ctx, { apply: true, refresh_prompts: true }))).toThrow("requires a character context");
   });
 
   test("check mode lists the prompt files that differ", async () => {

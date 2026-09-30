@@ -23,6 +23,7 @@ import type { CallContext, SidecarRequest, StreamEvent } from "../src/llm/types.
 import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 import { dirname } from "node:path";
 import { requestUrl } from "./support/fetch.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 afterEach(() => {
   closeLedgers();
@@ -369,7 +370,7 @@ describe("what a stream records", () => {
         yield { type: "start", model: "claude-opus-4-6" };
         throw new Error("provider exploded");
       }
-      expect(drain(recordingStream(ctx(path), REQ, boom()))).rejects.toThrow(
+      expect(await outcomeOf(drain(recordingStream(ctx(path), REQ, boom())))).toThrow(
         "provider exploded",
       );
       expect(rowsIn(path).map((r) => r["finish_reason"])).toEqual(["error"]);

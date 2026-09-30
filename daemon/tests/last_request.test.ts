@@ -28,6 +28,7 @@ import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts"
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -696,7 +697,7 @@ describe("keepalivePingNowCommand", () => {
       );
 
       if (c.output.kind === "err") {
-        expect(keepalivePingNowCommand("ada", world_.ctx)).rejects.toThrow(
+        expect(await outcomeOf(keepalivePingNowCommand("ada", world_.ctx))).toThrow(
           c.output.message,
         );
         return;

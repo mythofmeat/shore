@@ -15,6 +15,7 @@ import {
   wireScopedIteration,
   type WireExchange,
 } from "../src/llm/wire_capture.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 let uninstall: (() => void) | undefined;
 
@@ -169,7 +170,7 @@ describe("wire capture", () => {
     uninstall = installWireCapture(sink);
 
     await withWireScope(scope(), async () => {
-      expect(fetch("http://127.0.0.1:1/unreachable")).rejects.toThrow();
+      expect(await outcomeOf(fetch("http://127.0.0.1:1/unreachable"))).toThrow();
     });
     await recorded(seen, 1);
 

@@ -9,6 +9,7 @@ import {
   type MockAnthropic,
 } from "../src/testing/mock_anthropic.ts";
 import type { SidecarRequest, StreamEvent, WireMessage } from "../src/llm/types.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 let running: MockAnthropic | undefined;
 
@@ -327,6 +328,6 @@ describe("stream mechanics", () => {
 
   test("a scripted status fails the call", async () => {
     const m = await mock({ script: [{ status: 429 }] });
-    expect(drive(m.url, [user("hello")])).rejects.toThrow();
+    expect(await outcomeOf(drive(m.url, [user("hello")]))).toThrow();
   });
 });

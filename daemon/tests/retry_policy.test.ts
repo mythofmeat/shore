@@ -10,6 +10,7 @@ import {
   sleepUnlessAborted,
   streamWithRetry,
 } from "../src/llm/fallback.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 const transient: LlmError = { kind: "http_status", status: 500, body: "x" };
 
@@ -63,7 +64,7 @@ describe("sleepUnlessAborted", () => {
     const started = Date.now();
     const pending = sleepUnlessAborted((ms) => Bun.sleep(ms), 30_000, controller.signal);
     controller.abort();
-    expect(pending).rejects.toBeInstanceOf(AbortError);
+    expect(await rejectionOf(pending)).toBeInstanceOf(AbortError);
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
@@ -72,10 +73,10 @@ describe("sleepUnlessAborted", () => {
     controller.abort();
     let slept = false;
     expect(
-      sleepUnlessAborted(async () => {
+      await rejectionOf(sleepUnlessAborted(async () => {
         slept = true;
-      }, 5, controller.signal),
-    ).rejects.toBeInstanceOf(AbortError);
+      }, 5, controller.signal)),
+    ).toBeInstanceOf(AbortError);
     expect(slept).toBe(false);
   });
 
@@ -104,7 +105,7 @@ describe("streamWithRetry backoff cancellation", () => {
     );
     await until(() => calls === 1, "the first attempt");
     controller.abort();
-    expect(pending).rejects.toBeInstanceOf(AbortError);
+    expect(await rejectionOf(pending)).toBeInstanceOf(AbortError);
     expect(calls).toBe(1);
   });
 });

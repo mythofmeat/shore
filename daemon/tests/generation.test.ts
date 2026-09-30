@@ -46,6 +46,7 @@ import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedValue } from "./support/rerecord.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const CAPTURE = "tests/handler_captures/generation.json";
 
@@ -1341,7 +1342,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
     },
   );
 
-  expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
+  expect(await outcomeOf(run)).toThrow(NO_CHAT_MODELS_MESSAGE);
 
   expect(existsSync(characterActiveJsonl(config.dirs.data, "ada", MAIN_THREAD))).toBe(false);
   expect(engine.messages()).toEqual([]);

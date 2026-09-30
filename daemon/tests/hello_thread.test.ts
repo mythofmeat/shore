@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { admitClientMessage } from "../src/swp/admission.ts";
 import { WireReader } from "../src/swp/framing.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const HELLO = {
   type: "hello",
@@ -51,7 +52,7 @@ describe("a hello asking for a thread", () => {
 
   test("a non-string thread is refused by both decoders", async () => {
     const bad = { ...HELLO, thread: 42 };
-    expect(throughFraming(bad)).rejects.toThrow(/thread/);
+    expect(await outcomeOf(throughFraming(bad))).toThrow(/thread/);
     expect(() => admitClientMessage(bad)).toThrow(/thread/);
   });
 

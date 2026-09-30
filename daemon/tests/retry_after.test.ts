@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { retryAfterHint, retryDelayMs, streamWithRetry } from "../src/llm/fallback.ts";
 import type { LlmError } from "../src/llm/errors.ts";
 import { parseRetryAfterMs, rateLimitSnapshot, retryAfterMsFromError } from "../src/llm/retry_after.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 const NOW = Date.parse("2026-08-11T11:19:00Z");
 const now = () => NOW;
@@ -68,7 +69,7 @@ describe("the hint reaches the backoff", () => {
     const delays: number[] = [];
     let calls = 0;
     expect(
-      streamWithRetry(
+      await rejectionOf(streamWithRetry(
         async () => {
           calls += 1;
           throw {
@@ -84,8 +85,8 @@ describe("the hint reaches the backoff", () => {
           delays.push(ms);
         },
         { random: () => 0 },
-      ),
-    ).rejects.toMatchObject({ status: 429 });
+      )),
+    ).toMatchObject({ status: 429 });
     expect(calls).toBe(3);
     expect(delays).toEqual([12_000, 12_000]);
   });

@@ -7,6 +7,7 @@ import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { parseLastPeriod, usageReport } from "../src/ledger/usage.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const doc = seedDoc as unknown as {
   timezone: string;
@@ -106,8 +107,8 @@ describe("resolving a --last window", () => {
 
 describe("a --last shore cannot make sense of", () => {
   for (const bad of ["banana", "", "d"]) {
-    test(`${JSON.stringify(bad)} is refused rather than read as all time`, () => {
-      expect(report({ last: bad })).rejects.toThrow("unknown usage period");
+    test(`${JSON.stringify(bad)} is refused rather than read as all time`, async () => {
+      expect(await outcomeOf(report({ last: bad }))).toThrow("unknown usage period");
     });
   }
 });

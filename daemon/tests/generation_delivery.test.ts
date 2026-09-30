@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { OrderedDelivery } from "../src/handler/generation.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const frame = (name: string): ServerMessage => ({
   type: "command_output",
@@ -38,7 +39,7 @@ describe("generation frame delivery", () => {
     void delivery.send(frame("bad"));
     void delivery.send(frame("after"));
 
-    expect(delivery.flush()).rejects.toThrow("failed to deliver");
+    expect(await outcomeOf(delivery.flush())).toThrow("failed to deliver");
     expect(delivered).toEqual(["after"]);
   });
 });

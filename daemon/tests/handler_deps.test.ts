@@ -1501,7 +1501,7 @@ describe("reloading [mcp]", () => {
         fresh,
       );
 
-      expect(required(inFlight.mcpRegistry).call("mcp__hue__set_light", {})).resolves.toBe(
+      expect(await required(inFlight.mcpRegistry).call("mcp__hue__set_light", {})).toBe(
         "set_light ran",
       );
     } finally {

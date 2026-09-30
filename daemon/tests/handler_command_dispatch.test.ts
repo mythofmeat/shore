@@ -17,6 +17,7 @@ import {
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { HandshakeProvider, HistorySnapshot } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 function config(mutate: (c: LoadedConfig) => void = () => {}): LoadedConfig {
   const loaded: LoadedConfig = {
@@ -494,7 +495,7 @@ describe("a switch_character", () => {
       f.ctx,
     );
 
-    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(await outcomeOf(attempt)).toThrow(/unexpected end of JSON input/);
     expect(f.ctx.router.characterFor(SESSION)).toBe(CHARACTER);
     expect(f.log.sent).toEqual([]);
   });
@@ -601,7 +602,7 @@ describe("a switch_thread", () => {
       f.ctx,
     );
 
-    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(await outcomeOf(attempt)).toThrow(/unexpected end of JSON input/);
     expect(f.ctx.router.threadFor(SESSION)).toBe(null);
     expect(f.log.sent).toEqual([]);
   });

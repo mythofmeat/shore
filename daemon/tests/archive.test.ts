@@ -14,6 +14,7 @@ import type { ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 
@@ -53,7 +54,7 @@ describe("character archives", () => {
     const block = Buffer.alloc(512);
     new Header({ path, size: 1, mode: 0o600, type: "File" }).encode(block);
     await writeFile(output, Bun.gzipSync(Buffer.concat([block, Buffer.from("x"), Buffer.alloc(511 + 1024)])));
-    expect(importCharacter(context(target, new Set()), { archive: output })).rejects.toThrow("unexpected path");
+    expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("unexpected path");
     expect(existsSync(join(target.workspace as string, "outside"))).toBe(false);
   });
 
@@ -64,8 +65,8 @@ describe("character archives", () => {
   ])("browser export budget $bytes bytes/$entries entries rejects before publishing an archive", async (limits) => {
     const source = await root("limited-export"); await seedCharacter(source, "ada", "preserve source");
     const output = join(source.runtime, "limited.tar.gz");
-    expect(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output })).rejects.toThrow(limits.message);
-    expect(access(output)).rejects.toThrow();
+    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow(limits.message);
+    expect(await outcomeOf(access(output))).toThrow();
     expect(await readFile(join(source.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
   });
 
@@ -77,8 +78,8 @@ describe("character archives", () => {
     const output = join(source.runtime, "ada.tar.gz");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("limited-target"); await seedCharacter(target, "bea", "preserve other character");
-    expect(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output })).rejects.toThrow(limits.message);
-    expect(access(join(target.workspace as string, "ada"))).rejects.toThrow();
+    expect(await outcomeOf(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output }))).toThrow(limits.message);
+    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
     const history = HistoryStore.open(join(target.data, "shore.db"));
     try { expect(history.archiveKeys("ada")).toEqual([]); expect(history.readSegment("bea", 0)[0]?.content).toBe("preserve other character"); }
     finally { history.close(); }
@@ -89,11 +90,11 @@ describe("character archives", () => {
     await symlink("SOUL.md", join(source.workspace as string, "ada", "linked.md"));
     const output = join(source.runtime, "ada.tar.gz");
     const limits = { bytes: 1024 * 1024, entries: 100 };
-    expect(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output })).rejects.toThrow("regular files and directories");
+    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow("regular files and directories");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("link-target");
-    expect(importCharacter({ ...context(target, new Set()), limits }, { archive: output })).rejects.toThrow("unsupported entries");
-    expect(access(join(target.workspace as string, "ada"))).rejects.toThrow();
+    expect(await outcomeOf(importCharacter({ ...context(target, new Set()), limits }, { archive: output }))).toThrow("unsupported entries");
+    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
   });
 
   test("a compressed export restores one character without carrying another", async () => {
@@ -166,8 +167,8 @@ describe("character archives", () => {
 
     const target = await root("existing-target");
     await seedCharacter(target, "ada", "keep me");
-    expect(importCharacter(context(target, new Set(["ada"])), { archive: output }))
-      .rejects.toThrow("Refusing to overwrite");
+    expect(await outcomeOf(importCharacter(context(target, new Set(["ada"])), { archive: output })))
+      .toThrow("Refusing to overwrite");
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8")).toContain("keep me");
   });
 
@@ -187,8 +188,8 @@ describe("character archives", () => {
     );
     history.close();
 
-    expect(importCharacter(context(target, new Set()), { archive: output }))
-      .rejects.toThrow("history already exists");
+    expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output })))
+      .toThrow("history already exists");
     const preserved = new Database(join(target.data, "shore.db"), { readonly: true });
     const count = preserved
       .query("SELECT COUNT(*) AS count FROM history_messages WHERE character = ?1")
@@ -208,8 +209,8 @@ describe("character archives", () => {
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("rollback-target");
     await seedCharacter(target, "adam", "preserved");
-    expect(importCharacter(context(target, new Set(["adam"]), () => { throw new Error("refresh failed"); }), { archive: output }))
-      .rejects.toThrow("refresh failed");
+    expect(await outcomeOf(importCharacter(context(target, new Set(["adam"]), () => { throw new Error("refresh failed"); }), { archive: output })))
+      .toThrow("refresh failed");
     const restored = HistoryStore.open(join(target.data, "shore.db"));
     expect(restored.archiveKeys("ada")).toEqual([]);
     expect(restored.readSegment("adam", 0)[0]?.content).toBe("preserved");

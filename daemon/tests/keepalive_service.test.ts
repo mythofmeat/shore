@@ -562,7 +562,7 @@ describe("what reaches the heartbeat log and the state file", () => {
     loose.arm(prefix());
     loose.observe(CHARACTER, MODEL, "message");
     h.clock.advance(minutes(56));
-    expect(loose.tick()).resolves.toBeUndefined();
+    expect(await loose.tick()).toBeUndefined();
   });
 
   test("the schedule is current state, read the same every time", () => {

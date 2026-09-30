@@ -13,6 +13,7 @@ import { buildHandshakeProvider } from "../src/swp/handshake.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 afterAll(restoreTestEnv);
 
@@ -104,7 +105,7 @@ for (const stage of ["context", "provenance", "publish"] as const) {
     await h.run();
     const charDir = characterDataDir(h.config.dirs.data, "ada");
     await queueDeferredEdit(charDir, "SOUL.md");
-    expect(registry.forkThread("ada", "main", "child", { failAfter: stage })).rejects.toThrow("injected fork failure");
+    expect(await outcomeOf(registry.forkThread("ada", "main", "child", { failAfter: stage }))).toThrow("injected fork failure");
     await recoverForks(h.config.dirs.data, "ada");
     const snapshot = readState(h.config.dirs.data, "ada/threads/child/active_prompt/.snapshot");
     expect(snapshot).toBe(stage === "publish" ? "1" : undefined);
