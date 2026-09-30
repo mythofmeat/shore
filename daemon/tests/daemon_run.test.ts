@@ -27,6 +27,7 @@ import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { OperationClient } from "../src/browser/operations.ts";
 import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
+import { fakeHomeserver } from "./support/matrix_homeserver.ts";
 import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
 import type { BrowserRequest } from "../src/browser/connection.ts";
 import { segments } from "../src/commands/segments.ts";
@@ -1666,6 +1667,36 @@ describe("a Matrix homeserver that never answers", () => {
       });
     }
   });
+
+  test("does not keep the daemon from stopping", async () => {
+    const homeserver = await fakeHomeserver(() => "never");
+    const place = await layout(
+      "[matrix]\nenabled = true\n" +
+        `homeserver_url = "${homeserver.url}"\nuser_id = "@shore:example.com"\n`,
+    );
+    place.env[ACCESS_TOKEN_ENV] = "not-a-real-token";
+    const warnings: string[] = [];
+
+    try {
+      const daemon = await startDaemon({
+        argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"],
+        env: place.env,
+        providers: {},
+        instancesPath: place.instancesPath,
+        log: { warn: (message) => warnings.push(message) },
+      });
+      running.push(daemon);
+      await until(() => homeserver.requests.length > 0, "the bridge never asked its homeserver");
+
+      daemon.stop();
+      await daemon.done;
+
+      expect(warnings).not.toContain("Shutdown step timed out");
+      expect(warnings.join("\n")).not.toContain("Matrix bridge not started");
+    } finally {
+      await homeserver.close();
+    }
+  }, 15_000);
 });
 
 describe("describeRejection", () => {
