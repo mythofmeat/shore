@@ -49,7 +49,8 @@ export function renderDefaultsToml(includeUnset = false): string {
 
 export function renderStarterConfig(): string {
   return `# Shore configuration. Set ANTHROPIC_API_KEY in the environment or .env.
-# See docs/CONFIG_REFERENCE.md for optional settings and defaults.
+# \`shore config --all\` lists every optional setting, defaults included, and
+# \`shore config keys\` the type each one takes.
 # Add characters/<name>/workspace/SOUL.md to define a character.
 # Additional TOML files in conf.d/ load automatically, in filename order.
 # The daemon creates a client authentication token beside this file.

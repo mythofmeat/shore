@@ -80,7 +80,8 @@ describe("renderStarterConfig", () => {
     const rendered = renderStarterConfig();
     expect(rendered.split("\n").length).toBeLessThan(25);
     expect(Object.keys(Bun.TOML.parse(rendered))).toEqual(["providers", "chat", "tools"]);
-    expect(rendered).toContain("CONFIG_REFERENCE.md");
+    expect(rendered).toContain("`shore config --all` lists every optional setting");
+    expect(rendered).toContain("`shore config keys` the type each one takes");
   });
 
   test("the full reference renderer distinguishes unset options", () => {

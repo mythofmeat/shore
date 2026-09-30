@@ -84,6 +84,17 @@ const unanswered: readonly (readonly [string, (bot: MatrixBot) => Promise<unknow
   ],
 ];
 
+describe("starting a Matrix bot", () => {
+  test("gives up once the sync-start timeout passes, however long the homeserver leaves its first request unanswered", async () => {
+    const { bot, homeserver } = await botAtASilentHomeserver();
+
+    expect(await failureOf(bot.start(20))).toMatchObject({
+      message: "the Matrix sync did not start within 20ms",
+    });
+    await until(() => homeserver.requests.every((request) => request.hungUp), "the bot hanging up");
+  });
+});
+
 describe("stopping a Matrix bot", () => {
   test.each(unanswered)(
     "ends %s still in flight as failed instead of leaving it waiting on the homeserver",
