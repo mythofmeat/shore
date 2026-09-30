@@ -1,6 +1,8 @@
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   BYTES_PER_TOKEN,
@@ -10,6 +12,9 @@ import {
 } from "../src/engine/tokens.ts";
 import { estimateHistoryTokens } from "../src/engine/prompt.ts";
 import type { ContentBlock, ImageRef, Message } from "../src/engine/types.ts";
+import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER } from "../src/llm/image_tokens.ts";
+import { sizedImage } from "./support/sized_image.ts";
+import { testTmp } from "./support/tmp.ts";
 
 interface Corpus {
   host: string;
@@ -95,9 +100,14 @@ test("history tokens count the active messages once", () => {
 });
 
 describe("images in the history", () => {
-  const picture = (kib: number) => ({
-    type: "image" as const,
-    source: { type: "base64" as const, media_type: "image/jpeg", data: "A".repeat(kib * 1024) },
+  const picture = (bytes: Buffer, media_type = "image/png"): ContentBlock => ({
+    type: "image",
+    source: { type: "base64", media_type, data: bytes.toString("base64") },
+  });
+
+  const unreadable = (kib: number): ContentBlock => ({
+    type: "image",
+    source: { type: "base64", media_type: "image/jpeg", data: "A".repeat(kib * 1024) },
   });
 
   const holding = (content_blocks: ContentBlock[], images: ImageRef[] = []): Message[] => [{
@@ -109,37 +119,64 @@ describe("images in the history", () => {
     timestamp: "2026-01-01T00:00:00Z",
   }];
 
-  test("a picture in a tool result costs the same however many base64 bytes carry it", () => {
-    const small = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(10)] }]);
-    const large = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(400)] }]);
-    expect(estimateHistoryTokens(large)).toBe(estimateHistoryTokens(small));
+  test("a picture costs its pixels, whatever encoding carries them", async () => {
+    const png = await sizedImage(1920, 1080);
+    const jpeg = await sizedImage(1920, 1080, (image) => image.jpeg({ quality: 30 }));
+    expect(png.length).not.toBe(jpeg.length);
+    expect(estimateHistoryTokens(holding([picture(png)]))).toBe(2691);
+    expect(estimateHistoryTokens(holding([picture(jpeg, "image/jpeg")]))).toBe(2691);
   });
 
-  test("seven pictures are counted in thousands of tokens, not hundreds of thousands", () => {
+  test("a small picture costs its few patches, not the most a picture can", async () => {
+    expect(estimateHistoryTokens(holding([picture(await sizedImage(400, 300))]))).toBe(165);
+  });
+
+  test("a standard-tier model is charged less for a large picture", async () => {
+    const screenshot = holding([picture(await sizedImage(1920, 1080))]);
+    expect(estimateHistoryTokens(screenshot, STANDARD_IMAGE_TIER)).toBe(1560);
+  });
+
+  test("seven photos read in one tool call come to what the model is sent, not hundreds of thousands", async () => {
+    const photo = picture(await sizedImage(2000, 1500, (image) => image.jpeg()), "image/jpeg");
     const seven = holding([{
       type: "tool_result",
       tool_use_id: "t1",
-      content: Array.from({ length: 7 }, () => picture(250)),
+      content: Array.from({ length: 7 }, () => photo),
     }]);
-    expect(estimateHistoryTokens(seven)).toBeLessThan(50_000);
+    expect(estimateHistoryTokens(seven)).toBe(7 * 3888);
+    expect(estimateHistoryTokens(seven, STANDARD_IMAGE_TIER)).toBe(7 * 1564);
+  });
+
+  test("a picture whose size cannot be read is counted at the most the model charges", () => {
+    expect(estimateHistoryTokens(holding([unreadable(10)]))).toBe(HIGH_RESOLUTION_IMAGE_TIER.maxTokens);
+    expect(estimateHistoryTokens(holding([unreadable(400)]), STANDARD_IMAGE_TIER)).toBe(
+      STANDARD_IMAGE_TIER.maxTokens,
+    );
   });
 
   test("text beside a picture in a tool result is counted as its text alone", () => {
-    const bare = holding([{ type: "tool_result", tool_use_id: "t1", content: [picture(10)] }]);
+    const bare = holding([{ type: "tool_result", tool_use_id: "t1", content: [unreadable(10)] }]);
     const captioned = holding([{
       type: "tool_result",
       tool_use_id: "t1",
-      content: [{ type: "text", text: "photos/1.jpg" }, picture(10)],
+      content: [{ type: "text", text: "photos/1.jpg" }, unreadable(10)],
     }]);
     expect(estimateHistoryTokens(captioned) - estimateHistoryTokens(bare)).toBe(
       estimateTokens("photos/1.jpg"),
     );
   });
 
-  test("a picture sent in the conversation is not free, whether inline or attached", () => {
-    const inline = holding([picture(10)]);
-    const attached = holding([], [{ path: "a.png" }]);
-    expect(estimateHistoryTokens(inline)).toBeGreaterThan(0);
-    expect(estimateHistoryTokens(attached)).toBe(estimateHistoryTokens(inline));
+  test("an attached picture is measured from its file, or from its data while it still has some", async () => {
+    const bytes = await sizedImage(400, 300);
+    const dir = testTmp("token-estimate");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "attached.png");
+    writeFileSync(path, bytes);
+    expect(estimateHistoryTokens(holding([], [{ path }]))).toBe(165);
+    expect(estimateHistoryTokens(holding([], [{ path, data: "" }]))).toBe(165);
+    expect(estimateHistoryTokens(holding([], [{ path: join(dir, "gone.png"), data: bytes.toString("base64") }]))).toBe(165);
+    expect(estimateHistoryTokens(holding([], [{ path: join(dir, "gone.png") }]))).toBe(
+      HIGH_RESOLUTION_IMAGE_TIER.maxTokens,
+    );
   });
 });

@@ -5,15 +5,12 @@ import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
-import { MAX_IMAGE_EDGE } from "../llm/prepare_images.ts";
+import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
+import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, type ImageTier } from "../llm/image_tokens.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
-
-const PIXELS_PER_IMAGE_TOKEN = 750;
-
-const IMAGE_TOKENS = Math.ceil((MAX_IMAGE_EDGE * MAX_IMAGE_EDGE) / PIXELS_PER_IMAGE_TOKEN);
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
 
@@ -66,6 +63,7 @@ export interface PromptParams {
   max_context_tokens?: number | undefined;
   max_output_tokens?: number | undefined;
   user_timestamp_mode: UserTimestampMode;
+  image_tier?: ImageTier | undefined;
 }
 
 export function assemblePrompt(
@@ -86,6 +84,7 @@ export function assemblePrompt(
       params.has_prior_context,
       params.user_timestamp_mode,
       timeZone,
+      params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
     ),
   };
 }
@@ -176,7 +175,7 @@ export function stripOneTrailingNewline(raw: string): string {
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
 }
 
-function estimateBlockTokens(block: ContentBlock): number {
+function estimateBlockTokens(block: ContentBlock, tier: ImageTier): number {
   switch (block.type) {
     case "text":
       return estimateTokens(block.text);
@@ -189,21 +188,34 @@ function estimateBlockTokens(block: ContentBlock): number {
     case "tool_result":
       return typeof block.content === "string"
         ? estimateTokens(block.content)
-        : block.content.reduce((total, inner) => total + estimateBlockTokens(inner), 0);
+        : block.content.reduce((total, inner) => total + estimateBlockTokens(inner, tier), 0);
     case "image":
-      return IMAGE_TOKENS;
+      return imageTokens(base64ImageDimensions(block.source.data), tier);
   }
 }
 
-function estimateMessageTokens(msg: Message): number {
+function attachedImageTokens(image: ImageRef, tier: ImageTier): number {
+  const dimensions = image.data !== undefined && image.data.length > 0
+    ? base64ImageDimensions(image.data)
+    : fileImageDimensions(image.path);
+  return imageTokens(dimensions, tier);
+}
+
+export function estimateMessageTokens(
+  msg: Message,
+  tier: ImageTier = HIGH_RESOLUTION_IMAGE_TIER,
+): number {
   return msg.content_blocks.reduce(
-    (total, block) => total + estimateBlockTokens(block),
-    msg.images.length * IMAGE_TOKENS,
+    (total, block) => total + estimateBlockTokens(block, tier),
+    msg.images.reduce((total, image) => total + attachedImageTokens(image, tier), 0),
   );
 }
 
-export function estimateHistoryTokens(messages: readonly Message[]): number {
-  return messages.reduce((total, message) => total + estimateMessageTokens(message), 0);
+export function estimateHistoryTokens(
+  messages: readonly Message[],
+  tier: ImageTier = HIGH_RESOLUTION_IMAGE_TIER,
+): number {
+  return messages.reduce((total, message) => total + estimateMessageTokens(message, tier), 0);
 }
 
 const WEEKDAYS = [
@@ -291,13 +303,14 @@ function trimMessages(
   hasPriorContext: boolean,
   mode: UserTimestampMode,
   timeZone: string,
+  imageTier: ImageTier,
 ): PromptMessage[] {
   const selected: { pm: PromptMessage; ts: string; heartbeat: boolean }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = required(messages[i]);
-    const msgTokens = estimateMessageTokens(msg);
+    const msgTokens = estimateMessageTokens(msg, imageTier);
     if (usedTokens + msgTokens > tokenBudget && selected.length > 0) break;
     usedTokens += msgTokens;
     selected.push({

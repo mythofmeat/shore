@@ -19,6 +19,7 @@ import {
   resetActivePromptSnapshot,
 } from "../memory/deferred_edits.ts";
 import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.ts";
+import { imageTierForModel } from "../llm/image_tokens.ts";
 import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
 import { toCredentialsEntry } from "../config/providers.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
@@ -110,6 +111,7 @@ export async function prepareChatContext(
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,
     user_timestamp_mode: config.app.behavior.user_message_timestamps,
+    image_tier: imageTierForModel(resolved.modelId),
   };
   const prompt =
     params.timeZone === undefined

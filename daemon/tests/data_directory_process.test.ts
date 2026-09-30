@@ -8,6 +8,8 @@ import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts
 
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
 const TOKEN = "process-test-token";
+const STEP_MS = 10_000;
+const stepsWithin = (steps: number): number => steps * STEP_MS + 5_000;
 const children: Bun.Subprocess<"ignore", "ignore", "pipe">[] = [];
 const roots: string[] = [];
 
@@ -100,7 +102,7 @@ async function instanceIds(path: string): Promise<string[]> {
 
 async function waitForInstances(path: string, expected: readonly string[]): Promise<void> {
   const wanted = [...expected].sort();
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + STEP_MS;
   for (;;) {
     const actual = await instanceIds(path);
     if (JSON.stringify(actual) === JSON.stringify(wanted)) return;
@@ -112,7 +114,7 @@ async function waitForInstances(path: string, expected: readonly string[]): Prom
 }
 
 async function waitUntilReady(layout: ProcessLayout, instanceId: string): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + STEP_MS;
   for (;;) {
     try {
       if ((await readFile(layout.readyPath, "utf8")).trim() === "ready") return;
@@ -129,8 +131,8 @@ async function exitWithin(
 ): Promise<number> {
   return await Promise.race([
     child.exited,
-    Bun.sleep(10_000).then(() => {
-      throw new Error("daemon did not exit within 10 seconds");
+    Bun.sleep(STEP_MS).then(() => {
+      throw new Error(`daemon did not exit within ${String(STEP_MS)}ms`);
     }),
   ]);
 }
@@ -147,6 +149,8 @@ describe("daemon processes owning data directories", () => {
     try {
       await new Promise<void>((resolve, reject) => {
         let buffered = "";
+        const silent = setTimeout(() => reject(new Error(`no history within ${String(STEP_MS)}ms of connecting`)), STEP_MS);
+        socket.once("close", () => clearTimeout(silent));
         socket.once("error", reject);
         socket.once("connect", () => socket.write(`${JSON.stringify({ type: "hello", client_type: "cli", client_name: "shutdown-test", capabilities: [], token: TOKEN })}\n`));
         socket.on("data", (chunk: Buffer) => {
@@ -168,7 +172,7 @@ describe("daemon processes owning data directories", () => {
       socket.destroy();
       child.kill("SIGKILL");
     }
-  });
+  }, stepsWithin(3));
 
   test("a second process cannot open the same data directory", async () => {
     const root = await processRoot("same");
@@ -194,7 +198,7 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(secondLayout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  });
+  }, stepsWithin(7));
 
   test("two processes with different data directories remain supported", async () => {
     const root = await processRoot("different");
@@ -212,7 +216,7 @@ describe("daemon processes owning data directories", () => {
     first.kill("SIGTERM");
     second.kill("SIGTERM");
     expect(await Promise.all([exitWithin(first), exitWithin(second)])).toEqual([0, 0]);
-  });
+  }, stepsWithin(3));
 
   test("the lifetime lock blocks a process even when the owner record looks stale", async () => {
     const root = await processRoot("lifetime-lock");
@@ -243,7 +247,7 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(secondLayout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  });
+  }, stepsWithin(5));
 
   test("an owner killed without cleanup is safely reclaimed", async () => {
     const root = await processRoot("stale");
@@ -260,7 +264,7 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(replacementLayout, "recovered-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  });
+  }, stepsWithin(4));
 
   test("a container restart can reclaim a legacy lease with its reused PID", async () => {
     const root = await processRoot("reused-pid");
@@ -271,5 +275,5 @@ describe("daemon processes owning data directories", () => {
     await waitUntilReady(layout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
-  });
+  }, stepsWithin(2));
 });

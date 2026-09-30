@@ -12,6 +12,8 @@ import {
   type UserTimestampMode,
 } from "../src/engine/prompt";
 import type { ContentBlock, Message, Role } from "../src/engine/types";
+import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER, type ImageTier } from "../src/llm/image_tokens.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 import rawFixture from "./engine_captures/prompt.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
@@ -348,6 +350,36 @@ describe("what an image costs the prompt", () => {
     ];
     const got = assemblePrompt(params(history), ZONE);
     expect(got.messages.map((m) => m.role)).toEqual(history.map((m) => m.role));
+  });
+
+  test("screenshots all through a long conversation leave its text in the window", async () => {
+    const shot = (await sizedImage(800, 600)).toString("base64");
+    const history = Array.from({ length: 40 }, (_, i) => [
+      message(`u${String(i)}`, "user", [
+        { type: "text", text: `what about this one? ${String(i)}` },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: shot } },
+      ]),
+      message(`a${String(i)}`, "assistant", [{ type: "text", text: "a".repeat(2_000) }]),
+    ]).flat();
+    const got = assemblePrompt(params(history), ZONE);
+    expect(got.messages).toHaveLength(history.length);
+  });
+
+  test("a model on the standard tier fits more large pictures in the same window", async () => {
+    const screenshot = (await sizedImage(1920, 1080)).toString("base64");
+    const history = Array.from({ length: 10 }, (_, i) =>
+      message(`u${String(i)}`, "user", [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: screenshot } },
+      ]));
+    const kept = (image_tier: ImageTier) => assemblePrompt({
+      ...params(history),
+      system_prompt: "",
+      max_context_tokens: 24_000,
+      max_output_tokens: 0,
+      image_tier,
+    }, ZONE).messages.length;
+    expect(kept(HIGH_RESOLUTION_IMAGE_TIER)).toBe(8);
+    expect(kept(STANDARD_IMAGE_TIER)).toBe(10);
   });
 
   test("a window that opens on the assistant's own message is led in, not handed to the user", () => {

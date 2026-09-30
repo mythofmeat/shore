@@ -5,6 +5,7 @@ import { shoreLog } from "../../log.ts";
 import { threadDataDir } from "../../config/dirs.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
+import { estimateMessageTokens } from "../../engine/prompt.ts";
 import type { Message } from "../../engine/types";
 import type { CompactionOutcome, ConversationMessage } from "./types";
 
@@ -24,6 +25,7 @@ function toConversationMessage(msg: Message): ConversationMessage {
     isToolResultOnly: isToolResultOnly(msg),
     isAutonomous: msg.origin === "autonomous",
     ...(msg.version === undefined ? {} : { version: msg.version }),
+    tokens: estimateMessageTokens(msg),
   };
 }
 

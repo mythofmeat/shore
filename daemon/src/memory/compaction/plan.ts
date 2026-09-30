@@ -3,6 +3,7 @@ import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { normalizeMessage } from "../../engine/message_store.ts";
+import { estimateMessageTokens } from "../../engine/prompt.ts";
 import type { Message } from "../../engine/types.ts";
 import { versionsIn } from "../coverage.ts";
 import { rustLines, rustTrim } from "../lines.ts";
@@ -108,6 +109,7 @@ function conversationView(messages: readonly Message[]): ConversationMessage[] {
       message.content_blocks.every((block) => block.type === "tool_result"),
     isAutonomous: message.origin === "autonomous",
     ...(message.version === undefined ? {} : { version: message.version }),
+    tokens: estimateMessageTokens(message),
   }));
 }
 
