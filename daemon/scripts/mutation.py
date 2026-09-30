@@ -51,6 +51,7 @@ one that only means anything as a set — two clamps that cover each other are
 each individually equivalent, and only removing the pair is a change worth
 catching.
 """
+import os
 import pathlib
 import shutil
 import subprocess
@@ -119,8 +120,10 @@ def _normalize(mutant, default_src):
         raise ValueError(f"unrecognised mutant shape: {mutant!r}")
     a, b, find, replace = mutant
     # `(label, path, ...)` and `(path, label, ...)` both occur; the path is the
-    # one that names a file that exists.
-    if _resolve(str(a)).is_file() and not _resolve(str(b)).is_file():
+    # one that names a file that exists. A label can be longer than any file
+    # name, which `Path.is_file` raises on in older Pythons (3.12 and earlier at
+    # least); `os.path.isfile` answers False on every version.
+    if os.path.isfile(_resolve(str(a))) and not os.path.isfile(_resolve(str(b))):
         return str(b), [(_resolve(str(a)), find, replace)]
     return str(a), [(_resolve(str(b)), find, replace)]
 

@@ -8,6 +8,8 @@ update_deps() {
     update_tools() {
         cd "$root"
         bun upgrade
+        # CI installs the Bun named here, so it moves in the same commit as the lockfile it was tested with.
+        bun --version >"$root/daemon/.bun-version"
         rustup update stable
         rustup component add --toolchain stable rustfmt clippy
         cargo install cargo-edit

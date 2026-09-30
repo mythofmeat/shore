@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
 
 import fixture from "./tools_captures/dispatch.json" with { type: "json" };
 
@@ -239,7 +240,7 @@ describe("search mode defaulting", () => {
 
 describe("search semantics bundling", () => {
   async function workspace(): Promise<string> {
-    const dir = `/tmp/claude-0/dispatch-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const dir = `${tmpdir()}/dispatch-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await Bun.write(`${dir}/notes.md`, "the quick brown fox\n");
     return dir;
   }
@@ -304,7 +305,7 @@ describe("context fields reach their handler argument", () => {
   });
 
   test("generate_image writes into the context's image directory", async () => {
-    const imageDir = `/tmp/claude-0/dispatch-img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const imageDir = `${tmpdir()}/dispatch-img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const ctx = bareContext({
       imageDir,
       imageGenConfig: {
@@ -329,7 +330,7 @@ describe("context fields reach their handler argument", () => {
   });
 
   test("git commits as the context's character", async () => {
-    const dir = `/tmp/claude-0/dispatch-git-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const dir = `${tmpdir()}/dispatch-git-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await Bun.write(`${dir}/a.md`, "hello\n");
     const ctx = bareContext({ workspaceDir: dir, characterName: "Juniper Vale" });
 
@@ -422,7 +423,7 @@ describe("deferred edit annotation", () => {
   });
 
   test("bash reports prompt edits through dispatch", async () => {
-    const dir = `/tmp/claude-0/dispatch-edit-${Date.now()}`;
+    const dir = `${tmpdir()}/dispatch-edit-${Date.now()}`;
     await Bun.write(`${dir}/MEMORY.md`, "before\n");
     const ctx = bareContext({ workspaceDir: dir });
     const result = (await dispatchTool(
@@ -435,7 +436,7 @@ describe("deferred edit annotation", () => {
   });
 
   test("an ordinary workspace file is written without annotation", async () => {
-    const dir = `/tmp/claude-0/dispatch-edit-plain-${Date.now()}`;
+    const dir = `${tmpdir()}/dispatch-edit-plain-${Date.now()}`;
     await Bun.write(`${dir}/notes.md`, "before\n");
     const ctx = bareContext({ workspaceDir: dir });
     const result = (await dispatchTool(
