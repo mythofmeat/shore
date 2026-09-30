@@ -15,6 +15,7 @@ export interface ToolMediaItem {
   label: string;
   path?: string;
   original?: boolean;
+  reducedFrom?: ImageVersion;
 }
 
 export interface ToolResultPayload {

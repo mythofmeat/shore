@@ -1,10 +1,11 @@
 import { required } from "../src/util/required.ts";
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toolLimitsFrom, dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
+import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
 import { renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
@@ -83,7 +84,7 @@ test("read rejects directories, binaries, invalid UTF-8, corrupt and oversized i
   await put("binary", Buffer.from([0, 1, 2]));
   await put("encoding", Buffer.from([255, 255]));
   await put("bad.png", "not a PNG");
-  await put("large.png", Buffer.concat([Buffer.from(PNG, "base64"), Buffer.alloc(5 * 1024 * 1024)]));
+  await truncate(await put("large.png", Buffer.from(PNG, "base64")), MAX_READ_IMAGE_BYTES + 1);
   for (const file_path of [".", "binary", "encoding", "bad.png", "large.png", "missing"]) {
     expect((await run("read", { file_path })).isError).toBe(true);
   }
@@ -221,7 +222,7 @@ test("Markdown read preserves text when local images are missing, invalid, or to
   const { put, run, exec } = await world();
   exec.limits.max_inline_image_bytes = 10 * 1024 * 1024;
   await put("bad.png", "not an image");
-  await put("large.png", Buffer.concat([Buffer.from(PNG, "base64"), Buffer.alloc(5 * 1024 * 1024)]));
+  await truncate(await put("large.png", Buffer.from(PNG, "base64")), MAX_READ_IMAGE_BYTES + 1);
   for (const ref of ["missing.png", "bad.png", "large.png", "bad%GG.png", ".", "image%00.png"]) {
     await put("broken.md", `Keep this text\n![broken](${ref})\n`);
     const result = await run("read", { file_path: "broken.md" });

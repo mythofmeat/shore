@@ -30,7 +30,10 @@ is given stays within 2000px.
 model is told the original and sent size, format and token cost, at the active
 model's tier, and how to ask for the original. `original: true` sends the
 largest image the model accepts. MCP images are reduced at their own settings
-and nothing is said.
+and nothing is said. A file over 5 MiB, up to the 64 MiB read limit, is reduced
+as it is read to the largest image any model is sent, so clients are never
+shown more than 5 MiB. The model's image is made from that copy, and its note
+still describes the file.
 
 **Uploads.** An image a user sends is reduced once, when it arrives, and that
 copy is what every later request carries. An attachment from before this is
@@ -54,6 +57,7 @@ S = "src/config/schema.ts"
 M = "src/tools/media.ts"
 E = "src/tools/execute.ts"
 R = "src/tools/read.ts"
+RI = "src/tools/read_image.ts"
 H = "src/handler/images.ts"
 P = "src/engine/prompt.ts"
 
@@ -313,16 +317,24 @@ MUTANTS = [
      "  return await reduceImage(source, settings);"),
     ("note: MCP images are described too",
      E,
-     'if (toolUse.name !== "read" || !reduced.changed || !read.tell_model) return undefined;',
-     "if (!reduced.changed || !read.tell_model) return undefined;"),
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
+     "if (!fromFile.changed || !read.tell_model) return undefined;"),
     ("note: an unchanged image is described",
      E,
-     'if (toolUse.name !== "read" || !reduced.changed || !read.tell_model) return undefined;',
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
      'if (toolUse.name !== "read" || !read.tell_model) return undefined;'),
     ("note: tell_model is ignored",
      E,
-     'if (toolUse.name !== "read" || !reduced.changed || !read.tell_model) return undefined;',
-     'if (toolUse.name !== "read" || !reduced.changed) return undefined;'),
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
+     'if (toolUse.name !== "read" || !fromFile.changed) return undefined;'),
+    ("note: an image reduced as it was read is described by that copy",
+     E,
+     "  const fromFile = item.reducedFrom === undefined ? reduced : { ...reduced, original: item.reducedFrom, changed: true };",
+     "  const fromFile = reduced;"),
+    ("note: an image reduced as it was read, and sent as it was, goes unmentioned",
+     E,
+     "{ ...reduced, original: item.reducedFrom, changed: true }",
+     "{ ...reduced, original: item.reducedFrom, changed: reduced.changed }"),
     ("note: the original is offered even when it is refused",
      E,
      "    offerOriginal: read.allow_original,",
@@ -355,6 +367,38 @@ MUTANTS = [
      R,
      '    if (original) throw new InvalidArgs("original applies only to image files");\n',
      ""),
+    ("read: an image file over 5 MiB is refused",
+     RI,
+     'readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal)',
+     'readBoundedFile(file, path, MAX_IMAGE_BYTES, "image", signal)'),
+    ("read: an image file of any size is read",
+     RI,
+     'readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal)',
+     'readBoundedFile(file, path, Infinity, "image", signal)'),
+    ("read: an image file over 5 MiB is handed on whole",
+     RI,
+     "  if (data.length <= MAX_IMAGE_BYTES) return { description, image };",
+     "  if (true) return { description, image };"),
+    ("read: an image file of exactly 5 MiB is reduced",
+     RI,
+     "  if (data.length <= MAX_IMAGE_BYTES) return { description, image };",
+     "  if (data.length < MAX_IMAGE_BYTES) return { description, image };"),
+    ("read: an image file over 5 MiB is held to 2000px before the model's settings apply",
+     RI,
+     "ORIGINAL_IMAGE_SETTINGS, DEFAULT_IMAGE_LIMITS)",
+     "{ ...ORIGINAL_IMAGE_SETTINGS, max_edge: 2000 }, DEFAULT_IMAGE_LIMITS)"),
+    ("read: an image file over 5 MiB keeps more pixels than any model is sent",
+     RI,
+     "ORIGINAL_IMAGE_SETTINGS, DEFAULT_IMAGE_LIMITS)",
+     "ORIGINAL_IMAGE_SETTINGS, {})"),
+    ("read: an image file over 5 MiB forgets what it was reduced from",
+     RI,
+     ", reducedFrom: fitted.original }",
+     " }"),
+    ("read: an image file over 5 MiB that cannot be reduced fails without naming the file",
+     RI,
+     "\n    .catch((error: unknown) => { throw new ToolIoError(`${path}: image could not be reduced: ${error instanceof Error ? error.message : String(error)}`); });",
+     ";"),
     ("read: Markdown images are budgeted at the default max_bytes",
      R,
      'imageSettingsFor(images, "read").max_bytes',
