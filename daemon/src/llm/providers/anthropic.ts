@@ -1,4 +1,4 @@
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import { shoreLog } from "../../log.ts";
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -50,7 +50,7 @@ type ThinkingDisplay = NonNullable<ProviderOptions["thinking_display"]>;
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const { client, params, placement } = buildAnthropicCall(req);
     const stream = (await client.messages.create(
       { ...params, stream: true } as MessageCreateParamsStreaming,
@@ -65,7 +65,7 @@ export class AnthropicProvider implements SidecarProvider {
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const startedAt = Date.now();
     const { client, params, placement } = buildAnthropicCall(req);
     const message = (await client.messages

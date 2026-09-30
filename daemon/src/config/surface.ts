@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "images", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;

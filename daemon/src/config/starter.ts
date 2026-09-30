@@ -62,5 +62,12 @@ model = "anthropic:claude-opus-4-8"
 
 [tools]
 enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs"]
+
+# An image costs one token per 28×28-pixel patch. A 4:3 photo costs 1,036 tokens
+# at 1024×768, 2,352 at 1568×1176 and 3,888 at 2000×1500 (the default size);
+# models before Claude 4.7 cap any image at 1,568. To send smaller copies:
+# [images]
+# max_tokens = 1600  # a 4:3 photo arrives at about 1270×952 (1,564 tokens)
+# max_edge = 1024    # longest side in pixels; the stricter of the two wins
 `;
 }

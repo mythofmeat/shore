@@ -5,6 +5,7 @@ import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
 import { imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
+import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
 export const MAX_READ_LINES = 2000;
 export const MAX_READ_LINE_CHARS = 2000;
@@ -23,12 +24,14 @@ function positiveInteger(input: Record<string, unknown>, name: string, fallback:
 
 export async function handleRead(
   input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal, maxChars = 50_000,
-  maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES,
+  maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES, images: ImagesConfig = defaultImagesConfig(),
 ): Promise<unknown> {
   signal?.throwIfAborted();
   const path = filePath(input, workspaceDir);
   const offset = positiveInteger(input, "offset", 1);
   const limit = positiveInteger(input, "limit", MAX_READ_LINES, MAX_READ_LINES);
+  const original = input.original ?? false;
+  if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
   const file = await openRegularFile(path);
   try {
     const header = Buffer.alloc(12);
@@ -37,12 +40,14 @@ export async function handleRead(
     if (mime !== undefined || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) {
       if (mime === undefined) throw new ToolIoError(`${path}: invalid or unsupported image data`);
       if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs("offset and limit apply only to text files");
+      if (original && !images.read.allow_original) throw new InvalidArgs("original is turned off by images.read.allow_original; images are sent at the configured size");
       const { description, image } = await readImage(file, path, mime, signal);
-      return carryToolMedia({ value: description, media: [image], extra: [] });
+      return carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] });
     }
+    if (original) throw new InvalidArgs("original applies only to image files");
     const page = await readText(file, path, offset, limit, maxChars, signal);
     return MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
-      ? await expandMarkdownImages(file, path, page, maxImageBytes, signal)
+      ? await expandMarkdownImages(file, path, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
       : page.output;
   } finally {
     await file.close();

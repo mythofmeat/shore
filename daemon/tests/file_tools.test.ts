@@ -103,7 +103,7 @@ test("read returns real image blocks and prepares large dimensions", async () =>
   const source = required(pictures[0]).source;
   expect(source.data.length).toBeLessThanOrEqual(1_000_000);
   expect((await new Bun.Image(Buffer.from(source.data, "base64")).metadata()).width).toBeLessThanOrEqual(2000);
-  expect(resultText(result)).toContain("resized or converted");
+  expect(resultText(result)).toContain("wide.png: reduced from 4000×1000 PNG (2,116 tokens) to 2000×500 PNG (1,296 tokens). Read it with original: true for the full image.]");
   expect(resultText(result)).not.toContain(source.data);
   const frame = required(frames.find((candidate) => candidate.type === "tool_result"));
   expect(frame.tool_name).toBe("read");
@@ -494,7 +494,7 @@ test("read handles JPEG, WebP and GIF as visual content", async () => {
     expect(result.isError).toBe(false);
     if (result.block.type !== "tool_result") throw new Error("missing result");
     expect(toolResultImages(result.block.content)).toHaveLength(1);
-    if (file_path.endsWith("gif")) expect(resultText(result)).toContain("first frame only");
+    if (file_path.endsWith("gif")) expect(resultText(result)).toContain("image.gif: reduced from 1×1 GIF (1 token) to 1×1 PNG (1 token), first frame only.");
   }
 });
 

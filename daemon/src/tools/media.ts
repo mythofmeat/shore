@@ -1,4 +1,7 @@
 import { MAX_IMAGE_BYTES } from "../llm/images.ts";
+import type { ImageDimensions } from "../llm/image_dimensions.ts";
+import { sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
+import type { ImageVersion, ReducedImage } from "../llm/prepare_images.ts";
 
 const CARRIER = Symbol("shore.tool_media");
 
@@ -10,6 +13,8 @@ export interface ToolMediaItem {
   mime_type: string;
   data: string;
   label: string;
+  path?: string;
+  original?: boolean;
 }
 
 export interface ToolResultPayload {
@@ -64,4 +69,44 @@ export function renderPayload(payload: ToolResultPayload): string {
 export function renderToolValue(value: unknown): string {
   const payload = toolMediaOf(value);
   return payload === undefined ? payloadText(value) : renderPayload(payload);
+}
+
+const FORMAT_NAMES: Record<string, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WebP",
+  "image/gif": "GIF",
+};
+
+function describeVersion(version: ImageVersion): string {
+  const format = FORMAT_NAMES[version.mediaType] ?? version.mediaType;
+  const size = version.dimensions;
+  return size === undefined ? format : `${String(size.width)}×${String(size.height)} ${format}`;
+}
+
+function tokenCost(dimensions: ImageDimensions | undefined, tier: ImageTier): string {
+  const tokens = sentImageTokens(dimensions, tier);
+  return `${tokens.toLocaleString("en-US")} ${tokens === 1 ? "token" : "tokens"}`;
+}
+
+export interface ReductionNote {
+  item: ToolMediaItem;
+  reduced: ReducedImage;
+  tier: ImageTier;
+  fullSize: ImageDimensions | undefined;
+  offerOriginal: boolean;
+}
+
+export function reductionNote({ item, reduced, tier, fullSize, offerOriginal }: ReductionNote): string {
+  const firstFrame = reduced.original.mediaType === "image/gif" ? ", first frame only" : "";
+  const sent = `${describeVersion(reduced.sent)} (${tokenCost(reduced.sent.dimensions, tier)})`;
+  if (item.original === true) {
+    return `[${item.label}: ${describeVersion(reduced.original)} sent at ${sent}, the full resolution this model accepts${firstFrame}.]`;
+  }
+  const original = `${describeVersion(reduced.original)} (${tokenCost(fullSize, tier)})`;
+  const path = item.path ?? item.label;
+  const offer = !offerOriginal ? "" : path === item.label
+    ? " Read it with original: true for the full image."
+    : ` Read ${path} with original: true for the full image.`;
+  return `[${item.label}: reduced from ${original} to ${sent}${firstFrame}.${offer}]`;
 }

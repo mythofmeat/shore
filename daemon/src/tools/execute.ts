@@ -1,8 +1,16 @@
 import type { BashResult } from "./bash.ts";
 import { formatToolOutput } from "./output.ts";
 import { shoreLog } from "../log.ts";
-import { prepareImageBlock } from "../llm/prepare_images.ts";
+import {
+  DEFAULT_IMAGE_LIMITS,
+  fullResolution,
+  ORIGINAL_IMAGE_SETTINGS,
+  reduceImage,
+  type ImageLimits,
+  type ReducedImage,
+} from "../llm/prepare_images.ts";
 import { resolveImageBlock } from "../llm/images.ts";
+import { defaultImagesConfig, imageSettingsFor } from "../config/app.ts";
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,6 +33,7 @@ import {
 import {
   MAX_INLINE_TOOL_IMAGES,
   MAX_LISTED_MEDIA_NOTES,
+  reductionNote,
   toolMediaOf,
   type ToolMediaItem,
   type ToolResultPayload,
@@ -36,6 +45,7 @@ export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
   ctx: ToolContext;
   limits: ToolLimitsView;
+  imageLimits?: ImageLimits;
   rid?: string;
   subagent?: string;
   now: () => string;
@@ -199,10 +209,8 @@ async function attachToolMedia(
       continue;
     }
     try {
-      const block = await prepareImageBlock({
-        type: "image", source: { type: "base64", media_type: item.mime_type, data: item.data },
-      });
-      if (block.type !== "image") throw new Error("image preparation returned no image");
+      const reduced = await reduceToolImage(item, exec, toolUse);
+      const block: ContentBlock = { type: "image", source: reduced.source };
       const resolution = resolveImageBlock(block.source);
       if ("omitted" in resolution) throw new Error(resolution.omitted);
       const bytes = base64Bytes(block.source.data);
@@ -211,7 +219,8 @@ async function attachToolMedia(
         attached.images.push(original);
         continue;
       }
-      if (block.source.data !== item.data) attached.notes.push(`[${item.label}: image resized or converted for model input${item.mime_type === "image/gif" ? "; first frame only" : ""}]`);
+      const note = toolImageNote(item, reduced, exec, toolUse);
+      if (note !== undefined) attached.notes.push(note);
       attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
       attached.blocks.push(block);
       inlinedBytes += bytes;
@@ -225,6 +234,27 @@ async function attachToolMedia(
 
   if (skipped.length > 0) attached.notes.push(skippedNote(skipped, maxBytes));
   return attached;
+}
+
+async function reduceToolImage(item: ToolMediaItem, exec: ToolExecution, toolUse: ToolUseEvent): Promise<ReducedImage> {
+  const limits = exec.imageLimits ?? DEFAULT_IMAGE_LIMITS;
+  const source = { type: "base64" as const, media_type: item.mime_type, data: item.data };
+  if (item.original === true) return await reduceImage(source, ORIGINAL_IMAGE_SETTINGS, limits);
+  const settings = imageSettingsFor(exec.ctx.images ?? defaultImagesConfig(), toolUse.name === "read" ? "read" : "mcp");
+  return await reduceImage(source, settings, { maxEdge: limits.maxEdge });
+}
+
+function toolImageNote(item: ToolMediaItem, reduced: ReducedImage, exec: ToolExecution, toolUse: ToolUseEvent): string | undefined {
+  const read = (exec.ctx.images ?? defaultImagesConfig()).read;
+  if (toolUse.name !== "read" || !reduced.changed || !read.tell_model) return undefined;
+  const limits = exec.imageLimits ?? DEFAULT_IMAGE_LIMITS;
+  return reductionNote({
+    item,
+    reduced,
+    tier: limits.tier,
+    fullSize: fullResolution(reduced.original.dimensions, limits),
+    offerOriginal: read.allow_original,
+  });
 }
 
 function skippedNote(labels: readonly string[], maxBytes: number): string {

@@ -1,5 +1,5 @@
 import type { ImageDimensions } from "./image_dimensions.ts";
-import { MAX_IMAGE_EDGE } from "./prepare_images.ts";
+import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "./image_settings.ts";
 
 export interface ImageTier {
   maxEdge: number;
@@ -30,8 +30,12 @@ export function imageTierForModel(modelId: string): ImageTier {
 }
 
 export function imageTokens(dimensions: ImageDimensions | undefined, tier: ImageTier): number {
+  return sentImageTokens(dimensions === undefined ? undefined : reducedSize(dimensions, DEFAULT_IMAGE_SETTINGS), tier);
+}
+
+export function sentImageTokens(dimensions: ImageDimensions | undefined, tier: ImageTier): number {
   if (dimensions === undefined) return tier.maxTokens;
-  const seen = sizeForTier(sizeAfterPreparing(dimensions), tier);
+  const seen = sizeForTier(dimensions, tier);
   return visualTokens(seen.width, seen.height);
 }
 
@@ -61,8 +65,13 @@ export function sizeForTier({ width, height }: ImageDimensions, tier: ImageTier)
   return { width: lo, height: shortEdge(lo) };
 }
 
-function sizeAfterPreparing({ width, height }: ImageDimensions): ImageDimensions {
-  const scale = MAX_IMAGE_EDGE / Math.max(width, height);
+export function reducedSize(dimensions: ImageDimensions, settings: Readonly<ImageSettings>): ImageDimensions {
+  const edged = fitLongEdge(dimensions, settings.max_edge);
+  return settings.max_tokens > 0 ? sizeForTier(edged, { maxEdge: Number.MAX_SAFE_INTEGER, maxTokens: settings.max_tokens }) : edged;
+}
+
+export function fitLongEdge({ width, height }: ImageDimensions, edge: number): ImageDimensions {
+  const scale = edge / Math.max(width, height);
   if (scale >= 1) return { width, height };
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }

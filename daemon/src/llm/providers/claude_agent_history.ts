@@ -7,7 +7,8 @@ import { withStorage, ensureCollection, collectionText, appendCollection } from 
 import type { SidecarRequest } from "../types.ts";
 import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
-import { prepareImageBlocks } from "../prepare_images.ts";
+import { limitImageBlocks } from "../prepare_images.ts";
+import { MANY_IMAGES_MAX_EDGE } from "../image_settings.ts";
 
 function isModelIdentity(entry: SessionStoreEntry): boolean {
   const record = entry as { type?: unknown; attachment?: { type?: unknown } };
@@ -76,7 +77,7 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
   const entries: SessionStoreEntry[] = [];
   for (const [index, message] of req.messages.slice(0, -1).entries()) {
     const uuid = randomUUID();
-    const content = (await prepareImageBlocks(message.content)).map((block) => block.type === "tool_use"
+    const content = (await limitImageBlocks(message.content, MANY_IMAGES_MAX_EDGE)).map((block) => block.type === "tool_use"
       ? { ...block, name: names.wireOf(block.name) ?? block.name } : block);
     const entry: SessionStoreEntry = {
       type: message.role,

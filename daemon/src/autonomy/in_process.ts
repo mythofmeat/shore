@@ -19,6 +19,7 @@ import type { ToolLoopOptions, GenerateResponse, SidecarProvider, SidecarRequest
 import type { ToolContextDeps } from "../handler/tool_context.ts";
 import { buildToolContext } from "../handler/tool_context.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
+import { imageLimitsFor, type ImageLimits } from "../llm/prepare_images.ts";
 import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
 import { runToolUse, type ToolExecution, type ToolPhase } from "../tools/execute.ts";
@@ -51,6 +52,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
       let toolCtx: ReturnType<typeof buildToolContext> | undefined;
+      let imageLimits: ImageLimits | undefined;
 
       return await runHeartbeatTick(character, config, {
         cache: this.#deps.cache,
@@ -59,12 +61,14 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
       generate: async (request, phase, signal) => {
         labelAccountedCall(request, config, character, "heartbeat");
+        imageLimits = imageLimitsFor(request.sdk, request.model);
         let round = 0;
         const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
           tools: {
             ...phase,
             beforeTurn: async (call) => {
               labelAccountedCall(call, config, character, round++ === 0 ? "heartbeat" : "heartbeat_tool_loop");
+              imageLimits = imageLimitsFor(call.sdk, call.model);
               await phase.beforeTurn?.(call);
             },
           },
@@ -89,6 +93,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           sendDirect: () => {},
           ctx: await toolCtx,
           limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+          ...(imageLimits === undefined ? {} : { imageLimits }),
           now: () => new Date().toISOString(),
           newMessageId: () => `m_${crypto.randomUUID()}`,
           schemas: schemasFrom(tools),

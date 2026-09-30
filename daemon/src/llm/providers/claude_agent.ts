@@ -1,4 +1,4 @@
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import { recordProviderEvent } from "../provider_events.ts";
 import { retryToolStream } from "../tool_loop.ts";
 import { ToolLoopStop } from "../tool_loop_control.ts";
@@ -745,7 +745,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    const prepared = withSystemInstructions(await limitRequestImages(req));
     req = prepared.request;
     const startedAt = Date.now();
     let firstTokenAt = 0;
@@ -1077,7 +1077,7 @@ export async function* claudeAgentToolLoopEvents(
   deps: ClaudeAgentDeps = {},
   options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
-  req = await prepareRequestImages(req);
+  req = await limitRequestImages(req);
   const defs = req.tools ?? [];
   if (defs.length === 0) {
     yield* new ClaudeAgentProvider(deps).stream(req, signal);
@@ -1133,7 +1133,7 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
-    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    const prepared = withSystemInstructions(await limitRequestImages(req));
     Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
     const native = await withNativeHistory(plan, req, path, key, record);

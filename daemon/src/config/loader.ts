@@ -12,6 +12,7 @@ import {
   toolGrants,
   validateCompaction,
   validateHeartbeat,
+  validateImages,
   validateAppConfigLayer,
   type AppConfig,
   type UsageBudgetConfig,
@@ -499,6 +500,9 @@ function validateConfig(
 
   const heartbeat = validateHeartbeat(app.behavior.autonomy.heartbeat);
   if (heartbeat !== undefined) throw validationError(heartbeat);
+
+  const images = validateImages(app.images);
+  if (images !== undefined) throw validationError(images);
 
 }
 

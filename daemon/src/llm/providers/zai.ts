@@ -1,5 +1,5 @@
 import { coalesceToolResults } from "../tool_result_messages.ts";
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import OpenAI from "openai";
 import type {
   ChatCompletionChunk,
@@ -38,7 +38,7 @@ export type ZaiChatCompletionCreateParams = Omit<
 
 export class ZaiProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, params } = buildZaiCall(await prepareRequestImages(req), true);
+    const { client, params } = buildZaiCall(await limitRequestImages(req), true);
     const stream = (await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,
@@ -48,7 +48,7 @@ export class ZaiProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, params } = buildZaiCall(await prepareRequestImages(req), false);
+    const { client, params } = buildZaiCall(await limitRequestImages(req), false);
     const completion = await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,

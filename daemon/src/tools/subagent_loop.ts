@@ -32,6 +32,7 @@ import {
   type ToolLimitsView,
 } from "./dispatch.ts";
 import { toolPhase } from "./execute.ts";
+import { imageLimitsFor } from "../llm/prepare_images.ts";
 import type { McpRegistry, McpToolDef } from "./mcp_registry.ts";
 import { ALL_TOOLS } from "./registry.ts";
 import {
@@ -179,6 +180,7 @@ export async function runSubagent(
     sendDirect: send,
     ctx: nestedContext(deps.ctx, signal),
     limits: toolLimits(config),
+    imageLimits: imageLimitsFor(request.sdk, request.model),
     subagent: name,
     ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     now: deps.now ?? (() => new Date().toISOString()),

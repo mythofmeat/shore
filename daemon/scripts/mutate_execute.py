@@ -205,8 +205,8 @@ MUTANTS = [
      '      exec.sendDirect({\n        type: "send_image",',
      '      ((_: unknown) => {})({\n        type: "send_image",'),
     ("an attached image loses the media type the server gave it",
-     "      type: \"image\", source: { type: \"base64\", media_type: item.mime_type, data: item.data },",
-     "      type: \"image\", source: { type: \"base64\", media_type: \"application/octet-stream\", data: item.data },"),
+     "  const source = { type: \"base64\" as const, media_type: item.mime_type, data: item.data };",
+     "  const source = { type: \"base64\" as const, media_type: \"application/octet-stream\", data: item.data };"),
 
     # ── the diagnostics row ─────────────────────────────────────────────
 
