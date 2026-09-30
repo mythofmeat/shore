@@ -246,13 +246,14 @@ async function reduceToolImage(item: ToolMediaItem, exec: ToolExecution, toolUse
 
 function toolImageNote(item: ToolMediaItem, reduced: ReducedImage, exec: ToolExecution, toolUse: ToolUseEvent): string | undefined {
   const read = (exec.ctx.images ?? defaultImagesConfig()).read;
-  if (toolUse.name !== "read" || !reduced.changed || !read.tell_model) return undefined;
+  const fromFile = item.reducedFrom === undefined ? reduced : { ...reduced, original: item.reducedFrom, changed: true };
+  if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;
   const limits = exec.imageLimits ?? DEFAULT_IMAGE_LIMITS;
   return reductionNote({
     item,
-    reduced,
+    reduced: fromFile,
     tier: limits.tier,
-    fullSize: fullResolution(reduced.original.dimensions, limits),
+    fullSize: fullResolution(fromFile.original.dimensions, limits),
     offerOriginal: read.allow_original,
   });
 }

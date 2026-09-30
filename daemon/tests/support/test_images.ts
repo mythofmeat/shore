@@ -61,6 +61,11 @@ export function transparentPng(width: number, height: number): Buffer {
   ]);
 }
 
+export function withTextChunk(png: Buffer, bytes: number): Buffer {
+  const text = chunk("tEXt", Buffer.concat([Buffer.from("chara\0", "latin1"), Buffer.alloc(bytes, "A")]));
+  return Buffer.concat([png.subarray(0, 33), text, png.subarray(33)]);
+}
+
 export function rotatedJpeg(jpeg: Buffer): Buffer {
   const tiff = Buffer.from([
     0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01,

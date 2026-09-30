@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultImagesConfig, type ImagesConfig } from "../src/config/app.ts";
@@ -7,20 +7,22 @@ import { estimateMessageTokens } from "../src/engine/prompt.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { encodeImageBlock, ingestImages } from "../src/handler/images.ts";
 import { buildLlmMessages } from "../src/handler/wire_messages.ts";
-import { findModelCopy } from "../src/llm/images.ts";
-import { DEFAULT_IMAGE_SETTINGS } from "../src/llm/image_settings.ts";
+import { findModelCopy, MAX_IMAGE_BYTES } from "../src/llm/images.ts";
+import { DEFAULT_IMAGE_SETTINGS, MAX_SENT_IMAGE_BYTES } from "../src/llm/image_settings.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, sizeForTier, STANDARD_IMAGE_TIER, visualTokens } from "../src/llm/image_tokens.ts";
-import { imageLimitsFor } from "../src/llm/prepare_images.ts";
+import { DEFAULT_IMAGE_LIMITS, fullResolution, imageLimitsFor } from "../src/llm/prepare_images.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { handleRead } from "../src/tools/read.ts";
+import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { required } from "../src/util/required.ts";
 import { sizedImage } from "./support/sized_image.ts";
-import { noisePng } from "./support/test_images.ts";
+import { noisePng, withTextChunk } from "./support/test_images.ts";
 
 type ImageBlock = Extract<ContentBlock, { type: "image" }>;
 
@@ -133,6 +135,68 @@ describe("a workspace image the model reads", () => {
     expect((await run("read", { file_path: "small.png", original: true })).text).not.toContain("sent at");
   });
 
+  test("an image file over 5 MiB reaches the model the way the same image under 5 MiB does", async () => {
+    const { run, put } = await world();
+    const image = await sizedImage(3000, 2000);
+    const card = withTextChunk(image, 6 * 1024 * 1024);
+    expect(card.length).toBeGreaterThan(MAX_IMAGE_BYTES);
+    const small = await put("small.png", image);
+    const large = await put("card.png", card);
+    const note = (text: string, path: string) => text.split("\n").find((line) => line.startsWith(`[${path}: `))?.replace(path, "<path>");
+    for (const original of [false, true]) {
+      const under = await run("read", { file_path: "small.png", original });
+      const over = await run("read", { file_path: "card.png", original });
+      expect(over.isError).toBe(false);
+      expect(over.text).toContain(`${large}: image/png, 3000×2000, ${String(card.length)} bytes`);
+      expect(over.images).toEqual(under.images);
+      expect(note(under.text, small)).toContain("3000×2000 PNG");
+      expect(note(over.text, large)).toBe(note(under.text, small));
+    }
+  });
+
+  test("clients are shown an image file up to 5 MiB as it is, and a larger one at the full resolution any model is sent", async () => {
+    const { run, put, exec } = await world();
+    const frames: ServerMessage[] = [];
+    exec.sendDirect = (frame) => { frames.push(frame); };
+    const image = await sizedImage(3000, 2000);
+    const shown = async (bytes: number) => {
+      const file = withTextChunk(image, bytes - image.length - 18);
+      expect(file.length).toBe(bytes);
+      await put("card.png", file);
+      frames.length = 0;
+      expect((await run("read", { file_path: "card.png" })).isError).toBe(false);
+      const frame = required(frames.find((candidate) => candidate.type === "send_image"));
+      const data = required(frame.data);
+      expect((await readFile(frame.path)).toString("base64")).toBe(data);
+      return { file: file.toString("base64"), data };
+    };
+    const whole = await shown(MAX_IMAGE_BYTES);
+    expect(whole.data).toBe(whole.file);
+    const reduced = Buffer.from((await shown(MAX_IMAGE_BYTES + 1)).data, "base64");
+    expect(reduced.length).toBeLessThanOrEqual(MAX_SENT_IMAGE_BYTES);
+    const { width, height } = await new Bun.Image(reduced).metadata();
+    expect({ width, height }).toEqual(required(fullResolution({ width: 3000, height: 2000 }, DEFAULT_IMAGE_LIMITS)));
+  });
+
+  test("an image file over the read limit is refused before it is read", async () => {
+    const { run, put } = await world();
+    const path = await put("huge.png", await sizedImage(40, 30));
+    await truncate(path, MAX_READ_IMAGE_BYTES + 1);
+    const result = await run("read", { file_path: "huge.png" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(`${path}: image exceeds the ${String(MAX_READ_IMAGE_BYTES)}-byte input limit`);
+  });
+
+  test("an image file over 5 MiB whose pixels cannot be decoded fails the read", async () => {
+    const { run, put } = await world();
+    const header = (await sizedImage(3000, 2000)).subarray(0, 33);
+    const path = await put("broken.png", Buffer.concat([header, Buffer.alloc(MAX_IMAGE_BYTES, 7)]));
+    const result = await run("read", { file_path: "broken.png" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(`${path}: image could not be reduced: `);
+    expect(result.images).toHaveLength(0);
+  });
+
   test("tell_model = false sends the reduced image without a note", async () => {
     const { run, put } = await world(images({ max_edge: 1024, tell_model: false }));
     await put("ref.png", await sizedImage(4000, 3000));
@@ -175,6 +239,15 @@ describe("a workspace image the model reads", () => {
     expect(await dimensionsOf(result.images[0])).toEqual({ width: 1024, height: 683 });
     expect(result.text).toContain(`[Reference sheet (${sheet}): reduced from 3000×2000 PNG (`);
     expect(result.text).toContain(`Read ${sheet} with original: true for the full image.]`);
+  });
+
+  test("an image over 5 MiB in Markdown is attached the same way", async () => {
+    const { run, put } = await world(images({ max_edge: 1024 }));
+    const card = await put("card.png", withTextChunk(await sizedImage(3000, 2000), 6 * 1024 * 1024));
+    await put("character.md", "# Ada\n\n![Card](card.png)\n");
+    const result = await run("read", { file_path: "character.md" });
+    expect(await dimensionsOf(result.images[0])).toEqual({ width: 1024, height: 683 });
+    expect(result.text).toContain(`[Card (${card}): reduced from 3000×2000 PNG (`);
   });
 
   test("Markdown images are budgeted at the size the read settings send", async () => {

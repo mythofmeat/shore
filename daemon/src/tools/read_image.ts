@@ -3,6 +3,9 @@ import { ToolIoError } from "./errors.ts";
 import { openRegularFile, readBoundedFile } from "./file_access.ts";
 import type { ToolMediaItem } from "./media.ts";
 import { MAX_IMAGE_BYTES } from "../llm/images.ts";
+import { DEFAULT_IMAGE_LIMITS, ORIGINAL_IMAGE_SETTINGS, reduceImage } from "../llm/prepare_images.ts";
+
+export const MAX_READ_IMAGE_BYTES = 64 * 1024 * 1024;
 
 export function imageMime(header: Buffer): string | undefined {
   if (header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
@@ -13,13 +16,15 @@ export function imageMime(header: Buffer): string | undefined {
 }
 
 export async function readImage(file: FileHandle, path: string, mime: string, signal?: AbortSignal): Promise<{ description: string; image: ToolMediaItem }> {
-  const data = await readBoundedFile(file, path, MAX_IMAGE_BYTES, "image", signal);
+  const data = await readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal);
   const metadata = await new Bun.Image(data).metadata().catch(() => undefined);
   if (metadata === undefined) throw new ToolIoError(`${path}: image could not be decoded`);
-  return {
-    description: `${path}: ${mime}, ${metadata.width}×${metadata.height}, ${data.length} bytes`,
-    image: { mime_type: mime, data: data.toString("base64"), label: path, path },
-  };
+  const description = `${path}: ${mime}, ${metadata.width}×${metadata.height}, ${data.length} bytes`;
+  const image: ToolMediaItem = { mime_type: mime, data: data.toString("base64"), label: path, path };
+  if (data.length <= MAX_IMAGE_BYTES) return { description, image };
+  const fitted = await reduceImage({ type: "base64", media_type: mime, data: image.data }, ORIGINAL_IMAGE_SETTINGS, DEFAULT_IMAGE_LIMITS)
+    .catch((error: unknown) => { throw new ToolIoError(`${path}: image could not be reduced: ${error instanceof Error ? error.message : String(error)}`); });
+  return { description, image: { ...image, mime_type: fitted.source.media_type, data: fitted.source.data, reducedFrom: fitted.original } };
 }
 
 export async function readImageAt(path: string, accept: (bytes: number) => boolean, signal?: AbortSignal): Promise<ToolMediaItem | undefined> {
