@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, expectTypeOf, test } from "bun:test";
 import { join } from "node:path";
 
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
@@ -30,6 +30,21 @@ describe("rejectionOf", () => {
 
   test("fails, naming the value, when the promise resolves", async () => {
     expect(await outcomeOf(rejectionOf(Promise.resolve("fine")))).toThrow('Received promise that resolved: "fine"');
+  });
+});
+
+describe("toThrow on a function that may return a promise", () => {
+  test("cannot be called, so no promise is waited for where the test's timeout cannot stop it", () => {
+    const promised = (): Promise<number> => Promise.resolve(7);
+    const promisedOrNot = (): number | Promise<number> => 7;
+
+    expectTypeOf(expect(promised).toThrow).not.toBeFunction();
+    expectTypeOf(expect(promised).toThrowError).not.toBeFunction();
+    expectTypeOf(expect(promised).toThrowErrorMatchingSnapshot).not.toBeFunction();
+    expectTypeOf(expect(promised).toThrowErrorMatchingInlineSnapshot).not.toBeFunction();
+    expectTypeOf(expect(promised).not.toThrow).not.toBeFunction();
+    expectTypeOf(expect(promisedOrNot).toThrow).not.toBeFunction();
+    expectTypeOf(expect(async () => {}).toThrow).not.toBeFunction();
   });
 });
 

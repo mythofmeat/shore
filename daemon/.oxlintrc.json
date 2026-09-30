@@ -127,6 +127,11 @@
           {
             "property": "resolves",
             "message": "Bun waits for the promise inside the matcher, where the test's timeout cannot stop it, so a promise that never settles hangs bun test. Use expect(await promise)."
+          },
+          {
+            "object": "expect",
+            "property": "extend",
+            "message": "Bun waits for the promise a matcher returns inside the matcher, where the test's timeout cannot stop it, so an async matcher whose promise never settles hangs bun test. Lint cannot tell which matchers return a promise, so none may be registered. Await the value in the test and assert on it with a built-in matcher."
           }
         ]
       }

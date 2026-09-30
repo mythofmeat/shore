@@ -344,7 +344,7 @@ describe("executable operation contracts", () => {
       called = true;
       return { ...EMPTY_LIST, fork: { fork_id: "fk_1", thread: "branch", source: "main", created_at: "now", messages: 2, turns: 1, scope: "full" as const } };
     });
-    expect(() => operation.invoke(null, { name: "branch", turns: false })).toThrow();
+    expect(() => { void operation.invoke(null, { name: "branch", turns: false }); }).toThrow();
     expect(called).toBe(false);
     expect(operation.invoke(null, { name: "branch" })).toMatchObject({ fork: { messages: 2, turns: 1 } });
     expect(called).toBe(true);
