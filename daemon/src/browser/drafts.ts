@@ -1,16 +1,21 @@
 import type { ImageUpload } from "../protocol/ImageUpload.ts";
 import { randomUUID } from "./platform.ts";
+import { restoredDraft } from "./request_forms.ts";
 
 export interface DraftContent { text: string; images: ImageUpload[]; options?: Record<string, unknown> }
 export interface StoredDraft {
   id: string; conversation: string; revision: number; text: string; attachment: string | null;
   imageCount: number; bytes: number; updated: number; options?: Record<string, unknown>;
 }
+export interface SendingMessage { rid: string; conversation: string; tab: string | null; text: string; images: ImageUpload[]; sent: number }
 const MAX_DRAFTS = 64;
 const MAX_BYTES = 128 * 1024 * 1024;
+const TAB_LOCK = "shore.draft.tab.";
 let database: Promise<IDBDatabase> | undefined;
 let ownership: Promise<boolean> | undefined;
+let tab: string | null = null;
 const claimedDrafts = new Set<string>();
+const sendingHere = new Set<string>();
 const sessions = new Map<string, BrowserDraft>();
 const unsavedDrafts = new Set<BrowserDraft>();
 let watchingUnload = false;
@@ -31,15 +36,16 @@ function separateClonedTab(): Promise<boolean> {
     const owner = prior ?? randomUUID();
     if (navigator.locks === undefined) return true;
     const claim = async (id: string): Promise<boolean> => await new Promise((resolve, reject) => {
-      void navigator.locks.request(`shore.draft.tab.${id}`, { ifAvailable: true }, async (lock) => {
+      void navigator.locks.request(`${TAB_LOCK}${id}`, { ifAvailable: true }, async (lock) => {
         resolve(lock !== null);
         if (lock !== null) await new Promise<void>(() => {});
       }).catch(reject);
     });
-    if (await claim(owner)) { sessionStorage.setItem("shore.draft.tab", owner); return false; }
+    if (await claim(owner)) { sessionStorage.setItem("shore.draft.tab", owner); tab = owner; return false; }
     const fresh = randomUUID();
     await claim(fresh);
     sessionStorage.setItem("shore.draft.tab", fresh);
+    tab = fresh;
     return true;
   })();
   return ownership;
@@ -48,10 +54,12 @@ function separateClonedTab(): Promise<boolean> {
 function open(): Promise<IDBDatabase> {
   database ??= new Promise<IDBDatabase>((resolve, reject) => {
     let blocked = false;
-    const request = indexedDB.open("shore-drafts", 1);
+    const request = indexedDB.open("shore-drafts", 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore("drafts", { keyPath: "id" });
-      request.result.createObjectStore("attachments");
+      const stores = request.result.objectStoreNames;
+      if (!stores.contains("drafts")) request.result.createObjectStore("drafts", { keyPath: "id" });
+      if (!stores.contains("attachments")) request.result.createObjectStore("attachments");
+      if (!stores.contains("sending")) request.result.createObjectStore("sending", { keyPath: "rid" });
     };
     request.onerror = () => { database = undefined; reject(request.error ?? new Error("Draft storage unavailable")); };
     request.onblocked = () => { blocked = true; reject(new Error("Close older Shore tabs to open draft storage")); };
@@ -119,6 +127,41 @@ export async function discardDraft(record: StoredDraft): Promise<void> {
   });
 }
 
+class SendingTaken extends Error {
+  constructor() { super("Another tab already put this message back in its message box"); }
+}
+
+async function readSending(rid: string): Promise<SendingMessage | undefined> {
+  const db = await open();
+  return await result(db.transaction("sending").objectStore("sending").get(rid)) as SendingMessage | undefined;
+}
+
+export async function forgetSending(rid: string): Promise<void> {
+  sendingHere.delete(rid);
+  const db = await open();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("sending", "readwrite", { durability: "strict" });
+    tx.objectStore("sending").delete(rid);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error("Could not update the sent message"));
+  });
+}
+
+export function handOverSending(rid: string): void { sendingHere.delete(rid); }
+
+export async function unclaimedSending(): Promise<SendingMessage[]> {
+  await separateClonedTab();
+  const db = await open();
+  const rows = (await result(db.transaction("sending").objectStore("sending").getAll()) as SendingMessage[]).filter((row) => !sendingHere.has(row.rid));
+  if (rows.length === 0 || navigator.locks === undefined) return rows;
+  const held = new Set(((await navigator.locks.query()).held ?? []).map((lock) => lock.name));
+  return rows.filter((row) => row.tab === null || row.tab === tab || !held.has(`${TAB_LOCK}${row.tab}`));
+}
+
+export async function withSendingLock<T>(work: () => Promise<T>): Promise<T> {
+  return navigator.locks === undefined ? await work() : await navigator.locks.request("shore.draft.sending", work);
+}
+
 export class BrowserDraft {
   #id: string = randomUUID();
   #revision = 0;
@@ -158,14 +201,39 @@ export class BrowserDraft {
     return { text: "", images: [] };
   }
 
-  save(content: DraftContent): Promise<void> {
+  save(content: DraftContent): Promise<void> { return this.#save(content); }
+
+  send(rid: string, sent: DraftContent): Promise<void> {
+    sendingHere.add(rid);
+    const message: SendingMessage = { rid, conversation: this.conversation, tab, text: sent.text, images: sent.images, sent: Date.now() };
+    return this.#save({ ...sent, text: "", images: [] }, { put: message });
+  }
+
+  async restore(rid: string, fallback?: DraftContent): Promise<{ restored: boolean; dropped: number }> {
+    const loaded = await this.load();
+    const stored = fallback === undefined ? await readSending(rid) : await readSending(rid).catch(() => undefined);
+    const sent = stored ?? fallback;
+    if (sent === undefined) { sendingHere.delete(rid); return { restored: false, dropped: 0 }; }
+    const before = this.#current ?? loaded;
+    const { content, dropped } = restoredDraft(sent, before);
+    try { await this.#save(content, stored === undefined ? undefined : { take: rid }); } catch (error) {
+      if (!(error instanceof SendingTaken)) throw error;
+      sendingHere.delete(rid);
+      if (this.#current === content) await this.#save(before);
+      return { restored: false, dropped: 0 };
+    }
+    sendingHere.delete(rid);
+    return { restored: true, dropped };
+  }
+
+  #save(content: DraftContent, sending?: { put?: SendingMessage; take?: string }): Promise<void> {
     this.#current = content;
     const sequence = ++this.#sequence;
     this.#saving = true;
     unsavedDrafts.add(this);
     const saved = this.#queue.then(async () => {
       try {
-        await this.#write(content);
+        await this.#write(content, sending);
         if (sequence === this.#sequence) unsavedDrafts.delete(this);
       } finally {
         if (sequence === this.#sequence) {
@@ -189,17 +257,20 @@ export class BrowserDraft {
 
   get unsaved(): boolean { return unsavedDrafts.has(this); }
 
-  async #write(content: DraftContent): Promise<void> {
+  async #write(content: DraftContent, sending?: { put?: SendingMessage; take?: string }): Promise<void> {
     const db = await open();
     const bytes = JSON.stringify(content.options ?? {}).length * 2 + content.text.length * 2 + content.images.reduce((sum, image) => sum + (image.data.length + image.filename.length + (image.mime_type?.length ?? 0)) * 2, 0);
     if (bytes > MAX_BYTES) throw new Error("This draft exceeds the 128 MiB browser storage limit");
     const saved = await new Promise<StoredDraft | undefined>((resolve, reject) => {
-      const tx = db.transaction(["drafts", "attachments"], "readwrite", { durability: "strict" });
+      const tx = db.transaction(["drafts", "attachments", "sending"], "readwrite", { durability: "strict" });
       let failure: Error | undefined;
       let next: StoredDraft | undefined;
+      const unsent = tx.objectStore("sending");
+      const taken = sending?.take === undefined ? undefined : unsent.get(sending.take);
       const all = tx.objectStore("drafts").getAll();
       all.onsuccess = () => {
         try {
+          if (taken !== undefined && taken.result === undefined) throw new SendingTaken();
           const rows = all.result as StoredDraft[];
           const previous = rows.find((row) => row.id === this.#id);
           const conflict = (previous?.revision ?? 0) !== this.#revision;
@@ -218,6 +289,8 @@ export class BrowserDraft {
             remaining.push(next);
           } else if (!conflict) tx.objectStore("drafts").delete(id);
           cleanAttachments(tx, remaining);
+          if (sending?.put !== undefined) unsent.put(sending.put);
+          if (sending?.take !== undefined) unsent.delete(sending.take);
         } catch (error) { failure = error instanceof Error ? error : new Error(String(error)); tx.abort(); }
       };
       tx.oncomplete = () => resolve(next);

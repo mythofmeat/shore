@@ -6,12 +6,18 @@ import schemas from "./schemas.generated.json" with { type: "json" };
 
 export type { OperationInput, OperationName, OperationResult } from "./types.ts";
 
-const validator = contractValidator();
+let validator: ReturnType<typeof contractValidator> | undefined;
 
-const contracts = new Map<string, { input: ValidateFunction; output: ValidateFunction; schemas: typeof schemas[number] }>();
+const contracts = new Map<string, { schemas: typeof schemas[number]; input?: ValidateFunction; output?: ValidateFunction }>();
 for (const schema of schemas) {
   if (contracts.has(schema.name)) throw new Error(`Duplicate operation contract: ${schema.name}`);
-  contracts.set(schema.name, { input: validator.compile(schema.input), output: validator.compile(schema.output), schemas: schema });
+  contracts.set(schema.name, { schemas: schema });
+}
+
+function check(name: string, kind: "input" | "output"): ValidateFunction {
+  const contract = contracts.get(name);
+  if (contract === undefined) throw new Error(`Missing operation contract: ${name}`);
+  return contract[kind] ??= (validator ??= contractValidator()).compile(contract.schemas[kind]);
 }
 
 export function operationSchema(name: OperationName): typeof schemas[number] {
@@ -28,17 +34,15 @@ function violation(errors: ErrorObject[] | null | undefined): string {
 }
 
 export function parseOperationInput<N extends OperationName>(name: N, input: unknown): OperationInput<N> {
-  const contract = contracts.get(name);
-  if (contract === undefined) throw new Error(`Missing operation contract: ${name}`);
+  const valid = check(name, "input");
   const value: unknown = input ?? {};
-  if (!contract.input(value)) throw invalidRequest(violation(contract.input.errors));
+  if (!valid(value)) throw invalidRequest(violation(valid.errors));
   return value as OperationInput<N>;
 }
 
 export function parseOperationResult<N extends OperationName>(name: N, result: unknown): OperationResult<N> {
-  const contract = contracts.get(name);
-  if (contract === undefined) throw new Error(`Missing operation contract: ${name}`);
-  if (!contract.output(result)) throw internalError(`Invalid result for ${name}: ${violation(contract.output.errors)}`);
+  const valid = check(name, "output");
+  if (!valid(result)) throw internalError(`Invalid result for ${name}: ${violation(valid.errors)}`);
   return result as OperationResult<N>;
 }
 

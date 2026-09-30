@@ -271,6 +271,20 @@
   background: var(--danger);
 }
 
+.budget-chip-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.budget-chip-window.warning {
+  color: var(--danger);
+}
+
+.budget-chip-window.warning .budget-chip-bar span {
+  background: var(--danger);
+}
+
 .usage-controls {
   display: flex;
   flex-wrap: wrap;

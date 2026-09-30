@@ -1,4 +1,4 @@
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import { recordProviderEvent } from "../provider_events.ts";
 import { retryToolStream } from "../tool_loop.ts";
 import { ToolLoopStop } from "../tool_loop_control.ts";
@@ -14,6 +14,7 @@ import {
   type SessionStore,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { BetaMessage, BetaRawMessageStreamEvent } from "@anthropic-ai/sdk/resources/beta/messages";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
 
 import { shoreLog } from "../../log.ts";
@@ -42,6 +43,8 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
+import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
+import { claudePlanUsageEnvironment, fetchClaudePlanLimits, type ClaudePlanUsageQuery } from "../claude_plan_limits.ts";
 import { cacheTtlTier } from "../cache_capability.ts";
 import { hostZone } from "../../ledger/zoned.ts";
 import {
@@ -422,6 +425,7 @@ function endsATurn(event: RawMessageStreamEvent): boolean {
 function captureAgentEvent(msg: SDKMessage): void {
   if (msg.type === "rate_limit_event") {
     recordProviderEvent("claude_agent", msg);
+    observeClaudeRateLimit(msg.rate_limit_info);
   } else if (msg.type === "result") {
     recordProviderEvent("claude_agent", {
       type: msg.type,
@@ -449,6 +453,47 @@ function captureAgentEvent(msg: SDKMessage): void {
   }
 }
 
+const SYNTHETIC_MODEL = "<synthetic>";
+
+function* unstreamedEvents(message: BetaMessage): Generator<BetaRawMessageStreamEvent> {
+  yield { type: "message_start", message: { ...message, content: [], stop_reason: null, stop_sequence: null, stop_details: null } };
+  for (const [index, block] of message.content.entries()) {
+    switch (block.type) {
+      case "text":
+        yield { type: "content_block_start", index, content_block: { type: "text", text: "", citations: null } };
+        yield { type: "content_block_delta", index, delta: { type: "text_delta", text: block.text } };
+        break;
+      case "thinking":
+        yield { type: "content_block_start", index, content_block: { type: "thinking", thinking: "", signature: "" } };
+        yield { type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: block.thinking, estimated_tokens: null } };
+        yield { type: "content_block_delta", index, delta: { type: "signature_delta", signature: block.signature } };
+        break;
+      case "redacted_thinking":
+        yield { type: "content_block_start", index, content_block: block };
+        break;
+      case "tool_use":
+        yield { type: "content_block_start", index, content_block: { ...block, input: {} } };
+        yield { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input) } };
+        break;
+      default:
+        continue;
+    }
+    yield { type: "content_block_stop", index };
+  }
+  yield {
+    type: "message_delta",
+    context_management: message.context_management,
+    delta: {
+      container: message.container,
+      stop_details: message.stop_details,
+      stop_reason: message.stop_reason,
+      stop_sequence: message.stop_sequence,
+    },
+    usage: message.usage,
+  };
+  yield { type: "message_stop" };
+}
+
 async function* rawEventsOf(
   run: AsyncIterable<SDKMessage>,
   seen: SdkTurnFacts,
@@ -457,6 +502,13 @@ async function* rawEventsOf(
 ): AsyncIterable<RawMessageStreamEvent> {
   const toolStarts = new Map<string, Extract<RawMessageStreamEvent, { type: "content_block_start" }>>();
   const streamedToolIndexes = new Set<number>();
+  const startedMessages = new Set<string>();
+  async function* emit(event: RawMessageStreamEvent): AsyncIterable<RawMessageStreamEvent> {
+    if (endsATurn(event)) seen.sawStopReason = true;
+    if (event.type === "message_start" && onRoundStart !== undefined) await onRoundStart();
+    yield event;
+    if (event.type === "message_stop") await onRoundEnd?.();
+  }
   for await (const msg of run) {
     captureAgentEvent(msg);
     const sid = (msg as { session_id?: string }).session_id;
@@ -472,6 +524,11 @@ async function* rawEventsOf(
 
     if (msg.type === "assistant") {
       noteAssistant(seen, msg.message.id, msg.uuid);
+      if (!startedMessages.has(msg.message.id) && msg.error === undefined && msg.message.model !== SYNTHETIC_MODEL) {
+        startedMessages.add(msg.message.id);
+        for (const event of unstreamedEvents(msg.message)) yield* emit(event as RawMessageStreamEvent);
+        continue;
+      }
       for (const block of msg.message.content) {
         if (block.type !== "tool_use") continue;
         const start = toolStarts.get(block.id);
@@ -490,6 +547,7 @@ async function* rawEventsOf(
     if (msg.type === "stream_event") {
       const event = msg.event as RawMessageStreamEvent;
       if (event.type === "message_start") {
+        startedMessages.add(event.message.id);
         toolStarts.clear();
         streamedToolIndexes.clear();
       }
@@ -498,10 +556,7 @@ async function* rawEventsOf(
         streamedToolIndexes.add(event.index);
       }
       if ("index" in event && streamedToolIndexes.has(event.index)) continue;
-      if (endsATurn(event)) seen.sawStopReason = true;
-      if (event.type === "message_start" && onRoundStart !== undefined) await onRoundStart();
-      yield event;
-      if (event.type === "message_stop") await onRoundEnd?.();
+      yield* emit(event);
       continue;
     }
 
@@ -669,25 +724,39 @@ async function keepaliveUsage(run: AsyncIterable<SDKMessage>): Promise<Usage> {
 export interface ClaudeAgentDeps {
   runQuery?: AgentQuery;
   bookPath?: () => string;
+  planQuery?: ClaudePlanUsageQuery;
 }
 
 export class ClaudeAgentProvider implements SidecarProvider {
   readonly #runQuery: AgentQuery;
   readonly #bookPath: () => string;
+  readonly #planQuery: ClaudePlanUsageQuery | undefined;
 
   constructor(deps: ClaudeAgentDeps = {}) {
     this.#runQuery = deps.runQuery ?? query;
     this.#bookPath = deps.bookPath ?? bookPath;
+    this.#planQuery = deps.planQuery;
+  }
+
+  planLimits(): Promise<ClaudePlanPoll | undefined> {
+    const planQuery = this.#planQuery;
+    if (planQuery === undefined) return Promise.resolve(undefined);
+    return fetchClaudePlanLimits(planQuery, claudePlanUsageEnvironment(claudeAgentEnvironment()));
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    const prepared = withSystemInstructions(await limitRequestImages(req));
     req = prepared.request;
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
-    const blocks = new BlockAssembler();
+    let blocks = new BlockAssembler();
     const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
+    const restartRound = (): Promise<void> => {
+      blocks = new BlockAssembler();
+      acc.text = "";
+      return Promise.resolve();
+    };
 
     const path = this.#bookPath();
     const key = conversationKey(req);
@@ -708,12 +777,13 @@ export class ClaudeAgentProvider implements SidecarProvider {
 
       const run = this.#runQuery({ prompt: agentPrompt(native, prepared.instructions), options: buildOptions(req, native, abort) });
 
-      for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
+      for await (const event of anthropicContentEvents(rawEventsOf(run, seen, restartRound), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
         blocks.absorb(event);
         yield event;
       }
 
+      const finalBlocks = blocks.finish();
       if (seen.sessionId !== undefined) {
         writeSession(path, key, {
           version: SESSION_BOOK_VERSION,
@@ -725,7 +795,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
             ? {}
             : {
                 pendingAssistantUuids: seen.assistantUuids,
-                pendingAssistantHashes: [messageHash({ role: "assistant", content: blocks.finish() })],
+                pendingAssistantHashes: [messageHash({ role: "assistant", content: finalBlocks })],
               }),
         }, { record });
       }
@@ -736,6 +806,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
         type: "done",
         content: acc.text,
         finish_reason: finishReasonOf(seen, acc.stopReason),
+        content_blocks: finalBlocks,
         usage: seen.usage ?? acc.usage,
         ...(context === undefined ? {} : { context_usage: context }),
         timing: {
@@ -790,8 +861,8 @@ export class ClaudeAgentProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     if (req.context?.call_type === "keepalive") return await this.#keepalive(req, signal);
-    const blocks = new BlockAssembler();
     let content = "";
+    let content_blocks: ContentBlock[] = [];
     let finish_reason = "end_turn";
     let usage = emptyUsage();
     let timing = { total_ms: 0, time_to_first_token_ms: 0 };
@@ -799,19 +870,18 @@ export class ClaudeAgentProvider implements SidecarProvider {
     for await (const event of this.stream(req, signal)) {
       if (event.type === "done") {
         content = event.content;
+        content_blocks = (event.content_blocks ?? []) as ContentBlock[];
         finish_reason = event.finish_reason;
         usage = event.usage;
         timing = event.timing;
       } else if (event.type === "error") {
         throw new Error(event.message);
-      } else {
-        blocks.absorb(event);
       }
     }
 
     return {
       content,
-      content_blocks: blocks.finish(),
+      content_blocks,
       finish_reason,
       usage,
       timing,
@@ -973,18 +1043,19 @@ class RoundLog {
   }
 
   async close(acc: TurnAccumulator): Promise<void> {
-    if (this.#turn === undefined) return;
-    if (!this.#finished) {
-      if (this.#results.length > 0) await this.finishTools();
-      else await this.#phase.afterTurn?.(this.#turn);
+    if (this.#turn !== undefined) {
+      if (!this.#finished) {
+        if (this.#results.length > 0) await this.finishTools();
+        else await this.#phase.afterTurn?.(this.#turn);
+      }
+      this.#results = [];
+      this.#claimed.clear();
+      this.#turn = undefined;
+      this.#finished = false;
+      this.#failure = undefined;
+      this.#ready = new Promise((resolve) => { this.#resolveReady = resolve; });
     }
     this.#assembler = new BlockAssembler();
-    this.#results = [];
-    this.#claimed.clear();
-    this.#turn = undefined;
-    this.#finished = false;
-    this.#failure = undefined;
-    this.#ready = new Promise((resolve) => { this.#resolveReady = resolve; });
     acc.text = "";
   }
 
@@ -1006,7 +1077,7 @@ export async function* claudeAgentToolLoopEvents(
   deps: ClaudeAgentDeps = {},
   options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
-  req = await prepareRequestImages(req);
+  req = await limitRequestImages(req);
   const defs = req.tools ?? [];
   if (defs.length === 0) {
     yield* new ClaudeAgentProvider(deps).stream(req, signal);
@@ -1062,7 +1133,7 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
-    const prepared = withSystemInstructions(await prepareRequestImages(req));
+    const prepared = withSystemInstructions(await limitRequestImages(req));
     Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
     const native = await withNativeHistory(plan, req, path, key, record);

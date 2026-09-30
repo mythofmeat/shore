@@ -27,6 +27,7 @@ import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
 import { toolLimitsFrom, type ToolContext } from "../../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../../tools/execute.ts";
+import { imageLimitsFor, type ImageLimits } from "../../llm/prepare_images.ts";
 import { schemasFrom } from "../../tools/validate.ts";
 import {
   ensureWorkspaceGitRepoBestEffort,
@@ -453,16 +454,22 @@ async function resolveDeps(
       ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     }),
     markdownStore,
-    tools: compactionTools(toolCtx, effective, tools),
+    tools: compactionTools(toolCtx, effective, tools, imageLimitsFor(model.sdk, model.modelId)),
     maxToolIterations: model.maxToolIterations,
   };
 }
 
-function compactionTools(ctx: ToolContext, config: LoadedConfig, tools: readonly ToolDefinition[] | undefined): CompactionTools {
+function compactionTools(
+  ctx: ToolContext,
+  config: LoadedConfig,
+  tools: readonly ToolDefinition[] | undefined,
+  imageLimits: ImageLimits,
+): CompactionTools {
   const exec: ToolExecution = {
     sendDirect: () => {},
     ctx,
     limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+    imageLimits,
     now: () => new Date().toISOString(),
     newMessageId: () => `m_${crypto.randomUUID()}`,
     schemas: schemasFrom(tools),

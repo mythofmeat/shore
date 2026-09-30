@@ -28,7 +28,7 @@ export function turnsWithinReserve(
   let turns = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = required(messages[i]);
-    used += estimateTokens(msg.content);
+    used += msg.tokens ?? estimateTokens(msg.content);
     if (used > reserveTokens) break;
     if (isRealUserTurn(msg)) turns += 1;
   }

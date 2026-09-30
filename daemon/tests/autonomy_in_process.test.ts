@@ -28,6 +28,7 @@ import { testTmp } from "./support/tmp.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { interpretResult } from "../src/mcp/client.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -1032,13 +1033,13 @@ test.each([false, true])("compaction uses Bash deletion and keeps dry runs inert
   if (outcome?.kind === "dry_run") {
     expect(outcome.fileOpsPreview).toEqual([]);
     expect(await readFile(join(workspace, "projects/obsolete.md"), "utf8")).toBe("old context");
-    expect(readFile(join(workspace, "projects/current.md"))).rejects.toThrow();
-    expect(readdir(trash)).rejects.toThrow();
-    expect(readdir(join(workspace, ".git"))).rejects.toThrow();
+    expect(await outcomeOf(readFile(join(workspace, "projects/current.md")))).toThrow();
+    expect(await outcomeOf(readdir(trash))).toThrow();
+    expect(await outcomeOf(readdir(join(workspace, ".git")))).toThrow();
   } else {
-    expect(readFile(join(workspace, "projects/obsolete.md"))).rejects.toThrow();
+    expect(await outcomeOf(readFile(join(workspace, "projects/obsolete.md")))).toThrow();
     expect(await readFile(join(workspace, "projects/current.md"), "utf8")).toBe("current context");
-    expect(readdir(trash)).rejects.toThrow();
+    expect(await outcomeOf(readdir(trash))).toThrow();
   }
 });
 
@@ -1089,7 +1090,7 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
     config, generate: compactionGenerate({ config, providers: { anthropic: firstProvider } }),
   }, { keepTurnsOverride: 0 });
   expect(first?.kind).toBe("paused");
-  expect(readFile(path)).rejects.toThrow();
+  expect(await outcomeOf(readFile(path))).toThrow();
   const operations = join(workspace, "operations");
   const before = await readFile(operations, "utf8");
   if (recreate) await writeFile(path, "new user context");

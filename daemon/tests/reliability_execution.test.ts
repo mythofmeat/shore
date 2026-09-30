@@ -9,6 +9,7 @@ import { McpClient } from "../src/mcp/client.ts";
 import { handleBash } from "../src/tools/bash.ts";
 import { runProcess } from "../src/tools/workspace.ts";
 import { executeDiceRoll, MAX_DICE_COUNT } from "../src/tools/basic.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const TOOL = "mcp__audit__optional";
 const usage = { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 };
@@ -122,7 +123,7 @@ test("cancelled Git requests do not start a command", async () => {
   await mkdir(workspace);
   const parent = new AbortController();
   parent.abort();
-  expect(handleBash({ command: "git status" }, workspace, "ada", parent.signal)).rejects.toThrow();
+  expect(await outcomeOf(handleBash({ command: "git status" }, workspace, "ada", parent.signal))).toThrow();
 });
 
 test("Git output is bounded while the process is read", async () => {

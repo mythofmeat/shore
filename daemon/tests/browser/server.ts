@@ -73,6 +73,7 @@ const provider: SidecarProvider = {
     if (request.context?.call_type === "subagent") { yield* toolFixture(request, signal); return; }
     generation += 1;
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
+    if (question.includes("fail this reply")) throw Object.assign(new Error("Fixture reply failure"), { status: 400 });
     yield { type: "start", model: request.model };
     yield { type: "thinking", text: "Considering the question" };
     if (question.includes("long live preview fixture")) {
@@ -100,6 +101,24 @@ const provider: SidecarProvider = {
         yield { type: "text", text: "Tool image ready" };
         await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
       }
+      return;
+    }
+    const looped = request.messages.at(-1)?.content.flatMap((block) => block.type === "tool_result" && block.tool_use_id.startsWith("loop-") ? [block.tool_use_id] : []) ?? [];
+    if (question.includes("tool loop fixture") || looped.length > 0) {
+      const asked = request.messages.findLast((message) => message.role === "user" && message.content.some((block) => block.type === "text"))?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
+      const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      if (!looped.includes("loop-2")) {
+        const id = looped.includes("loop-1") ? "loop-2" : "loop-1";
+        yield { type: "tool_use", id, name: "bash", input: { command: `echo ${id}` } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+        return;
+      }
+      yield { type: "text", text: "Found both notes." };
+      if (asked.includes("hold")) {
+        await new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+        return;
+      }
+      yield { type: "done", content: "Found both notes.", finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
       return;
     }
     if (question.includes("run worker display fixture")) {

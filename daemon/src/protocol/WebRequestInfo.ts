@@ -3,4 +3,4 @@ import type { Error } from "./Error";
 import type { OperationResponse } from "./OperationResponse";
 import type { WebRequestPhase } from "./WebRequestPhase";
 
-export type WebRequestInfo = { id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, result?: OperationResponse, result_omitted: boolean, error?: Error, };
+export type WebRequestInfo = { id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, accepted?: boolean, result?: OperationResponse, result_omitted: boolean, error?: Error, };

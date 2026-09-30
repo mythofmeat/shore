@@ -4,7 +4,6 @@ import type { Definition, Image, ImageReference, Nodes } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { readBoundedFile } from "./file_access.ts";
 import { MAX_INLINE_TOOL_IMAGES, MAX_LISTED_MEDIA_NOTES, carryToolMedia, type ToolResultPayload } from "./media.ts";
-import { MAX_PREPARED_IMAGE_BYTES } from "../llm/prepare_images.ts";
 import { base64Bytes } from "../util/base64.ts";
 import { readImageAt } from "./read_image.ts";
 
@@ -52,7 +51,7 @@ function overBudgetNote(urls: readonly string[], maxImageBytes: number): string 
   return `[Markdown image(s) ${listed}${more} not read: ${reason}]`;
 }
 
-export async function expandMarkdownImages(file: FileHandle, path: string, page: TextPage, maxImageBytes: number, signal?: AbortSignal): Promise<unknown> {
+export async function expandMarkdownImages(file: FileHandle, path: string, page: TextPage, maxImageBytes: number, preparedImageBytes: number, signal?: AbortSignal): Promise<unknown> {
   if (page.ranges.length === 0) return page.output;
   const notes: string[] = [];
   const payload: ToolResultPayload = { value: page.output, media: [], extra: [], notes };
@@ -64,7 +63,7 @@ export async function expandMarkdownImages(file: FileHandle, path: string, page:
     const failures: string[] = [];
     const overBudget: string[] = [];
     const budget = { remaining: maxImageBytes };
-    const bytesAfterResize = (size: number) => Math.min(size, MAX_PREPARED_IMAGE_BYTES);
+    const bytesAfterResize = (size: number) => Math.min(size, preparedImageBytes);
     const fits = (size: number) => bytesAfterResize(size) <= budget.remaining;
     for (const { node, url } of imageNodes(source, page)) {
       signal?.throwIfAborted();

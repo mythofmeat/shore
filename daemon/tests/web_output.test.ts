@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { htmlToText } from "../src/tools/html_text.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
 import { handleFetchUrl, MAX_BODY_BYTES, type FetchLike } from "../src/tools/web.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const url = "https://example.com/page";
 const policy = { lookup: async () => ["93.184.216.34"] };
@@ -77,7 +78,7 @@ describe("web pagination", () => {
 
   test.each([0, -1, 1.5, "2"])("rejects invalid pagination value %p", async (value) => {
     for (const field of ["offset", "limit"]) {
-      expect(handleFetchUrl({ url, [field]: value }, response(""), undefined, policy)).rejects.toThrow(`${field} must be a positive integer`);
+      expect(await outcomeOf(handleFetchUrl({ url, [field]: value }, response(""), undefined, policy))).toThrow(`${field} must be a positive integer`);
     }
   });
 });

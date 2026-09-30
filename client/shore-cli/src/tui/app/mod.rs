@@ -307,6 +307,7 @@ pub(crate) struct App {
     pub pending_history_page: Option<String>,
     pub entries: Vec<ConversationEntry>,
     pub stream: StreamState,
+    pub replaced: Replaced,
     pub input: InputState,
     pub completion: CompletionState,
     pub alt_picker: Option<AltPickerState>,
@@ -363,6 +364,7 @@ pub(crate) struct App {
     pub output_pager: Option<OutputPager>,
     pub keymap: crate::tui::keymap::Keymap,
     pub usage_budgets: Vec<UsageBudget>,
+    pub plan_limits: Option<Vec<PlanLimit>>,
     pub pending_images: Vec<String>,
     pub paste_temp_paths: Vec<std::path::PathBuf>,
     pub editing_ref: Option<String>,
@@ -392,6 +394,7 @@ impl Default for App {
             pending_history_page: None,
             entries: Vec::new(),
             stream: StreamState::default(),
+            replaced: Replaced::default(),
             input: InputState::default(),
             completion: CompletionState::default(),
             alt_picker: None,
@@ -453,6 +456,7 @@ impl Default for App {
             output_pager: None,
             keymap: crate::tui::keymap::Keymap::default(),
             usage_budgets: Vec::new(),
+            plan_limits: None,
             pending_images: Vec::new(),
             paste_temp_paths: Vec::new(),
             editing_ref: None,
@@ -493,6 +497,7 @@ impl App {
             let _ = self.retired_streams.insert(rid);
         }
         self.abort_stream();
+        self.replaced = Replaced::default();
         self.request_epoch = self.request_epoch.wrapping_add(1);
         self.pending_navigation = None;
         self.pending_history_page = None;
@@ -826,7 +831,7 @@ impl App {
         ) {
             let _ = self.entries.pop();
         }
-        self.stream.reset();
+        self.end_unfinished_stream();
     }
 
     pub(crate) fn fail_stream(&mut self) {
@@ -844,6 +849,13 @@ impl App {
         if remove_empty {
             let _ = self.entries.pop();
         }
+        self.end_unfinished_stream();
+    }
+
+    fn end_unfinished_stream(&mut self) {
+        if self.stream.regen {
+            self.replaced = Replaced::default();
+        }
         self.stream.reset();
     }
 
@@ -851,21 +863,7 @@ impl App {
         self.stream.reset();
         self.stream.active = true;
         self.stream.regen = true;
-        let tail = self
-            .entries
-            .iter()
-            .rposition(|entry| match entry {
-                ConversationEntry::Turn(turn) => turn.is_real_user_turn(),
-                ConversationEntry::ArchiveBoundary { .. } => true,
-                ConversationEntry::System { .. } => false,
-            })
-            .map_or(0, |index| index.saturating_add(1));
-        self.stream.replacing = self
-            .entries
-            .iter()
-            .skip(tail)
-            .filter_map(|entry| entry.msg_id().map(str::to_owned))
-            .collect();
+        self.replaced = Replaced::tail_of(&self.entries);
         self.spinner_frame = 0;
         self.scroll_to_bottom();
     }
@@ -1539,6 +1537,32 @@ impl App {
                 pace: b.get("pace").and_then(usage_level_from_json),
             })
             .collect();
+        if data.get("mode").and_then(serde_json::Value::as_str) == Some("budget") {
+            self.plan_limits = data
+                .get("claude_plan_limits")
+                .and_then(plan_limits_from_json);
+        }
+    }
+
+    pub(crate) fn apply_plan_limit_warning(
+        &mut self,
+        window: PlanWindow,
+        level: UsageLevel,
+    ) -> bool {
+        let Some(limit) = self
+            .plan_limits
+            .as_mut()
+            .and_then(|limits| limits.iter_mut().find(|limit| limit.window == window))
+        else {
+            return false;
+        };
+        limit.level = level;
+        true
+    }
+
+    pub(crate) fn clear_usage_limits(&mut self) {
+        self.usage_budgets.clear();
+        self.plan_limits = None;
     }
 
     pub(crate) fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {

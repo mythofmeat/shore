@@ -12,6 +12,7 @@ import {
 import { handleActivityHeatmap } from "../src/tools/activity.ts";
 import type { ActivityStats, HourClassification } from "../src/autonomy/activity.ts";
 import { handleModelHistory, kindFor, utcBound } from "../src/tools/model_history.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const fx = fixture as unknown as {
   parse_dice_notation: {
@@ -320,25 +321,25 @@ describe("handleModelHistory", () => {
   ];
 
   test("no ledger reports io, not not-implemented", async () => {
-    expect(handleModelHistory({}, "frank", undefined)).rejects.toThrow(
+    expect(await outcomeOf(handleModelHistory({}, "frank", undefined))).toThrow(
       "io: the usage ledger is not available in this context",
     );
   });
 
   test("an empty character is an argument error", async () => {
-    expect(handleModelHistory({}, "", async () => [])).rejects.toThrow(
+    expect(await outcomeOf(handleModelHistory({}, "", async () => []))).toThrow(
       "invalid args: model history is not configured",
     );
   });
 
   test("a reversed range is rejected", async () => {
     expect(
-      handleModelHistory(
+      await outcomeOf(handleModelHistory(
         { start_time: "2026-06-01T00:00:00Z", end_time: "2026-05-01T00:00:00Z" },
         "frank",
         async () => [],
-      ),
-    ).rejects.toThrow("invalid args: start_time must be before or equal to end_time");
+      )),
+    ).toThrow("invalid args: start_time must be before or equal to end_time");
   });
 
   test("the range check runs on the rebased bounds", async () => {

@@ -112,6 +112,29 @@
         "unicorn/no-process-exit": "off",
         "typescript/no-explicit-any": "error"
       }
+    },
+    {
+      "files": [
+        "tests/**/*.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "property": "rejects",
+            "message": "Bun waits for the promise inside the matcher, where the test's timeout cannot stop it, so a promise that never settles hangs bun test. Use expect(await outcomeOf(promise)).toThrow(...) or expect(await rejectionOf(promise)) from tests/support/outcome.ts."
+          },
+          {
+            "property": "resolves",
+            "message": "Bun waits for the promise inside the matcher, where the test's timeout cannot stop it, so a promise that never settles hangs bun test. Use expect(await promise)."
+          },
+          {
+            "object": "expect",
+            "property": "extend",
+            "message": "Bun waits for the promise a matcher returns inside the matcher, where the test's timeout cannot stop it, so an async matcher whose promise never settles hangs bun test. Lint cannot tell which matchers return a promise, so none may be registered. Await the value in the test and assert on it with a built-in matcher."
+          }
+        ]
+      }
     }
   ]
 }

@@ -405,7 +405,7 @@ describe("deferred edit annotation", () => {
     const defer = deferEditTo("/data/juniper", async () => {
       throw new Error("disk full");
     });
-    expect(defer("SOUL.md")).resolves.toBeUndefined();
+    expect(await defer("SOUL.md")).toBeUndefined();
   });
 
   test("a path that is not prompt-visible never reaches deferEdit", async () => {

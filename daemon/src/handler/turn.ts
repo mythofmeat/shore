@@ -13,6 +13,7 @@ import { beginCompaction } from "../memory/compaction/manager.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
+import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
 
 export interface TurnEngine {
   readonly thread?: string;
@@ -39,6 +40,7 @@ export interface TurnAutonomy {
 export interface TurnContext {
   emitEvent: (message: ServerMessage) => void;
   sendDirect: (message: ServerMessage) => void;
+  accepted?: () => Promise<void>;
   autonomy: TurnAutonomy;
   now: () => string;
   newMessageId: () => string;
@@ -62,6 +64,7 @@ export async function appendUserTurn(
   body: TurnBody,
   regen: boolean,
   rid: string | null = null,
+  uploadSettings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
 ): Promise<PendingAlt | undefined> {
   if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };
   if (!bodyHasContent(body)) return undefined;
@@ -72,6 +75,7 @@ export async function appendUserTurn(
     body.images,
     body.image_data,
     new Date(ctx.now()),
+    uploadSettings,
   );
 
   const contentBlocks = [...blocks];
@@ -98,6 +102,7 @@ export async function appendUserTurn(
     engine.thread,
     rid,
   );
+  await ctx.accepted?.();
 
   return undefined;
 }

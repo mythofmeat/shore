@@ -359,6 +359,15 @@
             ]
           },
           {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "[heartbeat · Thursday 2026-01-01 · 10:00 AM]"
+              }
+            ]
+          },
+          {
             "role": "assistant",
             "content": [
               {

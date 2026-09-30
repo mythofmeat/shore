@@ -13,6 +13,7 @@ import {
   gitPushWorkspace,
   gitPushWorkspaceBestEffort,
 } from "../src/tools/workspace.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 
@@ -143,7 +144,7 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     writeFileSync(join(workspace, "MEMORY.md"), "# memory\n\n- new\n");
     await gitCommitAll(workspace, "Ada", "memory: compaction");
 
-    expect(gitPushWorkspace(workspace)).rejects.toThrow();
+    expect(await outcomeOf(gitPushWorkspace(workspace))).toThrow();
     expect(await gitPushWorkspaceBestEffort(workspace)).toBeUndefined();
   });
 });

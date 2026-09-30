@@ -10,6 +10,7 @@ import {
   MAX_TOTAL_ATTACHMENT_BYTES,
 } from "../src/swp/admission.ts";
 import { WireError, WireReader } from "../src/swp/framing.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 const upload = (filename: string, data: string) => ({ filename, data, mime_type: "image/png" });
 
@@ -90,7 +91,7 @@ describe("wire array decoding", () => {
     ["non-string capability", { type: "hello", client_type: "tui", client_name: "t", capabilities: [42] }],
   ] as const) {
     test(`rejects ${label}`, async () => {
-      expect(decode(value)).rejects.toBeInstanceOf(WireError);
+      expect(await rejectionOf(decode(value))).toBeInstanceOf(WireError);
     });
   }
 });

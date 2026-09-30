@@ -3,8 +3,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use shore_common::duration::format_duration_ms;
 use shore_common::protocol::server_msg::{
-    ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk,
-    StreamEnd, ToolCall, ToolResult, UsageWarning,
+    ConfigWarning, Phase, PlanLimitWarning, ProviderFallbackWarning, SendImage, ServerMessage,
+    StreamChunk, StreamEnd, ToolCall, ToolResult, UsageWarning,
 };
 use shore_common::protocol::tool_display::{
     format_tool_input_with_limit, format_tool_output_with_limit,
@@ -259,6 +259,14 @@ pub(crate) fn print_usage_warning(w: &UsageWarning) {
     _ = writeln!(out, ": {}", w.message);
 }
 
+pub(crate) fn print_plan_limit_warning(w: &PlanLimitWarning) {
+    let stderr = io::stderr();
+    let mut out = stderr.lock();
+
+    paint_on_stderr(&mut out, Tone::Warn, "warning");
+    _ = writeln!(out, ": {}", w.message);
+}
+
 pub(crate) fn print_config_warning(w: &ConfigWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -284,6 +292,7 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
         }
         ServerMessage::ProviderFallbackWarning(w) => print_provider_fallback_warning(w),
         ServerMessage::UsageWarning(w) => print_usage_warning(w),
+        ServerMessage::PlanLimitWarning(w) => print_plan_limit_warning(w),
         ServerMessage::ConfigWarning(w) => print_config_warning(w),
         ServerMessage::Hello(_)
         | ServerMessage::History(_)
@@ -300,6 +309,7 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
         | ServerMessage::ToolResult(_)
         | ServerMessage::SendImage(_)
         | ServerMessage::CacheWarning(_)
+        | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => {}
     }

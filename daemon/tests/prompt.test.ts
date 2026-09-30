@@ -5,11 +5,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   assemblePrompt,
+  EARLIER_CONVERSATION_NOT_SHOWN,
   renderTemplate,
+  type PromptMessage,
   type PromptParams,
   type UserTimestampMode,
 } from "../src/engine/prompt";
-import type { Message } from "../src/engine/types";
+import type { ContentBlock, Message, Role } from "../src/engine/types";
+import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER, type ImageTier } from "../src/llm/image_tokens.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 import rawFixture from "./engine_captures/prompt.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
@@ -33,6 +37,9 @@ interface AssembleCase {
     user_timestamp_mode: string;
   };
 }
+
+const fromHistory = (messages: readonly PromptMessage[]): PromptMessage[] =>
+  messages[0]?.content === EARLIER_CONVERSATION_NOT_SHOWN ? messages.slice(1) : [...messages];
 
 const opt = (v: string | null): string | undefined => v ?? undefined;
 const optNum = (v: number | null): number | undefined => v ?? undefined;
@@ -123,16 +130,31 @@ describe("assembling the system prompt, over every recorded set of inputs", () =
     }
   });
 
-  test("no message is ever added, only dropped from the front", () => {
+  test("no history is ever added, only dropped from the front", () => {
     for (const c of cases) {
       const params = paramsOf(c);
-      const got = assemblePrompt(params, ZONE);
-      expect(got.messages.length, c.name).toBeLessThanOrEqual(params.messages.length);
-      const kept = got.messages.length;
-      const tail = params.messages.slice(params.messages.length - kept);
-      expect(got.messages.map((m) => m.role), `${c.name}: keeps a suffix`).toEqual(
+      const got = fromHistory(assemblePrompt(params, ZONE).messages);
+      expect(got.length, c.name).toBeLessThanOrEqual(params.messages.length);
+      const tail = params.messages.slice(params.messages.length - got.length);
+      expect(got.map((m) => m.role), `${c.name}: keeps a suffix`).toEqual(
         tail.map((m) => m.role),
       );
+    }
+  });
+
+  test("the prompt never opens on the assistant's turn, which the model reads as the user's", () => {
+    for (const c of cases) {
+      const got = assemblePrompt(paramsOf(c), ZONE).messages;
+      expect(got.find((m) => m.role !== "system")?.role, c.name).not.toBe("assistant");
+    }
+  });
+
+  test("the lead-in is added only when the kept history would open on the assistant's turn", () => {
+    for (const c of cases) {
+      const got = assemblePrompt(paramsOf(c), ZONE).messages;
+      const history = fromHistory(got);
+      const opensOnAssistant = history.find((m) => m.role !== "system")?.role === "assistant";
+      expect(got.length - history.length, c.name).toBe(opensOnAssistant ? 1 : 0);
     }
   });
 
@@ -170,7 +192,7 @@ describe("assembling the system prompt, over every recorded set of inputs", () =
   test("a message is carried through whole, never truncated in the middle", () => {
     for (const c of cases) {
       const params = paramsOf(c);
-      const kept = assemblePrompt(params, ZONE).messages;
+      const kept = fromHistory(assemblePrompt(params, ZONE).messages);
       const originals = params.messages.map((m) => m.content);
       for (const [i, m] of kept.entries()) {
         const original = required(originals[originals.length - kept.length + i]);
@@ -287,5 +309,145 @@ describe("timezone is a parameter, not the host's", () => {
   test("a timestamp with no offset is unparseable, as chrono has it", () => {
     expect(at("2026-04-04T12:00:00", "UTC")).toBe("hi");
     expect(at("2026-04-04", "UTC")).toBe("hi");
+  });
+});
+
+describe("what an image costs the prompt", () => {
+  const picture = (kib: number): ContentBlock => ({
+    type: "image",
+    source: { type: "base64", media_type: "image/jpeg", data: "A".repeat(kib * 1024) },
+  });
+
+  const message = (msg_id: string, role: Role, content_blocks: ContentBlock[]): Message => ({
+    msg_id,
+    role,
+    content: content_blocks.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(""),
+    images: [],
+    content_blocks,
+    timestamp: "2026-09-29T15:05:00Z",
+  });
+
+  const params = (messages: Message[], has_prior_context = false): PromptParams => ({
+    character_name: "char",
+    display_name: "user",
+    has_prior_context,
+    messages,
+    max_context_tokens: 200_000,
+    user_timestamp_mode: "never",
+  });
+
+  test("a tool result full of pictures does not push the rest of the conversation out", () => {
+    const history = [
+      message("u1", "user", [{ type: "text", text: "the photos are in the folder" }]),
+      message("a1", "assistant", [{ type: "tool_use", id: "t1", name: "read", input: { file_path: "photos/1.jpg" } }]),
+      message("u2", "user", [{
+        type: "tool_result",
+        tool_use_id: "t1",
+        content: Array.from({ length: 7 }, () => picture(250)),
+      }]),
+      message("a2", "assistant", [{ type: "text", text: "all three are saved now" }]),
+      message("u3", "user", [{ type: "text", text: "hey, you there?" }]),
+    ];
+    const got = assemblePrompt(params(history), ZONE);
+    expect(got.messages.map((m) => m.role)).toEqual(history.map((m) => m.role));
+  });
+
+  test("screenshots all through a long conversation leave its text in the window", async () => {
+    const shot = (await sizedImage(800, 600)).toString("base64");
+    const history = Array.from({ length: 40 }, (_, i) => [
+      message(`u${String(i)}`, "user", [
+        { type: "text", text: `what about this one? ${String(i)}` },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: shot } },
+      ]),
+      message(`a${String(i)}`, "assistant", [{ type: "text", text: "a".repeat(2_000) }]),
+    ]).flat();
+    const got = assemblePrompt(params(history), ZONE);
+    expect(got.messages).toHaveLength(history.length);
+  });
+
+  test("a model on the standard tier fits more large pictures in the same window", async () => {
+    const screenshot = (await sizedImage(1920, 1080)).toString("base64");
+    const history = Array.from({ length: 10 }, (_, i) =>
+      message(`u${String(i)}`, "user", [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: screenshot } },
+      ]));
+    const kept = (image_tier: ImageTier) => assemblePrompt({
+      ...params(history),
+      system_prompt: "",
+      max_context_tokens: 24_000,
+      max_output_tokens: 0,
+      image_tier,
+    }, ZONE).messages.length;
+    expect(kept(HIGH_RESOLUTION_IMAGE_TIER)).toBe(8);
+    expect(kept(STANDARD_IMAGE_TIER)).toBe(10);
+  });
+
+  test("a window that opens on the assistant's own message is led in, not handed to the user", () => {
+    const history = [
+      message("a1", "assistant", [{ type: "text", text: "made you something" }]),
+      message("u1", "user", [{ type: "text", text: "i love it" }]),
+    ];
+    const got = assemblePrompt(params(history, true), ZONE);
+    expect(got.messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", EARLIER_CONVERSATION_NOT_SHOWN],
+      ["assistant", "made you something"],
+      ["user", "i love it"],
+    ]);
+  });
+});
+
+describe("a heartbeat message in the history", () => {
+  const NEW_YORK = "America/New_York";
+
+  const turn = (msg_id: string, role: Role, text: string, timestamp: string, heartbeat = false): Message => ({
+    msg_id,
+    role,
+    content: text,
+    images: [],
+    content_blocks: [{ type: "text", text }],
+    timestamp,
+    ...(heartbeat ? { origin: "autonomous" as const } : {}),
+  });
+
+  const assembled = (messages: Message[], mode: UserTimestampMode, has_prior_context = false) =>
+    assemblePrompt(
+      { character_name: "char", display_name: "user", has_prior_context, messages, user_timestamp_mode: mode },
+      NEW_YORK,
+    ).messages.map((m) => [m.role, m.content]);
+
+  const goodnight = turn("u1", "user", "goodnight", "2026-09-29T12:00:00Z");
+  const night = turn("a1", "assistant", "night night", "2026-09-29T12:00:30Z");
+  const drew = turn("h1", "assistant", "made you something", "2026-09-29T16:30:00Z", true);
+  const again = turn("h2", "assistant", "are you up yet?", "2026-09-29T20:30:00Z", true);
+  const love = turn("u2", "user", "i love it", "2026-09-29T21:30:00Z");
+
+  test("after the assistant's reply it is a turn of its own, stamped with when it was sent", () => {
+    expect(assembled([goodnight, night, drew, love], "auto")).toEqual([
+      ["user", "goodnight"],
+      ["assistant", "night night"],
+      ["user", "[heartbeat · Tuesday 2026-09-29 · 12:30 PM]"],
+      ["assistant", "made you something"],
+      ["user", "[5 hours later · Tuesday 2026-09-29 · 5:30 PM]\n\ni love it"],
+    ]);
+  });
+
+  test("a window that opens on one opens on its marker, not the generic lead-in", () => {
+    expect(assembled([drew, love], "never", true)).toEqual([
+      ["user", "[heartbeat]"],
+      ["assistant", "made you something"],
+      ["user", "i love it"],
+    ]);
+  });
+
+  test("two in a row are two turns, and with timestamps off the marker only names it", () => {
+    expect(assembled([goodnight, night, drew, again, love], "never")).toEqual([
+      ["user", "goodnight"],
+      ["assistant", "night night"],
+      ["user", "[heartbeat]"],
+      ["assistant", "made you something"],
+      ["user", "[heartbeat]"],
+      ["assistant", "are you up yet?"],
+      ["user", "i love it"],
+    ]);
   });
 });

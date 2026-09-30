@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+"""Mutation pass over how an image is reduced before a model sees it (#268).
+
+Every image the model receives goes through one reducer, with settings chosen
+by where the image came from. A reduction that is wrong in either direction is
+silent: too little and the image costs more tokens and bytes than the user
+configured, too much and the model reads detail that is no longer there, or a
+transparent reference sheet arrives with a black background. Every mutant below
+still returns a plausible image.
+
+Six groups.
+
+**The settings.** `[images]` holds the defaults, which reduce exactly as Shore
+always has, and `[images.read]`, `[images.upload]` and `[images.mcp]` override
+them one field at a time. Each range is checked where the config loads.
+
+**The reducer.** `max_edge` and `max_tokens` both apply and the stricter wins.
+An image inside every limit, and already in the requested format, goes as it
+is. `keep` re-encodes the rest as PNG, then WebP, and the other formats convert
+every image; `jpeg` sends WebP for an image that is actually transparent, which
+libwebp decides by looking at the pixels. `max_bytes` is met by lowering
+quality first and size second.
+
+**The request.** Whatever the source, a request only carries what the API
+accepts: 8000px and 5 MB of base64 per image, and 2000px once it carries more
+than 20 images. The Claude Agent SDK builds its own requests, so everything it
+is given stays within 2000px.
+
+**The read tool.** A workspace image arrives at the read settings, and the
+model is told the original and sent size, format and token cost, at the active
+model's tier, and how to ask for the original. `original: true` sends the
+largest image the model accepts. MCP images are reduced at their own settings
+and nothing is said. A file over 5 MiB, up to the 64 MiB read limit, is reduced
+as it is read to the largest image any model is sent, so clients are never
+shown more than 5 MiB. The model's image is made from that copy, and its note
+still describes the file.
+
+**Uploads.** An image a user sends is reduced once, when it arrives, and that
+copy is what every later request carries. An attachment from before this is
+prepared the way it always was, so an old conversation's bytes do not change.
+
+**The estimate.** A reduced copy and a tool result's image are counted at the
+size they are sent.
+
+A mutant is KILLED if the tests below fail with it applied.
+
+Run from the repository root:
+    python3 daemon/scripts/mutate_image_reduction.py
+"""
+import sys
+
+PI = "src/llm/prepare_images.ts"
+D = "src/llm/image_dimensions.ts"
+T = "src/llm/image_tokens.ts"
+A = "src/config/app.ts"
+S = "src/config/schema.ts"
+M = "src/tools/media.ts"
+E = "src/tools/execute.ts"
+R = "src/tools/read.ts"
+RI = "src/tools/read_image.ts"
+H = "src/handler/images.ts"
+P = "src/engine/prompt.ts"
+
+# (label, file, find, replace)
+MUTANTS = [
+    # --- the settings ----------------------------------------------------------
+    *[(f"settings: [images.<source>] {field} is ignored",
+       A,
+       f"    {field}: override.{field} ?? images.{field},",
+       f"    {field}: images.{field},")
+      for field in ["max_tokens", "max_edge", "format", "quality", "png_compression", "png_palette", "max_bytes"]],
+    ("settings: [images.mcp] is not checked",
+     A,
+     ', ["images.mcp", images.mcp]] as const',
+     "] as const"),
+    ("settings: the lowest value of a range is refused",
+     A,
+     "value !== undefined && (value < low || value > high)",
+     "value !== undefined && (value <= low || value > high)"),
+    ("settings: the highest value of a range is refused",
+     A,
+     "value !== undefined && (value < low || value > high)",
+     "value !== undefined && (value < low || value >= high)"),
+    ("settings: max_edge may exceed what the API accepts",
+     A,
+     "outside(settings.max_edge, 1, API_MAX_IMAGE_EDGE)",
+     "outside(settings.max_edge, 1, 2 * API_MAX_IMAGE_EDGE)"),
+    ("settings: quality 0 is accepted",
+     A,
+     "outside(settings.quality, 1, 100)",
+     "outside(settings.quality, 0, 100)"),
+    ("settings: png_compression 10 is accepted",
+     A,
+     "outside(settings.png_compression, 0, 9)",
+     "outside(settings.png_compression, 0, 10)"),
+    ("settings: max_bytes may exceed the base64 limit",
+     A,
+     "outside(settings.max_bytes, 1, MAX_SENT_IMAGE_BYTES)",
+     "outside(settings.max_bytes, 1, 2 * MAX_SENT_IMAGE_BYTES)"),
+    ("settings: the model is told nothing by default",
+     A,
+     "make: () => ({ ...noImageOverride(), tell_model: true, allow_original: true }),",
+     "make: () => ({ ...noImageOverride(), tell_model: false, allow_original: true }),"),
+    ("settings: originals are refused by default",
+     A,
+     "make: () => ({ ...noImageOverride(), tell_model: true, allow_original: true }),",
+     "make: () => ({ ...noImageOverride(), tell_model: true, allow_original: false }),"),
+    ("schema: image settings get the generic description",
+     S,
+     "  if (image !== undefined) return image;\n",
+     ""),
+    ("schema: an override does not say which images it is for",
+     S,
+     "`${description} Overrides images.${leaf} for ${section}.`",
+     "description"),
+    ("schema: max_edge carries no unit",
+     S,
+     ' : leaf === "max_edge" ? "pixels" : undefined;',
+     " : undefined;"),
+
+    # --- the reducer -----------------------------------------------------------
+    ("size: max_edge is ignored",
+     T,
+     "  const edged = fitLongEdge(dimensions, settings.max_edge);",
+     "  const edged = dimensions;"),
+    ("size: max_tokens is ignored",
+     T,
+     "  return settings.max_tokens > 0 ? sizeForTier(edged, { maxEdge: Number.MAX_SAFE_INTEGER, maxTokens: settings.max_tokens }) : edged;",
+     "  return edged;"),
+    ("size: the model's tier is not applied to an original",
+     PI,
+     "  const seen = options.tier === undefined ? reduced : sizeForTier(reduced, options.tier);",
+     "  const seen = reduced;"),
+    ("size: the Claude Agent SDK's 2000px limit is not applied",
+     PI,
+     "fitLongEdge(seen, options.maxEdge ?? API_MAX_IMAGE_EDGE)",
+     "fitLongEdge(seen, API_MAX_IMAGE_EDGE)"),
+    ("reduce: a GIF is sent as a GIF",
+     PI,
+     '  const gif = source.media_type === "image/gif";',
+     "  const gif = false;"),
+    ("reduce: every image is kept in the format it came in",
+     PI,
+     "  const keeps = encoding === undefined || MEDIA_TYPES[encoding] === mediaType;",
+     "  const keeps = true;"),
+    ("reduce: an image outside the size limits is sent as it is",
+     PI,
+     "  const unresized = sizing === undefined || sameSize(sizing.target, sizing.original);",
+     "  const unresized = true;"),
+    ("reduce: an image over max_bytes is sent as it is",
+     PI,
+     "  return keeps && unresized && fits(data)\n",
+     "  return keeps && unresized\n"),
+    ("reduce: a reduced image is reported unchanged",
+     PI,
+     "    changed: sent !== source.data,",
+     "    changed: false,"),
+    ("format: jpeg re-encodes a transparent WebP",
+     PI,
+     '      return mediaType === "image/webp" && mayBeTransparent(bytes) ? "webp" : "jpeg";',
+     '      return "jpeg";'),
+    ("format: webp and png behave like keep",
+     PI,
+     "    default:\n      return format;",
+     "    default:\n      return undefined;"),
+    ("keep: PNG is not tried first",
+     PI,
+     '    return await attempt(target, "png", settings.quality) ?? await shrinking("webp", settings.quality, true);',
+     '    return await shrinking("webp", settings.quality, true);'),
+    ("keep: WebP is not tried at the full size",
+     PI,
+     'await shrinking("webp", settings.quality, true);',
+     'await shrinking("webp", settings.quality, false);'),
+    ("png: a PNG too large is made smaller as WebP",
+     PI,
+     '?? await shrinking("png", settings.quality, false);',
+     '?? await shrinking("webp", settings.quality, false);'),
+    ("lossy: quality is never lowered",
+     PI,
+     "    if (quality - QUALITY_STEP < floor) break;",
+     "    break;"),
+    ("lossy: quality is lowered past 50",
+     PI,
+     "  const floor = Math.min(settings.quality, LOSSY_QUALITY_FLOOR);",
+     "  const floor = 1;"),
+    ("lossy: quality is lowered in steps of 5",
+     PI,
+     "const QUALITY_STEP = 10;",
+     "const QUALITY_STEP = 5;"),
+    ("jpeg: transparency is never checked",
+     PI,
+     '  if (as === "jpeg" && mayBeTransparent(bytes)) {',
+     "  if (false) {"),
+    ("jpeg: an image that might be transparent is sent as WebP without looking",
+     PI,
+     '    if (mayBeTransparent(Buffer.from(probe, "base64"))) {',
+     "    if (true) {"),
+    ("shrink: the first smaller size is skipped",
+     PI,
+     "edge = fromTarget ? longEdge : Math.floor(longEdge * SHRINK_STEP);",
+     "edge = fromTarget ? longEdge : Math.floor(longEdge * SHRINK_STEP * SHRINK_STEP);"),
+    ("shrink: sizes are halved",
+     PI,
+     "const SHRINK_STEP = 0.8;",
+     "const SHRINK_STEP = 0.5;"),
+    ("encode: png_compression is ignored",
+     PI,
+     "compressionLevel: settings.png_compression,",
+     "compressionLevel: 6,"),
+    ("encode: png_palette is ignored",
+     PI,
+     "...(settings.png_palette ? { palette: true } : {})",
+     "...({})"),
+    ("encode: nothing is resized",
+     PI,
+     '  const image = resize === undefined ? new Bun.Image(bytes) : new Bun.Image(bytes).resize(resize.width, resize.height, { fit: "fill" });',
+     "  const image = new Bun.Image(bytes);"),
+    ("encode: jpeg is written as WebP",
+     PI,
+     "      return await image.jpeg({ quality }).toBase64();",
+     "      return await image.webp({ quality }).toBase64();"),
+    ("cache: a result is reused under other settings",
+     PI,
+     '.update(JSON.stringify(settings)).update("\\0")',
+     '.update("\\0")'),
+    ("transparency: an RGBA PNG is opaque",
+     D,
+     "[4, 6].includes(bytes[25] as number)",
+     "[4].includes(bytes[25] as number)"),
+    ("transparency: a tRNS chunk is missed",
+     D,
+     '    if (type === "tRNS") return true;\n',
+     ""),
+    ("transparency: PNG chunk lengths are ignored",
+     D,
+     "    offset += 12 + bytes.readUInt32BE(offset);",
+     "    offset += 12;"),
+    ("transparency: the extended WebP alpha flag is missed",
+     D,
+     "((bytes[20] as number) & 0x10) !== 0",
+     "false"),
+    ("transparency: the lossless WebP alpha bit is missed",
+     D,
+     "((bytes.readUInt32LE(21) >>> 28) & 1) === 1",
+     "false"),
+
+    # --- the request -----------------------------------------------------------
+    ("request: a GIF is passed through",
+     PI,
+     '    block.source.media_type !== "image/gif" &&\n',
+     ""),
+    ("request: the per-image size ceiling is not enforced",
+     PI,
+     "    base64Bytes(block.source.data) <= MAX_SENT_IMAGE_BYTES &&\n",
+     ""),
+    ("request: the edge limit is not enforced",
+     PI,
+     "    (dimensions === undefined || Math.max(dimensions.width, dimensions.height) <= maxEdge)\n",
+     "    true\n"),
+    ("request: 20 images already count as many",
+     PI,
+     "countImageBlocks(request.messages) > MANY_IMAGES",
+     "countImageBlocks(request.messages) >= MANY_IMAGES"),
+    ("request: the Claude Agent SDK is treated like any other",
+     PI,
+     '  return request.sdk === "claude_agent" || countImageBlocks',
+     "  return countImageBlocks"),
+    ("limits: the Claude Agent SDK keeps the API's edge",
+     PI,
+     'maxEdge: sdk === "claude_agent" ? MANY_IMAGES_MAX_EDGE : API_MAX_IMAGE_EDGE',
+     "maxEdge: API_MAX_IMAGE_EDGE"),
+    ("limits: every model is given the high-resolution tier",
+     PI,
+     "  return { tier: imageTierForModel(model), maxEdge:",
+     "  return { tier: HIGH_RESOLUTION_IMAGE_TIER, maxEdge:"),
+    ("chat: a tool's images are not held to the model's limits",
+     "src/handler/generation.ts",
+     "        imageLimits: imageLimitsFor(call.sdk, call.model),\n",
+     ""),
+    ("subagent: a tool's images are not held to the model's limits (NEEDS A SEAM: the sub-agent tests script plain streams, and no test drives a tool through one)",
+     "src/tools/subagent_loop.ts",
+     "    imageLimits: imageLimitsFor(request.sdk, request.model),\n",
+     ""),
+    ("heartbeat: a tool's images are not held to the model's limits (NEEDS A SEAM: the heartbeat executor's tests never dispatch a tool that returns an image)",
+     "src/autonomy/in_process.ts",
+     "          ...(imageLimits === undefined ? {} : { imageLimits }),\n",
+     ""),
+    ("compaction: a tool's images are not held to the model's limits (NEEDS A SEAM: compaction's tool tests run no tool that returns an image)",
+     "src/memory/compaction/run.ts",
+     "    limits: toolLimitsFrom(config.app.tools, config.app.subagents),\n    imageLimits,\n",
+     "    limits: toolLimitsFrom(config.app.tools, config.app.subagents),\n"),
+
+    # --- the read tool ---------------------------------------------------------
+    ("original: an original gets the configured reduction",
+     E,
+     "  if (item.original === true) return await reduceImage(source, ORIGINAL_IMAGE_SETTINGS, limits);\n",
+     ""),
+    ("original: an original is held to 2000px",
+     PI,
+     "  ...DEFAULT_IMAGE_SETTINGS,\n  max_edge: API_MAX_IMAGE_EDGE,\n",
+     "  ...DEFAULT_IMAGE_SETTINGS,\n"),
+    ("original: an original is held to the default max_bytes",
+     PI,
+     "  max_bytes: MAX_SENT_IMAGE_BYTES,\n});",
+     "});"),
+    ("original: its cost in the note ignores the model",
+     PI,
+     "sizingFor(dimensions, ORIGINAL_IMAGE_SETTINGS, limits).target",
+     "sizingFor(dimensions, ORIGINAL_IMAGE_SETTINGS, {}).target"),
+    ("source: MCP images get the read settings",
+     E,
+     'toolUse.name === "read" ? "read" : "mcp"',
+     '"read"'),
+    ("source: a read ignores the Claude Agent SDK's limit",
+     E,
+     "  return await reduceImage(source, settings, { maxEdge: limits.maxEdge });",
+     "  return await reduceImage(source, settings);"),
+    ("note: MCP images are described too",
+     E,
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
+     "if (!fromFile.changed || !read.tell_model) return undefined;"),
+    ("note: an unchanged image is described",
+     E,
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
+     'if (toolUse.name !== "read" || !read.tell_model) return undefined;'),
+    ("note: tell_model is ignored",
+     E,
+     'if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;',
+     'if (toolUse.name !== "read" || !fromFile.changed) return undefined;'),
+    ("note: an image reduced as it was read is described by that copy",
+     E,
+     "  const fromFile = item.reducedFrom === undefined ? reduced : { ...reduced, original: item.reducedFrom, changed: true };",
+     "  const fromFile = reduced;"),
+    ("note: an image reduced as it was read, and sent as it was, goes unmentioned",
+     E,
+     "{ ...reduced, original: item.reducedFrom, changed: true }",
+     "{ ...reduced, original: item.reducedFrom, changed: reduced.changed }"),
+    ("note: the original is offered even when it is refused",
+     E,
+     "    offerOriginal: read.allow_original,",
+     "    offerOriginal: true,"),
+    ("note: an original is described as a reduction",
+     M,
+     "  if (item.original === true) {",
+     "  if (false) {"),
+    ("note: a GIF's lost frames go unmentioned",
+     M,
+     '? ", first frame only" : ""',
+     '? "" : ""'),
+    ("note: one token reads as tokens",
+     M,
+     '${tokens === 1 ? "token" : "tokens"}',
+     "tokens"),
+    ("note: an image in Markdown is offered as \"it\"",
+     M,
+     "const offer = !offerOriginal ? \"\" : path === item.label",
+     "const offer = !offerOriginal ? \"\" : true"),
+    ("read: a non-boolean original is accepted",
+     R,
+     '  if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");\n',
+     ""),
+    ("read: original is honoured when it is turned off",
+     R,
+     "      if (original && !images.read.allow_original) throw",
+     "      if (false) throw"),
+    ("read: original is accepted for text",
+     R,
+     '    if (original) throw new InvalidArgs("original applies only to image files");\n',
+     ""),
+    ("read: an image file over 5 MiB is refused",
+     RI,
+     'readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal)',
+     'readBoundedFile(file, path, MAX_IMAGE_BYTES, "image", signal)'),
+    ("read: an image file of any size is read",
+     RI,
+     'readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal)',
+     'readBoundedFile(file, path, Infinity, "image", signal)'),
+    ("read: an image file over 5 MiB is handed on whole",
+     RI,
+     "  if (data.length <= MAX_IMAGE_BYTES) return { description, image };",
+     "  if (true) return { description, image };"),
+    ("read: an image file of exactly 5 MiB is reduced",
+     RI,
+     "  if (data.length <= MAX_IMAGE_BYTES) return { description, image };",
+     "  if (data.length < MAX_IMAGE_BYTES) return { description, image };"),
+    ("read: an image file over 5 MiB is held to 2000px before the model's settings apply",
+     RI,
+     "ORIGINAL_IMAGE_SETTINGS, DEFAULT_IMAGE_LIMITS)",
+     "{ ...ORIGINAL_IMAGE_SETTINGS, max_edge: 2000 }, DEFAULT_IMAGE_LIMITS)"),
+    ("read: an image file over 5 MiB keeps more pixels than any model is sent",
+     RI,
+     "ORIGINAL_IMAGE_SETTINGS, DEFAULT_IMAGE_LIMITS)",
+     "ORIGINAL_IMAGE_SETTINGS, {})"),
+    ("read: an image file over 5 MiB forgets what it was reduced from",
+     RI,
+     ", reducedFrom: fitted.original }",
+     " }"),
+    ("read: an image file over 5 MiB that cannot be reduced fails without naming the file",
+     RI,
+     "\n    .catch((error: unknown) => { throw new ToolIoError(`${path}: image could not be reduced: ${error instanceof Error ? error.message : String(error)}`); });",
+     ";"),
+    ("read: Markdown images are budgeted at the default max_bytes",
+     R,
+     'imageSettingsFor(images, "read").max_bytes',
+     "DEFAULT_IMAGE_SETTINGS.max_bytes"),
+
+    # --- uploads ---------------------------------------------------------------
+    ("upload: no reduced copy is made",
+     H,
+     "    await saveModelCopy(saved.ref.path, saved.bytes, settings);\n",
+     ""),
+    ("upload: the copy is made at the default settings",
+     H,
+     'data: Buffer.from(bytes).toString("base64") }, settings);',
+     'data: Buffer.from(bytes).toString("base64") }, DEFAULT_IMAGE_SETTINGS);'),
+    ("upload: requests read the original instead of the copy",
+     H,
+     "  const copy = findModelCopy(img.path);\n  if (copy !== undefined) {",
+     "  const copy = findModelCopy(img.path);\n  if (copy === null) {"),
+    ("upload: an older attachment is sent unreduced",
+     H,
+     "    return prepared.type === \"image\" ? prepared.source : undefined;",
+     "    return { type: \"base64\", media_type: mediaType, data: Buffer.from(bytes).toString(\"base64\") };"),
+    ("upload: arrival ignores [images.upload]",
+     "src/handler/generation.ts",
+     'imageSettingsFor(config.app.images, "upload")',
+     'imageSettingsFor(config.app.images, "read")'),
+
+    # --- the estimate ----------------------------------------------------------
+    ("estimate: a reduced copy is counted at its original's size",
+     P,
+     "  if (copy !== undefined) return sentImageTokens(fileImageDimensions(copy.path), tier);\n",
+     ""),
+    ("estimate: a tool result's image is counted as if Shore still had to reduce it",
+     P,
+     "      return sentImageTokens(base64ImageDimensions(block.source.data), tier);",
+     "      return imageTokens(base64ImageDimensions(block.source.data), tier);"),
+]
+
+
+from mutation import run as _run_mutants  # noqa: E402
+
+
+def main() -> int:
+    return _run_mutants(MUTANTS, [
+        "tests/image_reduction.test.ts",
+        "tests/image_delivery.test.ts",
+        "tests/prepare_images.test.ts",
+        "tests/image_tokens.test.ts",
+        "tests/file_tools.test.ts",
+        "tests/generation_image_support.test.ts",
+        "tests/default_config.test.ts",
+    ])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,9 +1,13 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
 import { ConversationRequests } from "../chat/requests.ts";
+import { conversationCharacter, droppedNotice } from "../chat/sending.ts";
+import { UnsentMessages } from "../chat/unsent.ts";
 import { Notifier, type NotifySnapshot } from "../notifications.ts";
 import { DisplayPreferences, type ViewValues } from "../preferences.ts";
+import { listRequests } from "../request_history.ts";
 import { ThemeStore, type ThemeId } from "../theme.ts";
+import { toasts } from "../ui/toast.tsx";
 import { Workspace, type WorkspaceSnapshot } from "../workspace.ts";
 
 declare const SHORE_WEB_CONTRACT: string;
@@ -24,6 +28,10 @@ export const workspace = new Workspace(new BrowserConnection({
   origin: location.origin, contract: SHORE_WEB_CONTRACT, protocol: SHORE_WEB_PROTOCOL, character: route[0] || null, thread: route[1] || null,
 }));
 export const conversation = new ConversationRequests(workspace.connection);
+export const unsent = new UnsentMessages(workspace.connection, listRequests, (message, dropped) => {
+  const character = conversationCharacter(message.conversation);
+  toasts.show(`Your earlier message${character === undefined ? "" : ` to ${character}`} wasn’t saved, so it’s back in its message box.${droppedNotice(dropped)}`, "error");
+});
 export const themes = new ThemeStore();
 export const display = new DisplayPreferences(browserStorage());
 export const notifier = new Notifier({ storage: browserStorage() });

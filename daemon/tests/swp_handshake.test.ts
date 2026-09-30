@@ -18,6 +18,7 @@ import { MAIN_THREAD } from "../src/config/dirs.ts";
 import type { ConversationEngine, History } from "../src/engine/conversation.ts";
 import type { ThreadRecord } from "../src/engine/threads.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const MODEL = {
   name: "fixture",
@@ -247,8 +248,8 @@ describe("the history snapshot", () => {
       "yuna",
     );
 
-    expect(attempt).rejects.toThrow(HistorySnapshotError);
-    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(await outcomeOf(attempt)).toThrow(HistorySnapshotError);
+    expect(await outcomeOf(attempt)).toThrow(/unexpected end of JSON input/);
   });
 
   test("a live character carries its conversation, revision and resolved name", async () => {

@@ -505,6 +505,11 @@ describe("a config shore refuses, and what it says", () => {
   test("budget warn_at zero is rejected", () => {
     expect(refused("budgets = [{ name = \"daily\", period = \"day\", cost_usd = 5, warn_fractions = [0.8, 0], allow_compaction = false }]\n")).toContain("usage.budgets[0].warn_at values must be greater than 0");
   });
+  test("plan limits must name a positive share of the window", () => {
+    expect(refused("[plan_limits.five_hour]\nlimit_fraction = 0\n")).toContain("plan_limits.five_hour.limit_fraction must be greater than 0");
+    expect(refused("[plan_limits.seven_day]\nwarn_fractions = [0.8, 0]\n")).toContain("plan_limits.seven_day.warn_fractions values must be greater than 0");
+    expect(accepted("[plan_limits.seven_day]\nwarn_fractions = []\nlimit_fraction = 1.5\n")).toBeDefined();
+  });
   test("reset_hour 24 is rejected", () => {
     expect(refused("budgets = [{ name = \"daily\", period = \"day\", cost_usd = 5, reset_hour = 24, allow_compaction = false }]\n")).toContain("usage.budgets[0].reset_hour must be 0-23, got 24");
   });

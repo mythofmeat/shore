@@ -22,6 +22,7 @@ import {
   commandChangesState,
   handlerRegistry,
   turnAutonomy,
+  planLimitWarnings,
   usageBudgetWarnings,
   type CommandAssembly,
   type HandlerAssembly,
@@ -47,6 +48,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
+import { configureClaudePlanLimits, refreshClaudePlanLimits } from "../src/ledger/plan_limits.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 
@@ -750,6 +752,25 @@ describe("the budget check", () => {
       ).get()).toEqual({ name: "calls" });
       ledger.close();
     } finally {
+      closeLedgers();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a Claude plan reading warns even for a character with no usage config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shore-deps-plan-"));
+    const resets = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    try {
+      configureClaudePlanLimits({
+        fetch: () => Promise.resolve({ subscription_type: "max", five_hour: { percent_used: 0.9, resets_at: resets }, seven_day: null }),
+      });
+      await refreshClaudePlanLimits(0);
+      const warnings = planLimitWarnings(join(root, "shore.db"), () => undefined, undefined);
+      const first = await warnings("aria");
+      expect(first.map((warning) => [warning.limit, warning.window, warning.crossed_warn_at])).toEqual([["Claude 5-hour limit", "five_hour", [0.8]]]);
+      expect(await warnings("aria"), "each threshold is announced once per window").toEqual([]);
+    } finally {
+      configureClaudePlanLimits();
       closeLedgers();
       await rm(root, { recursive: true, force: true });
     }
@@ -1480,7 +1501,7 @@ describe("reloading [mcp]", () => {
         fresh,
       );
 
-      expect(required(inFlight.mcpRegistry).call("mcp__hue__set_light", {})).resolves.toBe(
+      expect(await required(inFlight.mcpRegistry).call("mcp__hue__set_light", {})).toBe(
         "set_light ran",
       );
     } finally {

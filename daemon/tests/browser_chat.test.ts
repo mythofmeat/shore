@@ -1,8 +1,14 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ImageUpload } from "../src/protocol/ImageUpload.ts";
+import type { ContentBlock } from "../src/protocol/ContentBlock.ts";
 import type { Message } from "../src/protocol/Message.ts";
-import { blockViews, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, swipeState, toolSummary, transcriptItems, visibleStreams } from "../src/browser/chat/transcript.ts";
+import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
+import { checkAttachments, restoredDraft } from "../src/browser/request_forms.ts";
+import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/chat/sending.ts";
+import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
+import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
@@ -54,6 +60,81 @@ test("content blocks pair tool calls with results and keep reasoning, images and
   expect(blockViews([{ type: "tool_use", id: "t", name: "run", input: {} }])[0]).toMatchObject({ output: null });
 });
 
+test("consecutive reasoning and tool calls collapse into one summary, and text splits them", () => {
+  const items = bodyItems(blockViews([
+    { type: "thinking", thinking: "plan" },
+    { type: "tool_use", id: "s1", name: "search", input: { query: "monday drawing" } },
+    { type: "tool_result", tool_use_id: "s1", content: "found" },
+    { type: "tool_use", id: "s2", name: "search", input: { query: "night" } },
+    { type: "thinking", thinking: "narrow it down" },
+    { type: "tool_use", id: "r1", name: "read", input: { path: "HEARTBEAT.md" } },
+    { type: "tool_result", tool_use_id: "r1", content: "missing", is_error: true },
+    { type: "text", text: "Let me look once more." },
+    { type: "tool_use", id: "b1", name: "bash", input: { command: "ls" } },
+    { type: "text", text: "Found it." },
+  ]));
+  expect(items.map((item) => item.kind === "activity" ? item.steps.map((step) => step.kind) : item.kind)).toEqual([["thinking", "tool", "tool", "thinking", "tool"], "text", ["tool"], "text"]);
+  const steps = items.flatMap((item) => item.kind === "activity" ? [item.steps] : []);
+  expect(activityHeadline(steps[0] ?? [], false)).toEqual({ label: "Reasoned and used 3 tools", detail: "search, read" });
+  expect(activityHeadline(steps[1] ?? [], false)).toEqual({ label: "Used 1 tool", detail: "bash" });
+  expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+});
+
+test("an activity headline names at most three tools, and while live shows the step in progress", () => {
+  const steps = bodyItems(blockViews([
+    { type: "thinking", thinking: "a" },
+    { type: "thinking", thinking: "b" },
+  ])).flatMap((item) => item.kind === "activity" ? item.steps : []);
+  expect(activityHeadline(steps, false)).toEqual({ label: "Reasoning", detail: "" });
+  expect(activityHeadline(steps, true)).toEqual({ label: "Thinking…", detail: "" });
+  const tools = blockViews(["a", "b", "c", "d", "e"].map((name) => ({ type: "tool_use" as const, id: name, name, input: { path: `${name}.md` } })));
+  const done = tools.flatMap((view) => view.kind === "tool" ? [{ ...view, output: "ok" }] : []);
+  expect(activityHeadline(done, false)).toEqual({ label: "Used 5 tools", detail: "a, b, c and 2 more" });
+  expect(activityHeadline(done, true)).toEqual({ label: "Used 5 tools", detail: "a, b, c and 2 more" });
+  const running = [...done.slice(0, 4), ...tools.slice(4).flatMap((view) => view.kind === "tool" ? [view] : [])];
+  expect(activityHeadline(running, true)).toEqual({ label: "e", detail: "e.md" });
+  expect(activityHeadline(running, false)).toEqual({ label: "Used 5 tools", detail: "a, b, c and 2 more" });
+});
+
+test("a streaming reply claims the saved message that holds its tool calls, never an earlier reply", () => {
+  const partial = message("partial", "assistant", "", { content_blocks: [{ type: "thinking", thinking: "plan" }, { type: "tool_use", id: "t1", name: "read", input: {} }, { type: "tool_result", tool_use_id: "t1", content: "ok" }] });
+  const pending = message("pending", "assistant", "", { content_blocks: [{ type: "thinking", thinking: "plan" }, { type: "tool_use", id: "t9", name: "read", input: {} }] });
+  const earlier = message("earlier", "assistant", "", { content_blocks: [{ type: "tool_use", id: "old", name: "read", input: {} }, { type: "tool_result", tool_use_id: "old", content: "ok" }, { type: "text", text: "Done." }] });
+  const question = message("question", "user", "");
+  expect(savedPart([question, partial], { tools: ["t1"] })).toBe(partial);
+  expect(savedPart([question, partial], { tools: ["elsewhere"] })).toBeUndefined();
+  expect(savedPart([question, pending], { tools: [] })).toBe(pending);
+  expect(savedPart([question, pending], { tools: ["elsewhere"] })).toBeUndefined();
+  expect(savedPart([question, earlier], { tools: [] })).toBeUndefined();
+  expect(savedPart([partial, question], { tools: ["t1"] })).toBeUndefined();
+  expect(savedPart([], { tools: [] })).toBeUndefined();
+});
+
+test("a streaming reply shows each saved step once and adds only what isn't saved yet", () => {
+  const steps = (stream: LiveReply, saved?: Message) => blockViews(replyBlocks(stream, saved)).map((view) => view.kind === "tool" ? `${view.id}:${view.output ?? "running"}` : view.kind === "thinking" ? `thinking:${view.text}` : view.kind === "text" ? `text:${view.text}` : view.kind);
+  const round = (reasoning: string, text: string, tools: string[]) => ({ reasoning, text, tools });
+  const use = { type: "tool_use" as const, id: "t1", name: "read", input: {} };
+  const result = { type: "tool_result" as const, tool_use_id: "t1", content: "contents" };
+  const saved = (...blocks: ContentBlock[]) => message("partial", "assistant", "", { content_blocks: [{ type: "thinking", thinking: "plan" }, ...blocks] });
+  const thinking: LiveReply = { reasoning: "plan", text: "", blocks: [], tools: [], round: round("plan", "", []) };
+  expect(steps(thinking)).toEqual(["thinking:plan"]);
+  expect(steps(thinking, saved(use))).toEqual(["thinking:plan", "t1:running"]);
+  const called: LiveReply = { ...thinking, blocks: [use], tools: ["t1"], round: round("plan", "", ["t1"]) };
+  expect(steps(called)).toEqual(["thinking:plan", "t1:running"]);
+  expect(steps(called, saved(use))).toEqual(["thinking:plan", "t1:running"]);
+  const answered: LiveReply = { ...called, blocks: [use, result] };
+  expect(steps(answered, saved(use))).toEqual(["thinking:plan", "t1:contents"]);
+  expect(steps(answered, saved(use, result))).toEqual(["thinking:plan", "t1:contents"]);
+  const next: LiveReply = { ...answered, reasoning: "plancheck", text: "Found it.", round: round("check", "Found it.", []) };
+  expect(steps(next, saved(use, result))).toEqual(["thinking:plan", "t1:contents", "thinking:check", "text:Found it."]);
+  const ended: LiveReply = { ...next, blocks: [{ type: "thinking", thinking: "check" }, { type: "text", text: "Found it." }] };
+  expect(steps(ended, saved(use, result))).toEqual(["thinking:plan", "t1:contents", "thinking:check", "text:Found it."]);
+  expect(steps(next)).toEqual(["thinking:plancheck", "text:Found it.", "t1:contents"]);
+  expect(replyBlocks({ reasoning: "", text: "", blocks: [], tools: [], round: round("", "", []) }, undefined)).toEqual([]);
+  const picture = { type: "tool_result" as const, tool_use_id: "t1", content: [{ type: "image" as const, source: { type: "base64" as const, media_type: "image/png", data: "AA==" } }] };
+  expect(blockViews(replyBlocks(answered, saved(use, picture))).find((view) => view.kind === "tool")).toMatchObject({ images: ["data:image/png;base64,AA=="] });
+});
+
 test("tool summaries and inputs are readable, never [object Object]", () => {
   expect(toolSummary({ path: "notes/trip.md", limit: 5 })).toBe("notes/trip.md");
   expect(toolSummary({ count: 3 })).toBe("3");
@@ -96,6 +177,43 @@ test("a started regeneration hides exactly the messages its stream_start lists",
   expect(regenReplaces(messages, 0, [{ replaces: ["old"] }, {}], false)).toEqual(["old"]);
   expect(regenReplaces(messages, 0, [{}, { replaces: [] }], false)).toEqual([]);
   expect(regenReplaces(messages, 0, [], false)).toEqual([]);
+});
+
+test("a message that wasn't saved comes back ahead of the draft and the draft stays sendable", () => {
+  const image = (name: string, bytes = 3): ImageUpload => ({ filename: name, data: "A".repeat(bytes / 3 * 4), mime_type: "image/png" });
+  const none: ImageUpload[] = [];
+  const sent = { text: "sent", images: [image("s1"), image("s2")] };
+  expect(restoredDraft(sent, { text: "", images: none, options: { stream: false } })).toEqual({ content: { text: "sent", images: sent.images, options: { stream: false } }, dropped: 0 });
+  expect(restoredDraft({ text: "", images: none }, { text: "typed", images: none }).content.text).toBe("typed");
+  const typed = Array.from({ length: MAX_ATTACHMENTS }, (_, index) => image(`t${String(index)}`));
+  const crowded = restoredDraft(sent, { text: "typed since", images: typed });
+  expect(crowded.content.text).toBe("sent\n\ntyped since");
+  expect(crowded.content.images.map((item) => item.filename)).toEqual(["s1", "s2", ...typed.slice(0, MAX_ATTACHMENTS - 2).map((item) => item.filename)]);
+  expect(crowded.dropped).toBe(2);
+  expect(() => checkAttachments(crowded.content.images)).not.toThrow();
+  const large = image("large", 4.5 * 1024 * 1024);
+  const heavy = restoredDraft({ text: "", images: [large, large, large, large] }, { text: "", images: [large, image("small")] });
+  expect(heavy.content.images.map((item) => item.filename)).toEqual(["large", "large", "large", "large", "small"]);
+  expect(heavy.dropped).toBe(1);
+  expect(() => checkAttachments(heavy.content.images)).not.toThrow();
+  expect(droppedNotice(0)).toBe("");
+  expect(droppedNotice(1)).toContain("1 image attached while it was sending didn’t fit and was removed");
+  expect(droppedNotice(2)).toContain("2 images attached while it was sending didn’t fit and were removed");
+});
+
+test("after a reload a sent message is kept only while the daemon may still save it", () => {
+  const request = (phase: WebRequestInfo["phase"], accepted?: boolean): WebRequestInfo => ({ id: "id", rid: "rid", operation: "message", label: "Send message", character: "nova", thread: "main", started_at: 0, expires_at: 1, phase, result_omitted: false, ...(accepted === undefined ? {} : { accepted }) });
+  expect(sentFate(undefined)).toBe("unsent");
+  expect(sentFate(request("running"))).toBe("waiting");
+  expect(sentFate(request("running", true))).toBe("saved");
+  for (const phase of ["uncertain", "failed", "cancelled", "superseded"] as const) {
+    expect(sentFate(request(phase))).toBe("unsent");
+    expect(sentFate(request(phase, true))).toBe("saved");
+  }
+  expect(sentFate(request("completed"))).toBe("saved");
+  expect(conversationCharacter(JSON.stringify(["nova", "side"]))).toBe("nova");
+  expect(conversationCharacter(JSON.stringify([null, null]))).toBeUndefined();
+  expect(conversationCharacter("not json")).toBeUndefined();
 });
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

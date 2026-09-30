@@ -2,7 +2,7 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export async function atomicWrite(path: string, data: string): Promise<void> {
+export async function atomicWrite(path: string, data: string | Uint8Array): Promise<void> {
   const dir = dirname(path);
   await mkdir(dir, { recursive: true });
   const tmp = join(dir, `.${crypto.randomUUID()}.tmp`);

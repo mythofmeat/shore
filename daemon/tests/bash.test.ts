@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { handleBash } from "../src/tools/bash.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
-import { ALL_TOOLS, BUILTIN_TOOL_SCHEMAS, renderToolDefs } from "../src/tools/registry.ts";
+import { ALL_TOOLS, renderToolDefs } from "../src/tools/registry.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 

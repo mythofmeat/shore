@@ -29,7 +29,7 @@ import {
 import { consumeStream, type FrameSink, type RegenStart, type StreamResult } from "./stream.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 import { characterWorkspaceDir, rustJoin } from "../config/dirs.ts";
-import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
+import { usageConfigView, type CallBlock } from "../ledger/budget.ts";
 import { shouldRetryError } from "./retry.ts";
 
 export class BudgetBlocked extends Error {
@@ -46,7 +46,7 @@ export class BudgetBlocked extends Error {
     this.summary = summary;
   }
 
-  static from(block: BudgetBlock): BudgetBlocked {
+  static from(block: CallBlock): BudgetBlocked {
     return new BudgetBlocked(block.message, block.scope, block.reset_at, block.summary);
   }
 }

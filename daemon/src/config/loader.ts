@@ -12,6 +12,7 @@ import {
   toolGrants,
   validateCompaction,
   validateHeartbeat,
+  validateImages,
   validateAppConfigLayer,
   type AppConfig,
   type UsageBudgetConfig,
@@ -500,6 +501,9 @@ function validateConfig(
   const heartbeat = validateHeartbeat(app.behavior.autonomy.heartbeat);
   if (heartbeat !== undefined) throw validationError(heartbeat);
 
+  const images = validateImages(app.images);
+  if (images !== undefined) throw validationError(images);
+
 }
 
 export const WEB_SEARCH_REMOVED =
@@ -591,6 +595,16 @@ function validateUsageConfig(config: UsageConfig): void {
       throw validationError(`usage budget name "${name}" is duplicated`);
     }
     names.add(name);
+  }
+
+  for (const window of ["five_hour", "seven_day"] as const) {
+    const policy = config.plan_limits[window];
+    if (!(policy.limit_fraction > 0.0)) {
+      throw validationError(`plan_limits.${window}.limit_fraction must be greater than 0`);
+    }
+    if (policy.warn_fractions.some((threshold) => !(threshold > 0.0))) {
+      throw validationError(`plan_limits.${window}.warn_fractions values must be greater than 0`);
+    }
   }
 }
 

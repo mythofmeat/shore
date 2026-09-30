@@ -16,6 +16,7 @@ import {
 } from "../src/llm/fallback";
 import { CREDENTIAL_FAILURE_KINDS, type KeyCandidate } from "../src/llm/credentials";
 import type { LlmError } from "../src/llm/errors";
+import { rejectionOf } from "./support/outcome.ts";
 
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
 
@@ -189,28 +190,28 @@ describe("credential rotation", () => {
   test("a non-credential failure does not rotate", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
     expect(
-      streamWithCredentialFallback(
+      await rejectionOf(streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
         h.readEnv,
         h.attempt({ first: { kind: "http_status", status: 500, body: "boom" } }),
         h.hooks,
-      ),
-    ).rejects.toMatchObject({ kind: "http_status", status: 500 });
+      )),
+    ).toMatchObject({ kind: "http_status", status: 500 });
     expect(h.tried).toEqual(["first"]);
   });
 
   test("an interrupted stream does not rotate", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
     expect(
-      streamWithCredentialFallback(
+      await rejectionOf(streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
         h.readEnv,
         h.attempt({ first: { kind: "incomplete_stream" } }),
         h.hooks,
-      ),
-    ).rejects.toMatchObject({ kind: "incomplete_stream" });
+      )),
+    ).toMatchObject({ kind: "incomplete_stream" });
     expect(h.tried).toEqual(["first"]);
   });
 
@@ -232,7 +233,7 @@ describe("credential rotation", () => {
   test("exhausting every key surfaces the last classified failure", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
     expect(
-      streamWithCredentialFallback(
+      await rejectionOf(streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
         h.readEnv,
@@ -241,16 +242,16 @@ describe("credential rotation", () => {
           second: { kind: "http_status", status: 402, body: "b" },
         }),
         h.hooks,
-      ),
-    ).rejects.toMatchObject({ kind: "http_status", status: 402 });
+      )),
+    ).toMatchObject({ kind: "http_status", status: 402 });
     expect(h.tried).toEqual(["first", "second"]);
   });
 
   test("no candidates at all names the provider", async () => {
     const h = harness({});
     expect(
-      streamWithCredentialFallback("openrouter", [], h.readEnv, h.attempt({}), h.hooks),
-    ).rejects.toMatchObject({
+      await rejectionOf(streamWithCredentialFallback("openrouter", [], h.readEnv, h.attempt({}), h.hooks)),
+    ).toMatchObject({
       kind: "missing_api_key",
       var: "provider 'openrouter' has no enabled keys",
     });
@@ -282,14 +283,14 @@ describe("credential rotation", () => {
   test("the last key's failure carries no warning, only the error", async () => {
     const h = harness({ A: "sk-a" });
     expect(
-      streamWithCredentialFallback(
+      await rejectionOf(streamWithCredentialFallback(
         "openrouter",
         [cand("only", "A", true)],
         h.readEnv,
         h.attempt({ only: { kind: "http_status", status: 401, body: "x" } }),
         h.hooks,
-      ),
-    ).rejects.toMatchObject({ kind: "http_status", status: 401 });
+      )),
+    ).toMatchObject({ kind: "http_status", status: 401 });
     expect(h.events[0]?.warning).toBeUndefined();
   });
 
@@ -337,7 +338,7 @@ describe("transient retry", () => {
   test("retries are bounded and the last error escapes", async () => {
     let calls = 0;
     expect(
-      streamWithRetry(
+      await rejectionOf(streamWithRetry(
         async () => {
           calls += 1;
           throw { kind: "http_status", status: 500, body: "x" } as LlmError;
@@ -345,15 +346,15 @@ describe("transient retry", () => {
         { maxRetries: 2, backoffBaseMs: 1 },
         undefined,
         async () => {},
-      ),
-    ).rejects.toMatchObject({ kind: "http_status", status: 500 });
+      )),
+    ).toMatchObject({ kind: "http_status", status: 500 });
     expect(calls).toBe(3);
   });
 
   test("a credential failure fails fast so rotation can happen", async () => {
     let calls = 0;
     expect(
-      streamWithRetry(
+      await rejectionOf(streamWithRetry(
         async () => {
           calls += 1;
           throw { kind: "http_status", status: 401, body: "x" } as LlmError;
@@ -361,8 +362,8 @@ describe("transient retry", () => {
         { maxRetries: 5, backoffBaseMs: 1 },
         undefined,
         async () => {},
-      ),
-    ).rejects.toMatchObject({ kind: "http_status", status: 401 });
+      )),
+    ).toMatchObject({ kind: "http_status", status: 401 });
     expect(calls).toBe(1);
   });
 

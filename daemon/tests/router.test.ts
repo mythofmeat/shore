@@ -504,6 +504,41 @@ describe("session state lifecycle", () => {
     ]);
   });
 
+  test("opted-in clients hear directly that their message was saved, even after moving to another thread", async () => {
+    let save = () => {};
+    const h = harness(["Alice"], 2, async (params) => {
+      await new Promise<void>((resolve) => { save = resolve; });
+      await params.accepted?.();
+      throw new Error("reply failed after the message was saved");
+    });
+    const reported: [number, ServerMessage][] = [];
+    h.router.observeRequests((session, frame) => reported.push([session, frame]));
+    h.router.setSelectedCharacter(1, "Alice");
+    h.router.setSelectedCharacter(2, "Alice");
+    const request = meta("Alice", 1, "saved", "message");
+    await h.handler.handleRouted({ kind: "engine", msg: message("saved", "hello", true), meta: { ...request, session: { ...request.session, capabilities: ["request-lifecycle"] } } });
+    h.router.setSelectedThread(1, "other");
+    save();
+    await h.handler.drain();
+    expect(h.frames.get(1)?.filter((frame) => frame.type.startsWith("request_"))).toEqual([
+      { type: "request_accepted", rid: "saved" },
+      { type: "request_finished", rid: "saved", outcome: "failed", error: { code: "internal_error", message: "reply failed after the message was saved" } },
+    ]);
+    expect(h.frames.get(2)?.some((frame) => frame.type === "request_accepted")).toBe(false);
+    expect(reported.map(([session, frame]) => [session, frame.type])).toEqual([[1, "request_accepted"], [1, "request_finished"]]);
+  });
+
+  test("clients without the request lifecycle are not sent acceptance, though it is still reported", async () => {
+    const h = harness(["Alice"], 1, async (params) => { await params.accepted?.(); });
+    const reported: ServerMessage[] = [];
+    h.router.observeRequests((_session, frame) => reported.push(frame));
+    h.router.setSelectedCharacter(1, "Alice");
+    await h.handler.handleRouted({ kind: "engine", msg: message("legacy", "hello", true), meta: meta("Alice", 1, "legacy", "message") });
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([]);
+    expect(reported.map((frame) => frame.type)).toEqual(["request_accepted", "request_finished"]);
+  });
+
   test("a completed generation releases its session state", async () => {
     let finish: (() => void) | undefined;
     const h = harness(

@@ -17,6 +17,10 @@ uses. Press `?` for keyboard shortcuts or Ctrl/⌘+K for the command palette. Th
 options are under Settings → Appearance. Every web setting requires a daemon restart. Disconnect (Settings → Disconnect) ends the
 browser session; it does not remove drafts saved in that browser.
 
+Sending clears the message box at once, but the browser keeps the text and images until the daemon
+confirms it saved the message. If the page closes or reloads first, the next page asks the daemon
+what happened to the message and puts it back in its message box unless the daemon saved it.
+
 Settings → Appearance → Notifications makes a tab that isn't focused show a desktop notification and
 an unread count in its title for new replies, heartbeat messages and errors in the open
 conversation. The setting is saved per browser. Browsers only allow desktop notifications over

@@ -4,6 +4,7 @@ import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
 import { DEFAULT_KEEPALIVE_PINGS, keepaliveWindowSecs } from "../config/keepalive.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
+import type { CallBlock } from "../ledger/budget.ts";
 import { MAIN_THREAD } from "../config/dirs.ts";
 import {
   beginCallAttempt,
@@ -38,6 +39,10 @@ export interface KeepaliveEvent {
 }
 
 export type KeepaliveEventSink = (event: KeepaliveEvent) => void;
+
+function blockLabel(block: CallBlock): string {
+  return `${block.scope === "plan" ? "plan limit" : "usage budget"} "${block.budget_name}"`;
+}
 
 export interface KeepaliveSchedule extends KeepaliveSnapshot {
   character: string;
@@ -330,7 +335,7 @@ export class KeepaliveService {
         status: "skipped",
         cold: false,
         reason: "budget",
-        detail: `usage budget "${blocked.budget_name}"`,
+        detail: blockLabel(blocked),
       };
     }
     const startedAt = this.#now();
@@ -436,7 +441,7 @@ export class KeepaliveService {
     await prepareCallAccounting(ping, fetch, this.#now());
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {
-      this.#skip(character, entry, `usage budget "${blocked.budget_name}"`);
+      this.#skip(character, entry, blockLabel(blocked));
       return;
     }
 

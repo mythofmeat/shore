@@ -1,17 +1,20 @@
 import { required } from "../src/util/required.ts";
-import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toolLimitsFrom, dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
-import { BUILTIN_TOOL_SCHEMAS, renderToolDefs } from "../src/tools/registry.ts";
+import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
+import { renderToolDefs } from "../src/tools/registry.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import { defaultToolsConfig } from "../src/config/app.ts";
 import { oversizedImage, wideImage } from "./support/oversized_image.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -81,7 +84,7 @@ test("read rejects directories, binaries, invalid UTF-8, corrupt and oversized i
   await put("binary", Buffer.from([0, 1, 2]));
   await put("encoding", Buffer.from([255, 255]));
   await put("bad.png", "not a PNG");
-  await put("large.png", Buffer.concat([Buffer.from(PNG, "base64"), Buffer.alloc(5 * 1024 * 1024)]));
+  await truncate(await put("large.png", Buffer.from(PNG, "base64")), MAX_READ_IMAGE_BYTES + 1);
   for (const file_path of [".", "binary", "encoding", "bad.png", "large.png", "missing"]) {
     expect((await run("read", { file_path })).isError).toBe(true);
   }
@@ -101,7 +104,7 @@ test("read returns real image blocks and prepares large dimensions", async () =>
   const source = required(pictures[0]).source;
   expect(source.data.length).toBeLessThanOrEqual(1_000_000);
   expect((await new Bun.Image(Buffer.from(source.data, "base64")).metadata()).width).toBeLessThanOrEqual(2000);
-  expect(resultText(result)).toContain("resized or converted");
+  expect(resultText(result)).toContain("wide.png: reduced from 4000×1000 PNG (2,116 tokens) to 2000×500 PNG (1,296 tokens). Read it with original: true for the full image.]");
   expect(resultText(result)).not.toContain(source.data);
   const frame = required(frames.find((candidate) => candidate.type === "tool_result"));
   expect(frame.tool_name).toBe("read");
@@ -219,7 +222,7 @@ test("Markdown read preserves text when local images are missing, invalid, or to
   const { put, run, exec } = await world();
   exec.limits.max_inline_image_bytes = 10 * 1024 * 1024;
   await put("bad.png", "not an image");
-  await put("large.png", Buffer.concat([Buffer.from(PNG, "base64"), Buffer.alloc(5 * 1024 * 1024)]));
+  await truncate(await put("large.png", Buffer.from(PNG, "base64")), MAX_READ_IMAGE_BYTES + 1);
   for (const ref of ["missing.png", "bad.png", "large.png", "bad%GG.png", ".", "image%00.png"]) {
     await put("broken.md", `Keep this text\n![broken](${ref})\n`);
     const result = await run("read", { file_path: "broken.md" });
@@ -374,30 +377,83 @@ test("edit rejects overlapping ambiguity and preserves BOM", async () => {
   expect(await readFile(path, "utf8")).toBe("\uFEFFok");
 });
 
-test("native patches add, contextual update, rename, and delete", async () => {
-  const { put, run, ctx } = await world();
-  await put("old", "first\nold\nlast\n");
-  await put("gone", "delete me");
-  const patch = "*** Begin Patch\n*** Add File: added\n+hello\n*** Update File: old\n*** Move to: renamed\n@@\n first\n-old\n+new\n last\n*** Delete File: gone\n*** End Patch";
-  const result = await run("apply_patch", { patch });
-  expect(result.isError).toBe(false);
-  expect(await readFile(join(ctx.workspaceDir, "added"), "utf8")).toBe("hello\n");
-  expect(await readFile(join(ctx.workspaceDir, "renamed"), "utf8")).toBe("first\nnew\nlast\n");
-  expect(await Bun.file(join(ctx.workspaceDir, "old")).exists()).toBe(false);
-  expect(await Bun.file(join(ctx.workspaceDir, "gone")).exists()).toBe(false);
-});
+describe("the native patch helper", () => {
+  beforeAll(async () => {
+    const build = Bun.spawn([process.execPath, "run", "scripts/build_patch.ts"], { cwd: join(import.meta.dir, ".."), stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+    const code = await build.exited;
+    if (code !== 0) throw new Error(`scripts/build_patch.ts exited with ${code}`);
+  }, 1_800_000);
 
-test("patch failures use native validation and report sequential partial application", async () => {
-  const { put, run, ctx } = await world();
-  const path = await put("note", "original\n");
-  const invalid = await run("apply_patch", { patch: "--- a/note\n+++ b/note\n@@\n-original\n+other" });
-  expect(invalid.isError).toBe(true);
-  expect(await readFile(path, "utf8")).toBe("original\n");
-  const partial = await run("apply_patch", { patch: "*** Begin Patch\n*** Add File: earlier\n+created\n*** Update File: note\n@@\n-absent\n+new\n*** End Patch" });
-  expect(partial.isError).toBe(true);
-  expect(resultText(partial)).toContain("earlier changes may remain");
-  expect(await readFile(join(ctx.workspaceDir, "earlier"), "utf8")).toBe("created\n");
-  expect(await readFile(path, "utf8")).toBe("original\n");
+  test("native patches add, contextual update, rename, and delete", async () => {
+    const { put, run, ctx } = await world();
+    await put("old", "first\nold\nlast\n");
+    await put("gone", "delete me");
+    const patch = "*** Begin Patch\n*** Add File: added\n+hello\n*** Update File: old\n*** Move to: renamed\n@@\n first\n-old\n+new\n last\n*** Delete File: gone\n*** End Patch";
+    const result = await run("apply_patch", { patch });
+    expect(result.isError).toBe(false);
+    expect(await readFile(join(ctx.workspaceDir, "added"), "utf8")).toBe("hello\n");
+    expect(await readFile(join(ctx.workspaceDir, "renamed"), "utf8")).toBe("first\nnew\nlast\n");
+    expect(await Bun.file(join(ctx.workspaceDir, "old")).exists()).toBe(false);
+    expect(await Bun.file(join(ctx.workspaceDir, "gone")).exists()).toBe(false);
+  });
+
+  test("patch failures use native validation and report sequential partial application", async () => {
+    const { put, run, ctx } = await world();
+    const path = await put("note", "original\n");
+    const invalid = await run("apply_patch", { patch: "--- a/note\n+++ b/note\n@@\n-original\n+other" });
+    expect(invalid.isError).toBe(true);
+    expect(await readFile(path, "utf8")).toBe("original\n");
+    const partial = await run("apply_patch", { patch: "*** Begin Patch\n*** Add File: earlier\n+created\n*** Update File: note\n@@\n-absent\n+new\n*** End Patch" });
+    expect(partial.isError).toBe(true);
+    expect(resultText(partial)).toContain("earlier changes may remain");
+    expect(await readFile(join(ctx.workspaceDir, "earlier"), "utf8")).toBe("created\n");
+    expect(await readFile(path, "utf8")).toBe("original\n");
+  });
+
+  test("edit and partial patch changes queue prompt reload and participate in write tracking", async () => {
+    const { put, run, ctx } = await world();
+    await put("MEMORY.md", "old\n");
+    const edits: string[] = [];
+    const tracked: string[] = [];
+    ctx.deferEdit = (path) => { edits.push(path); };
+    ctx.trackWorkspaceWrite = async (name, _input, write) => { tracked.push(name); return write(); };
+    await run("edit", { file_path: "MEMORY.md", old_string: "old", new_string: "new" });
+    await run("apply_patch", { patch: "*** Begin Patch\n*** Update File: MEMORY.md\n@@\n-new\n+updated\n*** Delete File: absent\n*** End Patch" });
+    expect(tracked).toEqual(["edit", "apply_patch"]);
+    expect(edits).toEqual(["MEMORY.md", "MEMORY.md"]);
+    const signal = AbortSignal.abort();
+    expect(await outcomeOf(dispatchTool("apply_patch", { patch: "anything" }, { ...ctx, signal }))).toThrow();
+  });
+
+  test("native patch paths follow symlinks and permit host-accessible parent paths", async () => {
+    const { root, ctx, run } = await world();
+    const outside = join(root, "outside");
+    await writeFile(outside, "before\n");
+    await symlink(outside, join(ctx.workspaceDir, "link"));
+    const result = await run("apply_patch", { patch: "*** Begin Patch\n*** Update File: link\n@@\n-before\n+after\n*** Add File: ../parent-added\n+literal $(exit 1)\n*** End Patch" });
+    expect(result.isError).toBe(false);
+    expect(await readFile(outside, "utf8")).toBe("after\n");
+    expect(await readFile(join(root, "parent-added"), "utf8")).toBe("literal $(exit 1)\n");
+  });
+
+  test.skipIf(process.platform === "win32")("cancelling a native patch stops the helper and reports earlier changes", async () => {
+    const { run, ctx } = await world();
+    const { runProcess } = await import("../src/tools/workspace.ts");
+    await runProcess("mkfifo", ["blocked"], { cwd: ctx.workspaceDir });
+    const abort = new AbortController();
+    ctx.signal = abort.signal;
+    const running = run("apply_patch", { patch: "*** Begin Patch\n*** Add File: earlier\n+created\n*** Update File: blocked\n@@\n-old\n+new\n*** End Patch" });
+    const path = join(ctx.workspaceDir, "earlier");
+    try {
+      const deadline = Date.now() + 2000;
+      while (!await Bun.file(path).exists() && Date.now() < deadline) await Bun.sleep(5);
+      expect(await Bun.file(path).exists()).toBe(true);
+    } finally { abort.abort(); }
+    const result = await running;
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("earlier changes may remain");
+    expect(await readFile(path, "utf8")).toBe("created\n");
+  });
 });
 
 test("tools enforce availability, dry run and host permissions", async () => {
@@ -424,21 +480,6 @@ test("tools enforce availability, dry run and host permissions", async () => {
   expect(renderToolDefs({ enabled_tools: ["edit", "apply_patch"], enabled_subagents: [] }, "Ada", "User").map((d) => d.name).sort()).toEqual(["apply_patch", "edit"]);
 });
 
-test("edit and partial patch changes queue prompt reload and participate in write tracking", async () => {
-  const { put, run, ctx } = await world();
-  await put("MEMORY.md", "old\n");
-  const edits: string[] = [];
-  const tracked: string[] = [];
-  ctx.deferEdit = (path) => { edits.push(path); };
-  ctx.trackWorkspaceWrite = async (name, _input, write) => { tracked.push(name); return write(); };
-  await run("edit", { file_path: "MEMORY.md", old_string: "old", new_string: "new" });
-  await run("apply_patch", { patch: "*** Begin Patch\n*** Update File: MEMORY.md\n@@\n-new\n+updated\n*** Delete File: absent\n*** End Patch" });
-  expect(tracked).toEqual(["edit", "apply_patch"]);
-  expect(edits).toEqual(["MEMORY.md", "MEMORY.md"]);
-  const signal = AbortSignal.abort();
-  expect(dispatchTool("apply_patch", { patch: "anything" }, { ...ctx, signal })).rejects.toThrow();
-});
-
 test("read handles JPEG, WebP and GIF as visual content", async () => {
   const { put, run } = await world();
   const wide = await wideImage();
@@ -454,19 +495,8 @@ test("read handles JPEG, WebP and GIF as visual content", async () => {
     expect(result.isError).toBe(false);
     if (result.block.type !== "tool_result") throw new Error("missing result");
     expect(toolResultImages(result.block.content)).toHaveLength(1);
-    if (file_path.endsWith("gif")) expect(resultText(result)).toContain("first frame only");
+    if (file_path.endsWith("gif")) expect(resultText(result)).toContain("image.gif: reduced from 1×1 GIF (1 token) to 1×1 PNG (1 token), first frame only.");
   }
-});
-
-test("native patch paths follow symlinks and permit host-accessible parent paths", async () => {
-  const { root, ctx, run } = await world();
-  const outside = join(root, "outside");
-  await writeFile(outside, "before\n");
-  await symlink(outside, join(ctx.workspaceDir, "link"));
-  const result = await run("apply_patch", { patch: "*** Begin Patch\n*** Update File: link\n@@\n-before\n+after\n*** Add File: ../parent-added\n+literal $(exit 1)\n*** End Patch" });
-  expect(result.isError).toBe(false);
-  expect(await readFile(outside, "utf8")).toBe("after\n");
-  expect(await readFile(join(root, "parent-added"), "utf8")).toBe("literal $(exit 1)\n");
 });
 
 test("a model-requested read reaches the HTTP continuation and is not rerun after image rejection", async () => {
@@ -507,25 +537,6 @@ test("a model-requested read reaches the HTTP continuation and is not rerun afte
     if (stored?.type !== "tool_result") throw new Error("missing persisted read");
     expect(toolResultImages(stored.content)).toHaveLength(1);
   } finally { await server.stop(true); }
-});
-
-test.skipIf(process.platform === "win32")("cancelling a native patch stops the helper and reports earlier changes", async () => {
-  const { run, ctx } = await world();
-  const { runProcess } = await import("../src/tools/workspace.ts");
-  await runProcess("mkfifo", ["blocked"], { cwd: ctx.workspaceDir });
-  const abort = new AbortController();
-  ctx.signal = abort.signal;
-  const running = run("apply_patch", { patch: "*** Begin Patch\n*** Add File: earlier\n+created\n*** Update File: blocked\n@@\n-old\n+new\n*** End Patch" });
-  const path = join(ctx.workspaceDir, "earlier");
-  try {
-    const deadline = Date.now() + 2000;
-    while (!await Bun.file(path).exists() && Date.now() < deadline) await Bun.sleep(5);
-    expect(await Bun.file(path).exists()).toBe(true);
-  } finally { abort.abort(); }
-  const result = await running;
-  expect(result.isError).toBe(true);
-  expect(resultText(result)).toContain("earlier changes may remain");
-  expect(await readFile(path, "utf8")).toBe("created\n");
 });
 
 test("an unavailable helper fails explicitly without changing a file", async () => {

@@ -19,6 +19,7 @@ import { ThreadError } from "../src/engine/threads.ts";
 import { ForkBusy } from "../src/engine/fork.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 import { buildSessionHistorySnapshot } from "../src/swp/handshake.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 
@@ -143,7 +144,7 @@ describe("the registry as the thread authority", () => {
   test("the home thread cannot be archived out from under the heartbeat", async () => {
     const { registry } = await registryWith("aria");
 
-    expect(registry.archiveThread("aria", MAIN_THREAD)).rejects.toThrow(ThreadError);
+    expect(await outcomeOf(registry.archiveThread("aria", MAIN_THREAD))).toThrow(ThreadError);
     expect(registry.homeThread("aria")).toBe(MAIN_THREAD);
   });
 
@@ -216,7 +217,7 @@ describe("the registry as the thread authority", () => {
 
     const ariaScratch = await registry.getOrCreate("aria", "scratch");
     expect(ariaScratch.characterName).toBe("aria");
-    expect(registry.getOrCreate("nova", "scratch")).rejects.toThrow(ThreadError);
+    expect(await outcomeOf(registry.getOrCreate("nova", "scratch"))).toThrow(ThreadError);
   });
 
   test("a character that disappears takes its threads and engines with it", async () => {

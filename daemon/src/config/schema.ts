@@ -195,8 +195,44 @@ function modelInfo(field: string): ConfigTypeInfo {
   return { kind: "string", optional: true };
 }
 
+const PLAN_LIMIT_DESCRIPTIONS: Record<string, string> = {
+  warn_fractions: "Claude plan utilization fractions that trigger warnings (0.8 means 80% of the window).",
+  limit_fraction: "Claude plan utilization fraction at which limit_action applies; 1.0 is the whole window.",
+  limit_action: "What reaching limit_fraction does to calls on the Claude subscription: warn, block, pause_background or pause_heartbeat.",
+};
+
+const IMAGE_DESCRIPTIONS: Record<string, string> = {
+  max_tokens: "Most tokens an image may cost; Claude charges one per 28×28-pixel patch. 1,600 fits a 4:3 photo at about 1270×952 (1,564 tokens), 1,000 at 1008×756; 0 leaves only max_edge and the model's own limit.",
+  max_edge: "Longest side in pixels. A 4:3 photo costs 1,036 tokens at 1024, 1,610 at 1280, 2,352 at 1568 and 3,888 at 2000 on Claude 4.7 and later; earlier models cap any image at 1,568 tokens (about 1270×952).",
+  format: "keep sends an image within the limits untouched and re-encodes the rest as PNG, then WebP; jpeg, webp and png convert every image, and jpeg uses WebP for images that may be transparent. Changes bytes, not tokens.",
+  quality: "JPEG and WebP quality, 1–100. To meet max_bytes it is lowered in steps of 10 toward 50 before the image is made smaller. Changes bytes, not tokens.",
+  png_compression: "PNG zlib level, 0–9; 9 is smaller and slower. Changes bytes, not tokens.",
+  png_palette: "Reduce re-encoded PNGs to 256 colours; very effective on screenshots. Changes bytes, not tokens.",
+  max_bytes: "Largest encoded size of one image; met by lowering quality first and size second.",
+  tell_model: "Tell the model when a workspace image it reads was reduced, with the original and sent size, format and token cost.",
+  allow_original: "Let the model read a workspace image with original: true, at the full resolution its model accepts.",
+};
+
+const IMAGE_SECTIONS: Record<string, string> = {
+  read: "workspace images the model reads, including images in Markdown",
+  upload: "images a user sends",
+  mcp: "images in MCP tool results",
+};
+
+function describeImageOption(path: readonly string[]): string | undefined {
+  const leaf = path.at(-1) ?? "";
+  const description = IMAGE_DESCRIPTIONS[leaf];
+  if (path.length === 2 || description === undefined) return description;
+  const section = IMAGE_SECTIONS[path[1] ?? ""];
+  return section === undefined || leaf === "tell_model" || leaf === "allow_original" ? description : `${description} Overrides images.${leaf} for ${section}.`;
+}
+
 function describeOption(path: readonly string[]): string {
   const leaf = path.at(-1) ?? "configuration";
+  const plan = path[0] === "plan_limits" ? PLAN_LIMIT_DESCRIPTIONS[leaf] : undefined;
+  if (plan !== undefined) return plan;
+  const image = path[0] === "images" ? describeImageOption(path) : undefined;
+  if (image !== undefined) return image;
   const descriptions: Record<string, string> = {
     model: "Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.",
     enabled: "Enable this feature or select the names granted access.",
@@ -221,7 +257,7 @@ function describeOption(path: readonly string[]): string {
 
 function unitsOf(path: readonly string[]): string | undefined {
   const leaf = path.at(-1) ?? "";
-  return leaf.endsWith("_bytes") ? "bytes" : leaf.endsWith("_chars") ? "characters" : leaf.endsWith("_tokens") ? "tokens" : leaf.endsWith("_fractions") ? "fraction" : leaf === "cost_usd" ? "USD" : undefined;
+  return leaf.endsWith("_bytes") ? "bytes" : leaf.endsWith("_chars") ? "characters" : leaf.endsWith("_tokens") ? "tokens" : leaf.endsWith("_fractions") || leaf === "limit_fraction" ? "fraction" : leaf === "cost_usd" ? "USD" : leaf === "max_edge" ? "pixels" : undefined;
 }
 
 export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): SchemaEntry | undefined {

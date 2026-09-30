@@ -27,7 +27,9 @@ import type {
   WireMessage,
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
-import { anyToolEnabled } from "../config/app.ts";
+import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
+import { anyToolEnabled, imageSettingsFor } from "../config/app.ts";
+import { imageLimitsFor } from "../llm/prepare_images.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
@@ -117,6 +119,7 @@ export interface GenerationDeps {
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered" | "call">;
   compaction: CompactionRunner;
   newlyCrossedUsageBudgetWarnings: PersistContext["newlyCrossedUsageBudgetWarnings"];
+  newlyCrossedPlanLimitWarnings: PersistContext["newlyCrossedPlanLimitWarnings"];
   ledgerPath?: string;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   now?: () => string;
@@ -214,6 +217,7 @@ async function runGenerationCore(
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
     sendDirect: (message) => void params.send(message),
+    ...(params.accepted === undefined ? {} : { accepted: params.accepted }),
     autonomy,
     now,
     newMessageId,
@@ -250,7 +254,7 @@ async function runGenerationCore(
   }
 
   const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid);
+  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
@@ -329,6 +333,7 @@ async function runGenerationCore(
     autonomy,
     notifier: deps.notifier,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
+    newlyCrossedPlanLimitWarnings: deps.newlyCrossedPlanLimitWarnings,
     now,
     newMessageId,
   };
@@ -336,6 +341,7 @@ async function runGenerationCore(
   await persistAndNotify(persistCtx, engine, {
     charName,
     resolvedProviderKey: resolved.providerKey,
+    onClaudePlan: runsOnClaudePlan(request),
     result,
     request: {
       ...sentBody,
@@ -445,6 +451,7 @@ async function streamTurn(
         sendDirect: sink,
         ctx: toolCtx,
         limits: toolLimits(config),
+        imageLimits: imageLimitsFor(call.sdk, call.model),
         ...(params.rid === undefined ? {} : { rid: params.rid }),
         now: params.now,
         newMessageId: params.newMessageId,

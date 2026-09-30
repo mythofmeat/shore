@@ -517,5 +517,96 @@
         }
       }
     }
+  ],
+  "plan": [
+    {
+      "label": "always shows both windows",
+      "mode": "always",
+      "windows": [
+        {
+          "window": "five_hour",
+          "percent_used": 0.31,
+          "crossed_warn_at": [],
+          "over_limit": false
+        },
+        {
+          "window": "seven_day",
+          "percent_used": 0.84,
+          "crossed_warn_at": [
+            0.8
+          ],
+          "over_limit": false
+        }
+      ],
+      "visible": [
+        "five_hour",
+        "seven_day"
+      ]
+    },
+    {
+      "label": "warn shows only windows past a threshold",
+      "mode": "warn",
+      "windows": [
+        {
+          "window": "five_hour",
+          "percent_used": 0.31,
+          "crossed_warn_at": [],
+          "over_limit": false
+        },
+        {
+          "window": "seven_day",
+          "percent_used": 0.84,
+          "crossed_warn_at": [
+            0.8
+          ],
+          "over_limit": false
+        }
+      ],
+      "visible": [
+        "seven_day"
+      ]
+    },
+    {
+      "label": "a window past its limit shows in warn mode",
+      "mode": "warn",
+      "windows": [
+        {
+          "window": "five_hour",
+          "percent_used": 0.9,
+          "crossed_warn_at": [],
+          "over_limit": true
+        },
+        {
+          "window": "seven_day",
+          "percent_used": 0.2,
+          "crossed_warn_at": [],
+          "over_limit": false
+        }
+      ],
+      "visible": [
+        "five_hour"
+      ]
+    },
+    {
+      "label": "off hides the plan",
+      "mode": "off",
+      "windows": [
+        {
+          "window": "five_hour",
+          "percent_used": 0.31,
+          "crossed_warn_at": [],
+          "over_limit": false
+        },
+        {
+          "window": "seven_day",
+          "percent_used": 0.84,
+          "crossed_warn_at": [
+            0.8
+          ],
+          "over_limit": false
+        }
+      ],
+      "visible": []
+    }
   ]
 }

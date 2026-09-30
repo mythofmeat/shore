@@ -18,7 +18,9 @@ export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "u
   return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, "value") ? { value: "<redacted>" } : {}) } };
 }
 
-export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
+export interface LiveRound { reasoning: string; text: string; tools: string[] }
+export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; tools: string[]; round: LiveRound; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
+export const liveTurn = (key: string, rid: string | null, subagent: string | null): LiveTurn => ({ key, rid, subagent, text: "", reasoning: "", blocks: [], tools: [], round: { reasoning: "", text: "", tools: [] }, final: false, msgId: null, metadata: null });
 export interface Activity { id: number; type: string; data: unknown; previewLimited: boolean }
 export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
@@ -33,7 +35,7 @@ export const EVENT_POLICIES = {
   tool_call: "stream", tool_result: "stream", send_image: "media",
   phase: "activity", command_output: "result", error: "warning",
   cache_warning: "warning", provider_warning: "warning", provider_fallback_warning: "warning",
-  usage_warning: "warning", config_warning: "warning", request_finished: "completion",
+  usage_warning: "warning", plan_limit_warning: "warning", config_warning: "warning", request_accepted: "completion", request_finished: "completion",
   ping: "connection", shutdown: "connection",
 } satisfies Record<ServerMessage["type"], string>;
 
@@ -107,7 +109,7 @@ export class Workspace {
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
     const manual = this.actions.pendingOperation(message.rid) === "run_tool";
     const key = JSON.stringify([message.rid ?? null, message.subagent ?? null, message.task_id ?? null]);
-    const current: LiveTurn = this.#state.streams.find((stream) => stream.key === key) ?? { key, rid: message.rid ?? null, subagent: message.subagent ?? null, text: "", reasoning: "", blocks: [], final: false, msgId: null, metadata: null };
+    const current: LiveTurn = this.#state.streams.find((stream) => stream.key === key) ?? liveTurn(key, message.rid ?? null, message.subagent ?? null);
     const next = { ...current };
     let media = this.#state.media;
     let mediaLimited = this.#state.mediaLimited;
@@ -116,10 +118,13 @@ export class Workspace {
         next.final = false;
         if (message.regen) next.replaces = message.replaces ?? [];
         break;
-      case "stream_chunk":
+      case "stream_chunk": {
         if (message.content_type === "thinking") next.reasoning += message.text;
         else next.text += message.text;
+        const round = next.round.tools.length > 0 ? { reasoning: "", text: "", tools: [] } : next.round;
+        next.round = message.content_type === "thinking" ? { ...round, reasoning: round.reasoning + message.text } : { ...round, text: round.text + message.text };
         break;
+      }
       case "stream_end":
         next.text = message.content;
         next.final = message.is_final;
@@ -127,7 +132,11 @@ export class Workspace {
         next.metadata = accumulateMetadata(next.metadata, message.metadata);
         next.blocks = message.terminal_content_blocks ?? next.blocks;
         break;
-      case "tool_call": next.blocks = [...next.blocks, { type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }]; break;
+      case "tool_call":
+        next.blocks = [...next.blocks, { type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }];
+        next.tools = [...next.tools, message.tool_id];
+        next.round = { ...next.round, tools: [...next.round.tools, message.tool_id] };
+        break;
       case "tool_result":
         next.blocks = [...next.blocks, { type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }];
         for (const image of message.images ?? []) {
@@ -144,6 +153,7 @@ export class Workspace {
     next.previewLimited ||= text !== next.text || reasoning !== next.reasoning;
     next.text = text;
     next.reasoning = reasoning;
+    next.round = { ...next.round, text: recentText(next.round.text, MAX_LIVE_TEXT), reasoning: recentText(next.round.reasoning, MAX_LIVE_TEXT) };
     if (next.blocks !== current.blocks) {
       const retained = recentItems(next.blocks, MAX_LIVE_BLOCKS, MAX_LIVE_BLOCK_CHARS, (block) => JSON.stringify(block).length);
       next.blocks = retained.items;
@@ -207,8 +217,8 @@ export class Workspace {
         this.#patch({ media: retained.items, mediaLimited: this.#state.mediaLimited || retained.limited });
         this.#activity(message.type, message); return;
       }
-      case "command_output": case "phase": case "cache_warning": case "provider_warning":
-      case "provider_fallback_warning": case "usage_warning": case "config_warning": case "shutdown":
+      case "command_output": case "phase": case "cache_warning": case "provider_warning": case "request_accepted":
+      case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "ping": break;
     }

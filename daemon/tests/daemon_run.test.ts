@@ -27,6 +27,7 @@ import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { OperationClient } from "../src/browser/operations.ts";
 import { seedDiagnosticFixture } from "./support/diagnostic_fixture.ts";
+import { fakeHomeserver } from "./support/matrix_homeserver.ts";
 import { cacheFixture, compactionFixture } from "./support/memory_fixture.ts";
 import type { BrowserRequest } from "../src/browser/connection.ts";
 import { segments } from "../src/commands/segments.ts";
@@ -40,6 +41,7 @@ import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { outcomeOf } from "./support/outcome.ts";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -1126,7 +1128,7 @@ describe("optional browser transport", () => {
       expect(page.messages.map((message) => message.content)).toEqual(["Keep the context"]);
       expect(page.has_more_before).toBe(true);
       expect((await actions.run("history_page", { before: page.next_before, count: 1 })).messages.map((message) => message.content)).toEqual(["answer 1"]);
-      expect(actions.run("edit", { ref: "missing-message", content: "rejected" })).rejects.toThrow("message not found");
+      expect(await outcomeOf(actions.run("edit", { ref: "missing-message", content: "rejected" }))).toThrow("message not found");
       const removed = await actions.run("delete", { refs: ["1", "last"] });
       expect(removed.deleted).toHaveLength(2);
       const browserHistory = await actions.run("log", {});
@@ -1275,7 +1277,7 @@ describe("optional browser transport", () => {
     if (address === null || typeof address === "string") throw new Error("Expected address");
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
     try {
-      expect(start(place)).rejects.toThrow("Failed to start browser transport");
+      expect(await outcomeOf(start(place))).toThrow("Failed to start browser transport");
       await until(() => !existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE)), "lease was not released");
       expect(existsSync(place.instancesPath)).toBe(false);
       expect(existsSync(join(place.root, "data", "shore", "shore.db"))).toBe(false);
@@ -1666,6 +1668,36 @@ describe("a Matrix homeserver that never answers", () => {
       });
     }
   });
+
+  test("does not keep the daemon from stopping", async () => {
+    const homeserver = await fakeHomeserver(() => "never");
+    const place = await layout(
+      "[matrix]\nenabled = true\n" +
+        `homeserver_url = "${homeserver.url}"\nuser_id = "@shore:example.com"\n`,
+    );
+    place.env[ACCESS_TOKEN_ENV] = "not-a-real-token";
+    const warnings: string[] = [];
+
+    try {
+      const daemon = await startDaemon({
+        argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"],
+        env: place.env,
+        providers: {},
+        instancesPath: place.instancesPath,
+        log: { warn: (message) => warnings.push(message) },
+      });
+      running.push(daemon);
+      await until(() => homeserver.requests.length > 0, "the bridge never asked its homeserver");
+
+      daemon.stop();
+      await daemon.done;
+
+      expect(warnings).not.toContain("Shutdown step timed out");
+      expect(warnings.join("\n")).not.toContain("Matrix bridge not started");
+    } finally {
+      await homeserver.close();
+    }
+  }, 15_000);
 });
 
 describe("describeRejection", () => {

@@ -16,6 +16,7 @@ import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import {
   defaultAppConfig,
+  defaultPlanLimitsConfig,
   type AppConfig,
   type RetrievalMode,
 } from "../src/config/app.ts";
@@ -45,6 +46,7 @@ import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedValue } from "./support/rerecord.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const CAPTURE = "tests/handler_captures/generation.json";
 
@@ -491,6 +493,7 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
     compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
+    newlyCrossedPlanLimitWarnings: async () => [],
     now: () => MINTED_TS,
     newMessageId: () => `m_${crypto.randomUUID()}`,
     monotonicMs: () => 0,
@@ -630,7 +633,7 @@ describe("runGeneration", () => {
             ...(rest["context"] as Record<string, unknown>),
             ledger: join(run.dataDir, "shore.db"),
             keepalive_window_secs: 0,
-            usage: { budgets: [], timezone: "local" },
+            usage: { budgets: [], timezone: "local", plan_limits: defaultPlanLimitsConfig() },
           },
         }),
       );
@@ -974,6 +977,7 @@ test("a sampler preference set for the character reaches the outgoing request", 
       mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
       compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
       newlyCrossedUsageBudgetWarnings: async () => [],
+      newlyCrossedPlanLimitWarnings: async () => [],
       now: () => MINTED_TS,
       newMessageId: () => `m_${crypto.randomUUID()}`,
       monotonicMs: () => 0,
@@ -1066,6 +1070,7 @@ test("a real reply without cache metrics still schedules the configured pings", 
       mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
       compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
       newlyCrossedUsageBudgetWarnings: async () => [],
+      newlyCrossedPlanLimitWarnings: async () => [],
       now: () => MINTED_TS,
       newMessageId: () => `m_${crypto.randomUUID()}`,
       monotonicMs: () => 0,
@@ -1158,6 +1163,7 @@ test("the turn tells the provider which thread it belongs to", async () => {
       mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
       compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
       newlyCrossedUsageBudgetWarnings: async () => [],
+      newlyCrossedPlanLimitWarnings: async () => [],
       now: () => MINTED_TS,
       newMessageId: () => `m_${crypto.randomUUID()}`,
       monotonicMs: () => 0,
@@ -1251,6 +1257,7 @@ test("a turn in a pinned thread runs on that thread's model, not the character's
       mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
       compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
       newlyCrossedUsageBudgetWarnings: async () => [],
+      newlyCrossedPlanLimitWarnings: async () => [],
       now: () => MINTED_TS,
       newMessageId: () => `m_${crypto.randomUUID()}`,
       monotonicMs: () => 0,
@@ -1316,6 +1323,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
       mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
       compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
       newlyCrossedUsageBudgetWarnings: async () => [],
+      newlyCrossedPlanLimitWarnings: async () => [],
       now: () => MINTED_TS,
       newMessageId: () => `m_${crypto.randomUUID()}`,
       monotonicMs: () => 0,
@@ -1334,7 +1342,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
     },
   );
 
-  expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
+  expect(await outcomeOf(run)).toThrow(NO_CHAT_MODELS_MESSAGE);
 
   expect(existsSync(characterActiveJsonl(config.dirs.data, "ada", MAIN_THREAD))).toBe(false);
   expect(engine.messages()).toEqual([]);

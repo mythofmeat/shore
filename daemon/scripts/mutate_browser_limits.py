@@ -8,6 +8,8 @@ M = "src/browser/media.ts"
 MUTANTS = [
     ("live response text unbounded", W, 'recentText(next.text, MAX_LIVE_TEXT)', 'next.text'),
     ("live reasoning unbounded", W, 'recentText(next.reasoning, MAX_LIVE_TEXT)', 'next.reasoning'),
+    ("current round text unbounded", W, 'text: recentText(next.round.text, MAX_LIVE_TEXT)', 'text: next.round.text'),
+    ("current round reasoning unbounded", W, 'reasoning: recentText(next.round.reasoning, MAX_LIVE_TEXT)', 'reasoning: next.round.reasoning'),
     ("tool previews unbounded", W, 'recentItems(next.blocks, MAX_LIVE_BLOCKS, MAX_LIVE_BLOCK_CHARS,', 'recentItems(next.blocks, Infinity, Infinity,'),
     ("activity payload unbounded", W, 'const preview = inspectionPreview(data);', 'const preview = data;'),
     ("live image bytes unbounded", M, 'recentItems(images, MAX_LIVE_IMAGES, MAX_LIVE_MEDIA_CHARS,', 'recentItems(images, MAX_LIVE_IMAGES, Infinity,'),

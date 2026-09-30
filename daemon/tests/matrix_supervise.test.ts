@@ -59,6 +59,10 @@ class FaultingBot {
     this.#wake?.();
   }
 
+  get stopped(): boolean {
+    return this.#stopped;
+  }
+
   resolveRoom(alias: string): Promise<string | undefined> {
     return Promise.resolve(alias);
   }
@@ -202,6 +206,52 @@ describe("supervising the bridge", () => {
     await bridge.done;
     expect(bots.length).toBe(1);
     expect(warnings.join("\n")).toContain("until the daemon restarts");
+  });
+
+  test("stopping abandons a login still in flight rather than waiting for the homeserver", async () => {
+    const warnings: string[] = [];
+    let abandoned: AbortSignal | undefined;
+    const bridge = superviseMatrixBridge({
+      config: loaded(usable()),
+      server: new Server({ addr: "127.0.0.1:0", serverName: "t", authenticate: () => true }),
+      env: { [ACCESS_TOKEN_ENV]: "t" },
+      log: { warn: (message: string) => warnings.push(message) },
+      login: (config) =>
+        new Promise<never>((_resolve, reject) => {
+          abandoned = config.signal;
+          config.signal?.addEventListener("abort", () => reject(new Error("login abandoned")));
+        }),
+      retry: { baseMs: 1, capMs: 2, stableMs: 1_000, now: () => 0 },
+    });
+    await until(() => abandoned !== undefined, "the login attempt");
+
+    await bridge.stop();
+
+    expect(abandoned?.aborted).toBe(true);
+    expect(warnings).toEqual([]);
+  });
+
+  test("a bridge that comes up after the stop was asked for is stopped, not left running", async () => {
+    const bot = new FaultingBot();
+    let admit: (() => void) | undefined;
+    const bridge = superviseMatrixBridge({
+      config: loaded(usable()),
+      server: new Server({ addr: "127.0.0.1:0", serverName: "t", authenticate: () => true }),
+      env: { [ACCESS_TOKEN_ENV]: "t" },
+      log: { warn: () => {} },
+      login: (() =>
+        new Promise<FaultingBot>((resolve) => {
+          admit = () => resolve(bot);
+        })) as never,
+      retry: { baseMs: 1, capMs: 2, stableMs: 1_000, now: () => 0 },
+    });
+    await until(() => admit !== undefined, "the login attempt");
+
+    const stopping = bridge.stop();
+    required(admit)();
+    await stopping;
+
+    expect(bot.stopped).toBe(true);
   });
 
   test("stopping cuts the backoff short rather than waiting it out", async () => {

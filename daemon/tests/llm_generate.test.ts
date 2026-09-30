@@ -25,6 +25,7 @@ import { openLedger, rowsIn } from "./support/ledger_fixture.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { LlmError } from "../src/llm/errors.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 
 afterEach(() => {
   closeLedgers();
@@ -180,9 +181,9 @@ describe("shared generation contract", () => {
         else effectSink({ type: "send_image" } as never);
         throw unauthorized();
       };
-      expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
+      expect(await rejectionOf(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
         tools: (_request, sink) => { effectSink = sink; return undefined; },
-      })).rejects.toEqual(unauthorized());
+      }))).toEqual(unauthorized());
       expect(attempts).toBe(1);
     });
   }
@@ -191,7 +192,7 @@ describe("shared generation contract", () => {
     const keys: string[] = [];
     const controller = new AbortController();
     controller.abort();
-    expect(generate(request(), deps(recordingProvider(keys)), controller.signal)).rejects.toThrow();
+    expect(await outcomeOf(generate(request(), deps(recordingProvider(keys)), controller.signal))).toThrow();
     expect(keys).toEqual([]);
   });
 
@@ -201,7 +202,7 @@ describe("shared generation contract", () => {
       yield { type: "text", text: "partial" };
       yield { type: "error", message: "provider failed", usage: ok().usage, timing: ok().timing };
     };
-    expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider))).rejects.toMatchObject({ kind: "stream_errored" });
+    expect(await rejectionOf(runGeneration(request(), { providerKey: "anthropic" }, deps(provider)))).toMatchObject({ kind: "stream_errored" });
   });
 });
 
@@ -301,12 +302,12 @@ describe("rotating through a provider's keys", () => {
     const provider = recordingProvider(keys, () => badRequest());
 
     expect(
-      generateWithCredentialFallback(
+      await outcomeOf(generateWithCredentialFallback(
         request(),
         required(resolveModelForRequest(config(), request())),
         deps(provider),
-      ),
-    ).rejects.toThrow();
+      )),
+    ).toThrow();
 
     expect(new Set(keys)).toEqual(new Set(["primary-secret"]));
   });
@@ -319,12 +320,12 @@ describe("rotating through a provider's keys", () => {
     });
 
     expect(
-      generateWithCredentialFallback(
+      await rejectionOf(generateWithCredentialFallback(
         request(),
         required(resolveModelForRequest(disabled, request())),
         deps(recordingProvider(keys), { config: disabled }),
-      ),
-    ).rejects.toBeDefined();
+      )),
+    ).toBeDefined();
 
     expect(keys).toEqual([]);
   });
@@ -333,12 +334,12 @@ describe("rotating through a provider's keys", () => {
     const keys: string[] = [];
 
     expect(
-      generateWithCredentialFallback(
+      await outcomeOf(generateWithCredentialFallback(
         request(),
         required(resolveModelForRequest(config(), request())),
         deps(recordingProvider(keys), { env: {} }),
-      ),
-    ).rejects.toThrow();
+      )),
+    ).toThrow();
 
     expect(keys).toEqual([]);
   });
@@ -366,7 +367,7 @@ describe("calling the model", () => {
     const keys: string[] = [];
     const provider = recordingProvider(keys, () => unauthorized());
 
-    expect(generate(request({ model: "dyn-model" }), deps(provider))).rejects.toThrow();
+    expect(await outcomeOf(generate(request({ model: "dyn-model" }), deps(provider)))).toThrow();
 
     expect(keys).toEqual(["seed"]);
   });
@@ -394,8 +395,8 @@ describe("calling the model", () => {
 
   test("an sdk with no adapter is a plain failure", async () => {
     expect(
-      generate(request({ sdk: "gemini", model: "dyn-model" }), deps(recordingProvider([]))),
-    ).rejects.toThrow("unsupported sdk: gemini");
+      await outcomeOf(generate(request({ sdk: "gemini", model: "dyn-model" }), deps(recordingProvider([])))),
+    ).toThrow("unsupported sdk: gemini");
   });
 });
 
@@ -441,7 +442,7 @@ describe("the ledger row", () => {
     const path = freshLedger();
     const provider = recordingProvider([], () => badRequest());
 
-    expect(generate(withLedger(path), deps(provider))).rejects.toBeDefined();
+    expect(await rejectionOf(generate(withLedger(path), deps(provider)))).toBeDefined();
 
     const rows = rowsIn(path);
     expect(rows.length).toBe(1);
@@ -498,7 +499,7 @@ describe("the budget gate", () => {
       },
     } as never);
 
-    expect(generate(req, deps(recordingProvider(keys)))).rejects.toBeInstanceOf(BudgetBlocked);
+    expect(await rejectionOf(generate(req, deps(recordingProvider(keys))))).toBeInstanceOf(BudgetBlocked);
 
     expect(keys).toEqual([]);
     expect(rowsIn(path).length).toBe(1);

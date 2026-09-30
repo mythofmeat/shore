@@ -14,6 +14,7 @@ import {
   type AutonomyRunnerConfig,
 } from "../src/autonomy/runner.ts";
 import type { CompactionReason } from "../src/autonomy/tick.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const HOUR = 3_600_000;
 
@@ -732,7 +733,7 @@ describe("when the daemon cannot be reached", () => {
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      expect(runner.tick()).rejects.toThrow("compaction:idle unreachable");
+      expect(await outcomeOf(runner.tick())).toThrow("compaction:idle unreachable");
       expect(executor.calls, "dreaming never ran").not.toContain("dream");
     });
   });
@@ -746,7 +747,7 @@ describe("when the daemon cannot be reached", () => {
       executor.unreachable.add("compaction:idle");
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
-      expect(runner.tick()).rejects.toThrow();
+      expect(await outcomeOf(runner.tick())).toThrow();
 
       executor.unreachable.clear();
       time.now += 2 * HOUR;
@@ -764,7 +765,7 @@ describe("when the daemon cannot be reached", () => {
       runner.onUserMessage(1, time.now);
       time.now += 4 * HOUR;
 
-      expect(runner.tick()).rejects.toThrow("heartbeat unreachable");
+      expect(await outcomeOf(runner.tick())).toThrow("heartbeat unreachable");
 
       const saved = await loadState(join(dir, STATE_FILENAME));
       expect(saved, "the state was written despite the throw").toBeDefined();

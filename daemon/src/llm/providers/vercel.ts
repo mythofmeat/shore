@@ -1,5 +1,5 @@
 import { coalesceToolResults } from "../tool_result_messages.ts";
-import { prepareRequestImages } from "../prepare_images.ts";
+import { limitRequestImages } from "../prepare_images.ts";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import {
@@ -40,7 +40,7 @@ export class VercelProvider implements SidecarProvider {
   constructor(private readonly customFetch?: typeof fetch) {}
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const markFirst = () => {
@@ -126,7 +126,7 @@ export class VercelProvider implements SidecarProvider {
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
-    req = await prepareRequestImages(req);
+    req = await limitRequestImages(req);
     const startedAt = Date.now();
     const result = await generateText(
       buildCall(req, signal, this.customFetch) as Parameters<typeof generateText>[0],

@@ -33,6 +33,7 @@ export function superviseMatrixBridge(options: SupervisorOptions): SupervisedBri
   const stableMs = options.retry?.stableMs ?? STABLE_MS;
   const now = options.retry?.now ?? Date.now;
 
+  const stopController = new AbortController();
   let stopped = false;
   let current: BridgeHandle | undefined;
   let wake: (() => void) | undefined;
@@ -64,13 +65,17 @@ export function superviseMatrixBridge(options: SupervisorOptions): SupervisedBri
     for (;;) {
       if (stopped) return;
 
-      const outcome = await attemptMatrixBridge(options);
+      const outcome = await attemptMatrixBridge(options, stopController.signal);
       if (outcome.kind === "off") return;
       if (outcome.kind === "failed") {
         if (isTerminalMatrixError(outcome.error)) return giveUp(outcome.error);
         if (stopped) return;
         await pause();
         continue;
+      }
+      if (stopped) {
+        await outcome.handle.stop();
+        return;
       }
 
       current = outcome.handle;
@@ -93,6 +98,7 @@ export function superviseMatrixBridge(options: SupervisorOptions): SupervisedBri
     done,
     stop: async () => {
       stopped = true;
+      stopController.abort();
       wake?.();
       await current?.stop();
       await done;

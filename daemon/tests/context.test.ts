@@ -26,6 +26,7 @@ import {
   type AssistantImageMode,
 } from "../src/handler/wire_messages.ts";
 import { testTmp } from "./support/tmp.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 interface FixturePromptMessage {
   role: Role;
@@ -317,6 +318,41 @@ describe("prepareChatContext", () => {
     });
     expect(got.system).toEqual(files.map(({ label, content }) => ({ label, text: content })));
     expect(got.prompt.system).toEqual(files.map(({ label, content }) => ({ label, content })));
+  });
+
+  test("the model's resolution tier decides how many pictures fit", async () => {
+    const base = contextCases[0];
+    if (base === undefined) throw new Error("missing context fixture");
+    const c = structuredClone(base);
+    c.input.active_files = [];
+    c.input.canonical_files = [];
+    c.input.max_context_tokens = 25_000;
+    c.input.max_output_tokens = 0;
+    const data = (await sizedImage(1920, 1080)).toString("base64");
+    const screenshots: Message[] = Array.from({ length: 10 }, (_, i) => ({
+      msg_id: `u${String(i)}`,
+      role: "user",
+      content: "",
+      images: [],
+      content_blocks: [{ type: "image", source: { type: "base64", media_type: "image/png", data } }],
+      timestamp: `2026-09-30T00:0${String(i)}:00Z`,
+    }));
+    const kept = async (modelId: string): Promise<number> => {
+      const { config, charDataDir, resolved } = await contextFixture(c);
+      const got = await prepareChatContext({
+        character: c.input.character,
+        characterDataDir: charDataDir,
+        config,
+        resolved: { ...resolved, modelId },
+        messages: screenshots,
+        hasPriorContext: false,
+        mcpToolDefs: [],
+        timeZone: ZONE,
+      });
+      return got.prompt.messages.length;
+    };
+    expect(await kept("claude-haiku-4-5")).toBe(10);
+    expect(await kept("claude-opus-5-5")).toBeLessThan(10);
   });
 
   for (const c of contextCases) {

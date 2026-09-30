@@ -6,7 +6,10 @@ import { join } from "node:path";
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { base64Rejection } from "../tools/images.ts";
-import { omissionNotice, resolveImage } from "../llm/images.ts";
+import { findModelCopy, modelCopyPath, omissionNotice, resolveImage } from "../llm/images.ts";
+import { prepareImageBlock, reduceImage } from "../llm/prepare_images.ts";
+import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
+import { atomicWrite } from "../engine/atomic.ts";
 
 export interface ImageUpload {
   filename: string;
@@ -178,26 +181,28 @@ export async function ingestImages(
   imagePaths: readonly string[],
   imageData: readonly ImageUpload[],
   now: Date = new Date(),
+  settings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
 ): Promise<{ images: ImageRef[]; blocks: ContentBlock[] }> {
   const attachmentsDir = join(characterMediaDir(dataDir, charName), "attachments");
   const images: ImageRef[] = [];
   const blocks: ContentBlock[] = [];
 
-  const keep = (label: string, ref: ImageRef | undefined): void => {
-    if (ref === undefined) {
+  const keep = async (label: string, saved: { ref: ImageRef; bytes: Uint8Array } | undefined): Promise<void> => {
+    if (saved === undefined) {
       blocks.push({ type: "text", text: omissionNotice(label, "it could not be attached") });
       return;
     }
-    const resolution = resolveImage(ref);
+    const resolution = resolveImage(saved.ref);
     if ("omitted" in resolution) {
       blocks.push({ type: "text", text: omissionNotice(label, resolution.omitted) });
       return;
     }
-    images.push(ref);
+    await saveModelCopy(saved.ref.path, saved.bytes, settings);
+    images.push(saved.ref);
   };
 
   for (const upload of imageData) {
-    keep(upload.filename, await ingestUpload(attachmentsDir, upload, now));
+    await keep(upload.filename, await ingestUpload(attachmentsDir, upload, now));
   }
 
   let uploadIndex = 0;
@@ -220,7 +225,7 @@ async function ingestUpload(
   attachmentsDir: string,
   upload: ImageUpload,
   now: Date,
-): Promise<ImageRef | undefined> {
+): Promise<{ ref: ImageRef; bytes: Uint8Array } | undefined> {
   const rejection = base64Rejection(upload.data);
   if (rejection !== undefined) {
     shoreLog.warn(
@@ -229,7 +234,20 @@ async function ingestUpload(
     return undefined;
   }
   const bytes = decodeBase64(upload.data);
-  return await saveAttachment(attachmentsDir, upload.filename, upload.mime_type, bytes, now);
+  const ref = await saveAttachment(attachmentsDir, upload.filename, upload.mime_type, bytes, now);
+  return ref === undefined ? undefined : { ref, bytes };
+}
+
+async function saveModelCopy(original: string, bytes: Uint8Array, settings: Readonly<ImageSettings>): Promise<void> {
+  const mediaType = sniffMediaType(bytes);
+  if (mediaType === undefined) return;
+  try {
+    const reduced = await reduceImage({ type: "base64", media_type: mediaType, data: Buffer.from(bytes).toString("base64") }, settings);
+    const target = modelCopyPath(original, reduced.source.media_type);
+    if (target !== undefined) await atomicWrite(target, Buffer.from(reduced.source.data, "base64"));
+  } catch (e) {
+    shoreLog.warn(`shore: could not reduce ${original} for the model; it will be sent the way older attachments are: ${String(e)}`);
+  }
 }
 
 function decodeBase64(data: string): Uint8Array {
@@ -239,6 +257,15 @@ function decodeBase64(data: string): Uint8Array {
 export async function encodeImageBlock(
   img: ImageRef,
 ): Promise<{ type: "base64"; media_type: string; data: string } | undefined> {
+  const copy = findModelCopy(img.path);
+  if (copy !== undefined) {
+    try {
+      return { type: "base64", media_type: copy.mediaType, data: (await readFile(copy.path)).toString("base64") };
+    } catch (e) {
+      shoreLog.warn(`shore: failed to read the model's copy of ${img.path}; sending the original instead: ${String(e)}`);
+    }
+  }
+
   const mediaType = mediaTypeForPath(img.path);
   if (mediaType === undefined) {
     shoreLog.warn(`shore: skipping image with unsupported extension: ${img.path}`);
@@ -253,9 +280,14 @@ export async function encodeImageBlock(
     return undefined;
   }
 
-  return {
-    type: "base64",
-    media_type: mediaType,
-    data: Buffer.from(bytes).toString("base64"),
-  };
+  try {
+    const prepared = await prepareImageBlock({
+      type: "image",
+      source: { type: "base64", media_type: mediaType, data: Buffer.from(bytes).toString("base64") },
+    });
+    return prepared.type === "image" ? prepared.source : undefined;
+  } catch (e) {
+    shoreLog.warn(`shore: failed to prepare image for LLM: ${img.path}: ${String(e)}`);
+    return undefined;
+  }
 }

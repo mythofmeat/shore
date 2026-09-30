@@ -3,7 +3,6 @@ import patchDesc from "../../prompts/tools/workspace/apply_patch.md" with { type
 import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
-import { schemasFrom } from "./validate.ts";
 import { toolPatternMatches } from "../config/app.ts";
 
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
@@ -43,6 +42,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         file_path: { type: "string", minLength: 1, description: "File to read. Absolute, or relative to the workspace root." },
         offset: { type: "integer", minimum: 1, description: "First text line to return, numbered from 1. Default 1. Not accepted for images." },
         limit: { type: "integer", minimum: 1, maximum: 2000, description: "Maximum text lines to return. Default 2000, maximum 2000. The result character budget can shorten the page." },
+        original: { type: "boolean", description: "Send an image file at the full resolution the model accepts instead of the reduced copy. Default false. Image files only." },
       },
       required: ["file_path"],
       additionalProperties: false,
@@ -247,10 +247,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
 ]);
-
-export const BUILTIN_TOOL_SCHEMAS = schemasFrom(
-  ALL_TOOLS.map((tool) => ({ name: tool.name, input_schema: tool.parameters })),
-);
 
 export { toolPatternMatches };
 

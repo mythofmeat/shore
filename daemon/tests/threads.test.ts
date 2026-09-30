@@ -36,6 +36,7 @@ import {
   writeThreadsIndex,
 } from "../src/engine/threads.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const NOW = "2026-09-03T12:00:00.000Z";
 
@@ -195,8 +196,8 @@ describe("thread lifecycle", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
 
-    expect(createThread(root, "aria", "scratch", NOW)).rejects.toThrow(ThreadError);
-    expect(createThread(root, "aria", "../escape", NOW)).rejects.toThrow(ThreadError);
+    expect(await outcomeOf(createThread(root, "aria", "scratch", NOW))).toThrow(ThreadError);
+    expect(await outcomeOf(createThread(root, "aria", "../escape", NOW))).toThrow(ThreadError);
     expect(existsSync(join(root, "aria", "threads", "..", "escape"))).toBe(false);
   });
 
@@ -208,7 +209,7 @@ describe("thread lifecycle", () => {
     await setHomeThread(root, "aria", "scratch", NOW);
     expect(await homeThreadOf(root, "aria")).toBe("scratch");
 
-    expect(setHomeThread(root, "aria", "nowhere", NOW)).rejects.toThrow(ThreadError);
+    expect(await outcomeOf(setHomeThread(root, "aria", "nowhere", NOW))).toThrow(ThreadError);
   });
 
   test("sets and clears a label, and records last activity", async () => {
@@ -245,7 +246,7 @@ describe("thread lifecycle", () => {
 
     expect(await threadChatModel(root, "aria", "scratch")).toBeUndefined();
     expect(await threadChatModel(root, "aria", "ghost")).toBeUndefined();
-    expect(setThreadModel(root, "aria", "ghost", "anthropic:opus", NOW)).rejects.toThrow(
+    expect(await outcomeOf(setThreadModel(root, "aria", "ghost", "anthropic:opus", NOW))).toThrow(
       ThreadError,
     );
   });
@@ -360,8 +361,8 @@ describe("archiving a thread", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
 
-    expect(archiveThread(root, "aria", MAIN_THREAD)).rejects.toThrow(ThreadError);
-    expect(archiveThread(root, "aria", "nowhere")).rejects.toThrow(ThreadError);
+    expect(await outcomeOf(archiveThread(root, "aria", MAIN_THREAD))).toThrow(ThreadError);
+    expect(await outcomeOf(archiveThread(root, "aria", "nowhere"))).toThrow(ThreadError);
     expect(existsSync(join(root, "aria", "threads", MAIN_THREAD))).toBe(true);
 
     await setHomeThread(root, "aria", "scratch", NOW);

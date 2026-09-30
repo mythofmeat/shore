@@ -2,6 +2,14 @@ import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
+import {
+  API_MAX_IMAGE_EDGE,
+  DEFAULT_IMAGE_SETTINGS,
+  IMAGE_FORMATS,
+  MAX_SENT_IMAGE_BYTES,
+  type ImageFormat,
+  type ImageSettings,
+} from "../llm/image_settings.ts";
 import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
 type TomlValue = unknown;
@@ -523,6 +531,120 @@ export function timeoutFor(tools: ToolsConfig, name: string): ConfigDuration | u
   return resolved.asMillisExact() > 0n ? resolved : undefined;
 }
 
+export interface ImageOverride {
+  max_tokens: number | undefined;
+  max_edge: number | undefined;
+  format: ImageFormat | undefined;
+  quality: number | undefined;
+  png_compression: number | undefined;
+  png_palette: boolean | undefined;
+  max_bytes: number | undefined;
+}
+
+export interface ImageReadConfig extends ImageOverride {
+  tell_model: boolean;
+  allow_original: boolean;
+}
+
+export interface ImagesConfig extends ImageSettings {
+  read: ImageReadConfig;
+  upload: ImageOverride;
+  mcp: ImageOverride;
+}
+
+export type ImageOrigin = "read" | "upload" | "mcp";
+
+const noImageOverride = (): ImageOverride => ({
+  max_tokens: undefined,
+  max_edge: undefined,
+  format: undefined,
+  quality: undefined,
+  png_compression: undefined,
+  png_palette: undefined,
+  max_bytes: undefined,
+});
+
+const IMAGE_OVERRIDE_FIELDS = {
+  max_tokens: optional(readU32),
+  max_edge: optional(readU32),
+  format: optional(readEnum(IMAGE_FORMATS)),
+  quality: optional(readU32),
+  png_compression: optional(readU32),
+  png_palette: optional(readBool),
+  max_bytes: optional(readUsize),
+};
+
+const IMAGE_OVERRIDE: StructSpec<ImageOverride> = {
+  name: "ImageOverride",
+  make: noImageOverride,
+  fields: IMAGE_OVERRIDE_FIELDS,
+};
+
+const IMAGE_READ: StructSpec<ImageReadConfig> = {
+  name: "ImageReadConfig",
+  make: () => ({ ...noImageOverride(), tell_model: true, allow_original: true }),
+  fields: { ...IMAGE_OVERRIDE_FIELDS, tell_model: readBool, allow_original: readBool },
+};
+
+export const defaultImagesConfig = (): ImagesConfig => ({
+  ...DEFAULT_IMAGE_SETTINGS,
+  read: IMAGE_READ.make(),
+  upload: noImageOverride(),
+  mcp: noImageOverride(),
+});
+
+const IMAGES: StructSpec<ImagesConfig> = {
+  name: "ImagesConfig",
+  make: defaultImagesConfig,
+  fields: {
+    max_tokens: readU32,
+    max_edge: readU32,
+    format: readEnum(IMAGE_FORMATS),
+    quality: readU32,
+    png_compression: readU32,
+    png_palette: readBool,
+    max_bytes: readUsize,
+    read: struct(IMAGE_READ),
+    upload: struct(IMAGE_OVERRIDE),
+    mcp: struct(IMAGE_OVERRIDE),
+  },
+};
+
+export function imageSettingsFor(images: ImagesConfig, origin: ImageOrigin): ImageSettings {
+  const override = images[origin];
+  return {
+    max_tokens: override.max_tokens ?? images.max_tokens,
+    max_edge: override.max_edge ?? images.max_edge,
+    format: override.format ?? images.format,
+    quality: override.quality ?? images.quality,
+    png_compression: override.png_compression ?? images.png_compression,
+    png_palette: override.png_palette ?? images.png_palette,
+    max_bytes: override.max_bytes ?? images.max_bytes,
+  };
+}
+
+export function validateImages(images: ImagesConfig): string | undefined {
+  for (const [section, settings] of [["images", images], ["images.read", images.read], ["images.upload", images.upload], ["images.mcp", images.mcp]] as const) {
+    const problem = imageSettingsProblem(settings);
+    if (problem !== undefined) return `${section}.${problem}`;
+  }
+  return undefined;
+}
+
+function imageSettingsProblem(settings: ImageOverride | ImageSettings): string | undefined {
+  const outside = (value: number | undefined, low: number, high: number): boolean =>
+    value !== undefined && (value < low || value > high);
+  if (outside(settings.max_edge, 1, API_MAX_IMAGE_EDGE)) {
+    return `max_edge is ${String(settings.max_edge)}; it must be from 1 to ${String(API_MAX_IMAGE_EDGE)} pixels, the most the API accepts`;
+  }
+  if (outside(settings.quality, 1, 100)) return `quality is ${String(settings.quality)}; it must be from 1 to 100`;
+  if (outside(settings.png_compression, 0, 9)) return `png_compression is ${String(settings.png_compression)}; it must be a zlib level from 0 to 9`;
+  if (outside(settings.max_bytes, 1, MAX_SENT_IMAGE_BYTES)) {
+    return `max_bytes is ${String(settings.max_bytes)}; it must be from 1 to ${String(MAX_SENT_IMAGE_BYTES)}, which keeps each image under the 5 MB base64 limit on every platform`;
+  }
+  return undefined;
+}
+
 export interface CompactionConfig {
   enabled: boolean;
   write_memory: boolean;
@@ -959,14 +1081,57 @@ export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
   return budget.pace_warn_at ?? budget.warn_at;
 }
 
+export interface PlanLimitPolicyConfig {
+  warn_fractions: number[];
+  limit_fraction: number;
+  limit_action: UsageBudgetAction;
+}
+
+export const defaultPlanLimitPolicy = (): PlanLimitPolicyConfig => ({
+  warn_fractions: [0.8, 0.95],
+  limit_fraction: 1,
+  limit_action: "pause_background",
+});
+
+const PLAN_LIMIT_POLICY: StructSpec<PlanLimitPolicyConfig> = {
+  name: "PlanLimitPolicyConfig",
+  make: defaultPlanLimitPolicy,
+  fields: {
+    warn_fractions: readF64Seq,
+    limit_fraction: readF64,
+    limit_action: readEnum(BUDGET_ACTIONS),
+  },
+};
+
+export interface PlanLimitsConfig {
+  five_hour: PlanLimitPolicyConfig;
+  seven_day: PlanLimitPolicyConfig;
+}
+
+export const defaultPlanLimitsConfig = (): PlanLimitsConfig => ({
+  five_hour: defaultPlanLimitPolicy(),
+  seven_day: defaultPlanLimitPolicy(),
+});
+
+const PLAN_LIMITS: StructSpec<PlanLimitsConfig> = {
+  name: "PlanLimitsConfig",
+  make: defaultPlanLimitsConfig,
+  fields: {
+    five_hour: struct(PLAN_LIMIT_POLICY),
+    seven_day: struct(PLAN_LIMIT_POLICY),
+  },
+};
+
 export interface UsageConfig {
   timezone: string;
   budgets: UsageBudgetConfig[];
+  plan_limits: PlanLimitsConfig;
 }
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
   budgets: [],
+  plan_limits: defaultPlanLimitsConfig(),
 });
 
 const USAGE: StructSpec<UsageConfig> = {
@@ -975,6 +1140,7 @@ const USAGE: StructSpec<UsageConfig> = {
   fields: {
     timezone: readString,
     budgets: readSeq(struct(BUDGET)),
+    plan_limits: struct(PLAN_LIMITS),
   },
 };
 
@@ -1072,6 +1238,7 @@ export interface AppConfig {
   defaults: DefaultsConfig;
   behavior: BehaviorConfig;
   tools: ToolsConfig;
+  images: ImagesConfig;
   memory: MemoryConfig;
   cache: CacheConfig;
   connections: ConnectionsConfig;
@@ -1087,6 +1254,7 @@ export const defaultAppConfig = (): AppConfig => ({
   defaults: defaultDefaultsConfig(),
   behavior: defaultBehaviorConfig(),
   tools: defaultToolsConfig(),
+  images: defaultImagesConfig(),
   memory: defaultMemoryConfig(),
   cache: defaultCacheConfig(),
   connections: defaultConnectionsConfig(),
@@ -1108,6 +1276,7 @@ const APP: StructSpec<AppConfig> = {
     defaults: struct(DEFAULTS),
     behavior: struct(BEHAVIOR),
     tools: struct(TOOLS),
+    images: struct(IMAGES),
     memory: struct(MEMORY),
     cache: struct(CACHE),
     connections: struct(CONNECTIONS),

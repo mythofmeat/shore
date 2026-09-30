@@ -3,7 +3,6 @@ import { basename, extname } from "node:path";
 
 import {
   ClientEvent,
-  createClient,
   Direction,
   EventType,
   MatrixEvent as SdkEvent,
@@ -17,7 +16,9 @@ import {
   type SyncStateData,
 } from "matrix-js-sdk";
 
+import { createStoppableClient } from "./client.ts";
 import { normalizeEvent, type MatrixEvent, type RawEvent } from "./events.ts";
+import { abortRejection } from "../../llm/abort.ts";
 import { MAX_ATTACHMENT_BYTES } from "../../swp/admission.ts";
 
 const TYPING_TIMEOUT_MS = 20_000;
@@ -46,6 +47,7 @@ export interface BotConfig {
   readonly password?: string | undefined;
   readonly deviceId?: string | undefined;
   readonly log?: BotLogger;
+  readonly signal?: AbortSignal | undefined;
 }
 
 export interface BotLogger {
@@ -65,23 +67,40 @@ export class MatrixBot {
   readonly #client: MatrixClient;
   readonly #userId: string;
   readonly #log: BotLogger | undefined;
+  readonly #stopController: AbortController;
+  readonly #stopSignal: AbortSignal;
   readonly #pending: MatrixEvent[] = [];
   readonly #faulted: Promise<Error>;
   #reportFault!: (fault: Error) => void;
   #wake: (() => void) | null = null;
-  #stopped = false;
 
-  private constructor(client: MatrixClient, userId: string, log: BotLogger | undefined) {
+  private constructor(
+    client: MatrixClient,
+    userId: string,
+    log: BotLogger | undefined,
+    stopController: AbortController,
+    stopSignal: AbortSignal,
+  ) {
     this.#client = client;
     this.#userId = userId;
     this.#log = log;
+    this.#stopController = stopController;
+    this.#stopSignal = stopSignal;
     this.#faulted = new Promise<Error>((resolve) => {
       this.#reportFault = resolve;
     });
+    stopSignal.addEventListener("abort", () => this.#shutDown(), { once: true });
   }
 
   static async login(this: void, config: BotConfig): Promise<MatrixBot> {
-    let client = createClient({
+    config.signal?.throwIfAborted();
+    const stopController = new AbortController();
+    const stopSignal =
+      config.signal === undefined
+        ? stopController.signal
+        : AbortSignal.any([stopController.signal, config.signal]);
+
+    let client = createStoppableClient(stopSignal, {
       baseUrl: config.homeserver,
       store: new MemoryStore(),
       ...(config.accessToken === undefined ? {} : { accessToken: config.accessToken }),
@@ -90,18 +109,21 @@ export class MatrixBot {
     });
 
     if (config.accessToken === undefined) {
-      if (config.password === undefined) {
+      const { password } = config;
+      if (password === undefined) {
         throw new Error("the Matrix bridge needs either an access token or a password");
       }
-      const session = await client.loginRequest({
-        type: "m.login.password",
-        identifier: { type: "m.id.user", user: config.userId },
-        password: config.password,
-        initial_device_display_name: "Shore Matrix Bridge",
-        ...(config.deviceId === undefined ? {} : { device_id: config.deviceId }),
-      });
+      const session = await unlessStopped(stopSignal, () =>
+        client.loginRequest({
+          type: "m.login.password",
+          identifier: { type: "m.id.user", user: config.userId },
+          password,
+          initial_device_display_name: "Shore Matrix Bridge",
+          ...(config.deviceId === undefined ? {} : { device_id: config.deviceId }),
+        }),
+      );
       config.log?.info?.("logged in with a password", { device_id: session.device_id });
-      client = createClient({
+      client = createStoppableClient(stopSignal, {
         baseUrl: config.homeserver,
         store: new MemoryStore(),
         accessToken: session.access_token,
@@ -111,7 +133,7 @@ export class MatrixBot {
       });
     }
 
-    const bot = new MatrixBot(client, config.userId, config.log);
+    const bot = new MatrixBot(client, config.userId, config.log, stopController, stopSignal);
     bot.#listen();
     return bot;
   }
@@ -124,12 +146,16 @@ export class MatrixBot {
     return this.#faulted;
   }
 
-  async start(): Promise<void> {
-    await this.#client.startClient({ initialSyncLimit: 0 });
+  async start(syncStartTimeoutMs: number = SYNC_START_TIMEOUT_MS): Promise<void> {
     try {
-      await awaitInitialSync(this.#client);
+      await this.#whileRunning(() =>
+        Promise.all([
+          this.#client.startClient({ initialSyncLimit: 0 }),
+          awaitInitialSync(this.#client, syncStartTimeoutMs, this.#stopSignal),
+        ]),
+      );
     } catch (e) {
-      this.#client.stopClient();
+      this.stop();
       throw e;
     }
     this.#watchSync();
@@ -138,7 +164,7 @@ export class MatrixBot {
 
   #watchSync(): void {
     watchForSyncDeath(this.#client, (fault) => {
-      if (this.#stopped) return;
+      if (this.#stopSignal.aborted) return;
       this.#log?.warn?.("Matrix sync ended", { error: String(fault) });
       this.#reportFault(fault);
       this.stop();
@@ -146,9 +172,16 @@ export class MatrixBot {
   }
 
   stop(): void {
-    this.#stopped = true;
+    this.#stopController.abort();
+  }
+
+  #shutDown(): void {
     this.#client.stopClient();
     this.#wake?.();
+  }
+
+  #whileRunning<T>(ask: () => Promise<T>): Promise<T> {
+    return unlessStopped(this.#stopSignal, ask);
   }
 
   async *events(): AsyncGenerator<MatrixEvent> {
@@ -158,7 +191,7 @@ export class MatrixBot {
         yield next;
         continue;
       }
-      if (this.#stopped) return;
+      if (this.#stopSignal.aborted) return;
       await new Promise<void>((resolve) => {
         this.#wake = resolve;
       });
@@ -187,7 +220,9 @@ export class MatrixBot {
 
   async redact(roomId: string, eventId: string, reason?: string): Promise<void> {
     try {
-      await this.#client.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined);
+      await this.#whileRunning(() =>
+        this.#client.redactEvent(roomId, eventId, undefined, reason ? { reason } : undefined),
+      );
     } catch (e) {
       this.#log?.warn?.("failed to redact", { room_id: roomId, event_id: eventId, error: String(e) });
     }
@@ -195,7 +230,9 @@ export class MatrixBot {
 
   async setTyping(roomId: string, typing: boolean): Promise<void> {
     try {
-      await this.#client.sendTyping(roomId, typing, typing ? TYPING_TIMEOUT_MS : 0);
+      await this.#whileRunning(() =>
+        this.#client.sendTyping(roomId, typing, typing ? TYPING_TIMEOUT_MS : 0),
+      );
     } catch (e) {
       this.#log?.warn?.("failed to set typing", { room_id: roomId, error: String(e) });
     }
@@ -213,10 +250,9 @@ export class MatrixBot {
     const name = basename(path);
     const mimeType = MIME_BY_EXTENSION[extname(path).toLowerCase()] ?? "application/octet-stream";
     try {
-      const upload = await this.#client.uploadContent(new Uint8Array(bytes), {
-        name,
-        type: mimeType,
-      });
+      const upload = await this.#whileRunning(() =>
+        this.#client.uploadContent(new Uint8Array(bytes), { name, type: mimeType }),
+      );
       return await this.#send(roomId, {
         msgtype: "m.image",
         body: caption ?? name,
@@ -243,7 +279,7 @@ export class MatrixBot {
     try {
       const response = await fetch(http, {
         headers: { Authorization: `Bearer ${this.#client.getAccessToken() ?? ""}` },
-        signal: AbortSignal.timeout(MEDIA_DOWNLOAD_TIMEOUT_MS),
+        signal: AbortSignal.any([this.#stopSignal, AbortSignal.timeout(MEDIA_DOWNLOAD_TIMEOUT_MS)]),
       });
       if (!response.ok) {
         this.#log?.warn?.("media download refused", { status: response.status });
@@ -258,7 +294,7 @@ export class MatrixBot {
         this.#log?.warn?.("media download rejected", { reason: e.reason, error: e.message });
         return { ok: false, reason: e.reason };
       }
-      if (isTimeoutError(e)) {
+      if (!this.#stopSignal.aborted && isTimeoutError(e)) {
         this.#log?.warn?.("media download timed out", { error: String(e) });
         return { ok: false, reason: "timed_out" };
       }
@@ -269,14 +305,16 @@ export class MatrixBot {
 
   async setProfile(character: string, avatar?: { bytes: Uint8Array; mimeType: string }): Promise<void> {
     try {
-      await this.#client.setDisplayName(character);
+      await this.#whileRunning(() => this.#client.setDisplayName(character));
     } catch (e) {
       this.#log?.warn?.("failed to set display name", { error: String(e) });
     }
     if (avatar === undefined) return;
     try {
-      const upload = await this.#client.uploadContent(avatar.bytes, { type: avatar.mimeType });
-      await this.#client.setAvatarUrl(upload.content_uri);
+      await this.#whileRunning(async () => {
+        const upload = await this.#client.uploadContent(avatar.bytes, { type: avatar.mimeType });
+        await this.#client.setAvatarUrl(upload.content_uri);
+      });
     } catch (e) {
       this.#log?.warn?.("failed to set avatar", { error: String(e) });
     }
@@ -285,7 +323,7 @@ export class MatrixBot {
   async resolveRoom(alias: string): Promise<string | undefined> {
     if (alias.startsWith("!")) return alias;
     try {
-      return (await this.#client.getRoomIdForAlias(alias)).room_id;
+      return (await this.#whileRunning(() => this.#client.getRoomIdForAlias(alias))).room_id;
     } catch (e) {
       this.#log?.warn?.("failed to resolve room alias", { alias, error: String(e) });
       return undefined;
@@ -294,7 +332,9 @@ export class MatrixBot {
 
   async #send(roomId: string, content: Record<string, unknown>): Promise<string | undefined> {
     try {
-      const sent = await this.#client.sendEvent(roomId, EventType.RoomMessage, content as never);
+      const sent = await this.#whileRunning(() =>
+        this.#client.sendEvent(roomId, EventType.RoomMessage, content as never),
+      );
       return sent.event_id;
     } catch (e) {
       this.#log?.warn?.("failed to send", { room_id: roomId, error: String(e) });
@@ -409,6 +449,7 @@ function isTimeoutError(error: unknown): boolean {
 export function awaitInitialSync(
   client: MatrixClient,
   timeoutMs: number = SYNC_START_TIMEOUT_MS,
+  stopSignal?: AbortSignal,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -422,16 +463,36 @@ export function awaitInitialSync(
       detach();
       reject(syncFailure(state, data));
     };
+    const onStop = () => {
+      detach();
+      reject(new Error("the Matrix bot was stopped before its sync started"));
+    };
     const detach = () => {
       clearTimeout(timer);
       client.off(ClientEvent.Sync, onSync);
+      stopSignal?.removeEventListener("abort", onStop);
     };
+    if (stopSignal?.aborted === true) {
+      onStop();
+      return;
+    }
     timer = setTimeout(() => {
       detach();
       reject(new Error(`the Matrix sync did not start within ${timeoutMs}ms`));
     }, timeoutMs);
     client.on(ClientEvent.Sync, onSync);
+    stopSignal?.addEventListener("abort", onStop, { once: true });
   });
+}
+
+async function unlessStopped<T>(stopSignal: AbortSignal, ask: () => Promise<T>): Promise<T> {
+  stopSignal.throwIfAborted();
+  const stopped = abortRejection(stopSignal);
+  try {
+    return await Promise.race([ask(), stopped.promise]);
+  } finally {
+    stopped.dispose();
+  }
 }
 
 export function watchForSyncDeath(client: MatrixClient, onDeath: (fault: Error) => void): void {
