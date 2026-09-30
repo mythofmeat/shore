@@ -50,6 +50,7 @@ import {
   type NotificationEvent,
   type NotificationSink,
 } from "../src/notifications.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 
 type Row = Record<string, unknown>;
@@ -143,12 +144,12 @@ describe("the command sink spawns argv directly", () => {
 
   test("an empty command is refused before anything is spawned", async () => {
     const { realSink } = await import("../src/notifications.ts");
-    expect(realSink.command([], "t", "b")).rejects.toThrow("notification command is not configured");
+    expect(await outcomeOf(realSink.command([], "t", "b"))).toThrow("notification command is not configured");
   });
 
   test("a non-zero exit is surfaced, not swallowed", async () => {
     const { realSink } = await import("../src/notifications.ts");
-    expect(realSink.command(["false"], "t", "b")).rejects.toThrow("exited 1");
+    expect(await outcomeOf(realSink.command(["false"], "t", "b"))).toThrow("exited 1");
   });
 });
 
@@ -433,8 +434,8 @@ describe("ntfy url", () => {
     );
     const { realSink } = await import("../src/notifications.ts");
     expect(
-      realSink.ntfy({ url: "https://ntfy.sh", topic: "", token: "" }, "t", "b"),
-    ).rejects.toThrow("ntfy topic is not configured");
+      await outcomeOf(realSink.ntfy({ url: "https://ntfy.sh", topic: "", token: "" }, "t", "b")),
+    ).toThrow("ntfy topic is not configured");
     expect(svc.shouldNotify("error")).toBe(true);
   });
 });

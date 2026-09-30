@@ -9,6 +9,7 @@ import {
 } from "../src/tools/mcp_registry.ts";
 import { McpCancelled, McpError, McpTransportError } from "../src/mcp/client.ts";
 import type { McpClient, McpServerSpec } from "../src/mcp/client.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const PLUGINS = "/plugins";
 
@@ -485,8 +486,8 @@ describe("a connection that dies mid-session is rebuilt", () => {
     );
 
     hue.killConnection();
-    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(McpTransportError);
-    expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
+    expect(await outcomeOf(registry.call("mcp__hue__set_light", {}))).toThrow(McpTransportError);
+    expect(await registry.call("mcp__hue__set_light", {})).toBe("set_light ran");
     expect(hue.state.connects).toBe(2);
   });
 
@@ -500,7 +501,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     );
 
     hue.killConnection();
-    expect(registry.call("mcp__hue__send_message", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__send_message", {}))).toThrow(McpTransportError);
     expect(hue.state.calls).toBe(1);
   });
 
@@ -516,10 +517,10 @@ describe("a connection that dies mid-session is rebuilt", () => {
 
     hue.state.tools = ["set_light", "brand_new_tool"];
     hue.killConnection();
-    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__set_light", {}))).toThrow(McpTransportError);
 
     expect(registry.allTools().map((t) => t.full_name)).toEqual(before);
-    expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
+    expect(await registry.call("mcp__hue__set_light", {})).toBe("set_light ran");
   });
 
   test("the old connection is closed once the new one is in place", async () => {
@@ -532,7 +533,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     );
 
     hue.killConnection();
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow(McpTransportError);
     expect(hue.state.shutdowns).toBe(1);
   });
 
@@ -547,13 +548,13 @@ describe("a connection that dies mid-session is rebuilt", () => {
 
     const cancelled = new AbortController();
     cancelled.abort();
-    expect(registry.call("mcp__hue__set_light", {}, cancelled.signal)).rejects.toThrow(
+    expect(await outcomeOf(registry.call("mcp__hue__set_light", {}, cancelled.signal))).toThrow(
       McpCancelled,
     );
 
     expect(hue.state.connects).toBe(1);
     expect(hue.state.shutdowns).toBe(0);
-    expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
+    expect(await registry.call("mcp__hue__set_light", {})).toBe("set_light ran");
   });
 
   test("concurrent calls to a dead server share one reconnect", async () => {
@@ -587,12 +588,12 @@ describe("a connection that dies mid-session is rebuilt", () => {
 
     hue.killConnection();
     hue.state.listening = false;
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow(McpTransportError);
     expect(hue.state.connects).toBe(2);
 
     hue.state.listening = true;
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
-    expect(registry.call("mcp__hue__ping", {})).resolves.toBe("ping ran");
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow(McpTransportError);
+    expect(await registry.call("mcp__hue__ping", {})).toBe("ping ran");
     await registry.shutdown();
   });
 
@@ -612,7 +613,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     };
 
     const registry = await McpRegistry.fromConfig({ hue: httpServer() }, PLUGINS, connect, noSleep);
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow("returned an error");
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow("returned an error");
     expect(connects).toBe(1);
   });
 
@@ -626,7 +627,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     );
 
     hue.killConnection();
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow(McpTransportError);
     expect(hue.state.connects).toBe(1);
     expect(registry.serverStatus()[0]).toMatchObject({ state: "unavailable" });
     await registry.shutdown();
@@ -643,7 +644,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
 
     await registry.shutdown();
     hue.killConnection();
-    expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(await outcomeOf(registry.call("mcp__hue__ping", {}))).toThrow(McpTransportError);
 
     expect(hue.state.connects).toBe(1);
   });

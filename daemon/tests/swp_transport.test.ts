@@ -12,6 +12,7 @@ import {
 } from "../src/swp/connection";
 import { MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, WireReader, type ByteSink } from "../src/swp/framing";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
+import { outcomeOf } from "./support/outcome.ts";
 
 const OPEN = (): boolean => true;
 
@@ -160,7 +161,7 @@ describe("session router", () => {
 
   test("sending to a session that has already gone is a no-op", async () => {
     const router = new SessionRouter();
-    expect(router.sendToSession(99, PING)).resolves.toBeUndefined();
+    expect(await router.sendToSession(99, PING)).toBeUndefined();
   });
 
   test("the live character survives a mid-session move", () => {
@@ -204,8 +205,8 @@ describe("serialSink", () => {
       },
     };
     const sink = serialSink(flaky);
-    expect(sink.write(new Uint8Array([1]))).rejects.toThrow("boom");
-    expect(sink.write(new Uint8Array([2]))).resolves.toBeUndefined();
+    expect(await outcomeOf(sink.write(new Uint8Array([1])))).toThrow("boom");
+    expect(await sink.write(new Uint8Array([2]))).toBeUndefined();
   });
 });
 

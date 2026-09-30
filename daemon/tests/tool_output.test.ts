@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { handleActivityHeatmap } from "../src/tools/activity.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
 import { handleSearch } from "../src/tools/workspace.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 describe("compact built-in output", () => {
   test("groups excerpts without repeating paths or ranking diagnostics, retaining limitations", () => {
@@ -89,7 +90,7 @@ test("search shares its response budget across every match and honors context", 
     expect((await search(1, 4)).results[0]?.excerpt).toBe("...😀😀😀😀NEEDLE界界界界...");
     expect((await search(1, 0)).results[0]?.excerpt).toBe("...NEEDLE...");
     for (const context of [-1, 1.5, "500", 10001]) {
-      expect(handleSearch({ query: "needle", context }, workspace, undefined, undefined)).rejects.toThrow("context must be an integer");
+      expect(await outcomeOf(handleSearch({ query: "needle", context }, workspace, undefined, undefined))).toThrow("context must be an integer");
     }
     const huge = "Q".repeat(13000);
     await writeFile(join(workspace, "huge.md"), `before ${huge} after`);

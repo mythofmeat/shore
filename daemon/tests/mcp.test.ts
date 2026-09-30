@@ -16,6 +16,7 @@ import {
   interpretResult,
   type McpClient,
 } from "../src/mcp/client.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const fx = fixture as unknown as {
   plugins_dir: string;
@@ -254,11 +255,11 @@ describe("MCP schema registration", () => {
 
 describe("call routing", () => {
   test("an unknown name is reported, not dispatched", async () => {
-    expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
+    expect(await outcomeOf(registry.call("mcp__nope__x", {}))).toThrow("not yet implemented");
   });
 
   test("a known name with no live client is reported as unavailable", async () => {
-    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow("is unavailable");
+    expect(await outcomeOf(registry.call("mcp__hue__set_light", {}))).toThrow("is unavailable");
   });
 
   test("a name with `__` inside both halves routes to the right tool", async () => {
@@ -286,10 +287,10 @@ describe("call routing", () => {
       ]),
     );
 
-    expect(wired.call("mcp__multi__part__tool__name", { a: 1 })).resolves.toBe("ok");
+    expect(await wired.call("mcp__multi__part__tool__name", { a: 1 })).toBe("ok");
     expect(calls).toEqual([["tool__name", { a: 1 }]]);
 
-    expect(wired.call("mcp__hue__set_light", {})).resolves.toBe("ok");
+    expect(await wired.call("mcp__hue__set_light", {})).toBe("ok");
     expect(calls[1]).toEqual(["set_light", {}]);
   });
 });

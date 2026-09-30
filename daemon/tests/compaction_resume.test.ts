@@ -22,6 +22,7 @@ import type {
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { handleBash } from "../src/tools/bash.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -71,8 +72,8 @@ test.each([false, true])("archive failure restores workspace edits, binary files
     ...opts,
     conversationMgr: {
       archiveAndRetain: async () => {
-        expect(readFile(join(workspace, "assets/data.bin"))).rejects.toThrow();
-        expect(readlink(join(workspace, "assets/link.bin"))).rejects.toThrow();
+        expect(await outcomeOf(readFile(join(workspace, "assets/data.bin")))).toThrow();
+        expect(await outcomeOf(readlink(join(workspace, "assets/link.bin")))).toThrow();
         throw new Error("archive failed");
       },
     },
@@ -83,7 +84,7 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   expect(await readFile(join(workspace, "projects/note.md"), "utf8")).toBe("original context");
   expect(await readFile(join(workspace, "assets/data.bin"))).toEqual(bytes);
   expect(await readlink(join(workspace, "assets/link.bin"))).toBe("data.bin");
-  expect(readFile(join(workspace, "projects/new.md"))).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(workspace, "projects/new.md")))).toThrow();
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
 });
 
@@ -166,7 +167,7 @@ test("compaction resumes without repeating writes and commits only after archive
   expect(secondLlm.calls).toBe(1);
   expect(secondLlm.apiKeys).toEqual(["secret-that-must-not-land-on-disk"]);
   expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("remembered\n");
-  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
   const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   expect(history.entries("ada")[0]).toMatchObject({
     memory_before: "before-sha",
@@ -228,7 +229,7 @@ test.each([false, true])("the tool-round ceiling preserves resumable slices, inc
   expect(edits).toBe(2);
   expect(await readFile(join(workspace, "memory/one.md"), "utf8")).toBe("one\n");
   expect(await readFile(join(workspace, "memory/two.md"), "utf8")).toBe("two\n");
-  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
 test("an explicit keep-turns count wins over the split a stale checkpoint planned", async () => {
@@ -374,7 +375,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
 
   expect(resumed.kind).toBe("compacted");
   expect(afterCrash.calls).toBe(0);
-  expect(readFile(checkpointFile, "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(checkpointFile, "utf8"))).toThrow();
 });
 
 test("a checkpoint the workspace has moved past stays wedged until a restart throws it away", async () => {
@@ -458,7 +459,7 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
       .split("\n")
       .map((line) => (JSON.parse(line) as { content: string }).content),
   ).toEqual(messages.slice(2).map((m) => m.content));
-  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
 test("a checkpoint whose source was edited out from under it is discarded instead of wedging", async () => {
@@ -526,7 +527,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   expect(freshLlm.calls).toBe(2);
   expect(edits).toBe(2);
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).not.toBe(editedLines);
-  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
 test.each(["model", "before_archive", "preview"])("cancellation at %s preserves a completed checkpoint for explicit resume", async (phase) => {

@@ -13,6 +13,7 @@ import {
   normalizeMessage,
 } from "../src/engine/message_store.ts";
 import type { Message, MessageAlternative, Role } from "../src/engine/types.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -128,7 +129,7 @@ describe("transactional message mutations", () => {
             WHEN ${record}.path = '${key}' BEGIN SELECT RAISE(ABORT, 'injected database failure'); END`);
         }
       });
-      expect(mutation.run(store)).rejects.toThrow("injected database failure");
+      expect(await outcomeOf(mutation.run(store))).toThrow("injected database failure");
       expect(wire(store.messages())).toEqual(wire(beforeMessages));
       expect(await readFile(path, "utf8")).toBe(beforeFile);
       withStorage(data, db => {
@@ -170,8 +171,8 @@ test("a failed store commit does not advance the conversation revision", async (
   withStorage(dir, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_lines BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
 
   expect(
-    engine.appendMessage(message("failed-append", "user", "must not appear", 2)),
-  ).rejects.toThrow();
+    await outcomeOf(engine.appendMessage(message("failed-append", "user", "must not appear", 2))),
+  ).toThrow();
 
   expect(engine.currentRevision()).toBe(beforeRevision);
   expect(wire(engine.messages())).toEqual(wire(beforeMessages));

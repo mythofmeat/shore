@@ -41,6 +41,7 @@ import { threadFile } from "../src/storage/files.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { outcomeOf } from "./support/outcome.ts";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -1127,7 +1128,7 @@ describe("optional browser transport", () => {
       expect(page.messages.map((message) => message.content)).toEqual(["Keep the context"]);
       expect(page.has_more_before).toBe(true);
       expect((await actions.run("history_page", { before: page.next_before, count: 1 })).messages.map((message) => message.content)).toEqual(["answer 1"]);
-      expect(actions.run("edit", { ref: "missing-message", content: "rejected" })).rejects.toThrow("message not found");
+      expect(await outcomeOf(actions.run("edit", { ref: "missing-message", content: "rejected" }))).toThrow("message not found");
       const removed = await actions.run("delete", { refs: ["1", "last"] });
       expect(removed.deleted).toHaveLength(2);
       const browserHistory = await actions.run("log", {});
@@ -1276,7 +1277,7 @@ describe("optional browser transport", () => {
     if (address === null || typeof address === "string") throw new Error("Expected address");
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
     try {
-      expect(start(place)).rejects.toThrow("Failed to start browser transport");
+      expect(await outcomeOf(start(place))).toThrow("Failed to start browser transport");
       await until(() => !existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE)), "lease was not released");
       expect(existsSync(place.instancesPath)).toBe(false);
       expect(existsSync(join(place.root, "data", "shore", "shore.db"))).toBe(false);

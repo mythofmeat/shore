@@ -11,6 +11,7 @@ import { startWebServer } from "../src/web/server.ts";
 import { validWebArchiveInfo, validWebArchiveList } from "../src/web/contracts.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { WEB_SUBPROTOCOL } from "../src/web/contract.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -88,11 +89,11 @@ test("uploads belong to the sign-in, use private controlled paths and import onc
   expect(f.transfers.list(b.session).archives).toEqual([]);
   expect(() => f.transfers.get(b.session, info.id)).toThrow("missing or expired");
   expect(() => f.transfers.import(b.session, info.id)).toThrow("missing or expired");
-  expect(f.transfers.remove(b.session, info.id)).rejects.toThrow("missing or expired");
-  expect(f.transfers.download(b.session, info.id, upload())).rejects.toThrow("missing or expired");
+  expect(await outcomeOf(f.transfers.remove(b.session, info.id))).toThrow("missing or expired");
+  expect(await outcomeOf(f.transfers.download(b.session, info.id, upload()))).toThrow("missing or expired");
   expect(f.transfers.import(a.session, info.id).phase).toBe("importing");
   expect(f.transfers.import(a.session, info.id).phase).toBe("importing");
-  expect(f.transfers.remove(a.session, info.id)).rejects.toThrow("active transfer");
+  expect(await outcomeOf(f.transfers.remove(a.session, info.id))).toThrow("active transfer");
   const route = await f.next();
   const args = parseOperationInput("import_character", route.cmd.args);
   expect(args.archive).toMatch(/\/shore-web-archive-[^/]+\/archive\.tar\.gz$/);
@@ -107,7 +108,7 @@ test("uploads belong to the sign-in, use private controlled paths and import onc
   expect(f.transfers.import(a.session, info.id).phase).toBe("imported");
   expect(f.count()).toBe(1);
   expect(f.transfers.get(a.session, info.id).result).toMatchObject({ name: "import_character", data: { character: "ada", imported: true } });
-  expect(access(dirname(args.archive))).rejects.toThrow();
+  expect(await outcomeOf(access(dirname(args.archive)))).toThrow();
   expect(f.server.sessionRouter.sessions()).toHaveLength(0);
 });
 
@@ -121,7 +122,7 @@ test.each(["invalid", "missing", "wrong-name", "duplicate", "cancelled", "failed
   expect(f.transfers.get(a.session, info.id).error?.length).toBeGreaterThan(0);
   expect(f.transfers.import(a.session, info.id).phase).toBe(phase);
   expect(f.count()).toBe(1);
-  expect(access(parseOperationInput("import_character", route.cmd.args).archive)).rejects.toThrow();
+  expect(await outcomeOf(access(parseOperationInput("import_character", route.cmd.args).archive))).toThrow();
   expect(f.server.sessionRouter.sessions()).toHaveLength(0);
 });
 
@@ -141,15 +142,15 @@ test("export downloads are owned attachments, retry after interruption and remov
   const info = f.transfers.export(a.session, "ada");
   const route = await f.next(); await f.finish(route, "completed", bytes);
   await until(() => f.transfers.get(a.session, info.id).downloadable);
-  expect(f.transfers.download(b.session, info.id, upload())).rejects.toThrow("missing or expired");
+  expect(await outcomeOf(f.transfers.download(b.session, info.id, upload()))).toThrow("missing or expired");
   const first = await f.transfers.download(a.session, info.id, upload());
   const reader = first.body?.getReader();
   if (reader === undefined) throw new Error("Missing download stream");
   const chunk: unknown = (await reader.read()).value;
   if (!(chunk instanceof Uint8Array)) throw new Error("Missing archive download bytes");
   expect(chunk.length).toBe(64 * 1024);
-  expect(f.transfers.download(a.session, info.id, upload())).rejects.toThrow("not ready");
-  expect(f.transfers.remove(a.session, info.id)).rejects.toThrow("active transfer");
+  expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow("not ready");
+  expect(await outcomeOf(f.transfers.remove(a.session, info.id))).toThrow("active transfer");
   await reader.cancel();
   const response = await f.transfers.download(a.session, info.id, upload());
   expect(response.headers.get("content-type")).toBe("application/gzip");
@@ -159,7 +160,7 @@ test("export downloads are owned attachments, retry after interruption and remov
   expect(response.headers.get("cache-control")).toContain("no-store");
   expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
   await until(() => f.transfers.list(a.session).archives.length === 0);
-  expect(access(parseOperationInput("export_character", route.cmd.args).output)).rejects.toThrow();
+  expect(await outcomeOf(access(parseOperationInput("export_character", route.cmd.args).output))).toThrow();
 });
 
 test("download refuses substituted links and changed files and releases its download claim", async () => {
@@ -170,9 +171,9 @@ test("download refuses substituted links and changed files and releases its down
   const path = parseOperationInput("export_character", route.cmd.args).output;
   const target = join(dirname(path), "private.txt"); await writeFile(target, "private contents");
   await rm(path); await symlink(target, path);
-  expect(f.transfers.download(a.session, info.id, upload())).rejects.toThrow();
+  expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow();
   await rm(path); await writeFile(path, "changed");
-  expect(f.transfers.download(a.session, info.id, upload())).rejects.toThrow("Archive changed");
+  expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow("Archive changed");
   await writeFile(path, "download archive"); await chmod(path, 0o600);
   expect(await (await f.transfers.download(a.session, info.id, upload())).text()).toBe("download archive");
 });
@@ -180,10 +181,10 @@ test("download refuses substituted links and changed files and releases its down
 test("uploads enforce declared and streamed byte limits, valid filenames, content type and nonempty complete bodies", async () => {
   const f = await fixture({ uploadBytes: 16 }); const a = owner();
   for (const request of [upload("", {}), upload("short", { "content-length": "10" }), upload("x", { "content-type": "text/plain" }), upload("x", { "x-shore-filename": "%ZZ" }), upload("x", { "x-shore-filename": "%00bad" })]) {
-    expect(f.transfers.upload(a.session, request)).rejects.toThrow();
+    expect(await outcomeOf(f.transfers.upload(a.session, request))).toThrow();
   }
-  expect(f.transfers.upload(a.session, upload("x", { "content-length": "17" }))).rejects.toThrow("size limit");
-  expect(f.transfers.upload(a.session, upload(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(10)); controller.enqueue(new Uint8Array(7)); controller.close(); } })))).rejects.toThrow("size limit");
+  expect(await outcomeOf(f.transfers.upload(a.session, upload("x", { "content-length": "17" })))).toThrow("size limit");
+  expect(await outcomeOf(f.transfers.upload(a.session, upload(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(10)); controller.enqueue(new Uint8Array(7)); controller.close(); } }))))).toThrow("size limit");
   await until(() => f.transfers.list(a.session).archives.length === 0);
   expect(f.server.sessionRouter.sessions()).toHaveLength(0);
 });
@@ -197,8 +198,8 @@ test("unfinished uploads cannot import, reserve capacity and release it on abort
   const info = f.transfers.list(a.session).archives.at(0);
   if (info === undefined) throw new Error("Missing pending upload");
   expect(f.transfers.import(a.session, info.id).phase).toBe("uploading");
-  expect(f.transfers.remove(a.session, info.id)).rejects.toThrow("active transfer");
-  expect(f.transfers.upload(a.session, upload("next"))).rejects.toThrow("capacity");
+  expect(await outcomeOf(f.transfers.remove(a.session, info.id))).toThrow("active transfer");
+  expect(await outcomeOf(f.transfers.upload(a.session, upload("next")))).toThrow("capacity");
   controller.abort(); expect(await outcome).toBeInstanceOf(Error); expect(cancelled).toBe(true);
   expect(f.transfers.list(a.session).archives).toEqual([]);
   expect((await f.transfers.upload(a.session, upload("next"))).phase).toBe("ready");
@@ -217,15 +218,15 @@ test.each(["expiry", "signout", "shutdown"])("%s removes completed artifacts and
   await until(() => f.transfers.list(a.session).archives.length === 0 && f.transfers.activePeers === 0);
   expect(f.server.sessionRouter.sessions()).toHaveLength(0);
   expect(() => f.transfers.get(a.session, running.id)).toThrow("missing or expired");
-  for (const route of [completed, pending]) expect(access(dirname(parseOperationInput("export_character", route.cmd.args).output))).rejects.toThrow();
+  for (const route of [completed, pending]) expect(await outcomeOf(access(dirname(parseOperationInput("export_character", route.cmd.args).output)))).toThrow();
 });
 
 test("per-session and global artifact limits retain other owners and can be reclaimed", async () => {
   const f = await fixture({ perSession: 1, artifacts: 2 }); const a = owner(); const b = owner(); const c = owner();
   const first = await f.transfers.upload(a.session, upload());
-  expect(f.transfers.upload(a.session, upload())).rejects.toThrow("capacity");
+  expect(await outcomeOf(f.transfers.upload(a.session, upload()))).toThrow("capacity");
   await f.transfers.upload(b.session, upload());
-  expect(f.transfers.upload(c.session, upload())).rejects.toThrow("capacity");
+  expect(await outcomeOf(f.transfers.upload(c.session, upload()))).toThrow("capacity");
   await f.transfers.remove(a.session, first.id);
   expect((await f.transfers.upload(c.session, upload())).phase).toBe("ready");
   expect(f.transfers.list(b.session).archives).toHaveLength(1);
@@ -234,14 +235,14 @@ test("per-session and global artifact limits retain other owners and can be recl
 test("upload deadlines cancel a stalled body and exports exceeding download limits release their bytes", async () => {
   const f = await fixture({ uploadBytes: 16, totalBytes: 16, requestMs: 20 }); const a = owner();
   let cancelled = false;
-  expect(f.transfers.upload(a.session, upload(new ReadableStream({ start(stream) { stream.enqueue(new Uint8Array(1)); }, cancel() { cancelled = true; } })))).rejects.toThrow();
+  expect(await outcomeOf(f.transfers.upload(a.session, upload(new ReadableStream({ start(stream) { stream.enqueue(new Uint8Array(1)); }, cancel() { cancelled = true; } }))))).toThrow();
   await until(() => cancelled && f.transfers.list(a.session).archives.length === 0);
   const info = f.transfers.export(a.session, "ada"); const route = await f.next();
   await f.finish(route, "completed", new Uint8Array(17));
   await until(() => f.transfers.get(a.session, info.id).phase === "failed" && f.transfers.activePeers === 0);
   expect(f.transfers.get(a.session, info.id).error).toContain("download size limit");
   expect(f.transfers.get(a.session, info.id).downloadable).toBe(false);
-  expect(access(dirname(parseOperationInput("export_character", route.cmd.args).output))).rejects.toThrow();
+  expect(await outcomeOf(access(dirname(parseOperationInput("export_character", route.cmd.args).output)))).toThrow();
   expect((await f.transfers.upload(a.session, upload("reclaimed"))).phase).toBe("ready");
 });
 
@@ -254,10 +255,10 @@ test("signout interrupts a download and shutdown waits for its file cleanup", as
   const reader = response.body?.getReader();
   if (reader === undefined) throw new Error("Missing download stream");
   await reader.read(); a.controller.abort();
-  expect(reader.read()).rejects.toThrow("interrupted");
+  expect(await outcomeOf(reader.read())).toThrow("interrupted");
   await f.transfers.close();
   expect(f.transfers.list(a.session).archives).toEqual([]);
-  expect(access(dirname(parseOperationInput("export_character", route.cmd.args).output))).rejects.toThrow();
+  expect(await outcomeOf(access(dirname(parseOperationInput("export_character", route.cmd.args).output)))).toThrow();
 });
 
 test("HTTP archive endpoints authenticate and enforce origin before attaching a bounded worker alongside a browser", async () => {

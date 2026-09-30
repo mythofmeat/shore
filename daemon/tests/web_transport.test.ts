@@ -21,6 +21,7 @@ import type { ControlRoutedMessage, RoutedMessage } from "../src/swp/session.ts"
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
 import { WEB_LIMITS, webBinding, webRequestOrigin } from "../src/web/policy.ts";
 import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
+import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 
 const TOKEN = "web-transport-test-token";
 const cleanups: (() => Promise<void>)[] = [];
@@ -120,7 +121,7 @@ describe("browser connection state", () => {
       const session = f.swp.sessionRouter.sessions().at(0)?.[0];
       if (session === undefined) throw new Error("Missing session");
       // @ts-expect-error the canonical input rejects unknown fields at compile time and runtime
-      expect(actions.run("edit", { ref: "1", content: "hi", typo: true })).rejects.toThrow("Invalid arguments");
+      expect(await outcomeOf(actions.run("edit", { ref: "1", content: "hi", typo: true }))).toThrow("Invalid arguments");
       expect(b.client.pendingCount).toBe(0);
       for (const scenario of ["invalid", "missing", "wrong-name", "duplicate", "failed", "valid", "quiet", "cleared"] as const) {
         const observed: string[] = [];
@@ -215,7 +216,7 @@ describe("browser connection state", () => {
       const request = b.client.submit({ type: "command", name: "create_thread", args: { name: "possibly-created" } });
       await until(() => f.routed.length === 1);
       b.sockets.at(0)?.close();
-      expect(request.finished).rejects.toBeInstanceOf(InterruptedRequestError);
+      expect(await rejectionOf(request.finished)).toBeInstanceOf(InterruptedRequestError);
       await until(() => f.histories() === 2 && b.client.status === "ready");
       const probe = b.client.submit({ type: "command", name: "status", args: {} });
       await until(() => f.routed.some((route) => route.kind === "command" && route.meta.rid === probe.rid));
@@ -393,7 +394,7 @@ describe("browser authentication boundary", () => {
     expect((await f.api("/api/session")).status).toBe(401);
     expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
     const denied = connectBrowser(f.web.origin, "");
-    expect(denied.opened).rejects.toThrow("rejected");
+    expect(await outcomeOf(denied.opened)).toThrow("rejected");
     await denied.closed;
     expect(denied.messages).toEqual([]);
     const { cookie, response, info } = await f.login();
@@ -421,7 +422,7 @@ describe("browser authentication boundary", () => {
     expect((await f.api("/api/session", cookie, {}, { host: "evil.example" })).status).toBe(403);
     expect((await f.api("/api/session", cookie)).status).toBe(200);
     const forged = connectBrowser(f.web.origin, cookie, WEB_SUBPROTOCOL, { headers: { origin: "https://evil.example" } });
-    expect(forged.opened).rejects.toThrow("rejected"); await forged.closed;
+    expect(await outcomeOf(forged.opened)).toThrow("rejected"); await forged.closed;
     expect(f.histories()).toBe(0);
   });
 
@@ -602,7 +603,7 @@ describe("browser resource limits", () => {
     const { cookie } = await f.login();
     const first = connectBrowser(f.web.origin, cookie); await first.opened;
     const extra = connectBrowser(f.web.origin, cookie);
-    expect(extra.opened).rejects.toThrow("rejected"); await extra.closed;
+    expect(await outcomeOf(extra.opened)).toThrow("rejected"); await extra.closed;
     expect(f.histories()).toBe(0);
   });
 

@@ -13,6 +13,7 @@ import {
   ZAI_SUB_BASE_URL,
 } from "../src/llm/providers/zai_config.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
   return {
@@ -333,25 +334,25 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
   });
 });
 
-test("rejects streams that end without terminal metadata", () => {
-  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([]), fakeClock())))
-    .rejects.toMatchObject({
+test("rejects streams that end without terminal metadata", async () => {
+  expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([]), fakeClock()))))
+    .toMatchObject({
       kind: "stream_errored",
       message: "Z.ai stream ended without a finish reason",
     });
 
-  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
+  expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
     choices: [{ index: 0, delta: { content: "partial" }, finish_reason: null }],
-  }]), fakeClock()))).rejects.toMatchObject({
+  }]), fakeClock())))).toMatchObject({
     kind: "stream_errored",
     message: "Z.ai stream ended without a finish reason",
   });
 });
 
-test("rejects completed streams with impossible zero-token accounting", () => {
-  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
+test("rejects completed streams with impossible zero-token accounting", async () => {
+  expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
     choices: [{ index: 0, delta: { content: "corrupt" }, finish_reason: "stop" }],
-  }]), fakeClock()))).rejects.toMatchObject({
+  }]), fakeClock())))).toMatchObject({
     kind: "stream_errored",
     message: "Z.ai stream ended with zero token usage",
   });

@@ -6,6 +6,7 @@ import {
   isTerminalMatrixError,
   watchForSyncDeath,
 } from "../src/connections/matrix/bot.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 type SyncListener = (state: SyncState, previous: SyncState | null, data?: SyncStateData) => void;
 
@@ -49,7 +50,7 @@ describe("waiting for the first sync", () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000);
     client.emit(SyncState.Error, unknownToken());
-    expect(waiting).rejects.toThrow("M_UNKNOWN_TOKEN");
+    expect(await outcomeOf(waiting)).toThrow("M_UNKNOWN_TOKEN");
     expect(client.listenerCount).toBe(0);
   });
 
@@ -57,14 +58,14 @@ describe("waiting for the first sync", () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000);
     client.emit(SyncState.Stopped);
-    expect(waiting).rejects.toThrow("STOPPED");
+    expect(await outcomeOf(waiting)).toThrow("STOPPED");
   });
 
   test("a sync that never settles gives up rather than blocking startup", async () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10);
     client.emit(SyncState.Reconnecting);
-    expect(waiting).rejects.toThrow("did not start within 10ms");
+    expect(await outcomeOf(waiting)).toThrow("did not start within 10ms");
     expect(client.listenerCount).toBe(0);
   });
 
@@ -73,14 +74,14 @@ describe("waiting for the first sync", () => {
     const stop = new AbortController();
     const waiting = awaitInitialSync(client.asClient(), 10_000, stop.signal);
     stop.abort();
-    expect(waiting).rejects.toThrow("stopped before its sync started");
+    expect(await outcomeOf(waiting)).toThrow("stopped before its sync started");
     expect(client.listenerCount).toBe(0);
   });
 
   test("a bot already stopped does not wait at all", async () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000, AbortSignal.abort());
-    expect(waiting).rejects.toThrow("stopped before its sync started");
+    expect(await outcomeOf(waiting)).toThrow("stopped before its sync started");
     expect(client.listenerCount).toBe(0);
   });
 

@@ -17,6 +17,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
+import { rejectionOf } from "./support/outcome.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
 
@@ -219,7 +220,7 @@ function failingProvider(message: string): SidecarProvider {
 describe("resolution", () => {
   test("a name with no config is NotImplemented, like any unregistered tool", async () => {
     const { config, root } = await configWith({});
-    expect(run(config, root, "ghost", scriptedProvider("x"))).rejects.toBeInstanceOf(
+    expect(await rejectionOf(run(config, root, "ghost", scriptedProvider("x")))).toBeInstanceOf(
       NotImplemented,
     );
   });
@@ -400,8 +401,8 @@ describe("the trace", () => {
     const { config, root } = await configWith({ researcher: spec() });
 
     expect(
-      run(config, root, "researcher", failingProvider("upstream exploded"), [], "toolu_parent"),
-    ).rejects.toBeInstanceOf(InvalidArgs);
+      await rejectionOf(run(config, root, "researcher", failingProvider("upstream exploded"), [], "toolu_parent")),
+    ).toBeInstanceOf(InvalidArgs);
 
     const traces = await readSubagentTraces(join(root, "data", "ada"));
     expect(traces).toHaveLength(1);
@@ -417,8 +418,8 @@ describe("the trace", () => {
     });
 
     expect(
-      run(config, root, "researcher", scriptedProvider("never reached"), [], "toolu_parent"),
-    ).rejects.toBeInstanceOf(BudgetBlocked);
+      await rejectionOf(run(config, root, "researcher", scriptedProvider("never reached"), [], "toolu_parent")),
+    ).toBeInstanceOf(BudgetBlocked);
 
     const traces = await readSubagentTraces(join(root, "data", "ada"));
     expect(traces).toHaveLength(1);

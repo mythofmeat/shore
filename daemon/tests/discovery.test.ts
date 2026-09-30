@@ -24,6 +24,7 @@ import {
 } from "../src/llm/discovery";
 import { requestUrl } from "./support/fetch.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
 const scratch = () => mkdtemp(testTmp("shore-discovery-"));
@@ -388,7 +389,7 @@ describe("writing the cache", () => {
       ...full,
       models: [{ provider_key: "p", model_id: "m", sdk: "openai", raw_provider_metadata: { bad: 1n }, discovered_at: NOW }],
     } as unknown as ProviderModelsCache;
-    expect(writeCache(path, poisoned)).rejects.toThrow();
+    expect(await outcomeOf(writeCache(path, poisoned))).toThrow();
 
     expect(await readFile(path, "utf8")).toBe(before);
     expect(await readdir(join(dir, "providers", "openrouter"))).toEqual(["models.json"]);
@@ -401,7 +402,7 @@ describe("writing the cache", () => {
     const before = await readFile(path, "utf8");
 
     await mkdir(`${path}.tmp`, { recursive: true });
-    expect(writeCache(path, cacheOf({ models: [] }))).rejects.toThrow();
+    expect(await outcomeOf(writeCache(path, cacheOf({ models: [] })))).toThrow();
     expect(await readFile(path, "utf8")).toBe(before);
   });
 });
@@ -508,7 +509,7 @@ describe("reading the cache back", () => {
   test("a genuine I/O failure is not swallowed", async () => {
     const dir = await scratch();
     await mkdir(join(dir, "providers", "openrouter", "models.json"), { recursive: true });
-    expect(readCache(cachePath(dir, "openrouter"))).rejects.toThrow();
+    expect(await outcomeOf(readCache(cachePath(dir, "openrouter")))).toThrow();
   });
 });
 

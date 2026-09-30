@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { OpenAIProvider } from "../src/llm/providers/openai.ts";
 import { startMockProvider, type MockProvider } from "../src/testing/mock_provider.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 let running: MockProvider | undefined;
 
@@ -154,12 +155,12 @@ describe("non-streaming", () => {
 describe("failures", () => {
   test("a scripted status becomes a thrown error, not a done", async () => {
     const m = await mock({ script: [{ status: 429 }] });
-    expect(collect(new OpenAIProvider().stream(request(m.url)))).rejects.toThrow();
+    expect(await outcomeOf(collect(new OpenAIProvider().stream(request(m.url))))).toThrow();
   });
 
   test("fallback: null refuses an unscripted turn", async () => {
     const m = await mock({ script: [], fallback: null });
-    expect(new OpenAIProvider().generate(request(m.url))).rejects.toThrow();
+    expect(await outcomeOf(new OpenAIProvider().generate(request(m.url)))).toThrow();
   });
 });
 

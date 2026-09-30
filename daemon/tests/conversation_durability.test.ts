@@ -17,6 +17,7 @@ import {
 } from "../src/engine/backup.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { Message } from "../src/engine/types.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -74,7 +75,7 @@ describe("one malformed line no longer costs the whole conversation", () => {
 
     const store = await MessageStore.load(path);
     expect(store.quarantinedLines).toBe(0);
-    expect(readdir(backupDirFor(path))).rejects.toThrow();
+    expect(await outcomeOf(readdir(backupDirFor(path)))).toThrow();
   });
 });
 

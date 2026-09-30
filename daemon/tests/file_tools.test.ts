@@ -13,6 +13,7 @@ import { defaultToolsConfig } from "../src/config/app.ts";
 import { oversizedImage, wideImage } from "./support/oversized_image.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -437,7 +438,7 @@ test("edit and partial patch changes queue prompt reload and participate in writ
   expect(tracked).toEqual(["edit", "apply_patch"]);
   expect(edits).toEqual(["MEMORY.md", "MEMORY.md"]);
   const signal = AbortSignal.abort();
-  expect(dispatchTool("apply_patch", { patch: "anything" }, { ...ctx, signal })).rejects.toThrow();
+  expect(await outcomeOf(dispatchTool("apply_patch", { patch: "anything" }, { ...ctx, signal }))).toThrow();
 });
 
 test("read handles JPEG, WebP and GIF as visual content", async () => {

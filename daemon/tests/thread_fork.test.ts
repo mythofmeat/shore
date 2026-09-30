@@ -25,6 +25,7 @@ import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { versionOf } from "../src/engine/versions.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const NOW = "2026-09-05T12:00:00.000Z";
 
@@ -425,7 +426,7 @@ describe("forking a thread", () => {
     await mkdir(squatter, { recursive: true });
     writeDurable(join(squatter, "active.jsonl"), "keep me\n");
 
-    expect(forkThread(root, "ada", "main", "spin", { now: () => NOW })).rejects.toThrow(
+    expect(await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW }))).toThrow(
       /already holds data/,
     );
     expect(await readFile(join(squatter, "active.jsonl"), "utf8")).toBe("keep me\n");
@@ -465,8 +466,8 @@ describe("recovering an interrupted fork", () => {
     const path = await seed(root, "ada", "main", [user("u1", "first")]);
 
     expect(
-      forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "provenance" }),
-    ).rejects.toThrow(/injected/);
+      await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "provenance" })),
+    ).toThrow(/injected/);
 
     expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(true);
     expect(await recoverForks(root, "ada")).toEqual(["spin"]);
@@ -487,8 +488,8 @@ describe("recovering an interrupted fork", () => {
     await seed(root, "ada", "main", [user("u1", "first")]);
 
     expect(
-      forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "publish" }),
-    ).rejects.toThrow(/injected/);
+      await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "publish" })),
+    ).toThrow(/injected/);
 
     expect(await recoverForks(root, "ada")).toEqual(["spin"]);
     expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
@@ -501,8 +502,8 @@ describe("recovering an interrupted fork", () => {
     const path = await seed(root, "ada", "main", [user("u1", "first")]);
 
     expect(
-      forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "context" }),
-    ).rejects.toThrow(/injected/);
+      await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "context" })),
+    ).toThrow(/injected/);
 
     await recoverForks(root, "ada");
     expect(existsSync(join(root, "ada", "threads", "spin"))).toBe(false);

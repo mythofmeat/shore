@@ -4,6 +4,7 @@ import { createConnection, type Socket } from "node:net";
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { Server } from "../src/swp/server.ts";
 import { MAX_TOTAL_ATTACHMENT_BYTES } from "../src/swp/admission.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 
@@ -267,7 +268,7 @@ describe("what the peer receives", () => {
     expect(server.sessionRouter.has(slow.session.sessionId)).toBe(false);
     expect(server.sessionRouter.has(other.session.sessionId)).toBe(true);
     expect(await slow.events().next()).toMatchObject({ done: true });
-    expect(slow.send({ type: "command", name: "status", args: {} })).rejects.toThrow("detached");
+    expect(await outcomeOf(slow.send({ type: "command", name: "status", args: {} }))).toThrow("detached");
     await settle();
     expect(routed).toEqual([{ kind: "session_disconnected", sessionId: slow.session.sessionId }]);
     const otherEvents = other.events();
@@ -376,7 +377,7 @@ describe("what the peer receives", () => {
     const attaching = server.attachLocal({ clientType: "browser", clientName: "cancelled", signal: controller.signal });
     await started;
     controller.abort(new Error("tab closed"));
-    expect(attaching).rejects.toThrow("tab closed");
+    expect(await outcomeOf(attaching)).toThrow("tab closed");
     expect(server.sessionRouter.sessions()).toEqual([]);
   });
 
@@ -392,7 +393,7 @@ describe("what the peer receives", () => {
     await settle();
     expect(server.sessionRouter.sessions()).toEqual([]);
     expect(await stopped.events().next()).toMatchObject({ done: true });
-    expect(server.attachLocal({ clientType: "browser", clientName: "late" })).rejects.toThrow("stopping");
+    expect(await outcomeOf(server.attachLocal({ clientType: "browser", clientName: "late" }))).toThrow("stopping");
   });
 
   test("broadcasts arrive, and so do frames addressed to its session alone", async () => {
