@@ -15,7 +15,7 @@ import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
-import { BUILTIN_TOOL_SCHEMAS } from "../src/tools/registry.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { required } from "../src/util/required.ts";
