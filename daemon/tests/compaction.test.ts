@@ -54,6 +54,7 @@ import {
 } from "../src/tools/workspace_path";
 import { queueDeferredEdit } from "../src/memory/deferred_edits";
 import type { Message } from "../src/engine/types.ts";
+import { estimateMessageTokens } from "../src/engine/prompt.ts";
 import { jsonlOf, maybePlanOf } from "./support/archival_plan.ts";
 import { CompactionError } from "../src/memory/compaction/types";
 
@@ -392,8 +393,11 @@ describe("loading a conversation", () => {
       writeDurable(join(root, "Aria", "threads", "main", "active.jsonl"), rec.active_jsonl as string);
       const loaded = await loadMessagesForCompaction(root, "Aria", "main");
       expect(loaded.rawContent).toBe(rec.raw_content as string);
-      expect(loaded.messages).toEqual(
+      expect(loaded.messages.map(({ tokens: _, ...flat }) => flat)).toEqual(
         (rec.messages as Json[]).map(toConversationMessage),
+      );
+      expect(loaded.messages.map((m) => m.tokens)).toEqual(
+        loaded.store.messages().map((m) => estimateMessageTokens(m)),
       );
     } finally {
       await rm(root, { recursive: true, force: true });

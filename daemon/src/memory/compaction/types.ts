@@ -28,6 +28,7 @@ export interface ConversationMessage {
   isToolResultOnly: boolean;
   isAutonomous: boolean;
   version?: string;
+  tokens?: number;
 }
 
 export interface CompactionCoverage {
