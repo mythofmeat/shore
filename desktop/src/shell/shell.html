@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'">
+<meta name="color-scheme" content="dark">
+<title>Shore</title>
+<link rel="stylesheet" href="shell.css">
+<script src="shell.js" defer></script>
+</head>
+<body>
+<main class="shell">
+  <form class="panel" id="connect" hidden>
+    <span class="wordmark">shore</span>
+    <div>
+      <h1>Daemon address</h1>
+      <p class="hint">Where the daemon serves its browser client, set by [daemon.web] bind_addr.</p>
+    </div>
+    <label class="field">
+      <span>Address</span>
+      <input class="input" id="address" autocomplete="off" spellcheck="false" placeholder="localhost:7340">
+    </label>
+    <p class="hint">If you leave them out, Shore uses http:// and port 7340.</p>
+    <button class="button primary block" id="connect-submit" type="submit">Continue</button>
+    <p class="error" id="connect-error" role="alert" hidden></p>
+  </form>
+  <section class="panel delayed" id="connecting" hidden>
+    <span class="wordmark">shore</span>
+    <div>
+      <h1>Connecting to the daemon</h1>
+      <p class="hint">Shore opens as soon as it answers.</p>
+    </div>
+    <p class="address" id="connecting-address"></p>
+    <div class="actions">
+      <button class="button" id="connecting-edit" type="button">Change address</button>
+    </div>
+  </section>
+  <section class="panel" id="unreachable" hidden>
+    <span class="wordmark">shore</span>
+    <div>
+      <h1 id="failure-title"></h1>
+      <p class="hint" id="failure-detail"></p>
+    </div>
+    <p class="address" id="failure-address"></p>
+    <p class="hint" id="countdown" aria-live="polite"></p>
+    <div class="actions">
+      <button class="button primary" id="retry" type="button">Try again</button>
+      <button class="button" id="edit" type="button">Change address</button>
+    </div>
+  </section>
+</main>
+</body>
+</html>

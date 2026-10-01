@@ -1,6 +1,8 @@
 client/target
 daemon/node_modules
 daemon/dist
+desktop/node_modules
+desktop/dist
 contrib/*/pkg
 contrib/*/src
 contrib/*/*.pkg.tar.zst

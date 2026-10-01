@@ -58,6 +58,22 @@ jobs:
       - run: bun run mutate --stale
       - run: bun run rerecord:check
 
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+
   client:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
