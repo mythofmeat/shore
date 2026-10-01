@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="40" x2="0" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b1c20"/>
+      <stop offset="1" stop-color="#0c0d0f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="300" cy="292" r="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f08a3c" stop-opacity="0.5"/>
+      <stop offset="0.28" stop-color="#f08a3c" stop-opacity="0.17"/>
+      <stop offset="1" stop-color="#f08a3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb" cx="289" cy="279" r="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff7ec"/>
+      <stop offset="0.38" stop-color="#ffc68a"/>
+      <stop offset="1" stop-color="#f08a3c"/>
+    </radialGradient>
+    <linearGradient id="stalk" x1="136" y1="468" x2="300" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f08a3c" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#f08a3c" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f08a3c" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <rect x="40" y="40" width="432" height="432" rx="100" fill="url(#tile)" stroke="#2c2e33" stroke-width="6"/>
+  <circle cx="300" cy="292" r="220" fill="url(#glow)"/>
+  <g fill="#ffc68a">
+    <circle cx="376" cy="212" r="3.5" fill-opacity="0.55"/>
+    <circle cx="212" cy="232" r="2.5" fill-opacity="0.4"/>
+    <circle cx="400" cy="334" r="3" fill-opacity="0.45"/>
+    <circle cx="232" cy="376" r="3.5" fill-opacity="0.5"/>
+    <circle cx="350" cy="408" r="2.5" fill-opacity="0.35"/>
+    <circle cx="176" cy="312" r="2" fill-opacity="0.3"/>
+    <circle cx="424" cy="250" r="2" fill-opacity="0.3"/>
+    <circle cx="258" cy="196" r="2" fill-opacity="0.35"/>
+  </g>
+  <path d="M136 468C122 330 150 156 268 124C352 102 338 206 300 250" fill="none" stroke="url(#stalk)" stroke-width="17" stroke-linecap="round"/>
+  <circle cx="300" cy="292" r="44" fill="url(#bulb)"/>
+</svg>
