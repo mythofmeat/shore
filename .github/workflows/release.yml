@@ -1,0 +1,131 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Part of the version to increase
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  version:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      revision: ${{ steps.bump.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Releases are cut from main, not $GITHUB_REF."
+            exit 1
+          fi
+          versions() {
+            sed -n '/^\[workspace\.package\]$/,/^\[/s/^version = "\(.*\)"$/\1/p' client/Cargo.toml
+            sed -n '/^name = "shore-\(cli\|common\)"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock
+            sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json
+            sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
+          }
+          current=$(versions | sort -u)
+          if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
+            echo "::error::The version files disagree: $(versions | tr '\n' ' ')"
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<<"$current"
+          case "$BUMP" in
+            major) version="$((major + 1)).0.0" ;;
+            minor) version="$major.$((minor + 1)).0" ;;
+            patch) version="$major.$minor.$((patch + 1))" ;;
+          esac
+          sed -i "/^\[workspace\.package\]$/,/^\[/s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
+          sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
+          sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
+          sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
+          if [ "$(versions | sort -u)" != "$version" ]; then
+            echo "::error::Not every version file moved to $version."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): v$version"
+          git tag "v$version"
+          git push --atomic origin HEAD "refs/tags/v$version"
+          echo "tag=v$version" >>"$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+  arch:
+    needs: version
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - run: pacman -Syu --noconfirm git
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      # makepkg refuses to run as root, and makepkg --syncdeps installs the build dependencies with sudo.
+      - run: |
+          useradd --create-home builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      - run: |
+          mkdir /build
+          cp contrib/arch/PKGBUILD /build/
+          chown -R builder /build
+          cd /build
+          sudo -u builder makepkg --syncdeps --noconfirm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: arch
+          path: /build/*.pkg.tar.zst
+
+  release:
+    needs: [version, arch]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: assets
+          merge-multiple: true
+      - run: gh release create "$TAG" assets/* --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+
+  homebrew:
+    needs: [version, release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: mythofmeat/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+      - env:
+          TAG: ${{ needs.version.outputs.tag }}
+          REVISION: ${{ needs.version.outputs.revision }}
+        run: |
+          scripts/update-formula shore "$TAG" "$REVISION"
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "shore ${TAG#v}"
+          git push
