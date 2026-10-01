@@ -29,6 +29,7 @@ import { eventsForResponse } from "./support/stream.ts";
 import { interpretResult } from "../src/mcp/client.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -1129,4 +1130,54 @@ test("compaction delivers structured read images to the next model round", async
   expect(result).toMatchObject({ type: "tool_result", is_error: false });
   if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("image result was flattened");
   expect(result.content.find((block) => block.type === "image")).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: png } });
+});
+
+async function readOriginalOnOlderModel(config: LoadedConfig): Promise<{ provider: SidecarProvider; seen: SidecarRequest[] }> {
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.modelId = "claude-sonnet-4-6";
+  await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "ref.png"), await sizedImage(4000, 3000));
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([
+    response([{ type: "tool_use", id: "read-ref", name: "read", input: { file_path: "ref.png", original: true } }], "tool_use"),
+    response([{ type: "text", text: "nothing to say" }]),
+  ], seen);
+  return { provider, seen };
+}
+
+async function expectHeldToOlderModel(seen: readonly SidecarRequest[]): Promise<void> {
+  const result = seen.at(-1)?.messages.flatMap((turn) => turn.content).find((block) => block.type === "tool_result" && block.tool_use_id === "read-ref");
+  if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("the read did not run");
+  const image = result.content.find((block) => block.type === "image");
+  if (image?.type !== "image") throw new Error("the read returned no image");
+  expect(await new Bun.Image(Buffer.from(image.source.data, "base64")).metadata()).toMatchObject({ width: 1270, height: 952 });
+  expect(JSON.stringify(result.content)).toContain("sent at 1270×952 PNG (1,564 tokens), the full resolution this model accepts.]");
+}
+
+test("an image a heartbeat's tool reads is held to the heartbeat's model", async () => {
+  const config = await world();
+  const { provider, seen } = await readOriginalOnOlderModel(config);
+  const executor = new InProcessAutonomyExecutor({
+    registry: registryFor(config),
+    cache: new LastRequestCache(),
+    providers: { anthropic: provider },
+  });
+
+  await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+  await expectHeldToOlderModel(seen);
+});
+
+test("an image a compaction's tool reads is held to the compaction's model", async () => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const { provider, seen } = await readOriginalOnOlderModel(config);
+
+  const outcome = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }),
+  }, { keepTurnsOverride: 0 });
+
+  expect(outcome?.kind).toBe("compacted");
+  await expectHeldToOlderModel(seen);
 });

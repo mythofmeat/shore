@@ -17,6 +17,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
+import type { ContentBlock } from "../src/engine/types.ts";
 import { rejectionOf } from "./support/outcome.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
@@ -717,4 +718,34 @@ test("a captured SDK subagent executes workspace tools through shared generation
   expect(agent.toolOutcomes).toHaveLength(1);
   expect(JSON.stringify(agent.toolOutcomes[0]?.output)).toContain("Continuity matters.");
   expect(records).toHaveLength(1);
+});
+
+test("an image a sub-agent's tool reads is held to the sub-agent's model", async () => {
+  const { sizedImage } = await import("./support/sized_image.ts");
+  const { config, root } = await configWith({ researcher: spec({ tools: ["read"] }) });
+  const model = config.models.chat.get("cheap");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.modelId = "claude-opus-5-5";
+  const ctx = contextIn(root);
+  await mkdir(config.dirs.data, { recursive: true });
+  await mkdir(ctx.workspaceDir, { recursive: true });
+  await writeFile(join(ctx.workspaceDir, "ref.png"), await sizedImage(4000, 3000));
+  const results: ContentBlock[] = [];
+  const provider: SidecarProvider = {
+    ...scriptedProvider("looked"),
+    async *streamWithTools(req, phase) {
+      results.push(await phase.runTool({ id: "toolu_read", name: "read", input: { file_path: "ref.png", original: true } }));
+      yield* scriptedProvider("looked").stream(req);
+    },
+  };
+
+  await runSubagent({ config, ctx, env: {}, providers: { claude_agent: provider } }, "researcher", "Look at the sheet.");
+
+  const result = results[0];
+  if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("the read did not run");
+  const image = result.content.find((block) => block.type === "image");
+  if (image?.type !== "image") throw new Error("the read returned no image");
+  expect(await new Bun.Image(Buffer.from(image.source.data, "base64")).metadata()).toMatchObject({ width: 2000, height: 1500 });
+  expect(JSON.stringify(result.content)).toContain("sent at 2000×1500 PNG (3,888 tokens), the full resolution this model accepts.]");
 });
