@@ -11,7 +11,7 @@ import { parseCacheKeepalive } from "../src/config/keepalive.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
 import { persistAndNotify, type PersistContext } from "../src/handler/persistence.ts";
 import { buildRequestWithResolvedKey } from "../src/llm/request.ts";
-import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
+import type { GenerateResponse, SidecarRequest, Usage } from "../src/llm/types.ts";
 import type { StreamResult } from "../src/llm/stream.ts";
 
 const CHARACTER = "ada";
@@ -108,6 +108,7 @@ async function turnPersisted(
   clock: ReturnType<typeof fakeClock>,
   opts: { ledgerPath?: string } = {},
   cacheReadTokens = 4096,
+  lastCall?: Usage,
 ) {
   const sent: SidecarRequest[] = [];
   const service = new KeepaliveService(
@@ -147,6 +148,7 @@ async function turnPersisted(
 
   const result = streamResult();
   result.usage.cache_read_tokens = cacheReadTokens;
+  if (lastCall !== undefined) result.context_usage = lastCall;
   await persistAndNotify(ctx, new CountingEngine(), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
@@ -332,6 +334,41 @@ describe("the ping count bounds the schedule", () => {
       await restored.tick();
     }
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe("a heartbeat is measured against what the turn's last call left cached", () => {
+  const LAST_CALL: Usage = { input_tokens: 10, output_tokens: 5, cache_read_tokens: 4000, cache_creation_tokens: 96 };
+
+  function heartbeatRead(service: KeepaliveService, read: number): void {
+    service.observe(CHARACTER, "claude-opus-4-6", "heartbeat", undefined, { cache_read_tokens: read }, {
+      ...turnFor(CONFIGURED).request,
+      context: { character: CHARACTER, call_type: "heartbeat", thinking_enabled: false, thread: "main" },
+    });
+  }
+
+  test("reading all of it, the write included, pushes the ping", async () => {
+    const clock = fakeClock();
+    const { service } = await turnPersisted(CONFIGURED, clock, {}, 12_000, LAST_CALL);
+    clock.advance(30 * MINUTE);
+    heartbeatRead(service, 4096);
+    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 85 * MINUTE);
+  });
+
+  test("reading a token less leaves it", async () => {
+    const clock = fakeClock();
+    const { service } = await turnPersisted(CONFIGURED, clock, {}, 12_000, LAST_CALL);
+    clock.advance(30 * MINUTE);
+    heartbeatRead(service, 4095);
+    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 55 * MINUTE);
+  });
+
+  test("a turn whose stream named no last call is measured by its usage", async () => {
+    const clock = fakeClock();
+    const { service } = await turnPersisted(CONFIGURED, clock, {}, 4096);
+    clock.advance(30 * MINUTE);
+    heartbeatRead(service, 4096);
+    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 85 * MINUTE);
   });
 });
 

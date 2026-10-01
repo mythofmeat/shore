@@ -29,6 +29,7 @@ const KEEPALIVE_TICK_MS = 10_000;
 export interface KeepalivePrefix extends SidecarRequest {
   keepalive_interval_ms?: number;
   keepalive_pings?: number;
+  keepalive_cached_tokens?: number;
 }
 
 export interface KeepaliveEvent {
@@ -129,6 +130,21 @@ export function pingRewrotePrefix(usage: {
   return usage.cache_creation_tokens >= KEEPALIVE_REWRITE_TOKENS;
 }
 
+export function cachedPrefixTokens(usage: Pick<Usage, "cache_read_tokens" | "cache_creation_tokens">): number {
+  return usage.cache_read_tokens + usage.cache_creation_tokens;
+}
+
+export function heartbeatRefreshedPrefix(
+  armed: KeepalivePrefix,
+  heartbeat: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
+  usage: Pick<Usage, "cache_read_tokens">,
+): boolean {
+  if (heartbeat.sdk === "claude_agent" || haltKey(heartbeat) !== haltKey(armed)) return false;
+  if ((heartbeat.context?.thread ?? MAIN_THREAD) !== (armed.context?.thread ?? MAIN_THREAD)) return false;
+  const cached = armed.keepalive_cached_tokens ?? 0;
+  return cached > 0 && usage.cache_read_tokens >= cached;
+}
+
 export interface KeepaliveCallLabels {
   ledgerPath?: string;
   windowSecs?: number;
@@ -147,7 +163,13 @@ export function buildKeepalivePing(
     role: "user",
     content: [{ type: "text", text: "." }],
   };
-  const { keepalive_interval_ms: _cadence, keepalive_pings: _pings, context, ...request } = prefix;
+  const {
+    keepalive_interval_ms: _cadence,
+    keepalive_pings: _pings,
+    keepalive_cached_tokens: _cached,
+    context,
+    ...request
+  } = prefix;
   const ping: SidecarRequest = {
     ...request,
     max_tokens: 1,
@@ -263,9 +285,13 @@ export class KeepaliveService {
     callType: string,
     fingerprint?: string,
     usage?: Pick<Usage, "cache_read_tokens">,
-    identity?: Pick<SidecarRequest, "sdk" | "model" | "provider_key">,
+    identity?: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
   ): void {
-    if (callType === "keepalive" || callType === "heartbeat" || callType === "heartbeat_tool_loop") return;
+    if (callType === "heartbeat") {
+      this.#observeHeartbeat(character, usage, identity);
+      return;
+    }
+    if (callType === "keepalive" || callType === "heartbeat_tool_loop") return;
     const entry = this.#entryFor(character);
     const armed = entry.prefix;
     const elsewhere = identity !== undefined && armed !== undefined && haltKey(identity) !== haltKey(armed);
@@ -277,6 +303,18 @@ export class KeepaliveService {
     }
     if (elsewhere) return;
     entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
+  }
+
+  #observeHeartbeat(
+    character: string,
+    usage: Pick<Usage, "cache_read_tokens"> | undefined,
+    identity: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context"> | undefined,
+  ): void {
+    const entry = this.#entries.get(character);
+    const armed = entry?.prefix;
+    if (entry === undefined || armed === undefined || usage === undefined || identity === undefined) return;
+    if (entry.keepalive.nextPingAt === undefined || !heartbeatRefreshedPrefix(armed, identity, usage)) return;
+    entry.keepalive.onPrefixWarmed(this.#now());
   }
 
   forgetMisses(character: string): void {

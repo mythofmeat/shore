@@ -83,6 +83,7 @@ export class CacheKeepalive {
 
   onPrefixWarmed(now: number): void {
     this.#prefixWarmAt = now;
+    this.#lastWarmAt = now;
     this.#nextPingAt = this.#deadline(now);
   }
 
