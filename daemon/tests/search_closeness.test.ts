@@ -14,7 +14,8 @@ import { containsEveryTerm, defaultMinSimilarity, distinctiveTerms, startsAWord 
 import { HISTORY_SEARCH_DB_FILE, HistorySearchIndex } from "../src/memory/history_index.ts";
 import { resolveMinSimilarity } from "../src/memory/retrieval.ts";
 import { indexPendingBatch } from "../src/memory/workspace_index.ts";
-import { handleSearchHistory, type HistoryCloseness, type HistoryHit } from "../src/tools/history.ts";
+import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
+import { handleSearchHistory, type HistoryCloseness, type HistoryHit, type SearchHistoryResult } from "../src/tools/history.ts";
 import { formatToolOutput } from "../src/tools/output.ts";
 import { DEFAULT_RETRIEVAL_CONFIG, GIT_HISTORY_HINT, handleSearch } from "../src/tools/workspace.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -70,6 +71,9 @@ async function indexedHistory(messages: Message[], embedder: Embedder) {
   do embedded = await index.embedPending(embedder); while (embedded > 0);
   index.close();
   return {
+    dir,
+    dbPath,
+    indexPath,
     search: (input: Record<string, unknown>, minSimilarity: number | null = 0.7) =>
       handleSearchHistory(input, dir, {
         character: basename(dir),
@@ -355,5 +359,50 @@ describe("workspace search reports when nothing is close", () => {
   test("an unknown match is rejected", async () => {
     const search = await workspace(files, UNRELATED);
     expect(await outcomeOf(search({ query: "x", match: "fuzzy" }))).toThrow("search `match` must be ranked or nearest");
+  });
+});
+
+describe("the minimum reaches both searches through the tool context", () => {
+  function context(over: Partial<ToolContext>): ToolContext {
+    return {
+      imageDir: "",
+      workspaceDir: "",
+      characterDataDir: "",
+      conversationDir: "",
+      historyDbPath: "",
+      characterName: "",
+      configDir: "",
+      retrievalConfig: DEFAULT_RETRIEVAL_CONFIG,
+      retrievalMode: "hybrid",
+      embedder: UNRELATED,
+      minSimilarity: 0.7,
+      ...over,
+    };
+  }
+
+  test("search_chat_logs", async () => {
+    const history = await indexedHistory([message("u1", "We walked through the apple orchard", 0)], UNRELATED);
+    const result = await dispatchTool("search_chat_logs", { query: "punk girl idea" }, context({
+      conversationDir: history.dir,
+      historyDbPath: history.dbPath,
+      historyIndexPath: history.indexPath,
+      characterName: basename(history.dir),
+    })) as SearchHistoryResult;
+    expect(result.closeness?.min_similarity).toBe(0.7);
+    expect(result.results).toEqual([]);
+  });
+
+  test("search", async () => {
+    const root = await mkdtemp(testTmp("closeness-dispatch-"));
+    const ws = join(root, "workspace");
+    await mkdir(ws, { recursive: true });
+    await writeFile(join(ws, "orchard.md"), "We walked through the apple orchard\n");
+    const indexPath = join(root, "cache", "workspace_index.db");
+    let pending: number;
+    do pending = (await indexPendingBatch({ workspaceDir: ws, retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, embedder: UNRELATED, indexPath })).pending;
+    while (pending > 0);
+    const result = await dispatchTool("search", { query: "punk girl idea" }, context({ workspaceDir: ws, memoryIndexPath: indexPath })) as Record<string, unknown>;
+    expect((result.closeness as HistoryCloseness).min_similarity).toBe(0.7);
+    expect(result.results).toEqual([]);
   });
 });
