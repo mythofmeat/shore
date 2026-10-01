@@ -1,5 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect x="40" y="40" width="432" height="432" rx="100" fill="#17181b" stroke="#2c2e33" stroke-width="6"/>
-  <path d="M120 222c45-38 91-38 136 0s91 38 136 0" fill="none" stroke="#f08a3c" stroke-width="34" stroke-linecap="round"/>
-  <path d="M120 302c45-38 91-38 136 0s91 38 136 0" fill="none" stroke="#f08a3c" stroke-opacity="0.45" stroke-width="34" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="40" x2="0" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b1c20"/>
+      <stop offset="1" stop-color="#0c0d0f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="300" cy="292" r="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f08a3c" stop-opacity="0.5"/>
+      <stop offset="0.28" stop-color="#f08a3c" stop-opacity="0.17"/>
+      <stop offset="1" stop-color="#f08a3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb" cx="289" cy="279" r="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff7ec"/>
+      <stop offset="0.38" stop-color="#ffc68a"/>
+      <stop offset="1" stop-color="#f08a3c"/>
+    </radialGradient>
+    <linearGradient id="stalk" x1="136" y1="468" x2="300" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f08a3c" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#f08a3c" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f08a3c" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <rect x="40" y="40" width="432" height="432" rx="100" fill="url(#tile)" stroke="#2c2e33" stroke-width="6"/>
+  <circle cx="300" cy="292" r="220" fill="url(#glow)"/>
+  <path d="M76 398H436" stroke="#f08a3c" stroke-opacity="0.2" stroke-width="5" stroke-linecap="round"/>
+  <g stroke="#ffb06a" stroke-width="7" stroke-linecap="round">
+    <path d="M236 419H364" stroke-opacity="0.6"/>
+    <path d="M263 435H351" stroke-opacity="0.42"/>
+    <path d="M269 451H321" stroke-opacity="0.26"/>
+  </g>
+  <g fill="#ffc68a">
+    <circle cx="386" cy="206" r="3.5" fill-opacity="0.55"/>
+    <circle cx="206" cy="228" r="2.5" fill-opacity="0.4"/>
+    <circle cx="410" cy="318" r="3" fill-opacity="0.4"/>
+    <circle cx="236" cy="352" r="3" fill-opacity="0.45"/>
+    <circle cx="178" cy="300" r="2" fill-opacity="0.3"/>
+    <circle cx="432" cy="246" r="2" fill-opacity="0.3"/>
+    <circle cx="256" cy="192" r="2" fill-opacity="0.35"/>
+    <circle cx="118" cy="168" r="2" fill-opacity="0.25"/>
+    <circle cx="400" cy="136" r="2.5" fill-opacity="0.3"/>
+  </g>
+  <path d="M136 468C122 330 150 156 268 124C352 102 338 206 300 250" fill="none" stroke="url(#stalk)" stroke-width="17" stroke-linecap="round"/>
+  <circle cx="300" cy="292" r="44" fill="url(#bulb)"/>
 </svg>
