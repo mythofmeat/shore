@@ -1,15 +1,25 @@
 import type { BashResult } from "./bash.ts";
-import { historyText } from "./history_output.ts";
-import type { SearchHistoryResult } from "./history.ts";
+import { historyText, whyNotClose } from "./history_output.ts";
+import type { HistoryCloseness, SearchHistoryResult } from "./history.ts";
 import type { FetchUrlResult } from "./web.ts";
 import type { HeatmapResult } from "./activity.ts";
 import type { ModelHistoryResult } from "./model_history.ts";
 import { payloadText } from "./media.ts";
 
+interface SearchHit {
+  path: string;
+  line: number;
+  excerpt: string;
+  semantic_score?: number | null;
+  weak?: boolean;
+}
+
 interface SearchOutput {
   query: string;
   mode?: string;
-  results: { path: string; line: number; excerpt: string }[];
+  match?: string;
+  closeness?: HistoryCloseness;
+  results: SearchHit[];
   has_more?: boolean;
   semantic_unavailable?: string;
   pending_files?: number;
@@ -23,10 +33,17 @@ function oneLine(value: string): string {
 
 function searchText(value: SearchOutput): string {
   const lines = [`Search ${JSON.stringify(value.query)} (${value.mode ?? "lexical"}): ${value.results.length} results`];
+  if (value.match === "nearest") lines.push("Matching: nearest files, including weak matches.");
+  const closeness = value.closeness;
+  if (value.results.length === 0 && closeness?.weaker_left_out === true) {
+    lines.push(`No close matches: ${whyNotClose(closeness, "file")}. match: nearest returns the nearest weak matches.`);
+  } else if (closeness?.weaker_left_out === true) {
+    lines.push("Close matches only; weaker matches were left out (match: nearest includes them).");
+  }
   let previousPath: string | undefined;
   for (const result of value.results) {
     if (result.path !== previousPath) {
-      lines.push("", oneLine(result.path));
+      lines.push("", `${oneLine(result.path)}${fileLabel(result)}`);
       previousPath = result.path;
     }
     lines.push(`  ${result.line}: ${result.excerpt}`);
@@ -37,6 +54,12 @@ function searchText(value: SearchOutput): string {
   if (value.pending_files) lines.push(`${value.pending_files} files pending semantic indexing.`);
   if (value.skipped_binary_or_large) lines.push(`${value.skipped_binary_or_large} binary or oversized files skipped.`);
   return lines.join("\n");
+}
+
+function fileLabel(hit: SearchHit): string {
+  const similarity = typeof hit.semantic_score === "number" ? `similarity ${hit.semantic_score.toFixed(2)}` : undefined;
+  if (hit.weak === true) return similarity === undefined ? " (weak match)" : ` (weak match, ${similarity})`;
+  return similarity === undefined ? "" : ` (${similarity})`;
 }
 
 function heatmapText(value: HeatmapResult): string {

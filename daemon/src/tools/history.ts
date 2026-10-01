@@ -10,6 +10,7 @@ import {
   type IndexedMessage,
 } from "../memory/history_index.ts";
 import { hostZone, normalizeToZone, toZonedRfc3339 } from "../ledger/zoned.ts";
+import { containsEveryTerm, distinctiveTerms, meetsSimilarity } from "../memory/closeness.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
 
 const DEFAULT_MAX_RESULTS = 3;
@@ -164,10 +165,21 @@ function modelFilterFrom(input: Record<string, unknown>): string | undefined {
 export class QueryMatcher {
   readonly rawLower: string;
   readonly terms: string[];
+  readonly words: string[];
 
   constructor(query: string, readonly exactPhrase = false) {
     this.rawLower = query.toLowerCase();
     this.terms = tokenize(this.rawLower);
+    this.words = distinctiveTerms(this.terms);
+  }
+
+  isClose(content: string): boolean {
+    const contentLower = content.toLowerCase();
+    if (this.phraseIndex(contentLower) !== undefined) return true;
+    if (this.exactPhrase) return false;
+    return this.terms.length === 0
+      ? contentLower.includes(this.rawLower)
+      : containsEveryTerm(contentLower, this.words);
   }
 
   score(content: string): number | undefined {
@@ -298,6 +310,7 @@ export interface HistorySearchOptions {
   dbPath: string;
   indexPath?: string;
   embedder?: Embedder;
+  minSimilarity?: number;
   defaultMode?: HistorySearchMode;
   timeZone?: string;
   now?: () => number;
@@ -312,6 +325,7 @@ interface RankedHistoryCandidate {
   coverage: number;
   phrase: boolean;
   timestampMs: number | undefined;
+  similarity?: number;
 }
 
 export interface HistoryMessage extends HistoryLocation {
@@ -326,11 +340,21 @@ export interface HistoryHit extends HistoryMessage {
   locations: HistoryLocation[];
   before: HistoryMessage[];
   after: HistoryMessage[];
+  similarity?: number;
+  weak?: true;
+}
+
+export interface HistoryCloseness {
+  min_similarity: number | null;
+  best_similarity: number | null;
+  words: string[];
+  weaker_left_out: boolean;
 }
 
 export interface SearchHistoryResult {
   mode: Exclude<HistorySearchMode, "auto">;
-  match?: "phrase";
+  match?: "phrase" | "nearest";
+  closeness?: HistoryCloseness;
   compact?: boolean;
   semantic_index: {
     indexed_chunks: number;
@@ -376,7 +400,9 @@ async function handleSearchHistoryUnlocked(
     throw new InvalidArgs("provide query, start_time, end_time, model, or a combination");
   }
   const match = input.match ?? "ranked";
-  if (match !== "ranked" && match !== "phrase") throw new InvalidArgs("match must be ranked or phrase");
+  if (match !== "ranked" && match !== "nearest" && match !== "phrase") {
+    throw new InvalidArgs("match must be ranked, nearest, or phrase");
+  }
   if (match === "phrase" && query === undefined) throw new InvalidArgs("phrase matching requires query");
   const compact = input.compact === true;
   const requested = match === "phrase" ? "lexical" : searchModeFrom(input, options.defaultMode ?? "auto");
@@ -430,8 +456,15 @@ async function handleSearchHistoryUnlocked(
     const ranked = mode === "hybrid"
       ? fuseCandidates(lexical, vector)
       : mode === "vector" ? vector : lexical;
-    const grouped = groupMessages(ranked);
-    const chosen = grouped.slice(0, maxResultsFrom(input));
+    const judge = matcher === undefined || match === "phrase"
+      ? undefined
+      : (candidate: RankedHistoryCandidate) =>
+          matcher.isClose(candidate.text) ||
+          meetsSimilarity(candidate.similarity, options.minSimilarity) ||
+          (options.minSimilarity === undefined && candidate.similarity !== undefined);
+    const grouped = groupMessages(ranked).map((hit) => ({ ...hit, close: judge?.(hit.candidate) ?? true }));
+    const eligible = match === "nearest" ? grouped : grouped.filter((hit) => hit.close);
+    const chosen = eligible.slice(0, maxResultsFrom(input));
     const neighborRows: IndexedMessage[] = [];
     for (const hit of chosen) {
       const before = compact ? undefined : index.neighbor(hit.candidate.row, -1);
@@ -453,13 +486,29 @@ async function handleSearchHistoryUnlocked(
         after: after === undefined
           ? []
           : [presentMessage(after, neighborTexts.get(after.id) ?? "", timeZone)],
+        ...(hit.candidate.similarity === undefined ? {} : { similarity: roundSimilarity(hit.candidate.similarity) }),
+        ...(hit.close ? {} : { weak: true as const }),
       };
     });
     const bounds = index.timestampBounds();
+    const best = vector.reduce<number | undefined>(
+      (top, candidate) => candidate.similarity === undefined || (top !== undefined && top >= candidate.similarity)
+        ? top
+        : candidate.similarity,
+      undefined,
+    );
 
     return {
       mode,
-      ...(match === "phrase" ? { match: "phrase" as const } : {}),
+      ...(match === "ranked" ? {} : { match }),
+      ...(judge === undefined || matcher === undefined ? {} : {
+        closeness: {
+          min_similarity: options.minSimilarity ?? null,
+          best_similarity: best === undefined ? null : roundSimilarity(best),
+          words: matcher.words,
+          weaker_left_out: match === "ranked" && grouped.some((hit) => !hit.close),
+        },
+      }),
       ...(compact ? { compact: true } : {}),
       semantic_index: diagnostics,
       ...(semanticUnavailable === undefined ? {} : { semantic_unavailable: semanticUnavailable }),
@@ -477,7 +526,7 @@ async function handleSearchHistoryUnlocked(
       },
       model_filter: modelFilter ?? null,
       results,
-      ...(grouped.length > chosen.length ? { has_more: true } : {}),
+      ...(eligible.length > chosen.length ? { has_more: true } : {}),
       count: results.length,
       searched_message_occurrences: index.selectedMessageCount(),
       searched_messages: index.distinctMessageCount(),
@@ -591,11 +640,11 @@ async function vectorCandidates(
     modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
   );
   const texts = await loadCanonicalTexts(index.ref, raw.map(({ row }) => row));
-  return raw.flatMap(({ row, rank }) => {
+  return raw.flatMap(({ row, rank, score }) => {
     const text = texts.get(row.id);
     return text === undefined ? [] : [{
       row, text, vectorRank: rank, lexicalScore: 0, coverage: 0, phrase: false,
-      timestampMs: parseRfc3339(row.timestamp),
+      timestampMs: parseRfc3339(row.timestamp), similarity: score,
     }];
   });
 }
@@ -609,7 +658,10 @@ function fuseCandidates(
     const current = byId.get(candidate.row.id) ?? { ...candidate, fused: 0 };
     current.fused += 1 / (60 + rank);
     if (kind === "lexical") current.lexicalRank = rank;
-    else current.vectorRank = rank;
+    else {
+      current.vectorRank = rank;
+      if (candidate.similarity !== undefined) current.similarity = candidate.similarity;
+    }
     byId.set(candidate.row.id, current);
   };
   lexical.forEach((candidate, i) => add(candidate, i + 1, "lexical"));
@@ -679,6 +731,10 @@ function groupMessages(
     );
   }
   return order.map((key) => required(groups.get(key)));
+}
+
+function roundSimilarity(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function threadOf(archiveKey: string): string {
