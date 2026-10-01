@@ -268,6 +268,11 @@ describe("the options the SDK is run with", () => {
     expect(options?.disallowedTools).toContain("Agent");
   });
 
+  test("tool calls go to shore's canUseTool, not to the CLI's auto-mode classifier", async () => {
+    const { agent } = await collect({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
+    expect(agent.calls[0]?.options.permissionMode).toBe("default");
+  });
+
   test("the run is given a controller so shore can stop it", async () => {
     const { agent } = await collect({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
     expect(agent.calls[0]?.options.abortController).toBeInstanceOf(AbortController);
@@ -324,6 +329,10 @@ describe("the environment the subprocess is given", () => {
     } finally {
       restoreTestEnv();
     }
+  });
+
+  test("the CLI is told not to turn an omitted thinking display into updates", async () => {
+    expect((await envOf(request())).CLAUDE_CODE_THINKING_DISPLAY_UPDATES).toBe("0");
   });
 
   test("nothing else of the daemon's environment leaks in", async () => {
