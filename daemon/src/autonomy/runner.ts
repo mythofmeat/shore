@@ -188,13 +188,15 @@ export class CharacterAutonomy {
     if (this.#clock.nextWakeAt !== before) this.#state.dirty = true;
   }
 
-  shouldCompactNow(turnCount: number, contextTokens: number): boolean {
+  shouldCompactNow(turnCount: number, contextTokens: number, crowded = false): boolean {
     const c = this.#config;
-    if (!c.compactionEnabled || turnCount < c.minTurns) return false;
-
-    const overTurns = c.maxTurns > 0 && turnCount >= c.maxTurns;
-    const overTokens = c.maxContextTokens > 0 && contextTokens >= c.maxContextTokens;
-    if (!overTurns && !overTokens) return false;
+    if (!c.compactionEnabled) return false;
+    if (!crowded) {
+      if (turnCount < c.minTurns) return false;
+      const overTurns = c.maxTurns > 0 && turnCount >= c.maxTurns;
+      const overTokens = c.maxContextTokens > 0 && contextTokens >= c.maxContextTokens;
+      if (!overTurns && !overTokens) return false;
+    }
 
     this.#state.compactionTriggered = true;
     this.#state.dirty = true;

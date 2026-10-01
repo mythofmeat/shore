@@ -15,6 +15,8 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
 
+export const COMPACT_BEFORE_TRIM_FRACTION = 0.9;
+
 
 const TIME_GAP_THRESHOLD_SECS = 1_800;
 
@@ -49,6 +51,7 @@ export interface PromptMessage {
 export interface AssembledPrompt {
   system: SystemBlock[];
   messages: PromptMessage[];
+  messageBudget: number;
 }
 
 export interface PromptParams {
@@ -87,6 +90,7 @@ export function assemblePrompt(
       timeZone,
       params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
     ),
+    messageBudget: availableForMessages,
   };
 }
 
@@ -212,6 +216,20 @@ export function estimateMessageTokens(
     (total, block) => total + estimateBlockTokens(block, tier),
     msg.images.reduce((total, image) => total + attachedImageTokens(image, tier), 0),
   );
+}
+
+export function nearMessageBudget(
+  messages: readonly Message[],
+  messageBudget: number,
+  tier: ImageTier = HIGH_RESOLUTION_IMAGE_TIER,
+): boolean {
+  const threshold = messageBudget * COMPACT_BEFORE_TRIM_FRACTION;
+  let used = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    used += estimateMessageTokens(required(messages[i]), tier);
+    if (used >= threshold) return true;
+  }
+  return false;
 }
 
 export function estimateHistoryTokens(

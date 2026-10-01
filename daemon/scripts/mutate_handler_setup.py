@@ -48,6 +48,11 @@ the field from the wire along with the `shore send --temperature/--top-p
 that called it no longer exist to mutate. The durable equivalents live under
 `shore model setting`, and `mutate_commands_model_settings.py` covers them.
 
+The request now also reports the message budget its prompt was trimmed to,
+which is what lets a turn compact before the next prompt drops anything (#295).
+With that mutant the pass is 27/28, and the survivor is still the equivalent
+above.
+
 Run from the repository root:
     python3 daemon/scripts/mutate_handler_setup.py
 """
@@ -155,8 +160,11 @@ MUTANTS = [
 
     # --- the request -------------------------------------------------------
     ("request: an api key is baked in",
-     '  return buildRequestWithResolvedKey(toRequestModel(resolved), "", {',
-     '  return buildRequestWithResolvedKey(toRequestModel(resolved), "baked", {'),
+     '    ...buildRequestWithResolvedKey(toRequestModel(resolved), "", {',
+     '    ...buildRequestWithResolvedKey(toRequestModel(resolved), "baked", {'),
+    ("request: the message budget is not reported, so a crowded prompt never compacts",
+     "    messageBudget: prepared.prompt.messageBudget,",
+     "    messageBudget: Number.MAX_SAFE_INTEGER,"),
     ("request: the tool surface is dropped",
      "    ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),",
      "    ...{},"),

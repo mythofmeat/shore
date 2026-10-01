@@ -366,6 +366,21 @@ describe("the compaction the handler runs", () => {
     });
   });
 
+  test("a prompt about to drop messages fires below min turns and under both ceilings", async () => {
+    await inTempDir(async (dir) => {
+      const { runner } = build({ dir, config: { maxTurns: 20, maxContextTokens: 100_000 } });
+      expect(runner.shouldCompactNow(3, 0, true)).toBe(true);
+      expect(runner.shouldCompactNow(3, 0, false)).toBe(false);
+    });
+  });
+
+  test("but not while compaction is switched off", async () => {
+    await inTempDir(async (dir) => {
+      const { runner } = build({ dir, config: { compactionEnabled: false } });
+      expect(runner.shouldCompactNow(3, 0, true)).toBe(false);
+    });
+  });
+
   test("a zero ceiling is an off switch, not an always-on one", async () => {
     await inTempDir(async (dir) => {
       const { runner } = build({ dir, config: { maxTurns: 0, maxContextTokens: 0 } });

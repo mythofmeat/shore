@@ -157,7 +157,7 @@ describe("buildLlmMessages", () => {
   for (const c of buildCases) {
     test(c.name, async () => {
       const dir = await images();
-      const prompt: AssembledPrompt = {
+      const prompt: Pick<AssembledPrompt, "system" | "messages"> = {
         system: c.prompt.system,
         messages: c.prompt.messages.map((m) => promptMessage(m, dir)),
       };

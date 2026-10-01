@@ -83,9 +83,13 @@ export interface BuildGenerationRequestParams {
   timeZone?: string;
 }
 
+export interface GenerationRequest extends BuiltRequest {
+  messageBudget: number;
+}
+
 export async function buildGenerationRequest(
   params: BuildGenerationRequestParams,
-): Promise<BuiltRequest> {
+): Promise<GenerationRequest> {
   const { engine, config, resolved, charName } = params;
 
   const messages = params.regen
@@ -107,10 +111,13 @@ export async function buildGenerationRequest(
     ...(params.timeZone === undefined ? {} : { timeZone: params.timeZone }),
   });
 
-  return buildRequestWithResolvedKey(toRequestModel(resolved), "", {
-    messages: prepared.llmMessages,
-    system: prepared.system,
-    ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
-    replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
-  });
+  return {
+    ...buildRequestWithResolvedKey(toRequestModel(resolved), "", {
+      messages: prepared.llmMessages,
+      system: prepared.system,
+      ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
+      replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
+    }),
+    messageBudget: prepared.prompt.messageBudget,
+  };
 }

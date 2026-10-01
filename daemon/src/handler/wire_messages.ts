@@ -96,7 +96,7 @@ async function renderMessageContent(
 }
 
 export async function buildLlmMessages(
-  prompt: AssembledPrompt,
+  prompt: Pick<AssembledPrompt, "system" | "messages">,
   mode: AssistantImageMode,
 ): Promise<{ messages: WireMessage[]; system: SystemBlock[] }> {
   const messages: WireMessage[] = [];

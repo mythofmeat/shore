@@ -252,8 +252,9 @@ export class AutonomyService {
     character: string,
     turnCount: number,
     contextTokens: number,
+    crowded = false,
   ): boolean | undefined {
-    return this.#entries.get(character)?.runner.shouldCompactNow(turnCount, contextTokens);
+    return this.#entries.get(character)?.runner.shouldCompactNow(turnCount, contextTokens, crowded);
   }
 
   forceHeartbeatNow(character: string): boolean | undefined {

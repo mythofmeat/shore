@@ -122,8 +122,8 @@ export function turnAutonomy(
     onUserMessage: (character, turnCount) => {
       bridge.onUserMessage(character, turnCount);
     },
-    shouldCompactNow: (character, turnCount, contextTokens) =>
-      bridge.shouldCompactNow(character, turnCount, contextTokens),
+    shouldCompactNow: (character, turnCount, contextTokens, crowded) =>
+      bridge.shouldCompactNow(character, turnCount, contextTokens, crowded),
     onCompactionComplete: (character, retained) => {
       bridge.onCompactionComplete(character, retained);
     },
