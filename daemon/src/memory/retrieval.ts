@@ -3,9 +3,11 @@ import { required } from "../util/required.ts";
 import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "../llm/credentials";
 import { cacheOrBuild, OpenAIEmbedder, type Embedder } from "../llm/embed";
 import { hardcodedProviderBaseUrl } from "../llm/request";
+import { defaultMinSimilarity } from "./closeness.ts";
 
 export interface EmbeddingSettings {
   dimensions?: number;
+  minSimilarity?: number;
 }
 
 export interface EmbeddingProvider {
@@ -56,6 +58,19 @@ function resolveApiKey(providerKey: string, entry: ProviderEntry | undefined): s
     `embedding API key not set for provider '${providerKey}'; ` +
       `set one of these env vars: ${candidates.map((c) => c.env).join(", ")}`,
   );
+}
+
+export function resolveMinSimilarity(
+  options: Pick<ResolveEmbedderOptions, "defaultRef" | "embedding">,
+): number | undefined {
+  let target: string;
+  try {
+    target = resolveTarget(options.defaultRef, options.embedding);
+  } catch {
+    return undefined;
+  }
+  return options.embedding[target]?.minSimilarity ??
+    defaultMinSimilarity(target.slice(target.indexOf(":") + 1));
 }
 
 export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {

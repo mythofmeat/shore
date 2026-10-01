@@ -170,7 +170,10 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   for (const section of ["chat", "embedding", "image"]) {
     for (const identity of new Set(["<provider:model_id>", ...live.instancesAt(section).filter((name) => name.includes(":"))])) {
       if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, canonicalSettingKey(field)], modelInfo(field));
-      if (section === "embedding") add([section, identity, "dimensions"], { kind: "integer", width: "u32", optional: true });
+      if (section === "embedding") {
+        add([section, identity, "dimensions"], { kind: "integer", width: "u32", optional: true });
+        add([section, identity, "min_similarity"], { kind: "float", optional: true });
+      }
       if (section === "image") for (const field of ["size", "quality", "aspect_ratio", "image_size"]) add([section, identity, field], { kind: "string", optional: true });
     }
   }

@@ -145,6 +145,11 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           description:
             "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring matching only, ordered by file recency. `vector` is semantic similarity only. Semantic modes fall back to lexical when embeddings are not configured, and the response says so.",
         },
+        match: {
+          type: "string",
+          enum: ["ranked", "nearest"],
+          description: "`ranked` (default) returns close matches only, and says so when nothing is close. `nearest` also returns the weaker semantic matches `ranked` leaves out, marked weak. `lexical` mode returns literal matches only either way.",
+        },
         path: {
           type: "string",
           description:
@@ -178,8 +183,8 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
         match: {
           type: "string",
-          enum: ["ranked", "phrase"],
-          description: "`ranked` (default) allows partial-term matches. `phrase` requires the whole phrase, case-insensitively and on word boundaries, with no semantic expansion; use it for names and titles. `phrase` requires `query`.",
+          enum: ["ranked", "nearest", "phrase"],
+          description: "`ranked` (default) returns close matches only, and says so when nothing is close. `nearest` also returns the weaker matches `ranked` leaves out, marked weak; use it when you are unsure of the wording. `phrase` requires the whole phrase, case-insensitively and on word boundaries, with no semantic expansion; use it for names and titles. `phrase` requires `query`.",
         },
         compact: {
           type: "boolean",

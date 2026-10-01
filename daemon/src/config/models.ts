@@ -301,6 +301,7 @@ function warnIgnoredFields(
 
 export interface EmbeddingSettings {
   dimensions?: number;
+  minSimilarity?: number;
 }
 
 export interface ImageGenSettings {
@@ -770,15 +771,21 @@ function expectedList(known: readonly string[]): string {
   return `one of ${head}, \`${known[known.length - 1]}\``;
 }
 
-const EMBEDDING_KEYS = ["dimensions"];
+const EMBEDDING_KEYS = ["dimensions", "min_similarity"];
 
 function readEmbeddingSettings(table: Record<string, unknown>): ParseResult<EmbeddingSettings> {
   const unknown = denyUnknown(table, EMBEDDING_KEYS);
   if (unknown !== undefined) return { err: unknown };
   const dimensions = readU32(table, "dimensions");
   if ("err" in dimensions) return dimensions;
+  const minSimilarity = readF64(table, "min_similarity");
+  if ("err" in minSimilarity) return minSimilarity;
+  if (minSimilarity.ok !== undefined && !(minSimilarity.ok >= 0 && minSimilarity.ok <= 1)) {
+    return { err: `min_similarity is ${String(minSimilarity.ok)}; it must be from 0 to 1, where 0 keeps every semantic match` };
+  }
   const out: EmbeddingSettings = {};
   if (dimensions.ok !== undefined) out.dimensions = dimensions.ok;
+  if (minSimilarity.ok !== undefined) out.minSimilarity = minSimilarity.ok;
   return { ok: out };
 }
 

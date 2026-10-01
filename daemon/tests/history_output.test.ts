@@ -42,6 +42,12 @@ test("identical messages at different locations are distinct events and differen
   expect(output).toContain('Thread "other"');
 });
 
+test("the header counts one match as one match", () => {
+  expect(formatToolOutput("search_chat_logs", result([hit(1)])).split("\n")[0]).toBe("Chat history: 1 match (lexical; UTC)");
+  expect(formatToolOutput("search_chat_logs", result([hit(1), hit(5)])).split("\n")[0]).toBe("Chat history: 2 matches (lexical; UTC)");
+  expect(formatToolOutput("search_chat_logs", result([])).split("\n")[0]).toBe("Chat history: 0 matches (lexical; UTC)");
+});
+
 test("empty and partial history results retain the facts needed to interpret them", () => {
   const value = result([]);
   value.semantic_unavailable = "embedder offline";

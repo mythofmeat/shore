@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, symlink, utimes, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { bestLineExcerpt, characterGitIdentity, excerptLine, findCaseInsensitiveMatch, SEARCH_EXCERPT_CHARS, handleSearch, DEFAULT_RETRIEVAL_CONFIG, type ToolInput } from "../src/tools/workspace";
+import { bestLineExcerpt, characterGitIdentity, excerptLine, findCaseInsensitiveMatch, GIT_HISTORY_HINT, SEARCH_EXCERPT_CHARS, handleSearch, DEFAULT_RETRIEVAL_CONFIG, type ToolInput } from "../src/tools/workspace";
 import { testTmp } from "./support/tmp.ts";
 import { compareRustStrings, rustLines } from "../src/memory/lines";
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -163,8 +163,8 @@ function expectSearchShape(c: SearchCase, ok: Record<string, unknown>): void {
       c.tree.some((n) => n.path === scope || n.path.startsWith(`${scope}/`));
     expect(
       ok.note,
-      `${where}: a path that is not there is worth saying; an empty result is not`,
-    ).toBe(exists ? undefined : "path does not exist");
+      `${where}: a path that is not there is worth saying; an empty result points at git history`,
+    ).toBe(exists ? GIT_HISTORY_HINT : "path does not exist");
     return;
   }
 

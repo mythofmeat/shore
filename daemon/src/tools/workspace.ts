@@ -7,13 +7,15 @@ import { lstat, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import type { Embedder } from "../llm/embed";
-import { compareRustStrings, rustLines, rustTrim, rustTrimEnd, rustTrimStart } from "../memory/lines";
+import { containsEveryTerm, distinctiveTerms, meetsSimilarity } from "../memory/closeness";
+import { compareRustStrings, rustLines, rustTrim, rustTrimEnd, rustTrimStart, tokenizeQuery } from "../memory/lines";
 import { truncateChars } from "../memory/markdown_query";
 import {
   displayPathFor,
   hybridSearch,
   type HybridMode,
   type RetrievalConfig,
+  type ScoredFile,
 } from "../memory/workspace_index";
 import { InvalidArgs } from "./errors";
 import { PathError, resolvePath, resolveRoots } from "./workspace_path";
@@ -22,6 +24,9 @@ const SEARCH_DEFAULT_MAX_RESULTS = 20;
 const SEARCH_MAX_RESULTS = 100;
 export const SEARCH_EXCERPT_CHARS = 500;
 export const SEARCH_RESPONSE_CHARS = 12_000;
+export const GIT_HISTORY_HINT =
+  "Search reads current files only. Earlier versions and deleted files are in the workspace's git history: " +
+  "run `git log -p -S'<text>'` with bash to find commits that added or removed some text.";
 const searchExcerptRenderers = new WeakMap<object, (context: number) => string>();
 
 export const DEFAULT_RETRIEVAL_CONFIG: RetrievalConfig = {
@@ -140,6 +145,14 @@ function budgetSearchResponse(response: Record<string, unknown>, context: number
 
 type RequestedMode = "hybrid" | "lexical" | "vector";
 
+type SearchMatch = "ranked" | "nearest";
+
+function parseSearchMatch(raw: unknown): SearchMatch {
+  if (raw === undefined || raw === "ranked") return "ranked";
+  if (raw === "nearest") return "nearest";
+  throw new InvalidArgs("search `match` must be ranked or nearest");
+}
+
 function parseSearchMode(raw: unknown): RequestedMode {
   if (raw === undefined) return "hybrid";
   if (typeof raw !== "string") throw new InvalidArgs("search `mode` must be a string");
@@ -150,6 +163,7 @@ function parseSearchMode(raw: unknown): RequestedMode {
 export interface SearchSemantics {
   embedder: Embedder;
   indexPath: string;
+  minSimilarity?: number;
 }
 
 export async function handleSearch(
@@ -164,6 +178,7 @@ export async function handleSearch(
   }
   const retrievalConfig = retrievalConfigOpt ?? DEFAULT_RETRIEVAL_CONFIG;
   const requestedMode = parseSearchMode(input.mode);
+  const match = parseSearchMatch(input.match);
   const requestedHybrid = requestedMode !== "lexical";
   const pathStr = asStr(input, "path");
 
@@ -178,6 +193,7 @@ export async function handleSearch(
       workspaceDir,
       retrievalConfig,
       mode,
+      match,
       semantics,
       scope,
     ), context);
@@ -237,6 +253,7 @@ async function handleSearchLexical(
     skipped_binary_or_large: scan.skippedBinaryOrLarge,
   };
 
+  if (count === 0) response.note = GIT_HISTORY_HINT;
   if (count > 0) {
     response.files = scan.filesSummary;
     response.note =
@@ -374,6 +391,7 @@ async function handleSearchHybrid(
   workspaceDir: string,
   retrievalConfig: RetrievalConfig,
   mode: HybridMode,
+  match: SearchMatch,
   semantics: SearchSemantics,
   pathFilter: string | undefined,
 ): Promise<Record<string, unknown>> {
@@ -400,7 +418,13 @@ async function handleSearchHybrid(
   }
 
   const qLower = query.toLowerCase();
-  const results = result.files.slice(0, maxResults).map((f) => {
+  const words = distinctiveTerms(tokenizeQuery(qLower));
+  const judged = result.files.map((file) => ({
+    file,
+    close: fileIsClose(file, qLower, words, semantics.minSimilarity),
+  }));
+  const eligible = match === "nearest" ? judged : judged.filter((entry) => entry.close);
+  const results = eligible.slice(0, maxResults).map(({ file: f, close }) => {
     const [lineNo, excerpt] = bestLineExcerpt(f.content ?? "", qLower);
     const hit = {
       path: f.displayPath,
@@ -409,17 +433,26 @@ async function handleSearchHybrid(
       lexical_score: f.lexicalScore,
       semantic_score: f.semanticScore ?? null,
       combined_score: f.combinedScore,
+      ...(close ? {} : { weak: true }),
     };
     searchExcerptRenderers.set(hit, (context) => bestLineExcerpt(f.content ?? "", qLower, context)[1]);
     return hit;
   });
+  const best = Math.max(...result.files.map((f) => f.semanticScore ?? Number.NEGATIVE_INFINITY));
 
   const response: Record<string, unknown> = {
     query,
     mode,
+    ...(match === "nearest" ? { match } : {}),
     results,
     count: results.length,
-    ...(result.files.length > maxResults ? { has_more: true } : {}),
+    closeness: {
+      min_similarity: semantics.minSimilarity ?? null,
+      best_similarity: Number.isFinite(best) ? Math.round(best * 1000) / 1000 : null,
+      words,
+      weaker_left_out: match === "ranked" && judged.some((entry) => !entry.close),
+    },
+    ...(eligible.length > maxResults ? { has_more: true } : {}),
     searched_files: result.searchedFiles,
     embedded_files: result.embeddedFiles,
     ...(result.pendingFiles === 0 ? {} : { pending_files: result.pendingFiles }),
@@ -431,9 +464,24 @@ async function handleSearchHybrid(
       "Files ranked by combined semantic + lexical score. Excerpts are " +
       "best-effort line-level snippets; call `read` on the top paths for " +
       "full context — one file often references others worth reading too.";
+  } else {
+    response.note = GIT_HISTORY_HINT;
   }
 
   return response;
+}
+
+function fileIsClose(
+  file: ScoredFile,
+  qLower: string,
+  words: readonly string[],
+  minSimilarity: number | undefined,
+): boolean {
+  const text = `${file.displayPath}\n${file.content ?? ""}`.toLowerCase();
+  if (text.includes(qLower) || containsEveryTerm(text, words)) return true;
+  return minSimilarity === undefined
+    ? file.semanticScore !== undefined
+    : meetsSimilarity(file.semanticScore, minSimilarity);
 }
 
 export function bestLineExcerpt(content: string, qLower: string, context = SEARCH_EXCERPT_CHARS): [number, string] {
