@@ -53,6 +53,7 @@ function generationErrorCode(error: unknown): ErrorCode {
   if (
     llmError.kind === "http_status" ||
     llmError.kind === "provider" ||
+    llmError.kind === "launch_failed" ||
     llmError.kind === "stream_errored"
   ) {
     return "provider_error";

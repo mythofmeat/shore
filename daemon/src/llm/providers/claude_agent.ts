@@ -40,6 +40,7 @@ import {
 import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
+import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
@@ -346,6 +347,7 @@ function buildOptions(
     includePartialMessages: true,
     cwd: req.context?.workspace_dir ?? tmpdir(),
     env,
+    ...claudeCodeOptions(),
     abortController: abort,
     ...(surface === undefined
       ? { maxTurns: 1 }
@@ -817,7 +819,11 @@ export class ClaudeAgentProvider implements SidecarProvider {
     } catch (e) {
       abort.abort();
       discardMissingAnchor(path, key, record, plan, e);
-      yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
+      const launch = claudeCodeLaunchFailure(e);
+      yield {
+        ...streamErrorEvent(launch ?? e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now),
+        ...(launch === undefined ? {} : { cause: launch }),
+      };
     }
   }
 
@@ -854,6 +860,8 @@ export class ClaudeAgentProvider implements SidecarProvider {
         timing: { total_ms: total, time_to_first_token_ms: total },
         model: req.model,
       };
+    } catch (e) {
+      throw claudeCodeLaunchFailure(e) ?? e;
     } finally {
       abort.abort();
     }
@@ -1215,7 +1223,8 @@ export async function* claudeAgentToolLoopEvents(
     }
     await round.finish();
     discardMissingAnchor(path, key, record, plan, e);
-    yield { ...streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now), cause: toolFailure ?? e };
+    const failure = claudeCodeLaunchFailure(e) ?? e;
+    yield { ...streamErrorEvent(failure, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now), cause: toolFailure ?? failure };
   } finally {
     abort.abort();
   }
