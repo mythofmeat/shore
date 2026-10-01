@@ -32,7 +32,7 @@ export interface TurnAutonomy {
   needsActivityBackfill(character: string): boolean;
   backfillActivity(character: string, timestamps: readonly Date[]): void;
   onUserMessage(character: string, turnCount: number): void;
-  shouldCompactNow(character: string, turnCount: number, contextTokens: number): boolean;
+  shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded?: boolean): boolean;
   onCompactionComplete(character: string, retained: number): void;
   onCompactionFailed(character: string, retryAt?: number): void;
 }
@@ -213,10 +213,11 @@ export async function maybeCompact(
   result: StreamResult,
   rid: string | undefined,
   runner: CompactionRunner,
+  crowded = false,
 ): Promise<boolean> {
   const turnCount = engine.turnCount();
   const contextTokens = contextTokensFor(result.context_usage ?? result.usage);
-  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens)) return false;
+  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return false;
 
   await runInlineCompaction(ctx, engine, charName, config, dataDir, rid, runner);
   return true;

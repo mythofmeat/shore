@@ -384,4 +384,19 @@ describe("the question that cannot wait", () => {
 
     expect(bridge.shouldCompactNow("ada", 20, 100_000)).toBe(true);
   });
+
+  test("carries a crowded prompt through to the service", () => {
+    const asked: unknown[][] = [];
+    const bridge = new TurnAutonomyBridge({
+      ...recordingService(),
+      shouldCompactNow: (...args: unknown[]) => {
+        asked.push(args);
+        return true;
+      },
+    });
+    bridge.ensureState("ada", configWith());
+
+    expect(bridge.shouldCompactNow("ada", 3, 1_000, true)).toBe(true);
+    expect(asked).toEqual([["ada", 3, 1_000, true]]);
+  });
 });

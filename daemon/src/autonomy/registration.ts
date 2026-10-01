@@ -133,8 +133,8 @@ export class TurnAutonomyBridge {
     });
   }
 
-  shouldCompactNow(character: string, turnCount: number, contextTokens: number): boolean {
-    return this.#service.shouldCompactNow(character, turnCount, contextTokens) ?? false;
+  shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded = false): boolean {
+    return this.#service.shouldCompactNow(character, turnCount, contextTokens, crowded) ?? false;
   }
 
   onCompactionComplete(character: string, retained: number): void {

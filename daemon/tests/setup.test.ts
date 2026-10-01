@@ -30,6 +30,7 @@ import {
 } from "../src/handler/setup.ts";
 import { testTmp } from "./support/tmp.ts";
 import { required } from "../src/util/required.ts";
+import { withSafetyMargin } from "../src/engine/tokens.ts";
 
 const ZONE = fixture.timezone;
 
@@ -356,5 +357,27 @@ describe("buildGenerationRequest", () => {
     });
 
     expect(built.request.tools?.map((tool) => tool.name)).toEqual(["bash", "mcp__notes__append", "mcp__notes__search"]);
+  });
+
+  test("reports the message budget its prompt was trimmed to, which follows the model's window", async () => {
+    const c = required(buildCases[0]);
+    const root = await mkdtemp(testTmp("shore-build-budget-"));
+    const dirs: ShoreDirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
+    await mkdir(characterWorkspaceDir(dirs.config, "heidi"), { recursive: true });
+    await mkdir(dirs.cache, { recursive: true });
+    const budget = async (maxContextTokens: number) => (await buildGenerationRequest({
+      engine: engineFor(c), dataDir: dirs.data, charName: "heidi", config: baseConfig(dirs, defaultAppConfig(), emptyCatalog()),
+      resolved: {
+        name: "opus", qualifiedName: "chat.anthropic.opus", category: "chat", providerKey: "anthropic",
+        sdk: "anthropic", modelId: "opus-id", apiKeyEnv: "TEST_KEY", maxContextTokens, maxOutputTokens: 1_000,
+      },
+      regen: false, mcpRegistry: McpRegistry.fromTools([]), timeZone: ZONE,
+    })).messageBudget;
+
+    const wide = await budget(100_000);
+    const narrow = await budget(50_000);
+    expect(wide).toBeGreaterThan(0);
+    expect(wide).toBeLessThan(withSafetyMargin(100_000 - 1_000));
+    expect(Math.abs(wide - narrow - withSafetyMargin(50_000))).toBeLessThanOrEqual(1);
   });
 });

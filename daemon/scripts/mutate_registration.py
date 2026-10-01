@@ -21,7 +21,9 @@ things follow, and each is a mutant:
   had just reset.
 - `shouldCompactNow` answers immediately, and before registration it answers
   *no*. Yes takes a single-flight latch on a runner that does not exist, and
-  nothing ever releases it.
+  nothing ever releases it. Once registered, it passes on whether the prompt is
+  nearly full: dropped there, a crowded prompt waits for `max_turns` while
+  messages fall out of it unarchived.
 
 A mutant is KILLED if `bun test tests/autonomy_registration.test.ts` fails with
 it applied.
@@ -182,12 +184,16 @@ MUTANTS = [
     # --- the question that cannot wait ----------------------------------------
     ("compact: an unregistered character is told to compact, taking a latch nothing releases",
      R,
-     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens) ?? false;",
-     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens) ?? true;"),
+     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens, crowded) ?? false;",
+     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens, crowded) ?? true;"),
     ("compact: the service's yes is discarded, so nothing ever compacts inline",
      R,
-     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens) ?? false;",
+     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens, crowded) ?? false;",
      "    return false;"),
+    ("compact: a crowded prompt is not passed on, so it waits for the usual triggers",
+     R,
+     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens, crowded) ?? false;",
+     "    return this.#service.shouldCompactNow(character, turnCount, contextTokens) ?? false;"),
 ]
 
 

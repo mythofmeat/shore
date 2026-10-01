@@ -55,6 +55,15 @@ export function archiveSplitIndex(
   return Math.min(splitAt, Math.max(messages.length - tail, 0));
 }
 
+export function canArchiveTurns(
+  messages: readonly Message[],
+  keepRecentTurns: number,
+  maxContextTokens: number,
+): boolean {
+  const view = conversationView(messages);
+  return archiveSplitIndex(view, retentionForBudget(view, keepRecentTurns, maxContextTokens), false) > 0;
+}
+
 export interface ArchivalPlanInput {
   rawContent: string;
   messages: readonly ConversationMessage[];

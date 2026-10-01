@@ -30,6 +30,9 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
 import { anyToolEnabled, imageSettingsFor } from "../config/app.ts";
 import { imageLimitsFor } from "../llm/prepare_images.ts";
+import { imageTierForModel } from "../llm/image_tokens.ts";
+import { nearMessageBudget } from "../engine/prompt.ts";
+import { canArchiveTurns } from "../memory/compaction/plan.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
@@ -359,6 +362,8 @@ async function runGenerationCore(
   await flushFrames();
 
   if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) return;
+  const compaction = config.app.memory.compaction;
+  const active = engine.messages();
   await maybeCompact(
     turnCtx,
     engine,
@@ -368,6 +373,8 @@ async function runGenerationCore(
     result,
     params.rid ?? undefined,
     deps.compaction,
+    nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
+      canArchiveTurns(active, compaction.keep_recent_turns, compaction.max_context_tokens),
   );
 }
 
@@ -577,11 +584,11 @@ function sideThreadAutonomy(config: LoadedConfig): GenerationDeps["autonomy"] {
     onCompactionFailed: () => {},
     notifyAssistantMessage: () => {},
     notifyLastRequest: () => {},
-    shouldCompactNow: (_character, turns, tokens) => {
+    shouldCompactNow: (_character, turns, tokens, crowded) => {
       const c = config.app.memory.compaction;
-      return c.enabled && turns >= c.min_turns &&
+      return c.enabled && (crowded === true || (turns >= c.min_turns &&
         ((c.max_turns > 0 && turns >= c.max_turns) ||
-         (c.max_context_tokens > 0 && tokens >= c.max_context_tokens));
+         (c.max_context_tokens > 0 && tokens >= c.max_context_tokens))));
     },
   };
 }
