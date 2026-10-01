@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Shore
+GenericName=Chat Client
+Comment=Chat with your Shore characters
+Exec=shore-desktop
+Icon=shore-desktop
+Terminal=false
+Categories=Network;Chat;
+Keywords=shore;chat;ai;character;
+StartupWMClass=shore-desktop
+SingleMainWindow=true

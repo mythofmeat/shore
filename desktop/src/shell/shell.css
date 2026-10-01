@@ -1,0 +1,196 @@
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #111214;
+  --surface-input: #16171a;
+  --hover: #24262a;
+  --line-3: #34363c;
+  --text: #e8e8ea;
+  --text-body: #dcdce0;
+  --text-2: #a9abb2;
+  --text-3: #80828a;
+  --accent: #f08a3c;
+  --accent-hover: #f59a55;
+  --accent-ink: #1f1105;
+  --accent-soft: rgba(240, 138, 60, 0.14);
+  --accent-line: rgba(240, 138, 60, 0.45);
+  --danger: #e6877b;
+  --radius-sm: 7px;
+  --radius: 9px;
+  --font-ui: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-body);
+  font: 14px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.panel {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.delayed {
+  animation: appear 0.2s ease 0.8s both;
+}
+
+@keyframes appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.wordmark {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.hint,
+.error {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.hint {
+  color: var(--text-3);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius);
+  background: var(--surface-input);
+  color: var(--text);
+  font: 14px var(--font-ui);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.address {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font: 13px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-body);
+  font: 13.5px var(--font-ui);
+  white-space: nowrap;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.button:disabled {
+  opacity: 0.55;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 500;
+}
+
+.button.primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.button.block {
+  width: 100%;
+  height: 40px;
+}
