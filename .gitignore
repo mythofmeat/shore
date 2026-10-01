@@ -37,6 +37,9 @@ contrib/arch/shore/
 out/
 
 # Environment / secrets
+# What compose.yaml mounts when Shore runs from this checkout.
+/config/
+/workspace/
 .env
 .env.*
 !.env.example

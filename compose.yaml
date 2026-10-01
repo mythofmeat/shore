@@ -1,0 +1,81 @@
+# Runs the Shore daemon in Docker, from a checkout of this repository:
+#
+#   mkdir -p config workspace          # create these yourself, or Docker creates them owned by root
+#   docker compose up -d --build
+#   docker compose run --rm shore      # the terminal client, connected to the daemon below
+#
+# On first start the daemon writes config/config.toml and config/token. Put
+# provider keys in config/.env (ANTHROPIC_API_KEY=...) and each character's
+# SOUL.md in workspace/<name>/.
+#
+# To keep the deployment outside the checkout, copy this file somewhere else
+# and build from git instead, with context: https://github.com/mythofmeat/shore.git#main
+#
+# The same daemon without compose:
+#
+#   docker build -f daemon/Dockerfile -t shore-daemon .
+#   docker run -d --name shore-daemon -p 127.0.0.1:7320:7320 \
+#     -v "$PWD/config:/config" -v "$PWD/workspace:/workspace" \
+#     -v shore-data:/data -v shore-cache:/cache -v shore-home:/home/app \
+#     shore-daemon
+
+services:
+  shore-daemon:
+    build:
+      context: .
+      dockerfile: daemon/Dockerfile
+      args:
+        # The bind mounts must be writable by the daemon's user. If your UID or
+        # GID is not 1000, set SHORE_UID and SHORE_GID in .env.
+        USER_UID: ${SHORE_UID:-1000}
+        USER_GID: ${SHORE_GID:-1000}
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      # Loopback only. Publishing it wider, e.g. "7320:7320", lets anyone who
+      # can reach the port and holds config/token drive the daemon.
+      - "127.0.0.1:7320:7320"
+      # The browser client, once config.toml has [daemon.web] enabled = true
+      # and bind_addr = "0.0.0.0:7340":
+      # - "127.0.0.1:7340:7340"
+    volumes:
+      - ./config:/config
+      - ./workspace:/workspace
+      - data:/data
+      - cache:/cache
+      # The character's home directory: tool caches, what it installs with
+      # pip --user or uv, and Claude Code's login unless CLAUDE_CONFIG_DIR
+      # points elsewhere.
+      - home:/home/app
+    # The bash tool runs whatever the model asks for inside this container.
+    # These keep it from gaining privileges or writing anywhere but the
+    # volumes and /tmp. They do not hide config/ from it: see #238.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  shore:
+    profiles: [cli]
+    build:
+      context: .
+      dockerfile: client/shore-cli/Dockerfile
+    environment:
+      SHORE_ADDR: shore-daemon:7320
+      SHORE_CONFIG_DIR: /config
+    volumes:
+      # For the token the daemon wrote there.
+      - ./config:/config:ro
+    depends_on:
+      - shore-daemon
+    stdin_open: true
+    tty: true
+
+volumes:
+  data:
+  cache:
+  home:
