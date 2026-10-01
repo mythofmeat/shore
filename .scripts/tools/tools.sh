@@ -48,6 +48,7 @@ current_versions() {
     client/Cargo.lock:shore-cli $(sed -n '/^name = "shore-cli"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock)
     client/Cargo.lock:shore-common $(sed -n '/^name = "shore-common"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock)
     daemon/package.json $(sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json)
+    desktop/package.json $(sed -n 's/^  "version": "\(.*\)",$/\1/p' desktop/package.json)
     contrib/arch/PKGBUILD $(sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD)"
     if [ "$(printf '%s\n' "$versions" | awk '{ print $2 }' | sort -u | wc -l)" -ne 1 ]; then
         printf 'Versions differ:\n%s\n' "$versions" >&2
@@ -69,13 +70,13 @@ bump_version_to() {
     fi
     sed -i "/^\[workspace\.package\]$/,/^\[/s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
     sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
-    sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
+    sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
     sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
     [ "$(current_versions)" = "$version" ]
     # Only the version files: anything else in the working tree stays out of
     # the release commit.
     git commit --no-verify -m "chore(release): v$version" -- \
-        client/Cargo.toml client/Cargo.lock daemon/package.json contrib/arch/PKGBUILD
+        client/Cargo.toml client/Cargo.lock daemon/package.json desktop/package.json contrib/arch/PKGBUILD
 }
 
 version_increment() {
@@ -128,9 +129,9 @@ release_gh() {
 packaging_arch() {
     cd "$root"/contrib/arch
     makepkg -f
-    pkg="$(find . -maxdepth 1 -name "*.pkg.tar.zst")"
-    gh release upload "v$(current_versions)" "$pkg"
-    rm -f "$pkg"
+    # A split package: shore-cli and shore-desktop.
+    gh release upload "v$(current_versions)" ./*.pkg.tar.zst
+    rm -f ./*.pkg.tar.zst
 }
 
 release_gh_final() {

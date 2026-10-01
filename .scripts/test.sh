@@ -80,6 +80,18 @@ if [ "$only" != client ]; then
         bun run mutate --stale
     run "bun-rerecord-check" \
         bun run rerecord:check
+
+    # The desktop app only needs Bun too, so its checks ride along with the daemon's. Its
+    # Playwright journeys need a KWin session and stay manual: `bun run test:e2e` in desktop/.
+    cd "$root/desktop" || exit 1
+    run "desktop-install" \
+        bun install
+    run "desktop-typecheck" \
+        bun run typecheck
+    run "desktop-test" \
+        bun test
+    run "desktop-build" \
+        bun run build
 fi
 
 if [ "$only" != daemon ]; then

@@ -1,29 +1,37 @@
 # Maintainer: eshen <mythofmeat>
 
-pkgname=shore-cli
 pkgbase=shore
+pkgname=('shore-cli' 'shore-desktop')
 pkgver=4.19.2
 pkgrel=1
-pkgdesc="Persistent AI character engine — CLI and terminal chat client"
+pkgdesc="Persistent AI character engine"
 arch=('x86_64')
 url="https://github.com/mythofmeat/shore"
-source=("$pkgname"::git+ssh://git@github.com/mythofmeat/"$pkgbase".git#tag=v$pkgver)
+source=("$pkgbase"::git+ssh://git@github.com/mythofmeat/"$pkgbase".git#tag=v$pkgver)
 license=('MIT' 'Apache-2.0')
-depends=('gcc-libs' 'glibc')
-makedepends=('rust' 'git' 'sccache')
-optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)' 'yazi: image picker')
+makedepends=('rust' 'git' 'sccache' 'bun')
 options=('!lto' '!debug' 'strip')
 sha256sums=('SKIP')
+
+# The desktop app runs on the system Electron, so it ships only its own files.
+_electron=electron44
 
 export RUSTC_WRAPPER="sccache"
 
 build() {
-    cd "$srcdir/$pkgname/client" || exit
+    cd "$srcdir/$pkgbase/client" || exit
     cargo build --release --bin shore
+
+    cd "$srcdir/$pkgbase/desktop" || exit
+    bun run build
 }
 
-package() {
-    cd "$srcdir/$pkgname/" || exit
+package_shore-cli() {
+    pkgdesc="Persistent AI character engine — CLI and terminal chat client"
+    depends=('gcc-libs' 'glibc')
+    optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)' 'yazi: image picker')
+
+    cd "$srcdir/$pkgbase/" || exit
     install -Dm644 "./LICENSE-MIT" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
     install -Dm644 "./LICENSE-APACHE-2.0" \
@@ -42,4 +50,35 @@ package() {
     ./shore completions zsh \
         >"$pkgdir/usr/share/zsh/site-functions/_shore"
 
+}
+
+package_shore-desktop() {
+    pkgdesc="Persistent AI character engine — desktop app for the daemon's browser client"
+    arch=('any')
+    license=('MIT' 'Apache-2.0' 'OFL-1.1')
+    depends=("$_electron" 'libnotify' 'xdg-utils')
+
+    cd "$srcdir/$pkgbase/" || exit
+    install -Dm644 "./LICENSE-MIT" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+    install -Dm644 "./LICENSE-APACHE-2.0" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
+
+    cd "./desktop" || exit
+    install -Dm644 "./package.json" "$pkgdir/usr/lib/$pkgname/package.json"
+    cp -r --no-preserve=ownership "./dist" "$pkgdir/usr/lib/$pkgname/dist"
+    install -Dm644 "./dist/shell/fonts/LICENSE-Geist.txt" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-Geist.txt"
+    install -Dm644 "./dist/shell/fonts/LICENSE-GeistMono.txt" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-GeistMono.txt"
+    install -Dm644 "./shore-desktop.desktop" \
+        "$pkgdir/usr/share/applications/shore-desktop.desktop"
+    install -Dm644 "./assets/shore.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/shore-desktop.svg"
+    install -Dm644 "./assets/shore.png" \
+        "$pkgdir/usr/share/icons/hicolor/512x512/apps/shore-desktop.png"
+
+    install -dm755 "$pkgdir/usr/bin"
+    printf '#!/bin/sh\nexec %s /usr/lib/%s "$@"\n' "$_electron" "$pkgname" >"$pkgdir/usr/bin/$pkgname"
+    chmod 755 "$pkgdir/usr/bin/$pkgname"
 }
