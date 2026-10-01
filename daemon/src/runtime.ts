@@ -1,6 +1,8 @@
 import { closeStorageConnections } from "./storage/store.ts";
 import { initializeDatabase } from "./storage/database.ts";
+import { useImageCacheFor } from "./storage/image_blobs.ts";
 import { evictCachedImages, setImageCacheLimit } from "./storage/image_cache.ts";
+import { moveImagesOutOfDatabase } from "./storage/image_db_migration.ts";
 import { moveImagesToCache } from "./storage/image_migration.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
 import { shoreLog } from "./log.ts";
@@ -109,7 +111,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   createRuntimeDirs(config);
   initializeDatabase(config.dirs.data);
   setImageCacheLimit(config.app.daemon.image_cache_bytes);
+  useImageCacheFor(config.dirs.data, config.dirs.cache);
   moveImagesToCache(config.dirs.data, config.dirs.cache);
+  moveImagesOutOfDatabase(config.dirs.data, config.dirs.cache);
   evictCachedImages(config.dirs.cache);
 
   const notifier = new NotificationService(config.app.notifications);

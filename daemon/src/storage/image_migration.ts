@@ -5,12 +5,14 @@ import { basename, dirname, join } from "node:path";
 import type { ImageRef, Message } from "../engine/types.ts";
 import { modelCopies } from "../llm/images.ts";
 import { shoreLog } from "../log.ts";
+import { imageBlobDir } from "./image_blobs.ts";
 import { attachmentCacheDir } from "./image_cache.ts";
 import { characterMediaDir } from "./media.ts";
 import { pack, unpack, withStorage } from "./store.ts";
 
 const ATTACHMENTS_DIR = "attachments";
 const TOOLS_DIR = "tools";
+const BLOBS_DIR = "blobs";
 const MODEL_COPIES_DIR = "model";
 
 export interface ImageMove {
@@ -41,7 +43,7 @@ export function moveCharacterImagesToCache(data: string, cache: string, characte
   const media = characterMediaDir(data, character);
   const tools = join(media, TOOLS_DIR);
   const legacy = join(media, ATTACHMENTS_DIR);
-  const result: ImageMove = { moved: 0, removed: countFiles(tools) };
+  const result: ImageMove = { moved: moveBlobs(join(media, BLOBS_DIR), imageBlobDir(cache, character)), removed: countFiles(tools) };
   rmSync(tools, { recursive: true, force: true });
   if (!existsSync(legacy)) return result;
 
@@ -56,7 +58,7 @@ export function moveCharacterImagesToCache(data: string, cache: string, characte
     }
     db.transaction(() => repointActiveImages(db, character, moves))();
   });
-  result.moved = moves.size;
+  result.moved += moves.size;
   result.removed += countFiles(legacy) - [...moves.keys()].reduce((files, path) => files + 1 + modelCopies(path).length, 0);
   rmSync(legacy, { recursive: true, force: true });
   return result;
@@ -113,6 +115,14 @@ export function copyAttachment(from: string, to: string): boolean {
     copyFileSync(copy, destination);
   }
   return true;
+}
+
+function moveBlobs(from: string, to: string): number {
+  const names = entriesOf(from).filter((name) => statSync(join(from, name), { throwIfNoEntry: false })?.isFile() === true);
+  if (names.length > 0) mkdirSync(to, { recursive: true });
+  for (const name of names) copyFileSync(join(from, name), join(to, name));
+  rmSync(from, { recursive: true, force: true });
+  return names.length;
 }
 
 export function insideDir(parent: string, path: string): string | undefined {

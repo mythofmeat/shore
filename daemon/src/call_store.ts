@@ -7,6 +7,7 @@ import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from
 
 import { splitJsonPayload } from "./payload_split.ts";
 import { rateLimitSnapshot } from "./llm/retry_after.ts";
+import { withImageTokens } from "./storage/image_blobs.ts";
 
 const ZSTD_LEVEL = 3;
 
@@ -254,7 +255,7 @@ export class CallStore {
   }
 
   storePayload(data: Uint8Array | string): number {
-    const bytes = capturedBytes(typeof data === "string" ? Buffer.from(data, "utf8") : data);
+    const bytes = capturedBytes(withoutInlineImages(data));
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const chunks = chunkPayload(bytes);
     const manifest = new Uint8Array(chunks.length * HASH_BYTES);
@@ -728,6 +729,33 @@ export class CallStore {
     this.#collectGarbage();
   }
 
+  referenceInlineImages(): number {
+    const ids = (this.#db.query("SELECT id FROM capture_payloads ORDER BY id").all() as Row[]).map((row) => int(row["id"]));
+    const replace = this.#db.transaction((id: number) => this.#referencePayloadImages(id));
+    const changed = ids.filter((id) => replace(id)).length;
+    if (changed > 0) this.#collectGarbage();
+    return changed;
+  }
+
+  #referencePayloadImages(id: number): boolean {
+    let bytes: Uint8Array | null;
+    try {
+      bytes = this.loadPayload(id);
+    } catch {
+      return false;
+    }
+    const decoded = bytes === null ? null : decodeUtf8(bytes);
+    if (decoded === null || withImageTokens(decoded) === decoded) return false;
+    const replacement = this.storePayload(decoded);
+    for (const table of ["capture_calls", "capture_http_calls"]) {
+      for (const column of ["request_payload_id", "response_payload_id"]) {
+        this.#db.query(`UPDATE ${table} SET ${column} = ?1 WHERE ${column} = ?2`).run(replacement, id);
+      }
+    }
+    this.#db.query("DELETE FROM capture_payloads WHERE id = ?1").run(id);
+    return true;
+  }
+
   #collectGarbage(): void {
     this.#changes(
       `DELETE FROM capture_payloads WHERE id NOT IN (
@@ -847,6 +875,13 @@ function entryOf(op: DiffOp, chunk: PayloadChunk): PayloadDiffEntry {
 
 function decodeLossy(bytes: Uint8Array): string {
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+function withoutInlineImages(data: Uint8Array | string): Uint8Array {
+  const decoded = typeof data === "string" ? data : decodeUtf8(data);
+  if (decoded === null) return data as Uint8Array;
+  const tokens = withImageTokens(decoded);
+  return typeof data !== "string" && tokens === decoded ? data : Buffer.from(tokens, "utf8");
 }
 
 function capturedBytes(bytes: Uint8Array): Uint8Array {

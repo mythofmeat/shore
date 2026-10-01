@@ -5,9 +5,8 @@ import type { ImageRef, ContentBlock } from "../engine/types.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
 import { imageLabel, omissionNotice } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
+import { EVICTED_IMAGE } from "../storage/image_blobs.ts";
 import { encodeImageBlock } from "./images.ts";
-
-const EVICTED_IMAGE = "no longer cached";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 

@@ -2,6 +2,7 @@ import { exportUnifiedDatabase, importUnifiedDatabase, removeStoredCharacter } f
 import { databasePath, withStorage } from "../storage/store.ts";
 import { characterMediaDir } from "../storage/media.ts";
 import { attachmentCacheDir } from "../storage/image_cache.ts";
+import { imageBlobDir } from "../storage/image_blobs.ts";
 import { activeImagePaths, copyAttachment, insideDir, legacyAttachmentsDir, moveCharacterImagesToCache, repointActiveImages } from "../storage/image_migration.ts";
 import { modelCopies } from "../llm/images.ts";
 import { Database } from "bun:sqlite";
@@ -240,6 +241,8 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string,
   if (await exists(media)) await cp(media, join(stage, "media"), { ...copyOptions(), filter: admit });
   else await mkdir(join(stage, "media"));
   const cachedImages = await stageActiveImages(dirs, character, stage, admit);
+  const blobs = imageBlobDir(dirs.cache, character);
+  if (await exists(blobs)) await cp(blobs, join(stage, "media", "blobs"), { ...copyOptions(), filter: admit });
   exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
   if (cachedImages.size > 0) {
     const staged = new Database(join(stage, "shore.db"));
