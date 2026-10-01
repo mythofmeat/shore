@@ -404,6 +404,14 @@ describe("LastRequestCache", () => {
     expect(k.armed[0]?.context?.character).toBe("ada");
   });
 
+  test("the size the turn left cached is armed beside the cadence", () => {
+    const k = spy();
+    new LastRequestCache(k.service as never).set("ada", body("claude-fixture"), {
+      intervalMs: 3_300_000, pings: undefined, cachedTokens: 4096,
+    });
+    expect(k.armed[0]?.keepalive_cached_tokens).toBe(4096);
+  });
+
   test("no cadence means no interval key at all — absent is off, not zero", () => {
     const k = spy();
     new LastRequestCache(k.service as never).set("ada", body("claude-fixture"), undefined);

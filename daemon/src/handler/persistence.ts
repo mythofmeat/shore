@@ -12,6 +12,7 @@ import type { PlanLimitWarningEvent } from "../ledger/plan_limits.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
 import type { KeepaliveArming } from "../cache/last_request.ts";
+import { cachedPrefixTokens } from "../cache/keepalive.ts";
 import type { NotificationService } from "../notifications.ts";
 
 export interface CompletedResponseMessage {
@@ -76,6 +77,7 @@ export async function persistAndNotify(
   ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
     intervalMs: params.keepaliveIntervalMs,
     pings: params.keepalivePings,
+    cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),
   }, engine.thread);
   const notifyContent = notifyContentFromResponseMessages(completedMessages);
 

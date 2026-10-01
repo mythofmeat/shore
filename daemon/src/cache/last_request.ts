@@ -25,6 +25,7 @@ const UNARMED: KeepaliveArming = { intervalMs: undefined, pings: undefined };
 export interface KeepaliveArming {
   intervalMs: number | undefined;
   pings: number | undefined;
+  cachedTokens?: number;
 }
 
 export type KeepaliveReprime =
@@ -122,5 +123,6 @@ function toPrefix(
       ? {}
       : { keepalive_interval_ms: keepalive.intervalMs }),
     ...(keepalive.pings === undefined ? {} : { keepalive_pings: keepalive.pings }),
+    ...(keepalive.cachedTokens === undefined ? {} : { keepalive_cached_tokens: keepalive.cachedTokens }),
   };
 }

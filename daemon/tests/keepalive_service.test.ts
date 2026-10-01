@@ -140,6 +140,10 @@ describe("the ping body", () => {
     expect(cached.keepalive_interval_ms, "the fixture carries one to strip").toBeDefined();
     expect("keepalive_interval_ms" in buildKeepalivePing(cached)).toBe(false);
   });
+
+  test("carries no cached size onto the wire", () => {
+    expect("keepalive_cached_tokens" in buildKeepalivePing(prefix({ keepalive_cached_tokens: 4096 }))).toBe(false);
+  });
 });
 
 describe("firing", () => {
@@ -273,24 +277,113 @@ describe("the real event order", () => {
   });
 });
 
-describe("what counts as a warm", () => {
-  test.each(["heartbeat", "heartbeat_tool_loop"])("a same-model %s does not move the chat deadline or activity", async (callType) => {
+describe("a heartbeat whose first round read the armed prefix", () => {
+  const CACHED = 4096;
+
+  type CallIdentity = Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">;
+
+  function heartbeatCall(over: Partial<CallIdentity> = {}): CallIdentity {
+    return {
+      sdk: "anthropic",
+      model: MODEL,
+      context: { character: CHARACTER, call_type: "heartbeat", thinking_enabled: true, thread: "main" },
+      ...over,
+    };
+  }
+
+  test("pushes the next ping a full interval out, without counting as activity", async () => {
     const h = harness();
-    armWarm(h);
+    armWarm(h, { keepalive_cached_tokens: CACHED });
+    const before = required(h.service.scheduleFor(CHARACTER));
+
+    h.clock.advance(minutes(50));
+    h.service.observe(CHARACTER, MODEL, "heartbeat", "heartbeat-prefix", { cache_read_tokens: CACHED }, heartbeatCall());
+    expect(h.service.nextPingAt(CHARACTER)).toBe(h.clock.now() + INTERVAL_MS);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual({ ...before, last_warm_at: h.clock.now() });
+
+    h.clock.advance(INTERVAL_MS - 1);
+    await h.service.tick();
+    expect(h.sent).toHaveLength(0);
+
+    h.clock.advance(1);
+    await h.service.tick();
+    expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
+  });
+
+  test.each([
+    { name: "a later round of its own tool loop", callType: "heartbeat_tool_loop" },
+    { name: "a round that read nothing", read: 0 },
+    { name: "a read that stopped short of the prefix, at the system prompt", read: CACHED - 1 },
+    { name: "a heartbeat on another model", call: { model: OTHER_MODEL } },
+    { name: "a heartbeat on the same model through another provider", call: { provider_key: "openrouter" } },
+    {
+      name: "a heartbeat on another thread",
+      call: { context: { character: CHARACTER, call_type: "heartbeat", thinking_enabled: true, thread: "scratch" } },
+    },
+    {
+      name: "claude_agent, whose usage sums every request of a session of its own",
+      armed: { sdk: "claude_agent", keepalive_cached_tokens: CACHED },
+      call: { sdk: "claude_agent" },
+      read: CACHED * 10,
+    },
+    { name: "a prefix rebuilt from disk, whose cached size nothing measured", armed: {} },
+    { name: "a turn that left nothing cached", armed: { keepalive_cached_tokens: 0 }, read: 0 },
+  ] satisfies {
+    name: string;
+    callType?: string;
+    read?: number;
+    call?: Partial<CallIdentity>;
+    armed?: Partial<KeepalivePrefix>;
+  }[])("leaves the ping where it was for $name", async (c) => {
+    const h = harness();
+    armWarm(h, "armed" in c ? c.armed : { keepalive_cached_tokens: CACHED });
     const before = h.service.scheduleFor(CHARACTER);
     const deadline = h.service.nextPingAt(CHARACTER);
 
     h.clock.advance(minutes(50));
-    h.service.observe(CHARACTER, MODEL, callType, "heartbeat-prefix", { cache_read_tokens: 4096 });
+    h.service.observe(
+      CHARACTER,
+      MODEL,
+      "callType" in c ? c.callType : "heartbeat",
+      "heartbeat-prefix",
+      { cache_read_tokens: "read" in c ? c.read : CACHED },
+      heartbeatCall("call" in c ? c.call : {}),
+    );
     expect(h.service.nextPingAt(CHARACTER)).toBe(deadline);
     expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
-
-    h.clock.advance(minutes(5));
-    await h.service.tick();
-    expect(h.sent).toHaveLength(1);
-    expect(h.events.map((event) => event.outcome)).toEqual(["sent"]);
   });
 
+  test("does not revive a schedule a cold ping stopped", async () => {
+    const h = harness([response(0, 5000)]);
+    armWarm(h, { keepalive_cached_tokens: CACHED });
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.events.map((event) => event.outcome)).toEqual(["cold"]);
+
+    h.clock.advance(minutes(10));
+    h.service.observe(CHARACTER, MODEL, "heartbeat", "heartbeat-prefix", { cache_read_tokens: CACHED }, heartbeatCall());
+    expect(h.service.nextPingAt(CHARACTER)).toBeUndefined();
+
+    h.clock.advance(hours(6));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(1);
+  });
+
+  test("a restart after the push resumes on the pushed schedule", () => {
+    const h = harness();
+    armWarm(h, { keepalive_cached_tokens: CACHED });
+    h.clock.advance(minutes(50));
+    h.service.observe(CHARACTER, MODEL, "heartbeat", "heartbeat-prefix", { cache_read_tokens: CACHED }, heartbeatCall());
+    const pushed = required(h.service.nextPingAt(CHARACTER));
+
+    h.clock.advance(minutes(10));
+    const restarted = new KeepaliveService(async () => response(2200, 0), h.clock.now);
+    expect(restarted.restore(CHARACTER, required(h.service.scheduleFor(CHARACTER)))).toBe(true);
+    expect(restarted.nextPingAt(CHARACTER)).toBe(pushed);
+  });
+});
+
+describe("what counts as a warm", () => {
   test("a call on another model does not push the ping out", async () => {
     const h = harness();
     armWarm(h);
