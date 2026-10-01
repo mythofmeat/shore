@@ -1,6 +1,7 @@
 import { extract } from "tar";
 import { removeStoredCharacter } from "../src/storage/archive.ts";
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import { bookPathIn, readBook, sessionKey } from "../src/llm/providers/agent_ses
 import { readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import { databasePath, withStorage } from "../src/storage/store.ts";
 import { loadActivePromptFile } from "../src/memory/deferred_edits.ts";
+import { attachmentCacheDir } from "../src/storage/image_cache.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -47,9 +49,10 @@ test("the oldest supported release's archive restores current data through the c
   const engine = await ConversationEngine.load("ada", dirs.data, undefined, "main");
   expect(engine.messages()).toHaveLength(1);
   expect(engine.messages()[0]?.content).toBe("saved conversation for ada");
-  const image = join(dirs.data, "media/ada/attachments/pixel.png");
+  const image = join(attachmentCacheDir(dirs.cache, "ada"), "pixel.png");
   expect(engine.messages()[0]?.images[0]?.path).toBe(image);
   expect((await readFile(image)).subarray(1, 4).toString()).toBe("PNG");
+  expect(existsSync(join(dirs.data, "media/ada/attachments"))).toBe(false);
   const path = databasePath(dirs.data);
   const history = HistoryStore.open(path);
   try {
@@ -83,7 +86,11 @@ test("the oldest supported release's archive restores current data through the c
   expect((await ConversationEngine.load("ada", installedDirs.data)).messages()[0]?.content).toBe("saved conversation for ada");
   removeStoredCharacter(installedPath, "ada");
   await importCharacter({ ...context, dirs: installedDirs }, { archive: currentArchive });
-  expect((await ConversationEngine.load("ada", installedDirs.data)).messages()[0]?.content).toBe("saved conversation for ada");
+  const installed = (await ConversationEngine.load("ada", installedDirs.data)).messages()[0];
+  expect(installed?.content).toBe("saved conversation for ada");
+  const installedImage = join(attachmentCacheDir(installedDirs.cache, "ada"), "pixel.png");
+  expect(installed?.images[0]?.path).toBe(installedImage);
+  expect((await readFile(installedImage)).subarray(1, 4).toString()).toBe("PNG");
   const installedCalls = CallStore.open(installedPath);
   try {
     expect(installedCalls.getCall(installedCalls.queryCalls({ limit: 1 })[0]?.id ?? 0)?.request).toBe('{"request":"ada"}');

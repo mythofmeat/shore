@@ -257,7 +257,7 @@ async function runGenerationCore(
   }
 
   const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
+  const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);

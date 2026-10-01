@@ -1,4 +1,4 @@
-import { characterMediaDir } from "../storage/media.ts";
+import { attachmentCacheDir, markImagesUsed, noteCachedImages } from "../storage/image_cache.ts";
 import { shoreLog } from "../log.ts";
 
 import { mkdir, open, readFile } from "node:fs/promises";
@@ -176,14 +176,14 @@ async function saveAttachment(
 }
 
 export async function ingestImages(
-  dataDir: string,
+  cacheDir: string,
   charName: string,
   imagePaths: readonly string[],
   imageData: readonly ImageUpload[],
   now: Date = new Date(),
   settings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
 ): Promise<{ images: ImageRef[]; blocks: ContentBlock[] }> {
-  const attachmentsDir = join(characterMediaDir(dataDir, charName), "attachments");
+  const attachmentsDir = attachmentCacheDir(cacheDir, charName);
   const images: ImageRef[] = [];
   const blocks: ContentBlock[] = [];
 
@@ -195,10 +195,12 @@ export async function ingestImages(
     const resolution = resolveImage(saved.ref);
     if ("omitted" in resolution) {
       blocks.push({ type: "text", text: omissionNotice(label, resolution.omitted) });
+      noteCachedImages(cacheDir, saved.bytes.byteLength);
       return;
     }
-    await saveModelCopy(saved.ref.path, saved.bytes, settings);
+    const copied = await saveModelCopy(saved.ref.path, saved.bytes, settings);
     images.push(saved.ref);
+    noteCachedImages(cacheDir, saved.bytes.byteLength + copied);
   };
 
   for (const upload of imageData) {
@@ -238,15 +240,19 @@ async function ingestUpload(
   return ref === undefined ? undefined : { ref, bytes };
 }
 
-async function saveModelCopy(original: string, bytes: Uint8Array, settings: Readonly<ImageSettings>): Promise<void> {
+async function saveModelCopy(original: string, bytes: Uint8Array, settings: Readonly<ImageSettings>): Promise<number> {
   const mediaType = sniffMediaType(bytes);
-  if (mediaType === undefined) return;
+  if (mediaType === undefined) return 0;
   try {
     const reduced = await reduceImage({ type: "base64", media_type: mediaType, data: Buffer.from(bytes).toString("base64") }, settings);
     const target = modelCopyPath(original, reduced.source.media_type);
-    if (target !== undefined) await atomicWrite(target, Buffer.from(reduced.source.data, "base64"));
+    if (target === undefined) return 0;
+    const copy = Buffer.from(reduced.source.data, "base64");
+    await atomicWrite(target, copy);
+    return copy.byteLength;
   } catch (e) {
     shoreLog.warn(`shore: could not reduce ${original} for the model; it will be sent the way older attachments are: ${String(e)}`);
+    return 0;
   }
 }
 
@@ -256,8 +262,10 @@ function decodeBase64(data: string): Uint8Array {
 
 export async function encodeImageBlock(
   img: ImageRef,
+  markUsed = false,
 ): Promise<{ type: "base64"; media_type: string; data: string } | undefined> {
   const copy = findModelCopy(img.path);
+  if (markUsed) markImagesUsed([img.path]);
   if (copy !== undefined) {
     try {
       return { type: "base64", media_type: copy.mediaType, data: (await readFile(copy.path)).toString("base64") };

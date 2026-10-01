@@ -2,6 +2,7 @@ import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
+import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
 import {
   API_MAX_IMAGE_EDGE,
   DEFAULT_IMAGE_SETTINGS,
@@ -259,11 +260,13 @@ const WEB: StructSpec<WebConfig> = {
 
 export interface DaemonConfig {
   addr: string;
+  image_cache_bytes: number;
   web: WebConfig;
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
   addr: "127.0.0.1:7320",
+  image_cache_bytes: DEFAULT_IMAGE_CACHE_BYTES,
   web: defaultWebConfig(),
 });
 
@@ -272,6 +275,7 @@ const DAEMON: StructSpec<DaemonConfig> = {
   make: defaultDaemonConfig,
   fields: {
     addr: readString,
+    image_cache_bytes: readUsize,
     web: struct(WEB),
   },
 };

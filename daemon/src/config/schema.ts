@@ -247,6 +247,7 @@ function describeOption(path: readonly string[]): string {
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
     max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
+    image_cache_bytes: "Most bytes the image cache keeps for every character together: images users send, their reduced copies and images tools return. Past it the least recently used go first; an image a model request read in the last hour stays. Defaults to 512 MiB.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
