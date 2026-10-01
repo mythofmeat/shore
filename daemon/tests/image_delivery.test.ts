@@ -47,7 +47,7 @@ async function world(config: ImagesConfig = defaultImagesConfig()) {
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir);
   const ctx: ToolContext = {
-    workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"),
+    workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
     retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto", images: config,
   };

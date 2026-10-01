@@ -8,7 +8,8 @@ export function imageDataForPath(path: string): string | undefined {
   try {
     return readFileSync(path).toString("base64");
   } catch (e) {
-    shoreLog.warn(`shore: failed to read image for wire embedding at ${path}: ${String(e)}`);
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") shoreLog.debug(`shore: no image file to embed at ${path}`);
+    else shoreLog.warn(`shore: failed to read image for wire embedding at ${path}: ${String(e)}`);
     return undefined;
   }
 }

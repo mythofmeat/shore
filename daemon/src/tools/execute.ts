@@ -11,6 +11,7 @@ import {
 } from "../llm/prepare_images.ts";
 import { resolveImageBlock } from "../llm/images.ts";
 import { defaultImagesConfig, imageSettingsFor } from "../config/app.ts";
+import { noteCachedImages, toolImageCacheDir } from "../storage/image_cache.ts";
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -273,15 +274,18 @@ async function saveToolMedia(
   toolUse: ToolUseEvent,
   index: number,
 ): Promise<string | undefined> {
-  if (exec.ctx.imageDir === "") return undefined;
+  const cache = exec.ctx.cacheDir;
+  if (cache === undefined || cache === "") return undefined;
   const extension = EXTENSION_BY_MIME[item.mime_type] ?? "bin";
   const stamp = fileSafe(exec.now());
   const id = fileSafe(toolUse.id).slice(0, 24);
-  const dir = join(exec.ctx.imageDir, "tools");
+  const dir = toolImageCacheDir(cache, exec.ctx.characterName);
   const target = join(dir, `${stamp}_${id}_${String(index)}.${extension}`);
   try {
     await mkdir(dir, { recursive: true });
-    await writeFile(target, Buffer.from(item.data, "base64"));
+    const bytes = Buffer.from(item.data, "base64");
+    await writeFile(target, bytes);
+    noteCachedImages(cache, bytes.byteLength);
     return target;
   } catch (e) {
     shoreLog.warn(`shore: failed to save ${toolUse.name} image result: ${String(e)}`);

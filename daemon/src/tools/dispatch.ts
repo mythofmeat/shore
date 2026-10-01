@@ -32,6 +32,7 @@ export interface ToolContext {
   maxInlineImageBytes?: number;
   images?: ImagesConfig;
   imageDir: string;
+  cacheDir?: string;
   workspaceDir: string;
   characterDataDir: string;
   conversationDir: string;

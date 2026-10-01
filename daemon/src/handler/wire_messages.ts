@@ -1,9 +1,13 @@
+import { existsSync } from "node:fs";
 import { basename } from "node:path";
 
 import type { ImageRef, ContentBlock } from "../engine/types.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
+import { imageLabel, omissionNotice } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
 import { encodeImageBlock } from "./images.ts";
+
+const EVICTED_IMAGE = "no longer cached";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 
@@ -84,8 +88,9 @@ async function renderMessageContent(
 
   let content: ContentBlock[] = [];
   for (const img of turnImages) {
-    const source = await encodeImageBlock(img);
+    const source = await encodeImageBlock(img, true);
     if (source !== undefined) content.push({ type: "image", source });
+    else if (!existsSync(img.path)) content.push({ type: "text", text: omissionNotice(imageLabel(img), EVICTED_IMAGE) });
   }
   content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));
 

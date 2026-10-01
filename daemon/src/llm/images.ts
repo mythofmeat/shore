@@ -89,6 +89,12 @@ export function modelCopyPath(original: string, mediaType: string): string | und
   return extension === undefined ? undefined : modelCopyAt(original, extension);
 }
 
+export function modelCopies(original: string): string[] {
+  return MODEL_COPY_TYPES
+    .map(([extension]) => modelCopyAt(original, extension))
+    .filter((candidate) => fs.statSync(candidate, { throwIfNoEntry: false })?.isFile() === true);
+}
+
 export function findModelCopy(original: string): { path: string; mediaType: string } | undefined {
   for (const [extension, mediaType] of MODEL_COPY_TYPES) {
     const candidate = modelCopyAt(original, extension);
