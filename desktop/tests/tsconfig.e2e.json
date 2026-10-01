@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
+  },
+  "include": ["*.e2e.ts", "fixtures.ts", "../playwright.config.ts"],
+  "exclude": []
+}

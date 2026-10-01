@@ -39,7 +39,7 @@ jobs:
           versions() {
             sed -n '/^\[workspace\.package\]$/,/^\[/s/^version = "\(.*\)"$/\1/p' client/Cargo.toml
             sed -n '/^name = "shore-\(cli\|common\)"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock
-            sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json
+            sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
           }
           current=$(versions | sort -u)
@@ -55,7 +55,7 @@ jobs:
           esac
           sed -i "/^\[workspace\.package\]$/,/^\[/s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
           sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
-          sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json
+          sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
