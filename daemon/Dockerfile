@@ -42,6 +42,7 @@ RUN apt-get update \
     git-lfs \
     jq \
     python3 \
+    python3-pip \
     ripgrep \
     sed \
     tini \
@@ -51,7 +52,10 @@ RUN apt-get update \
 
 COPY --from=mikefarah/yq:latest /usr/bin/yq /usr/local/bin/yq
 COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
-RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
+# Commands from npm packages start with #!/usr/bin/env node, and bun runs them
+# when it is called as node.
+RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx \
+    && ln -s /usr/local/bin/bun /usr/local/bin/node
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # The default user owns the mount points, so named volumes start out writable.
@@ -88,6 +92,11 @@ ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
+# The character installs software as its own user (see prompts/tools/bash.md).
+# pip may install into the user site although Debian marks the system Python
+# as externally managed, and what the installers put in $HOME is on PATH.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV PATH=/home/${USERNAME}/.local/bin:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.cargo/bin:${PATH}
 EXPOSE 7320
 EXPOSE 7340
 
