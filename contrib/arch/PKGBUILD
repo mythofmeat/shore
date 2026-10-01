@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc="Persistent AI character engine — CLI and terminal chat client"
 arch=('x86_64')
 url="https://github.com/mythofmeat/shore"
-source=("$pkgname"::git+ssh://git@github.com/mythofmeat/"$pkgbase".git#tag=v$pkgver)
+source=("$pkgname"::git+https://github.com/mythofmeat/"$pkgbase".git#tag=v$pkgver)
 license=('MIT' 'Apache-2.0')
 depends=('gcc-libs' 'glibc')
 makedepends=('rust' 'git' 'sccache')
