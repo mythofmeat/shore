@@ -47,7 +47,7 @@ export function openStorage(data: string): Database {
   const db = new Database(databasePath(data), { create: true });
   try {
     chmodSync(databasePath(data), 0o600);
-    db.run("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
+    db.run("PRAGMA busy_timeout = 5000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
     db.run(STORAGE_SCHEMA);
     return db;
   } catch (error) {

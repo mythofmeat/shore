@@ -276,6 +276,7 @@ export class Ledger {
   static create(path: string, pricing?: PricingEngine, recoverPending = true): Ledger {
     const db = new Database(path, { create: true, readwrite: true });
     db.run("PRAGMA busy_timeout = 5000;");
+    db.run("PRAGMA auto_vacuum = INCREMENTAL;");
     db.run("PRAGMA journal_mode = WAL;");
     db.run(SCHEMA);
     if (recoverPending) db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
