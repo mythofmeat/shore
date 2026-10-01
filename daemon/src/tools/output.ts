@@ -32,7 +32,8 @@ function oneLine(value: string): string {
 }
 
 function searchText(value: SearchOutput): string {
-  const lines = [`Search ${JSON.stringify(value.query)} (${value.mode ?? "lexical"}): ${value.results.length} results`];
+  const count = value.results.length;
+  const lines = [`Search ${JSON.stringify(value.query)} (${value.mode ?? "lexical"}): ${count} ${count === 1 ? "result" : "results"}`];
   if (value.match === "nearest") lines.push("Matching: nearest files, including weak matches.");
   const closeness = value.closeness;
   if (value.results.length === 0 && closeness?.weaker_left_out === true) {

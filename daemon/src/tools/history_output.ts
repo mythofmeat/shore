@@ -5,7 +5,7 @@ function key(message: HistoryLocation): string {
 }
 
 export function historyText(value: SearchHistoryResult): string {
-  const lines = [`Chat history: ${value.count} matches (${value.mode}; ${value.time_zone})`];
+  const lines = [`Chat history: ${value.count} ${value.count === 1 ? "match" : "matches"} (${value.mode}; ${value.time_zone})`];
   if (value.match === "phrase") lines.push("Matching: whole phrase with word boundaries; no semantic expansion.");
   if (value.match === "nearest") lines.push("Matching: nearest messages, including weak matches.");
   if (value.compact) lines.push("Showing matching excerpts without neighboring messages; request full context for relevant hits.");
