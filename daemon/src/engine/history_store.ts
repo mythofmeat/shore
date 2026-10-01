@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmodSync } from "node:fs";
+import { dirname } from "node:path";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import {
@@ -8,6 +9,7 @@ import {
   normalizeMessage,
 } from "./message_store.ts";
 import { alternativeVersionOf, versionOf } from "./versions.ts";
+import { imageBlobs, imageCacheFor, withImageData, withImageReferences, type ImageBlobs } from "../storage/image_blobs.ts";
 import type {
   ContentBlock,
   ImageRef,
@@ -229,9 +231,11 @@ const DISPLAY_TOOL_RESULT = 3;
 
 export class HistoryStore {
   readonly #db: Database;
+  readonly #data: string | undefined;
 
-  constructor(db: Database) {
+  constructor(db: Database, data?: string) {
     this.#db = db;
+    this.#data = data;
     db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
@@ -239,7 +243,7 @@ export class HistoryStore {
   }
 
   static open(path: string): HistoryStore {
-    const store = new HistoryStore(new Database(path, { create: true, readwrite: true }));
+    const store = new HistoryStore(new Database(path, { create: true, readwrite: true }), dirname(path));
     try {
       chmodSync(path, 0o600);
     } catch {}
@@ -730,7 +734,7 @@ export class HistoryStore {
       )
       .all(character, idx) as MessageRow[];
 
-    return this.#messagesFromRows(rows);
+    return this.#messagesFromRows(rows, character);
   }
 
   readDisplayRange(character: string, start: number, end: number): HistoryDisplaySlice {
@@ -755,17 +759,17 @@ export class HistoryStore {
 
     metrics.rows_read = rows.length;
     metrics.segments_read = new Set(rows.map((row) => row.segment)).size;
-    return { messages: this.#messagesFromRows(rows, metrics), metrics };
+    return { messages: this.#messagesFromRows(rows, character, metrics), metrics };
   }
 
-  #messagesFromRows(rows: MessageRow[], metrics?: HistoryReadMetrics): Message[] {
+  #messagesFromRows(rows: MessageRow[], character: string, metrics?: HistoryReadMetrics): Message[] {
     const altQuery = this.#db.query(
       `SELECT timestamp, provider_key, model, images, blocks_hash, version
        FROM history_alternatives WHERE message_id = ?1 ORDER BY ordinal`,
     );
 
     return rows.map((row) => {
-      const { blocks, images, content } = this.#body(row, metrics);
+      const { blocks, images, content } = this.#body(row, character, metrics);
       const message: Message = {
         msg_id: row.msg_id,
         role: row.role,
@@ -783,14 +787,14 @@ export class HistoryStore {
 
       const altRows = altQuery.all(row.id) as BodyRow[];
       if (altRows.length > 0) {
-        message.alternatives = altRows.map((alt) => this.#alternative(alt, metrics));
+        message.alternatives = altRows.map((alt) => this.#alternative(alt, character, metrics));
       }
       return normalizeMessage(message);
     });
   }
 
   #insertMessage(character: string, segment: number, ordinal: number, message: Message): void {
-    const blocksHash = this.#storeBlob(utf8.encode(JSON.stringify(message.content_blocks)));
+    const blocksHash = this.#storeBlob(utf8.encode(JSON.stringify(this.#referenced(character, message.content_blocks))));
     const kind = displayKind(message);
     this.#db
       .query(
@@ -835,7 +839,7 @@ export class HistoryStore {
         alternative.provider_key ?? null,
         alternative.model ?? null,
         imagesColumn(alternative.images),
-        this.#storeBlob(utf8.encode(JSON.stringify(alternative.content_blocks))),
+        this.#storeBlob(utf8.encode(JSON.stringify(this.#referenced(character, alternative.content_blocks)))),
         alternativeVersionOf(alternative) ?? null,
       );
     });
@@ -968,8 +972,8 @@ export class HistoryStore {
       .run(character, display.n, turns);
   }
 
-  #alternative(row: BodyRow, metrics?: HistoryReadMetrics): MessageAlternative {
-    const body = this.#body(row, metrics);
+  #alternative(row: BodyRow, character: string, metrics?: HistoryReadMetrics): MessageAlternative {
+    const body = this.#body(row, character, metrics);
     return {
       content: body.content,
       images: body.images,
@@ -983,6 +987,7 @@ export class HistoryStore {
 
   #body(
     row: BodyRow,
+    character: string,
     metrics?: HistoryReadMetrics,
   ): { blocks: ContentBlock[]; images: ImageRef[]; content: string } {
     const bytes = this.#loadBlob(row.blocks_hash);
@@ -991,9 +996,52 @@ export class HistoryStore {
       metrics.decoded_body_bytes += bytes.byteLength;
       if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
     }
-    const blocks = JSON.parse(decoder.decode(bytes)) as ContentBlock[];
+    const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character));
     const images = row.images === null ? [] : (JSON.parse(row.images) as ImageRef[]);
     return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
+  }
+
+  #blobs(character: string): ImageBlobs | undefined {
+    const cache = this.#data === undefined ? undefined : imageCacheFor(this.#data);
+    return cache === undefined ? undefined : imageBlobs(cache, character, false);
+  }
+
+  #referenced(character: string, blocks: ContentBlock[]): ContentBlock[] {
+    const blobs = this.#blobs(character);
+    return blobs === undefined ? blocks : withImageReferences(blocks, blobs);
+  }
+
+  referenceInlineImages(cache: string): number {
+    const hashes = (this.#db.query("SELECT hash FROM history_blobs ORDER BY hash").all() as { hash: string }[]).map((row) => row.hash);
+    const replace = this.#db.transaction((hash: string) => this.#referenceBodyImages(hash, cache));
+    const changed = hashes.filter((hash) => replace(hash)).length;
+    if (changed > 0) this.#collectGarbage();
+    return changed;
+  }
+
+  #referenceBodyImages(hash: string, cache: string): boolean {
+    let blocks: unknown;
+    try {
+      const bytes = this.#loadBlob(hash);
+      if (bytes === null) return false;
+      blocks = JSON.parse(decoder.decode(bytes));
+    } catch {
+      return false;
+    }
+    const characters = this.#db
+      .query(
+        `SELECT character FROM history_messages WHERE blocks_hash = ?1
+         UNION SELECT m.character FROM history_alternatives a
+           JOIN history_messages m ON m.id = a.message_id WHERE a.blocks_hash = ?1`,
+      )
+      .all(hash) as { character: string }[];
+    let referenced = blocks;
+    for (const { character } of characters) referenced = withImageReferences(blocks, imageBlobs(cache, character, false));
+    if (referenced === blocks) return false;
+    const fresh = this.#storeBlob(utf8.encode(JSON.stringify(referenced)));
+    this.#db.query("UPDATE history_messages SET blocks_hash = ?1 WHERE blocks_hash = ?2").run(fresh, hash);
+    this.#db.query("UPDATE history_alternatives SET blocks_hash = ?1 WHERE blocks_hash = ?2").run(fresh, hash);
+    return true;
   }
 
   #storeBlob(bytes: Uint8Array): string {

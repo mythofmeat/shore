@@ -4,6 +4,7 @@ import { basename, dirname } from "node:path";
 import type { SessionKey, SessionStore, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { ContentBlock } from "../../engine/types.ts";
 import { withStorage, ensureCollection, collectionText, appendCollection } from "../../storage/store.ts";
+import { imageBlobs, imageCacheFor, withImageData, withImageReferences } from "../../storage/image_blobs.ts";
 import type { SidecarRequest } from "../types.ts";
 import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
@@ -41,18 +42,22 @@ export function nativeHistoryStore(book: string, conversation: string, sameModel
   const prefix = `sdk_transcripts/${basename(book)}/${Buffer.from(character).toString("base64url")}/`;
   const pathOf = (key: SessionKey) => prefix + [key.sessionId, key.subpath ?? ""]
     .map((part) => Buffer.from(part).toString("base64url")).join("/");
+  const cache = imageCacheFor(data);
+  const blobs = cache === undefined ? undefined : imageBlobs(cache, character, true);
   return {
     load: (key) => Promise.resolve(withStorage(data, (db) => db.transaction(() => {
       const path = pathOf(key);
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
-      return withoutStaleModelIdentity(JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[], sameModel);
+      const entries = JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
+      return withoutStaleModelIdentity(withImageData(entries, blobs), sameModel);
     })())),
     append: (key, added) => {
+      const stored = blobs === undefined ? added : added.map((entry) => withImageReferences(entry, blobs));
       withStorage(data, (db) => db.transaction(() => {
         const path = pathOf(key);
         ensureCollection(db, path, character, "array");
-        appendCollection(db, path, added.map(entry => ({ text: JSON.stringify(entry), ...(entry.uuid === undefined ? {} : { key: entry.uuid }) })));
+        appendCollection(db, path, stored.map(entry => ({ text: JSON.stringify(entry), ...(entry.uuid === undefined ? {} : { key: entry.uuid }) })));
       })());
       return Promise.resolve();
     },

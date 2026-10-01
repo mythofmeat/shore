@@ -1,3 +1,5 @@
+import { withImageTokens } from "../storage/image_blobs.ts";
+
 export interface CassetteExchange {
   method: string;
   url: string;
@@ -33,10 +35,11 @@ export function keyOrdered(value: unknown): unknown {
 
 export function canonicalBody(body: string | null): unknown {
   if (body === null || body === "") return null;
+  const tokens = withImageTokens(body);
   try {
-    return keyOrdered(JSON.parse(body));
+    return keyOrdered(JSON.parse(tokens));
   } catch {
-    return body;
+    return tokens;
   }
 }
 
