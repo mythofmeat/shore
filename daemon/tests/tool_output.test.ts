@@ -20,6 +20,13 @@ describe("compact built-in output", () => {
     })).toBe('Search "tea" (hybrid): 2 results\n\nmemory/tea.md\n  2: Green tea\n  5: Black tea\nMore matches available. Increase max_results (up to 100) or narrow query/path.\nSemantic search unavailable: index unavailable\n3 files pending semantic indexing.\n2 binary or oversized files skipped.');
   });
 
+  test("the header counts one result as one result", () => {
+    const header = (results: { path: string; line: number; excerpt: string }[]) =>
+      formatToolOutput("search", { query: "tea", mode: "lexical", results }).split("\n")[0];
+    expect(header([{ path: "tea.md", line: 1, excerpt: "tea" }])).toBe('Search "tea" (lexical): 1 result');
+    expect(header([])).toBe('Search "tea" (lexical): 0 results');
+  });
+
   test("no activity does not produce zero-filled tables", () => {
     expect(formatToolOutput("activity_heatmap", handleActivityHeatmap({}, () => undefined)))
       .toBe("Activity over 30 days: 0 messages (0 total)\nNo activity data in this window.");

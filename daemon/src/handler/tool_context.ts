@@ -13,7 +13,7 @@ import {
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
-import { resolveEmbedder } from "../memory/retrieval.ts";
+import { resolveEmbedder, resolveMinSimilarity } from "../memory/retrieval.ts";
 import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
 import type { RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
@@ -69,15 +69,20 @@ export async function buildToolContext(
   const workspaceDir = characterWorkspaceDir(configDir, charName, config.dirs.workspace);
 
   let embedder: ToolContext["embedder"];
+  let minSimilarity: number | undefined;
   try {
-    embedder = resolveEmbedder({
+    const embeddingTarget = {
       ...(config.app.defaults.embedding === undefined
         ? {}
         : { defaultRef: config.app.defaults.embedding }),
       embedding: Object.fromEntries(config.models.embedding),
+    };
+    embedder = resolveEmbedder({
+      ...embeddingTarget,
       providers,
       ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
     });
+    minSimilarity = resolveMinSimilarity(embeddingTarget);
   } catch (e) {
     shoreLog.warn(
       `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,
@@ -96,6 +101,7 @@ export async function buildToolContext(
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     images: config.app.images,
     imageDir: characterMediaDir(dataDir, charName),
+    cacheDir: config.dirs.cache,
     workspaceDir,
     characterDataDir: charDataDir,
     conversationDir: threadDataDir(dataDir, charName, deps.thread ?? MAIN_THREAD),
@@ -114,6 +120,7 @@ export async function buildToolContext(
       ? {}
       : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(embedder === undefined ? {} : { embedder }),
+    ...(minSimilarity === undefined ? {} : { minSimilarity }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(mcp === undefined
       ? {}

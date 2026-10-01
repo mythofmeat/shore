@@ -196,7 +196,7 @@ MUTANTS = [
      "  if (skipped.length > 0) attached.notes.push(skippedNote(skipped, maxBytes));",
      "  if (false) attached.notes.push(skippedNote(skipped, maxBytes));"),
     ("attached media is never written to disk",
-     "    await writeFile(target, Buffer.from(item.data, \"base64\"));",
+     "    await writeFile(target, bytes);",
      "    await Promise.resolve();"),
     ("a failed media save is reported as a successful saved-image delivery",
      "    if (saved === undefined) {",

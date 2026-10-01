@@ -26,7 +26,7 @@ async function world() {
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir);
   const ctx: ToolContext = {
-    workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"),
+    workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
     retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
   };
@@ -119,7 +119,7 @@ test("read returns real image blocks and prepares large dimensions", async () =>
 
 test("read image previews travel even when a media copy cannot be saved", async () => {
   const { put, run, exec } = await world();
-  exec.ctx.imageDir = "";
+  exec.ctx.cacheDir = "";
   const frames: ServerMessage[] = [];
   exec.sendDirect = (frame) => { frames.push(frame); };
   await put("chart.png", Buffer.from(PNG, "base64"));

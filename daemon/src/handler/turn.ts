@@ -59,7 +59,7 @@ function bodyHasContent(body: TurnBody): boolean {
 export async function appendUserTurn(
   ctx: TurnContext,
   engine: TurnEngine,
-  dataDir: string,
+  cacheDir: string,
   charName: string,
   body: TurnBody,
   regen: boolean,
@@ -70,7 +70,7 @@ export async function appendUserTurn(
   if (!bodyHasContent(body)) return undefined;
 
   const { images, blocks } = await ingestImages(
-    dataDir,
+    cacheDir,
     charName,
     body.images,
     body.image_data,

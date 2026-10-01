@@ -1,6 +1,10 @@
 import { exportUnifiedDatabase, importUnifiedDatabase, removeStoredCharacter } from "../storage/archive.ts";
-import { databasePath } from "../storage/store.ts";
+import { databasePath, withStorage } from "../storage/store.ts";
 import { characterMediaDir } from "../storage/media.ts";
+import { attachmentCacheDir } from "../storage/image_cache.ts";
+import { activeImagePaths, copyAttachment, insideDir, legacyAttachmentsDir, moveCharacterImagesToCache, repointActiveImages } from "../storage/image_migration.ts";
+import { modelCopies } from "../llm/images.ts";
+import { Database } from "bun:sqlite";
 import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -235,7 +239,16 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string,
   const media = characterMediaDir(dirs.data, character);
   if (await exists(media)) await cp(media, join(stage, "media"), { ...copyOptions(), filter: admit });
   else await mkdir(join(stage, "media"));
+  const cachedImages = await stageActiveImages(dirs, character, stage, admit);
   exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
+  if (cachedImages.size > 0) {
+    const staged = new Database(join(stage, "shore.db"));
+    try {
+      staged.transaction(() => repointActiveImages(staged, character, cachedImages))();
+    } finally {
+      staged.close();
+    }
+  }
   const manifest: Manifest = {
     format: FORMAT,
     version: VERSION,
@@ -253,6 +266,23 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string,
     },
   };
   await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+async function stageActiveImages(
+  dirs: ShoreDirs,
+  character: string,
+  stage: string,
+  admit: (path: string) => Promise<boolean>,
+): Promise<Map<string, string>> {
+  const cached = attachmentCacheDir(dirs.cache, character);
+  const staged = new Map<string, string>();
+  for (const path of withStorage(dirs.data, (db) => activeImagePaths(db, character))) {
+    const name = insideDir(cached, path);
+    if (name === undefined || !await exists(path)) continue;
+    for (const file of [path, ...modelCopies(path)]) await admit(file);
+    if (copyAttachment(path, join(stage, "media", "attachments", name))) staged.set(path, join(legacyAttachmentsDir(dirs.data, character), name));
+  }
+  return staged;
 }
 
 async function extractArchive(archive: string, stage: string, limits?: ArchiveLimits): Promise<void> {
@@ -345,6 +375,9 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
       await cp(join(stage, "media"), media, copyOptions());
       created.push(media);
     }
+    const cache = characterCacheDir(ctx.dirs.cache, character);
+    if (!await exists(cache)) created.push(cache);
+    moveCharacterImagesToCache(ctx.dirs.data, ctx.dirs.cache, character);
     await ctx.refreshDiscovery();
   } catch (error) {
     if (imported) {

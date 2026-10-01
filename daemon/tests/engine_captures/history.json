@@ -1584,7 +1584,8 @@
     {
       "name": "keyword ranks by relevance blended with recency",
       "input": {
-        "query": "tea kettle"
+        "query": "tea kettle",
+        "match": "nearest"
       },
       "expect": {
         "msg_ids": [
@@ -1610,7 +1611,8 @@
     {
       "name": "recency overturns a stronger older match",
       "input": {
-        "query": "tea winter zzz"
+        "query": "tea winter zzz",
+        "match": "nearest"
       },
       "expect": {
         "msg_ids": [
@@ -1625,7 +1627,8 @@
     {
       "name": "recency cannot overturn a much stronger older match",
       "input": {
-        "query": "tea winter oolong"
+        "query": "tea winter oolong",
+        "match": "nearest"
       },
       "expect": {
         "msg_ids": [
@@ -1655,7 +1658,8 @@
     {
       "name": "multi-term partial coverage",
       "input": {
-        "query": "coffee tea"
+        "query": "coffee tea",
+        "match": "nearest"
       },
       "expect": {
         "msg_ids": [
@@ -1862,13 +1866,102 @@
     {
       "name": "the best match is not the first one found, untruncated",
       "input": {
-        "query": "\u4e16\u754c tea"
+        "query": "\u4e16\u754c tea",
+        "match": "nearest"
       },
       "expect": {
         "msg_ids": [
           "s1-unicode",
           "s0-tea",
           "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked keeps only messages with every word",
+      "input": {
+        "query": "tea kettle"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked finds nothing close when no message has every word",
+      "input": {
+        "query": "coffee tea"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked keeps a message with all the distinctive words",
+      "input": {
+        "query": "tea winter oolong"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked does not require stopwords",
+      "input": {
+        "query": "tea in the winter"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked words must start a word",
+      "input": {
+        "query": "alked"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "nearest returns words found inside other words",
+      "input": {
+        "query": "alked",
+        "match": "nearest"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "ranked matches unspaced scripts inside a sentence",
+      "input": {
+        "query": "\u306e\u8a71 tea"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode"
         ],
         "model_filter": null,
         "searched_messages": 6

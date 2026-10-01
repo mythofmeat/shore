@@ -17,6 +17,7 @@ import { countImageBlocks, stripImageBlocks } from "../src/llm/image_support.ts"
 import { buildLlmMessages } from "../src/handler/wire_messages.ts";
 import { normalizeMessage } from "../src/engine/message_store.ts";
 import { oversizedImage } from "./support/oversized_image.ts";
+import { toolImageCacheDir } from "../src/storage/image_cache.ts";
 
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -38,15 +39,16 @@ async function runMcpTool(
   limits: ToolLimitsView = LIMITS,
   notes: string[] = [],
 ): Promise<{ block: ContentBlock; frames: ServerMessage[]; saved: string[] }> {
-  const imageDir = await mkdtemp(join(tmpdir(), "shore-mcp-media-"));
+  const cacheDir = await mkdtemp(join(tmpdir(), "shore-mcp-media-"));
   const frames: ServerMessage[] = [];
   const ctx: ToolContext = {
-    imageDir,
+    imageDir: "",
+    cacheDir,
     workspaceDir: "",
     characterDataDir: "",
     conversationDir: "",
   historyDbPath: "/tmp/history.db",
-  characterName: "",
+  characterName: "ada",
     configDir: "",
     retrievalConfig: {
       maxFileBytes: 0,
@@ -70,11 +72,11 @@ async function runMcpTool(
   const run = await runToolUse({ id: "toolu_1", name: "mcp__srv__shot", input: {} }, exec, []);
   let saved: string[] = [];
   try {
-    saved = (await readdir(join(imageDir, "tools"))).sort();
+    saved = (await readdir(toolImageCacheDir(cacheDir, "ada"))).sort();
   } catch {
     saved = [];
   }
-  await rm(imageDir, { recursive: true, force: true });
+  await rm(cacheDir, { recursive: true, force: true });
   return { block: run.block, frames, saved };
 }
 
@@ -223,7 +225,8 @@ describe("mcp media reaches the model", () => {
   test("an unreadable image directory degrades to a note, not a thrown tool", async () => {
     const frames: ServerMessage[] = [];
     const ctx: ToolContext = {
-      imageDir: "/proc/shore-cannot-write-here",
+      imageDir: "",
+      cacheDir: "/proc/shore-cannot-write-here",
       workspaceDir: "",
       characterDataDir: "",
       conversationDir: "",

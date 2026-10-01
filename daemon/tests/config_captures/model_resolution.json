@@ -1226,7 +1226,7 @@
       "embedding_toml": "[\"openai:m\"]\nmodel_id = \"m\"\n",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `model_id`, expected `dimensions`. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `model_id`, expected one of `dimensions`, `min_similarity`. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_image_unknown_field",
