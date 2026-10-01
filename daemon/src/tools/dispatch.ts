@@ -48,6 +48,7 @@ export interface ToolContext {
   activityStats?: ActivityStatsLookup;
 
   embedder?: Embedder;
+  minSimilarity?: number;
   memoryIndexPath?: string;
   historyIndexPath?: string;
 
@@ -170,6 +171,7 @@ export async function dispatchTool(
         dbPath: ctx.historyDbPath,
         ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
         ...(ctx.embedder === undefined ? {} : { embedder: ctx.embedder }),
+        ...(ctx.minSimilarity === undefined ? {} : { minSimilarity: ctx.minSimilarity }),
         defaultMode: ctx.retrievalMode,
       });
 
@@ -210,7 +212,11 @@ export async function dispatchTool(
       );
       const semantics =
         ctx.embedder !== undefined && ctx.memoryIndexPath !== undefined
-          ? { embedder: ctx.embedder, indexPath: ctx.memoryIndexPath }
+          ? {
+              embedder: ctx.embedder,
+              indexPath: ctx.memoryIndexPath,
+              ...(ctx.minSimilarity === undefined ? {} : { minSimilarity: ctx.minSimilarity }),
+            }
           : undefined;
       return await handleSearch(args, ctx.workspaceDir, ctx.retrievalConfig, semantics);
     }
