@@ -107,9 +107,8 @@ it is for SWP envelopes and events (`daemon/src/protocol/README.md`):
   `styles/themes/`. See the plan for the theme rules.
 - Build: `bun run browser:build` regenerates `daemon/src/web/assets.generated.ts`, which the daemon
   embeds. Rebuild and restart the daemon to pick up UI changes.
-- Tests: `bun test tests/browser_*.test.ts` for units, `bun run test:browser` for Playwright. The
-  pre-commit hook and CI run the unit tests but not Playwright, so run the journeys before pushing
-  UI changes.
+- Tests: `bun test tests/browser_*.test.ts` for units, `bun run test:browser` for Playwright. CI
+  runs the unit tests but not Playwright, so run the journeys before pushing UI changes.
 - Parity: `tests/browser_parity.test.ts` checks every CLI command and option, TUI view preference,
   local workflow, conversation request and renderer family against `src/browser/surfaces.ts` and the
   shrinking list in `scripts/browser_known_gaps.json`. After implementing something, declare it in

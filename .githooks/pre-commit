@@ -1,3 +1,0 @@
-#!/bin/sh
-# Runs every check before each commit; CI runs the same script. Skip them with git commit --no-verify.
-exec "$(git rev-parse --show-toplevel)/.scripts/test.sh" </dev/null
