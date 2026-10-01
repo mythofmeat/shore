@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/daemon/run.ts",
-    "build": "bun run build:patch && bun run browser:build && bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
+    "build": "bun run build:patch && bun run build:daemon",
+    "build:daemon": "bun run browser:build && bun build src/daemon/run.ts --compile --outfile dist/shore-daemon && bun run build:claude",
+    "build:claude": "bun run scripts/build_claude.ts",
     "typecheck": "tsc --noEmit && tsc --project src/browser/tsconfig.json",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "lint": "oxlint --type-aware src tests scripts",

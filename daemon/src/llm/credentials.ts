@@ -42,6 +42,7 @@ export function classifyCredentialFailure(
     case "deserialize":
     case "provider":
       return "not_credential_failure";
+    case "launch_failed":
     case "budget_blocked":
     case "aborted":
       return "not_credential_failure";

@@ -8,3 +8,5 @@ contrib/*/*.apk
 out
 daemon/target
 .git
+config
+workspace

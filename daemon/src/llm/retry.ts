@@ -43,6 +43,7 @@ export function shouldRetryError(
     case "serialize":
     case "deserialize":
     case "missing_api_key":
+    case "launch_failed":
       return FAIL;
 
     case "provider":

@@ -18,6 +18,7 @@ export type LlmError =
       timeout?: boolean;
     }
   | { kind: "missing_api_key"; var: string }
+  | { kind: "launch_failed"; message: string }
   | { kind: "provider"; message: string }
   | { kind: "budget_blocked"; message: string; scope?: string }
   | { kind: "aborted"; message: string };
@@ -30,6 +31,7 @@ const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
   "incomplete_stream",
   "stream_errored",
   "missing_api_key",
+  "launch_failed",
   "provider",
   "budget_blocked",
   "aborted",
@@ -63,6 +65,8 @@ export function describeLlmError(error: LlmError): string {
       return `stream errored after partial usage: ${error.message}`;
     case "missing_api_key":
       return `API key environment variable ${error.var} is not set`;
+    case "launch_failed":
+      return error.message;
     case "provider":
       return `provider error: ${error.message}`;
     case "budget_blocked":

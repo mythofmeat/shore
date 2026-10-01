@@ -26,6 +26,8 @@ export function sanitizeReason(raw: unknown): string {
       return `HTTP ${error.status}`;
     case "missing_api_key":
       return `env ${debugString(error.var)} not set`;
+    case "launch_failed":
+      return truncateBytes(error.message, MAX_REASON_BYTES);
     case "provider":
       return `provider error: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "incomplete_stream":

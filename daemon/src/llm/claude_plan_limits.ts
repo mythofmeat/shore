@@ -2,6 +2,7 @@ import { query, type Query, type SDKControlGetUsageResponse, type SDKUserMessage
 import { tmpdir } from "node:os";
 
 import { claudePlanInstant, type ClaudePlanPoll, type ClaudePlanReading } from "../ledger/plan_limits.ts";
+import { claudeCodeLaunchFailure, claudeCodeOptions } from "./providers/claude_code.ts";
 
 export const CLAUDE_PLAN_FETCH_TIMEOUT_MS = 15_000;
 
@@ -40,12 +41,14 @@ export async function fetchClaudePlanLimits(
     session = runQuery({
       prompt: silentUntil(held),
       options: {
-        cwd: tmpdir(), env, abortController,
+        cwd: tmpdir(), env, ...claudeCodeOptions(), abortController,
         settingSources: [], strictMcpConfig: true, tools: [], skills: [],
         persistSession: false,
       },
     });
     return claudePlanPoll(await session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }));
+  } catch (e) {
+    throw claudeCodeLaunchFailure(e) ?? e;
   } finally {
     clearTimeout(timeout);
     release();

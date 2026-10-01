@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { toRfc3339 } from "../../ledger/zoned.ts";
 import type { DiscoveredModel, DiscoveryResult } from "../discovery.ts";
 import { claudeAgentEnvironment } from "./claude_agent.ts";
+import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 
 export type ClaudeAgentModelQuery = (params: Parameters<typeof query>[0]) => Pick<Query, "supportedModels" | "close">;
 
@@ -19,7 +20,7 @@ export async function discoverClaudeAgent(
     session = runQuery({
       prompt: (async function* (): AsyncGenerator<SDKUserMessage> {})(),
       options: {
-        cwd: tmpdir(), env: claudeAgentEnvironment(baseUrl), abortController,
+        cwd: tmpdir(), env: claudeAgentEnvironment(baseUrl), ...claudeCodeOptions(), abortController,
         settingSources: [], strictMcpConfig: true, tools: [], skills: [],
         persistSession: false,
       },
@@ -45,7 +46,8 @@ export async function discoverClaudeAgent(
       discovered_at: discoveredAt,
     })) };
   } catch (e) {
-    return { err: { kind: "network", provider: providerKey, message: e instanceof Error ? e.message : String(e) } };
+    const failure = claudeCodeLaunchFailure(e) ?? e;
+    return { err: { kind: "network", provider: providerKey, message: failure instanceof Error ? failure.message : String(failure) } };
   } finally {
     clearTimeout(timeout);
     session?.close();
