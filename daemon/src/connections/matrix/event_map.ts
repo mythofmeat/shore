@@ -57,20 +57,8 @@ export class EventMap {
     this.#save();
   }
 
-  removeMsg(msgId: string): MappedEvent | undefined {
-    return this.#removeWhere((e) => e.msgId === msgId);
-  }
-
   removeEvent(eventId: string): MappedEvent | undefined {
     return this.#removeWhere((e) => e.eventId === eventId);
-  }
-
-  pruneMissing(roomId: string, liveIds: ReadonlySet<string>): void {
-    const before = this.#entries.length;
-    this.#entries = this.#entries.filter(
-      (e) => e.roomId !== roomId || liveIds.has(e.msgId),
-    );
-    if (this.#entries.length !== before) this.#save();
   }
 
   #removeWhere(match: (e: MappedEvent) => boolean): MappedEvent | undefined {
