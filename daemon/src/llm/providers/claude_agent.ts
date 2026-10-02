@@ -308,6 +308,7 @@ export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<st
     TZ: hostZone(),
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     CLAUDE_CODE_TOTAL_TOKENS_REMINDER: "off",
+    CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0",
     CLAUDE_SECURESTORAGE_CONFIG_DIR:
       process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
   };
@@ -343,6 +344,7 @@ function buildOptions(
     skills: [],
     allowedTools: [],
     disallowedTools: NESTED_LOOP_TOOLS,
+    permissionMode: "default",
     settings: { autoCompactEnabled: false, ...(cacheTtl === undefined ? {} : { promptCacheTtl: cacheTtl }) },
     includePartialMessages: true,
     cwd: req.context?.workspace_dir ?? tmpdir(),

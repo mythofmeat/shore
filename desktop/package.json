@@ -1,0 +1,25 @@
+{
+  "name": "shore-desktop",
+  "productName": "Shore",
+  "version": "4.19.2",
+  "description": "Desktop app for Shore's browser client",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "desktopName": "shore-desktop.desktop",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "start": "bun run build && electron .",
+    "typecheck": "tsc --noEmit && tsc --noEmit --project src/shell/tsconfig.json && tsc --noEmit --project tests/tsconfig.e2e.json",
+    "test": "bun test",
+    "test:e2e": "bun run build && bun run scripts/e2e.ts",
+    "icons": "bun run scripts/icons.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/bun": "^1.4.2",
+    "electron": "^44.4.5",
+    "typescript": "^7.0.2"
+  },
+  "trustedDependencies": []
+}

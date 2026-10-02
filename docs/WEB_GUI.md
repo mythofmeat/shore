@@ -76,6 +76,47 @@ the CLI/TUI protocol and cannot serve a browser.
 `public_origin` is optional proxy configuration and does not prevent direct access through another
 hostname or port. Remove `tls_cert` and `tls_key` if switching an existing HTTPS listener to HTTP.
 
+## Desktop app
+
+`desktop/` is an Electron app that shows the daemon's browser client in its own window. It runs on
+the system Electron and needs nothing from the daemon beyond `[daemon.web]`, the same as a browser.
+On Arch, `contrib/arch/PKGBUILD` builds it as the `shore-desktop` package next to `shore-cli`, and
+it appears as **Shore** in the application menu.
+
+The first launch asks for the daemon's address, such as `my-host.example.ts.net:7340`. Without a
+scheme the app uses `http://`, and without a port it uses 7340. Then sign in with the daemon token,
+as in a browser. To change the address later, use the tray menu or the Shore menu (press Alt to
+show the menu bar). `shore-desktop --address=<address>` sets it from the command line.
+
+How it differs from a browser tab:
+
+- Desktop notifications work over plain HTTP. The app treats its daemon's address as a secure
+  origin, which browsers only do for HTTPS and `localhost`. Switching to such an address restarts
+  the app once. Turn notifications on in Settings → Appearance → Notifications, as in a browser.
+- Closing the window keeps Shore running in the system tray, so notifications keep arriving.
+  Clicking one, or launching Shore again, brings the window back. Close to Tray in the tray or
+  Shore menu turns this off.
+- Links open in the default browser. The window only shows the daemon's own pages.
+- With notifications on, the unread count shows in the window title and as a dot on the tray icon.
+- KWin and other desktops that draw window frames give the window their native title bar.
+
+Settings are in `~/.config/shore-desktop/settings.json`, next to the app's browser data (the
+sign-in cookie and unsent drafts). `--user-data-dir=<directory>` keeps a separate profile with its
+own address, which lets a second window stay connected to another daemon.
+
+To work on it, in `desktop/`:
+
+- `bun run start` builds the app and opens it with the system `electron`.
+- `bun test` covers address parsing, failure messages, settings and menus. CI's `desktop` job runs
+  it with the type check and the build.
+- `bun run test:e2e` runs the Playwright journeys against the daemon's browser fixture, so run
+  `bun install` in `daemon/` first. They start a private KWin session with no visible output
+  (`kwin_wayland --virtual` on its own D-Bus), so they need KWin but never touch your desktop. CI
+  doesn't run them.
+  `SHORE_DESKTOP_APP=/usr/lib/shore-desktop SHORE_DESKTOP_ELECTRON=electron44` points them at an
+  installed package instead of the build in `desktop/dist`.
+- `bun run icons` renders the PNG icons from their SVGs with `rsvg-convert`.
+
 ## Operation contracts
 
 Browser and terminal clients call the same daemon operations. Rust is canonical for their shapes, as

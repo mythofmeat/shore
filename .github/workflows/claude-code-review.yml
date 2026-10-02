@@ -4,27 +4,60 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
 
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
-    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: read
-      issues: read
       id-token: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+      - uses: actions/checkout@v7
 
-      - name: Run Claude Code Review
-        id: claude-review
+      # Claude submits the review itself with the Claude app's token, so it
+      # shows up as claude[bot] approving or requesting changes. The action
+      # skips (green, no review) on a pull request that edits this file,
+      # because the app token is only issued for the workflow on main.
+      - id: review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. Its head commit is ${{ github.event.pull_request.head.sha }}, and the working directory is that pull request merged into ${{ github.event.pull_request.base.ref }}.
+
+            1. Read the pull request with `gh pr view ${{ github.event.pull_request.number }} --comments` and `gh pr diff ${{ github.event.pull_request.number }}`, and read the surrounding code wherever the diff alone doesn't tell you whether a change is right.
+            2. Look for real problems the change introduces: bugs, logic errors, broken edge cases, security holes, and code that won't build or pass its tests. Skip style, naming, and anything a linter or the `daemon` and `client` CI checks already catch. Only keep a finding after you've checked it against the code and are confident it's real; a false alarm costs more than a miss.
+            3. Do the whole review yourself in this session. Nothing re-invokes you after you stop, so don't hand work to background agents or wait for anything.
+            4. Submit exactly one GitHub review, then stop:
+               - Write it to `review.json` as `{"commit_id": "${{ github.event.pull_request.head.sha }}", "event": ..., "body": ..., "comments": [...]}`.
+               - `event` is `"REQUEST_CHANGES"` if you kept any finding and `"APPROVE"` if you kept none.
+               - `body` is a few sentences: what the pull request does, your verdict, and what you checked. Put findings that don't belong on a changed line here too.
+               - Each entry in `comments` is one finding: `{"path": ..., "line": ..., "side": "RIGHT", "body": ...}`, where `line` is a line of the new file that appears in the diff (add `"start_line"` for a range). Say what goes wrong and when, and how to fix it.
+               - Submit it with `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews --method POST --input review.json`. If GitHub rejects a comment because its line isn't part of the diff, move that finding into `body` and submit again.
+          claude_args: >-
+            --allowedTools "Read,Grep,Glob,Write,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews:*)"
+            --disallowedTools "Agent,Task"
+
+      # A run that ends without a review would otherwise pass silently, so
+      # print how Claude finished and fail unless the head commit got one.
+      - if: ${{ always() && steps.review.outputs.execution_file != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          jq -r '.[] | select(.type == "result") | .result // empty' "$EXECUTION_FILE"
+          reviews=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" \
+            --jq ".[] | select(.user.type == \"Bot\" and .commit_id == \"$HEAD_SHA\") | .state")
+          if [ -z "$reviews" ]; then
+            echo "::error::Claude finished without reviewing $HEAD_SHA"
+            exit 1
+          fi
+          echo "Review on $HEAD_SHA: $reviews"

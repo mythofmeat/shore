@@ -162,6 +162,14 @@ MUTANTS = [
      AGENT,
      "...(cacheTtl === undefined ? {} : { promptCacheTtl: cacheTtl }) },",
      "},"),
+    ("options: the CLI picks auto mode, whose classifier approves tool calls without asking canUseTool",
+     AGENT,
+     "    permissionMode: \"default\",\n",
+     ""),
+    ("options: an omitted thinking display is sent as updates, which asks for connector text",
+     AGENT,
+     "    CLAUDE_CODE_THINKING_DISPLAY_UPDATES: \"0\",\n",
+     ""),
 
     # --- the keepalive ping --------------------------------------------------
     ("keepalive: a ping reads a session of its own, whose cache nothing else uses",
