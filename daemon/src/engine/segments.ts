@@ -88,6 +88,13 @@ export class SegmentReader {
     return this.history.readSegment(this.character, index);
   }
 
+  readSegmentOrdinals(index: number, ordinals: readonly number[]): Map<number, Message> {
+    if (this.history?.hasSegment(this.character, index) !== true) {
+      throw new MessageNotFound(`segment index ${index}`);
+    }
+    return this.history.readSegmentOrdinals(this.character, index, ordinals);
+  }
+
   close(): void {
     this.history?.close();
   }

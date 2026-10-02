@@ -10,6 +10,7 @@ import {
 } from "./message_store.ts";
 import { alternativeVersionOf, versionOf } from "./versions.ts";
 import { imageBlobs, imageCacheFor, withImageData, withImageReferences, type ImageBlobs } from "../storage/image_blobs.ts";
+import { required } from "../util/required.ts";
 import type {
   ContentBlock,
   ImageRef,
@@ -652,6 +653,25 @@ export class HistoryStore {
       .all(character, idx) as MessageRow[];
 
     return this.#messagesFromRows(rows, character);
+  }
+
+  readSegmentOrdinals(character: string, idx: number, ordinals: readonly number[]): Map<number, Message> {
+    const rows = this.#db
+      .query(
+        `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment, ordinal,
+                alt_index, alt_count, images, blocks_hash, version
+         FROM history_messages
+         WHERE character = ?1 AND segment = ?2
+           AND ordinal IN (SELECT value FROM json_each(?3))
+           AND EXISTS (
+             SELECT 1 FROM history_segments
+             WHERE character = ?1 AND idx = ?2 AND committed = 1
+           )`,
+      )
+      .all(character, idx, JSON.stringify(ordinals)) as (MessageRow & { ordinal: number })[];
+
+    const messages = this.#messagesFromRows(rows, character);
+    return new Map(rows.map((row, i) => [row.ordinal, required(messages[i])]));
   }
 
   readDisplayRange(character: string, start: number, end: number): HistoryDisplaySlice {
