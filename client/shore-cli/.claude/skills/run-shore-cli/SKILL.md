@@ -24,7 +24,7 @@ The Rust workspace toolchain — nothing else (no `apt-get` packages were needed
 it builds and tests clean on a stock Linux toolchain).
 
 ```bash
-cargo --version   # 1.95.0 used here; any recent stable works
+cargo --version
 ```
 
 ## Build
@@ -39,16 +39,16 @@ cargo build -p shore-cli            # produces target/debug/shore
 ## Run (agent path) — preview the rendering
 
 ```bash
-.claude/skills/run-shore-cli/preview.sh           # both previews, colorized
+.claude/skills/run-shore-cli/preview.sh           # every preview, colorized
 .claude/skills/run-shore-cli/preview.sh log       # just shore log / shore get
 .claude/skills/run-shore-cli/preview.sh stream    # just live token streaming
 ```
 
-Each preview renders a representative assistant turn with **interleaved
-thinking** (thinking → text → tool call → redacted_thinking → thinking → text)
-through the real `render_message_content` (log) and `print_chunk_to` (stream)
-functions, with color ON, and prints the raw bytes so your terminal colorizes
-them. The layout is a two-channel design: response **speech** is flush-left and
+The log and stream previews render a representative assistant turn with
+**interleaved thinking** (thinking → text → tool call → redacted_thinking →
+thinking → text) through the real `render_message_content` (log) and
+`print_chunk_to` (stream) functions, with color ON, and print the raw bytes so
+your terminal colorizes them. The layout is a two-channel design: response **speech** is flush-left and
 plain, while thinking, tool calls, and results form one **process channel** down
 a dim `│` left gutter — each block opened by a colored sigil + label header
 (magenta `◌ Thinking`, yellow `→ <tool> · <arg>`, green `✓ result` / red
@@ -111,7 +111,7 @@ The behavior is pinned by ordinary (non-ignored) tests in the same modules
 `redacted_thinking_is_hidden`, …):
 
 ```bash
-cargo test -p shore-cli output::      # 68 pass, 2 ignored (the previews)
+cargo test -p shore-cli output::
 ```
 
 ## Run (human path) — the real CLI
@@ -132,8 +132,7 @@ Use the preview path above instead when you only need to see how output looks.
   so parallel runs are correct, but their stdout blocks would interleave. The
   driver already sets this.
 - **`#[ignore]`, not deletion.** Previews live permanently in the test modules
-  but are skipped by default — that's why a normal `output::` run reports
-  `2 ignored`. Don't "clean them up."
+  but are skipped by default. Don't "clean them up."
 - **Shared process-channel primitives.** The sigils, gutter, wrap width, and
   the per-line writers live in `output/mod.rs` (`write_sigil_header`,
   `write_process_body`, `write_thinking_content_line`, `write_channel_rule`,
@@ -162,5 +161,5 @@ Use the preview path above instead when you only need to see how output looks.
 - **Colors don't show, you see raw `^[[38;5;8m`.** Your viewer is escaping the
   bytes (e.g. piping through `cat -v`). Run the driver directly in a terminal.
 - **`0 ignored` / preview didn't run.** You dropped `--ignored`, or the test
-  name filter didn't match. Use `render_preview` (both), `render_preview_log`,
-  or `render_preview_stream`.
+  name filter didn't match. Use `render_preview` (all of them) or one preview's
+  full name, such as `render_preview_log`.

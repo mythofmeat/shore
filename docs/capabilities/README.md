@@ -5,7 +5,7 @@ The browser tracks them through a ratchet rather than a one-to-one mapping: ever
 view preference, local workflow and conversation request is either surfaced by the browser
 (declared in `daemon/src/browser/surfaces.ts` at an `inline`, `settings` or `advanced` tier) or
 listed in `daemon/scripts/browser_known_gaps.json`, which may only shrink. Terminal-only concepts
-are listed with reasons in `daemon/scripts/browser_parity.ts`. See [WEB_UI_V3_PLAN.md](../WEB_UI_V3_PLAN.md).
+are listed with reasons in `daemon/scripts/browser_parity.ts`.
 
 ## Reproducible source inventory
 
@@ -17,9 +17,9 @@ are listed with reasons in `daemon/scripts/browser_parity.ts`. See [WEB_UI_V3_PL
 - `daemon.generated.json` combines the executable operation registry and every generated wire type.
   It includes characterless dispatch, core message/regen/cancel requests, results, images, tools,
   warnings, and all known server-event variants. All 56 named operations are registered and
-  validated against their generated schemas, so `legacy_operations` is empty. The `requests`
-  collection records the message/regen/cancel registrations and their input/completion schemas.
-  The inventory itself is not a runtime validator.
+  validated against their generated schemas. The `requests` collection records the
+  message/regen/cancel registrations and their input/completion schemas. The inventory itself is
+  not a runtime validator.
 
 Regenerate from `client/`, then from `daemon/`:
 
