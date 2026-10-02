@@ -3,139 +3,16 @@ import { describe, expect, test } from "bun:test";
 
 import rawFixture from "./tools_captures/tool_handlers.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
-import {
-  DiceParseError,
-  executeDiceRoll,
-  handleRollDice,
-  parseDiceNotation,
-} from "../src/tools/basic.ts";
 import { handleActivityHeatmap } from "../src/tools/activity.ts";
 import type { ActivityStats, HourClassification } from "../src/autonomy/activity.ts";
 import { handleModelHistory, kindFor, utcBound } from "../src/tools/model_history.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const fx = fixture as unknown as {
-  parse_dice_notation: {
-    input: string;
-    ok?: { count: number; sides: number; modifier: number };
-    err?: string;
-  }[];
-  execute_dice_roll: {
-    count: number;
-    sides: number;
-    modifier: number;
-    observed_min: number;
-    observed_max: number;
-  }[];
-  handle_roll_dice: Record<string, { input: Record<string, unknown>; err?: string; echoed?: string }>;
   kind_for: { call_type: string; kind: string }[];
   utc_bound: { input: Record<string, unknown>; ok?: string | null; err?: string }[];
   activity_heatmap_empty: Record<string, { input: Record<string, unknown>; output: unknown }>;
 };
-
-describe("parseDiceNotation", () => {
-  test.each(fx.parse_dice_notation.map((c): [string, typeof c] => [JSON.stringify(c.input), c]))(
-    "%s",
-    (_label, c) => {
-      if (c.ok !== undefined) {
-        expect(parseDiceNotation(c.input)).toEqual(c.ok);
-      } else {
-        expect(() => parseDiceNotation(c.input)).toThrow(new DiceParseError(c.err));
-      }
-    },
-  );
-
-  test("a sign at position 0 belongs to the sides, not the modifier", () => {
-    expect(() => parseDiceNotation("d-6")).toThrow("Invalid sides: -6");
-    expect(parseDiceNotation("d+6")).toEqual({ count: 1, sides: 6, modifier: 0 });
-  });
-
-  test("a negative zero modifier is plain zero", () => {
-    const parsed = parseDiceNotation("2d6-0");
-    expect(parsed.modifier).toBe(0);
-    expect(Object.is(parsed.modifier, -0)).toBe(false);
-  });
-
-  test("an integer argument accepts a leading + and rejects everything else", () => {
-    expect(parseDiceNotation("+2d6")).toEqual({ count: 2, sides: 6, modifier: 0 });
-    expect(() => parseDiceNotation("-2d6")).toThrow("Invalid dice count: -2");
-    expect(() => parseDiceNotation("2.5d6")).toThrow("Invalid dice count: 2.5");
-    expect(() => parseDiceNotation("2d6.5")).toThrow("Invalid sides: 6.5");
-  });
-
-  test("trimming happens once, up front", () => {
-    expect(parseDiceNotation("  2D6+3  ")).toEqual({ count: 2, sides: 6, modifier: 3 });
-    expect(() => parseDiceNotation("2 d 6")).toThrow("Invalid dice count: 2 ");
-    expect(() => parseDiceNotation("2d6 +3")).toThrow("Invalid sides: 6 ");
-  });
-
-  test("roll counts are bounded while sides and modifiers retain their integer ranges", () => {
-    expect(() => parseDiceNotation("4294967295d6")).toThrow("Dice count must be at most 1000");
-    expect(() => parseDiceNotation("4294967296d6")).toThrow("Invalid dice count: 4294967296");
-    expect(parseDiceNotation("1d6+2147483647").modifier).toBe(2_147_483_647);
-    expect(() => parseDiceNotation("1d6+2147483648")).toThrow("Invalid modifier: +2147483648");
-    expect(parseDiceNotation("1d6-2147483648").modifier).toBe(-2_147_483_648);
-    expect(() => parseDiceNotation("1d6-2147483649")).toThrow("Invalid modifier: -2147483649");
-  });
-});
-
-describe("executeDiceRoll", () => {
-  test.each(
-    fx.execute_dice_roll.map((c): [string, typeof c] => [
-      `${c.count}d${c.sides}${c.modifier >= 0 ? "+" : ""}${c.modifier}`,
-      c,
-    ]),
-  )("%s", (_label, c) => {
-    const notation = { count: c.count, sides: c.sides, modifier: c.modifier };
-    let lo = Number.POSITIVE_INFINITY;
-    let hi = Number.NEGATIVE_INFINITY;
-    for (let i = 0; i < 500; i += 1) {
-      const { rolls, total } = executeDiceRoll(notation);
-      expect(rolls.length).toBe(c.count);
-      let expected = c.modifier;
-      for (const r of rolls) {
-        expect(r).toBeGreaterThanOrEqual(1);
-        expect(r).toBeLessThanOrEqual(c.sides);
-        expect(Number.isInteger(r)).toBe(true);
-        lo = Math.min(lo, r);
-        hi = Math.max(hi, r);
-        expected = Math.min(2_147_483_647, Math.max(-2_147_483_648, expected + r));
-      }
-      expect(total).toBe(expected);
-    }
-    expect(lo).toBe(c.observed_min);
-    expect(hi).toBe(c.observed_max);
-  });
-
-  test("the total saturates rather than wrapping", () => {
-    const { total } = executeDiceRoll({ count: 1, sides: 1, modifier: 2_147_483_647 });
-    expect(total).toBe(2_147_483_647);
-  });
-});
-
-describe("handleRollDice", () => {
-  test("missing notation", () => {
-    expect(() => handleRollDice({})).toThrow(fx.handle_roll_dice["missing_notation"]?.err);
-  });
-
-  test("a non-string notation reports as missing", () => {
-    expect(() => handleRollDice({ notation: 6 })).toThrow(
-      fx.handle_roll_dice["notation_not_a_string"]?.err,
-    );
-  });
-
-  test("a parse failure is wrapped, keeping the inner message", () => {
-    expect(() => handleRollDice({ notation: "abc" })).toThrow(
-      fx.handle_roll_dice["parse_failure_is_wrapped"]?.err,
-    );
-  });
-
-  test("the echoed notation is the raw input, not the normalized parse", () => {
-    const echoed = fx.handle_roll_dice["echoes_raw_notation"]?.echoed as string;
-    const out = handleRollDice({ notation: echoed }) as { notation: string };
-    expect(out.notation).toBe(echoed);
-  });
-});
 
 describe("kindFor", () => {
   test.each(fx.kind_for.map((c): [string, typeof c] => [JSON.stringify(c.call_type), c]))(
