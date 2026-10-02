@@ -64,8 +64,7 @@ request field the daemon ignores.
   (`bun run scripts/browser_parity.ts --prune`). A terminal field that maps to no daemon operation
   field fails as an API parity error, whatever the UI declares.
 - `daemon/tests/browser_local_workflows.test.ts` checks that `shore ui` commands keep their fields and
-  choices, that conversation shortcuts resolve to the operation catalogue, and that line scrolling
-  keeps the terminal defaults.
+  choices, and that conversation shortcuts resolve to the operation catalogue.
 
 Surface declarations are claims. The Playwright journeys in `daemon/tests/browser/` back them up:
 sign-in, the chat workspace and every settings page. Run them with `bun run test:browser` from
