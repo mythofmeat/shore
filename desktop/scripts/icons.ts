@@ -10,11 +10,10 @@ const RENDERS = [
   { source: "tray-unread-template.svg", output: "tray-unread-template.png", size: 18 },
   { source: "tray-unread-template.svg", output: "tray-unread-template@2x.png", size: 36 },
 ];
-// Each .icns entry is a PNG of one size: 16 to 512 points at one and two pixels per point.
 const ICNS_ENTRIES = [["icp4", 16], ["ic11", 32], ["icp5", 32], ["ic12", 64], ["ic07", 128], ["ic13", 256], ["ic08", 256], ["ic14", 512], ["ic09", 512], ["ic10", 1024]] as const;
-// macOS draws app icons on a 1024-unit grid whose rounded square is 824 units wide. shore.svg's tile,
-// outline included, is 438 of its 512 units, so the .icns renders a wider view of the same drawing.
-const MAC_TILE = 438;
+const MACOS_ICON_GRID = 1024;
+const MACOS_ICON_TILE = 824;
+const SHORE_SVG_TILE = 438;
 
 function render(svg: Uint8Array, size: number, label: string): Uint8Array {
   const result = Bun.spawnSync(["rsvg-convert", "--width", String(size), "--height", String(size)], { stdin: svg, stderr: "inherit" });
@@ -36,7 +35,7 @@ for (const { source, output, size } of RENDERS) {
   await Bun.write(join(ASSETS, output), render(await Bun.file(join(ASSETS, source)).bytes(), size, source));
 }
 
-const side = MAC_TILE * 1024 / 824;
+const side = SHORE_SVG_TILE * MACOS_ICON_GRID / MACOS_ICON_TILE;
 const origin = 256 - side / 2;
 const svg = await Bun.file(join(ASSETS, "shore.svg")).text();
 if (!svg.includes('viewBox="0 0 512 512"')) {

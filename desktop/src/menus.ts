@@ -70,7 +70,6 @@ export function applicationMenuTemplate(closeToTray: boolean, actions: MenuActio
     { role: "togglefullscreen" },
     { role: "toggleDevTools" },
   ];
-  // macOS names the first menu after the app and expects About, Hide and Quit there, and ⌘W in File.
   if (mac) {
     return [
       { role: "appMenu", submenu: [
@@ -106,7 +105,6 @@ export function applicationMenuTemplate(closeToTray: boolean, actions: MenuActio
   ];
 }
 
-// macOS keeps Shore running in the Dock when its window closes, so there is no Close to Tray to offer.
 export function trayMenuTemplate(closeToTray: boolean, actions: MenuActions, mac: boolean): MenuItemConstructorOptions[] {
   const closing: MenuItemConstructorOptions[] = mac ? [] : [closeToTrayItem(closeToTray, actions), { type: "separator" }];
   return [

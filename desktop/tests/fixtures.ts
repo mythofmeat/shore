@@ -24,7 +24,6 @@ export function electronCommand(profile: string, options: LaunchOptions = {}): {
   const address = options.address === undefined ? [] : [`--address=${options.address}`];
   if (process.platform === "darwin") {
     if (process.env["SHORE_DESKTOP_ELECTRON"] === undefined) throw new Error("Point SHORE_DESKTOP_ELECTRON at a built Shore.app/Contents/MacOS/Shore: on macOS the journeys run the app bundle.");
-    // The profile stands in for ~/Library/Application Support, and the mock keychain keeps the login keychain out of it.
     return { command: ELECTRON, args: [`--user-data-dir=${join(profile, "shore-desktop")}`, "--use-mock-keychain", ...address], env: environment() };
   }
   const nested = process.env["SHORE_DESKTOP_E2E_DISPLAY"];

@@ -5,7 +5,6 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const PLAYWRIGHT = join(ROOT, "node_modules", ".bin", "playwright");
 
-// macOS has no private display to give the journeys, so they run in the logged-in session.
 if (process.platform === "darwin") {
   const playwright = Bun.spawn([PLAYWRIGHT, "test", ...process.argv.slice(2)], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
   process.exit(await playwright.exited);

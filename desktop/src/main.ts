@@ -13,7 +13,6 @@ const SHELL_PAGE = join(ROOT, "shell", "shell.html");
 const ICON = join(ROOT, "assets", "shore.png");
 const TRAY_ICON = join(ROOT, "assets", "tray.png");
 const TRAY_UNREAD_ICON = join(ROOT, "assets", "tray-unread.png");
-// The menu bar tints template images to suit its own appearance; the @2x files sit beside them.
 const TRAY_TEMPLATE = join(ROOT, "assets", "tray-template.png");
 const TRAY_UNREAD_TEMPLATE = join(ROOT, "assets", "tray-unread-template.png");
 const ADDRESS_FLAG = "--address=";
@@ -134,10 +133,8 @@ class Desktop {
     window.on("close", (event) => {
       const bounds = window.getNormalBounds();
       this.#save({ window: { width: bounds.width, height: bounds.height, maximized: window.isMaximized() } });
-      // On macOS the Dock brings the window back, so closing it always keeps Shore running.
       if (this.#quitting || (!MAC && (!this.#settings.closeToTray || this.#tray === null))) return;
       event.preventDefault();
-      // A full-screen window hidden in place leaves its empty Space behind on macOS.
       if (MAC && window.isFullScreen()) {
         window.once("leave-full-screen", () => { window.hide(); });
         window.setFullScreen(false);
@@ -153,7 +150,6 @@ class Desktop {
     try {
       const tray = new Tray(trayImage(false));
       tray.setToolTip("Shore");
-      // macOS opens the context menu on any click, so a click can't also toggle the window there.
       if (!MAC) tray.on("click", () => { this.#toggle(); });
       return tray;
     } catch (error) {
