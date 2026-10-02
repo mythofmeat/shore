@@ -10,7 +10,8 @@ concurrency:
 
 jobs:
   claude-review:
-    if: ${{ !github.event.pull_request.draft }}
+    # Release pull requests only move version numbers.
+    if: ${{ !github.event.pull_request.draft && !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
