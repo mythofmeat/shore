@@ -900,11 +900,12 @@ async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionChe
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
   const changed: string[] = [];
   for (const write of latest.values()) {
-    if (write.superseded === true || await stillAsWritten(write)) continue;
+    if (await stillAsWritten(write)) continue;
     changed.push(write.displayPath);
     for (const earlier of checkpoint.loop.writesApplied) {
       if (earlier.resolvedPath === write.resolvedPath) earlier.superseded = true;
     }
+    write.resultingState = await workspaceEntry(write.resolvedPath);
   }
   if (changed.length === 0) return;
   shoreLog.info(

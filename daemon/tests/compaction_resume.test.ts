@@ -442,6 +442,58 @@ test.each([false, true])("a checkpoint resumes over an outside edit and keeps it
   expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("remembered, then reworded\n");
 });
 
+test("a checkpoint notices an outside edit again after a second pause", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-outside-edit-twice-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async (_name, input) => {
+      const edit = input as { path: string; content: string };
+      await writeFile(join(workspace, edit.path), edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const run = async (llm: CompactionLlm) => await compact(
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, llm),
+    { keepRecentTurns: 1 },
+  );
+  const notes = (llm: ReturnType<typeof scripted>) =>
+    llm.requests[0]?.messages.at(-1)?.content.flatMap((b) => b.type === "text" ? [b.text] : []);
+
+  expect((await run(scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "write-fact", name: "edit", input: { path: "memory/fact.md", content: "remembered\n" } },
+    ]),
+    new Error("provider unavailable"),
+  ]))).kind).toBe("paused");
+  await writeFile(join(workspace, "memory/fact.md"), "reworded once\n", "utf8");
+
+  const second = scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "write-other", name: "edit", input: { path: "memory/other.md", content: "elsewhere\n" } },
+    ]),
+    new Error("provider unavailable"),
+  ]);
+  expect((await run(second)).kind).toBe("paused");
+  expect(notes(second)).toEqual([expect.stringContaining("memory/fact.md changed outside it")]);
+  await writeFile(join(workspace, "memory/fact.md"), "reworded twice\n", "utf8");
+
+  const third = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  expect((await run(third)).kind).toBe("compacted");
+  expect(notes(third)).toEqual([expect.stringContaining("memory/fact.md changed outside it")]);
+  expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("reworded twice\n");
+});
+
 test("a checkpoint whose source was edited out from under it is discarded instead of wedging", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-edited-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
