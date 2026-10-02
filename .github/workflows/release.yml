@@ -25,7 +25,6 @@ jobs:
       contents: write
     outputs:
       tag: ${{ steps.bump.outputs.tag }}
-      revision: ${{ steps.bump.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
       - id: bump
@@ -41,6 +40,7 @@ jobs:
             sed -n '/^name = "shore-\(cli\|common\)"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock
             sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
+            sed -n 's/^      tag: "v\(.*\)"$/\1/p' HomebrewFormula/shore.rb
           }
           current=$(versions | sort -u)
           if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
@@ -57,6 +57,7 @@ jobs:
           sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
+          sed -i "s/^      tag: \"v.*\"$/      tag: \"v$version\"/" HomebrewFormula/shore.rb
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
             exit 1
@@ -67,7 +68,6 @@ jobs:
           git tag "v$version"
           git push --atomic origin HEAD "refs/tags/v$version"
           echo "tag=v$version" >>"$GITHUB_OUTPUT"
-          echo "revision=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
   arch:
     needs: version
@@ -108,24 +108,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.version.outputs.tag }}
-
-  homebrew:
-    needs: [version, release]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          repository: mythofmeat/homebrew-tap
-          token: ${{ secrets.TAP_GITHUB_TOKEN }}
-      - env:
-          TAG: ${{ needs.version.outputs.tag }}
-          REVISION: ${{ needs.version.outputs.revision }}
-        run: |
-          scripts/update-formula shore "$TAG" "$REVISION"
-          if git diff --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "shore ${TAG#v}"
-          git push
