@@ -54,23 +54,35 @@ function retainImages(messages: readonly Message[], previous: readonly Message[]
   }) }));
 }
 
+export type FrameScheduler = (callback: () => void) => void;
+
 export class Workspace {
   readonly actions: OperationClient;
   #listeners = new Set<() => void>();
+  #frame: FrameScheduler;
+  #framePending = false;
   #navigation = 0;
   #eventId = 0;
   #historyEpoch = 0;
   #before: number | "active" = "active";
   #loadingEarlier = false;
   #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
-  constructor(readonly connection: BrowserConnection) {
+  constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
+    this.#frame = frame;
     this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
   }
   getSnapshot = (): WorkspaceSnapshot => this.#state;
   subscribe = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
-  #patch(patch: Partial<WorkspaceSnapshot>): void {
+  #patch(patch: Partial<WorkspaceSnapshot>, untilFrame = false): void {
     this.#state = { ...this.#state, ...patch };
+    if (!untilFrame) { this.#notify(); return; }
+    if (this.#framePending) return;
+    this.#framePending = true;
+    this.#frame(() => { if (this.#framePending) this.#notify(); });
+  }
+  #notify(): void {
+    this.#framePending = false;
     for (const listener of this.#listeners) listener();
   }
   report(error: unknown): void { this.#patch({ error: error instanceof Error ? error.message : String(error) }); }
@@ -161,7 +173,7 @@ export class Workspace {
     }
     const metadata = message.type === "stream_end" && message.is_final && next.subagent === null && next.msgId !== null && next.metadata !== null
       ? Object.fromEntries([...Object.entries(this.#state.metadata).filter(([id]) => id !== next.msgId), [next.msgId, next.metadata] as const].slice(-256)) : this.#state.metadata;
-    this.#patch({ metadata, media, mediaLimited, streams: manual && next.subagent === null ? this.#state.streams : [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) });
+    this.#patch({ metadata, media, mediaLimited, streams: manual && next.subagent === null ? this.#state.streams : [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) }, message.type === "stream_chunk");
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {

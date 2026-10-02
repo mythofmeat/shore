@@ -9,7 +9,7 @@ import { checkAttachments, restoredDraft } from "../src/browser/request_forms.ts
 import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/chat/sending.ts";
 import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
 import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
-import { Markdown, safeHref } from "../src/browser/markdown.tsx";
+import { Markdown, markdownBlocks, safeHref, type SettledMarkdown } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
 import { DEFAULT_THEME, THEME_STORAGE_KEY, ThemeStore, isThemeId, storedTheme } from "../src/browser/theme.ts";
@@ -230,6 +230,43 @@ test("markdown renders formatting but never raw HTML, unsafe links or remote ima
   expect(safeHref(" mailto:a@b.c ")).toBe("mailto:a@b.c");
   expect(safeHref("data:text/html,x")).toBeUndefined();
   expect(renderToStaticMarkup(createElement(Markdown, { text: "# Title" }))).toContain("<h3>Title</h3>");
+});
+
+const STREAMED_MARKDOWN = [
+  "Intro paragraph\n\n## Heading\n\nSecond *paragraph* with `code`.\n\n- one\n- two\n\n  continued\n- three\n\n```ts\nconst a = 1;\n\n\nconst b = 2;\n```\n\n> quote\nlazy line\n\n> second quote\n\nLast line",
+  "1. first\n\n2. second\n\n3. third\n\nafter",
+  "- tight\n- list\n\n- now loose\n\nend",
+  "para\n***x\n\npara\n---\n\npara\n===\n\nnext",
+  "    indented\n\n    still code\n\nprose\n\n    more code",
+  "intro\n\n  - item\n\n      not code\n\nend",
+  "See [foo] here.\n\nMore text.\n\n[foo]: https://example.com\n\nThen more.\n\nAnd [foo] again.",
+  "See [bar][] here.\n\nMore text.\n\n> [bar]: https://example.org/b\n\nTail",
+  "<div>\nhtml block\n\n</div>\n\ntext after html",
+  "Line one\r\n\r\nLine two\r\n\r\n- item\r\n- item\r\n\r\nend",
+];
+
+test("streamed markdown renders exactly what the whole text renders at every step", () => {
+  const markup = (blocks: ReturnType<typeof markdownBlocks>["blocks"]) => renderToStaticMarkup(createElement("div", null, blocks));
+  for (const text of STREAMED_MARKDOWN) {
+    for (const size of [1, 2, 5, 13]) {
+      let settled: SettledMarkdown | undefined;
+      for (let end = size; end < text.length + size; end += size) {
+        const shown = text.slice(0, end);
+        const step = markdownBlocks(shown, settled);
+        settled = step.settled;
+        expect({ shown, html: markup(step.blocks) }).toEqual({ shown, html: markup(markdownBlocks(shown).blocks) });
+      }
+    }
+  }
+});
+
+test("streamed markdown parses only what follows the blocks it has settled", () => {
+  const first = markdownBlocks("one\n\ntwo\n\nthr");
+  expect(first.settled.text).toBe("one\n\n");
+  const next = markdownBlocks("one\n\ntwo\n\nthree", first.settled);
+  expect(next.blocks[0]).toBe(first.blocks[0]);
+  expect(next.blocks).toHaveLength(3);
+  expect(renderToStaticMarkup(createElement("div", null, markdownBlocks("two", first.settled).blocks))).toBe("<div><p>two</p></div>");
 });
 
 test("avatar initials respect graphemes and tones are stable per name", () => {

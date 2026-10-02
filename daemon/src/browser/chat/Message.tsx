@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type { CharacterAvatar } from "../../protocol/CharacterAvatar.ts";
 import type { AlternativeListing } from "../../protocol/AlternativeListing.ts";
 import type { Message } from "../../protocol/Message.ts";
@@ -189,7 +189,7 @@ function Swipe({ message, last, busy }: { message: Message; last: boolean; busy:
   </div>;
 }
 
-export function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage }: {
+export const MessageRow = memo(function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage }: {
   message: Message; character: string; avatar: CharacterAvatar | null | undefined; last: boolean; lastUser?: boolean; metadata: StreamMetadata | undefined;
   display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage;
 }) {
@@ -233,4 +233,4 @@ export function MessageRow({ message, character, avatar, last, lastUser = false,
       {mode === "delete" ? <DeleteConfirm message={message} done={() => setMode("view")} /> : null}
     </div>
   </article>;
-}
+});

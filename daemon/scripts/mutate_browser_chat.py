@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Exercise the chat transcript, markdown safety, themes, shortcuts, settings wording and the parity ratchet."""
+"""Exercise the chat transcript and its live updates, markdown safety and streaming, themes, shortcuts, settings wording and the parity ratchet."""
 import sys
 from mutation import run
 
 T = "src/browser/chat/transcript.ts"
 W = "src/browser/workspace.ts"
 M = "src/browser/markdown.tsx"
+R = "src/browser/chat/Message.tsx"
 H = "src/browser/theme.ts"
 S = "src/browser/app/shortcuts.ts"
 F = "src/browser/settings/format.ts"
@@ -42,10 +43,25 @@ MUTANTS = [
     ("the current round drops its text", W, '{ ...round, text: round.text + message.text }', '{ ...round }'),
     ("tool calls are not remembered for the reply", W, 'next.tools = [...next.tools, message.tool_id];', ''),
     ("tool calls are not remembered for the current round", W, 'next.round = { ...next.round, tools: [...next.round.tools, message.tool_id] };', ''),
+    ("streamed chunks render at once instead of once per frame", W, '}, message.type === "stream_chunk");', '}, false);'),
+    ("every streamed chunk asks for a frame of its own", W, '    if (this.#framePending) return;\n', ''),
+    ("a frame already covered by an immediate update renders again", W, 'this.#frame(() => { if (this.#framePending) this.#notify(); });', 'this.#frame(() => { this.#notify(); });'),
+    ("an immediate update leaves its frame pending", W, '    this.#framePending = false;\n    for (const listener', '    for (const listener'),
     ("compaction notice survives its request", T, 'if (phase === null || phase.id < finished) return null;', 'if (phase === null) return null;'),
     ("tool summary shows raw objects", T, 'values.find((value): value is string => typeof value === "string" && value.trim() !== "")', 'values.find((value): value is string => value !== undefined)'),
     ("unsafe link schemes become clickable", M, 'const SAFE_LINK = /^(https?:|mailto:)/i;', 'const SAFE_LINK = /^/i;'),
     ("raw HTML rendered as markup", M, 'case "html": return node.value;', 'case "html": return <span key={key} dangerouslySetInnerHTML={{ __html: node.value }} />;'),
+    ("settled blocks reused for text that no longer starts with them", M, 'const base = text.startsWith(previous.text) ? previous : UNSETTLED;', 'const base = previous;'),
+    ("a later link definition leaves earlier references unlinked", M, 'if (defined && base !== UNSETTLED) return markdownBlocks(text);', ''),
+    ("link definitions inside quotes and lists go unnoticed", M, '("children" in node && node.children.some(defines))', 'false'),
+    ("blocks settle once a link definition is in play", M, 'const start = defined || open < 1 ?', 'const start = open < 1 ?'),
+    ("nothing ever settles", M, 'const start = defined || open < 1 ? undefined :', 'const start = true ? undefined :'),
+    ("a block settles while the line that closed it is still arriving", M, '<= complete);', '<= tail.length);'),
+    ("settled text cut at the block instead of its line", M, 'const cut = tail.lastIndexOf("\\n", start - 1) + 1;', 'const cut = start;'),
+    ("the newest settled block is left out", M, 'blocks: blocks.slice(0, base.blocks.length + open)', 'blocks: blocks.slice(0, base.blocks.length + open - 1)'),
+    ("each render parses the whole text again (NEEDS A SEAM — static rendering keeps nothing between renders)", M, 'markdownBlocks(text, settled.current)', 'markdownBlocks(text)'),
+    ("markdown re-renders when its text is unchanged (NEEDS A SEAM — static rendering has no re-renders)", M, 'export const Markdown = memo(function Markdown(', 'export const Markdown = (function Markdown('),
+    ("saved messages re-render on every streamed frame (NEEDS A SEAM — no test renders a message row, whose module needs a browser location)", R, 'export const MessageRow = memo(function MessageRow(', 'export const MessageRow = (function MessageRow('),
     ("unknown stored theme accepted", H, 'return isThemeId(value) ? value : DEFAULT_THEME;', 'return (value ?? DEFAULT_THEME) as ThemeId;'),
     ("failed theme save reported as saved", H, 'error = "This browser couldn\'t save the theme, so it will reset on reload.";', 'error = "";'),
     ("theme changes from other tabs ignored", H, 'if (theme !== this.#theme) this.#set(theme, "");', ''),
