@@ -88,7 +88,7 @@ export function pathComponents(p: string): string[] {
   return out;
 }
 
-export function isInside(candidate: string, base: string): boolean {
+function isInside(candidate: string, base: string): boolean {
   if (candidate === base) return true;
   const withSep = base.endsWith(sep) ? base : base + sep;
   return candidate.startsWith(withSep);
