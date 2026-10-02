@@ -223,13 +223,13 @@ function inlineSubscriptionBlock(raw: unknown): Record<string, unknown> | undefi
   return block as Record<string, unknown>;
 }
 
-export function inlineSubscriptionIncluded(raw: unknown): boolean | undefined {
+function inlineSubscriptionIncluded(raw: unknown): boolean | undefined {
   const block = inlineSubscriptionBlock(raw);
   if (block === undefined) return undefined;
   return typeof block.included === "boolean" ? block.included : undefined;
 }
 
-export function inlineSubscriptionMultiplier(raw: unknown): number | undefined {
+function inlineSubscriptionMultiplier(raw: unknown): number | undefined {
   const block = inlineSubscriptionBlock(raw);
   if (block === undefined) return undefined;
   const value = block.inputTokenMultiplier;
@@ -382,7 +382,7 @@ async function discoverNanoGpt(
   return { ok: mergeNanoGptRosters(covered.ok, paid.ok) };
 }
 
-export function mergeNanoGptRosters(
+function mergeNanoGptRosters(
   covered: readonly DiscoveredModel[],
   paid: readonly DiscoveredModel[],
 ): DiscoveredModel[] {
@@ -647,7 +647,7 @@ function thinkingType(r: Record<string, unknown>, name: string): boolean | undef
   return isSupported((types as Record<string, unknown>)[name]);
 }
 
-export function normalizeDiscoveredSupport(raw: unknown): DiscoveredModelSupport | undefined {
+function normalizeDiscoveredSupport(raw: unknown): DiscoveredModelSupport | undefined {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const supportedParameters = stringListPreservingEmpty(r.supported_parameters);

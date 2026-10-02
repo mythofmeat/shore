@@ -1,51 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over how an image is reduced before a model sees it (#268).
-
-Every image the model receives goes through one reducer, with settings chosen
-by where the image came from. A reduction that is wrong in either direction is
-silent: too little and the image costs more tokens and bytes than the user
-configured, too much and the model reads detail that is no longer there, or a
-transparent reference sheet arrives with a black background. Every mutant below
-still returns a plausible image.
-
-Six groups.
-
-**The settings.** `[images]` holds the defaults, which reduce exactly as Shore
-always has, and `[images.read]`, `[images.upload]` and `[images.mcp]` override
-them one field at a time. Each range is checked where the config loads.
-
-**The reducer.** `max_edge` and `max_tokens` both apply and the stricter wins.
-An image inside every limit, and already in the requested format, goes as it
-is. `keep` re-encodes the rest as PNG, then WebP, and the other formats convert
-every image; `jpeg` sends WebP for an image that is actually transparent, which
-libwebp decides by looking at the pixels. `max_bytes` is met by lowering
-quality first and size second.
-
-**The request.** Whatever the source, a request only carries what the API
-accepts: 8000px and 5 MB of base64 per image, and 2000px once it carries more
-than 20 images. The Claude Agent SDK builds its own requests, so everything it
-is given stays within 2000px.
-
-**The read tool.** A workspace image arrives at the read settings, and the
-model is told the original and sent size, format and token cost, at the active
-model's tier, and how to ask for the original. `original: true` sends the
-largest image the model accepts. MCP images are reduced at their own settings
-and nothing is said. A file over 5 MiB, up to the 64 MiB read limit, is reduced
-as it is read to the largest image any model is sent, so clients are never
-shown more than 5 MiB. The model's image is made from that copy, and its note
-still describes the file.
-
-**Uploads.** An image a user sends is reduced once, when it arrives, and that
-copy is what every later request carries. An attachment from before this is
-prepared the way it always was, so an old conversation's bytes do not change.
-
-**The estimate.** A reduced copy and a tool result's image are counted at the
-size they are sent.
-
-A mutant is KILLED if the tests below fail with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_image_reduction.py
+"""Mutation pass over reducing an image before a model sees it: per-source
+settings, format and size choices, the cache, and every path that sends
+images.
 """
 import sys
 
@@ -61,7 +17,6 @@ RI = "src/tools/read_image.ts"
 H = "src/handler/images.ts"
 P = "src/engine/prompt.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the settings ----------------------------------------------------------
     *[(f"settings: [images.<source>] {field} is ignored",
@@ -438,7 +393,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

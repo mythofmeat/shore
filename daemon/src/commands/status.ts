@@ -17,7 +17,7 @@ import type { ActivityStatusReport } from "../protocol/ActivityStatusReport.ts";
 
 type Args = OperationInput<"error_log">;
 
-export interface StatusConfigView {
+interface StatusConfigView {
   app: { defaults: { model: string | undefined } };
   dirs: ShoreDirs;
 }
@@ -76,7 +76,7 @@ export function autonomyWire(autonomy: AutonomyStatus, now: number): AutonomySta
   };
 }
 
-export function mcpWire(servers: readonly McpServerStatus[]): McpStatusReport {
+function mcpWire(servers: readonly McpServerStatus[]): McpStatusReport {
   return {
     configured: servers.length,
     connected: servers.filter((server) => server.state === "connected").length,

@@ -20,7 +20,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scope !== "config" || keys.length > 0 || state.status !== "ready") return;
-    workspace.actions.run("config_schema", {}, { remember: false }).then((result) => setKeys(result.schema.filter((entry) => entry.settable && !entry.key.includes("<")).map((entry) => entry.key))).catch(() => setKeys([]));
+    workspace.actions.run("config_schema", {}).then((result) => setKeys(result.schema.filter((entry) => entry.settable && !entry.key.includes("<")).map((entry) => entry.key))).catch(() => setKeys([]));
   }, [scope, keys.length, state.status]);
   const commands = useMemo<Command[]>(() => {
     const run = (work: () => void) => () => { close(); work(); };

@@ -5,7 +5,7 @@ import type { ArchiveLimits } from "../commands/archive.ts";
 
 export type RequestKind = "message" | "regen" | "command" | "cancel";
 
-export const ALL_CHARACTERS_CAPABILITY = "all_characters";
+const ALL_CHARACTERS_CAPABILITY = "all_characters";
 export const REQUEST_LIFECYCLE_CAPABILITY = "request-lifecycle";
 
 export interface ClientInfo {

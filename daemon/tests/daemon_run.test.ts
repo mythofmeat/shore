@@ -1459,7 +1459,7 @@ describe("going down", () => {
     await daemon.done;
     running.length = 0;
 
-    expect(() => store?.rotate(new Date(0), 1)).toThrow();
+    expect(() => store?.expireBefore(new Date(0))).toThrow();
   });
 
   test("a shutdown step that overruns is abandoned rather than waited on", async () => {

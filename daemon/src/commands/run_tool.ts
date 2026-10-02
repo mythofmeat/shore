@@ -22,7 +22,6 @@ import type { ToolRunReport } from "../protocol/ToolRunReport.ts";
 import type { NestedToolCall } from "../protocol/NestedToolCall.ts";
 import type { ImageRef } from "../protocol/ImageRef.ts";
 import type { ToolKind } from "../protocol/ToolKind.ts";
-export type { ToolKind } from "../protocol/ToolKind.ts";
 
 const NESTED_OUTPUT_CHARS = 600;
 

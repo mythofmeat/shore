@@ -1,7 +1,7 @@
 import type { CharacterAvatar } from "../../protocol/CharacterAvatar.ts";
 import { Icon } from "./icons.tsx";
 
-export const AVATAR_TONES = 6;
+const AVATAR_TONES = 6;
 
 export function avatarTone(name: string): number {
   let hash = 0;

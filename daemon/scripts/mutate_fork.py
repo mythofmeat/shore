@@ -1,25 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over branching a thread into its own context (#203).
-
-A fork is a snapshot operation over a live conversation, so almost every
-decision in `engine/fork.ts` is an ordering or a refusal rather than a value
-another test would notice. The child's context is written before its provenance,
-and its provenance before the registry entry, so an interrupted run can only
-ever leave a child that recovery can finish or throw away — never one the user
-can open and find empty. The destination is checked under the same lock that
-publishes it, so two forks racing for one name cannot both win. Versions are
-carried from the source, because a copy that shares no identity with what
-it was copied from is a duplicate rather than a branch, and every downstream
-guarantee — recall showing a shared message once, memory processing running over
-it once — rests on that identity.
-
-None of that shows up in a single successful fork, which is exactly the class of
-hole this harness exists to find.
-
-A mutant is KILLED if `bun test tests/thread_fork.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_fork.py
+"""Mutation pass over forking a thread: what is copied, the child's identity
+and provenance, refusals, the order the child is published in, and recovery.
 """
 import pathlib
 import sys
@@ -28,7 +9,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FORK = ROOT / "src/engine/fork.ts"
 VERSIONS = ROOT / "src/engine/versions.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- what the snapshot takes --------------------------------------------
     ("scope: a turn count is ignored, so every fork copies everything",
@@ -152,7 +132,7 @@ MUTANTS = [
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

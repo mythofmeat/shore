@@ -1,7 +1,7 @@
 import type { LoadedConfig } from "./loader.ts";
 import { serializeConfigValue } from "./serialize.ts";
 
-export const RESTART_REQUIRED_PATHS = [
+const RESTART_REQUIRED_PATHS = [
   "daemon",
   "notifications",
   "connections",

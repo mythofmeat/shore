@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { Icon } from "./icons.tsx";
 
-export interface Toast { id: number; text: string; tone: "info" | "error" }
+interface Toast { id: number; text: string; tone: "info" | "error" }
 
 class ToastStore {
   #items: Toast[] = [];

@@ -85,21 +85,11 @@ interface MutationCase {
 }
 
 const mutations: MutationCase[] = [
-  { name: "clear", run: async (store) => await store.clear() },
   {
     name: "append",
     run: async (store) => await store.append(message("failed-append", "user", "lost", 10)),
   },
-  {
-    name: "insert by timestamp",
-    run: async (store) =>
-      await store.insertByTimestamp(message("failed-insert", "user", "lost", 3)),
-  },
   { name: "edit", run: async (store) => await store.edit("u1", "failed edit") },
-  {
-    name: "truncate after the last user turn",
-    run: async (store) => await store.truncateAfterLastUserTurn(),
-  },
   {
     name: "replace after the last user turn",
     run: async (store) =>
@@ -107,10 +97,7 @@ const mutations: MutationCase[] = [
         message("failed-replacement", "assistant", "lost", 10),
       ]),
   },
-  { name: "delete", run: async (store) => await store.delete("a1") },
   { name: "delete all", run: async (store) => await store.deleteAll(["a1", "u2"]) },
-  { name: "set alternate metadata", run: async (store) => await store.setAlt("a1", 1, 3) },
-  { name: "add alternate candidate", run: async (store) => await store.addAltCandidate("a1") },
   { name: "select alternate", run: async (store) => await store.selectAlt("a2", 1) },
 ];
 

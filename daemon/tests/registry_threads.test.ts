@@ -15,10 +15,11 @@ import { MAIN_THREAD, characterThreadsIndex } from "../src/config/dirs.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import { ThreadError } from "../src/engine/threads.ts";
+import { ThreadError, readThreadsIndex, writeThreadsIndex } from "../src/engine/threads.ts";
 import { ForkBusy } from "../src/engine/fork.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 import { buildSessionHistorySnapshot } from "../src/swp/handshake.ts";
+import { required } from "../src/util/required.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
@@ -109,7 +110,6 @@ describe("the registry as the thread authority", () => {
     expect(scratch.thread).toBe("scratch");
     expect(scratch.conversationDir).toBe(join(dataDir, "aria", "threads", "scratch"));
     expect(home.conversationDir).toBe(join(dataDir, "aria", "threads", MAIN_THREAD));
-    expect(scratch.characterDir).toBe(home.characterDir);
   });
 
   test("moving home changes which engine an unqualified call returns", async () => {
@@ -148,15 +148,11 @@ describe("the registry as the thread authority", () => {
     expect(registry.homeThread("aria")).toBe(MAIN_THREAD);
   });
 
-  test("labels and last-active are visible through the registry", async () => {
+  test("labels are visible through the registry", async () => {
     const { registry } = await registryWith("aria");
     await registry.createThread("aria", "scratch", { label: "Scratch" });
 
     expect(registry.listThreads("aria")[1]?.label).toBe("Scratch");
-    expect(registry.listThreads("aria")[1]?.last_active).toBeUndefined();
-
-    await registry.touchThread("aria", "scratch");
-    expect(registry.listThreads("aria")[1]?.last_active).toBeDefined();
   });
 
   test("forking through the registry publishes the child and caches its engine apart", async () => {
@@ -235,6 +231,19 @@ describe("the registry as the thread authority", () => {
     expect(registry.listThreads("nova")).toEqual([]);
     expect(registry.threads("aria")?.threads.length).toBe(1);
   });
+
+  test("a thread dropped from the stored index is refused after a reload, though its engine was cached", async () => {
+    const { registry, dataDir, loaded } = await registryWith("aria");
+    await registry.createThread("aria", "scratch");
+    await registry.getOrCreate("aria", "scratch");
+
+    const index = required(await readThreadsIndex(dataDir, "aria"));
+    await writeThreadsIndex(dataDir, "aria", { ...index, threads: index.threads.filter((t) => t.id !== "scratch") });
+    await registry.reloadRuntimeState(loaded);
+
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD]);
+    expect(await outcomeOf(registry.getOrCreate("aria", "scratch"))).toThrow(ThreadError);
+  });
 });
 
 describe("concurrent thread-index mutations", () => {
@@ -299,22 +308,21 @@ describe("concurrent thread-index mutations", () => {
     );
   });
 
-  test("the in-memory index matches disk after concurrent touches", async () => {
+  test("the in-memory index matches disk after concurrent updates", async () => {
     const { registry, dataDir } = await registryWith("aria");
     await registry.createThread("aria", "alpha");
 
     await Promise.all([
-      registry.touchThread("aria", "alpha"),
-      registry.touchThread("aria", MAIN_THREAD),
       registry.setThreadLabel("aria", "alpha", "labelled"),
+      registry.setThreadLabel("aria", MAIN_THREAD, "home"),
     ]);
 
     const onDisk = JSON.parse(
       readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
-    ) as { threads: Array<{ id: string; label?: string; last_active?: string }> };
+    ) as { threads: Array<{ id: string; label?: string }> };
 
     expect(onDisk.threads.find((t) => t.id === "alpha")?.label).toBe("labelled");
-    expect(onDisk.threads.every((t) => t.last_active !== undefined)).toBe(true);
+    expect(onDisk.threads.find((t) => t.id === MAIN_THREAD)?.label).toBe("home");
     expect(registry.threads("aria")).toEqual(onDisk as never);
   });
 });

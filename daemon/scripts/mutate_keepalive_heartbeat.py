@@ -1,48 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over a heartbeat's refresh of the chat keepalive (#251).
-
-A same-model heartbeat sends the chat's tools, system prompt and messages, with
-its own prompt in a transient tail after the last cache breakpoint, so its first
-round reads the entry the keepalive pings, and that read renews the entry's TTL.
-The keepalive is told, and moves its next ping a full interval out. Otherwise
-the ping goes out on the old schedule and pays to read an entry the heartbeat
-refreshed minutes before.
-
-Every mutant below still looks like a working keepalive. Four groups.
-
-**Too eager.** A heartbeat that did not read the entry moves the ping anyway,
-and the entry expires behind a ping that now comes too late. That covers later
-rounds of the heartbeat's own tool loop, which read its own entries, a read
-that stopped at the system prompt, another model, provider or thread, and
-claude_agent, whose usage sums every request of a CLI session kept apart from
-chat. A prefix rebuilt from disk was never measured, so nothing covers it.
-
-**Too generous.** The refresh is booked as activity, which is #222 over again.
-It moves `lastActiveAt` and so the idle ceiling, it gives the ping count back,
-or its fingerprint is recorded and every later ping skips as stale. Or it
-revives a schedule that a cold ping stopped.
-
-**Mismeasured.** The armed size is what the turn's last call left cached: its
-read plus its write, which is exactly what the first ping reads. The turn's
-usage summed over its rounds is far larger once it ran a tool, so no heartbeat
-would ever cover it. The read alone is smaller, so a heartbeat that stopped
-short of the turn's new tail would count.
-
-**Lost on restart.** The persisted schedule must carry the refresh. Restoring
-refuses a schedule whose last warm is an interval old, so a restart past the
-old deadline would drop one that is still warm.
-
-A mutant is KILLED if `bun test` over TESTS fails with it applied.
-
-This is **19/19** on the first pass.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_keepalive_heartbeat.py
+"""Mutation pass over a heartbeat refreshing the chat keepalive: which
+heartbeats count, the cache size they arm, and the ping schedule they move.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 K = "src/cache/keepalive.ts"
 S = "src/cache/schedule.ts"
 L = "src/cache/last_request.ts"
@@ -59,14 +20,13 @@ REFRESH_GUARD = '  if (heartbeat.sdk === "claude_agent" || haltKey(heartbeat) !=
 COVERED = "  return cached > 0 && usage.cache_read_tokens >= cached;"
 ARMED_SIZE = "    cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the signal ------------------------------------------------------------
     ("observe: a heartbeat is ignored again, so its refresh never moves the ping",
      K,
      "      this.#observeHeartbeat(character, usage, identity);\n      return;",
      "      return;"),
-    ("observe: a heartbeat is recorded like a real call, the #222 regression",
+    ("observe: a heartbeat is recorded like a real call",
      K,
      '    if (callType === "heartbeat") {\n      this.#observeHeartbeat(character, usage, identity);\n      return;\n    }\n',
      ""),
@@ -147,7 +107,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

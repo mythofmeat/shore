@@ -6,8 +6,8 @@ regeneration overwrites the change.
 
 Per issue #12: Rust stays canonical for the wire schema because the TUI and the CLI stay Rust
 permanently, so the Rust types have to exist regardless. `client/shore-common/tests/golden_json.rs`
-(48 tests, hand-written JSON for every message) remains the behavioural lock underneath — these
-bindings describe the shape, that file pins the bytes.
+remains the behavioural lock underneath — these bindings describe the shape, that file pins the
+bytes.
 
 ## Regenerating
 
@@ -21,14 +21,9 @@ No environment variable, and that is deliberate. ts-rs resolves `export_to` agai
 relative path (`../../../daemon/src/protocol/`) instead. Setting the destination in the
 derive rather than the environment means the *only* place these can land is this directory.
 
-The first version of this did use `TS_RS_EXPORT_DIR`, and it was a trap: the export tests are
-ordinary `#[test]`s, so any plain `cargo test -p shore-common` — running the suite, checking one
-unrelated case — silently wrote a second, drifting copy of all 38 files into
-`client/shore-common/bindings/`. One of those copies got committed before anyone noticed.
-
 ## Deliberate type overrides
 
-Four shapes need `#[ts(...)]` help in the Rust, and all four are load-bearing:
+These shapes need `#[ts(...)]` help in the Rust:
 
 | Rust | TypeScript | why |
 |---|---|---|

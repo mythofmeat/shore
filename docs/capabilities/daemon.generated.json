@@ -3336,7 +3336,6 @@
       }
     }
   ],
-  "legacy_operations": [],
   "protocol": {
     "ActivatedHeartbeat": "{ state: AutonomyHeartbeatState, next_wake_at?: string, seconds_until_wake?: number, }",
     "ActivityHourClass": "\"peak\" | \"trough\" | \"normal\"",
@@ -3561,7 +3560,6 @@
     "Shutdown": "Record<symbol, never>",
     "StaticModelSource": "\"static\"",
     "StatusReport": "{ character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, index: WorkspaceIndexResult | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, sections: Array<string>, }",
-    "StatusSection": "\"tokens\" | \"autonomy\" | \"activity\" | \"index\" | \"history_index\" | \"mcp\"",
     "StoredSubagentTrace": "{ ts: string, subagent: string, parent_tool_use_id: string, rid?: string, model: string, messages: Array<Message>, messages_expired?: boolean, result?: string, error?: string, }",
     "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",

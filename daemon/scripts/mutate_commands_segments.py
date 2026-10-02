@@ -1,27 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over segment inspection and `clear` (#12).
-
-Every writer of a segment has keyed it on `archiveKey(character, thread)` since
-stage 03 — compaction, deep archive, `clear` itself. The reader did not. So
-`shore segments` in a side thread listed home's segments, `shore segments
-exclude 2` excluded home's segment 2, and `clear` archived the side thread and
-then reported home's last segment back as the one it had just made. None of that
-throws and none of it looks wrong: the numbers are plausible, the timestamps are
-real, they just belong to a different conversation.
-
-That is the shape of every mutant here. There is no crash to catch and no error
-message to match — the only evidence a test can hold is that two threads with a
-segment at the same index stay told apart. So the pass wants two of them, and it
-asserts on which one came back.
-
-The second group is `clear`'s tail. Archiving under one key and reading back
-under another is two separate decisions in two places, and the second one is
-where the misreport lived.
-
-A mutant is KILLED if `bun test tests/segments.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_segments.py
+"""Mutation pass over `segments` and `clear`: every segment read is keyed on
+the thread, not only the character.
 """
 import pathlib
 import sys
@@ -29,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEGMENTS = ROOT / "src/commands/segments.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- which conversation's segments these are ------------------------------
     ("scope: the reader keys on the character, so a side thread lists home's segments",
@@ -95,7 +73,7 @@ MUTANTS = [
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

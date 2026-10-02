@@ -1,60 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the generation setup phase (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked. This module is two
-functions with quite different risk: `resolveGenerationModel` is a four-way
-fallback chain where every branch produces *a* model, so a wrong branch is
-silent; `buildGenerationRequest` is assembly, where the failures are wrong
-inputs threaded to the right places.
-
-The chain is the dangerous one. Falling through to the first catalog model when
-the user's `defaults.model` is misspelled would look like it worked, on a model
-they did not ask for and are paying for.
-
-A mutant is KILLED if `bun test tests/setup.test.ts` fails with it
-applied; a survivor means either the fixture cannot see that decision, or the
-code is equivalent under it.
-
-The first pass was 26/33; the fourth is 25/26, over 26 mutants rather than the
-original 33. Five of the seven first-pass
-survivors were real gaps, and again the shape was "reachable but invisible":
-
-- Nothing exercised model *discovery* at all — every case resolved a static
-  catalog entry, and `findModel` succeeds before the hidden check or the cache
-  ever come up. Two cases now register a provider with `discovery.ignore` and a
-  cache file behind it, which is what makes `includeHidden` mean anything.
-- The cache directory needed a second round on its own. A cached record and a
-  bare provider entry build the *same* model unless the record carries upstream
-  metadata, so the cached ids now have a `context_length` and a
-  `max_output_tokens`. That is also why the record needs `discovered_at`:
-  without it both sides swallow the file as unparseable and quietly resolve off
-  the provider entry, which looks identical from the outside.
-- Every case ran against a model with no `top_p` and no `reasoning_effort`, so
-  "apply the override unconditionally" and "leave the model's own alone" agreed
-  on `undefined`. Three cases now use a model carrying both.
-- Nothing lived at the character-specific data path that did not also live at
-  its parent, so pointing the lookup one level up produced the same prompt. An
-  `AGENTS.md` under the character's own `active_prompt` now separates them.
-
-The one survivor is a true equivalent: `applySamplerOverlay` copies the model
-and then writes only the fields the overlay sets, so applying an empty overlay
-returns a value-identical model. The Rust's short-circuit saves a clone, not a
-behaviour, and is kept because it says which of the two branches is the
-interesting one.
-
-Seven mutants over the per-message `overrides` field are gone. 9d3f6dac deleted
-the field from the wire along with the `shore send --temperature/--top-p
-/--thinking` flags that were its only writer, so `withOverrides` and the branch
-that called it no longer exist to mutate. The durable equivalents live under
-`shore model setting`, and `mutate_commands_model_settings.py` covers them.
-
-The request now also reports the message budget its prompt was trimmed to,
-which is what lets a turn compact before the next prompt drops anything (#295).
-With that mutant the pass is 27/28, and the survivor is still the equivalent
-above.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_handler_setup.py
+"""Mutation pass over the generation setup phase: `resolveGenerationModel`'s
+fallback chain and `buildGenerationRequest`'s assembly.
 """
 import pathlib
 import sys
@@ -62,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SETUP = ROOT / "src/handler/setup.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- the resolution chain ---------------------------------------------
     ("chain: the pre-resolved model is ignored",
@@ -181,7 +126,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

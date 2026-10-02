@@ -292,14 +292,6 @@ impl SWPConnection {
         Ok(msg)
     }
 
-    pub async fn send_message<T: Into<String>>(
-        &mut self,
-        text: T,
-        stream: bool,
-    ) -> Result<Option<String>> {
-        self.send_message_with_images(text, stream, vec![]).await
-    }
-
     pub async fn send_message_with_images<T: Into<String>>(
         &mut self,
         text: T,

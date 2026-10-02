@@ -27,7 +27,7 @@ import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { 
 
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
 
-export const MEMORY_INDEX_FILE = "MEMORY.md";
+const MEMORY_INDEX_FILE = "MEMORY.md";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 const stateFile = (thread: string, file: string): string => thread === MAIN_THREAD ? file : `threads/${thread}/${file}`;

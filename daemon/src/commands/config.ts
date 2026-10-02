@@ -10,7 +10,6 @@ import {
   loadCharacterConfig,
   loadConfig,
   modelRefResolves,
-  WEB_SEARCH_REMOVED,
   type LoadedConfig,
 } from "../config/loader.ts";
 import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
@@ -97,8 +96,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
 
   const warnings: string[] = [];
   for (const t of cfg.enabled_tools) {
-    if (t === "web_search") warnings.push(WEB_SEARCH_REMOVED);
-    else if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);
+    if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);
   }
   for (const server of cfg.enabled_mcp) {
     if (!ctx.config.app.mcp.has(server)) warnings.push(`tools.mcp references MCP server '${server}' with no [mcp.${server}] definition`);
@@ -110,8 +108,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
   }
   for (const name of [...subagents.keys()].sort()) {
     for (const t of required(subagents.get(name)).tools) {
-      if (t === "web_search") warnings.push(`subagent '${name}': ${WEB_SEARCH_REMOVED}`);
-      else if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
+      if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
     }
   }
 
@@ -214,7 +211,7 @@ export function reportedSections(ctx: ConfigContext): string[] {
   return Object.keys(reportedConfig(ctx));
 }
 
-export function canonicalKey(key: string): string {
+function canonicalKey(key: string): string {
   try { return formatConfigPath(parseConfigPath(key)); }
   catch { throw notFound(`Config section not found: ${key}`); }
 }

@@ -7,7 +7,7 @@ import { reconcileSessions, retireSession } from "./agent_session_retention.ts";
 
 export const SESSION_KEY_SEPARATOR = "\u0000";
 
-export const SESSION_BOOK_FILE = "claude_agent_sessions.json";
+const SESSION_BOOK_FILE = "claude_agent_sessions.json";
 
 export interface DeliveredEntry {
   hash: string;

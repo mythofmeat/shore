@@ -35,10 +35,6 @@ export class RoomBindings {
     return this.#roomToCharacter.get(roomId);
   }
 
-  roomForCharacter(character: string): string | undefined {
-    return this.#characterToRoom.get(character);
-  }
-
   isBound(roomId: string): boolean {
     return this.#roomToCharacter.has(roomId);
   }

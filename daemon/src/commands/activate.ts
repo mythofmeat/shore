@@ -42,7 +42,7 @@ function scheduled(at: number, intervalMs: number, now: number): ScheduledPing {
   };
 }
 
-export async function activateKeepalive(
+async function activateKeepalive(
   character: string,
   ctx: SessionActivateContext,
 ): Promise<KeepaliveActivation> {

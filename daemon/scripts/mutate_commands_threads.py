@@ -1,41 +1,15 @@
 #!/usr/bin/env python3
-"""Mutation pass over what `shore thread` tells you (#12).
-
-Two numbers were added to the listing in stage 05, and they are the kind that
-get believed. **Turns** is how far along a conversation is, which is what a
-reader uses to decide which thread is the real one. **Warm** is which thread
-holds the prompt-cache slot, which is what a reader uses to decide whether
-switching costs money — a turn in a cold thread pays to rebuild a prefix, and
-the marker is the only place that is ever said.
-
-Both fail silently in the same direction: a wrong count is still a count, and a
-warm marker on the wrong row still reads as an answer. So the mutants are almost
-all attribution — the right shape of value against the wrong thread. Nothing
-here throws.
-
-The third group is the field's absence. `turns` is optional on the wire so an
-older daemon is not made to lie, and the distinction between "counted, and it is
-zero" and "did not count" is carried by the field being missing rather than
-zero. A mutant that defaults it to `0` makes every uncounted thread claim to be
-empty, which is worse than saying nothing.
-
-A mutant is KILLED if
-`bun test tests/thread_commands.test.ts tests/keepalive_service.test.ts` fails
-with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_threads.py
+"""Mutation pass over the `thread` listing: each thread's own turn count, and
+which thread holds the warm cache slot.
 """
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 T = "src/commands/threads.ts"
 K = "src/cache/keepalive.ts"
 
 TESTS = ["tests/thread_commands.test.ts", "tests/keepalive_service.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- how far along each thread is ----------------------------------------
     ("turns: every row reports the count of the thread the session is in",
@@ -110,7 +84,7 @@ MUTANTS = [
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

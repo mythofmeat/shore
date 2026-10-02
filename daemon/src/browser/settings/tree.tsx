@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { fieldLabel } from "../ui/Field.tsx";
 
-export function scalarText(value: unknown): string | undefined {
+function scalarText(value: unknown): string | undefined {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string") {
     if (value === "") return "(empty)";

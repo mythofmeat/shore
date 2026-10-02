@@ -20,10 +20,6 @@ use super::{
 };
 use crate::terminal_images;
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "stream rendering state tracks independent cursor/channel flags"
-)]
 struct ChunkState {
     was_thinking: bool,
     has_emitted: bool,

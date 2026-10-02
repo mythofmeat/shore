@@ -1057,11 +1057,6 @@ wire_types! {
         pub cache_write_tokens: u64,
     }
 
-
-
-    #[serde(rename_all = "snake_case")]
-    pub enum StatusSection { Tokens, Autonomy, Activity, Index, HistoryIndex, Mcp }
-
     pub struct StatusReport {
         pub character: String,
         pub keepalive_halts: Vec<KeepaliveHaltReport>,

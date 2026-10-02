@@ -2,7 +2,6 @@
 
 Shore's daemon can serve an optional browser client: a chat workspace for your characters and
 conversations, with settings and advanced tools in a separate Settings page. It is off by default.
-The design and rebuild plan are in [WEB_UI_V3_PLAN.md](WEB_UI_V3_PLAN.md).
 
 ## Enabling it
 
@@ -14,8 +13,8 @@ bind_addr = "127.0.0.1:7340"
 
 Restart the daemon, open `http://127.0.0.1:7340`, and connect with the same access token the CLI
 uses. Press `?` for keyboard shortcuts or Ctrl/⌘+K for the command palette. Themes and display
-options are under Settings → Appearance. Every web setting requires a daemon restart. Disconnect (Settings → Disconnect) ends the
-browser session; it does not remove drafts saved in that browser.
+options are under Settings → Appearance. Disconnect (Settings → Disconnect) ends the browser
+session; it does not remove drafts saved in that browser.
 
 Sending clears the message box at once, but the browser keeps the text and images until the daemon
 confirms it saved the message. If the page closes or reloads first, the next page asks the daemon
@@ -76,7 +75,6 @@ the CLI/TUI protocol and cannot serve a browser.
 
 `public_origin` is optional proxy configuration and does not prevent direct access through another
 hostname or port. Remove `tls_cert` and `tls_key` if switching an existing HTTPS listener to HTTP.
-All web configuration changes require a daemon restart.
 
 ## Desktop app
 
@@ -145,7 +143,8 @@ it is for SWP envelopes and events (`daemon/src/protocol/README.md`):
   `drafts.ts`, …) is framework-free; the React UI lives in `app/`, `chat/`, `sidebar/`,
   `settings/` and `ui/`.
 - Styles: `daemon/src/browser/styles/`. Components use design tokens only; colors and fonts live in
-  `styles/themes/`. See the plan for the theme rules.
+  `styles/themes/`. A theme overrides tokens under `[data-theme="<id>"]` and may add rules scoped to
+  it, but never changes markup. `tests/browser_styles.test.ts` rejects raw colors anywhere else.
 - Build: `bun run browser:build` regenerates `daemon/src/web/assets.generated.ts`, which the daemon
   embeds. Rebuild and restart the daemon to pick up UI changes.
 - Tests: `bun test tests/browser_*.test.ts` for units, `bun run test:browser` for Playwright. CI

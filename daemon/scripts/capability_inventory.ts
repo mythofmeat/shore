@@ -106,17 +106,14 @@ export async function currentDaemonInventory(): Promise<object> {
   assertInventoryCurrent(registryInventory(requests, "coreRequests"), requestCatalogue().map((request) => request.name).sort());
   assertRegisteredDispatch(dispatch);
   assertInventoryCurrent(registryInventory(registry), commandCatalogue().map((operation) => operation.name).sort());
-  const legacy = dispatchInventory(dispatch);
-  const operations = { ...legacy };
+  const operations: Record<string, string[]> = {};
   for (const operation of commandCatalogue()) {
-    if (Object.hasOwn(legacy, operation.name)) throw new Error(`Operation still has a legacy dispatch path: ${operation.name}`);
     operations[operation.name] = ["registry", `scope:${operation.scope}`];
   }
   return {
     format: 1,
     operations: Object.fromEntries(Object.entries(operations).sort(([a], [b]) => a.localeCompare(b))),
     requests: requestCatalogue().map((request) => ({ name: request.name, input: request.input, output: request.output })),
-    legacy_operations: Object.keys(legacy),
     protocol: protocolInventory(protocol),
   };
 }

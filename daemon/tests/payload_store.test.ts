@@ -265,7 +265,7 @@ describe("payload garbage collection", () => {
     record(store, "old", new Date("2026-01-01T00:00:00Z"), shared);
     record(store, "new", new Date("2026-06-01T00:00:00Z"), [...shared, turn("user", "later")]);
 
-    store.rotate(new Date("2026-03-01T00:00:00Z"), 1_000_000_000);
+    store.expireBefore(new Date("2026-03-01T00:00:00Z"));
 
     expect(store.callCount()).toBe(1);
     const survivor = required(store.queryCalls({ limit: 1 })[0]);
@@ -278,7 +278,7 @@ describe("payload garbage collection", () => {
     record(store, "old", new Date("2026-01-01T00:00:00Z"), [turn("user", "y".repeat(2000))]);
     const before = store.blobCount();
 
-    store.rotate(new Date("2026-03-01T00:00:00Z"), 1_000_000_000);
+    store.expireBefore(new Date("2026-03-01T00:00:00Z"));
 
     expect(store.callCount()).toBe(0);
     expect(before).toBeGreaterThan(0);

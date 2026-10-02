@@ -13,7 +13,7 @@ const field = (internal: string, canonical: string): ConfigField => ({
   internal: internal.split("."), canonical: canonical.split("."),
 });
 
-export const CONFIG_FIELDS: readonly ConfigField[] = [
+const CONFIG_FIELDS: readonly ConfigField[] = [
   field("daemon.addr", "daemon.listen_addr"),
   field("cache.forensics", "daemon.cache_forensics"),
   field("defaults.model", "chat.model"),
@@ -67,7 +67,7 @@ export const BUDGET_FIELDS: readonly ConfigField[] = Object.entries({
   usage_kind: "usage_kinds", allow_compaction_over_budget: "allow_compaction",
 }).map(([old, key]) => field(old, key));
 
-export const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
+const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
   budget_tokens: "reasoning_budget_tokens",
   replay_prior_thinking: "reasoning_replay", max_tool_iterations: "max_tool_rounds",
   openrouter_provider: "openrouter_routing", gemini_generation: "gemini_thinking_mode",
@@ -107,7 +107,7 @@ export function parseConfigPath(key: string): string[] {
   return path;
 }
 
-export function valueAt(root: unknown, path: ConfigPath): unknown {
+function valueAt(root: unknown, path: ConfigPath): unknown {
   let current = root;
   for (const segment of path) {
     if (typeof current !== "object" || current === null) return undefined;
@@ -116,7 +116,7 @@ export function valueAt(root: unknown, path: ConfigPath): unknown {
   return current;
 }
 
-export function putAt(root: ConfigTable, path: ConfigPath, value: unknown): void {
+function putAt(root: ConfigTable, path: ConfigPath, value: unknown): void {
   let current = root;
   for (const segment of path.slice(0, -1)) {
     const child = current[segment];
@@ -128,7 +128,7 @@ export function putAt(root: ConfigTable, path: ConfigPath, value: unknown): void
   if (last !== undefined) current[last] = value;
 }
 
-export function removeAt(root: ConfigTable, path: ConfigPath, prune = true): void {
+function removeAt(root: ConfigTable, path: ConfigPath, prune = true): void {
   const [head, ...tail] = path;
   if (head === undefined) return;
   if (tail.length === 0) { delete root[head]; return; }
@@ -138,7 +138,7 @@ export function removeAt(root: ConfigTable, path: ConfigPath, prune = true): voi
   if (prune && isConfigTable(child) && Object.keys(child).length === 0) delete root[head];
 }
 
-export function matchingPaths(root: unknown, pattern: ConfigPath, prefix: string[] = []): string[][] {
+function matchingPaths(root: unknown, pattern: ConfigPath, prefix: string[] = []): string[][] {
   if (pattern.length === 0) return root === undefined ? [] : [prefix];
   if (typeof root !== "object" || root === null) return [];
   const [head, ...tail] = pattern;
@@ -146,7 +146,7 @@ export function matchingPaths(root: unknown, pattern: ConfigPath, prefix: string
   return keys.flatMap((key) => matchingPaths((root as ConfigTable)[key], tail, [...prefix, key]));
 }
 
-export function translatePath(path: ConfigPath, from: ConfigPath, to: ConfigPath): string[] | undefined {
+function translatePath(path: ConfigPath, from: ConfigPath, to: ConfigPath): string[] | undefined {
   if (path.length < from.length || !from.every((part, i) => part === "*" || part === path[i])) return undefined;
   const captures = from.flatMap((part, i) => part === "*" ? [path[i] as string] : []);
   let index = 0;
@@ -310,7 +310,7 @@ export function publicConfig(input: ConfigTable): ConfigTable {
   return out;
 }
 
-export function publicSettings(input: ConfigTable): ConfigTable {
+function publicSettings(input: ConfigTable): ConfigTable {
   const out = { ...input };
   for (const rule of SETTING_FIELDS) {
     const old = rule.internal[0] as string;

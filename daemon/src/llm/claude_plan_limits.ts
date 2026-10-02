@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { claudePlanInstant, type ClaudePlanPoll, type ClaudePlanReading } from "../ledger/plan_limits.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./providers/claude_code.ts";
 
-export const CLAUDE_PLAN_FETCH_TIMEOUT_MS = 15_000;
+const CLAUDE_PLAN_FETCH_TIMEOUT_MS = 15_000;
 
 type UsageMethod = "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET";
 

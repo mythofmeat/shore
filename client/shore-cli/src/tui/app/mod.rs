@@ -809,14 +809,12 @@ impl App {
 
     pub(crate) fn stream_push_tool_result(
         &mut self,
-        tool_id: String,
         tool_name: String,
         output: String,
         images: Vec<ImageRef>,
         is_error: bool,
     ) {
         self.ensure_streaming_turn().blocks.push(Block::ToolResult {
-            tool_id,
             tool_name,
             output,
             images,
@@ -2841,10 +2839,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        clippy::float_cmp,
-        reason = "level() selects a stored percent_used without arithmetic, so these are the fixture's own values"
-    )]
     fn focused_budget_honors_scope_and_name_pins() {
         let mut app = App {
             usage_budgets: vec![

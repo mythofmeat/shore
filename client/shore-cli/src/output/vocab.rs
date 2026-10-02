@@ -560,7 +560,6 @@ fn scale_u64(value: f64) -> u64 {
 #[expect(
     clippy::float_arithmetic,
     clippy::as_conversions,
-    clippy::cast_precision_loss,
     reason = "token counts are rendered as human-scaled decimals"
 )]
 pub(crate) fn count(value: u64) -> String {

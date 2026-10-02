@@ -31,9 +31,7 @@ Thumbs.db
 
 **/pkg/
 *.pkg.tar.zst
-*.apk
 contrib/arch/src/
-contrib/arch/shore/
 out/
 
 # Environment / secrets
@@ -47,7 +45,6 @@ out/
 !daemon/tests/fixtures/web-tls/cert.pem
 !daemon/tests/fixtures/web-tls/key.pem
 *.key
-test_char
 worktree/
 .worktree/
 .worktrees/

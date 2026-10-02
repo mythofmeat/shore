@@ -1,14 +1,12 @@
 import { expect, test } from "bun:test";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { parseToolArgs } from "../src/llm/tool_args.ts";
-import { parseDiceNotation } from "../src/tools/basic.ts";
 import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
 import { join } from "node:path";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { McpClient } from "../src/mcp/client.ts";
 import { handleBash } from "../src/tools/bash.ts";
 import { runProcess } from "../src/tools/workspace.ts";
-import { executeDiceRoll, MAX_DICE_COUNT } from "../src/tools/basic.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const TOOL = "mcp__audit__optional";
@@ -76,12 +74,6 @@ test("cancelling generation reaches an in-flight MCP tool", async () => {
   expect(failure).toBeDefined();
   expect(observed).toBeDefined();
   expect(observed?.aborted).toBe(true);
-});
-
-test("dice rejects counts that would block the daemon", () => {
-  expect(() => parseDiceNotation("4294967295d6")).toThrow();
-  expect(() => executeDiceRoll({ count: MAX_DICE_COUNT + 1, sides: 6, modifier: 0 })).toThrow();
-  expect(executeDiceRoll(parseDiceNotation(`${MAX_DICE_COUNT}d1`)).rolls).toHaveLength(MAX_DICE_COUNT);
 });
 
 test("process cancellation kills and reaps a child that ignores SIGTERM", async () => {

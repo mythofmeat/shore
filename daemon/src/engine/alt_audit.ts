@@ -1,6 +1,6 @@
 import type { ContentBlock, Message, MessageAlternative } from "./types.ts";
 
-export type AlternativeDefectKind =
+type AlternativeDefectKind =
   | "empty"
   | "thinking_lost"
   | "thinking_without_signature";

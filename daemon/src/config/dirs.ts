@@ -229,22 +229,6 @@ function readdirOrEmpty(dir: string): string[] {
   }
 }
 
-export function loadCharacterDefinition(
-  config: string,
-  name: string,
-  workspaceDir?: string,
-): string | undefined {
-  return readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir));
-}
-
-export function resolveUserDefinition(
-  config: string,
-  name: string,
-  workspaceDir?: string,
-): string | undefined {
-  return readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceDir));
-}
-
 export function resolvePromptTemplate(
   config: string,
   characterName: string,

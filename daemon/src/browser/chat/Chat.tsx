@@ -20,7 +20,7 @@ function SidebarToggle({ open, mobile, toggle }: { open: boolean; mobile: boolea
   return <IconButton icon={mobile ? "menu" : "panel"} label={mobile ? "Open sidebar" : "Expand sidebar"} onClick={toggle} />;
 }
 
-export function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
+function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
   const [dialog, setDialog] = useState<ConversationDialog | "model" | "gallery" | null>(null);
   const { listing, refresh } = useModelListing(state);
   useEffect(() => {

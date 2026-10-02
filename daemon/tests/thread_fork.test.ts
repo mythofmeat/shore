@@ -367,7 +367,7 @@ describe("forking a thread", () => {
 
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     try {
-      expect(store.forkOf("ada", result.fork.fork_id)).toMatchObject({
+      expect(store.threadForks("ada").find((fork) => fork.fork_id === result.fork.fork_id)).toMatchObject({
         child: "spin",
         source: "main",
         message_count: 2,
@@ -377,7 +377,7 @@ describe("forking a thread", () => {
     }
   });
 
-  test("a fork of a fork resolves its whole ancestry without the parents' directories", async () => {
+  test("a fork of a fork keeps both records after a parent's directory is gone", async () => {
     const root = await dataDir();
     await seed(root, "ada", "main", [user("u1", "first")]);
     await forkThread(root, "ada", "main", "spin", { now: () => NOW });
@@ -386,9 +386,9 @@ describe("forking a thread", () => {
 
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     try {
-      expect(store.forkAncestry("ada", "spin-2").map((f) => `${f.source}->${f.child}`)).toEqual([
-        "spin->spin-2",
+      expect(store.threadForks("ada").map((f) => `${f.source}->${f.child}`).sort()).toEqual([
         "main->spin",
+        "spin->spin-2",
       ]);
     } finally {
       store.close();

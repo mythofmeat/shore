@@ -8,7 +8,7 @@ export interface ConversationTokens {
   cache_write: number;
 }
 
-export const noTokens = (): ConversationTokens => ({
+const noTokens = (): ConversationTokens => ({
   input: 0,
   output: 0,
   cache_read: 0,

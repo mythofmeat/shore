@@ -26,7 +26,7 @@ import {
 
 export type UsageBudgetPeriod = import("../protocol/UsageBudgetPeriod.ts").UsageBudgetPeriod;
 export type UsageBudgetAction = import("../protocol/UsageBudgetAction.ts").UsageBudgetAction;
-export type BudgetWeekday =
+type BudgetWeekday =
   | "monday"
   | "tuesday"
   | "wednesday"
@@ -165,7 +165,7 @@ const WEEKDAY_FROM_MONDAY: Record<BudgetWeekday, number> = {
   sunday: 6,
 };
 
-export type PaceStatus = import("../protocol/UsagePace.ts").UsagePace;
+type PaceStatus = import("../protocol/UsagePace.ts").UsagePace;
 
 export type BudgetStatus = import("../protocol/UsageBudget.ts").UsageBudget;
 

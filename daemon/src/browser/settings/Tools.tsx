@@ -36,7 +36,7 @@ function ToolForm({ tool }: { tool: string }) {
   useEffect(() => {
     let alive = true;
     setDescription(undefined); setReport(undefined); setError("");
-    workspace.actions.run("run_tool", { tool, describe: true }, { remember: false }).then((result) => {
+    workspace.actions.run("run_tool", { tool, describe: true }).then((result) => {
       if (!alive || !("input_schema" in result)) return;
       setDescription(result);
       try { setValue(initialValue(toolControl(result.input_schema))); } catch (failure) { setError(errorText(failure)); setMode("pairs"); }

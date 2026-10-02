@@ -41,7 +41,7 @@ const ARCHIVE_REVISION_TRIGGERS = [
 END;`
 ).join("\n\n");
 
-export const HISTORY_SCHEMA = `
+const HISTORY_SCHEMA = `
 CREATE TABLE IF NOT EXISTS history_blobs (
     hash       TEXT PRIMARY KEY,
     size       INTEGER NOT NULL,
@@ -185,9 +185,6 @@ export interface ThreadForkRecord {
 }
 
 export const CHARACTER_ARCHIVES_SQL = "(character = ?1 OR substr(character, 1, length(?1) + 1) = ?1 || '/')";
-
-const MESSAGE_ARCHIVES_SQL =
-  "(m.character = ?1 OR substr(m.character, 1, length(?1) + 1) = ?1 || '/')";
 
 const ZSTD_LEVEL = 3;
 const BLOB_RAW_UNDER = 256;
@@ -403,16 +400,6 @@ export class HistoryStore {
     return row.n;
   }
 
-  totalMessageCount(character: string): number {
-    const row = this.#db
-      .query(
-        `SELECT COALESCE(SUM(message_count), 0) AS n FROM history_segments
-         WHERE character = ?1 AND committed = 1`,
-      )
-      .get(character) as { n: number };
-    return row.n;
-  }
-
   displayMessageCount(character: string): number {
     const row = this.#db
       .query("SELECT display_count FROM history_character_stats WHERE character = ?1")
@@ -531,32 +518,6 @@ export class HistoryStore {
       .all(character) as ThreadForkRecord[];
   }
 
-  forkOf(character: string, forkId: string): ThreadForkRecord | undefined {
-    const row = this.#db
-      .query(
-        `SELECT fork_id, child, source, created_at, message_count, turn_count
-         FROM history_thread_forks WHERE character = ?1 AND fork_id = ?2`,
-      )
-      .get(character, forkId) as ThreadForkRecord | null;
-    return row ?? undefined;
-  }
-
-  forkAncestry(character: string, thread: string): ThreadForkRecord[] {
-    const byChild = new Map<string, ThreadForkRecord>();
-    for (const fork of this.threadForks(character)) byChild.set(fork.child, fork);
-    const chain: ThreadForkRecord[] = [];
-    const seen = new Set<string>();
-    let cursor: string | undefined = thread;
-    while (cursor !== undefined && !seen.has(cursor)) {
-      seen.add(cursor);
-      const fork: ThreadForkRecord | undefined = byChild.get(cursor);
-      if (fork === undefined) break;
-      chain.push(fork);
-      cursor = fork.source;
-    }
-    return chain;
-  }
-
   forgetThreadFork(character: string, forkId: string): void {
     this.#db
       .query("DELETE FROM history_thread_forks WHERE character = ?1 AND fork_id = ?2")
@@ -648,50 +609,6 @@ export class HistoryStore {
          WHERE character = ?1 AND path = ?2 AND state = 'claimed' AND claimed_at < ?3`,
       )
       .run(character, path, olderThanMs).changes;
-  }
-
-  memoryCoverageState(
-    character: string,
-    path: MemoryPath,
-    version: string,
-  ): { state: string; unit: string | null; claim: string | null } | undefined {
-    const row = this.#db
-      .query(
-        `SELECT state, unit, claim FROM memory_coverage
-         WHERE character = ?1 AND path = ?2 AND version = ?3`,
-      )
-      .get(character, path, version) as
-      | { state: string; unit: string | null; claim: string | null }
-      | null;
-    return row ?? undefined;
-  }
-
-  characterDistinctTurnCount(character: string): number {
-    const row = this.#db
-      .query(
-        `SELECT COUNT(*) AS n FROM (
-           SELECT DISTINCT COALESCE(m.version, 'occurrence:' || m.id) AS identity
-           FROM history_messages m
-           JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-           WHERE ${MESSAGE_ARCHIVES_SQL}
-             AND s.committed = 1 AND m.is_user_turn = 1
-         )`,
-      )
-      .get(character) as { n: number };
-    return row.n;
-  }
-
-  characterOccurrenceTurnCount(character: string): number {
-    const row = this.#db
-      .query(
-        `SELECT COUNT(*) AS n
-         FROM history_messages m
-         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE ${MESSAGE_ARCHIVES_SQL}
-           AND s.committed = 1 AND m.is_user_turn = 1`,
-      )
-      .get(character) as { n: number };
-    return row.n;
   }
 
   archiveKeys(character: string): string[] {
@@ -1167,21 +1084,21 @@ function displayStateAfter(
   return "none";
 }
 
-export class MissingBody extends Error {
+class MissingBody extends Error {
   constructor(hash: string) {
     super(`history blob ${hash} is missing`);
     this.name = "MissingBody";
   }
 }
 
-export class PendingCompaction extends Error {
+class PendingCompaction extends Error {
   constructor(character: string) {
     super(`history compaction is already pending for ${character}`);
     this.name = "PendingCompaction";
   }
 }
 
-export class PendingCompactionConflict extends Error {
+class PendingCompactionConflict extends Error {
   constructor(character: string) {
     super(`cannot recover the pending history compaction for ${character}: active history changed`);
     this.name = "PendingCompactionConflict";

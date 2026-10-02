@@ -13,7 +13,7 @@ export interface BashResult {
 
 const PROMPT_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
 
-export async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
+async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
   return await Promise.all(PROMPT_FILES.map(async (path) => {
     try {
       return await readFile(join(workspaceDir, path));

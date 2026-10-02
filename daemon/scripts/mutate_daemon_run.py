@@ -1,64 +1,15 @@
 #!/usr/bin/env python3
-"""Mutation pass over the daemon's startup wiring (#18, step 5).
-
-Almost nothing in `run.ts` is a computation. What it holds is an *order*, and
-every mutant below reorders or unhooks something that still lets the daemon
-come up and answer — which is what makes them worth writing down.
-
-**The registered address.** `--addr 127.0.0.1:0` asks the kernel for a port.
-Recording the requested address instead writes a literal `:0` into
-`instances.json`, and every discovery client dials a port nobody opened. The
-daemon itself is fine, and nothing logs anything.
-
-**The handshake.** Attach it to the wrong thing, or not at all, and a client
-still connects and is still answered — with one character called `default` and
-an empty conversation.
-
-**The handler before the accept.** A connection that hand-shakes while nothing
-is draining `Server.routes` queues its messages and is never answered. Reversed,
-the daemon serves normally right up until the first client is fast.
-
-**The push channels.** The engine's history listener and the autonomous-message
-emit are how a conversation reaches a connected client. Unwired, everything is
-still persisted; it just stops appearing.
-
-**Shutdown.** Unregistering, closing the stores, and stopping the clocks each
-leave a different corpse behind: a registry entry pointing at a dead pid, an
-MCP child that outlives its parent, a keepalive still spending money.
-
-# Two that cannot die
-
-Both are ordering guarantees with no observable consequence in a test that
-stops a healthy daemon, and both are kept because the failure they prevent
-only appears under load or over time:
-
-- **The handler is not awaited.** It returns when the route stream closes,
-  which the server does on its way out — so on a quiet daemon the wait is
-  already over before it starts. It matters when a turn is mid-write: autonomy
-  persists its state next, and a turn still appending would be writing to a
-  conversation whose turn count has already been recorded.
-- **The clocks are not stopped.** `setInterval` handles are `unref`'d, so
-  nothing observes them after the process would exit anyway. It matters for a
-  caller that starts a second daemon in the same process — a test harness, or
-  anything embedding this — where the first daemon's keepalive would keep
-  spending against a runtime that has been shut down.
-
-A mutant is KILLED if `bun test tests/daemon_run.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_daemon_run.py
+"""Mutation pass over the daemon's startup wiring in `run.ts`: the order things
+start in, what is attached, the instance registry, shutdown, and config
+reloads.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 R = "src/daemon/run.ts"
 D = "src/handler/deps.ts"
-H = "src/daemon/hot_reload.ts"
 
 TESTS = ["tests/daemon_run.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the registered address ----------------------------------------------
     ("registry: the requested address is recorded, so port zero is written as zero",
@@ -198,7 +149,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

@@ -5,8 +5,6 @@ import { nanogptSupportsExplicitCache } from "./providers/nanogpt_config.ts";
 
 const HONORS_CACHE_TTL: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic", "nanogpt"]);
 
-const REPORTS_CACHE_WRITES: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic", "nanogpt"]);
-
 export function honorsCacheTtl(sdk: Sdk, model?: string): boolean {
   return HONORS_CACHE_TTL.has(sdk) &&
     (sdk !== "nanogpt" || model === undefined || nanogptSupportsExplicitCache(model));
@@ -27,10 +25,6 @@ export function keepaliveTtlWarning(sdk: Sdk, model: string, ttl: string | undef
   const ttlMs = known === "1h" ? 3_600_000 : 300_000;
   if (intervalMs < ttlMs) return undefined;
   return `cache_keepalive is not shorter than this model's ${known} cache TTL, so each ping will land after the cache has already expired`;
-}
-
-export function reportsCacheWrites(sdk: Sdk): boolean {
-  return REPORTS_CACHE_WRITES.has(sdk);
 }
 
 export function cachingIsSilentlyOff(sdk: Sdk, requested: string, model?: string): boolean {

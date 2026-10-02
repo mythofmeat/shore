@@ -197,12 +197,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   await workspaceIndex.start();
 
   const keepalive = new KeepaliveService(
-    (req, signal) => {
+    (req) => {
       const provider = providers[req.sdk];
       if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
       return provider.generate(
         withResolvedCredential(withWorkspaceDir(req, config), config, options.env ?? process.env),
-        signal,
       );
     },
     () => Date.now(),
@@ -424,7 +423,7 @@ async function connectMcpRegistry(
   );
 }
 
-export async function refreshMcpPromptCaches(
+async function refreshMcpPromptCaches(
   cache: Pick<LastRequestCache, "cachedCharacters" | "invalidate" | "reprimeFromDisk">,
   registry: Pick<CharacterRegistry, "effectiveConfig">,
   dataDir: string,

@@ -34,7 +34,7 @@ export const builtinSystemPrompt = (): string => `${BUILTIN_SYSTEM_TEMPLATE}\n`;
 
 export type UserTimestampMode = "never" | "always" | "auto";
 
-export interface SystemBlock {
+interface SystemBlock {
   label: string;
   content: string;
 }

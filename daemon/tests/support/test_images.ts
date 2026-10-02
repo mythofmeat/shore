@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 
-export function noiseBitmap(width: number, height: number, seed = 1): Buffer {
+function noiseBitmap(width: number, height: number, seed = 1): Buffer {
   const stride = Math.ceil((width * 3) / 4) * 4;
   const bmp = Buffer.alloc(54 + stride * height);
   bmp.write("BM");

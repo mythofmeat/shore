@@ -1,4 +1,4 @@
-export interface CoalescedToolCall {
+interface CoalescedToolCall {
   id: string;
   name: string;
   arguments: unknown;

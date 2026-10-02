@@ -2,7 +2,7 @@ import { hostZone, normalizeToZone } from "../ledger/zoned.ts";
 import { parseTimeBound } from "./history.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
-export interface ModelHistoryRow {
+interface ModelHistoryRow {
   model: string;
   provider: string;
   call_type: string;

@@ -4,7 +4,7 @@ import { base64Rejection } from "../tools/images.ts";
 import { base64Bytes } from "../util/base64.ts";
 
 import { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES, MAX_CAPABILITY_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_IMAGE_PATH_BYTES } from "./limits.ts";
-export { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES } from "./limits.ts";
+export { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "./limits.ts";
 
 export class AdmissionError extends Error {
   override readonly name = "AdmissionError";

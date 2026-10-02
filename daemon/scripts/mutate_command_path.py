@@ -1,50 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over the handler's command path (#18 / #12).
-
-This layer computes almost nothing. It decides which of four paths a command
-takes, what a request whose character cannot be resolved gets told, which config
-each path is handed, and whether the answer carries the rid it was asked under.
-Every one of those is invisible to a test that only checks that a command
-answered — which is what makes the mutants here worth writing.
-
-The mutants cover four things:
-
-- **The routing**, including the one decision that is per-*request* rather than
-  per-name: `list_models` is characterless only while no character is selected.
-  `switch_character` is its own path because it runs before a character can be
-  resolved — the whole point of it is that the session has not chosen one yet.
-- **Character resolution**, and the code each of its two failures reports —
-  `invalid_request` for a client that can fix it by choosing, `internal_error`
-  for one that cannot.
-- **The contexts**: the character path gets the character-effective config, the
-  characterless path gets the global one, and the post-processing gets the
-  config the command left behind rather than the one the dispatch started with,
-  because `config_reload` replaces it on the session object mid-command.
-- **The rid**, on all three paths that attach it — including the three commands
-  the Rust dropped it for, which is this port's one deliberate divergence and so
-  has to be pinned from this side rather than from the fixture.
-
-A mutant is KILLED if `bun test tests/command_path.test.ts` fails with it
-applied.
-
-The session model cache these mutants used to probe is gone: 58338805 deleted
-`ProcessSessionCache` along with the mirror-back write, the read on the
-characterless path, and the ordering between them. Four mutants went with it.
-
-What survives of it is one line, and mutating it found a live bug. 58338805 left
-`characterSession` filling `CommandSession.activeModel` from
-`resolveActiveModelAndOverlay`, which falls back to `[defaults].model` when the
-character has saved nothing — and the field's only remaining reader is
-`masked_by_preference`, which reports "this character still uses X" whenever it
-differs from the configured default. A qualified name never equals the raw
-config string, so every `config set defaults.model` on the character path
-claimed a preference was masking it, including for characters with no
-preferences file at all. The field now holds the character's *saved* selection
-or nothing, which is what its reader always meant, and two cases here dispatch
-`config` on the character path to hold it there.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_command_path.py
+"""Mutation pass over the handler's command path: the route a command takes,
+how an unresolvable character is reported, the config each route is handed,
+and the reply's rid.
 """
 import pathlib
 import sys
@@ -52,7 +9,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMMANDS = ROOT / "src/handler/commands.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- routing --------------------------------------------------------------
     ("route: list_models is always characterless",
@@ -115,13 +71,13 @@ MUTANTS = [
      "    const annotated = data;"),
 
     # --- the rid --------------------------------------------------------------
-    ("rid: the character path drops it, as the Rust's characterless path did",
+    ("rid: the character path drops it",
      "  return frameWithRid(frame, rid);\n}\n\nexport function liveThread(",
      "  return frame;\n}\n\nexport function liveThread("),
     ("rid: the switch_character path drops it",
      "  return frameWithRid(frame, rid);\n}\n\nasync function characterlessCommand(",
      "  return frame;\n}\n\nasync function characterlessCommand("),
-    ("rid: the characterless path drops it, reproducing the Rust's bug",
+    ("rid: the characterless path drops it",
      "  return frameWithRid(frame, rid);\n}\n\nfunction characterSession(",
      "  return frame;\n}\n\nfunction characterSession("),
     ("rid: nothing attaches it at all",
@@ -130,7 +86,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

@@ -24,7 +24,7 @@ export function serializeConfigValue(value: unknown): unknown {
   return value;
 }
 
-export const SECRET_CONFIG_PATHS: readonly string[] = [
+const SECRET_CONFIG_PATHS: readonly string[] = [
   "notifications.ntfy.topic",
   "notifications.topic",
   "mcp.*.env.*",

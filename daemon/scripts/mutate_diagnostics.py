@@ -1,51 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the diagnostics ring buffers (#18 / #12).
-
-Small module, and every one of its failure modes is quiet — nothing here can
-throw, so a wrong answer just looks like a slightly different diagnostic:
-
-- **Keeping the wrong end.** A ring that evicts the newest instead of the
-  oldest, or a `lastN` that returns the *first* n, still returns entries of
-  the right type and roughly the right number. It is the wrong report.
-- **Off-by-one at the capacity.** Evicting one entry early or one late is a
-  quiet capacity change, and the buffer is a fixed size precisely so memory
-  is bounded.
-- **`count` versus `recent.length`.** They are different numbers on purpose —
-  a client renders "3 of 100" from them — and swapping one for the other
-  reads as a plausible object.
-- **Absent optional fields.** They are `skip_serializing_if` on the Rust
-  side, so they are *missing* from the object rather than null. A port that
-  emits `"error": null` changes the shape of a wire format.
-
-A mutant is KILLED if `bun test tests/diagnostics.test.ts` fails with
-it applied.
-
-This is **20/20**, from 18/21 on the first pass.
-
-Two survivors were the same defect in the *test*, not the code. The `sparse`
-seed left its optional fields off the object entirely, so
-`Object.entries` never saw them and there was nothing for the serialiser to
-elide — both "write nulls instead" and "elide nothing" then changed no
-output. The seed now assigns an explicit `undefined`, which is the shape a
-real call site produces: a cost the provider did not report arrives as a
-variable holding `undefined`, and assigning it is what the interface's
-`| undefined` is for. Note `toEqual` alone would still not have caught it —
-it treats a missing key and an explicit `undefined` as equal — so the
-elision is asserted over `Object.keys` too.
-
-One mutant is **removed as equivalent**: `lastN` reading
-`slice(length - n)` rather than `slice(Math.max(length - n, 0))`. A negative
-index clamps to the start in JavaScript, so the two are the same expression.
-The `Math.max` stays because it says what is meant, and because it is what
-the Rust's `saturating_sub` says.
-
-`count` versus `recent.length` earns its own seed: they agree in every
-ordinary case, so telling them apart needs the `overflowing` seed, which
-pushes 105 entries into a 100-entry ring and asks for the last 10. The
-buffer holds 100, `recent` holds 10, and 105 appears nowhere in the answer.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_diagnostics.py
+"""Mutation pass over the diagnostics ring buffers: eviction, ordering,
+capacity, and the JSON they produce.
 """
 import pathlib
 import sys
@@ -53,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/diagnostics.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- eviction -------------------------------------------------------------
     ("ring: the newest entry is evicted rather than the oldest",
@@ -136,7 +90,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

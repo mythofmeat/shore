@@ -52,7 +52,7 @@ export type BlockView =
   | { kind: "tool"; key: string; id: string; name: string; input: unknown; output: string | null; error: boolean; images: string[] }
   | { kind: "image"; key: string; source: string };
 
-export function toolResultText(content: ToolResultContent): string {
+function toolResultText(content: ToolResultContent): string {
   if (typeof content === "string") return content;
   return content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
 }

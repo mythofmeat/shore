@@ -1,34 +1,11 @@
 #!/usr/bin/env python3
-"""Mutation pass over `shore usage` — the command, not the report (#18 / #12).
-
-The report is pinned by a frozen fixture generated from the Rust, so what is
-mutated here is the thin part around it:
-
-- **The forward.** The args and the `[usage]` config pass through untouched. A
-  command that dropped either would still answer with a well-formed report of
-  the wrong thing.
-- **The failures.** A bad period is a bad request and everything else is an
-  internal error, as the Rust's `map_err` arms were.
-
-The pricing refresh is gone. 861b0f0c removed `--refresh-pricing`, which left
-`PricingEngine.clearCache` and the `DELETE FROM pricing` behind it with no
-caller — the mutants over them could not be killed by any test because no test
-could reach the statement. #130 deleted the dead code and the mutants with it.
-
-A mutant is KILLED if `bun test tests/commands_usage.test.ts tests/pricing.test.ts
-tests/ledger_usage.test.ts` fails with it applied. This is **5/5**.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_usage.py
+"""Mutation pass over the `usage` command: what it forwards to the report, and
+how a failure is reported.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMMAND = "src/commands/usage.ts"
-REPORT = "src/ledger/usage.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the forward ----------------------------------------------------------
     ("forward: the args are dropped, so every request is the default summary", COMMAND,
@@ -52,12 +29,8 @@ MUTANTS = [
      '    throw internalError("usage report failed");'),
 ]
 
-# `invalidRequest` is not imported by the command; one mutant needs it to be.
-IMPORT = ('import { internalError } from "./errors.ts";',
-          'import { internalError, invalidRequest } from "./errors.ts";')
 
-
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

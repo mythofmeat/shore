@@ -108,7 +108,7 @@ export function setSubscriptionProviders(names: Iterable<string>, characters: It
   characterSubscriptionProviders = new Map([...characters].map(([character, providers]) => [character, new Set(providers)]));
 }
 
-export const isSubscriptionProvider = (provider: string, character?: string): boolean =>
+const isSubscriptionProvider = (provider: string, character?: string): boolean =>
   (character === undefined ? subscriptionProviders : characterSubscriptionProviders.get(character) ?? subscriptionProviders).has(provider);
 
 let nanoGptCoveredModels = new Set<string>();
@@ -175,9 +175,9 @@ export interface RecordCall {
   error?: string | undefined;
 }
 
-export const MAX_ATTEMPT_ERROR_CHARS = 500;
+const MAX_ATTEMPT_ERROR_CHARS = 500;
 
-export function attemptErrorText(record: Pick<RecordCall, "finish_reason" | "error">): string | null {
+function attemptErrorText(record: Pick<RecordCall, "finish_reason" | "error">): string | null {
   if (record.finish_reason !== "error") return null;
   const text = record.error?.trim();
   if (text === undefined || text === "") return "provider call failed";
@@ -186,7 +186,7 @@ export function attemptErrorText(record: Pick<RecordCall, "finish_reason" | "err
     : `${text.slice(0, MAX_ATTEMPT_ERROR_CHARS)}…`;
 }
 
-export type CacheStateReason =
+type CacheStateReason =
   | "cancelled"
   | "errored_before_usage"
   | "provider_reports_no_cache";
@@ -298,10 +298,6 @@ export class Ledger {
 
   get pricing(): PricingEngine {
     return this.#pricing;
-  }
-
-  get trackers(): CacheTrackers {
-    return this.#trackers;
   }
 
   setCacheTtlSecs(secs: number): void {

@@ -209,7 +209,7 @@ describe("recalling a message that a fork copied", () => {
     expect(result.searched_messages).toBe(2);
   });
 
-  test("a character-wide turn count counts a shared turn once, occurrences separately", async () => {
+  test("each archive counts its own display turns, a shared turn included", async () => {
     const f = await fixture();
     const shared = newMessageVersion();
     const store = HistoryStore.open(f.dbPath);
@@ -218,8 +218,6 @@ describe("recalling a message that a fork copied", () => {
       message("asked", shared, "user"),
       message("asked again", newMessageVersion(), "user"),
     ]);
-    expect(store.characterDistinctTurnCount("ada")).toBe(2);
-    expect(store.characterOccurrenceTurnCount("ada")).toBe(3);
     expect(store.displayTurnCount("ada")).toBe(1);
     expect(store.displayTurnCount("ada/spin")).toBe(2);
     store.close();

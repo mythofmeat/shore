@@ -1,60 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the character navigation commands (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked. This module's failure
-modes are quiet ones — nothing here errors when it goes wrong:
-
-- **A character vanishing from the listing.** `list_characters` is how a client
-  learns what it may switch to. Drop the unconditional active-character prepend
-  and a character with nothing on disk yet becomes unreachable through the UI,
-  with no error anywhere.
-- **A probe answering the wrong question.** `has_definition` asks whether
-  `SOUL.md` is *there*; `definition_preview` asks whether it could be *read*.
-  Collapsing the two — `is_file` for one, `exists` for the other — is invisible
-  until someone's `SOUL.md` is a directory, and then the report is simply wrong.
-- **Reading the wrong character's queue.** `character_info` takes a name; every
-  path it builds has to be built from *that* name and not from the session's.
-  Swapping one reports another character's pending edits as this one's.
-
-A mutant is KILLED if `bun test tests/navigation.test.ts` fails with it
-applied.
-
-This stands at **37/38**, and the fixture needed no new cases to get there — it
-already carried the cases that separate the pairs that matter: a directory named
-`avatar.png` with a real `avatar.jpg` behind it, a `SOUL.md` that is a directory
-(the only state where `has_definition` and `definition_preview` disagree), a
-`character_info` call naming a character that is *not* the active one and has
-its own deferred queue, a definition of 10 ASCII characters plus 600 emoji, and
-`Zebra`/`Apple`/`apple` to separate a code-point sort from a case-insensitive
-one.
-
-The first pass read 34/40. Three of those six survivors were mis-written
-patterns of mine, not gaps: one had the wrong indentation and never applied, one
-uppercased a whole absolute path instead of just the extension, and one
-"prepends the active character" mutant prepended the first *discovered* name,
-which produces the identical list. Two more were equivalent mutants and have
-been removed — see below. Fixing the three left one real survivor.
-
-**The accepted survivor: `catch { continue }` in the avatar probe.**
-Separating "an unreadable avatar falls through to the next extension" from "an
-unreadable avatar ends the probe" needs a path that `is_file` accepts and a read
-then rejects. On this filesystem only a permissions error does that, and
-`workspace_index_parity` already documents why a chmod-based case cannot be
-recorded here: the container the fixtures were generated in runs as root, where
-mode 000 does not deny a read, so the generator would have recorded a successful
-read and pinned nothing. The other trick that test uses — deleting the file
-between the probe and the read — is not reachable either, because the probe and
-the read are synchronous and adjacent. So the branch is real, defensive, and not
-observable from outside; `characterMetadata` says so at the line itself.
-
-For the same reason two mutants on the `is_file` probe were removed rather than
-chased: replacing it with `exists`, and deleting it outright. Anything that is
-not a readable file fails the read as well, so the probe and the catch are
-mutually redundant and neither is separately observable. Both are kept, for the
-reasons given in the source.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_navigation.py
+"""Mutation pass over the character navigation commands: avatars, the character
+list, info and switch.
 """
 import pathlib
 import sys
@@ -62,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/navigation.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- the avatar probe -----------------------------------------------------
     ("avatar: the probe order is reversed",
@@ -223,7 +168,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

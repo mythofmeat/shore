@@ -1,33 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over the heartbeat tick's delivery (#18 / #12).
-
-The tick's two halves are mutated by `mutate_heartbeat_request.py` and
-`mutate_heartbeat_loop.py`. What is left is the end of it: getting what the
-character asked to say out of a conversation that is about to be thrown away.
-
-Every step of that can fail on its own — the engine may refuse the append, no
-client may be connected, the notifier may be absent — and the Rust let each fail
-independently and carried on. Most mutants here collapse that into one failure
-path, or move the notification inside it. The notification's placement is the one
-that looks most like a tidy-up and is not: the character *did* speak, and a user
-told about a message they cannot find is better served than one who is never
-told.
-
-The rest is the difference between "said nothing" and "said something empty".
-A tick with no text and no images is a skip; a tick that returned an empty
-string from a `sendMessage` tool call is a message. Only the tag can never
-produce the empty string, so collapsing those two states loses a real one.
-
-A mutant is KILLED if `bun test tests/heartbeat_tick.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_heartbeat_tick.py
+"""Mutation pass over delivering what a heartbeat tick said: skips, failures,
+the delivered message, and persisting before pushing.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 T = "src/autonomy/heartbeat_tick.ts"
 
 TESTS = ["tests/heartbeat_tick.test.ts"]
@@ -44,7 +20,6 @@ ENGINE_BLOCK = (
     "    }"
 )
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- said something, or said nothing --------------------------------------
     ("skip: an image-only tick is treated as having said nothing",
@@ -155,7 +130,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

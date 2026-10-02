@@ -1,12 +1,12 @@
 import type { ActivityStats, Weekday } from "../autonomy/activity.ts";
 
-export interface HeatmapHour {
+interface HeatmapHour {
   hour: number;
   density: number;
   classification: string;
 }
 
-export interface HeatmapWeekday {
+interface HeatmapWeekday {
   weekday: Weekday;
   message_count: number;
   density: number;

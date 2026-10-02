@@ -44,7 +44,7 @@ export interface MemoryFileOp {
   content: string;
 }
 
-export interface CompactionResult {
+interface CompactionResult {
   memoryFilesWritten: string[];
   conversationId: string;
   newConversationId: string;
@@ -57,7 +57,7 @@ export interface CompactionResult {
   toolsCalled: string[];
 }
 
-export interface DryRunResult {
+interface DryRunResult {
   wouldWriteFiles: number;
   fileOpsPreview: MemoryFileOp[];
   messageCount: number;
@@ -69,7 +69,7 @@ export interface DryRunResult {
   toolsCalled: string[];
 }
 
-export interface PausedCompactionResult {
+interface PausedCompactionResult {
   conversationId: string;
   checkpointId: string;
   messageCount: number;
@@ -81,7 +81,7 @@ export interface PausedCompactionResult {
   resumeAt?: string;
 }
 
-export interface RotatedResult {
+interface RotatedResult {
   conversationId: string;
   dryRun: boolean;
   messageCount: number;
@@ -91,7 +91,7 @@ export interface RotatedResult {
   retainedTurns: number;
 }
 
-export interface TruncatedCompactionResult {
+interface TruncatedCompactionResult {
   conversationId: string;
   messageCount: number;
   compactedTurns: number;
@@ -195,7 +195,7 @@ export interface ToolOutput {
   isError: boolean;
 }
 
-export type CompactionWriteTracker = (
+type CompactionWriteTracker = (
   name: string, input: unknown, write: () => Promise<ToolOutput>,
 ) => Promise<ToolOutput>;
 

@@ -2,7 +2,7 @@ import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
 import type { ThreadForkResult } from "../protocol/ThreadForkResult.ts";
-export type { ThreadView, ThreadListing, ThreadForkResult };
+export type { ThreadListing, ThreadForkResult };
 import type { Args } from "./navigation.ts";
 import { busy, invalidRequest, notFound } from "./errors.ts";
 import {
@@ -70,7 +70,7 @@ export interface ThreadContext {
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
-export function threadCommandError(e: unknown): unknown {
+function threadCommandError(e: unknown): unknown {
   if (e instanceof ForkBusy) return busy(e.message);
   if (!(e instanceof ThreadError)) return e;
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);

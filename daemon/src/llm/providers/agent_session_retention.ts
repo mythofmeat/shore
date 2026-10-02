@@ -8,7 +8,7 @@ import type { SessionBook, SessionRecord } from "./agent_sessions.ts";
 
 const RETIRED_PREFIX = "sdk_retired/";
 
-export function sessionReferences(book: SessionBook): Map<string, string> {
+function sessionReferences(book: SessionBook): Map<string, string> {
   const refs = new Map<string, string>();
   for (const [key, record] of Object.entries(book)) {
     if (typeof record.sessionId !== "string" || !Array.isArray(record.entries)) throw new Error("Invalid SDK session references; preserving transcripts");

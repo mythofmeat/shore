@@ -1,49 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the SWP listener (#18, step 5).
-
-`swp_transport.test.ts` covers the protocol against in-memory duplexes and had
-a harness of its own. This one covers the part that only exists once there is a
-socket, and every mutant here is silent — a client connects, hand-shakes, and
-is told something wrong rather than told nothing.
-
-**The handshake arrives after construction.** The provider answers out of the
-character registry, and the registry is built with this server's broadcast, so
-one of the two has to exist first. Read at construction rather than per
-connection, `setHandshakeProvider` becomes a no-op and every client is served
-the fallback — one character literally named `default`, and an empty
-conversation. Nothing errors. A user sees a window with the wrong character in
-it and no reason why.
-
-**The bind is separate from the accept.** `--addr 127.0.0.1:0` asks the kernel
-for a port, and `instances.json` has to record the one it got. A bind that
-reported the requested address instead would write a literal `:0` and send
-every discovery client to a port nobody opened.
-
-**Writing out.** Every connection writes one last frame — the shutdown notice.
-Bun 1.4.2 settles failed writes, so removing Shore's closed-socket guard no
-longer reliably hangs shutdown. It can still reject the history write after
-handshake registration, before the connection has received its session handle.
-The real socket test closes during history loading and checks that shutdown
-leaves neither a session nor a spurious handler error. Bun's matching source is
-https://github.com/oven-sh/bun/blob/bun-v1.4.2/src/js/node/net.ts.
-
-**Routing.** A message that never reaches the queue is a message the handler
-never answers, and the client waits for a reply that is not coming.
-
-A mutant is KILLED if `bun test tests/swp_server.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_swp_server.py
+"""Mutation pass over the SWP listener: start-up, the handshake, the bound
+address, writes after a disconnect, and routing.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 S = "src/swp/server.ts"
 
 TESTS = ["tests/swp_server.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     ("startup: early TCP clients remain open before the daemon can serve them",
      S,
@@ -123,7 +87,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

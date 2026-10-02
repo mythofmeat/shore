@@ -19,7 +19,7 @@ export function remainingMessageOptions(current: Record<string, unknown>, submit
 
 const attachmentBytes = (image: ImageUpload): number => image.data.length * 3 / 4 - (image.data.endsWith("==") ? 2 : image.data.endsWith("=") ? 1 : 0);
 
-export function fitAttachments(images: readonly ImageUpload[]): { kept: ImageUpload[]; dropped: number } {
+function fitAttachments(images: readonly ImageUpload[]): { kept: ImageUpload[]; dropped: number } {
   const kept: ImageUpload[] = [];
   let total = 0;
   for (const image of images) {

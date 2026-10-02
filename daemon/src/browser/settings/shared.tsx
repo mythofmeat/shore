@@ -18,7 +18,7 @@ export function useOperation<N extends OperationName>(state: WorkspaceSnapshot, 
     if (!enabled || state.status !== "ready") return;
     let alive = true;
     setLoading(true);
-    workspace.actions.run(name, JSON.parse(key) as OperationInput<N>, { remember: false })
+    workspace.actions.run(name, JSON.parse(key) as OperationInput<N>)
       .then((result) => { if (alive) { setData(result); setError(""); } })
       .catch((failure: unknown) => { if (alive) setError(errorText(failure)); })
       .finally(() => { if (alive) setLoading(false); });

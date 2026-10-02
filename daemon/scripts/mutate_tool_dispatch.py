@@ -1,19 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the `set_next_wake` arm of the tool dispatcher.
-
-`set_next_wake` is an ordinary registry tool now, offered wherever the
-allowlist names it, so every answer it gives is one a character plans around.
-The mutants attack the four ways it can mislead without failing:
-
-- **The quote.** The clock clamps, and the answer must say what the clock
-  allowed rather than what was asked for.
-- **The defaults.** An hour and an empty reason, as the heartbeat loop gave
-  before the arm moved here.
-- **The refusals.** A context with no schedule, and a character whose
-  heartbeats are not running, must each say so rather than report a wake.
-- **The dry run.** A dry-run pass must not move the real clock.
-
-A mutant is KILLED if `bun test tests/dispatch.test.ts` fails with it applied.
+"""Mutation pass over the `set_next_wake` tool: the quote, the defaults, the
+refusals, and dry runs.
 """
 import sys
 from mutation import run

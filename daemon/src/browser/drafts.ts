@@ -3,7 +3,7 @@ import { randomUUID } from "./platform.ts";
 import { restoredDraft } from "./request_forms.ts";
 
 export interface DraftContent { text: string; images: ImageUpload[]; options?: Record<string, unknown> }
-export interface StoredDraft {
+interface StoredDraft {
   id: string; conversation: string; revision: number; text: string; attachment: string | null;
   imageCount: number; bytes: number; updated: number; options?: Record<string, unknown>;
 }
@@ -82,13 +82,13 @@ function result<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function storedDrafts(conversation?: string): Promise<StoredDraft[]> {
+async function storedDrafts(conversation?: string): Promise<StoredDraft[]> {
   const db = await open();
   const rows = await result(db.transaction("drafts").objectStore("drafts").getAll()) as StoredDraft[];
   return rows.filter((row) => conversation === undefined || row.conversation === conversation).sort((a, b) => b.updated - a.updated);
 }
 
-export async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
+async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
   const db = await open();
   const tx = db.transaction(["drafts", "attachments"]);
   const record = await result(tx.objectStore("drafts").get(id)) as StoredDraft | undefined;
@@ -106,25 +106,6 @@ function cleanAttachments(tx: IDBTransaction, records: StoredDraft[]): void {
     if (typeof cursor.result.key !== "string" || !used.has(cursor.result.key)) tx.objectStore("attachments").delete(cursor.result.key);
     cursor.result.continue();
   };
-}
-
-export async function discardDraft(record: StoredDraft): Promise<void> {
-  const db = await open();
-  return await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(["drafts", "attachments"], "readwrite", { durability: "strict" });
-    let failure: Error | undefined;
-    const all = tx.objectStore("drafts").getAll();
-    all.onsuccess = () => {
-      const rows = all.result as StoredDraft[];
-      if (rows.some((row) => row.id === record.id && row.revision !== record.revision)) {
-        failure = new Error("This draft changed in another tab. Refresh the saved drafts before discarding it."); tx.abort(); return;
-      }
-      tx.objectStore("drafts").delete(record.id);
-      cleanAttachments(tx, rows.filter((row) => row.id !== record.id));
-    };
-    tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(failure ?? tx.error ?? new Error("Could not discard draft"));
-  });
 }
 
 class SendingTaken extends Error {

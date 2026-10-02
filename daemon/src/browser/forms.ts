@@ -12,7 +12,7 @@ export const CONTROL_KINDS = ["json", "string", "integer", "number", "boolean", 
 export type ControlKind = (typeof CONTROL_KINDS)[number];
 export const CONTROL_KINDS_COMPLETE: [Exclude<Control["kind"], ControlKind>] extends [never] ? true : never = true;
 
-export function record(value: unknown): Record<string, unknown> {
+function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a schema object");
   return value as Record<string, unknown>;
 }

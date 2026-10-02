@@ -18,7 +18,6 @@ import {
   type ModelCatalog,
   type ModelConfigFields,
   type ResolvedModel,
-  type Sdk,
 } from "./models.ts";
 import { invalidType } from "./models.ts";
 import { parseKeepalivePings } from "./keepalive.ts";
@@ -82,10 +81,6 @@ const SAMPLER_FIELDS = SETTING_STORAGE_FIELDS;
 
 export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
 
-export const SAMPLER_FIELD_BY_KEY: ReadonlyMap<string, keyof SamplerSettings> = new Map(
-  SAMPLER_FIELDS.map(([field, key]) => [key, field]),
-);
-
 function applyOverlay(target: SamplerSettings, overlay: SamplerSettings): void {
   for (const [field] of SAMPLER_FIELDS) {
     const value = overlay[field];
@@ -136,7 +131,7 @@ export interface ModelPreference {
   sampler: SamplerSettings;
 }
 
-export interface PreferenceDefaults {
+interface PreferenceDefaults {
   sampler: SamplerSettings;
 }
 
@@ -465,7 +460,7 @@ function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   return cleaned;
 }
 
-export type PreferenceScope =
+type PreferenceScope =
   | "static_default"
   | "global_default"
   | "character_default"
@@ -841,7 +836,7 @@ function pinnedModel(
   }
 }
 
-export function resolveThreadPin(
+function resolveThreadPin(
   config: LoadedConfigView,
   character: string,
   pinned: string,
@@ -1056,7 +1051,7 @@ function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
   };
 }
 
-export function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
+function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
   const unknown = unknownField(table, [
     "selected",
     "favorites",
@@ -1218,8 +1213,6 @@ function tomlInline(value: unknown): string {
   if (typeof value === "string") return tomlString(value);
   return String(value);
 }
-
-export type { Sdk };
 
 function expectedList(known: readonly string[]): string {
   if (known.length === 1) return `\`${known[0]}\``;

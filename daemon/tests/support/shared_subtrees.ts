@@ -1,5 +1,5 @@
-export const SHARED_KEY = "$shared";
-export const REF_KEY = "$ref";
+const SHARED_KEY = "$shared";
+const REF_KEY = "$ref";
 
 function substitute(node: unknown, shared: Record<string, unknown>): unknown {
   if (Array.isArray(node)) return node.map((v) => substitute(v, shared));

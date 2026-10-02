@@ -1,46 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over the Claude plan limits: the reading, the gate, the warnings.
-
-A plan limit is a gauge somebody else owns. The 5-hour and weekly windows are
-measured by Anthropic across every client on the account, including the Claude
-Code session the user is typing into right now, so shore's job is to keep its
-own background work from eating that quota. Each way that can go wrong fails
-quietly, which is why these mutants exist.
-
-**A reading that is wrong or stale.** Utilization arrives as 0-100 from the
-usage report and as a fraction from rate-limit events; resets arrive as ISO
-strings and as epoch seconds. Reading either in the other's units, keeping a
-figure past its window's reset, or never polling again leaves a gauge that
-looks alive and is not. A poll that is never cached is forgotten on restart,
-which is exactly when a paused heartbeat would wake into a spent window.
-
-**A poll that costs more than it should.** Every poll starts a Claude Code
-process. Two callers racing must share one poll, a failed poll must back off,
-and neither a conversation turn nor a usage report may wait for one. A
-background turn must, since it is the one the gate is deciding about. A poll
-is a snapshot from when it started, so a rate-limit event that lands while it
-runs is the newer figure and must survive it.
-
-**A gate that holds back the wrong calls.** Pausing background work at the
-limit is the default precisely because conversation should carry on. Blocking
-every call, ignoring the configured policy, or holding back providers that
-never touch the Claude plan all read as the daemon being broken.
-
-**Warnings that repeat, never come, or go to the wrong conversation.** The
-reported reset jitters by a fraction of a second between polls, so the window
-is keyed to the minute; key it to the raw string and every poll re-arms every
-threshold. Only a turn that ran on the Claude plan hears about it, since the
-threshold it spends is gone for every other character.
-
-A mutant is KILLED if the plan limit tests fail with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_plan_limits.py
+"""Mutation pass over the Claude plan limits: the reading, polling, the gate,
+the warnings, and how plan usage is accounted.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 PLAN = "src/ledger/plan_limits.ts"
 FETCH = "src/llm/claude_plan_limits.ts"
 GATE = "src/ledger/gate.ts"
@@ -59,7 +22,6 @@ TESTS = [
     "tests/stream.test.ts",
 ]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the reading ----------------------------------------------------------
     ("reading: utilization taken as a fraction already, so 31% reads as 3100%",
@@ -221,7 +183,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

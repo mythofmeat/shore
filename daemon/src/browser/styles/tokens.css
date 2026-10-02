@@ -20,9 +20,7 @@
   --text-xl: 17px;
   --text-2xl: 24px;
   --ease: cubic-bezier(0.2, 0, 0, 1);
-  --z-sticky: 10;
   --z-drawer: 40;
   --z-menu: 50;
-  --z-dialog: 60;
   --z-toast: 70;
 }
