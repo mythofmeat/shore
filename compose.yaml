@@ -29,6 +29,8 @@ services:
         # GID is not 1000, set SHORE_UID and SHORE_GID in .env.
         USER_UID: ${SHORE_UID:-1000}
         USER_GID: ${SHORE_GID:-1000}
+        # Sets /etc/localtime in the image. Keep it the same as TZ below.
+        TZ: ${TZ:-UTC}
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
