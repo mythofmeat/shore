@@ -4,7 +4,6 @@ daemon/dist
 contrib/*/pkg
 contrib/*/src
 contrib/*/*.pkg.tar.zst
-contrib/*/*.apk
 out
 daemon/target
 .git
