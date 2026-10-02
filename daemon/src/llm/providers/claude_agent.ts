@@ -41,7 +41,7 @@ import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
-import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
+import { nativeHistoryStore, seedNativeHistory, throwawayHistoryStore } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
@@ -683,12 +683,10 @@ function agentPrompt(plan: NativeTurnPlan, instructions: ContentBlock[] = []): A
 
 const KEEPALIVE_REFUSAL = "a keepalive ping runs no tools";
 
-export function keepalivePlan(record: SessionRecord | undefined, path: string, key: string, model: string): NativeTurnPlan {
-  if (record?.version !== SESSION_BOOK_VERSION || record.storedTranscript !== true) {
-    throw new Error("claude_agent: no stored session to keep warm; the next real turn creates one");
-  }
+export async function keepalivePlan(req: SidecarRequest, record: SessionRecord | undefined, path: string, key: string): Promise<NativeTurnPlan> {
+  if (record?.version !== SESSION_BOOK_VERSION || record.storedTranscript !== true) return await unstoredKeepalivePlan(req);
   const kept = record.pendingAssistantUuids?.at(-1);
-  const store = nativeHistoryStore(path, key, record.model === model);
+  const store = nativeHistoryStore(path, key, record.model === req.model);
   return {
     resume: record.sessionId,
     ...(kept === undefined ? {} : { resumeSessionAt: kept }),
@@ -698,6 +696,17 @@ export function keepalivePlan(record: SessionRecord | undefined, path: string, k
     content: [{ type: "text", text: "." }],
     sessionStore: { ...store, append: () => Promise.resolve() },
   };
+}
+
+async function unstoredKeepalivePlan(req: SidecarRequest): Promise<NativeTurnPlan> {
+  const { request } = withSystemInstructions(await limitRequestImages(req));
+  const history = throwawayHistoryStore();
+  const sessionStore = { ...history, append: () => Promise.resolve() };
+  if (request.messages.length === 1) {
+    return { fork: false, keptEntries: [], delivered: [], content: request.messages[0]?.content ?? [], sessionStore };
+  }
+  const seeded = await seedNativeHistory(request, history);
+  return { resume: seeded.sessionId, fork: true, keptEntries: [], delivered: [], content: seeded.promptContent, sessionStore };
 }
 
 function keepaliveSurface(req: SidecarRequest): AgentToolSurface | undefined {
@@ -843,7 +852,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const startedAt = Date.now();
     const path = this.#bookPath();
     const key = conversationKey(req);
-    const plan = keepalivePlan(readBook(path)[key], path, key, req.model);
+    const plan = await keepalivePlan(req, readBook(path)[key], path, key);
     const abort = new AbortController();
     if (signal?.aborted) abort.abort();
     signal?.addEventListener("abort", () => abort.abort(), { once: true });
