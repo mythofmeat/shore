@@ -188,12 +188,6 @@ describe("operation traces", () => {
       return { alternatives: p === undefined ? null : p.alternatives };
     }
     if (op === "inspect") return {};
-    if (op === "truncate") return { removed: await store.truncateAfterLastUserTurn() };
-    if (op === "clear") {
-      await store.clear();
-      return {};
-    }
-    if (op === "add_candidate") return { count: await store.addAltCandidate("a1") };
     if (op === "replace") {
       return {
         removed: await store.replaceAfterLastUserTurn([
@@ -214,24 +208,12 @@ describe("operation traces", () => {
       await store.append(hydrate(rec["append_msg"] as Message));
       return { ok: true };
     }
-    if ("insert_msg" in rec) {
-      await store.insertByTimestamp(hydrate(rec["insert_msg"] as Message));
-      return {};
-    }
-    if ("set_alt" in rec) {
-      const [i, n] = rec["set_alt"] as [number, number];
-      await store.setAlt("a1", i, n);
-      return {};
-    }
-    if ("add_candidate" in rec) {
-      return { count: await store.addAltCandidate(rec["add_candidate"] as string) };
-    }
     if ("edit" in rec) {
       await store.edit(rec["edit"] as string, "after");
       return {};
     }
     if ("delete" in rec) {
-      await store.delete(rec["delete"] as string);
+      await store.deleteAll([rec["delete"] as string]);
       return {};
     }
     if ("select" in rec) {
@@ -291,17 +273,6 @@ describe("operation traces", () => {
         case "inspect":
           unchanged("reading the store does not change it");
           return;
-        case "clear":
-          expect(after, `${where}: clearing leaves nothing`).toEqual([]);
-          return;
-        case "truncate": {
-          const removed = result.removed as number;
-          expect(ids(after), `${where}: truncating drops that many from the end`).toEqual(
-            ids(before).slice(0, before.length - removed),
-          );
-          expect(changedIds(before, after), `${where}: and rewrites none of the rest`).toEqual([]);
-          return;
-        }
         case "replace": {
           const removed = result.removed as number;
           expect(
@@ -314,13 +285,6 @@ describe("operation traces", () => {
           ).toEqual(["regenerated"]);
           return;
         }
-        case "add_candidate":
-          expect(
-            changedIds(before, after).length <= 1,
-            `${where}: a candidate lands on one message`,
-          ).toBe(true);
-          expect(ids(after), `${where}: and adds no message`).toEqual(ids(before));
-          return;
         default:
           throw new Error(`${where}: no shape stated for ${op}`);
       }
@@ -338,21 +302,6 @@ describe("operation traces", () => {
         appended.msg_id,
       ]);
       expect(changedIds(before, after), `${where}: and disturbs nothing`).toEqual([]);
-      return;
-    }
-    if ("insert_msg" in rec) {
-      const inserted = rec["insert_msg"] as Message;
-      expect([...ids(after)].sort(), `${where}: insert adds exactly that message`).toEqual(
-        [...ids(before), inserted.msg_id].sort(),
-      );
-      expect(changedIds(before, after), `${where}: and rewrites none of the others`).toEqual([]);
-      const stamps = after
-        .map((m) => Date.parse(m.timestamp))
-        .filter((t) => !Number.isNaN(t));
-      expect(
-        [...stamps].sort((a, b) => a - b),
-        `${where}: and leaves the parseable timestamps in order`,
-      ).toEqual(stamps);
       return;
     }
     if ("edit" in rec) {
@@ -373,7 +322,7 @@ describe("operation traces", () => {
       expect(changedIds(before, after), `${where}: and rewrites none of the rest`).toEqual([]);
       return;
     }
-    if ("set_alt" in rec || "add_candidate" in rec || "select" in rec) {
+    if ("select" in rec) {
       const positions = ids(after).map((id) => ids(before).indexOf(id));
       expect(
         positions.every((n) => n >= 0),
@@ -397,7 +346,7 @@ describe("operation traces", () => {
           `${where}: what it drops is the exchange that produced the answer it replaced`,
         ).toBe(true);
       }
-      if ("select" in rec && typeof result.msg_id === "string") {
+      if (typeof result.msg_id === "string") {
         const chosen = required(after.find((m) => m.msg_id === result.msg_id));
         expect(chosen.content, `${where}: the chosen answer is what the message now says`).toBe(
           result.content as string,

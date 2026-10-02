@@ -400,13 +400,6 @@ export class MessageStore {
     return this.#messages.slice(this.#keepIndex());
   }
 
-  async clear(): Promise<void> {
-    await this.#mutate((messages) => {
-      messages.length = 0;
-      return changed(undefined);
-    });
-  }
-
   async append(msg: Message): Promise<void> {
     const candidate = versioned(structuredClone(msg));
     return await this.#enqueue(async () => {
@@ -440,28 +433,6 @@ export class MessageStore {
     });
   }
 
-  async insertByTimestamp(msg: Message): Promise<void> {
-    const candidate = versioned(structuredClone(msg));
-    await this.#mutate((messages) => {
-      const at = Date.parse(candidate.timestamp);
-      let pos: number;
-      if (Number.isNaN(at)) {
-        pos = messages.length;
-      } else {
-        pos = 0;
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const existing = Date.parse(required(messages[i]).timestamp);
-          if (Number.isNaN(existing) || existing <= at) {
-            pos = i + 1;
-            break;
-          }
-        }
-      }
-      messages.splice(pos, 0, candidate);
-      return changed(undefined);
-    });
-  }
-
   async edit(msgId: string, newContent: string): Promise<void> {
     return await this.#enqueue(async () => {
       const index = this.#messages.findIndex(message => message.msg_id === msgId);
@@ -474,16 +445,6 @@ export class MessageStore {
       this.#prepareRows();
       updateDurableLine(this.#file, index, `${serializeForStorage(msg)}\n`);
       this.#messages[index] = msg;
-    });
-  }
-
-  async truncateAfterLastUserTurn(): Promise<number> {
-    return await this.#mutate((messages) => {
-      const keep = this.#keepIndex(messages);
-      const removed = messages.length - keep;
-      if (removed === 0) return unchanged(0);
-      messages.length = keep;
-      return changed(removed);
     });
   }
 
@@ -511,10 +472,6 @@ export class MessageStore {
     });
   }
 
-  async delete(msgId: string): Promise<void> {
-    await this.deleteAll([msgId]);
-  }
-
   async deleteAll(msgIds: readonly string[]): Promise<void> {
     const doomed = new Set(msgIds);
     await this.#mutate((messages) => {
@@ -525,27 +482,6 @@ export class MessageStore {
       messages.length = 0;
       messages.push(...kept);
       return changed(undefined);
-    });
-  }
-
-  async setAlt(msgId: string, index: number, count: number): Promise<void> {
-    await this.#mutate((messages) => {
-      const msg = messages.find((m) => m.msg_id === msgId);
-      if (msg === undefined) throw new MessageNotFound(msgId);
-      msg.alt_index = index;
-      msg.alt_count = count;
-      return changed(undefined);
-    });
-  }
-
-  async addAltCandidate(msgId: string): Promise<number> {
-    return await this.#mutate((messages) => {
-      const msg = messages.find((m) => m.msg_id === msgId);
-      if (msg === undefined) throw new MessageNotFound(msgId);
-      const next = (msg.alt_count ?? 1) + 1;
-      msg.alt_count = next;
-      msg.alt_index = next - 1;
-      return changed(next);
     });
   }
 

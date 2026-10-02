@@ -28,6 +28,7 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { mergeToolLoopMessages } from "../src/engine/merge.ts";
 import type { ImageRef, Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { displayHistoryOf } from "./support/display_history.ts";
 
 interface WireError {
   code: string;
@@ -581,7 +582,7 @@ describe("conversation commands", () => {
       expect(serdeShape(engine.messages())).toEqual(
         expand(scenario.initial_messages ?? scenario.active, root) as never,
       );
-      const display = await engine.displayHistory();
+      const display = await displayHistoryOf(engine);
       expect(serdeShape(display.messages)).toEqual(
         expand(scenario.initial_display_history ?? scenario.active, root) as never,
       );
@@ -591,7 +592,7 @@ describe("conversation commands", () => {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         const before = snapshot(engine);
         const mergedBefore = mergeToolLoopMessages([...engine.messages()]);
-        const history = await engine.displayHistory();
+        const history = await displayHistoryOf(engine);
 
         let result: unknown;
         let thrown: unknown;

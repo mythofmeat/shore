@@ -225,11 +225,12 @@ describe("CharacterRegistry", () => {
             let got: unknown;
             try {
               const engine = await required(registry, where).getOrCreate(step.name as string);
+              const characterDir = join(engine.conversationDir, "..", "..");
               got = {
                 ok: true,
                 engine: engineId(engine),
-                root: rootOf(engine.characterDir, dataDir, configDir),
-                leaf: basename(engine.characterDir),
+                root: rootOf(characterDir, dataDir, configDir),
+                leaf: basename(characterDir),
               };
             } catch (e) {
               if (!(e instanceof EngineCharacterNotFound)) throw e;

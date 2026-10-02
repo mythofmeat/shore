@@ -109,7 +109,6 @@ describe("the registry as the thread authority", () => {
     expect(scratch.thread).toBe("scratch");
     expect(scratch.conversationDir).toBe(join(dataDir, "aria", "threads", "scratch"));
     expect(home.conversationDir).toBe(join(dataDir, "aria", "threads", MAIN_THREAD));
-    expect(scratch.characterDir).toBe(home.characterDir);
   });
 
   test("moving home changes which engine an unqualified call returns", async () => {
