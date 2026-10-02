@@ -74,6 +74,14 @@ RUN groupadd -g "$USER_GID" "$USERNAME" \
     "$USERNAME" \
     && install -d -o "$USER_UID" -g "$USER_GID" /config /data /cache /workspace
 
+# TZ at run time sets the clock programs report, but the character also reads
+# /etc/localtime and /etc/timezone to find the zone, so build them to match.
+ARG TZ=UTC
+RUN test -f "/usr/share/zoneinfo/$TZ" \
+    && ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime \
+    && echo "$TZ" > /etc/timezone
+ENV TZ=${TZ}
+
 # Root-owned and outside every mount, so nothing the character runs can change
 # the daemon. shore-daemon finds shore-apply-patch and shore-claude beside it.
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /opt/shore/
