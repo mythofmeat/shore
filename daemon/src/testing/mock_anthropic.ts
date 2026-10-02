@@ -82,6 +82,12 @@ function isTextBlock(block: unknown): block is { type: "text"; text: string } {
   return maybe.type === "text" && typeof maybe.text === "string";
 }
 
+const BILLING_HEADER = "x-anthropic-billing-header:";
+
+function isBillingHeader(block: unknown): boolean {
+  return isTextBlock(block) && block.text.startsWith(BILLING_HEADER);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -152,7 +158,7 @@ export class PrefixCache {
     };
 
     walk("tools", Array.isArray(tools) ? tools : []);
-    walk("system", Array.isArray(system) ? system : system ? [system] : []);
+    walk("system", (Array.isArray(system) ? system : system ? [system] : []).filter((block) => !isBillingHeader(block)));
     walk("messages", messages);
 
     const total = cumulative;
@@ -257,9 +263,10 @@ export async function startMockAnthropic(
       options.onRequest?.(record);
 
       const model = typeof body.model === "string" ? body.model : "claude-mock";
+      const id = `msg_mock_${String(requests.length)}`;
       return streaming
-        ? streamResponse(reply, model, usage, chunkChars)
-        : Response.json(messageResponse(reply, model, usage));
+        ? streamResponse(reply, id, model, usage, chunkChars)
+        : Response.json(messageResponse(reply, id, model, usage));
     },
   });
 
@@ -344,9 +351,9 @@ function blocksOf(reply: AnthropicReply): unknown[] {
   return blocks;
 }
 
-function messageResponse(reply: AnthropicReply, model: string, usage: AnthropicUsage): unknown {
+function messageResponse(reply: AnthropicReply, id: string, model: string, usage: AnthropicUsage): unknown {
   return {
-    id: "msg_mock",
+    id,
     type: "message",
     role: "assistant",
     model,
@@ -359,6 +366,7 @@ function messageResponse(reply: AnthropicReply, model: string, usage: AnthropicU
 
 function streamResponse(
   reply: AnthropicReply,
+  id: string,
   model: string,
   usage: AnthropicUsage,
   chunkChars: number,
@@ -373,7 +381,7 @@ function streamResponse(
 
       send("message_start", {
         message: {
-          id: "msg_mock",
+          id,
           type: "message",
           role: "assistant",
           model,

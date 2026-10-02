@@ -64,6 +64,18 @@ export function nativeHistoryStore(book: string, conversation: string, sameModel
   };
 }
 
+export function throwawayHistoryStore(): SessionStore {
+  const sessions = new Map<string, SessionStoreEntry[]>();
+  const pathOf = (key: SessionKey) => `${key.sessionId}/${key.subpath ?? ""}`;
+  return {
+    load: (key) => Promise.resolve(sessions.get(pathOf(key)) ?? null),
+    append: (key, added) => {
+      sessions.set(pathOf(key), [...(sessions.get(pathOf(key)) ?? []), ...added]);
+      return Promise.resolve();
+    },
+  };
+}
+
 export async function seedNativeHistory(req: SidecarRequest, sessionStore: SessionStore): Promise<{
   sessionId: string;
   assistantUuids: Map<number, string>;

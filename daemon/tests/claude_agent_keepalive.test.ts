@@ -52,10 +52,14 @@ function storedTranscriptEntries(dir: string): number {
   }
 }
 
-function lastUserText(record: AnthropicRequestRecord): string {
+function lastUserTexts(record: AnthropicRequestRecord): (string | undefined)[] {
   const last = record.body.messages.at(-1) as { content: unknown };
   const blocks = Array.isArray(last.content) ? last.content as { type: string; text?: string }[] : [];
-  return blocks.filter((block) => block.type === "text").map((block) => block.text).join("\n");
+  return blocks.filter((block) => block.type === "text").map((block) => block.text);
+}
+
+function lastUserText(record: AnthropicRequestRecord): string {
+  return lastUserTexts(record).join("\n");
 }
 
 test.each([false, true])("the real SDK pings the chat session's own prefix and keeps nothing (tools: %s)", async (withTools) => {
@@ -108,20 +112,66 @@ test.each([false, true])("the real SDK pings the chat session's own prefix and k
   }
 }, 120_000);
 
-test("a ping with no stored session fails rather than seeding one", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "shore-agent-keepalive-none-"));
-  const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
-  const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => join(dir, "sessions.json") });
-  const caught = await provider.generate(request([user("hello")], "keepalive")).then(() => undefined, (error: unknown) => error);
-  expect(String(caught)).toContain("no stored session");
-  expect(agent.calls).toHaveLength(0);
-});
+async function unstoredPing(conversation: WireMessage[], firstTurn: WireMessage[]) {
+  const dir = await mkdtemp(join(tmpdir(), "shore-agent-keepalive-unstored-"));
+  const path = join(dir, "sessions.json");
+  const mock = await startMockAnthropic({ fallback: { text: "native reply" } });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => path,
+    runQuery: params => query({ ...params, options: {
+      ...params.options,
+      env: { ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: join(dir, "claude") },
+    } }),
+  });
+  const extra: Partial<SidecarRequest> = { base_url: mock.url, provider_options: { cache_ttl: "1h" }, tools: TOOLS };
+  const phase: ToolPhase = {
+    messages: [], recordTurn: () => {},
+    runTool: () => { throw new Error("No tool execution expected"); },
+  };
+  try {
+    const ping = await provider.generate(request([...conversation, user(".")], "keepalive", extra), AbortSignal.timeout(25_000));
+    const pinged = required(mock.requests.at(-1));
+    const bookAfterPing = readBook(path);
+    const transcriptsAfterPing = storedTranscriptEntries(dir);
+    const events: StreamEvent[] = [];
+    for await (const event of provider.streamWithTools(request(firstTurn, "message", extra), phase, AbortSignal.timeout(25_000))) events.push(event);
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+    return { ping, pinged, next: required(mock.requests.at(-1)), bookAfterPing, transcriptsAfterPing };
+  } finally {
+    await mock.stop();
+  }
+}
 
-test("a ping resumes where the next turn would, on a fork whose writes are dropped", () => {
-  const plan = keepalivePlan({
+test("with nothing stored, as after a compaction, the ping warms the system prefix the first turn reads", async () => {
+  const { ping, pinged, next, bookAfterPing, transcriptsAfterPing } = await unstoredPing([], [user("hello")]);
+  expect(lastUserTexts(pinged)).toContain(".");
+  expect(ping.usage.cache_creation_tokens, "the ping wrote the prefix").toBeGreaterThan(0);
+  expect(bookAfterPing, "the ping stored no session").toEqual({});
+  expect(transcriptsAfterPing, "the ping stored no transcript").toBe(0);
+  const system = next.breakpoints.filter((breakpoint) => breakpoint.where === "system");
+  expect(system.length).toBeGreaterThan(0);
+  expect(system.every((breakpoint) => breakpoint.hit), "the first turn read the system prefix the ping wrote").toBe(true);
+}, 120_000);
+
+test("with history but nothing stored, the ping seeds a throwaway copy of the prefix the next turn sends", async () => {
+  const conversation: WireMessage[] = [
+    user("hello"),
+    { role: "system", content: [{ type: "text", text: "Answer briefly." }] },
+    assistant("native reply"),
+  ];
+  const { pinged, next, bookAfterPing, transcriptsAfterPing } = await unstoredPing(conversation, [...conversation, user("again")]);
+  expect(lastUserTexts(pinged)).toContain(".");
+  expect(bookAfterPing, "the ping stored no session").toEqual({});
+  expect(transcriptsAfterPing, "the ping stored no transcript").toBe(0);
+  expect(lastUserTexts(next)).toContain("again");
+  expect(prefixOf(next), "the next turn seeds the prefix the ping kept warm").toEqual(prefixOf(pinged));
+}, 120_000);
+
+test("a ping resumes where the next turn would, on a fork whose writes are dropped", async () => {
+  const plan = await keepalivePlan(request([user(".")], "keepalive"), {
     version: SESSION_BOOK_VERSION, sessionId: "s-1", entries: [], storedTranscript: true,
     pendingAssistantUuids: ["a-1", "a-2"], model: "claude-sonnet-4-6",
-  }, "/tmp/unused/sessions.json", "ada", "claude-sonnet-4-6");
+  }, "/tmp/unused/sessions.json", "ada");
   expect(plan.resume).toBe("s-1");
   expect(plan.resumeSessionAt).toBe("a-2");
   expect(plan.fork).toBe(true);
