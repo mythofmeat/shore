@@ -53,10 +53,7 @@ export interface PingNowOutcome {
   detail?: string;
 }
 
-export type PingSender = (
-  req: SidecarRequest,
-  signal?: AbortSignal,
-) => Promise<GenerateResponse>;
+export type PingSender = (req: SidecarRequest) => Promise<GenerateResponse>;
 
 interface Entry {
   keepalive: CacheKeepalive;
