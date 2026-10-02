@@ -338,13 +338,13 @@ class CompactionDriver {
     if (turn === undefined) return;
     const uses = this.toolUses(turn);
     if (this.state.pendingUseCount !== uses.length) return;
-    this.request.messages.push({
-      role: "user",
-      content: this.state.pendingResults.map((result, index) => ({
-        type: "tool_result", tool_use_id: required(uses[index]).id,
-        content: result.content ?? result.output, is_error: result.isError,
-      })),
-    });
+    const content: ContentBlock[] = this.state.pendingResults.map((result, index) => ({
+      type: "tool_result", tool_use_id: required(uses[index]).id,
+      content: result.content ?? result.output, is_error: result.isError,
+    }));
+    if (this.state.pendingNote !== undefined) content.push({ type: "text", text: this.state.pendingNote });
+    delete this.state.pendingNote;
+    this.request.messages.push({ role: "user", content });
     this.state.toolRounds += 1;
     delete this.state.pendingTurn;
     this.state.pendingResults = [];
@@ -382,6 +382,7 @@ async function runCompactionToolLoop(
     driver.state.maxRoundsHit = true;
     return driver.state;
   }
+  deliverPendingNote(request, driver.state);
   const phase: ToolPhase = {
     messages: [],
     parallel: false,
@@ -405,6 +406,15 @@ async function runCompactionToolLoop(
   return driver.state;
 }
 
+function deliverPendingNote(request: SidecarRequest, state: ToolLoopState): void {
+  const note = state.pendingNote;
+  if (note === undefined) return;
+  delete state.pendingNote;
+  const last = request.messages.at(-1);
+  if (last?.role === "user") last.content.push({ type: "text", text: note });
+  else request.messages.push({ role: "user", content: [{ type: "text", text: note }] });
+}
+
 async function writeWorkspaceFile(path: string, content: string | Uint8Array): Promise<void> {
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -417,6 +427,7 @@ async function writeWorkspaceFile(path: string, content: string | Uint8Array): P
 async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
     const write = required(writes[i]);
+    if (write.superseded === true) continue;
     if (write.previousState !== undefined) {
       try {
         await restoreWorkspaceEntry(write.resolvedPath, write.previousState);
@@ -568,16 +579,9 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   if (checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
-  const conflict = await checkpointConflict(checkpoint, plan.sourceContent);
-  if (conflict !== undefined) {
-    if (conflict.reason !== "source_conflict") {
-      checkpoint.state = "paused";
-      checkpoint.pauseReason = conflict.reason;
-      if (conflict.detail === undefined) delete checkpoint.pauseDetail;
-      else checkpoint.pauseDetail = conflict.detail;
-      await persistCheckpoint(opts, checkpoint);
-      return pausedOutcome(opts, checkpoint);
-    }
+  if (checkpointSourceIsCompatible(checkpoint, plan.sourceContent)) {
+    await adoptOutsideEdits(opts, checkpoint);
+  } else {
     shoreLog.warn(
       `shore: discarding compaction checkpoint ${checkpoint.id} for ${opts.charName}: the active ` +
         `conversation was rewritten under it, so the pass can never resume; summarizing from the ` +
@@ -891,45 +895,47 @@ async function discardCheckpoint(opts: CompactOptions): Promise<string | undefin
   return abandoned?.memoryBefore;
 }
 
-interface CheckpointConflict {
-  reason: CompactionPauseReason;
-  detail?: string;
-}
-
-async function checkpointConflict(
-  checkpoint: CompactionCheckpoint,
-  activeContent: string,
-): Promise<CheckpointConflict | undefined> {
-  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) {
-    return { reason: "source_conflict" };
-  }
+async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionCheckpoint): Promise<void> {
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
+  const changed: string[] = [];
   for (const write of latest.values()) {
-    if (write.resultingState !== undefined) {
-      if (!sameWorkspaceEntry(await workspaceEntry(write.resolvedPath), write.resultingState)) {
-        return { reason: "workspace_conflict", detail: write.displayPath };
-      }
-      continue;
-    }
-    if (write.deleted === true) {
-      try {
-        await lstat(write.resolvedPath);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
-      }
-      return { reason: "workspace_conflict", detail: write.displayPath };
-    }
-    if (write.resultingContent === undefined) continue;
-    try {
-      if ((await readFile(write.resolvedPath, "utf8")) !== write.resultingContent) {
-        return { reason: "workspace_conflict", detail: write.displayPath };
-      }
-    } catch {
-      return { reason: "workspace_conflict", detail: write.displayPath };
+    if (write.superseded === true || await stillAsWritten(write)) continue;
+    changed.push(write.displayPath);
+    for (const earlier of checkpoint.loop.writesApplied) {
+      if (earlier.resolvedPath === write.resolvedPath) earlier.superseded = true;
     }
   }
-  return undefined;
+  if (changed.length === 0) return;
+  shoreLog.info(
+    `shore: compaction checkpoint ${checkpoint.id} for ${opts.charName} resumes over outside edits ` +
+      `to ${JSON.stringify(changed)}; the pass keeps them and will not roll them back`,
+  );
+  const note =
+    `[While this pass was paused, ${changed.join(", ")} changed outside it. The current ` +
+    `contents are authoritative: read them again before editing, and keep those changes.]`;
+  const earlier = checkpoint.loop.pendingNote;
+  checkpoint.loop.pendingNote = earlier === undefined ? note : `${earlier}\n${note}`;
+}
+
+async function stillAsWritten(write: AppliedCompactionWrite): Promise<boolean> {
+  if (write.resultingState !== undefined) {
+    return sameWorkspaceEntry(await workspaceEntry(write.resolvedPath), write.resultingState);
+  }
+  if (write.deleted === true) {
+    try {
+      await lstat(write.resolvedPath);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return true;
+    }
+    return false;
+  }
+  if (write.resultingContent === undefined) return true;
+  try {
+    return (await readFile(write.resolvedPath, "utf8")) === write.resultingContent;
+  } catch {
+    return false;
+  }
 }
 
 function pausedOutcome(

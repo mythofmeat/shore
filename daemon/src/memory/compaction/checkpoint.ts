@@ -21,6 +21,7 @@ export interface CheckpointLoopState {
   pendingTurn?: GenerateResponse;
   pendingResults: ToolOutput[];
   pendingUseCount: number;
+  pendingNote?: string;
 }
 
 export interface CompactionCheckpoint {
