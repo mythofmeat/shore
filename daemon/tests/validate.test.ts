@@ -311,24 +311,7 @@ describe("a config that shore can act on", () => {
   test("an MCP server granted by name with a definition is silent", () => {
     expect(warningsOf("[mcp.tavily]\nurl = \"https://mcp.example.invalid/mcp\"\n\n[tools]\nmcp = [\"tavily\"]\n").join(" ")).not.toContain("tavily");
   });
-  test("a removed web_search grant warns and names the MCP replacement", () => {
-    for (const src of [
-      "[tools]\nenabled = [\"bash\", \"web_search\"]\n",
-      "\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\ntools = [\"web_search\"]\n",
-    ]) {
-      const warnings = warningsOf(src).join(" ");
-      expect(warnings).toContain("tool 'web_search' was removed and grants nothing");
-      expect(warnings).toContain("tools.mcp");
-    }
-    expect(warningsOf("[tools]\nenabled = [\"bash\"]\n").join(" ")).not.toContain("web_search");
-  });
-  test("a leftover [web_search] section is refused with a migration hint", () => {
-    const message = refused("[web_search]\nmax_results = 5\n");
-    expect(message).toContain("[web_search] is no longer supported");
-    expect(message).toContain("[mcp.tavily]");
-    expect(message).toContain("tools.mcp");
-  });
-  test("a top-level key named like an Object method is an unknown field, not a removed section", () => {
+  test("a top-level key named like an Object method is an unknown field", () => {
     expect(refused("constructor = 1\n")).toContain("unknown field `constructor`");
   });
   test("provider:model_id embedding default passes", () => {

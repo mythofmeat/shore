@@ -22,8 +22,7 @@
     "browser:generate": "bun run scripts/browser_validators.ts --write",
     "browser:check": "bun run scripts/browser_validators.ts && bun run scripts/build_browser.ts --check",
     "browser:build": "bun run scripts/build_browser.ts",
-    "test:browser": "bun run build && playwright test",
-    "inventory:check": "bun run scripts/capability_inventory.ts"
+    "test:browser": "bun run build && playwright test"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.54",

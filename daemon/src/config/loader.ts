@@ -506,10 +506,6 @@ function validateConfig(
 
 }
 
-export const WEB_SEARCH_REMOVED =
-  "tool 'web_search' was removed and grants nothing; configure a search MCP server " +
-  "such as [mcp.tavily] and grant it with tools.mcp or an mcp__<server>__* tool pattern";
-
 function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
   for (const [name, server] of app.mcp) {
     const hasCommand = server.command !== undefined;
@@ -551,7 +547,6 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     ...[...app.subagents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
-    if (pattern === "web_search") onWarn(WEB_SEARCH_REMOVED, [["pattern", pattern]]);
     if (!pattern.startsWith("mcp__")) continue;
     const server = pattern.slice("mcp__".length).split("__")[0] ?? "";
     if (server !== "" && server !== "*" && !app.mcp.has(server)) {

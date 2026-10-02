@@ -227,7 +227,6 @@ limit_action = "block"
     expect(() => read('notifications=[]')).toThrow("must be a table");
     expect(() => read('[[budgets]]\ncost_usd=1\n[tools]\nbash=[]')).toThrow("tools.bash must be a table");
     expect(() => read('[chat."gemini:m"]\ntemperatur=0.5')).toThrow("unknown field");
-    expect(() => read('[web_search]\ndepth="advanced"')).toThrow("[web_search] is no longer supported");
   });
 
 

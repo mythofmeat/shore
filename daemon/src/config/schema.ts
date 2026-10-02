@@ -275,17 +275,11 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   return template === undefined ? undefined : { ...template, key };
 }
 
-const REMOVED_SECTIONS: ReadonlyMap<string, string> = new Map([
-  ["web_search", "[web_search] is no longer supported: the built-in web_search tool was removed. Delete this section and configure a search MCP server instead, for example [mcp.tavily] with url = \"https://mcp.tavily.com/mcp/\" and bearer_token_env = \"TAVILY_API_KEY\", then grant it with tools.mcp = [\"tavily\"]"],
-]);
-
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });
   const visit = (value: unknown, path: string[]): void => {
     const key = formatConfigPath(path);
     const info = findSchemaEntry(entries, key);
-    const removed = path.length === 1 ? REMOVED_SECTIONS.get(key) : undefined;
-    if (removed !== undefined) throw new Error(`${source}: ${removed}`);
     if (info === undefined) {
       const expected = entries.filter((candidate) => parseConfigPath(candidate.key).length === 1).map((candidate) => `\`${candidate.key}\``);
       throw new Error(`${source}: unknown field \`${key}\`${path.length === 1 ? `, expected one of ${expected.join(", ")}` : ""}`);
