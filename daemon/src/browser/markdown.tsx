@@ -1,6 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
-import type { Nodes, Parents } from "mdast";
-import type { ReactNode } from "react";
+import type { Nodes, Parents, RootContent } from "mdast";
+import { memo, useRef, type ReactNode } from "react";
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
@@ -13,9 +13,8 @@ function children(node: Parents, prefix: string): ReactNode[] {
   return node.children.map((child, index) => render(child, `${prefix}.${String(index)}`));
 }
 
-function render(node: Nodes, key: string): ReactNode {
+function render(node: RootContent, key: string): ReactNode {
   switch (node.type) {
-    case "root": return <>{children(node, key)}</>;
     case "paragraph": return <p key={key}>{children(node, key)}</p>;
     case "heading": {
       const Tag = (`h${String(Math.min(node.depth + 2, 6))}`) as "h3" | "h4" | "h5" | "h6";
@@ -50,8 +49,32 @@ function render(node: Nodes, key: string): ReactNode {
   }
 }
 
-export function Markdown({ text, className = "prose" }: { text: string; className?: string }) {
-  let tree: Nodes;
-  try { tree = fromMarkdown(text); } catch { return <div className={className}><p>{text}</p></div>; }
-  return <div className={className}>{render(tree, "m")}</div>;
+export interface SettledMarkdown { text: string; blocks: ReactNode[] }
+
+const UNSETTLED: SettledMarkdown = { text: "", blocks: [] };
+
+function defines(node: Nodes): boolean {
+  return node.type === "definition" || ("children" in node && node.children.some(defines));
 }
+
+export function markdownBlocks(text: string, previous: SettledMarkdown = UNSETTLED): { blocks: ReactNode[]; settled: SettledMarkdown } {
+  const base = text.startsWith(previous.text) ? previous : UNSETTLED;
+  const tail = text.slice(base.text.length);
+  const tree = fromMarkdown(tail);
+  const defined = defines(tree);
+  if (defined && base !== UNSETTLED) return markdownBlocks(text);
+  const blocks = [...base.blocks, ...tree.children.map((child, index) => render(child, `m.${String(base.blocks.length + index)}`))];
+  const complete = tail.lastIndexOf("\n");
+  const open = tree.children.findLastIndex((child) => (child.position?.start.offset ?? Infinity) <= complete);
+  const start = defined || open < 1 ? undefined : tree.children[open]?.position?.start.offset;
+  if (start === undefined) return { blocks, settled: base };
+  const cut = tail.lastIndexOf("\n", start - 1) + 1;
+  return { blocks, settled: { text: base.text + tail.slice(0, cut), blocks: blocks.slice(0, base.blocks.length + open) } };
+}
+
+export const Markdown = memo(function Markdown({ text, className = "prose" }: { text: string; className?: string }) {
+  const settled = useRef<SettledMarkdown>(UNSETTLED);
+  let blocks: ReactNode[];
+  try { ({ blocks, settled: settled.current } = markdownBlocks(text, settled.current)); } catch { return <div className={className}><p>{text}</p></div>; }
+  return <div className={className}>{blocks}</div>;
+});

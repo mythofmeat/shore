@@ -186,6 +186,36 @@ test("a tool loop's saved rounds and its live stream show each step once", () =>
   expect(shown()).toEqual(["question", "final"]);
 });
 
+test("streamed chunks reach the screen once per frame while every other event reaches it at once", () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const frames: (() => void)[] = [];
+  const workspace = new Workspace(connection, (callback) => { frames.push(callback); });
+  let notified = 0;
+  workspace.subscribe(() => { notified += 1; });
+  const chunk = (text: string): ServerMessage => ({ type: "stream_chunk", rid: "r1", content_type: "text", text });
+  connection.frame({ type: "stream_start", rid: "r1", regen: false });
+  const started = notified;
+  expect(started).toBeGreaterThan(0);
+  for (const text of ["a", "b", "c"]) connection.frame(chunk(text));
+  expect(workspace.getSnapshot().streams.map((stream) => stream.text)).toEqual(["abc"]);
+  expect(notified).toBe(started);
+  expect(frames).toHaveLength(1);
+  frames[0]?.();
+  expect(notified).toBe(started + 1);
+  connection.frame(chunk("d"));
+  expect(frames).toHaveLength(2);
+  connection.frame({ type: "stream_end", rid: "r1", msg_id: "final", content: "abcd", finish_reason: "end_turn", is_final: true, metadata: { model: "m", tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 } } });
+  const ended = notified;
+  expect(ended).toBeGreaterThan(started + 1);
+  frames[1]?.();
+  expect(notified).toBe(ended);
+});
+
 test("history-only updates retain configuration until it is replaced or the conversation changes", () => {
   class Connection extends BrowserConnection {
     listeners = new Set<(update: ConnectionUpdate) => void>();

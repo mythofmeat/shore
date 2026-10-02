@@ -26,7 +26,7 @@ function browserStorage(): Pick<Storage, "getItem" | "setItem"> {
 
 export const workspace = new Workspace(new BrowserConnection({
   origin: location.origin, contract: SHORE_WEB_CONTRACT, protocol: SHORE_WEB_PROTOCOL, character: route[0] || null, thread: route[1] || null,
-}));
+}), (callback) => { requestAnimationFrame(callback); });
 export const conversation = new ConversationRequests(workspace.connection);
 export const unsent = new UnsentMessages(workspace.connection, listRequests, (message, dropped) => {
   const character = conversationCharacter(message.conversation);
