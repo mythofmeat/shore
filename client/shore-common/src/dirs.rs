@@ -121,10 +121,6 @@ impl ShoreDirs {
     }
 }
 
-pub fn workspace_root() -> Option<PathBuf> {
-    workspace_root_from(&process_env)
-}
-
 fn workspace_root_from(env: &impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
     env("SHORE_WORKSPACE_DIR")
         .filter(|v| !v.is_empty())

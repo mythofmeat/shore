@@ -132,7 +132,6 @@ mod tests {
         assert_eq!(run.tool_name.as_deref(), Some("edit"));
 
         run.push_block(Block::ToolResult {
-            tool_id: "t1".into(),
             tool_name: "edit".into(),
             output: "written".into(),
             images: Vec::new(),

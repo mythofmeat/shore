@@ -2902,7 +2902,6 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     clippy::as_conversions,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
     clippy::float_arithmetic,
     reason = "the slider maps a clamped floating-point sampler range onto a bounded terminal rail"
 )]
@@ -3155,9 +3154,8 @@ pub(crate) mod scenario_tests {
         }
     }
 
-    fn tool_result(id: &str, name: &str, output: &str, is_error: bool) -> Block {
+    fn tool_result(name: &str, output: &str, is_error: bool) -> Block {
         Block::ToolResult {
-            tool_id: id.into(),
             tool_name: name.into(),
             output: output.into(),
             images: Vec::new(),
@@ -5562,7 +5560,6 @@ pub(crate) mod scenario_tests {
             serde_json::json!({"path": "/tmp/notes.txt"}),
         );
         h.app.stream_push_tool_result(
-            "call-1".into(),
             "read_file".into(),
             "line one\nline two\nline three".into(),
             Vec::new(),
@@ -5762,12 +5759,7 @@ pub(crate) mod scenario_tests {
                 "web_search",
                 serde_json::json!({"query": "foo bar baz"}),
             ),
-            tool_result(
-                "tc1",
-                "web_search",
-                "Found 3 results for foo bar baz",
-                false,
-            ),
+            tool_result("web_search", "Found 3 results for foo bar baz", false),
         ]));
 
         let f = h.render("tool call + result");
@@ -5833,7 +5825,7 @@ pub(crate) mod scenario_tests {
         ));
         h.app.entries.push(assistant_turn(vec![
             tool_use("tc1", "web_search", serde_json::json!({"query": "foo"})),
-            tool_result("tc1", "web_search", "Result: foo page", false),
+            tool_result("web_search", "Result: foo page", false),
             Block::Text("I found foo.".into()),
         ]));
 
@@ -5888,7 +5880,7 @@ pub(crate) mod scenario_tests {
             Block::SubagentBegin("research".into()),
             Block::Thinking("nested thought".into()),
             tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
-            tool_result("s1", "web_search", "nested result", false),
+            tool_result("web_search", "nested result", false),
             Block::SubagentEnd("research".into()),
             Block::Text("primary answer".into()),
         ]));
@@ -5919,7 +5911,7 @@ pub(crate) mod scenario_tests {
             Block::SubagentBegin("research".into()),
             Block::Thinking("nested thought".into()),
             tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
-            tool_result("s1", "web_search", "nested result", false),
+            tool_result("web_search", "nested result", false),
             Block::SubagentEnd("research".into()),
             Block::Text("primary answer".into()),
         ]));
@@ -5963,11 +5955,11 @@ pub(crate) mod scenario_tests {
             tool_use("p1", "ask_research", serde_json::json!({"query": "x"})),
             Block::SubagentBegin("research".into()),
             tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
-            tool_result("s1", "web_search", "a", false),
+            tool_result("web_search", "a", false),
             tool_use("s2", "read", serde_json::json!({"path": "b"})),
-            tool_result("s2", "read", "b", false),
+            tool_result("read", "b", false),
             Block::SubagentEnd("research".into()),
-            tool_result("p1", "ask_research", "answer", false),
+            tool_result("ask_research", "answer", false),
             tool_use("p2", "roll_dice", serde_json::json!({"notation": "1d6"})),
         ]));
 
@@ -5994,10 +5986,10 @@ pub(crate) mod scenario_tests {
         h.app.entries.push(assistant_turn(vec![
             Block::Thinking("FIRST_THOUGHT".into()),
             tool_use("tc1", "ALPHA_TOOL", serde_json::json!({"q": "x"})),
-            tool_result("tc1", "ALPHA_TOOL", "alpha done", false),
+            tool_result("ALPHA_TOOL", "alpha done", false),
             Block::Thinking("SECOND_THOUGHT".into()),
             tool_use("tc2", "BETA_TOOL", serde_json::json!({"q": "y"})),
-            tool_result("tc2", "BETA_TOOL", "beta done", false),
+            tool_result("BETA_TOOL", "beta done", false),
             Block::Text("FINAL_ANSWER".into()),
         ]));
 
@@ -6344,7 +6336,7 @@ pub(crate) mod scenario_tests {
         h.app.entries.push(assistant_turn(vec![
             Block::Text("PRETOOL_TEXT".into()),
             tool_use("tc1", "do_tool", serde_json::json!({"x": 1})),
-            tool_result("tc1", "do_tool", "ok", false),
+            tool_result("do_tool", "ok", false),
             Block::Text("POSTTOOL_TEXT".into()),
         ]));
 
@@ -6935,7 +6927,6 @@ pub(crate) mod scenario_tests {
                     }),
                 },
                 Block::ToolResult {
-                    tool_id: "toolu_1".into(),
                     tool_name: "long_tool".into(),
                     output: long_tool_output,
                     images: Vec::new(),
@@ -7249,19 +7240,13 @@ pub(crate) mod scenario_tests {
                 "web_search",
                 serde_json::json!({"query": "rust tui frameworks"}),
             ),
-            tool_result(
-                "tc1",
-                "web_search",
-                "Found: ratatui, cursive, tui-rs",
-                false,
-            ),
+            tool_result("web_search", "Found: ratatui, cursive, tui-rs", false),
             tool_use(
                 "tc2",
                 "read_page",
                 serde_json::json!({"url": "https://ratatui.rs"}),
             ),
             tool_result(
-                "tc2",
                 "read_page",
                 "Ratatui is a Rust library for building terminal UIs",
                 false,
@@ -7271,7 +7256,7 @@ pub(crate) mod scenario_tests {
                 "read_page",
                 serde_json::json!({"url": "https://404.example.com"}),
             ),
-            tool_result("tc3", "read_page", "404 Not Found", true),
+            tool_result("read_page", "404 Not Found", true),
         ]));
 
         let f = h.render("multiple tool calls");

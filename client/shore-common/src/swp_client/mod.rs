@@ -7,7 +7,7 @@ pub mod sync;
 
 pub use conn_manager::{ConnCommand, ConnEvent, spawn_connection};
 pub use connection::{SWPConnection, ServerAddr, read_image_upload};
-pub use discovery::{discover_config_dir, discover_or_default};
+pub use discovery::discover_or_default;
 pub use error::{ClientError, DiscoveryKind, Result};
 
 #[cfg(test)]
@@ -240,7 +240,10 @@ mod tests {
         });
 
         let mut conn = SWPConnection::from_raw_stream(client_stream);
-        let rid = conn.send_message("test message", true).await.unwrap();
+        let rid = conn
+            .send_message_with_images("test message", true, vec![])
+            .await
+            .unwrap();
         assert!(rid.is_some());
 
         let reply = conn.recv().await.unwrap();

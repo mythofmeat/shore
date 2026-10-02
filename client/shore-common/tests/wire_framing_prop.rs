@@ -311,10 +311,6 @@ fn arb_character_info() -> impl Strategy<Value = CharacterInfo> {
         .prop_map(|(name, avatar)| CharacterInfo { name, avatar })
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "single server-message strategy keeps variant coverage visible in one property-test generator"
-)]
 fn arb_server_message() -> BoxedStrategy<ServerMessage> {
     prop_oneof![
         (

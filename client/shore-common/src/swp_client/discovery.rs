@@ -156,14 +156,6 @@ fn describe_instances(entries: &[InstanceEntry]) -> String {
         .join(", ")
 }
 
-pub fn discover_config_dir() -> Result<Option<PathBuf>> {
-    let entries = read_instances()?;
-    let [only] = entries.as_slice() else {
-        return Ok(None);
-    };
-    Ok(only.config_dir.as_deref().map(PathBuf::from))
-}
-
 pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
     match read_instances() {
         Ok(entries) => config_dir_of(&entries, addr),

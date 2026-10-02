@@ -1,4 +1,3 @@
-// allow-expect-in-tests doesn't reach non-#[test] helpers in integration tests.
 #![expect(
     clippy::expect_used,
     reason = "golden fixture helpers intentionally fail fast when checked-in protocol JSON is malformed"
