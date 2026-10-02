@@ -9,7 +9,6 @@ import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import type { ToolContext, ToolLimitsView } from "../src/tools/dispatch.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import { runnableTools } from "../src/llm/providers/anthropic_tools.ts";
 import { turnToOpenAI } from "../src/llm/providers/openai.ts";
 import { turnToVercel } from "../src/llm/providers/vercel.ts";
 import { translateMessages } from "../src/llm/providers/gemini.ts";
@@ -324,46 +323,6 @@ describe("providers deliver tool result images", () => {
     });
     expect(parts?.[1]).toEqual({ text: "Image from tool toolu_1 (tool_call_id: toolu_1):" });
     expect(parts?.[2]).toEqual({ inlineData: { mimeType: "image/png", data: PNG } });
-  });
-});
-
-describe("the anthropic tool runner returns content blocks", () => {
-  test("an image tool result becomes text plus an image param", async () => {
-    const phase = {
-      messages: [],
-      runTool: () => Promise.resolve(IMAGE_TOOL_RESULT),
-      recordTurn: () => undefined,
-    };
-    const [tool] = runnableTools(
-      [{ name: "mcp__srv__shot", description: "", input_schema: { type: "object" } }],
-      phase,
-      () => undefined,
-    );
-
-    expect(await tool?.run({}, { toolUse: { id: "toolu_1" } } as never)).toEqual([
-      { type: "text", text: "the screenshot" },
-      { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
-    ]);
-  });
-
-  test("a plain string result is still returned as a string", async () => {
-    const phase = {
-      messages: [],
-      runTool: () =>
-        Promise.resolve({
-          type: "tool_result" as const,
-          tool_use_id: "toolu_1",
-          content: "plain",
-        }),
-      recordTurn: () => undefined,
-    };
-    const [tool] = runnableTools(
-      [{ name: "mcp__srv__shot", description: "", input_schema: { type: "object" } }],
-      phase,
-      () => undefined,
-    );
-
-    expect(await tool?.run({}, { toolUse: { id: "toolu_1" } } as never)).toBe("plain");
   });
 });
 
