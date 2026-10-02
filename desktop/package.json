@@ -1,7 +1,7 @@
 {
   "name": "shore-desktop",
   "productName": "Shore",
-  "version": "4.21.1",
+  "version": "4.21.2",
   "description": "Desktop app for Shore's browser client",
   "private": true,
   "type": "module",
