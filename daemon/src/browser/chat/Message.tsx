@@ -106,7 +106,7 @@ function EditBox({ message, done }: { message: Message; done: () => void }) {
   useEffect(() => { const node = area.current; if (node !== null) { node.focus(); node.setSelectionRange(node.value.length, node.value.length); } }, []);
   useEffect(() => {
     let alive = true;
-    workspace.actions.run("get", { ref: message.msg_id }, { remember: false }).then((latest) => {
+    workspace.actions.run("get", { ref: message.msg_id }).then((latest) => {
       if (!alive) return;
       setOriginal(latest.content);
       if (!typed.current) setText(latest.content);
@@ -156,7 +156,7 @@ function AlternativesDialog({ message, close }: { message: Message; close: () =>
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let alive = true;
-    workspace.actions.run("list_alternatives", { ref: message.msg_id }, { remember: false }).then((result) => { if (alive) setListing(result); }).catch((failure: unknown) => { if (alive) setError(errorText(failure)); });
+    workspace.actions.run("list_alternatives", { ref: message.msg_id }).then((result) => { if (alive) setListing(result); }).catch((failure: unknown) => { if (alive) setError(errorText(failure)); });
     return () => { alive = false; };
   }, [message.msg_id]);
   const choose = async (position: number) => {

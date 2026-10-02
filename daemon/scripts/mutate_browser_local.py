@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Exercise retained output and local workflow checks."""
+"""Exercise operation results and local workflow checks."""
 import sys
 from mutation import run
 
 O = "src/browser/operations.ts"
 MUTANTS = [
-    ("background actions replace reopened output", O, 'options.remember !== false &&', ''),
-    ("sign-out lets late completion retain output", O, 'epoch === this.#epoch', 'true'),
     ("missing output becomes usable", O, 'invalid || !received || !validOperationResult(name, result)', 'false'),
 ]
 

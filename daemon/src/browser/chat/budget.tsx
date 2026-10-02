@@ -29,7 +29,7 @@ export function BudgetChip({ state }: { state: WorkspaceSnapshot }) {
   useEffect(() => {
     if (values.usage === "off" || state.status !== "ready") return;
     let alive = true;
-    workspace.actions.run("usage", { budget: true }, { remember: false }).then((result) => { if (alive && result.mode === "budget") { setBudgets(result.budgets); setPlan(result.claude_plan_limits); } }).catch(() => { if (alive) { setBudgets([]); setPlan(undefined); } });
+    workspace.actions.run("usage", { budget: true }).then((result) => { if (alive && result.mode === "budget") { setBudgets(result.budgets); setPlan(result.claude_plan_limits); } }).catch(() => { if (alive) { setBudgets([]); setPlan(undefined); } });
     return () => { alive = false; };
   }, [values.usage, state.status, state.character, state.thread, configAt(state.config, "active_model"), finished]);
   if (values.usage === "off") return null;

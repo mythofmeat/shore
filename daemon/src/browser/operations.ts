@@ -12,25 +12,17 @@ export class OperationFailure extends Error {
 }
 
 export class OperationClient {
-  #output: { name: OperationName; data: OperationResult<OperationName>; context: string } | undefined;
-  #listeners = new Set<() => void>();
-  #epoch = 0;
   #requests = new Map<string, OperationName>();
   pendingOperation(rid: string | null | undefined): OperationName | undefined { return rid === undefined || rid === null ? undefined : this.#requests.get(rid); }
-  constructor(readonly connection: BrowserConnection, readonly context: () => string = () => "") {}
-  getOutput = () => this.#output;
-  subscribeOutput = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
-  clearOutput(): void { this.#epoch += 1; this.#output = undefined; for (const listener of this.#listeners) listener(); }
+  constructor(readonly connection: BrowserConnection) {}
 
-  async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { remember?: boolean; observe?: (message: ServerMessage) => void } = {}): Promise<OperationResult<N>> {
+  async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { observe?: (message: ServerMessage) => void } = {}): Promise<OperationResult<N>> {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
     let rid: string | undefined;
     let result: unknown;
     const images = new Map<string, string>();
     let received = false;
     let invalid = false;
-    const epoch = this.#epoch;
-    const context = this.context();
     const unsubscribe = this.connection.subscribe((update) => {
       if (update.kind !== "frame" || !("rid" in update.message) || update.message.rid !== rid) return;
       options.observe?.(update.message);
@@ -54,10 +46,6 @@ export class OperationClient {
         result = { ...result, images: result.images.map(image => ({ ...image, data: image.data ?? images.get(image.path) ?? null })) };
       }
       if (invalid || !received || !validOperationResult(name, result)) throw new Error(`Invalid result for ${name}`);
-      if (options.remember !== false && epoch === this.#epoch) {
-        this.#output = { name, data: result, context };
-        for (const listener of this.#listeners) listener();
-      }
       return result;
     } finally { if (rid !== undefined) this.#requests.delete(rid); unsubscribe(); }
   }
