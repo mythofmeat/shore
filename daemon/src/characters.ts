@@ -5,8 +5,6 @@ import {
   characterWorkspaceFile,
   threadDataDir,
   discoverCharacters,
-  loadCharacterDefinition,
-  resolveUserDefinition,
   SOUL_FILE,
 } from "./config/dirs.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
@@ -29,7 +27,6 @@ import {
   setThreadLabel,
   setThreadModel,
   threadRecord,
-  touchThread,
   ThreadError,
   type ArchiveThreadOptions,
   type NewThread,
@@ -175,10 +172,6 @@ export class CharacterRegistry {
 
   availableCharacters(): readonly string[] {
     return this.#available;
-  }
-
-  async refresh(): Promise<void> {
-    this.#available = await this.#scan();
   }
 
   hasCharacter(name: string): boolean {
@@ -336,13 +329,6 @@ export class CharacterRegistry {
     );
   }
 
-  async touchThread(name: string, id: string): Promise<void> {
-    await this.#withThreadIndex(name, async () => {
-      const index = await touchThread(this.#dataDir, name, id, new Date().toISOString());
-      if (index !== undefined) this.#threads.set(name, index);
-    });
-  }
-
   async #withThreadIndex<T>(
     name: string,
     run: () => Promise<T>,
@@ -363,14 +349,6 @@ export class CharacterRegistry {
     return this.#globalConfig.dirs.workspace;
   }
 
-  characterDefinition(name: string): string | undefined {
-    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());
-  }
-
-  userDefinition(name: string): string | undefined {
-    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());
-  }
-
   effectiveConfig(name: string): LoadedConfig {
     if (!this.#charConfigs.has(name)) {
       try {
@@ -380,10 +358,6 @@ export class CharacterRegistry {
       }
     }
     return this.#charConfigs.get(name) ?? this.#globalConfig;
-  }
-
-  invalidateConfigs(): void {
-    this.#charConfigs.clear();
   }
 
   setRuntimeEffectiveConfig(name: string, config: LoadedConfig): void {

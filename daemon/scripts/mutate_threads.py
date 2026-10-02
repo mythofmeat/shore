@@ -86,7 +86,7 @@ MUTANTS = [
      "  await writeThreadsIndex(data, character, next);\n  return next;\n}\n\nfunction requireThread(",
      "  return next;\n}\n\nfunction requireThread("),
 
-    # --- home, labels and activity -----------------------------------------
+    # --- home and labels ---------------------------------------------------
     ("home: it can be pointed at a thread that does not exist",
      "  requireThread(index, character, id);\n  const next: ThreadsIndex = { ...index, home: id };",
      "  const next: ThreadsIndex = { ...index, home: id };"),
@@ -99,11 +99,6 @@ MUTANTS = [
     ("label: the whole list is replaced by the edited record",
      "  return { ...index, threads: index.threads.map((t) => (t.id === record.id ? record : t)) };",
      "  return { ...index, threads: [record] };"),
-    ("touch: activity is not recorded",
-     "  const next = replaceThread(index, { ...current, last_active: now });\n"
-     "  await writeThreadsIndex(data, character, next);\n"
-     "  return next;",
-     "  return index;"),
 
     # --- archiving ----------------------------------------------------------
     ("archive: the home thread can be archived out from under the heartbeat",

@@ -14,13 +14,14 @@ import {
   characterWorkspaceDir,
   characterWorkspaceFile,
   discoverCharacters,
-  loadCharacterDefinition,
   pluginsDir,
+  readOrUndefined,
   resolvePromptTemplate,
   NoHomeDirectoryError,
   resolveShoreDirs,
-  resolveUserDefinition,
   rustJoin,
+  SOUL_FILE,
+  USER_FILE,
   type Env,
 } from "../src/config/dirs.ts";
 import {
@@ -287,8 +288,8 @@ describe("character discovery", () => {
     test(c.name, () => {
       const root = build(c.files, c.dirs);
       expect(discoverCharacters(root)).toEqual(c.discovered);
-      expect(loadCharacterDefinition(root, c.probe) ?? null).toEqual(c.definition);
-      expect(resolveUserDefinition(root, c.probe) ?? null).toEqual(c.user);
+      expect(readOrUndefined(characterWorkspaceFile(root, c.probe, SOUL_FILE)) ?? null).toEqual(c.definition);
+      expect(readOrUndefined(characterWorkspaceFile(root, c.probe, USER_FILE)) ?? null).toEqual(c.user);
       expect(resolvePromptTemplate(root, c.probe, "compaction.md") ?? null).toEqual(
         c.prompt_compaction,
       );

@@ -147,15 +147,11 @@ describe("the registry as the thread authority", () => {
     expect(registry.homeThread("aria")).toBe(MAIN_THREAD);
   });
 
-  test("labels and last-active are visible through the registry", async () => {
+  test("labels are visible through the registry", async () => {
     const { registry } = await registryWith("aria");
     await registry.createThread("aria", "scratch", { label: "Scratch" });
 
     expect(registry.listThreads("aria")[1]?.label).toBe("Scratch");
-    expect(registry.listThreads("aria")[1]?.last_active).toBeUndefined();
-
-    await registry.touchThread("aria", "scratch");
-    expect(registry.listThreads("aria")[1]?.last_active).toBeDefined();
   });
 
   test("forking through the registry publishes the child and caches its engine apart", async () => {
@@ -298,22 +294,21 @@ describe("concurrent thread-index mutations", () => {
     );
   });
 
-  test("the in-memory index matches disk after concurrent touches", async () => {
+  test("the in-memory index matches disk after concurrent updates", async () => {
     const { registry, dataDir } = await registryWith("aria");
     await registry.createThread("aria", "alpha");
 
     await Promise.all([
-      registry.touchThread("aria", "alpha"),
-      registry.touchThread("aria", MAIN_THREAD),
       registry.setThreadLabel("aria", "alpha", "labelled"),
+      registry.setThreadLabel("aria", MAIN_THREAD, "home"),
     ]);
 
     const onDisk = JSON.parse(
       readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
-    ) as { threads: Array<{ id: string; label?: string; last_active?: string }> };
+    ) as { threads: Array<{ id: string; label?: string }> };
 
     expect(onDisk.threads.find((t) => t.id === "alpha")?.label).toBe("labelled");
-    expect(onDisk.threads.every((t) => t.last_active !== undefined)).toBe(true);
+    expect(onDisk.threads.find((t) => t.id === MAIN_THREAD)?.label).toBe("home");
     expect(registry.threads("aria")).toEqual(onDisk as never);
   });
 });

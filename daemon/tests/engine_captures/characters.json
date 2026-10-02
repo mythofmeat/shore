@@ -39,7 +39,7 @@
       ]
     },
     {
-      "name": "discovery is sorted and reads workspace definitions",
+      "name": "discovery is sorted and case-sensitive",
       "seed": {
         "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
@@ -74,21 +74,6 @@
           "op": "has_character",
           "name": "alice",
           "result": false
-        },
-        {
-          "op": "character_definition",
-          "name": "Alice",
-          "result": "Alice legacy"
-        },
-        {
-          "op": "character_definition",
-          "name": "Zulu",
-          "result": "Zulu soul"
-        },
-        {
-          "op": "character_definition",
-          "name": "Nobody",
-          "result": null
         }
       ]
     },
@@ -120,7 +105,7 @@
           "body": "not a definition"
         },
         {
-          "op": "refresh"
+          "op": "reload_runtime_state"
         },
         {
           "op": "fs:write",
@@ -128,7 +113,7 @@
           "body": "now it is"
         },
         {
-          "op": "refresh",
+          "op": "reload_runtime_state",
           "state": {
             "available": [
               "Alice",
@@ -140,7 +125,7 @@
       ]
     },
     {
-      "name": "refresh re-scans; nothing else does",
+      "name": "a reload re-scans; nothing else does",
       "seed": {
         "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
@@ -172,7 +157,7 @@
           "result": false
         },
         {
-          "op": "refresh",
+          "op": "reload_runtime_state",
           "state": {
             "available": [
               "Alice",
@@ -196,7 +181,7 @@
           "result": true
         },
         {
-          "op": "refresh",
+          "op": "reload_runtime_state",
           "state": {
             "available": [
               "Bob"
@@ -423,9 +408,6 @@
           }
         },
         {
-          "op": "refresh"
-        },
-        {
           "op": "get_or_create",
           "name": "Alice",
           "result": {
@@ -469,82 +451,6 @@
           "name": "Bob",
           "result": {
             "err": "character not found: Bob"
-          }
-        }
-      ]
-    },
-    {
-      "name": "refresh keeps a removed character's engine",
-      "seed": {
-        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
-        "raw_table": true,
-        "characters": [
-          {
-            "name": "Alice",
-            "soul": true
-          }
-        ]
-      },
-      "steps": [
-        {
-          "op": "new",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": []
-          }
-        },
-        {
-          "op": "get_or_create",
-          "name": "Alice",
-          "result": {
-            "ok": true,
-            "engine": 0,
-            "root": "data",
-            "leaf": "Alice"
-          }
-        },
-        {
-          "op": "fs:remove_character",
-          "name": "Alice"
-        },
-        {
-          "op": "refresh",
-          "state": {
-            "available": [],
-            "snapshots": []
-          }
-        },
-        {
-          "op": "get_or_create",
-          "name": "Alice",
-          "result": {
-            "err": "character not found: Alice"
-          }
-        },
-        {
-          "op": "fs:add_character",
-          "name": "Alice",
-          "soul": true
-        },
-        {
-          "op": "refresh",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": []
-          }
-        },
-        {
-          "op": "get_or_create",
-          "name": "Alice",
-          "result": {
-            "ok": true,
-            "engine": 0,
-            "root": "data",
-            "leaf": "Alice"
           }
         }
       ]
@@ -598,7 +504,7 @@
           }
         },
         {
-          "op": "invalidate_configs"
+          "op": "reload_runtime_state"
         },
         {
           "op": "effective_config",
@@ -656,7 +562,7 @@
           "toml": "[embedding]\nmodel = \"bare-alias\"\n"
         },
         {
-          "op": "invalidate_configs"
+          "op": "reload_runtime_state"
         },
         {
           "op": "effective_config",
@@ -698,7 +604,7 @@
       ]
     },
     {
-      "name": "a runtime override outranks the file until invalidated",
+      "name": "a runtime override outranks the file until the next reload",
       "seed": {
         "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
@@ -746,7 +652,7 @@
           }
         },
         {
-          "op": "invalidate_configs"
+          "op": "reload_runtime_state"
         },
         {
           "op": "effective_config",
@@ -927,7 +833,7 @@
           "result": true
         },
         {
-          "op": "refresh"
+          "op": "reload_runtime_state"
         },
         {
           "op": "has_character",
@@ -972,7 +878,7 @@
           "toml": "\n"
         },
         {
-          "op": "invalidate_configs"
+          "op": "reload_runtime_state"
         },
         {
           "op": "effective_config",
@@ -1221,7 +1127,7 @@
           "soul": true
         },
         {
-          "op": "refresh",
+          "op": "reload_runtime_state",
           "state": {
             "available": [
               "Alice",
@@ -1300,64 +1206,12 @@
           }
         },
         {
-          "op": "invalidate_configs"
-        },
-        {
           "op": "effective_config",
           "name": "Alice",
           "result": {
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }
-        }
-      ]
-    },
-    {
-      "name": "user definition reads workspace edits",
-      "seed": {
-        "global_toml": "[daemon]\nlisten_addr = \"127.0.0.1:9999\"\n\n[chat]\ndisplay_name = \"GLOBAL\"\n",
-        "raw_table": true,
-        "characters": [
-          {
-            "name": "Alice",
-            "soul": true
-          }
-        ]
-      },
-      "steps": [
-        {
-          "op": "new",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": []
-          }
-        },
-        {
-          "op": "user_definition",
-          "name": "Alice",
-          "result": null
-        },
-        {
-          "op": "fs:write",
-          "path": "characters/Alice/workspace/USER.md",
-          "body": "legacy user"
-        },
-        {
-          "op": "user_definition",
-          "name": "Alice",
-          "result": "legacy user"
-        },
-        {
-          "op": "fs:write",
-          "path": "characters/Alice/workspace/USER.md",
-          "body": "workspace user"
-        },
-        {
-          "op": "user_definition",
-          "name": "Alice",
-          "result": "workspace user"
         }
       ]
     }

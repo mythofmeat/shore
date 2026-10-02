@@ -43,9 +43,6 @@ MUTANTS = [
     ("scan: construction does not scan",
      "    registry.#available = await registry.#scan();",
      "    registry.#available = [];"),
-    ("scan: refresh does not re-scan",
-     "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();",
-     "  async refresh(): Promise<void> {\n    await this.#scan();"),
     ("scan: reload does not re-scan",
      "    const after = await this.#scan();",
      "    const after = this.#available;"),
@@ -107,9 +104,6 @@ MUTANTS = [
      "    const cached = this.#engines.get(engineKey(name, id));\n"
      "    if (cached !== undefined) return await cached;\n"
      "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);"),
-    ("engines: refresh drops them like a reload does",
-     "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();",
-     "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();\n    for (const n of [...this.#engines.keys()]) {\n      if (!this.#available.includes(engineCharacter(n))) this.#engines.delete(n);\n    }"),
     ("engines: reload drops all of them, not just the vanished",
      "      if (!afterSet.has(engineCharacter(key))) {",
      "      if (true as boolean) {"),
@@ -136,9 +130,6 @@ MUTANTS = [
     ("config: membership is checked",
      "  effectiveConfig(name: string): LoadedConfig {",
      "  effectiveConfig(name: string): LoadedConfig {\n    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);"),
-    ("config: invalidateConfigs does nothing",
-     "  invalidateConfigs(): void {\n    this.#charConfigs.clear();",
-     "  invalidateConfigs(): void {"),
     ("config: setGlobalConfig keeps the per-character cache",
      "    this.#globalConfig = config;\n    this.#charConfigs.clear();\n  }\n\n  globalConfig()",
      "    this.#globalConfig = config;\n  }\n\n  globalConfig()"),
@@ -204,16 +195,6 @@ MUTANTS = [
      '    return new CharacterError(\n      "ambiguous",',
      '    return new CharacterError(\n      "not_found",'),
 
-    # --- definitions ------------------------------------------------------
-    ("definition: the character definition reads the user file",
-     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());",
-     "    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());"),
-    ("definition: the user definition reads the character file",
-     "    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());",
-     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());"),
-    ("definition: definitions are read from the data dir",
-     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());",
-     "    return loadCharacterDefinition(this.#dataDir, name, this.#workspaceRoot());"),
     # --- threads ----------------------------------------------------------
     ("threads: the index is not cached at scan time",
      "        const index = await this.#withThreadIndex(name, async () =>\n"
