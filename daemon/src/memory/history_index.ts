@@ -531,9 +531,13 @@ async function loadMessageTexts(
   try {
     for (const group of groups.values()) {
       const first = required(group[0]);
-      const messages = await reader.readSegment(first.archive_key, first.segment);
+      const messages = reader.readSegmentOrdinals(
+        first.archive_key,
+        first.segment,
+        group.map((row) => row.ordinal),
+      );
       for (const row of group) {
-        const message = messages[row.ordinal];
+        const message = messages.get(row.ordinal);
         if (message === undefined) continue;
         const text = visibleText(message);
         if (text !== undefined) out.set(row.id, text);
