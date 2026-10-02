@@ -1074,7 +1074,7 @@ test("compaction rejects retired workspace tools without executing them", async 
   expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("active context");
 });
 
-test.each([false, true])("compaction resumes a deletion without repeating it and detects recreation (%s)", async (recreate) => {
+test.each([false, true])("compaction resumes a deletion without repeating it and keeps a recreation (%s)", async (recreate) => {
   const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
   const config = await world();
   config.app.memory.git_push = false;
@@ -1101,12 +1101,15 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
   const second = await runCompactionPass("ada", {
     config, generate: compactionGenerate({ config, providers: { anthropic: nextProvider } }),
   }, { keepTurnsOverride: 0 });
-  expect(second?.kind).toBe(recreate ? "paused" : "compacted");
-  expect(seen).toHaveLength(recreate ? 0 : 1);
+  expect(second?.kind).toBe("compacted");
+  expect(seen).toHaveLength(1);
   expect(await readFile(operations, "utf8")).toEqual(before);
+  const note = seen[0]?.messages.at(-1)?.content.flatMap((b) => b.type === "text" ? [b.text] : []);
   if (recreate) {
-    expect(second).toMatchObject({ reason: "workspace_conflict", detail: "notes.md" });
+    expect(note).toEqual([expect.stringContaining("notes.md changed outside it")]);
     expect(await readFile(path, "utf8")).toBe("new user context");
+  } else {
+    expect(note).toEqual([]);
   }
 });
 
