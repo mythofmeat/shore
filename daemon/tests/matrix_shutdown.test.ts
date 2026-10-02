@@ -80,7 +80,7 @@ async function daemonBridgedTo(homeserver: FakeHomeserver): Promise<Child> {
   );
   const readyPath = join(root, "ready");
   const daemon = spawnFixture(
-    "tests/fixtures/owned_daemon.ts",
+    "tests/support/owned_daemon.ts",
     ["--config", configPath, "--addr", "127.0.0.1:0"],
     {
       SHORE_CONFIG_DIR: configDir,
@@ -131,7 +131,7 @@ describe("a Matrix bot whose capability fetch is still in flight", () => {
     "%s sends nothing more and leaves nothing behind to keep the process alive",
     async (_when, outcome, answer) => {
       const homeserver = await homeserverAnswering(answer);
-      const bot = spawnFixture("tests/fixtures/stopped_matrix_bot.ts", [outcome], {
+      const bot = spawnFixture("tests/support/stopped_matrix_bot.ts", [outcome], {
         SHORE_TEST_HOMESERVER: homeserver.url,
       });
       await until(() => asked(homeserver, "/capabilities"), "the bot's capability fetch", START_MS);

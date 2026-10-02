@@ -144,9 +144,15 @@ mod tests {
             initial: Initial,
             steps: Vec<Step>,
         }
-        let sequences: Vec<Sequence> =
-            serde_json::from_str(include_str!("../../../../fixtures/protocol/sync.json")).unwrap();
-        for sequence in sequences {
+        #[derive(serde::Deserialize)]
+        struct Recorded {
+            sequences: Vec<Sequence>,
+        }
+        let recorded: Recorded = serde_json::from_str(include_str!(
+            "../../../../daemon/tests/browser_captures/sync_sequences.json"
+        ))
+        .unwrap();
+        for sequence in recorded.sequences {
             let mut sync = SyncState::new(
                 sequence.initial.revision,
                 sequence.initial.character.as_deref(),

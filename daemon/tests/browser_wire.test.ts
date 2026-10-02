@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { browserValidators } from "../scripts/browser_validators.ts";
 import { parseServerFrame } from "../src/browser/wire.ts";
-import richHistory from "../../fixtures/protocol/rich-history.json" with { type: "json" };
+import { SERVER_FIXTURES } from "./support/wire_fixtures.ts";
 
 test("Rust and browser share structured image history without flattening or dropping data", () => {
-  expect<unknown>(parseServerFrame(JSON.stringify(richHistory))).toEqual({ kind: "known", message: richHistory });
+  const history = SERVER_FIXTURES.history_with_image_tool_result;
+  expect<unknown>(parseServerFrame(JSON.stringify(history))).toEqual({ kind: "known", message: history });
 });
 
 test("browser validators regenerate exactly from canonical Rust schemas", async () => {

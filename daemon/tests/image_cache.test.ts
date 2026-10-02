@@ -466,7 +466,7 @@ describe("a character archive", () => {
       dirs, hasCharacter: () => false, withSnapshot: async (run) => await run(),
       refreshDiscovery: () => Promise.reject(new Error("discovery failed")), releaseCharacter: async () => {},
     };
-    const archive = join(import.meta.dir, "fixtures/supported-baseline/ada.shore.tar.gz");
+    const archive = join(import.meta.dir, "support/supported-baseline/ada.shore.tar.gz");
     expect(await outcomeOf(importCharacter(context, { archive }))).toThrow("discovery failed");
     expect(existsSync(characterCacheDir(dirs.cache, "ada"))).toBe(false);
     expect(existsSync(join(dirs.data, "media", "ada"))).toBe(false);

@@ -72,7 +72,7 @@ function spawnDaemon(layout: ProcessLayout, instanceId: string) {
     [
       "bun",
       "run",
-      "tests/fixtures/owned_daemon.ts",
+      "tests/support/owned_daemon.ts",
       "--config",
       layout.configPath,
       "--addr",

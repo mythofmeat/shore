@@ -563,8 +563,13 @@ mod tests {
         let rendered = render(
             "status --section daemon",
             "status",
-            &serde_json::from_str(include_str!("../../tests/fixtures/diagnostic_status.json"))
-                .unwrap(),
+            serde_json::from_str::<serde_json::Value>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../daemon/tests/command_captures/operation_results.json"
+            )))
+            .unwrap()
+            .get("diagnostic_status")
+            .unwrap(),
             "ada",
         )
         .expect("rendered");

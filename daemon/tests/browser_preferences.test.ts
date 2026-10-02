@@ -4,7 +4,10 @@ import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_CONTROLS, VIEW_KEYS, b
 import { VIEW_PREFERENCES } from "../src/browser/preferences.generated.ts";
 import { focusedBudget, showPlanLimit, showUsage } from "../src/browser/budget_display.ts";
 import { assertDisplayCoverage, switchCases } from "../scripts/browser_coverage.ts";
-import fixtures from "../../client/shore-cli/tests/fixtures/display_budgets.json" with { type: "json" };
+import capture from "./browser_captures/display_budgets.json" with { type: "json" };
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/browser_captures/display_budgets.json";
 
 function storage() {
   const data = new Map<string, string>();
@@ -26,26 +29,26 @@ test("all terminal display choices have controls and enum modes; omissions fail"
   }
 });
 
-for (const fixture of fixtures.cases) test(`browser budget conformance: ${fixture.label}`, () => {
-  const selected = focusedBudget(fixture.budgets, fixture.focus);
-  if (fixture.expected === null) { expect(selected).toBeUndefined(); return; }
-  expect(selected?.budget.name).toBe(fixture.expected.name);
-  expect<string | undefined>(selected?.scope).toBe(fixture.expected.scope);
-  expect(selected?.level.percent_used).toBe(fixture.expected.percent_used);
-  expect(selected === undefined ? undefined : showUsage(fixture.mode, selected.budget)).toBe(fixture.expected.visible);
+for (const [index, budgetCase] of capture.cases.entries()) test(`browser budget conformance: ${budgetCase.label}`, () => {
+  const selected = focusedBudget(budgetCase.budgets, budgetCase.focus);
+  const shown = selected === undefined ? null : { name: selected.budget.name, scope: selected.scope, percent_used: selected.level.percent_used, visible: showUsage(budgetCase.mode, selected.budget) };
+  recordedValue(CAPTURE, ["cases", index, "expected"], shown);
+  if (!recording) expect<unknown>(budgetCase.expected).toEqual(shown);
 });
 
-for (const fixture of fixtures.plan) test(`browser plan conformance: ${fixture.label}`, () => {
-  expect(fixture.windows.filter((limit) => showPlanLimit(fixture.mode, limit)).map((limit) => limit.window)).toEqual(fixture.visible);
+for (const [index, plan] of capture.plan.entries()) test(`browser plan conformance: ${plan.label}`, () => {
+  const visible = plan.windows.filter((limit) => showPlanLimit(plan.mode, limit)).map((limit) => limit.window);
+  recordedValue(CAPTURE, ["plan", index, "visible"], visible);
+  if (!recording) expect(plan.visible).toEqual(visible);
 });
 
 test("budget focus accepts the same scopes, aliases, names and invalid tokens as the terminal", () => {
-  for (const fixture of fixtures.parsers) {
-    const focus = budgetFocus(fixture.input);
-    expect(focus.name).toBe(fixture.name);
-    expect<string>(focus.scope).toBe(fixture.scope);
+  for (const [index, parser] of capture.parsers.entries()) {
+    const focus = budgetFocus(parser.input);
+    recordedValue(CAPTURE, ["parsers", index], { input: parser.input, ...focus });
+    if (!recording) expect<unknown>(parser).toEqual({ input: parser.input, ...focus });
   }
-  for (const input of fixtures.invalid) expect(() => budgetFocus(input)).toThrow();
+  for (const input of capture.invalid) expect(() => budgetFocus(input)).toThrow();
 });
 
 test("preferences migrate existing quick controls and persist each display choice", () => {
@@ -128,9 +131,13 @@ test("corrupt or inaccessible storage reports errors and reset repairs persisted
   expect(denied.getSnapshot().error).toContain("not saved");
 });
 
-test("metadata accumulation matches terminal fixtures, preserving first-token timing and wide token counts", async () => {
+test("metadata accumulation is recorded for the terminal, preserving first-token timing and wide token counts", async () => {
   const { accumulateMetadata } = await import("../src/browser/metadata.ts");
-  for (const fixture of fixtures.metadata) expect(accumulateMetadata(fixture.previous, fixture.incoming)).toEqual(fixture.expected);
+  for (const [index, accumulation] of capture.metadata.entries()) {
+    const accumulated = accumulateMetadata(accumulation.previous, accumulation.incoming);
+    recordedValue(CAPTURE, ["metadata", index, "expected"], accumulated);
+    if (!recording) expect<unknown>(accumulation.expected).toEqual(accumulated);
+  }
 });
 
 test("stream metadata stays associated with its completed message through history and clears on selection", async () => {

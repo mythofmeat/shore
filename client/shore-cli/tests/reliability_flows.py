@@ -15,6 +15,11 @@ import time
 import unittest
 
 BINARY = sys.argv.pop(1)
+OPERATION_RESULTS = Path(__file__).resolve().parents[3] / "daemon" / "tests" / "command_captures" / "operation_results.json"
+
+
+def operation_result(section):
+    return json.loads(OPERATION_RESULTS.read_text())[section]
 
 
 def environment(root):
@@ -92,27 +97,27 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 class ReliabilityFlows(unittest.TestCase):
     def test_cli_character_archives_preserve_server_paths_backups_and_complete_results(self):
-        fixtures = json.loads((Path(__file__).parent / "fixtures" / "character_archives.json").read_text())
+        archives = operation_result("character_archives")
         commands = [["export", "ada", "--output", "/fixture/ada.tar.gz"], ["import", "/fixture/ada.tar.gz"], ["character", "delete", "ada", "--archive", "/fixture/ada.tar.gz", "--yes"]]
-        for fixture, command in zip(fixtures, commands):
+        for archive, command in zip(archives, commands):
             for json_output in [False, True]:
                 def respond(request, send, _stream, _seen):
-                    self.assertEqual(request["name"], fixture["name"])
-                    self.assertEqual(request["args"], fixture["input"])
-                    send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**fixture["result"], "future_archive_detail": "retained"}})
+                    self.assertEqual(request["name"], archive["name"])
+                    self.assertEqual(request["args"], archive["input"])
+                    send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**archive["result"], "future_archive_detail": "retained"}})
                 result, _ = run_cli([*command, *(["--json"] if json_output else [])], respond)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 if json_output:
-                    self.assertEqual(json.loads(result.stdout), {**fixture["result"], "future_archive_detail": "retained"})
+                    self.assertEqual(json.loads(result.stdout), {**archive["result"], "future_archive_detail": "retained"})
                 else:
-                    self.assertIn(b"Imported character ada" if fixture["name"] == "import_character" else b"/fixture/ada.tar.gz", result.stdout)
+                    self.assertIn(b"Imported character ada" if archive["name"] == "import_character" else b"/fixture/ada.tar.gz", result.stdout)
             def malformed(request, send, _stream, _seen):
                 send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {"character": "ada"}})
             result, _ = run_cli([*command, "--json"], malformed)
             self.assertNotEqual(result.returncode, 0)
         def without_backup(request, send, _stream, _seen):
             self.assertEqual(request["args"], {"character": "ada", "confirm": "ada"})
-            send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**fixtures[2]["result"], "archive": None}})
+            send({"type": "command_output", "name": request["name"], "rid": request["rid"], "data": {**archives[2]["result"], "archive": None}})
         result, _ = run_cli(["character", "delete", "ada", "--yes", "--json"], without_backup)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNone(json.loads(result.stdout)["archive"])
@@ -122,7 +127,7 @@ class ReliabilityFlows(unittest.TestCase):
         self.assertEqual([request for request in seen if request["type"] == "command"], [])
 
     def test_cli_usage_filters_views_and_export_bytes(self):
-        reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
+        reports = operation_result("usage_reports")
         common = {"last": "all", "character": "ada", "provider": "anthropic", "api_key": "default", "model": "usage-model-a", "call_type": "message", "group_by": None, "budget": False, "anomalies": False, "export_csv": False, "export_tsv": False}
         cases = [([], {}, reports[0]), (["cache"], {}, reports[0]), (["limits"], {}, reports[0]), (["budgets"], {"budget": True}, reports[2]), (["anomalies"], {"anomalies": True}, reports[3]), (["export"], {"export_csv": True}, reports[4]), (["export", "--tsv"], {"export_tsv": True}, reports[5])]
         for dimension in ["model", "provider", "call_type", "kind", "api_key", "cost_source"]:
@@ -150,7 +155,7 @@ class ReliabilityFlows(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
     def test_cli_manual_tool_arguments_and_result_variants(self):
-        reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
+        reports = operation_result("tool_results")
         for output in reports:
             describe = "mode" in output
             args = ["debug", "tool", "fixture", "count=0", '--input={"entries":[{"text":"first\\nsecond","enabled":null}]}', "--raw", "--json"]
@@ -175,9 +180,8 @@ class ReliabilityFlows(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
     def test_cli_memory_arguments_and_all_result_variants(self):
-        fixtures = Path(__file__).parent / "fixtures"
-        listing = json.loads((fixtures / "memory_segments.json").read_text())
-        reports = json.loads((fixtures / "memory_compaction.json").read_text())
+        listing = operation_result("memory_segments")
+        reports = operation_result("memory_compaction")
         segment = listing["segments"][0]
         clear = {"status": "clear", "character": "ada", "thread": "main", "message_count": 2, "segment": segment}
         cases = [
@@ -250,9 +254,8 @@ class ReliabilityFlows(unittest.TestCase):
         self.assertIn(b"missing field", result.stderr)
 
     def test_cli_diagnostic_filters_runtime_outcomes_and_full_results(self):
-        fixtures = Path(__file__).parent / "fixtures"
-        call = json.loads((fixtures / "diagnostic_call.json").read_text())
-        status = json.loads((fixtures / "diagnostic_status.json").read_text())
+        call = operation_result("diagnostic_call")
+        status = operation_result("diagnostic_status")
         cases = [
             (["status", "--json"], "status", {}, status),
             (["trace", "calls", "2", "--wire", "--diff", "--against=1", "--json"], "call_log", {"id": 2, "wire": True, "diff": True, "against": 1}, call),
@@ -340,15 +343,15 @@ class ReliabilityFlows(unittest.TestCase):
                                 model_changed.set()
                             elif name == "call_log":
                                 diagnostic_requests.append(request)
-                                output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
+                                output = operation_result("diagnostic_call")
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
                             elif name in ["export_character", "import_character"]:
                                 archive_requests.append(request)
-                                fixture = next(item for item in json.loads((Path(__file__).parent / "fixtures" / "character_archives.json").read_text()) if item["name"] == name)
-                                self.assertEqual(request["args"], fixture["input"])
-                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": fixture["result"]})
+                                archive = next(item for item in operation_result("character_archives") if item["name"] == name)
+                                self.assertEqual(request["args"], archive["input"])
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": archive["result"]})
                             elif name == "usage":
-                                reports = json.loads((Path(__file__).parent / "fixtures" / "usage_reports.json").read_text())
+                                reports = operation_result("usage_reports")
                                 args = request["args"]
                                 if args != {"budget": True}:
                                     usage_requests.append(request)
@@ -356,16 +359,15 @@ class ReliabilityFlows(unittest.TestCase):
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": reports[index]})
                             elif name == "run_tool":
                                 tool_requests.append(request)
-                                reports = json.loads((Path(__file__).parent / "fixtures" / "tool_results.json").read_text())
+                                reports = operation_result("tool_results")
                                 output = reports[0 if request["args"].get("describe") else 1]
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
                             elif name in ["compact", "segments", "clear"]:
                                 memory_requests.append(request)
-                                fixtures = Path(__file__).parent / "fixtures"
                                 if name == "compact":
-                                    output = json.loads((fixtures / "memory_compaction.json").read_text())[3]
+                                    output = operation_result("memory_compaction")[3]
                                 elif name == "segments":
-                                    output = json.loads((fixtures / "memory_segments.json").read_text())
+                                    output = operation_result("memory_segments")
                                 else:
                                     output = {"status": "clear", "character": "ada", "thread": "main", "message_count": 2, "segment": None}
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})

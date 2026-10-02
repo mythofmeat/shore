@@ -3499,14 +3499,28 @@ mod redraw_tests {
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
+    fn recorded_image_history() -> History {
+        let recorded: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../daemon/tests/handler_captures/wire_fixtures.json"
+        )))
+        .unwrap();
+        let ServerMessage::History(history) = serde_json::from_value(
+            recorded
+                .get("server")
+                .and_then(|server| server.get("history_with_image_tool_result"))
+                .unwrap()
+                .clone(),
+        )
+        .unwrap() else {
+            panic!("Missing recorded history");
+        };
+        history
+    }
+
     #[test]
     fn structured_history_images_reach_the_existing_tui_viewer() {
-        let ServerMessage::History(history) = serde_json::from_str(include_str!(
-            "../../../../fixtures/protocol/rich-history.json"
-        ))
-        .unwrap() else {
-            panic!("Missing history fixture");
-        };
+        let history = recorded_image_history();
         let entries = build_history_entries(history.messages, 0);
         let turn = entries.first().unwrap().as_turn().unwrap();
         assert!(turn.images.is_empty());
@@ -3538,12 +3552,7 @@ mod redraw_tests {
 
     #[test]
     fn structured_terminal_images_repair_a_missing_stream_in_the_tui() {
-        let ServerMessage::History(history) = serde_json::from_str(include_str!(
-            "../../../../fixtures/protocol/rich-history.json"
-        ))
-        .unwrap() else {
-            panic!("Missing history fixture");
-        };
+        let history = recorded_image_history();
         let blocks = &history.messages.first().unwrap().content_blocks;
         let end = serde_json::from_value(serde_json::json!({
             "type": "stream_end", "rid": "image-request", "msg_id": "image-answer", "content": "Image result", "terminal_content_blocks": blocks,
@@ -4934,10 +4943,14 @@ mod redraw_tests {
             ServerMessage::CommandOutput(CommandOutput {
                 rid: Some(rid.clone()),
                 name: "status".into(),
-                data: serde_json::from_str(include_str!(
-                    "../../tests/fixtures/diagnostic_status.json"
-                ))
-                .unwrap(),
+                data: serde_json::from_str::<serde_json::Value>(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../daemon/tests/command_captures/operation_results.json"
+                )))
+                .unwrap()
+                .get("diagnostic_status")
+                .unwrap()
+                .clone(),
             }),
         );
 

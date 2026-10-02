@@ -5,15 +5,12 @@ import { CommandError } from "../src/commands/errors.ts";
 import operationSchemas from "../src/operations/schemas.generated.json" with { type: "json" };
 import * as webContracts from "../src/web/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
-import { isOperationName, validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { operationPolicy } from "../src/operations/policy.ts";
-import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
-import memorySegments from "../../client/shore-cli/tests/fixtures/memory_segments.json" with { type: "json" };
-import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
-import usageReports from "../../client/shore-cli/tests/fixtures/usage_reports.json" with { type: "json" };
-import archiveReports from "../../client/shore-cli/tests/fixtures/character_archives.json" with { type: "json" };
+import { OPERATION_RESULTS } from "./support/operation_results.ts";
 
+const { character_archives: archiveReports, memory_compaction: memoryReports, memory_segments: memorySegments, tool_results: toolResults, usage_reports: usageReports } = OPERATION_RESULTS;
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 const PROBE_MS = 10_000;
 const CONTRACTS = new URL("../src/operations/contracts.ts", import.meta.url).pathname;
@@ -65,7 +62,6 @@ describe("contract validators compile when first used", () => {
 describe("executable operation contracts", () => {
   test("archive operations have closed inputs, complete results and daemon-host path controls", () => {
     for (const { name, input, result } of archiveReports) {
-      if (!isOperationName(name)) throw new Error(`Unregistered archive operation: ${name}`);
       expect(validOperationInput(name, input)).toBe(true);
       expect(validOperationInput(name, { ...input, overwrite: true })).toBe(false);
       for (const key of Object.keys(input)) expect(validOperationInput(name, { ...input, [key]: null })).toBe(false);

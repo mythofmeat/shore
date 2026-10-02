@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Duplex } from "node:stream";
 
 export async function startMockClaudeOAuth(messagesUrl: string) {
-  const fixtures = join(import.meta.dir, "../../tests/fixtures/claude-oauth");
+  const fixtures = join(import.meta.dir, "../../tests/support/claude-oauth");
   const refreshTokens: string[] = [];
   const accessToken = () => `test-access-${refreshTokens.length}`;
   const refreshToken = () => `test-refresh-${refreshTokens.length}`;

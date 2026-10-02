@@ -1,0 +1,668 @@
+{
+  "sequences": [
+    {
+      "name": "paired snapshots and message notifications have independent watermarks",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "main"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 6,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m6",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 6,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m6",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "drop_stale",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 5
+          },
+          "decision": "drop_stale",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 7,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m7",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6
+          },
+          "decision": "deliver",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 7
+          },
+          "decision": "deliver",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 7,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m7",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "drop_stale",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "name": "foreign selections cannot advance watermarks",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "main"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 99,
+            "character": "other",
+            "thread": "main",
+            "msg_id": "m99",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "drop_stale",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 99,
+            "character": "ada",
+            "thread": "side",
+            "msg_id": "m99",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "drop_stale",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "side",
+            "revision": 99,
+            "delta": {
+              "base_revision": 5,
+              "after": null
+            }
+          },
+          "decision": "drop_stale",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "other",
+            "selected_thread": "main",
+            "revision": 99,
+            "delta": {
+              "base_revision": 5,
+              "after": null
+            }
+          },
+          "decision": "drop_stale",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 6,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m6",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "name": "delta gaps request recovery without changing state",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "main"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6,
+            "delta": {
+              "base_revision": 5,
+              "after": null
+            }
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6,
+            "delta": {
+              "base_revision": 5,
+              "after": null
+            }
+          },
+          "decision": "drop_stale",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 8,
+            "delta": {
+              "base_revision": 7,
+              "after": "missing"
+            }
+          },
+          "decision": "resync",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 8
+          },
+          "decision": "deliver",
+          "latest_revision": 8,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 8,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m8",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 8,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 9,
+            "delta": {
+              "base_revision": 8,
+              "after": null
+            }
+          },
+          "decision": "deliver",
+          "latest_revision": 9,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "name": "selection changes reset both revisions even to zero",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "main"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "side",
+            "revision": 2
+          },
+          "decision": "deliver",
+          "latest_revision": 2,
+          "character": "ada",
+          "thread": "side"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 3,
+            "character": "ada",
+            "thread": "side",
+            "msg_id": "m3",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 3,
+          "character": "ada",
+          "thread": "side"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "bea",
+            "selected_thread": "main",
+            "revision": 0
+          },
+          "decision": "deliver",
+          "latest_revision": 0,
+          "character": "bea",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 1,
+            "character": "bea",
+            "thread": "main",
+            "msg_id": "m1",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 1,
+          "character": "bea",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": null,
+            "selected_thread": null,
+            "revision": 0
+          },
+          "decision": "deliver",
+          "latest_revision": 0,
+          "character": null,
+          "thread": null
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 0
+          },
+          "decision": "deliver",
+          "latest_revision": 0,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "name": "omitted thread in a snapshot does not switch an existing selection",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "side"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": null,
+            "revision": 4
+          },
+          "decision": "drop_stale",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "side"
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": null,
+            "revision": 6
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "side"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 7,
+            "character": "ada",
+            "thread": null,
+            "msg_id": "m7",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "drop_stale",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": "side"
+        },
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 7,
+            "character": "ada",
+            "thread": "side",
+            "msg_id": "m7",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": "side"
+        }
+      ]
+    },
+    {
+      "name": "null and main denote the same scope for incremental frames",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": null
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "new_message",
+            "revision": 6,
+            "character": "ada",
+            "thread": "main",
+            "msg_id": "m6",
+            "role": "assistant",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [],
+            "timestamp": "2026-09-12T00:00:00Z"
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": null
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 6,
+            "delta": {
+              "base_revision": 5,
+              "after": null
+            }
+          },
+          "decision": "deliver",
+          "latest_revision": 6,
+          "character": "ada",
+          "thread": null
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": null,
+            "revision": 7,
+            "delta": {
+              "base_revision": 6,
+              "after": null
+            }
+          },
+          "decision": "deliver",
+          "latest_revision": 7,
+          "character": "ada",
+          "thread": null
+        },
+        {
+          "event": {
+            "type": "history",
+            "messages": [],
+            "config": {},
+            "selected_character": "ada",
+            "selected_thread": "main",
+            "revision": 1
+          },
+          "decision": "deliver",
+          "latest_revision": 1,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "name": "non-history and unknown future events do not advance revisions",
+      "initial": {
+        "revision": 5,
+        "character": "ada",
+        "thread": "main"
+      },
+      "steps": [
+        {
+          "event": {
+            "type": "stream_chunk",
+            "text": "reason",
+            "content_type": "thinking",
+            "rid": "r"
+          },
+          "decision": "deliver",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "request_finished",
+            "rid": "r",
+            "outcome": "completed"
+          },
+          "decision": "deliver",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        },
+        {
+          "event": {
+            "type": "future_progress",
+            "revision": 999,
+            "character": "other"
+          },
+          "decision": "deliver",
+          "latest_revision": 5,
+          "character": "ada",
+          "thread": "main"
+        }
+      ]
+    }
+  ]
+}
