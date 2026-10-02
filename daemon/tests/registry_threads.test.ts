@@ -15,10 +15,11 @@ import { MAIN_THREAD, characterThreadsIndex } from "../src/config/dirs.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import { ThreadError } from "../src/engine/threads.ts";
+import { ThreadError, readThreadsIndex, writeThreadsIndex } from "../src/engine/threads.ts";
 import { ForkBusy } from "../src/engine/fork.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 import { buildSessionHistorySnapshot } from "../src/swp/handshake.ts";
+import { required } from "../src/util/required.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
@@ -229,6 +230,19 @@ describe("the registry as the thread authority", () => {
     expect(registry.threads("nova")).toBeUndefined();
     expect(registry.listThreads("nova")).toEqual([]);
     expect(registry.threads("aria")?.threads.length).toBe(1);
+  });
+
+  test("a thread dropped from the stored index is refused after a reload, though its engine was cached", async () => {
+    const { registry, dataDir, loaded } = await registryWith("aria");
+    await registry.createThread("aria", "scratch");
+    await registry.getOrCreate("aria", "scratch");
+
+    const index = required(await readThreadsIndex(dataDir, "aria"));
+    await writeThreadsIndex(dataDir, "aria", { ...index, threads: index.threads.filter((t) => t.id !== "scratch") });
+    await registry.reloadRuntimeState(loaded);
+
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD]);
+    expect(await outcomeOf(registry.getOrCreate("aria", "scratch"))).toThrow(ThreadError);
   });
 });
 

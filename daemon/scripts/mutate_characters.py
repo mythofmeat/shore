@@ -68,7 +68,7 @@ MUTANTS = [
     ("engines: membership is not checked",
      "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);\n",
      ""),
-    ("engines: the cache is consulted before membership",
+    ("engines: the cache is consulted before the membership and thread checks",
      "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);\n\n    const id = thread ?? this.homeThread(name);",
      "    const id = thread ?? this.homeThread(name);\n"
      "    const cached = this.#engines.get(engineKey(name, id));\n"
