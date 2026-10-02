@@ -18,7 +18,7 @@ import type { ConfigRuntime } from "../commands/config.ts";
 import { runRegisteredOperation, isRegisteredOperation, commandOperations } from "../commands/registry.ts";
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
-import { afterConfigurationCommand, afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
+import { afterConfigurationCommand, afterCommand, type DispatchRuntime } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import type { FrameSink } from "../llm/stream.ts";
@@ -265,5 +265,3 @@ function frameWithRid(frame: ServerMessage, rid: string | undefined): ServerMess
       return frame;
   }
 }
-
-export type { ReloadSummary };

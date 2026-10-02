@@ -63,10 +63,6 @@ export class ToolNames {
   bareOf(wire: string): string | undefined {
     return this.#bareOf.get(wire);
   }
-
-  get wireNames(): string[] {
-    return [...this.#bareOf.keys()];
-  }
 }
 
 export type RunShoreTool = (bare: string, input: unknown) => Promise<ContentBlock>;

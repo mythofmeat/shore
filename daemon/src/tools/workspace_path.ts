@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, parse, sep } from "node:path";
+import { dirname, isAbsolute, parse, sep } from "node:path";
 
 import { rustTrim } from "../memory/lines";
 
@@ -13,8 +13,6 @@ export class PathError extends Error {
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
 
 const MEMORY_INDEX_DEFERRED_PATH = "MEMORY.md";
-
-const ACTIVE_PROMPT_DIR = "active_prompt";
 
 export function resolveRoots(workspaceDir: string, relativeRaw: string): [string, string] {
   if (workspaceDir === "") throw new PathError("invalid args: workspace not configured");
@@ -134,12 +132,4 @@ export function normalizePromptVisiblePath(path: string): string | undefined {
   if (protectedName !== undefined) return protectedName;
   if (normalized === MEMORY_INDEX_DEFERRED_PATH) return MEMORY_INDEX_DEFERRED_PATH;
   return undefined;
-}
-
-export function activePromptDir(characterDataDir: string): string {
-  return join(characterDataDir, ACTIVE_PROMPT_DIR);
-}
-
-export function activePromptFile(characterDataDir: string, name: string): string {
-  return join(activePromptDir(characterDataDir), name);
 }

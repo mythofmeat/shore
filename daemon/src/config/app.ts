@@ -40,7 +40,6 @@ function unknownField(key: string, known: readonly string[]): string {
 
 type Reader<T> = (value: TomlValue) => ParseResult<T>;
 
-export type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
 export type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";
 import type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
 import type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";

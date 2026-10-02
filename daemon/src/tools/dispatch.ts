@@ -442,4 +442,4 @@ export async function dispatchWithinDeadline(
   throw new ToolTimedOut(seconds, true);
 }
 
-export { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut };
+export { InvalidArgs, NotImplemented };

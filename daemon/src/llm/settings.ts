@@ -16,7 +16,7 @@ import type { ModelSettingKind as SettingKind } from "../protocol/ModelSettingKi
 import type { ModelSettingApplicability as SettingApplicability } from "../protocol/ModelSettingApplicability.ts";
 import type { ModelSettingEditor as SettingEditor } from "../protocol/ModelSettingEditor.ts";
 import type { ModelSettingSchemaEntry as SettingSchemaEntry } from "../protocol/ModelSettingSchemaEntry.ts";
-export type { SettingKind, SettingApplicability, SettingEditor, SettingSchemaEntry };
+export type { SettingApplicability, SettingSchemaEntry };
 
 type Parsed = { value: unknown } | { error: string };
 type SamplerField = keyof SamplerSettings;

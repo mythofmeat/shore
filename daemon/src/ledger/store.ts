@@ -300,10 +300,6 @@ export class Ledger {
     return this.#pricing;
   }
 
-  get trackers(): CacheTrackers {
-    return this.#trackers;
-  }
-
   setCacheTtlSecs(secs: number): void {
     this.#ttlSecs = secs;
   }

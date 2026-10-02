@@ -1,5 +1,5 @@
 import { htmlToText } from "./html_text.ts";
-import { InvalidArgs, ToolIoError } from "./errors.ts";
+import { InvalidArgs } from "./errors.ts";
 
 export class ToolHttpError extends Error {
   constructor(message: string) {
@@ -245,5 +245,3 @@ async function readCapped(resp: Response): Promise<{ text: string; capped: boole
   }
   return { text: new TextDecoder().decode(joined), capped };
 }
-
-export { InvalidArgs, ToolIoError };

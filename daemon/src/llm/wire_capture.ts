@@ -56,10 +56,6 @@ export function withWireScope<T>(scope: WireScope, fn: () => T): T {
   return scopes.run(scope, fn);
 }
 
-export function activeWireScope(): WireScope | undefined {
-  return scopes.getStore();
-}
-
 export async function* wireScopedIteration<T>(
   scope: WireScope,
   start: () => AsyncIterable<T>,

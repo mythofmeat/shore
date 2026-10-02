@@ -23,10 +23,6 @@ export function alternativeVersionOf(
   return isMessageVersion(alternative.version) ? alternative.version : undefined;
 }
 
-export function withMintedVersion(message: Message, mint = newMessageVersion): Message {
-  return versionOf(message) === undefined ? { ...message, version: mint() } : message;
-}
-
 export function isRealUserTurn(message: Message): boolean {
   if (message.role !== "user") return false;
   const blocks = message.content_blocks;
@@ -51,11 +47,4 @@ export function tailTurnStart(messages: readonly Message[], turns: number | unde
 export function processingUnitId(versions: readonly string[]): string {
   const digest = createHash("sha256").update(versions.join("\n")).digest("hex");
   return `pu_${digest.slice(0, 32)}`;
-}
-
-export function messageVersions(messages: readonly Message[]): string[] {
-  return messages.flatMap((message) => {
-    const version = versionOf(message);
-    return version === undefined ? [] : [version];
-  });
 }

@@ -337,16 +337,6 @@ export class HistorySearchIndex {
     return { oldestMs, newestMs };
   }
 
-  rowsByIds(ids: readonly number[]): IndexedMessage[] {
-    if (ids.length === 0) return [];
-    const marks = ids.map(() => "?").join(",");
-    return this.#db.query(
-      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash,
-              version
-       FROM messages WHERE id IN (${marks})`,
-    ).all(...ids) as IndexedMessage[];
-  }
-
   neighbor(row: IndexedMessage, direction: -1 | 1): IndexedMessage | undefined {
     const op = direction < 0 ? "<" : ">";
     const order = direction < 0 ? "DESC" : "ASC";

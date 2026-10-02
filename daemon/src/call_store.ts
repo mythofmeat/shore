@@ -554,11 +554,6 @@ export class CallStore {
     return [...byHost.values()];
   }
 
-  httpCallCount(): number {
-    const row = this.#db.query("SELECT COUNT(*) AS n FROM capture_http_calls").get() as Row;
-    return count(row["n"]);
-  }
-
   queryCalls(filter: CallFilter): CallSummary[] {
     const rows = this.#db
       .query(
@@ -711,13 +706,6 @@ export class CallStore {
       deleted_by_age: agedCalls + agedTranscripts + agedHttp,
       deleted_by_size: sized + orphaned,
     };
-  }
-
-  databaseBytes(): number {
-    const row = this.#db
-      .query("SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()")
-      .get() as Row;
-    return count(row["bytes"]);
   }
 
   blobCount(): number {

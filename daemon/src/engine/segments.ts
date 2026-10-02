@@ -11,7 +11,7 @@ import {
 import { MessageNotFound } from "./message_store";
 import type { Message } from "./types";
 
-export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
+export type { SegmentRecord } from "./history_store.ts";
 
 export interface ConversationRef {
   dir: string;
@@ -48,10 +48,6 @@ export class SegmentReader {
 
   segmentCount(): number {
     return this.history?.segmentCount(this.character) ?? 0;
-  }
-
-  totalMessageCount(): number {
-    return this.history?.totalMessageCount(this.character) ?? 0;
   }
 
   displayMessageCount(): number {

@@ -39,10 +39,6 @@ export function parseKeepalivePings(raw: unknown): ParseResult<number> {
   return { ok: parsed };
 }
 
-export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | undefined {
-  return setting.kind === "off" ? undefined : setting.interval.asMillis();
-}
-
 export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
 }

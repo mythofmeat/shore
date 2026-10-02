@@ -2,7 +2,7 @@ import type { OperationInput, OperationName, OperationResult } from "../operatio
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { BrowserConnection } from "./connection.ts";
-import { isOperationName, validOperationInput, validOperationResult } from "./operation_validators.generated.js";
+import { validOperationInput, validOperationResult } from "./operation_validators.generated.js";
 
 export class OperationFailure extends Error {
   constructor(readonly operation: OperationName, readonly completion: RequestFinished) {
@@ -21,11 +21,6 @@ export class OperationClient {
   getOutput = () => this.#output;
   subscribeOutput = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
   clearOutput(): void { this.#epoch += 1; this.#output = undefined; for (const listener of this.#listeners) listener(); }
-
-  async runDiscovered(name: string, input: unknown): Promise<OperationResult<OperationName>> {
-    if (!isOperationName(name) || !validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
-    return this.run(name, input);
-  }
 
   async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { remember?: boolean; observe?: (message: ServerMessage) => void } = {}): Promise<OperationResult<N>> {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);

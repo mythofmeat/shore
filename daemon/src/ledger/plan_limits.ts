@@ -24,9 +24,7 @@ import {
 } from "./budget.ts";
 import { formatLocalAmPm, toRfc3339, zoneFor } from "./zoned.ts";
 
-export type { ClaudePlanWindow };
-
-export const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
+const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
 
 export const CLAUDE_PLAN_REFRESH_MS = 5 * 60 * 1000;
 

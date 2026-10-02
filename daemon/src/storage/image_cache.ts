@@ -43,11 +43,7 @@ export function noteCachedImages(cache: string, bytes: number, nowMs: number = D
   totals.set(cache, total > limitBytes ? evictCachedImages(cache, limitBytes, nowMs).remaining : total);
 }
 
-export function forgetImageCacheTotals(): void {
-  totals.clear();
-}
-
-export interface CachedImage {
+interface CachedImage {
   key: string;
   paths: string[];
   bytes: number;

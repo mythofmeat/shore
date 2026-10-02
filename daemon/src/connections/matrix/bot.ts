@@ -138,10 +138,6 @@ export class MatrixBot {
     return bot;
   }
 
-  get userId(): string {
-    return this.#userId;
-  }
-
   get faulted(): Promise<Error> {
     return this.#faulted;
   }

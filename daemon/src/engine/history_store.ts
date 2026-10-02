@@ -403,16 +403,6 @@ export class HistoryStore {
     return row.n;
   }
 
-  totalMessageCount(character: string): number {
-    const row = this.#db
-      .query(
-        `SELECT COALESCE(SUM(message_count), 0) AS n FROM history_segments
-         WHERE character = ?1 AND committed = 1`,
-      )
-      .get(character) as { n: number };
-    return row.n;
-  }
-
   displayMessageCount(character: string): number {
     const row = this.#db
       .query("SELECT display_count FROM history_character_stats WHERE character = ?1")

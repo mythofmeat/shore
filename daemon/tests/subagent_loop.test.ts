@@ -101,7 +101,6 @@ function contextIn(root: string): ToolContext {
 
 function scriptedProvider(text: string, seen: SidecarRequest[] = []): SidecarProvider {
   return {
-    // eslint-disable-next-line @typescript-eslint/require-await
     async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
       seen.push(req);
       yield { type: "start", model: req.model };
@@ -155,7 +154,6 @@ async function run(
 function dicerollingProvider(): SidecarProvider {
   let call = 0;
   return {
-    // eslint-disable-next-line @typescript-eslint/require-await
     async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
       call += 1;
       yield { type: "start", model: req.model };
@@ -197,7 +195,6 @@ function dicerollingProvider(): SidecarProvider {
 
 function failingProvider(message: string): SidecarProvider {
   return {
-    // eslint-disable-next-line @typescript-eslint/require-await
     async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
       yield { type: "start", model: req.model };
       yield {

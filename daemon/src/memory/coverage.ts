@@ -1,6 +1,5 @@
 import {
   HistoryStore,
-  characterOfArchiveKey,
   type MemoryPath,
 } from "../engine/history_store.ts";
 import type { Message } from "../engine/types.ts";
@@ -140,8 +139,4 @@ export function withCoverageStore<T>(dbPath: string, read: (store: HistoryStore)
   } finally {
     store.close();
   }
-}
-
-export function characterOf(archiveKey: string): string {
-  return characterOfArchiveKey(archiveKey);
 }

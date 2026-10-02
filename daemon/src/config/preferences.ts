@@ -18,7 +18,6 @@ import {
   type ModelCatalog,
   type ModelConfigFields,
   type ResolvedModel,
-  type Sdk,
 } from "./models.ts";
 import { invalidType } from "./models.ts";
 import { parseKeepalivePings } from "./keepalive.ts";
@@ -81,10 +80,6 @@ export interface SamplerSettings {
 const SAMPLER_FIELDS = SETTING_STORAGE_FIELDS;
 
 export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
-
-export const SAMPLER_FIELD_BY_KEY: ReadonlyMap<string, keyof SamplerSettings> = new Map(
-  SAMPLER_FIELDS.map(([field, key]) => [key, field]),
-);
 
 function applyOverlay(target: SamplerSettings, overlay: SamplerSettings): void {
   for (const [field] of SAMPLER_FIELDS) {
@@ -1218,8 +1213,6 @@ function tomlInline(value: unknown): string {
   if (typeof value === "string") return tomlString(value);
   return String(value);
 }
-
-export type { Sdk };
 
 function expectedList(known: readonly string[]): string {
   if (known.length === 1) return `\`${known[0]}\``;

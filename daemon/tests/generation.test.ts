@@ -428,7 +428,6 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   });
 
   const provider: SidecarProvider = {
-    // eslint-disable-next-line require-yield
     async *stream(req) {
       requests.push(req);
       yield* events;

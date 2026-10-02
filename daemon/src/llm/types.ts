@@ -242,12 +242,6 @@ export interface ImageResponse {
   timing: { total_ms: number };
 }
 
-export interface ToolDef {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
 export interface TurnMessage {
   role: "user" | "assistant" | "system";
   content: ContentBlock[];
@@ -256,82 +250,4 @@ export interface TurnMessage {
 
 export function toTurn(turn: WireMessage): TurnMessage {
   return { role: turn.role, content: turn.content };
-}
-
-export interface ThinkingConfig {
-  enabled: boolean;
-  budgetTokens?: number;
-  effort?: string;
-}
-
-export interface SystemPromptBlock {
-  type: "text";
-  text: string;
-  _label?: string;
-}
-
-export interface ChatRequest {
-  system: string | SystemPromptBlock[];
-  messages: TurnMessage[];
-  tools: ToolDef[];
-  thinking: ThinkingConfig;
-  cacheTtl: string;
-  modelId: string;
-  apiKey: string;
-  baseUrl?: string;
-  maxTokens: number;
-  temperature?: number;
-  topP?: number;
-  signal?: AbortSignal;
-  cacheForensics?: CacheForensicsSink;
-  forensicCharacter?: string;
-  forensicRid?: string;
-}
-
-export interface CacheForensicsSink {
-  nextCallId(): number;
-  logRequest(entry: {
-    callId: number;
-    character?: string;
-    model: string;
-    msgCount: number;
-    msgBreakpoints: number[];
-    sysBreakpoints: number[];
-    sysBlocks: number;
-    prefixHash: string;
-    hasExistingMarkers: boolean;
-    cacheEnabled: boolean;
-    rid?: string;
-  }): void;
-}
-
-export interface UsageStats {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadInputTokens: number;
-  cacheCreationInputTokens: number;
-}
-
-export type ChatEvent =
-  | { kind: "text_delta"; text: string }
-  | { kind: "thinking_delta"; text: string }
-  | { kind: "tool_use_start"; id: string; name: string }
-  | { kind: "tool_use_input_delta"; id: string; partial_json: string }
-  | { kind: "tool_use_done"; id: string }
-  | {
-      kind: "done";
-      content: ContentBlock[];
-      stopReason: string;
-      usage: UsageStats;
-    };
-
-export interface GenerateResult {
-  content: ContentBlock[];
-  stopReason: string;
-  usage: UsageStats;
-}
-
-export interface ProviderClient {
-  stream(req: ChatRequest): AsyncIterable<ChatEvent>;
-  generate(req: ChatRequest): Promise<GenerateResult>;
 }

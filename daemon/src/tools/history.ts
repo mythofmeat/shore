@@ -23,8 +23,6 @@ const TERM_HIT = 10;
 const FULL_COVERAGE_BONUS = 15;
 const PHRASE_BONUS = 25;
 
-export { InvalidArgs, ToolIoError };
-
 function optionalTrimmedString(
   input: Record<string, unknown>,
   field: string,

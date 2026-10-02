@@ -45,15 +45,6 @@ function blockLabel(block: CallBlock): string {
   return `${block.scope === "plan" ? "plan limit" : "usage budget"} "${block.budget_name}"`;
 }
 
-export interface KeepaliveSchedule extends KeepaliveSnapshot {
-  character: string;
-}
-
-export interface KeepaliveDrain {
-  events: KeepaliveEvent[];
-  schedules: KeepaliveSchedule[];
-}
-
 export interface PingNowOutcome {
   status: "sent" | "skipped" | "failed";
   cold: boolean;

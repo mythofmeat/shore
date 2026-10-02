@@ -108,25 +108,6 @@ function cleanAttachments(tx: IDBTransaction, records: StoredDraft[]): void {
   };
 }
 
-export async function discardDraft(record: StoredDraft): Promise<void> {
-  const db = await open();
-  return await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(["drafts", "attachments"], "readwrite", { durability: "strict" });
-    let failure: Error | undefined;
-    const all = tx.objectStore("drafts").getAll();
-    all.onsuccess = () => {
-      const rows = all.result as StoredDraft[];
-      if (rows.some((row) => row.id === record.id && row.revision !== record.revision)) {
-        failure = new Error("This draft changed in another tab. Refresh the saved drafts before discarding it."); tx.abort(); return;
-      }
-      tx.objectStore("drafts").delete(record.id);
-      cleanAttachments(tx, rows.filter((row) => row.id !== record.id));
-    };
-    tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(failure ?? tx.error ?? new Error("Could not discard draft"));
-  });
-}
-
 class SendingTaken extends Error {
   constructor() { super("Another tab already put this message back in its message box"); }
 }

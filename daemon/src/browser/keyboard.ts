@@ -13,7 +13,6 @@ export const LOCAL_SHORTCUTS = {
   edit_cancel: "Cancel message edit", output: "Last action output", editor: "Expand draft editor", undo: "Undo draft text", redo: "Redo draft text", focus: "Focus composer", send: "Send current draft", follow: "Toggle following responses",
   top: "Scroll to first message", bottom: "Scroll to latest message", up: "Scroll up", down: "Scroll down",
 } as const;
-export type LocalShortcut = keyof typeof LOCAL_SHORTCUTS;
 export function scrollAmount(args: Record<string, unknown>): number {
   const amount = args["amount"] ?? 1;
   if (typeof amount !== "number" || !Number.isInteger(amount) || amount < 0 || amount > 65535) throw new Error("Scroll amount must be a whole number from 0 to 65535");
