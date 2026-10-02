@@ -426,7 +426,7 @@ MUTANTS = [
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 def main() -> int:
     return _run_mutants(MUTANTS, TESTS)

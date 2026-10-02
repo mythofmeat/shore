@@ -57,7 +57,7 @@ IMPORT = ('import { internalError } from "./errors.ts";',
           'import { internalError, invalidRequest } from "./errors.ts";')
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:
