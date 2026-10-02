@@ -239,7 +239,7 @@ fn current_inventory() -> Value {
 
 fn inventory_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/capabilities/terminal.generated.json")
+        .join("../../daemon/src/browser/terminal_capabilities.generated.json")
 }
 
 #[test]

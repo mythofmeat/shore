@@ -19,7 +19,6 @@ FROM oven/bun:debian AS daemon-builder
 WORKDIR /build/daemon
 COPY daemon/package.json daemon/bun.lock ./
 RUN bun install --frozen-lockfile --production
-COPY docs/capabilities /build/docs/capabilities
 COPY daemon/tsconfig.json ./
 COPY daemon/prompts prompts
 COPY daemon/scripts scripts

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import terminal from "../../docs/capabilities/terminal.generated.json" with { type: "json" };
+import terminal from "../src/browser/terminal_capabilities.generated.json" with { type: "json" };
 import wire from "../src/protocol/wire.generated.json" with { type: "json" };
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { actionControl } from "../src/browser/forms.ts";
