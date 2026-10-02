@@ -255,44 +255,6 @@ MUTANTS = [
      "  try {\n    return JSON.parse(json);\n  } catch {\n    return json;\n  }",
      "  return json;"),
 
-    # --- rotate ---------------------------------------------------------------
-    ("rotate: the cutoff is inclusive",
-     '    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix < ?1", cutoffUnix);',
-     '    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix <= ?1", cutoffUnix);'),
-    ("rotate: capture_transcripts are not pruned by age",
-     "    const agedTranscripts = this.#changes(\n"
-     '      "DELETE FROM capture_transcripts WHERE ts_unix < ?1",\n      cutoffUnix,\n    );',
-     "    const agedTranscripts = 0;"),
-    ("rotate: the age counter omits capture_transcripts",
-     "      deleted_by_age: agedCalls + agedTranscripts + agedHttp,",
-     "      deleted_by_age: agedCalls + agedHttp,"),
-    ("rotate: the two counters are swapped",
-     "      deleted_by_age: agedCalls + agedTranscripts + agedHttp,\n"
-     "      deleted_by_size: sized + orphaned,",
-     "      deleted_by_age: sized + orphaned,\n"
-     "      deleted_by_size: agedCalls + agedTranscripts + agedHttp,"),
-    ("rotate: the size backstop keeps the oldest rows rather than the newest",
-     "                          OVER (ORDER BY ts_unix DESC, id DESC",
-     "                          OVER (ORDER BY ts_unix ASC, id ASC"),
-    ("rotate: the running total is at-or-over rather than over the cap",
-     "           WHERE running > ?1",
-     "           WHERE running >= ?1"),
-    ("rotate: the newest row is not exempt from the cap",
-     "           WHERE running > ?1\n"
-     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
-     "           WHERE running > ?1"),
-    ("rotate: the exempt row is the oldest rather than the newest",
-     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
-     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix ASC, id ASC LIMIT 1)"),
-    ("rotate: the running total counts only the request blob",
-     '                      SUM(COALESCE(request_stored, 0)\n'
-     "                          + COALESCE(response_stored, 0)\n"
-     "                          + COALESCE(wire.bytes, 0))",
-     '                      SUM(COALESCE(request_stored, 0))'),
-    ("rotate: the size backstop is skipped entirely",
-     "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE id IN (",
-     "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE 0 AND id IN ("),
-
     # --- schema and migration -------------------------------------------------
     ("schema: a fresh DB has no character column",
      "    source            TEXT NOT NULL,\n    character         TEXT,\n    call_type         TEXT,",

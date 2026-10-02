@@ -216,11 +216,6 @@ export interface CallFilter {
   limit: number;
 }
 
-export interface RotateStats {
-  deleted_by_age: number;
-  deleted_by_size: number;
-}
-
 export class CallStore {
   readonly #db: Database;
 
@@ -651,61 +646,6 @@ export class CallStore {
       if (removed > 0) this.#collectGarbage();
       return removed;
     })();
-  }
-
-  rotate(cutoff: Date, maxTotalBytes: number): RotateStats {
-    const cutoffUnix = unixSeconds(cutoff);
-    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix < ?1", cutoffUnix);
-    const agedTranscripts = this.#changes(
-      "DELETE FROM capture_transcripts WHERE ts_unix < ?1",
-      cutoffUnix,
-    );
-
-    const agedHttp = this.#changes("DELETE FROM capture_http_calls WHERE ts_unix < ?1", cutoffUnix);
-
-    const sized = this.#changes(
-      `DELETE FROM capture_calls WHERE id IN (
-           SELECT id FROM (
-               SELECT id,
-                      SUM(COALESCE(request_stored, 0)
-                          + COALESCE(response_stored, 0)
-                          + COALESCE(wire.bytes, 0))
-                          OVER (ORDER BY ts_unix DESC, id DESC
-                                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running
-               FROM (
-                   SELECT capture_calls.*,
-                          (SELECT stored FROM capture_payloads WHERE id = request_payload_id)
-                              AS request_stored,
-                          (SELECT stored FROM capture_payloads WHERE id = response_payload_id)
-                              AS response_stored
-                   FROM capture_calls
-               ) AS capture_calls
-               LEFT JOIN (
-                   SELECT call_id,
-                          SUM(COALESCE(LENGTH(request_headers_zstd), 0)
-                              + COALESCE(LENGTH(response_headers_zstd), 0)
-                              + COALESCE(
-                                  (SELECT stored FROM capture_payloads WHERE id = request_payload_id), 0)
-                              + COALESCE(
-                                  (SELECT stored FROM capture_payloads WHERE id = response_payload_id), 0)) AS bytes
-                   FROM capture_http_calls GROUP BY call_id
-               ) AS wire ON wire.call_id = capture_calls.call_id
-           )
-           WHERE running > ?1
-             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)
-       )`,
-      maxTotalBytes,
-    );
-
-    const orphaned = this.#changes(
-      "DELETE FROM capture_http_calls WHERE call_id NOT IN (SELECT call_id FROM capture_calls)",
-    );
-    this.#collectGarbage();
-
-    return {
-      deleted_by_age: agedCalls + agedTranscripts + agedHttp,
-      deleted_by_size: sized + orphaned,
-    };
   }
 
   blobCount(): number {
