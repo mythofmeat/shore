@@ -3,6 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
+const PLAYWRIGHT = join(ROOT, "node_modules", ".bin", "playwright");
+
+if (process.platform === "darwin") {
+  const playwright = Bun.spawn([PLAYWRIGHT, "test", ...process.argv.slice(2)], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
+  process.exit(await playwright.exited);
+}
 
 for (const tool of ["kwin_wayland", "dbus-run-session"]) {
   if (Bun.which(tool) !== null) continue;
@@ -17,7 +23,7 @@ const status = join(home, "status");
 const session = join(home, "session.sh");
 try {
   await Promise.all(["config", "data", "cache", "state"].map((name) => mkdir(join(home, name))));
-  const playwright = [join(ROOT, "node_modules", ".bin", "playwright"), "test", ...process.argv.slice(2)].map(quote).join(" ");
+  const playwright = [PLAYWRIGHT, "test", ...process.argv.slice(2)].map(quote).join(" ");
   await writeFile(session, `#!/bin/sh\nexec 2>&1\ncd ${quote(ROOT)}\n${playwright}\necho $? > ${quote(status)}\n`, { mode: 0o755 });
   const kwin = Bun.spawn([
     "dbus-run-session", "--", "kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",

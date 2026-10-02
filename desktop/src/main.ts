@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainEvent, type IpcMainInvokeEvent, type NativeImage } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { externalUrl, needsSecureOverride, parseAddress, sameOrigin } from "./address.ts";
@@ -7,14 +7,24 @@ import { applicationMenuTemplate, contextMenuTemplate, trayMenuTemplate, type Me
 import { readSettings, writeSettings, ZOOM_LIMIT, type Settings } from "./settings.ts";
 import { unreadCount } from "./title.ts";
 
+const MAC = process.platform === "darwin";
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const SHELL_PAGE = join(ROOT, "shell", "shell.html");
 const ICON = join(ROOT, "assets", "shore.png");
 const TRAY_ICON = join(ROOT, "assets", "tray.png");
 const TRAY_UNREAD_ICON = join(ROOT, "assets", "tray-unread.png");
+const TRAY_TEMPLATE = join(ROOT, "assets", "tray-template.png");
+const TRAY_UNREAD_TEMPLATE = join(ROOT, "assets", "tray-unread-template.png");
 const ADDRESS_FLAG = "--address=";
 const PERMISSIONS = new Set(["notifications", "clipboard-sanitized-write", "fullscreen"]);
 const ERR_ABORTED = -3;
+
+function trayImage(unread: boolean): NativeImage {
+  if (!MAC) return nativeImage.createFromPath(unread ? TRAY_UNREAD_ICON : TRAY_ICON);
+  const image = nativeImage.createFromPath(unread ? TRAY_UNREAD_TEMPLATE : TRAY_TEMPLATE);
+  image.setTemplateImage(true);
+  return image;
+}
 
 class Desktop {
   #settings: Settings;
@@ -41,6 +51,7 @@ class Desktop {
 
   start(): void {
     app.on("second-instance", () => { this.#show(); });
+    app.on("activate", () => { this.#show(); });
     app.on("before-quit", () => { this.#quitting = true; });
     ipcMain.handle("shell:connect", (event, input: unknown) => this.#connect(event, input));
     ipcMain.on("shell:retry", (event) => { if (this.#fromShell(event)) this.#showDaemon(); });
@@ -70,8 +81,8 @@ class Desktop {
   };
 
   #refreshMenus(): void {
-    Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenuTemplate(this.#settings.closeToTray, this.#menuActions)));
-    this.#tray?.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(this.#settings.closeToTray, this.#menuActions)));
+    Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenuTemplate(this.#settings.closeToTray, this.#menuActions, MAC)));
+    this.#tray?.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(this.#settings.closeToTray, this.#menuActions, MAC)));
   }
 
   #createWindow(): BrowserWindow {
@@ -122,9 +133,14 @@ class Desktop {
     window.on("close", (event) => {
       const bounds = window.getNormalBounds();
       this.#save({ window: { width: bounds.width, height: bounds.height, maximized: window.isMaximized() } });
-      if (this.#quitting || !this.#settings.closeToTray || this.#tray === null) return;
+      if (this.#quitting || (!MAC && (!this.#settings.closeToTray || this.#tray === null))) return;
       event.preventDefault();
-      window.hide();
+      if (MAC && window.isFullScreen()) {
+        window.once("leave-full-screen", () => { window.hide(); });
+        window.setFullScreen(false);
+      } else {
+        window.hide();
+      }
     });
     window.on("closed", () => { this.#window = null; });
     return window;
@@ -132,9 +148,9 @@ class Desktop {
 
   #createTray(): Tray | null {
     try {
-      const tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
+      const tray = new Tray(trayImage(false));
       tray.setToolTip("Shore");
-      tray.on("click", () => { this.#toggle(); });
+      if (!MAC) tray.on("click", () => { this.#toggle(); });
       return tray;
     } catch (error) {
       console.error("shore-desktop: no system tray, so closing the window quits", error);
@@ -149,7 +165,7 @@ class Desktop {
     const unread = unreadCount(title) > 0;
     if (unread === this.#unread) return;
     this.#unread = unread;
-    tray.setImage(nativeImage.createFromPath(unread ? TRAY_UNREAD_ICON : TRAY_ICON));
+    tray.setImage(trayImage(unread));
   }
 
   #show(): void {
