@@ -21,7 +21,7 @@ export function scrollAmount(args: Record<string, unknown>): number {
 export interface Binding { key: string; scope: "normal" | "global"; target: string; args: Record<string, unknown>; mode: "open" | "run" }
 export const KEYBOARD_STORAGE = "shore.keyboard.v1.";
 export const MAX_BINDINGS = 128;
-export const MAX_BINDING_BYTES = 32 * 1024;
+const MAX_BINDING_BYTES = 32 * 1024;
 const modifiers = ["ctrl", "alt", "shift", "meta"];
 const aliases: Record<string, string> = { control: "ctrl", cmd: "meta", command: "meta", option: "alt", esc: "escape", return: "enter", up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright", " ": "space", "+": "plus", "-": "minus" };
 const named = new Set(["escape", "tab", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright", "home", "end", "pageup", "pagedown", "backspace", "delete", "insert", "space", "plus", "minus"]);

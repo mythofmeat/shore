@@ -208,7 +208,7 @@ export function withoutOrphanToolResults(messages: readonly Message[]): Message[
   return kept;
 }
 
-export function unansweredTailToolUseIds(messages: readonly Message[]): string[] {
+function unansweredTailToolUseIds(messages: readonly Message[]): string[] {
   let latestAssistant = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (required(messages[index]).role === "assistant") {

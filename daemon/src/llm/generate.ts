@@ -138,7 +138,7 @@ function providerFor(request: SidecarRequest, deps: GenerateDeps): SidecarProvid
   return withCallCapture(provider, deps.callStore);
 }
 
-export interface StreamedGenerateOptions {
+interface StreamedGenerateOptions {
   sink?: FrameSink;
   signal?: AbortSignal;
 }

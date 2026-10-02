@@ -70,7 +70,7 @@ export interface ThreadContext {
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
-export function threadCommandError(e: unknown): unknown {
+function threadCommandError(e: unknown): unknown {
   if (e instanceof ForkBusy) return busy(e.message);
   if (!(e instanceof ThreadError)) return e;
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);

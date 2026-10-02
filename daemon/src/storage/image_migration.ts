@@ -64,7 +64,7 @@ export function moveCharacterImagesToCache(data: string, cache: string, characte
   return result;
 }
 
-export function activeWindowPaths(db: Database, character: string): string[] {
+function activeWindowPaths(db: Database, character: string): string[] {
   const prefix = `${character}/threads/`;
   const rows = db.query("SELECT path FROM state_files WHERE character = ?1 AND substr(path, 1, length(?2)) = ?2")
     .all(character, prefix) as { path: string }[];

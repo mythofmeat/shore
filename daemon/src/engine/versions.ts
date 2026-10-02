@@ -9,7 +9,7 @@ export function newMessageVersion(): string {
   return `${VERSION_PREFIX}${crypto.randomUUID()}`;
 }
 
-export function isMessageVersion(value: unknown): value is string {
+function isMessageVersion(value: unknown): value is string {
   return typeof value === "string" && value.startsWith(VERSION_PREFIX) && value.length > VERSION_PREFIX.length;
 }
 

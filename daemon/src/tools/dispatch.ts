@@ -351,7 +351,7 @@ export function truncateToolResult(output: string, maxChars: number): string {
   return windowToolResult(output, maxChars).output;
 }
 
-export const CANCEL_GRACE_MS = 2_000;
+const CANCEL_GRACE_MS = 2_000;
 
 const STILL_RUNNING = Symbol("still running");
 

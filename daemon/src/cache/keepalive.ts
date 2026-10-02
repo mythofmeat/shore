@@ -75,7 +75,7 @@ export interface KeepaliveHalt {
   at: number;
 }
 
-export function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
+function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
   return `${req.provider_key ?? req.sdk}:${req.model}`;
 }
 
@@ -125,7 +125,7 @@ export function cachedPrefixTokens(usage: Pick<Usage, "cache_read_tokens" | "cac
   return usage.cache_read_tokens + usage.cache_creation_tokens;
 }
 
-export function heartbeatRefreshedPrefix(
+function heartbeatRefreshedPrefix(
   armed: KeepalivePrefix,
   heartbeat: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
   usage: Pick<Usage, "cache_read_tokens">,

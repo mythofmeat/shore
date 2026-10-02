@@ -5,7 +5,7 @@ import { characterCacheDir } from "../config/dirs.ts";
 import { shoreLog } from "../log.ts";
 
 export const DEFAULT_IMAGE_CACHE_BYTES = 512 * 1024 * 1024;
-export const RECENT_USE_MS = 60 * 60 * 1000;
+const RECENT_USE_MS = 60 * 60 * 1000;
 
 const CHARACTERS_DIR = "characters";
 const IMAGES_DIR = "images";
@@ -50,7 +50,7 @@ interface CachedImage {
   usedAt: number;
 }
 
-export function cachedImages(cache: string): CachedImage[] {
+function cachedImages(cache: string): CachedImage[] {
   const byKey = new Map<string, CachedImage>();
   for (const character of entriesOf(join(cache, CHARACTERS_DIR))) {
     for (const file of filesUnder(join(cache, CHARACTERS_DIR, character, IMAGES_DIR))) {

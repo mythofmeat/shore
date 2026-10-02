@@ -301,7 +301,7 @@ export interface LoadedConfig {
   adoptEnvironment?: () => void;
 }
 
-export function normalizeSource(
+function normalizeSource(
   input: TomlTable,
   source: string,
 ): TomlTable {

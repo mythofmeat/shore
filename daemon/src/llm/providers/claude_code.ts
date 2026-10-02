@@ -1,6 +1,6 @@
 import { dirname, isAbsolute, join } from "node:path";
 
-export const CLAUDE_CODE_PATH_ENV = "SHORE_CLAUDE_PATH";
+const CLAUDE_CODE_PATH_ENV = "SHORE_CLAUDE_PATH";
 
 export const BUNDLED_CLAUDE_CODE = process.platform === "win32" ? "shore-claude.exe" : "shore-claude";
 

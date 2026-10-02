@@ -298,12 +298,12 @@ function warnIgnoredFields(
   }
 }
 
-export interface EmbeddingSettings {
+interface EmbeddingSettings {
   dimensions?: number;
   minSimilarity?: number;
 }
 
-export interface ImageGenSettings {
+interface ImageGenSettings {
   size?: string;
   quality?: string;
   aspectRatio?: string;

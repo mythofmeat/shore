@@ -294,7 +294,7 @@ export function conversationKey(req: SidecarRequest): string {
   );
 }
 
-export interface AgentToolSurface {
+interface AgentToolSurface {
   instance: McpServer;
   canUseTool: CanUseTool;
   maxTurns: number;
@@ -370,7 +370,7 @@ function buildOptions(
   };
 }
 
-export function agentThinking(req: SidecarRequest): NonNullable<Options["thinking"]> {
+function agentThinking(req: SidecarRequest): NonNullable<Options["thinking"]> {
   return { type: "adaptive", display: req.provider_options?.thinking_display ?? "summarized" };
 }
 
@@ -597,7 +597,7 @@ function isNestedFrame(msg: SDKMessage): msg is SDKMessage & { parent_tool_use_i
     typeof msg.parent_tool_use_id === "string";
 }
 
-export class BlockAssembler {
+class BlockAssembler {
   readonly #blocks: ContentBlock[] = [];
   #text = "";
   #thinking = "";

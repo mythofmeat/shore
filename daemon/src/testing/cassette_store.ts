@@ -1,7 +1,7 @@
 import type { CallStore, HttpExchangeRow } from "../call_store.ts";
 import type { Cassette, CassetteExchange } from "./cassette.ts";
 
-export function exchangeFromRow(row: HttpExchangeRow): CassetteExchange | undefined {
+function exchangeFromRow(row: HttpExchangeRow): CassetteExchange | undefined {
   if (row.status === null) return undefined;
   return {
     method: row.method,

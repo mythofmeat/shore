@@ -1,6 +1,6 @@
-export type HeaderReader = (name: string) => string | undefined;
+type HeaderReader = (name: string) => string | undefined;
 
-export function headerReader(headers: unknown): HeaderReader | undefined {
+function headerReader(headers: unknown): HeaderReader | undefined {
   if (headers === null || headers === undefined) return undefined;
   const get = (headers as { get?: unknown }).get;
   if (typeof get === "function") {

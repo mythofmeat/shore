@@ -1,7 +1,7 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 
-export const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_calls", "capture_transcripts", "capture_http_calls"];
-export const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
+const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_calls", "capture_transcripts", "capture_http_calls"];
+const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
 export const HISTORY_TABLES = [
   "history_blobs", "history_segments", "history_messages", "history_alternatives", "history_pending",
   "history_thread_forks", "memory_coverage", "history_character_stats", "history_archive_revision",

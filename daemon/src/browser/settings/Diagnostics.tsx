@@ -11,7 +11,7 @@ import { Tree } from "./tree.tsx";
 import { requestStatus } from "./format.ts";
 
 
-export function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
+function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
   const [listing, setListing] = useState<WebRequestList>();
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
@@ -48,7 +48,7 @@ const SECTION_FIELDS: Record<string, readonly (keyof StatusReport)[]> = {
   autonomy: ["autonomy"], activity: ["activity"], index: ["index", "history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
 };
 
-export function StatusView({ report }: { report: StatusReport }) {
+function StatusView({ report }: { report: StatusReport }) {
   const [section, setSection] = useState("all");
   const sections = [...new Set(["conversation", "folders", ...report.sections.filter((name) => SECTION_FIELDS[name] !== undefined), "edits"])];
   const shown = section === "all" ? sections : [section];

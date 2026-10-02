@@ -14,11 +14,11 @@ import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 
 export const HISTORY_SEARCH_DB_FILE = "history_search.db";
-export const HISTORY_SEARCH_SCHEMA_VERSION = 6;
-export const HISTORY_CHUNK_CHARS = 1_200;
-export const HISTORY_CHUNK_OVERLAP = 120;
-export const HISTORY_EMBED_BATCH_ITEMS = 32;
-export const HISTORY_EMBED_BATCH_CHARS = 96_000;
+const HISTORY_SEARCH_SCHEMA_VERSION = 6;
+const HISTORY_CHUNK_CHARS = 1_200;
+const HISTORY_CHUNK_OVERLAP = 120;
+const HISTORY_EMBED_BATCH_ITEMS = 32;
+const HISTORY_EMBED_BATCH_CHARS = 96_000;
 
 const HISTORY_VECTOR_CANDIDATES = 2_048;
 const LSH_BANDS = 8;
@@ -515,7 +515,7 @@ export function chunkVisibleText(text: string): string[] {
   return chunkText(text, HISTORY_CHUNK_CHARS, HISTORY_CHUNK_OVERLAP);
 }
 
-export async function loadMessageTexts(
+async function loadMessageTexts(
   ref: CharacterHistoryRef,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {

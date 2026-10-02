@@ -30,7 +30,7 @@ export function appendCompactionTail(
   });
 }
 
-export type LedgerGenerate = (
+type LedgerGenerate = (
   request: SidecarRequest,
   model: ResolvedModel,
   character: string,

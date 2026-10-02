@@ -355,7 +355,7 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
   return content.every((b) => (b as { type?: string }).type === "tool_result");
 }
 
-export function toPlacementTurns(messages: readonly MessageParam[]): PlacementTurn[] {
+function toPlacementTurns(messages: readonly MessageParam[]): PlacementTurn[] {
   return messages.map((m) => ({
     role: m.role,
     toolResultOnly: isToolResultOnlyUser(m),

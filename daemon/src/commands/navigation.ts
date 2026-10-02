@@ -127,7 +127,7 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
 
 const soulTemplate = (name: string): string => `You are ${name}.\n`;
 
-export const scaffoldedFiles = (
+const scaffoldedFiles = (
   name: string,
 ): readonly (readonly [file: string, content: string])[] => [
   [SOUL_FILE, soulTemplate(name)],

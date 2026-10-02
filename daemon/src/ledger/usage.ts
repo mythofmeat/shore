@@ -396,7 +396,7 @@ export interface CostBackfill {
   failures: { model: string; reason: string }[];
 }
 
-export async function backfillMissingCosts(
+async function backfillMissingCosts(
   db: Database,
   pricing: PricingEngine,
   force: boolean,

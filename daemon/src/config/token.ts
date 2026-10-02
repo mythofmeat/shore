@@ -13,7 +13,7 @@ export class TokenError extends Error {
   override readonly name = "TokenError";
 }
 
-export type TokenSource = "env" | "file" | "generated";
+type TokenSource = "env" | "file" | "generated";
 
 export interface ResolvedToken {
   readonly token: string;

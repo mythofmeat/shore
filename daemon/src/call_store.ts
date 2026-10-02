@@ -196,9 +196,9 @@ export interface PayloadChunk {
   text: string | null;
 }
 
-export type DiffOp = import("./protocol/PayloadDiffOperation.ts").PayloadDiffOperation;
+type DiffOp = import("./protocol/PayloadDiffOperation.ts").PayloadDiffOperation;
 
-export type PayloadDiffEntry = import("./protocol/PayloadDiffEntry.ts").PayloadDiffEntry;
+type PayloadDiffEntry = import("./protocol/PayloadDiffEntry.ts").PayloadDiffEntry;
 
 export interface PayloadDiff {
   from_payload: number;

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
-export const DATABASE_FILE = "shore.db";
+const DATABASE_FILE = "shore.db";
 export const databasePath = (data: string): string => join(data, DATABASE_FILE);
 
 export const STORAGE_SCHEMA = `

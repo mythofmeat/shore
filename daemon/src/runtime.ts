@@ -424,7 +424,7 @@ async function connectMcpRegistry(
   );
 }
 
-export async function refreshMcpPromptCaches(
+async function refreshMcpPromptCaches(
   cache: Pick<LastRequestCache, "cachedCharacters" | "invalidate" | "reprimeFromDisk">,
   registry: Pick<CharacterRegistry, "effectiveConfig">,
   dataDir: string,

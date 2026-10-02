@@ -301,7 +301,7 @@ function compareOptionalTs(a: number | undefined, b: number | undefined): number
   return a === b ? 0 : a < b ? -1 : 1;
 }
 
-export type HistorySearchMode = "auto" | "lexical" | "hybrid" | "vector";
+type HistorySearchMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface HistorySearchOptions {
   character: string;
@@ -692,7 +692,7 @@ function identityKey(row: IndexedMessage): string {
   return row.version === null ? `at:${locatorKey(row)}` : `version:${row.version}`;
 }
 
-export function locationOf(row: IndexedMessage): HistoryLocation {
+function locationOf(row: IndexedMessage): HistoryLocation {
   return { thread: threadOf(row.archive_key), segment: row.segment, ordinal: row.ordinal };
 }
 

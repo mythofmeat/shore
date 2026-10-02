@@ -214,7 +214,7 @@ export function reportedSections(ctx: ConfigContext): string[] {
   return Object.keys(reportedConfig(ctx));
 }
 
-export function canonicalKey(key: string): string {
+function canonicalKey(key: string): string {
   try { return formatConfigPath(parseConfigPath(key)); }
   catch { throw notFound(`Config section not found: ${key}`); }
 }

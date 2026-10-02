@@ -262,7 +262,7 @@ export async function limitImageBlocks(blocks: readonly ContentBlock[], maxEdge:
   return out;
 }
 
-export function requestMaxImageEdge(request: Pick<SidecarRequest, "sdk" | "messages">): number {
+function requestMaxImageEdge(request: Pick<SidecarRequest, "sdk" | "messages">): number {
   return request.sdk === "claude_agent" || countImageBlocks(request.messages) > MANY_IMAGES
     ? MANY_IMAGES_MAX_EDGE
     : API_MAX_IMAGE_EDGE;

@@ -23,7 +23,7 @@ import { PathError, resolvePath, resolveRoots } from "./workspace_path";
 const SEARCH_DEFAULT_MAX_RESULTS = 20;
 const SEARCH_MAX_RESULTS = 100;
 export const SEARCH_EXCERPT_CHARS = 500;
-export const SEARCH_RESPONSE_CHARS = 12_000;
+const SEARCH_RESPONSE_CHARS = 12_000;
 export const GIT_HISTORY_HINT =
   "Search reads current files only. Earlier versions and deleted files are in the workspace's git history: " +
   "run `git log -p -S'<text>'` with bash to find commits that added or removed some text.";
@@ -580,7 +580,7 @@ function bestTermMatchedLine(
   return best === undefined ? undefined : [best.lineNo, best.line, best.term];
 }
 
-export const GIT_SAFETY_FLAGS: readonly string[] = [
+const GIT_SAFETY_FLAGS: readonly string[] = [
   "-c",
   "core.hooksPath=/dev/null",
   "-c",

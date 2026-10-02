@@ -178,7 +178,7 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
   );
 }
 
-export type SettingTarget =
+type SettingTarget =
   | { kind: "model"; model: ResolvedModel }
   | { kind: "subagent"; subagent: string; model: ResolvedModel }
   | { kind: "subagent_model"; model: ResolvedModel };
@@ -1026,7 +1026,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   return slots;
 }
 
-export function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
+function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
   const character = ctx.characterName;
   const [global, charPrefs] =
     character === undefined

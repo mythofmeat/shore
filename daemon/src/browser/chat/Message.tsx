@@ -18,7 +18,7 @@ import { swipe as swipeTo } from "./actions.ts";
 
 export type OpenImage = (source: string, caption: string) => void;
 
-export function ReasoningChip({ text, redacted = false, live = false }: { text: string; redacted?: boolean; live?: boolean }) {
+function ReasoningChip({ text, redacted = false, live = false }: { text: string; redacted?: boolean; live?: boolean }) {
   const [open, setOpen] = useState(false);
   if (redacted) return <div className="chip static"><span>Reasoning hidden by the provider</span></div>;
   return <div className="reasoning">
@@ -29,7 +29,7 @@ export function ReasoningChip({ text, redacted = false, live = false }: { text: 
   </div>;
 }
 
-export function ToolChip({ view, openImage }: { view: Extract<BlockView, { kind: "tool" }>; openImage: OpenImage }) {
+function ToolChip({ view, openImage }: { view: Extract<BlockView, { kind: "tool" }>; openImage: OpenImage }) {
   const [open, setOpen] = useState(false);
   const summary = toolSummary(view.input);
   const running = view.output === null;
@@ -58,7 +58,7 @@ function Step({ step, live, openImage }: { step: StepView; live: boolean; openIm
   return step.kind === "thinking" ? <ReasoningChip text={step.text} redacted={step.redacted} live={live} /> : <ToolChip view={step} openImage={openImage} />;
 }
 
-export function Activity({ steps, live, openImage, expanded = false }: { steps: StepView[]; live: boolean; openImage: OpenImage; expanded?: boolean }) {
+function Activity({ steps, live, openImage, expanded = false }: { steps: StepView[]; live: boolean; openImage: OpenImage; expanded?: boolean }) {
   const [open, setOpen] = useState(expanded);
   const [only] = steps;
   if (only !== undefined && steps.length === 1) return <Step step={only} live={live} openImage={openImage} />;

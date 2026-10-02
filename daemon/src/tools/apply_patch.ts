@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { runProcess } from "./workspace.ts";
 
-export async function patchExecutable(): Promise<string> {
+async function patchExecutable(): Promise<string> {
   const override = process.env.SHORE_APPLY_PATCH_PATH;
   if (override !== undefined) {
     if (!isAbsolute(override)) throw new InvalidArgs("SHORE_APPLY_PATCH_PATH must be an absolute executable path");

@@ -71,7 +71,7 @@ function ipv4Blocked(a: number, b: number): boolean {
   return false;
 }
 
-export function addressBlocked(address: string): boolean {
+function addressBlocked(address: string): boolean {
   const plain = address.split("%")[0] ?? address;
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(plain);
   if (v4 !== null) {

@@ -131,7 +131,7 @@ export interface ModelPreference {
   sampler: SamplerSettings;
 }
 
-export interface PreferenceDefaults {
+interface PreferenceDefaults {
   sampler: SamplerSettings;
 }
 
@@ -460,7 +460,7 @@ function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   return cleaned;
 }
 
-export type PreferenceScope =
+type PreferenceScope =
   | "static_default"
   | "global_default"
   | "character_default"
@@ -836,7 +836,7 @@ function pinnedModel(
   }
 }
 
-export function resolveThreadPin(
+function resolveThreadPin(
   config: LoadedConfigView,
   character: string,
   pinned: string,
@@ -1051,7 +1051,7 @@ function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
   };
 }
 
-export function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
+function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
   const unknown = unknownField(table, [
     "selected",
     "favorites",

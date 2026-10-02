@@ -4,25 +4,25 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import type { AgentPrompt, AgentQuery } from "../llm/providers/claude_agent.ts";
 
-export type FakeBlock =
+type FakeBlock =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string; signature?: string }
   | { kind: "redacted_thinking"; data: string }
   | { kind: "tool_use"; id: string; name: string; input: unknown };
 
-export interface FakeUsage {
+interface FakeUsage {
   input_tokens?: number;
   output_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
 }
 
-export interface FakeToolCall {
+interface FakeToolCall {
   name: string;
   input?: Record<string, unknown>;
 }
 
-export interface FakeRound {
+interface FakeRound {
   blocks: FakeBlock[];
   toolCalls?: FakeToolCall[];
   stopReason?: string | null;
@@ -45,12 +45,12 @@ export interface FakeScript {
   throwOn?: Error;
 }
 
-export interface FakeCall {
+interface FakeCall {
   prompt: AgentPrompt;
   options: Options;
 }
 
-export interface FakeToolOutcome {
+interface FakeToolOutcome {
   name: string;
   allowed: boolean;
   denial?: string;

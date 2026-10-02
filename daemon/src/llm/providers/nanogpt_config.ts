@@ -5,9 +5,9 @@ export const NANOGPT_PROVIDER = "nanogpt";
 
 export const NANOGPT_BASE_URL = "https://nano-gpt.com/api/v1";
 
-export const NANOGPT_SUBSCRIPTION_BASE_URL = "https://nano-gpt.com/api/subscription/v1";
+const NANOGPT_SUBSCRIPTION_BASE_URL = "https://nano-gpt.com/api/subscription/v1";
 
-export const NANOGPT_PAID_BASE_URL = "https://nano-gpt.com/api/paid/v1";
+const NANOGPT_PAID_BASE_URL = "https://nano-gpt.com/api/paid/v1";
 
 export const NANOGPT_MODELS_QUERY = "?detailed=true";
 
@@ -36,7 +36,7 @@ const SHORE_PLACES_ITS_OWN_BREAKPOINTS = true;
 
 export type NanogptCacheTtl = "5m" | "1h";
 
-export function nanogptCacheTtl(requested: string): NanogptCacheTtl {
+function nanogptCacheTtl(requested: string): NanogptCacheTtl {
   return requested === "1h" ? "1h" : "5m";
 }
 

@@ -16,7 +16,7 @@ export interface Cassette {
   exchanges: CassetteExchange[];
 }
 
-export const REPLAYED_REQUEST_HEADERS: readonly string[] = [
+const REPLAYED_REQUEST_HEADERS: readonly string[] = [
   "content-type",
   "accept",
   "anthropic-version",
@@ -72,7 +72,7 @@ export function snapshotOf(
   };
 }
 
-export function snapshotKey(snapshot: RequestSnapshot): string {
+function snapshotKey(snapshot: RequestSnapshot): string {
   return JSON.stringify([snapshot.method, snapshot.url, snapshot.headers, snapshot.body]);
 }
 

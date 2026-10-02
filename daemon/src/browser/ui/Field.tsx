@@ -128,7 +128,7 @@ export function Field({ control, value, change, label, id, secret }: { control: 
   return <Renderer control={control} value={value} change={change} label={label} id={id} {...(secret === undefined ? {} : { secret })} />;
 }
 
-export function FieldRow({ name, label, required, hint, control, value, change, id, secret }: { name: string; label?: string; required: boolean; hint?: string | undefined; control: Control; value: unknown; change: (value: unknown) => void; id?: string; secret?: boolean }) {
+function FieldRow({ name, label, required, hint, control, value, change, id, secret }: { name: string; label?: string; required: boolean; hint?: string | undefined; control: Control; value: unknown; change: (value: unknown) => void; id?: string; secret?: boolean }) {
   const generated = useId();
   const fieldId = id ?? generated;
   const text = label ?? fieldLabel(name);

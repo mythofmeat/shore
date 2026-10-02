@@ -3,7 +3,7 @@ import { jsonSidecar, type Sidecar } from "./store.ts";
 
 const VIEW_KEYS = ["thinking", "tools", "usage"] as const;
 
-export type ViewKey = (typeof VIEW_KEYS)[number];
+type ViewKey = (typeof VIEW_KEYS)[number];
 
 export type RoomView = Record<ViewKey, boolean>;
 

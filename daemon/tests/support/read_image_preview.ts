@@ -7,7 +7,7 @@ import type { ServerMessage } from "../../src/protocol/ServerMessage.ts";
 
 export const READ_IMAGE_PREVIEW_CAPTURE = "tests/handler_captures/read_image_preview.json";
 
-export const READ_IMAGE_PREVIEW_ROOT = "/workspace";
+const READ_IMAGE_PREVIEW_ROOT = "/workspace";
 
 export async function readImagePreview(markdown: boolean): Promise<unknown> {
   const root = await mkdtemp(join(tmpdir(), "shore-read-preview-"));

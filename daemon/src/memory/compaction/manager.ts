@@ -464,7 +464,7 @@ export interface CompactionSettings {
   maxContextTokens?: number;
 }
 
-export function compactThread(opts: Pick<CompactOptions, "thread">): string {
+function compactThread(opts: Pick<CompactOptions, "thread">): string {
   return opts.thread ?? MAIN_THREAD;
 }
 

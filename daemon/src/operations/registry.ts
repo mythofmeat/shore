@@ -4,7 +4,7 @@ import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { OperationField } from "../protocol/OperationField.ts";
 import type { OperationPolicy } from "../protocol/OperationPolicy.ts";
 
-export type FieldPresentation = OperationField;
+type FieldPresentation = OperationField;
 
 export interface OperationPresentation<N extends OperationName> extends Pick<OperationDescriptor, "label" | "category" | "scope" | "confirmation"> {
   prerequisites: Readonly<OperationDescriptor["prerequisites"]>;

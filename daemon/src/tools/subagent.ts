@@ -8,7 +8,7 @@ import type { ContentBlock, Message } from "../engine/types";
 
 export const MAX_HISTORY_MESSAGES = 100;
 
-export type MacroWarn = (path: string, reason: string) => void;
+type MacroWarn = (path: string, reason: string) => void;
 
 export interface MacroContext {
   thread?: string;

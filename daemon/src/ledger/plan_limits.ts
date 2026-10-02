@@ -51,7 +51,7 @@ export interface ClaudePlanLimitsState extends ClaudePlanPoll {
 
 export type PlanLimitWarningEvent = Omit<PlanLimitWarning, "rid">;
 
-export type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
+type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
 
 export interface ClaudePlanLimitsOptions {
   cacheDir?: string;
@@ -177,7 +177,7 @@ function persist(): Promise<void> {
   return persisting;
 }
 
-export async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
+async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(state, null, 2));

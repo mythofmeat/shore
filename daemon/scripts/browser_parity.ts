@@ -6,7 +6,7 @@ import { actionControl } from "../src/browser/forms.ts";
 import { SURFACES, TIERS, type Tier } from "../src/browser/surfaces.ts";
 import { TERMINAL_LOCAL_COMMANDS } from "../src/browser/preferences.generated.ts";
 
-export const KNOWN_GAPS_PATH = new URL("./browser_known_gaps.json", import.meta.url);
+const KNOWN_GAPS_PATH = new URL("./browser_known_gaps.json", import.meta.url);
 
 type Route = { tier: Tier; operations: string[]; fields: Record<string, string[]>; tiers: Record<string, Tier> };
 const route = (tier: Tier, operations: string, fields: Record<string, string> = {}, tiers: Record<string, Tier> = {}): Route => ({
@@ -107,7 +107,7 @@ export const NOT_APPLICABLE: Readonly<Record<string, string>> = {
 
 const REQUEST_FIELD_TIERS: Partial<Record<string, Tier>> = { "message.stream": "settings", "regen.stream": "settings" };
 const LOCAL_TIERS: Partial<Record<string, Tier>> = { bind: "settings", unbind: "settings", output: "advanced", quit: "settings" };
-export const RENDERER_FAMILIES = ["field", "request_phase", "archive_phase", "usage_mode", "compaction_status"] as const;
+const RENDERER_FAMILIES = ["field", "request_phase", "archive_phase", "usage_mode", "compaction_status"] as const;
 
 const choices: Record<string, readonly string[]> = {
   "shore log.role": ["user", "assistant", "character", "system"],
@@ -118,7 +118,7 @@ const choices: Record<string, readonly string[]> = {
   ...Object.fromEntries(["use", "info", "setting", "reset"].map((command) => [`shore model ${command}.background`, ["all", "heartbeat", "compaction"]])),
 };
 
-export interface TerminalInventory {
+interface TerminalInventory {
   commands: { path: string; arguments: { id: string; action: string; choices: string[] }[] }[];
   wire_examples: { mapping: { name: string; args: object } | null }[];
   view_preferences: { key: string }[];

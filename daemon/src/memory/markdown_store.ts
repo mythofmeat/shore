@@ -15,7 +15,7 @@ import { compareRustStrings, rustTrim } from "./lines";
 
 const INTERNAL_TOP_LEVEL = [".dreams", "dreaming", "dreams.md", "memory.md"];
 
-export type MarkdownStoreErrorKind = "io" | "path-traversal" | "not-found";
+type MarkdownStoreErrorKind = "io" | "path-traversal" | "not-found";
 
 const ERROR_PREFIX: Record<MarkdownStoreErrorKind, string> = {
   io: "io",

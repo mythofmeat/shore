@@ -1,7 +1,7 @@
 import { shoreLog } from "../../log.ts";
 import { jsonSidecar, type Sidecar } from "./store.ts";
 
-export type EventOrigin = "assistant" | "mirrored_user" | "matrix_user";
+type EventOrigin = "assistant" | "mirrored_user" | "matrix_user";
 
 export interface MappedEvent {
   msgId: string;

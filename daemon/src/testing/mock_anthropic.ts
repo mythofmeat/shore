@@ -11,13 +11,13 @@ export interface AnthropicUsage {
   cache_creation_input_tokens: number;
 }
 
-export interface MockToolUse {
+interface MockToolUse {
   id?: string;
   name: string;
   input: unknown;
 }
 
-export interface AnthropicReply {
+interface AnthropicReply {
   text?: string;
   thinking?: string;
   thinkingSignature?: string;
@@ -45,7 +45,7 @@ export interface AnthropicRequestRecord {
   usage: AnthropicUsage;
 }
 
-export interface AnthropicRequestBody extends Record<string, unknown> {
+interface AnthropicRequestBody extends Record<string, unknown> {
   messages: unknown[];
   model?: unknown;
   stream?: unknown;

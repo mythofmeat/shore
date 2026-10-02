@@ -3,7 +3,7 @@ import { randomUUID } from "./platform.ts";
 import { restoredDraft } from "./request_forms.ts";
 
 export interface DraftContent { text: string; images: ImageUpload[]; options?: Record<string, unknown> }
-export interface StoredDraft {
+interface StoredDraft {
   id: string; conversation: string; revision: number; text: string; attachment: string | null;
   imageCount: number; bytes: number; updated: number; options?: Record<string, unknown>;
 }
@@ -82,13 +82,13 @@ function result<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function storedDrafts(conversation?: string): Promise<StoredDraft[]> {
+async function storedDrafts(conversation?: string): Promise<StoredDraft[]> {
   const db = await open();
   const rows = await result(db.transaction("drafts").objectStore("drafts").getAll()) as StoredDraft[];
   return rows.filter((row) => conversation === undefined || row.conversation === conversation).sort((a, b) => b.updated - a.updated);
 }
 
-export async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
+async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
   const db = await open();
   const tx = db.transaction(["drafts", "attachments"]);
   const record = await result(tx.objectStore("drafts").get(id)) as StoredDraft | undefined;

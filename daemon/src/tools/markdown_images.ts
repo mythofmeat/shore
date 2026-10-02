@@ -7,7 +7,7 @@ import { MAX_INLINE_TOOL_IMAGES, MAX_LISTED_MEDIA_NOTES, carryToolMedia, type To
 import { base64Bytes } from "../util/base64.ts";
 import { readImageAt } from "./read_image.ts";
 
-export const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
+const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
 
 export interface TextPage {
   output: string;

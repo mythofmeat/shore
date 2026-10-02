@@ -41,7 +41,7 @@ const ARCHIVE_REVISION_TRIGGERS = [
 END;`
 ).join("\n\n");
 
-export const HISTORY_SCHEMA = `
+const HISTORY_SCHEMA = `
 CREATE TABLE IF NOT EXISTS history_blobs (
     hash       TEXT PRIMARY KEY,
     size       INTEGER NOT NULL,
@@ -1157,21 +1157,21 @@ function displayStateAfter(
   return "none";
 }
 
-export class MissingBody extends Error {
+class MissingBody extends Error {
   constructor(hash: string) {
     super(`history blob ${hash} is missing`);
     this.name = "MissingBody";
   }
 }
 
-export class PendingCompaction extends Error {
+class PendingCompaction extends Error {
   constructor(character: string) {
     super(`history compaction is already pending for ${character}`);
     this.name = "PendingCompaction";
   }
 }
 
-export class PendingCompactionConflict extends Error {
+class PendingCompactionConflict extends Error {
   constructor(character: string) {
     super(`cannot recover the pending history compaction for ${character}: active history changed`);
     this.name = "PendingCompactionConflict";

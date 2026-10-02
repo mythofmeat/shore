@@ -36,7 +36,7 @@ export type HistoryPageLimit =
   | { kind: "count"; value: number }
   | { kind: "turns"; value: number };
 
-export interface HistoryPageMetrics {
+interface HistoryPageMetrics {
   segments_read: number;
   rows_read: number;
   decoded_body_bytes: number;

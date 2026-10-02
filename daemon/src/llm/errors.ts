@@ -76,7 +76,7 @@ export function describeLlmError(error: LlmError): string {
   }
 }
 
-export function errorChain(e: unknown): Error[] {
+function errorChain(e: unknown): Error[] {
   const out: Error[] = [];
   let current = e;
   while (current instanceof Error) {

@@ -94,7 +94,7 @@ export interface ArchivalPlan {
   resumed: boolean;
 }
 
-export function messagesFromJsonl(content: string): Message[] {
+function messagesFromJsonl(content: string): Message[] {
   const messages: Message[] = [];
   for (const line of rustLines(content)) {
     if (rustTrim(line) === "") continue;
@@ -134,7 +134,7 @@ function resumesCheckpoint(
   return true;
 }
 
-export function sourceIsCurrent(
+function sourceIsCurrent(
   sourceContent: string,
   sourceHash: string,
   liveContent: string,
@@ -142,7 +142,7 @@ export function sourceIsCurrent(
   return hashCompactionSource(sourceContent) === sourceHash && liveContent.startsWith(sourceContent);
 }
 
-export function planSourceIsCurrent(plan: ArchivalPlan, liveContent: string): boolean {
+function planSourceIsCurrent(plan: ArchivalPlan, liveContent: string): boolean {
   return sourceIsCurrent(plan.sourceContent, plan.sourceHash, liveContent);
 }
 

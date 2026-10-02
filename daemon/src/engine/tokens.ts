@@ -2,7 +2,7 @@ export const BYTES_PER_TOKEN = 3.2;
 
 export const CONTEXT_SAFETY_FRACTION = 0.1;
 
-export function byteLength(text: string): number {
+function byteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
 }
 

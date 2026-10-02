@@ -23,8 +23,8 @@ import { MAX_ATTACHMENT_BYTES } from "../../swp/admission.ts";
 
 const TYPING_TIMEOUT_MS = 20_000;
 
-export const SYNC_START_TIMEOUT_MS = 60_000;
-export const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+const SYNC_START_TIMEOUT_MS = 60_000;
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 export type MediaDownloadResult =
   | { readonly ok: true; readonly bytes: Uint8Array }

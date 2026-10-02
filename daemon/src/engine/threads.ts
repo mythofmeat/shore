@@ -47,7 +47,7 @@ export function assertThreadId(id: string): void {
   );
 }
 
-export interface ThreadForkOrigin {
+interface ThreadForkOrigin {
   fork_id: string;
   source: string;
   created_at: string;
@@ -153,7 +153,7 @@ function isThreadsIndex(raw: unknown): raw is ThreadsIndex {
   return threads.every(isThreadRecord);
 }
 
-export async function readThreadsIndexIn(
+async function readThreadsIndexIn(
   characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
