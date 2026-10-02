@@ -74,6 +74,32 @@ jobs:
       - run: bun test
       - run: bun run build
 
+  desktop-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      # The formula builds the release tag it names from GitHub, so here that tag names this checkout and the
+      # formula clones it from disk instead.
+      - run: |
+          git tag --force "$(sed -n 's/^      tag: "\(v.*\)"$/\1/p' HomebrewFormula/shore-desktop.rb)"
+          sed -i '' "s|^  url \"https://github.com/mythofmeat/shore.git\",$|  url \"file://$GITHUB_WORKSPACE\", using: :git,|" HomebrewFormula/shore-desktop.rb
+          mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
+          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
+      - run: brew install mythofmeat/shore/shore-desktop
+      - run: brew test mythofmeat/shore/shore-desktop
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run test:e2e
+        working-directory: desktop
+        env:
+          SHORE_DESKTOP_ELECTRON: /opt/homebrew/opt/shore-desktop/Shore.app/Contents/MacOS/Shore
+
   client:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -110,5 +136,5 @@ jobs:
       - run: |
           mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
           ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
-      - run: brew style mythofmeat/shore/shore
-      - run: brew audit --strict mythofmeat/shore/shore
+      - run: brew style mythofmeat/shore/shore mythofmeat/shore/shore-desktop
+      - run: brew audit --strict mythofmeat/shore/shore mythofmeat/shore/shore-desktop

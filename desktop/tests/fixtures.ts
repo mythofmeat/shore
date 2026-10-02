@@ -16,13 +16,23 @@ export interface Daemon { origin: string; port: number; tcpPort: number }
 export interface LaunchOptions { address?: string }
 export interface Launched { app: ElectronApplication; page: Page; settings(): Promise<{ address: string | null; closeToTray: boolean; zoom: number; window: { width: number; height: number; maximized: boolean } }> }
 
+function environment(overrides: Record<string, string> = {}): Record<string, string> {
+  return Object.fromEntries(Object.entries({ ...process.env, ...overrides }).filter((entry): entry is [string, string] => entry[1] !== undefined));
+}
+
 export function electronCommand(profile: string, options: LaunchOptions = {}): { command: string; args: string[]; env: Record<string, string> } {
+  const address = options.address === undefined ? [] : [`--address=${options.address}`];
+  if (process.platform === "darwin") {
+    if (process.env["SHORE_DESKTOP_ELECTRON"] === undefined) throw new Error("Point SHORE_DESKTOP_ELECTRON at a built Shore.app/Contents/MacOS/Shore: on macOS the journeys run the app bundle.");
+    // The profile stands in for ~/Library/Application Support, and the mock keychain keeps the login keychain out of it.
+    return { command: ELECTRON, args: [`--user-data-dir=${join(profile, "shore-desktop")}`, "--use-mock-keychain", ...address], env: environment() };
+  }
   const nested = process.env["SHORE_DESKTOP_E2E_DISPLAY"];
   if (nested === undefined || process.env["WAYLAND_DISPLAY"] !== nested) throw new Error("Run the desktop journeys with `bun run test:e2e`: it starts the private KWin session they need.");
   return {
     command: ELECTRON,
-    args: ["--ozone-platform=wayland", "--disable-gpu", "--host-resolver-rules=MAP shore.test 127.0.0.1", APP, ...(options.address === undefined ? [] : [`--address=${options.address}`])],
-    env: Object.fromEntries(Object.entries({ ...process.env, XDG_CONFIG_HOME: profile, DISPLAY: "" }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    args: ["--ozone-platform=wayland", "--disable-gpu", "--host-resolver-rules=MAP shore.test 127.0.0.1", APP, ...address],
+    env: environment({ XDG_CONFIG_HOME: profile, DISPLAY: "" }),
   };
 }
 

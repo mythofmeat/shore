@@ -41,7 +41,7 @@ jobs:
             sed -n '/^name = "shore-\(cli\|common\)"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock
             sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
-            sed -n 's/^      tag: "v\(.*\)"$/\1/p' HomebrewFormula/shore.rb
+            sed -n 's/^      tag: "v\(.*\)"$/\1/p' HomebrewFormula/*.rb
           }
           current=$(versions | sort -u)
           if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
@@ -62,7 +62,7 @@ jobs:
           sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
-          sed -i "s/^      tag: \"v.*\"$/      tag: \"v$version\"/" HomebrewFormula/shore.rb
+          sed -i "s/^      tag: \"v.*\"$/      tag: \"v$version\"/" HomebrewFormula/*.rb
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
             exit 1

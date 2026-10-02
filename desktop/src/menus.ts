@@ -59,35 +59,61 @@ export function contextMenuTemplate(params: ContextParams, actions: ContextActio
   return groups.flatMap((group, index) => index === 0 ? group : [{ type: "separator" }, ...group]);
 }
 
-export function applicationMenuTemplate(closeToTray: boolean, actions: MenuActions): MenuItemConstructorOptions[] {
+export function applicationMenuTemplate(closeToTray: boolean, actions: MenuActions, mac: boolean): MenuItemConstructorOptions[] {
+  const changeAddress: MenuItemConstructorOptions = { label: "Change Daemon Address…", click: () => { actions.changeAddress(); } };
+  const reload: MenuItemConstructorOptions = { label: "Reload", accelerator: "CmdOrCtrl+R", click: () => { actions.reload(); } };
+  const view: MenuItemConstructorOptions[] = [
+    { label: "Actual Size", accelerator: "CmdOrCtrl+0", click: () => { actions.zoom(0); } },
+    { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => { actions.zoom(1); } },
+    { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => { actions.zoom(-1); } },
+    { type: "separator" },
+    { role: "togglefullscreen" },
+    { role: "toggleDevTools" },
+  ];
+  // macOS names the first menu after the app and expects About, Hide and Quit there, and ⌘W in File.
+  if (mac) {
+    return [
+      { role: "appMenu", submenu: [
+        { role: "about" },
+        { type: "separator" },
+        changeAddress,
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ] },
+      { role: "fileMenu" },
+      { role: "editMenu" },
+      { label: "View", submenu: [reload, { type: "separator" }, ...view] },
+      { role: "windowMenu" },
+    ];
+  }
   return [
     { label: "&Shore", submenu: [
-      { label: "Change Daemon Address…", click: () => { actions.changeAddress(); } },
-      { label: "Reload", accelerator: "CmdOrCtrl+R", click: () => { actions.reload(); } },
+      changeAddress,
+      reload,
       { type: "separator" },
       closeToTrayItem(closeToTray, actions),
       { type: "separator" },
       { label: "Quit", accelerator: "CmdOrCtrl+Q", click: () => { actions.quit(); } },
     ] },
     { role: "editMenu" },
-    { label: "&View", submenu: [
-      { label: "Actual Size", accelerator: "CmdOrCtrl+0", click: () => { actions.zoom(0); } },
-      { label: "Zoom In", accelerator: "CmdOrCtrl+=", click: () => { actions.zoom(1); } },
-      { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => { actions.zoom(-1); } },
-      { type: "separator" },
-      { role: "togglefullscreen" },
-      { role: "toggleDevTools" },
-    ] },
+    { label: "&View", submenu: view },
   ];
 }
 
-export function trayMenuTemplate(closeToTray: boolean, actions: MenuActions): MenuItemConstructorOptions[] {
+// macOS keeps Shore running in the Dock when its window closes, so there is no Close to Tray to offer.
+export function trayMenuTemplate(closeToTray: boolean, actions: MenuActions, mac: boolean): MenuItemConstructorOptions[] {
+  const closing: MenuItemConstructorOptions[] = mac ? [] : [closeToTrayItem(closeToTray, actions), { type: "separator" }];
   return [
     { label: "Show Shore", click: () => { actions.show(); } },
     { label: "Change Daemon Address…", click: () => { actions.changeAddress(); } },
     { type: "separator" },
-    closeToTrayItem(closeToTray, actions),
-    { type: "separator" },
+    ...closing,
     { label: "Quit Shore", click: () => { actions.quit(); } },
   ];
 }
