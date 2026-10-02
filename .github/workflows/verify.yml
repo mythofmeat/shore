@@ -97,3 +97,18 @@ jobs:
           fi
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
+
+  homebrew:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
+      # brew style and audit only apply the formula rules to a tapped formula, so the checkout is linked in as the mythofmeat/shore tap.
+      - run: |
+          mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
+          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
+      - run: brew style mythofmeat/shore/shore
+      - run: brew audit --strict mythofmeat/shore/shore
