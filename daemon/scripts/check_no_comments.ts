@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { Glob } from "bun";
 
 import { commentRanges, lineNumberAt, lineStartsOf } from "./comment_ranges.ts";
 
-const ROOT = join(import.meta.dir, "..");
-const ROOTS = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "scripts")];
-const CLIENT = join(ROOT, "..", "client");
+const REPO = join(import.meta.dir, "..", "..");
+const TS_FILES = ["daemon/{src,tests,scripts}/**/*.{ts,tsx}", "desktop/{src,tests,scripts}/**/*.ts", "desktop/*.ts"];
+const CLIENT = join(REPO, "client");
 
 const CLAP_FILES = new Set(["shore-cli/src/cli.rs"]);
 const RUST_DIRECTIVE = /^\/\/\s*(SAFETY:|rustfmt|clippy|allow-)/i;
@@ -20,9 +20,9 @@ const offenders: string[] = [];
 let scanned = 0;
 let generated = 0;
 
-for (const root of ROOTS)
-for (const rel of new Glob("**/*.{ts,tsx}").scanSync(root)) {
-  const abs = join(root, rel);
+for (const pattern of TS_FILES)
+for (const rel of new Glob(pattern).scanSync(REPO)) {
+  const abs = join(REPO, rel);
   const text = readFileSync(abs, "utf8");
   if (GENERATED.test(text)) {
     generated++;
@@ -35,7 +35,7 @@ for (const rel of new Glob("**/*.{ts,tsx}").scanSync(root)) {
     if (DIRECTIVE.test(body.trimStart())) continue;
     const line = lineNumberAt(lineStarts, r.pos);
     const first = body.split("\n")[0].trim();
-    offenders.push(`${relative(ROOT, abs)}:${line}  ${first.slice(0, 90)}`);
+    offenders.push(`${rel}:${line}  ${first.slice(0, 90)}`);
   }
 }
 
@@ -83,9 +83,9 @@ for (const rel of new Glob("**/*.rs").scanSync(CLIENT)) {
 }
 
 if (offenders.length > 0) {
-  console.error(`Comments are not allowed in daemon/. Found ${offenders.length}:\n`);
+  console.error(`Comments are not allowed in daemon/, desktop/ or client/. Found ${offenders.length}:\n`);
   for (const o of offenders) console.error(`  ${o}`);
-  console.error(`\nSee CLAUDE.md. Rename something or write a test instead.`);
+  console.error(`\nRename something or write a test instead.`);
   console.error(`Directives (@ts-expect-error, eslint-*) and generated files are exempt.`);
   process.exit(1);
 }
