@@ -1,57 +1,15 @@
 #!/usr/bin/env python3
-"""Mutation pass over the tool loop's budget pre-flight (#14).
-
-This gate fails quietly in both directions, and the two failures look nothing
-alike. Too lax and it is `ff7426ae` again — a budget that reads as enforced and
-is not, discovered on a bill. Too eager and it refuses turns that would have
-fit, which reads as the daemon being broken and has no error anyone can act on.
-
-So the mutants are the ways the projection can be wrong while the suite still
-passes:
-
-**A projection that is not a projection.** Dropping it, zeroing it, or folding
-it into the reported spend. The last one is the subtle one: enforcement would
-still be right, and `shore usage` would start disagreeing with the refusal
-message about how much has been spent.
-
-**A boundary off by one call.** The opening call is already weighed by the
-plain check, so the loop adds `cap - 1`. Counting the cap whole over-projects
-every loop by one call; counting `cap - 2` under-projects every one.
-
-**A guard that stops guarding.** The three cases that deliberately project
-nothing — no tools, a cap of one, no cost history — each exist to avoid
-refusing on a number that means nothing. Removing any of them refuses a turn
-that should have run.
-
-**A mean that includes free calls.** Subscription providers record `$0`. Let
-those into the average and a loop projects roughly nothing, which is the one
-answer that makes the whole gate useless while looking like it works.
-
-**Two mutants are deliberately absent, because they are equivalent rather than
-surviving.** Returning `0` instead of `undefined` for an unknown model changes
-nothing: `?? 0` and `projected > 0` both read a zero the same way. And a zero
-mean cannot occur, because the query already excludes non-positive costs — the
-`mean > 0` test guards a case SQL cannot produce. Both lines stay for
-readability; neither is observable, so neither is worth a mutant that would
-survive forever and train the eye to ignore survivors.
-
-A mutant is KILLED if `bun test tests/budget_gate.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_budget_preflight.py
+"""Mutation pass over the tool loop's budget pre-flight: the projected loop
+cost, its boundaries and basis, and how a refusal is reported.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = "src/ledger/gate.ts"
 BUDGET = "src/ledger/budget.ts"
 QUERY = "src/ledger/query.ts"
 
 TESTS = ["tests/budget_gate.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the projection reaches the decision ----------------------------------
     ("projection: never computed, so a loop is one call's worth again",

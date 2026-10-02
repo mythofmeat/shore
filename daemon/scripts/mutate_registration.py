@@ -1,45 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the turn/autonomy seam (#18, step 5).
-
-Two halves, and both fail quietly.
-
-**Reading the config.** Eight runner settings and four clock bounds, each a
-plain field read. Swapping two of the same type changes nothing visible — a
-wake interval used as a dormancy bound just makes a character go quiet, and a
-`min_turns` read as `max_turns` compacts at the wrong length forever. Nothing
-throws, and the only symptom is behaviour nobody ordered.
-
-**Bridging the clocks.** A turn is synchronous and registration is not, so the
-first turn for a character arrives before the loop knows it exists. Three
-things follow, and each is a mutant:
-
-- `ensureState` returns true *exactly once*. It is the only cue the caller gets
-  to seed the activity tracker: twice double-seeds a heatmap, never leaves it
-  blank until the character has talked for a fortnight.
-- Deferred updates run in the order the turn made them. A user message landing
-  after the compaction that followed it restarts an idle clock the compaction
-  had just reset.
-- `shouldCompactNow` answers immediately, and before registration it answers
-  *no*. Yes takes a single-flight latch on a runner that does not exist, and
-  nothing ever releases it. Once registered, it passes on whether the prompt is
-  nearly full: dropped there, a crowded prompt waits for `max_turns` while
-  messages fall out of it unarchived.
-
-A mutant is KILLED if `bun test tests/autonomy_registration.test.ts` fails with
-it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_registration.py
+"""Mutation pass over the turn/autonomy seam: registering a character's
+autonomy, and queueing the updates a turn sends it.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 R = "src/autonomy/registration.ts"
 
 TESTS = ["tests/autonomy_registration.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- reading the config ---------------------------------------------------
     ("config: the heartbeat switch is read as the loop's own",
@@ -139,7 +107,7 @@ MUTANTS = [
      "  onAssistantMessage(character: string, turnCount: number): void {\n"
      "    void this.#after;\n    void turnCount;\n    void character;"),
     # --- the reload -----------------------------------------------------------
-    ("reload: one character's config is pushed to all of them, as the Rust's shared copy was",
+    ("reload: one character's config is pushed to all of them",
      R,
      "        const config = effectiveConfig(character);",
      '        const config = effectiveConfig("ada");'),

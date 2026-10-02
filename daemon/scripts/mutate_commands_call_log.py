@@ -1,50 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over `call_log` and `transcript` (#18 / #12).
-
-These are diagnostics, which makes their failure modes unusually quiet: a
-wrong answer here looks exactly like a right one to anyone who was not already
-suspicious. What the fixture has to catch:
-
-- **Answering for the wrong character.** Both commands scope to the session's
-  character unless told otherwise, and the response does not echo which
-  character the rows came from — so a leak between two characters' logs is
-  invisible in the output.
-- **The `id` path versus the index path.** One `call_log` command does two
-  different things depending on whether `id` parses as an integer. Send
-  `"1"` down the id path and it answers a question nobody asked; send `1`
-  down the index path and the payload silently vanishes.
-- **`count` defaulting.** A negative, fractional or string count is `None` to
-  serde, which means *the default*, not zero. Zero is a real count and means
-  no limit. Three different behaviours, one argument.
-- **The reordering.** `transcript` returns ticks newest-first but the
-  iterations within a tick chronologically. Every wrong version of that still
-  returns every row, in an order that looks deliberate.
-- **The disabled shape.** With the store off both commands answer
-  `{ enabled: false }` rather than failing, and `transcript` still carries its
-  `source` while `call_log` carries `entries`. A client renders on `enabled`.
-
-A mutant is KILLED if `bun test tests/call_log.test.ts` fails with it
-applied.
-
-This is **41/41**, from 36/41 on the first pass.
-
-Four of the five survivors were one fixture gap. The store held five calls
-and nine transcripts, so a default limit of 20, a default of 10 and no limit
-at all were the same query — every mutant that moved the default or changed
-what a zero or negative count means returned an identical answer. Twenty
-filler rows, stamped older than the interesting ones, turn the default into a
-boundary something actually reaches while leaving the tick layout at the head
-of the result.
-
-The fifth was an untested path rather than a gap: no case made the store
-fail, so both commands' error prefixes were unexercised and could be swapped
-freely. The fixture cannot cover it — the generator has no way to make SQLite
-fail on demand, and the text after the prefix would be Node's wording rather
-than Rust's regardless — so the prefixes are asserted directly, read from the
-Rust, and provoked by closing the store underneath the command.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_call_log.py
+"""Mutation pass over the `call_log` and `transcript` commands: argument
+decoding, filters, ordering, and the disabled and error replies.
 """
 import pathlib
 import sys
@@ -52,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/call_log.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- count ----------------------------------------------------------------
     ("count: the default is 10 rather than 20",

@@ -1,37 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the image cache (#287).
-
-Images users send and images tools return used to be kept forever in the data
-dir, `media/<character>/attachments/` and `media/<character>/tools/`. After the
-turn it arrives in, an attachment is read again only while its message is in an
-active window, and a tool copy is never read again, so both now live in the
-cache dir, `<cache>/characters/<character>/images/`, under one size limit for
-every character together (`daemon.image_cache_bytes`).
-
-What the fixture has to catch, and each mutant takes a piece of:
-
-- **Where the files go.** An upload, its reduced copy for the model and a tool
-  copy are written under the cache dir and nothing new appears in the data dir.
-- **The limit.** Every write is counted, the reduced copy included; past the
-  limit the least recently used images are deleted first. A model request
-  reading an image counts as a use, so an image the latest request read stays.
-  An image used in the last hour is never deleted: the prompt cache that holds
-  it may still be warm. An attachment and its reduced copy are one image and
-  leave together.
-- **An image that has gone.** It reaches the model as `[image omitted: <file> —
-  no longer cached]` in its place, instead of disappearing.
-- **The move.** At start-up, `media/*/tools/` is deleted; attachments an active
-  window shows are copied to the cache with their reduced copies, marked used,
-  and their references rewritten; the rest are deleted. Archived references keep
-  their old paths, since nothing reads them.
-- **Archives.** An export carries the cached images active windows show, in the
-  layout older archives used, and points the exported database at them; an
-  import moves them into its own cache.
-
-A mutant is KILLED if `bun test` on the files in TESTS fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_image_cache.py
+"""Mutation pass over the image cache: where uploads and tool images go, use
+counting and eviction, the start-up move, archives, and the size setting.
 """
 import sys
 
@@ -43,7 +12,6 @@ TOOLS = "src/tools/execute.ts"
 ARCHIVE = "src/commands/archive.ts"
 RUNTIME = "src/runtime.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- where the files go ---------------------------------------------------
     ("upload: attachments go to the data dir's media directory again",

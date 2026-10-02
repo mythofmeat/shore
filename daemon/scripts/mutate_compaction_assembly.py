@@ -1,46 +1,12 @@
 #!/usr/bin/env python3
-"""Mutation pass over the compaction assembly (#18 / #12).
-
-Two kinds of code here, and the mutants are aimed differently at each.
-
-`archiveAndRetain` is the one part of a compaction pass that writes to disk
-without going through the pass: it splits `active.jsonl`, appends a numbered
-segment, updates the manifest, and rewrites what is left. Every arithmetic
-mistake in it is silent and permanent — a split off by one archives a turn the
-model was told would be kept, and a segment index that reuses a number
-overwrites history. So most of the mutants are the off-by-ones.
-
-The rest resolve things, and there the failure mode is a fallback that fires
-when it should not: a template default that wins over a character's override,
-a model that is chosen instead of refused.
-
-A mutant is KILLED if `bun test tests/compaction_assembly.test.ts` fails
-with it applied.
-
-This is **17/17**, from 14/17 on the first pass.
-
-Three survivors, all of them the recorded cases being too forgiving:
-
-- **The clamp.** `keep_last_n = 99` against three lines: an unclamped
-  subtraction goes to −96, and JavaScript's negative `slice` bounds happen to
-  produce the right two halves. One past the end — `4` against three — is where
-  it actually goes wrong, and that case now exists.
-- **The retained file's shape, twice.** The replay compared the messages it
-  parsed back, so a blank line and a missing trailing newline were both
-  invisible. The fixture records the exact bytes now, which is the right level
-  for a file another process reads.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_compaction_assembly.py
+"""Mutation pass over compaction assembly: splitting the conversation, writing
+what is retained, and rendering the result.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 A = "src/memory/compaction/archive.ts"
 R = "src/memory/compaction/run.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the split ------------------------------------------------------------
     ("split: keeps one too many",

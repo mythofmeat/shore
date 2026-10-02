@@ -1,74 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over tool execution (#18 / #12).
-
-Covers `src/tools/execute.ts` — the frames a running tool emits, the cap on
-what the model reads, the diagnostics row, and the generated-image side
-channel.
-
-Five things the mutants attack:
-
-- **The result string.** That a string value goes through verbatim and
-  everything else is serialized, that a failure reports `ToolError`'s `Display`
-  and not `Error: <that>`, and that a failure is a *result* rather than a thrown
-  turn.
-- **The cap.** That it is applied at all, that the per-tool override outranks
-  the global, and — the one that matters — that it is applied *before* the
-  frame, the diagnostics row and the returned block, rather than to one of them
-  and not the others. A cap applied late is invisible until a provider rejects
-  an over-long turn.
-- **The two frames.** Their order, their field spellings, and that `rid` is
-  omitted rather than sent as null. A client correlates on `rid` and renders on
-  `tool_id`; either being wrong is a UI that silently shows nothing.
-- **The image side channel.** Both gates (`generate_image` by name, success by
-  `is_error`), that the ref lands on the last *assistant* turn rather than the
-  last message, that the bytes go on the frame and not on the stored ref, and
-  that an unreadable path costs the bytes rather than the frame.
-- **Tool media (#156).** That a media payload is unwrapped rather than passed
-  through as its own wrapper, that its extra lines and attachment notes reach
-  the model, that the two inline caps (count and size) are applied, that the
-  bytes are written to disk and announced on `send_image`, that a save failure
-  degrades to a note rather than a bogus attachment, and that the server's
-  media type survives onto the block. Every one of these is a silent failure if
-  it breaks: the tool succeeds and the model reads something incomplete.
-
-A mutant is KILLED if `bun test tests/execute.test.ts tests/mcp_media.test.ts`
-fails with it applied.
-
-This is **40/42**, from 33/39 on the first pass.
-
-The three that lived the first time were the shape #12 keeps naming — the case
-existed and nothing in it was load-bearing:
-
-- **An absent `rid` sent as null on the `send_image` frame.** Every attach case
-  carried an rid, so the `skip_serializing_if` branch was never taken on that
-  frame. `with no rid the frame leaves the field off` is that case.
-- **The scan not stopping at the last assistant turn.** No case had two
-  assistant turns, so attaching to *every* one of them looked identical to
-  attaching to the last. It is not a hypothetical: a multi-round loop
-  accumulates one assistant turn per round, and by round two the mutant would
-  hang the image off both. `only the last assistant turn takes the image` is
-  that case.
-- **The frame announced after the tool ran.** The mutant was broken, not the
-  fixture — it relocated the send past the dispatch but not past the image
-  attach, so no frame changed places. It now relocates past everything the tool
-  does, and dies on the `generate_image` group's frame order.
-
-Two survivors remain, both equivalent, and both kept in the list so a later
-reader does not "fix" them:
-
-- **The success gate on the image attach.** `!isError` and "there is a value"
-  are the same condition: `okValue` is assigned only on the success path, so a
-  failed tool reaches `attachGeneratedImage` with `undefined` and returns at the
-  first line. The Rust had both guards too, for the same reason and with the
-  same redundancy.
-- **The `value === null` guard in the attach path.** `typeof null` is
-  `"object"`, so without it the next line reads `path` off null and throws
-  rather than returning — but nothing that calls through `executeToolUse` can
-  produce null. Kept because `attachGeneratedImage` is exported and the fixture
-  drives it with exactly those malformed shapes.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_execute.py
+"""Mutation pass over `tools/execute.ts`: how a result or failure reaches the
+model, the result cap and deadline, the frames a running tool emits, tool
+media and attached images, and the turns it records.
 """
 import pathlib
 import sys
@@ -76,7 +9,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXECUTE = "src/tools/execute.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # ── the result string ───────────────────────────────────────────────
     ("a string result is serialized like everything else",
@@ -123,12 +55,6 @@ MUTANTS = [
     ("the tool_call frame is not sent",
      '  exec.sendDirect({\n    type: "tool_call",',
      '  ((_: unknown) => {})({\n    type: "tool_call",'),
-    # The one long pattern in the list, and it has to be: proving the frame is
-    # announced *before* the tool runs means relocating it past the dispatch,
-    # and the dispatch is what sits between the two positions.
-    # The one long pattern in the list, and it has to be: proving the frame is
-    # announced *before* the tool runs means relocating it past everything the
-    # tool does, and that is the span between the two positions.
     ("the tool_call frame is sent after the tool ran, not before",
      [("  exec.sendDirect({\n"
        '    type: "tool_call",\n'

@@ -1,48 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the provider discovery commands (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked. Two of this module's
-failure modes are worse than an error:
-
-- **Leaking a credential.** `list_providers` is a diagnostic the user runs and
-  pastes into a bug report. It must report *whether* a key's env var is set and
-  nothing else — not the variable's name, not the value, not a prefix.
-- **Losing a cache.** A refresh that fails must leave the previous cache exactly
-  as it was. Writing on the failure path would replace a good model list with an
-  empty one, and nothing would report an error afterwards; the daemon would just
-  quietly know about fewer models than it did before.
-
-A mutant is KILLED if `bun test tests/providers.test.ts` fails with it
-applied.
-
-The first pass was 38/49 and the third is 49/49. Nine of the eleven first-pass
-survivors were real gaps (two were mis-typed patterns of mine), and closing four
-of them needed the *upstream* to start caring what it was sent — the key value
-never appears in any payload, so which key was chosen is unobservable against a
-server that answers everything:
-
-- **No listing case had a key whose env var held only whitespace**, so "blank
-  counts as unset" and "any value counts as set" agreed everywhere.
-- **The hidden and visible counts were equal** (two models, one hidden), so
-  inverting the filter changed nothing. The cache has three models now.
-- **No provider had two usable keys.** Both refresh cases had exactly one, so
-  first-vs-last could not differ. There is now a provider with two, against an
-  upstream that accepts only the first one's value.
-- **No provider had a disabled key holding a usable value**, so skipping
-  disabled keys was untested.
-- **No provider had both a configured base_url and a built-in default**, so
-  which one wins was invisible; and no provider took its *sdk* from a built-in
-  default either. Both are now one case: a provider named `anthropic` with a
-  configured base_url, against an upstream that demands the `x-api-key` header
-  only the anthropic adapter sends. A wrong base url 502s and a wrong sdk 401s.
-- **`include_hidden` was only ever `true` or absent**, so `as_bool` semantics —
-  a `1` or a `"true"` is *absent*, not truthy — went unpinned.
-- **No cache existed for a provider with no registry entry**, so "no entry means
-  nothing is hidden" had nothing to act on, and **no static entry matched an
-  ignore rule**, so "statics are never filtered" was equally free.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_providers.py
+"""Mutation pass over the provider discovery commands: listings, API-key
+detection, refreshes, and the model rows they report.
 """
 import pathlib
 import sys
@@ -50,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/providers.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- argument handling ---------------------------------------------------
     ("provider: an empty string is a provider",

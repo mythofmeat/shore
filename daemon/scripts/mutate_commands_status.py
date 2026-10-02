@@ -1,71 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over the autonomy half of `status.rs` (#18 / #12).
-
-`status` is what `shore status` renders and the single richest response the
-daemon produces. Most of it is a projection, and a projection is exactly the
-kind of code where a wrong answer is well-formed: every field is present, every
-type is right, and the number is off. What the fixture has to catch:
-
-- **The unit conversions.** Four config-derived fields are milliseconds on this
-  side and whole seconds on the wire, and the Rust truncated rather than
-  rounding. A sub-second bound is the only input where those differ, which is
-  why `custom_bounds` has one.
-- **The sign of `seconds_until_wake`.** Documented as "negative if overdue",
-  and both directions truncate towards zero rather than flooring. A wake 45
-  seconds in the past is the case that separates `trunc` from `floor`.
-- **The saturation of `seconds_since_user`.** `Instant::duration_since` clamps
-  at zero, so a `last_user_at` in the future reads as ten minutes ahead *and*
-  zero seconds ago. `future_user` is the only case where those two disagree.
-- **Presence versus null.** Four fields are `skip_serializing_if` and two more
-  (`autonomy`, `activity`) are null-when-absent. Both are things the CLI
-  branches on, and `toEqual` alone cannot tell a missing key from an
-  `undefined` one — hence the explicit key-set assertions.
-- **The renames.** The scheduler's vocabulary is not the CLI's:
-  `max_idle_ticks` becomes `dormant_after_heartbeat_turns`,
-  `default_interval_ms` becomes `default_interval_secs`, and `character` and
-  `covered_turn_count` are dropped rather than carried.
-- **Two counts under four names.** `message_count`/`turn_count` appear in the
-  envelope and again inside `activity`, and the two pairs are different
-  numbers — the conversation's turns versus what the tracker recorded.
-- **Which controls error and which do not.** `heartbeat_log` answers with an
-  empty list for a character nobody registered; the three heartbeat controls
-  raise `invalid_request` for the same character.
-
-A mutant is KILLED if `bun test tests/status.test.ts` fails with it
-applied.
-
-This is **55/55**, from 50/56 on the first pass. Five of the six survivors were
-fixed; the sixth was equivalent and was removed rather than chased.
-
-**Three were sub-second effects the fixture's tolerance could not see.** The
-four clock-derived fields are checked against the offset their setup arranged,
-with two seconds of slack — so truncating downwards instead of towards zero
-(one second) and dropping or keeping a fractional part (a millisecond) both
-passed. Neither can be pinned through the fixture, because the Rust builds
-those fields from `Instant::now()` and has no clock to inject. They are
-asserted directly instead, in "the clock arithmetic" — values read off
-`duration_secs_i64` and `SecondsFormat::AutoSi` rather than recorded from a
-run, and fed through `autonomyWire` with a fabricated status and an exact
-`now`. The same shape as the error-prefix assertions in
-`mutate_commands_call_log.py`, for the same reason.
-
-**One was a log too short to reach its own default.** Seven events meant
-`heartbeat_log`'s limit of 20, a limit of 10 and no limit at all were the same
-query. Twenty-five events make the default a boundary.
-
-**One was a command whose reply says nothing about what it did.**
-`heartbeat_set_dormant` and `heartbeat_set_active` both answer with a constant,
-so swapping which state they force left the recorded response identical. The
-generator now records the scheduler state *after* each control runs —
-`heartbeat_state`, `ticks_without_user` and whether a wake is armed — which is
-where the difference actually lives.
-
-The removed one: `sinceSecs` flooring rather than truncating. It clamps at
-zero, and the two round identically on non-negative values, so no input can
-distinguish them. Documented on the helper.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_status.py
+"""Mutation pass over the autonomy half of `status`: elapsed and remaining
+times, timestamps, the autonomy block's shape and presence, activity counts,
+and the event log.
 """
 import pathlib
 import sys
@@ -73,7 +9,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/status.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- unit conversions -----------------------------------------------------
     ("secs: milliseconds are rounded rather than truncated",
@@ -135,10 +70,6 @@ MUTANTS = [
     ("since: the sign is inverted",
      "const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((now - at) / 1000));",
      "const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((at - now) / 1000));"),
-    # `sinceSecs` floored rather than truncated was here and is provably
-    # equivalent: the clamp at zero means only non-negative results survive,
-    # and the two round identically on those. Documented on the helper rather
-    # than chased. The clamp itself is #14.
     ("since: the wake helper is reused for the user stamp",
      "      : { last_user_at: rfc3339(user), seconds_since_user: sinceSecs(user, now) }),",
      "      : { last_user_at: rfc3339(user), seconds_since_user: untilSecs(user, now) }),"),

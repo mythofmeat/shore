@@ -1,56 +1,17 @@
 #!/usr/bin/env python3
-"""Mutation pass over the AppConfig port (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked, on the evidence that
-five ports in a row had a fixture replay green while still full of holes. This
-is the harness for `config/app.ts`.
-
-Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/app.test.ts` fails with it applied;
-a survivor means either the fixture cannot see that decision, or the code is
-equivalent under it.
-
-The interesting decisions here are not the field types — those are pinned many
-times over by the parse cases — but the *walk*: sorted vs document order,
-interleaved vs two-pass unknown-field detection, declaration order for missing
-fields, and code-point vs UTF-16 ordering of the map-valued sections.
-
-The first pass was 70/77, and the six live survivors were the useful output:
-four were fixture gaps (no non-ASCII unknown key, no sequence given where a
-struct or map was expected, no unknown key in a one-field struct, and no
-middle-star pattern whose name extended past the star), and one was a mutant
-aimed at a file this harness did not open. Filling those found `visit_seq`
-entirely — the Rust accepts `autonomy = []` as a struct of defaults, and the
-port had been rejecting it. Final state is 76/78 with two documented
-equivalents, both of them dead branches the Rust had: no spec declares its
-required fields out of sorted order, and `expectedList`'s empty-list arm is
-unreachable now that its only caller builds `known` from a spec's own fields.
-
-Eight mutants went with features that were deliberately deleted rather than
-moved — `readPath` (8031bbe2), `readFlattenOnly` (3e9c5209),
-`normalizeDeprecatedAliases` and the `defaults.heartbeat` alias (910dc436), and
-the sidecar keys (20f2c48f).
-
-The four default *values* were surviving because the only test of them compared
-`defaultAppConfig()` against itself, which moves with any edit. They are spelled
-out now. `tools.config`'s `keySource` had no assertion anywhere, so this pass
-runs `config_schema.test.ts` alongside `app.test.ts`.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_config_app.py
+"""Mutation pass over `config/app.ts`: reading the AppConfig document, and the
+helpers that answer questions about it.
 """
 import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 APP = ROOT / "src/config/app.ts"
-# `invalidType` is shared with the model catalog, so one mutant lands there.
 MODELS = ROOT / "src/config/models.ts"
 
-# (label, find, replace) — implicitly APP unless the label starts with "models:"
 MUTANTS = [
     # --- the struct walk --------------------------------------------------
-    ("readStruct: walk the document instead of the BTreeMap",
+    ("readStruct: walk the document's own key order instead of sorted keys",
      "for (const key of sortedKeys(value)) {\n    const read =",
      "for (const key of Object.keys(value)) {\n    const read ="),
     ("readStruct: sort in UTF-16 order",
@@ -120,6 +81,7 @@ MUTANTS = [
      "      ? { ok: v }\n"
      '      : { err: invalidType(v, "f64") },'),
     ("models: invalidType: sequences and maps carry a rendering after all",
+     MODELS,
      "  if (Array.isArray(value) || isTable(value)) return undefined;",
      "  if (false) return undefined;"),
     # --- flatten-only structs ---------------------------------------------
@@ -286,17 +248,7 @@ from mutation import run as _run_mutants
 
 
 def main() -> int:
-    routed = [
-        (label, MODELS, find, replace)
-        if label.startswith("models:")
-        else (label, find, replace)
-        for label, find, replace in MUTANTS
-    ]
-    return _run_mutants(
-        routed,
-        ["tests/app.test.ts", "tests/config_schema.test.ts"],
-        src=APP,
-    )
+    return _run_mutants(MUTANTS, ["tests/app.test.ts", "tests/config_schema.test.ts"], src=APP)
 
 
 if __name__ == "__main__":

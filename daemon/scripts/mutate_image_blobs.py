@@ -1,36 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over keeping image data out of shore.db (#289).
-
-shore.db kept base64 image data inline wherever a row carried an image, and
-most images were stored many times over: every new Claude Agent SDK session
-wrote the whole active conversation into its transcript, images included, and a
-capture stored an image again whenever the chunk around it differed. In
-production 1,375 inline images, 172 of them distinct, were 65% of the file.
-
-Each image's bytes now live once in the image cache (#287), named by a hash of
-their contents, under `<cache>/characters/<character>/images/blobs/`, and a row
-holds a reference where the base64 was:
-
-- **SDK transcripts** store `{"type": "shore_image", "sha256", "media_type",
-  "bytes"}` as the image block's source on `append`, and put the base64 back on
-  `load`, so a resumed session still sends its images. Loading counts as a use.
-  An image no longer in the cache comes back as a text block saying so.
-- **Captures** keep `shore-image:sha256=…;type=…;bytes=…` where the base64 was,
-  so the call log still shows which image a request carried and how large it
-  was. Cassettes canonicalise live request bodies the same way before matching.
-- **Archived history** stores references in its message bodies and puts the
-  images back when it is read, without counting that as a use: an archived
-  image is never part of a model request.
-- **The move.** At start-up, once, existing transcripts, captures and archived
-  bodies are rewritten the same way, then `PRAGMA incremental_vacuum` gives the
-  space back and the write-ahead log is truncated.
-- **Archives** carry the character's blobs, and an import puts them in its own
-  cache.
-
-A mutant is KILLED if `bun test` on TESTS fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_image_blobs.py
+"""Mutation pass over keeping image data out of shore.db: blob storage and
+loading, image references in transcripts, captures, cassettes and history,
+and the migration.
 """
 import sys
 
@@ -41,7 +12,6 @@ HISTORY = "src/engine/history_store.ts"
 SDK = "src/llm/providers/claude_agent_history.ts"
 ARCHIVE = "src/commands/archive.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the store --------------------------------------------------------------
     ("store: base64 that does not round-trip is stored anyway",

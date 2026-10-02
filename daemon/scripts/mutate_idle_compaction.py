@@ -1,47 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over idle-triggered compaction (#18 / #12).
-
-This action has no parity fixture — everything it delegates to is pinned
-elsewhere — so this pass is doing more of the work than usual. Read it as the
-spec that was not generated.
-
-Every mutant below leaves an action that *runs*: a pass happens, a result comes
-back, nothing throws. What changes is what is left on disk afterwards, or what
-the runner is told about it.
-
-Three groups.
-
-**The pass.** Two options separate this from the deep archive's LLM arm, and
-both of them are silences. `keepTurnsOverride: 0` empties the conversation — the
-archive wants that, an idle pass emphatically does not, and a character whose
-idle window quietly archives the exchange it is in the middle of looks exactly
-like a character whose memory is working. `retainTrailingAutonomous` is the
-archive's too, for the file it is emptying.
-
-**The reporting.** `turnCount` is what makes the runner mark those turns covered,
-and coverage is what the deep archive's cheap arm keys on. Reporting the wrong
-number sends the *next* action down the wrong branch. Reporting `deepArchiveDone`
-would end an idle period that has not ended.
-
-**The bookkeeping.** Shared with the archive via `post_archive.ts` and mutated
-there by `mutate_deep_archive.py`; what is mutated here is whether this action
-calls it at all, and in what order.
-
-A mutant is KILLED if `bun test tests/idle_compaction.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_idle_compaction.py
+"""Mutation pass over idle-triggered compaction: the pass it runs, its report,
+and the engine reload afterwards.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 I = "src/autonomy/idle_compaction.ts"
 
 TESTS = ["tests/idle_compaction.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the pass -------------------------------------------------------------
 

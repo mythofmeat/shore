@@ -1,55 +1,14 @@
 #!/usr/bin/env python3
-"""Mutation pass over the dispatcher's after-effects (#18 / #12).
-
-Covers `src/handler/command_dispatch.ts`, `restartRequiredChanges` in
-`src/config/restart.ts`, and the `historyMessage` extraction in
-`src/swp/connection.ts`. Three things these mutants attack:
-
-- **The gates.** Which command each post-processor runs for, and — the one the
-  Rust spells out in a sub-expression — that a `config` *read* publishes
-  nothing. Also `applied`, which decides between two entirely different reload
-  paths.
-- **The effects and their order.** The registry before the schedulers, the
-  session moved before its history is taken, and `restart_required` computed
-  before adoption rather than after, when every comparison is empty.
-- **The annotations.** Which keys, from which summary field, merged into what
-  the command already wrote rather than replacing it.
-
-A mutant is KILLED if `bun test tests/handler_command_dispatch.test.ts
-tests/swp.test.ts tests/swp_transport.test.ts` fails with it applied.
-The two SWP files are in because `historyMessage` is now shared with the
-handshake, whose wire shape those pin.
-
-This is **27/27**, from 27/28 on the first full pass.
-
-The one survivor is equivalent and was removed:
-
-- **`equal` ignoring a key the right side has and the left does not.** No input
-  reaching it can have mismatched key sets. `readStruct` builds every section
-  from `make()` and rejects any field it does not know, none of these three
-  sections holds a map, and `serializeConfigValue` writes a `None` as `null`
-  rather than dropping the key — so both sides always carry exactly the fields
-  the defaults declare. The check stays in the source, with that reasoning, on
-  the grounds that `equal` is a general comparison.
-
-One more mutant was written, tried and removed for the same reason: returning
-`{}` rather than `undefined` from the `config_reload` branch whose file no
-longer parses. `afterCommand` spreads an empty object over `data`, which
-produces a copy that is structurally the same answer. Only object identity
-tells them apart, and no caller has one to compare against.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_command_dispatch.py
+"""Mutation pass over the dispatcher's after-effects: which config changes need
+a restart, what each command's effects reach, how a reply is annotated, and
+the history frame pushed afterwards.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 DISPATCH = "src/handler/command_dispatch.ts"
 RESTART = "src/config/restart.ts"
 CONNECTION = "src/swp/connection.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- which sections need a restart ----------------------------------------
     ("restart: the listener is not startup-owned", RESTART,

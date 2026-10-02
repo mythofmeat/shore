@@ -1,47 +1,16 @@
 #!/usr/bin/env python3
-"""Mutation pass over the in-process autonomy executor and the transcript it
-writes (#18, step 5).
-
-This class is supposed to hold no decisions — every action is already its own
-module, and what is left is the wiring each one cannot assemble for itself. So
-the mutants are aimed at the wiring, and they fall into the three places a piece
-of wiring can be wrong without anything failing.
-
-**What the ledger is told.** The call type is per round: the first call is the
-tick, the rest are its loop, and that is how a heartbeat's own cost is told from
-its tool rounds'. Collapse them and the distinction is gone from every row.
-
-**Which action runs.** `max_turns` compaction fires inline from the turn that
-crossed the threshold, under that turn's config. Running it here as well
-compacts the same conversation twice and bills for both. And the deep archive's
-covered-turn count picks between a free file archive and a paid model call, so a
-wrong number there is a bill rather than a bug.
-
-**What the model is told back.** `set_next_wake` is clamped by the clock, and the
-answer quotes the clamped number — a character told it got the 900 hours it
-asked for plans around a wake that will never come.
-
-The transcript mutants are the other half: an entry a person reads afterwards,
-where an empty reasoning list and a redacted-thinking placeholder mean different
-things, and where a failed write must never take a tick down with it.
-
-A mutant is KILLED if `bun test tests/autonomy_in_process.test.ts
-tests/transcript_capture.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_in_process.py
+"""Mutation pass over the in-process autonomy executor and its transcript: the
+ledger context, which actions run, wake quotes, notifications, and tool
+results.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 P = "src/autonomy/in_process.ts"
 T = "src/transcript_capture.ts"
 TOOLS = "src/tools/dispatch.ts"
 
 TESTS = ["tests/autonomy_in_process.test.ts", "tests/transcript_capture.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- what the ledger is told ----------------------------------------------
     ("ledger: every round is labelled a heartbeat, so the loop's cost is misattributed",

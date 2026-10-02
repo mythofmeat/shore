@@ -1,70 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over what a stopped Matrix bot leaves behind (#271).
-
-`matrix-js-sdk`'s `stopClient()` cancels what is already scheduled and nothing
-else. Two things in the SDK outlive it, in 42.4.0 and still in 43.0.0:
-
-- `CapabilityPoller.poll()` schedules its next run when its fetch settles
-  (30-35s after a failure, six hours after a success) without checking whether
-  it was stopped meanwhile. A client stopped mid-fetch polls `/capabilities`
-  for the rest of the process's life. A start that fails against a homeserver
-  that is down stops the client mid-fetch (twelve times out of twelve against
-  a closed port), so each of the supervisor's retries left another poller
-  behind.
-- `timeoutSignal()` arms a timer for every request with a local timeout and
-  never clears it. Every `/sync` has one of 80-110s, so a process that ran the
-  bridge against a perfectly healthy homeserver could not exit for up to 110s
-  after it was stopped. Upstream has had this open since 2022, as
-  matrix-org/matrix-js-sdk#2472.
-
-The daemon exits when its event loop drains, so either one kept a stopped
-daemon alive. Patching the dependency is not an option here: `bun patch` keys a
-patch to one exact version and `bun update --latest` drops it with a warning,
-which the scheduled dependency update would do on the SDK's next release.
-
-So the bot takes over what the SDK gets wrong: what its client may still send
-and hear once it has stopped, and the timers on its requests. That is
-`src/connections/matrix/client.ts`, and every mutant below takes a piece of it
-away while leaving a bot that starts, syncs and sends as before.
-
-**The line out.** The client's `fetch` carries the bot's stop signal. Stopping
-hangs up on whatever is in flight and refuses whatever is asked afterwards.
-
-**What a stopped client hears.** Nothing. A request that ends after the stop
-never reports how it ended, because every retry the SDK schedules is scheduled
-from the continuation of a request. This is what stops the poller, and it would
-stop another like it.
-
-**Timeouts.** A request's local timeout is a timer the bot starts and clears
-with the request, in place of the SDK's.
-
-**The bot's own waits.** A client that hears nothing would leave the bot's own
-`await`s hanging, so each one gives up when the bot stops: a send, a redaction,
-a login, the wait for the first sync.
-
-**The supervisor.** Stopping reaches an attempt that is still in flight instead
-of waiting for the homeserver, and a bridge that comes up after the stop was
-asked for is stopped rather than left running.
-
-**The start's deadline** (#276). `startClient()` waits for
-`/_matrix/client/versions` before it starts the sync, and that request has no
-timeout of its own. The sync-start clock used to begin only once
-`startClient()` had returned, so a homeserver that accepted the connection and
-then said nothing held each attempt for Bun's own fetch timeout (360s when
-measured) and the 60s after it: seven minutes before the supervisor could begin
-to back off. The clock now runs alongside `startClient()`, from the moment the
-start is asked for. A start it times out is stopped like any other that failed,
-which is what hangs up on the request still in flight.
-
-Each group runs against the one test file that watches it, because a mutant
-here shows up as a hung test and a hung test costs its whole timeout. The last
-group is what only a draining event loop can catch: `tests/matrix_shutdown.test.ts`
-starts real processes and takes ten seconds to notice each one that lingers.
-
-A mutant is KILLED if its group's tests fail with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_matrix_stop.py
+"""Mutation pass over what a stopped Matrix bot leaves behind: in-flight
+requests, timers, downloads, the sync start, and the supervisor.
 """
 import sys
 
@@ -73,7 +9,6 @@ B = "src/connections/matrix/bot.ts"
 A = "src/connections/matrix/start.ts"
 S = "src/connections/matrix/supervise.ts"
 
-# (label, file, find, replace)
 CLIENT = [
     # --- the line out ---------------------------------------------------------
     ("line: the client keeps the global fetch, so stopping hangs up on nothing",
@@ -183,7 +118,7 @@ BOT = [
      "      if (!this.#stopSignal.aborted && isTimeoutError(e)) {",
      "      if (isTimeoutError(e)) {"),
 
-    # --- the start's deadline (#276) ------------------------------------------
+    # --- the start's deadline -------------------------------------------------
     ("start: the sync-start clock starts only once the homeserver has answered",
      B,
      "        Promise.all([\n"

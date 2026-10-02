@@ -1,71 +1,11 @@
 #!/usr/bin/env python3
-"""Mutation pass over what the Agent SDK provider considers "the same message".
-
-The Agent SDK owns conversation history; shore only remembers a hash per message
-so it can tell, next turn, whether the incoming history still extends what the
-session was given. Everything downstream rests on that comparison: an exact
-prefix resumes the session, a divergence forks it at an assistant uuid, and no
-common prefix rebuilds native history from Shore's active conversation.
-
-So a hash that is too coarse does not throw — it silently claims two different
-conversations are one. The original hash was taken over text blocks only, which
-meant a turn was identified by its words and nothing else: two messages differing
-only by the image attached were the same message, and once tool calls exist, an
-assistant turn is identified by prose it may not even have.
-
-That is the shape of every mutant in the first group. Each removes one field from
-the fingerprint, and the evidence a test can hold is only that two messages
-differing in exactly that field stay told apart.
-
-The whitespace mutant is the subtle one. A block list is hashed twice at
-different moments — once when the turn is recorded, once when it comes back on
-the wire — and `handler/wire_messages.ts` drops whitespace-only text blocks in
-between. Hashing without the same filter makes the two disagree, and the symptom
-is not a wrong answer but an unexplained cold start.
-
-The version mutants guard the upgrade itself: a book written under the old hash
-must not be read under the new one, because its entries would never match and
-the mismatch would look like a divergence rather than a stale book.
-
-The second half of the pass covers the turn itself. The provider reads a stream
-it does not own: the SDK emits raw Anthropic events for the model's own output,
-assistant frames that are one content block each, frames belonging to agents the
-SDK ran by itself, and a final result. Each mutant here confuses one of those for
-another, and none of them throws — a dropped signature, a stop reason read from
-the wrong place, or a nested agent's words taken for the reply all produce a turn
-that looks finished.
-
-The options group is the one that fails open. Turning a built-in tool surface
-back on, or letting the harness compact the history behind shore's back, costs
-tokens and correctness on every turn while every test still passes unless the
-options themselves are asserted.
-
-The last group is the tool name table. The CLI namespaces every MCP tool as
-`mcp__<server>__<tool>` and there is no way to advertise a bare one, so a shore
-tool is known by two names at once: the one the model calls and the one
-`tools/dispatch.ts` switches on. Getting the translation wrong is quiet in a
-particular way — `runToolUse` looks up a tool's schema, its result cap and its
-timeout by name and falls back to defaults on a miss, so a leaked prefix means a
-subagent runs with no argument validation and the global timeout rather than its
-configured hour, and nothing is logged.
-
-The loop group is about the shape of what a tool-using turn writes down.
-`engine/merge.ts` folds an assistant turn holding tool_use blocks, a user turn
-holding their results, and a final assistant turn back into one logical turn, and
-regeneration and alt-switching both rest on that grouping. Recording the pair out
-of order, recording the final reply twice, or letting an earlier round's prose
-into the finished turn each produce a conversation that reads correctly once and
-comes apart when it is edited.
-
-A mutant is KILLED if the tests listed in TESTS fail with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_claude_agent.py
+"""Mutation pass over the Claude Agent SDK provider: the message hashes that
+decide whether a session resumes, forks or rebuilds, and the stream, tool
+loop, keepalive and billing around them.
 """
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 AGENT = "src/llm/providers/claude_agent.ts"
 SESSIONS = "src/llm/providers/agent_sessions.ts"
 TOOLS = "src/llm/providers/claude_agent_tools.ts"
@@ -81,7 +21,6 @@ TESTS = [
     "tests/claude_agent_keepalive.test.ts",
 ]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- what identifies a message -------------------------------------------
     ("hash: an image contributes nothing, so two different pictures are one turn",

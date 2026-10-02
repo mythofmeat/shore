@@ -1,68 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the observability call store (#18 / #12).
-
-The store is a write-then-read module with no user-facing errors, so its
-failure modes are all silent ones. What the fixture has to catch:
-
-- **Reading the wrong column.** Fourteen columns of three types, several
-  interchangeable — swap `input_tokens` for `output_tokens`, or `model` for
-  `provider`, and every row still looks like a row.
-- **Ordering.** `ORDER BY ts_unix DESC, id DESC` is two keys, and dropping
-  either one is invisible until two rows share a timestamp. `call_log` shows
-  the result as "recent capture_calls", so a wrong order is a wrong answer.
-- **Losing a filter.** A `character` filter that silently matches everything
-  leaks one character's capture_calls into another's log.
-- **`limit == 0` meaning "no limit".** Spelled `-1` to SQLite. Pass the 0
-  through and every unlimited query returns nothing.
-- **Rotation deleting the wrong rows.** The size backstop is a window function
-  with an exclusion for the newest row; get the exclusion wrong and rotation
-  can empty the store. Get the comparison wrong and it never fires.
-- **The migration.** A DB predating `capture_transcripts.character` must gain the
-  column. Skip it and every transcript write against an old store fails.
-
-A mutant is KILLED if `bun test tests/call_store.test.ts` fails with it
-applied.
-
-This is **60/60**, from 54/63 on the first pass. Of the nine that lived:
-
-- **One was a real bug.** The stored `ts` string is `to_rfc3339`, which prints
-  the sub-second fraction when it is non-zero. The port dropped the fraction
-  unconditionally — and since every recorded call takes its timestamp from
-  `Utc::now()`, that was every row in the store, not an edge case. The fixture
-  had not caught it because every timestamp in it was a whole second.
-- **Four were fixture gaps**, all closed by two additions: a call written last
-  but stamped three-quarters of a second into an earlier row's second, and a
-  transcript whose `call_type` differs from its `source`. Before those, id
-  order and timestamp order agreed, and `source` and `call_type` held the same
-  string in every row, so swapping either pair changed nothing.
-- **Three were bad mutants** — one no-op, one whose pattern never matched, and
-  one that read the SQLite change count a statement later, which reads the same
-  value. Rewritten or dropped.
-- **One killed its own code.** `cap()` clamped the size cap into the
-  safe-integer range, mirroring a `u64`-to-`i64` saturation that only exists
-  because Rust's types demand it. Nothing could reach it and no fixture could
-  express it, so it is gone rather than tested.
-
-One further mutant is **removed as equivalent**, not chased: dropping the
-`id DESC` tiebreak from the capture_calls query. Two rows share a timestamp, a call
-type and a character precisely so the tiebreak decides between them — but every
-plan SQLite picks for these queries already walks the index in descending rowid
-order, so the tiebreak and its absence are indistinguishable. It stays in the
-SQL because relying on the plan is not a contract, and that is written down at
-the query rather than left to be rediscovered.
-
-The fixture is built to make the rest visible. It is not a JSON transcript of
-Rust's answers — it ships whole SQLite files that Rust *wrote*, and the replay
-queries those exact bytes. That is what makes byte counts and eviction
-boundaries assertable at all: Rust and Bun link different libzstd builds and
-disagree on the compressed size of some capture_payloads, so asking TypeScript to
-reproduce Rust's numbers would pin a library version rather than this module.
-One call has every optional column null; one has a response body and one has
-none, so `null` and `""` are told apart; one transcript entry is not valid
-JSON, so the parse fallback is exercised rather than assumed.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_call_store.py
+"""Mutation pass over the call store: what a write records, how captures and
+transcripts are filtered, ordered and limited, and the usage summary.
 """
 import pathlib
 import sys
@@ -70,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/call_store.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- ordering -------------------------------------------------------------
     ("capture_calls: ordered oldest-first",

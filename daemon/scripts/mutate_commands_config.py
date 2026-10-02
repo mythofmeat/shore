@@ -1,65 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the configuration commands (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked. The failure modes here
-are unusually quiet even by this phase's standards, because four of the five
-commands are *diagnostics* — the things people run to find out why something
-else is broken:
-
-- **A reload that half-applies.** `config_reload` validates, refreshes prompts,
-  then adopts. Reorder those and a broken config on disk can leave the daemon
-  running with a new prompt snapshot and an old config, or a fresh config and a
-  stale snapshot. Nothing errors; the next background call just uses the wrong
-  bytes.
-- **A validation that skips the overlays.** A typo in one character's
-  `config.toml` has to abort the whole reload. Skip that loop and it instead
-  falls back silently at merge time, and that character quietly loses every
-  setting it thought it had.
-- **A tool surface that lies.** `tools` exists to explain why a tool is not
-  firing. If the warnings are dropped, a typo in `enabled_tools` produces a
-  report that looks completely healthy and answers nothing.
-- **A reload that moves the data directory.** The loader takes the environment
-  as an argument here where the Rust read the process environment. Drop it on
-  the reload path and the daemon re-resolves XDG mid-run and starts writing
-  somewhere else. This one was a real bug, found by this fixture and not by the
-  replay passing.
-
-A mutant is KILLED if `bun test tests/config_commands.test.ts` fails
-with it applied.
-
-The original pass reached **45/45**, from 36/41 on the first pass. The current
-typed configuration boundary has 42 applicable mutants. One original survivor was an
-equivalent mutant and is gone: removing the sort from the sub-agent roster
-changes nothing, because the loader already stores the map sorted. The source
-says why the sort stays anyway.
-
-The other four were real gaps, and all four needed the *fixture* to grow — the
-recorded cases could not tell the pairs apart:
-
-- **The one sub-agent that was not enabled owned a tool that did not exist**, so
-  "owners are the enabled sub-agents" and "owners are every sub-agent" agreed on
-  every row. It owns a real tool now, *and* a dangling one, because the second
-  loop needs the dangling reference to stay observable — fixing the first gap
-  with only a real tool opened a new survivor in the warnings loop.
-- **No api key env var was set to a blank value**, so "blank counts as unset"
-  and "any value counts as set" agreed. `std::env::var` gives `Ok("")` for a
-  blank, which is not an error, so a blank counts as *set*.
-- **`active_resolved_model` was `None` in every case**, so dropping it on a
-  model change was invisible. One case now seeds the pre-resolved selection the
-  dispatcher would have supplied.
-- **`apply` was only ever `true` or absent**, so boolean coercion semantics went
-  unpinned. The canonical input now rejects non-boolean values; explicit null
-  remains false and has its own mutation probe.
-
-Two rules are pinned structurally rather than by the fixture, and both are noted
-at the assertion. The Rust harness had no observer on `CommandContext`, so it
-could not record which runtime hooks fired or in what order — and the order is
-exactly what makes a failed reload safe, since prompts are refreshed before the
-config is adopted. The fixture's `state_after` and `changed_after` carry
-everything the Rust could see; the call-order assertions carry the rest.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_config.py
+"""Mutation pass over the configuration commands: the tool roster, config
+checks, reading and setting values, and reload.
 """
 import pathlib
 import sys
@@ -67,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/config.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- tools ----------------------------------------------------------------
     ("tools: the roster is the config's enabled list rather than the registry",

@@ -1,48 +1,14 @@
 #!/usr/bin/env python3
-"""Mutation pass over the deep-idle archive (#18 / #12).
-
-This module decides what happens to a conversation nobody came back to, and
-every mutant below still *works* — the archive runs, the trigger clears, nothing
-throws. What they change is what survives.
-
-Three groups.
-
-The **plan** picks between spending nothing and spending a model call over a
-whole conversation. Its two failure modes are opposite and both permanent: take
-the cheap arm when turns are uncovered and those turns are archived without ever
-reaching memory; take the expensive arm when everything is covered and every
-deep archive pays for a pass that rediscovers what memory already holds.
-
-The **tail** is what the user sees when they come back. It is the run of
-unanswered heartbeat messages, and it becomes `keepLastN` unchanged — so an
-off-by-one either archives a message the user has not read or leaves a covered
-exchange in `active.jsonl` forever.
-
-The **reporting** is what the runner folds in. `deepArchiveDone` is the one that
-matters: the LLM arm must not set it, because a keep-0 pass retains an
-unanswered autonomous run in `active.jsonl`, and setting it there would stop
-the next window from coming back to quiesce that tail.
-
-A mutant is KILLED if `bun test tests/deep_archive.test.ts
-tests/autonomy_runner.test.ts` fails with it applied — two files, because what
-the archive *reports* is only behaviour once the runner folds it in.
-
-Four mutants land in `post_archive.ts`, which idle compaction shares. They are
-still the archive's mutants: the bookkeeping is the archive's last four steps,
-and the sharing is why breaking it in one place has to fail here too.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_deep_archive.py
+"""Mutation pass over the deep-idle archive: what is archived and what is
+retained, the quiesce arm, the idle-period bookkeeping, and the
+notification.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 D = "src/autonomy/deep_archive.ts"
 P = "src/autonomy/post_archive.ts"
 R = "src/autonomy/runner.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the plan -------------------------------------------------------------
     ("plan: the tail runs forwards from the start, not backwards from the end",

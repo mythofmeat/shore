@@ -1,78 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the cached last request (#18 / #12).
-
-This is the module where a silent failure costs money rather than correctness.
-The body cached here is the prompt prefix the keepalive pings, and the whole
-subsystem's value is the difference between a cache read at 0.1x and a cache
-write at 2.0x. Every mutant below is one that still *works* — the ping goes
-out, the heartbeat runs, nothing throws — and just quietly stops paying for
-itself.
-
-Three groups.
-
-The **selection** decides which conversations get rebuilt at all. Its failure
-mode is treating a mid-turn conversation as rebuildable (an invalid request) or
-an empty one as nothing-to-do (the prefix goes cold overnight, which is exactly
-the case the anchor exists for).
-
-The **rebuild** has to produce what chat's next turn would send. Dropping the
-MCP tool surface is the one that looks harmless and is not: a warmed prefix
-missing tools chat includes is a prefix the next chat turn cannot reuse, so
-every ping buys nothing. The Rust has two of these functions and they disagree
-about this on purpose.
-
-The **reprime** decides whether to keep pinging. A rebuild that failed must
-disarm; leaving the pre-invalidation body armed pings a prefix no real turn
-will reuse.
-
-A mutant is KILLED if `bun test tests/last_request.test.ts` fails with it
-applied.
-
-This is **33/33**, from 28/33 on the first pass. Five survivors, and only three
-of them were real:
-
-- **`hasPriorContext` hard-coded to `false`.** Every recorded case had nothing
-  archived, so counted and never-assumed agreed everywhere. Chasing this found
-  a real bug rather than a fixture gap: `memory/compaction/archive.ts`'s
-  `segmentCount` was listing `*.jsonl` files, where the Rust's
-  `SegmentReader::load` counts `compaction.json`'s entries — and
-  `engine/segments.ts` says in its own header that the manifest is the
-  authority and the files are not. Both callers use it for `has_prior_context`,
-  so an orphan file from a crashed archive would have told the model it was
-  missing context that no reader can actually read. Fixed there; the fixture
-  now carries a case with two segment files and an empty manifest, which is the
-  only shape that separates the two counts.
-- **The conversation returned by reference rather than copied.** The Rust's
-  `messages.to_vec()` keeps `MessageStore`'s own array from escaping to a
-  caller that could mutate it. Nothing does today, which is why it needed an
-  assertion rather than a comment.
-- **The character not stamped onto the prefix context.** Every test body already
-  carried the right character, so stamping was a no-op. The case that separates
-  them is a body carrying someone *else's*.
-
-The other two were malformed mutants, not gaps — one returned `undefined` on a
-path already returning it, the other left the real value in place. Both
-rewritten.
-
-One mutant was dropped as **equivalent**: removing the `selected === undefined`
-guard and rebuilding on an empty list. The undefined reaches
-`prepareChatContext`, throws there, and is caught into the same `undefined` the
-guard would have returned. The behaviour the guard exists for — not rebuilding
-on messages the selection rejected — is covered by "the selection's chosen
-messages are ignored for the raw store", which dies.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_last_request.py
+"""Mutation pass over the cached last request the keepalive pings: which body
+is cached, rebuilds and reprimes, invalidation, and ping outcomes.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 B = "src/cache/rebuild.ts"
 L = "src/cache/last_request.ts"
 K = "src/commands/keepalive.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the selection --------------------------------------------------------
     ("selection: between-turns reads the first message, not the last",

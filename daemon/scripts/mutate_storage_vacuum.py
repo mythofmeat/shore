@@ -1,31 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over shore.db giving space back to the filesystem (#288).
-
-`CallStore` deletes expired captures and then runs `PRAGMA incremental_vacuum`,
-which hands free pages back to the filesystem only in a database whose
-`auto_vacuum` is INCREMENTAL. SQLite takes that mode from a database with no
-tables yet, or through `VACUUM`. `openStorage` creates shore.db first and used
-to leave the mode at NONE, so by the time `CallStore` asked for INCREMENTAL it
-was too late, and a production shore.db stayed at its largest size.
-
-Two things fix it, and each mutant below takes a piece of one away:
-
-- **A new database is incremental from the start.** Every store that can
-  create shore.db asks for the mode before anything else touches the file. The
-  order matters: `journal_mode = WAL` writes the header of a new file, and SQLite
-  ignores a later change of mode without saying so.
-- **An existing database is rewritten once.** `initializeDatabase` runs
-  `PRAGMA auto_vacuum = INCREMENTAL; VACUUM;` at start-up when the mode is
-  anything else, logs how long that took, and truncates the write-ahead log,
-  which would otherwise hold a second copy of the database for as long as
-  another connection keeps it open. A rewrite that fails is logged and the
-  daemon starts anyway; the next start tries again.
-
-A mutant is KILLED if `bun test tests/storage_vacuum.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_storage_vacuum.py
+"""Mutation pass over shore.db giving space back to the filesystem: every store
+creates it with incremental auto_vacuum, and an existing database is
+rewritten once.
 """
 import sys
 
@@ -35,7 +11,6 @@ LEDGER = "src/ledger/store.ts"
 CALLS = "src/call_store.ts"
 HISTORY = "src/engine/history_store.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- a new database -------------------------------------------------------
     ("openStorage: a new shore.db keeps auto_vacuum NONE",

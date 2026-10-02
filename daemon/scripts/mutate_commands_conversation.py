@@ -1,70 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over the conversation command surface (#18 / #12).
-
-This module's risk is concentrated in two places, and neither errors when it is
-wrong:
-
-- **Reference resolution.** `resolveRef` turns "-1" or "3" into a msg_id. An
-  off-by-one resolves to a real, adjacent message, and `edit` then rewrites the
-  wrong turn and reports success. There is no failure to observe.
-- **Paging arithmetic.** `log` and `history_page` return a slice plus four
-  indices the client uses to place the archive boundary and ask for the next
-  page. A boundary that is one off greys out the wrong message; a `cursor` that
-  is one off makes the client re-request a page it already has, or skip one.
-
-A mutant is KILLED if `bun test tests/conversation.test.ts` fails with it
-applied; a survivor means either the tests cannot see that decision, or the
-code is equivalent under it.
-
-The first pass was 70/87, the second 79/88, and the fifth is 82/91. Six of the
-nine first-pass survivors were real gaps, and the shape was the usual one — the
-case was present and nothing in it was load-bearing:
-
-- **Nothing read history without bounding it.** `history_page` was always called
-  with a `before`, so "an absent cursor means the start of the conversation
-  rather than the end" changed nothing. Three unbounded calls now cover it.
-- **No conversation was long enough for the default to bound anything.** Every
-  case had fewer than 64 user turns, so `pageStartByTurns(…, 64)` and `return 0`
-  agreed. A generated 66-turn conversation now separates them; that is the shape
-  of every plain `shore log`, and it had no coverage at all.
-- **Nothing passed a non-integer.** `count`, `turns`, `index` and `position` all
-  read through `asU64`, where `1.5` and `-1` are *absent* rather than errors — so
-  they silently fall through to the next branch. Every argument had been an
-  integer, so the difference between "reject" and "ignore" could not show. Both
-  forms are now passed to each of the four.
-- **Two assistant messages, so the backwards scan means something.** Every
-  alternatives case had exactly one assistant message, and a scan that ran
-  forwards found the same one.
-- **A filtered page that starts inside the archive.** The local active boundary
-  is counted *after* role filtering; with only pages whose archived half was
-  entirely one role, filtering it changed no count.
-- **Reading history must not write bytes back into the store.** `log` embeds
-  image data into the page it returns. The merge passes message objects through
-  by reference, so without a copy the base64 lands in the live store and
-  `MessageStore` rewrites `active.jsonl` from those objects. Nothing looked at
-  the engine after a read; every read now asserts the conversation is unchanged.
-
-The nine remaining survivors are all true equivalents, in three groups:
-
-1. **Two clamps that cover each other.** `resolveHistoryBefore` clamps the
-   cursor to the message count and `pageStartByTurns` clamps its end bound to
-   the same thing, as do the two in `historyPagePayload`. Removing any one is
-   invisible because another catches it; removing the pair *is* caught, which is
-   what the "BOTH redundant clamps" mutant is for. Kept as written — each one
-   states a bound that holds.
-2. **Guards on a value the store cannot produce.** `Message.normalize` clamps
-   `alt_index` to `alternatives.length - 1` on every load, so no conversation on
-   disk can carry an out-of-range one — a case writes `alt_index: 7` against
-   three alternatives and the engine loads it as `2`. The clamps in
-   `listAlternatives` and `alt` therefore cannot fire. Likewise
-   `MessageStore.selectAlt` re-checks `index >= altCount` and raises the
-   identical message, so `resolveAltTarget`'s bound is redundant with it.
-3. **`"role" in args` versus `args.role === undefined`.** These differ only for a
-   key that is present with an `undefined` value, which decoded JSON never
-   produces.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_conversation.py
+"""Mutation pass over the conversation commands: argument decoding, message
+references, history paging and the engine arithmetic behind it, and edit,
+delete, alternatives and inject.
 """
 import pathlib
 import sys
@@ -72,16 +9,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/conversation.ts"
 
-# `#155` moved the paging arithmetic into the engine, behind two paths: the
-# storage-native one that reads a bounded range out of SQLite, and the fallback
-# that still materialises the whole conversation. The command keeps argument
-# decoding, the role filter and the payload shape, so mutants that reach into
-# the engine name it with the four-part `(label, path, find, replace)` shape.
 ENGINE = ROOT / "src/engine/conversation.ts"
 
-# (label, find, replace) — or (label, [(find, replace), ...]) for a mutant that
-# only becomes visible when several places change together. A mutant against a
-# source other than SRC is `(label, path, find, replace)`.
 MUTANTS = [
     # --- argument readers --------------------------------------------------
     ("asStr: a number counts as a string",
@@ -169,12 +98,7 @@ MUTANTS = [
      "    for (let i = messages.length - 1; i >= 0; i -= 1) {",
      "    for (let i = 0; i < messages.length; i += 1) {"),
 
-    # --- paging arithmetic, fallback path ----------------------------------
-    # `historyPageStart` walks a conversation that is already fully in memory.
-
-    # --- paging arithmetic, storage-native path ----------------------------
-    # `#pageStartByTurns` spends the turn budget on the in-memory tail first and
-    # asks storage for whatever is left, so the hand-off is the interesting part.
+    # --- paging arithmetic -------------------------------------------------
     ("pageStartByTurns: zero turns returns the whole page",
      ENGINE,
      "    if (turns === 0) return end;",
@@ -271,8 +195,6 @@ MUTANTS = [
      "  return role !== undefined && message.role === role;"),
 
     # --- history_page bounds -----------------------------------------------
-    # `resolveHistoryBefore` decodes the cursor; `historyEnd` turns it into an
-    # index. The clamp lives with the latter now, so both are engine mutants.
     ("historyEnd: an absent cursor means the start, not the end",
      ENGINE,
      "  return Math.min(before ?? total, total);",

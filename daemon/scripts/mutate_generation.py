@@ -1,83 +1,15 @@
 #!/usr/bin/env python3
-"""Mutation pass over the generation driver (#18 / #12).
-
-The driver is ordering. Almost nothing in it computes a value — it decides what
-happens before what, and which of two things a phase is handed — so a fixture
-that only checked the frames would pass with the tool context wired to the
-wrong directory, with the loop mutating the request the keepalive later clones,
-or with `stream_end` going out before the turn was durable. That last one is
-the bug the whole arrangement exists to prevent.
-
-The mutants cover six things:
-
-- **The order.** `stream_end` after persistence, the compaction gate last, the
-  user turn recorded before the request is assembled from it.
-- **The turn's inputs.** Which model, which history a regen sends, whether the
-  loop runs at all, and the cap on how long it runs for.
-- **The tool context's paths.** Every one of them is a string built from the
-  character name and a root, and swapping two of them puts a character's
-  workspace where nothing reads it.
-- **The wire body.** That the loop's turns are appended to `last_request` once,
-  with the provider off the request and the model off the result.
-- **The failure paths.** A stream that errors persists nothing, and a retry
-  starts the turn's tool record over rather than appending to it.
-
-- **The budget gate.** That a chat turn is checked at all, that it is checked
-  where the key is known, and that a refusal neither rotates nor retries.
-
-A mutant is KILLED if `bun test tests/generation.test.ts
-tests/budget_gate.test.ts` fails with it applied. The second file is here
-because the gate mutants are about a call that never happens, and the parity
-fixture records what a turn *did* — it has nothing to say about a turn that was
-refused before it started.
-
-This is **33/33**: 28/28 for the driver, from 24/29 on the first pass, plus
-five for the gate, which went 3/5 before the tests grew a fallback count and a
-sleep count.
-
-The two gate survivors are worth naming, because both were invisible in the
-obvious assertion — "the provider was not called" is true whether the refusal
-was decided once or five times:
-
-- **Rotation.** A refusal that classifies as a credential failure is re-asked
-  with each remaining key, and the provider is still never called. Killed by
-  counting `key_fallbacks` with two keys configured.
-- **Retry.** A refusal that classifies as transient is re-asked after a
-  backoff, and the provider is still never called. Killed by counting the
-  injected `sleep`, which is the only trace it leaves.
-
-Five survivors, and the split was the usual one — three cases present with
-nothing load-bearing in them, and two lines that did not need to exist:
-
-- **Autonomy, twice.** Nothing checked that the driver seeds the tracker or
-  tells it the user spoke; deleting either call changed no frame. The replay
-  now asserts the whole call sequence, and says why it is not fixture-driven.
-- **The sampler overlay.** No recorded case has one — the generator handed the
-  Rust a model its handler had already merged — so dropping the overlay on the
-  floor was invisible. There is a separate turn in the replay for it now.
-- **The key name on the call labels.** Equivalent, because `callContext` set it
-  from the assembly-time key and the per-attempt copy then overwrote it with
-  the key that was actually used. The dead line is gone and the mutant is aimed
-  at the one that does the work.
-- **The `anyToolEnabled` gate on the tool loop.** Genuinely equivalent: the tool
-  surface is built from the same config, so it is empty in exactly the cases
-  the gate refuses. Removed from the list; both checks stay in the source
-  because they fail differently if the surface builder ever changes.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_generation.py
+"""Mutation pass over the generation driver: the order of its phases, the
+inputs each is handed, the tool loop, last_request, and the budget gate.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 GEN = "src/handler/generation.ts"
 CTX = "src/handler/tool_context.ts"
 GENERATE = "src/llm/generate.ts"
 RETRY = "src/llm/retry.ts"
 CREDS = "src/llm/credentials.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the order ------------------------------------------------------------
     ("order: stream_end before persistence",
@@ -223,11 +155,6 @@ MUTANTS = [
      "  const sentBody = request;"),
 
     # --- the budget gate ------------------------------------------------------
-    # This is the one the port lost. `/v1/stream` gated the turn while the
-    # daemon still posted to it; absorbing the hop moved the call in-process and
-    # left the gate on the endpoint. Everything below is a way for that to
-    # happen again quietly, so each has to be a failing test rather than a
-    # reading of the source.
     ("gate: a chat turn is not budget-checked at all",
      GENERATE,
      "    const blocked = budgetBlockFor(call);\n"

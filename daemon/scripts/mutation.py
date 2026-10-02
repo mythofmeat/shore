@@ -1,55 +1,13 @@
 #!/usr/bin/env python3
 """The shared harness the `mutate_*.py` passes run on.
 
-Three things it exists to fix, all of them from #54:
-
-**The restore is guaranteed.** A mutant is written into your working tree and
-taken back out. Doing that without `try`/`finally` means a Ctrl-C, a timeout or
-any exception leaves the source mutated, which 31 of the 49 scripts did.
-
-**An inapplicable mutant is not a survivor.** A pattern that no longer matches
-its target is a fact about the harness — the source moved underneath it. A
-survivor is a fact about the tests — they did not notice a real change in
-behaviour. Reporting the first as the second is how `mutate_daemon_startup.py`
-came to announce eighteen security holes that had been deliberately deleted, and
-to score 10/28 while its tests were fine. They are counted and exited on
-separately here, and the score is over the mutants that actually applied.
-
-**One entry point.** `bun run mutate [module]`, so the whole set can be run
-rather than remembered.
-
-**A survivor with a checked reason is not a finding.** #130: once every pass
-applied, 30 of the 33 remaining survivors were mutants somebody had already sat
-down with and decided were not worth killing — a clamp another clamp covers, a
-guard on a value the store cannot produce. Exiting non-zero on those means the
-harness can never go green, so it can never be a gate, so a pattern that quietly
-stops matching stays silent for six months. A survivor whose label carries one
-of `REASONS` is a recorded decision and is reported apart from the unexplained
-ones; the exit code is over the unexplained survivors, the stale patterns, and
-any label whose reason has since become false.
-
-**A staleness check that costs nothing.** #132: a full sweep is 15 minutes, so
-nothing runs it, so the rot it catches — a `find` pattern that stops matching
-because the source moved — stays silent until somebody remembers. But that rot
-needs no test runs to find: it is `source.count(find) == 1`, file reads and
-substring counts. `--stale` does only that and skips every `bun test`, which is
-fast enough for routine verification before committing. It does not catch a
-mutant that still applies but has stopped being killed; that still wants the
-full sweep.
-
-**The tests run somewhere the repository is not.** A mutant that rewrites a path
-makes the code under test write to a path nobody chose. `rustJoin: always treat
-component as absolute` collapses every join to its last segment, so a character
-workspace that should be `${root}/ada` becomes a bare `ada`, and the suite quietly
-deposits `daemon/ada/TOOLS.md` in the working tree — twice now, unexplained both
-times. The suite is given absolute test paths and run from a scratch directory
-that is deleted afterwards, so a write to a relative path lands there instead of
-in the repository.
-
-A mutant is normally one edit. `(label, [(find, replace), ...])` is the shape for
-one that only means anything as a set — two clamps that cover each other are
-each individually equivalent, and only removing the pair is a change worth
-catching.
+Each mutant is written into the working tree and restored in a `finally`, and
+the suite runs from a scratch directory, so a mutant that breaks a path cannot
+write into the repository. A pattern that does not match its source exactly
+once is reported as stale, not as a survivor. A survivor whose label gives one
+of `REASONS` is a recorded decision; the exit code counts unexplained
+survivors, stale patterns, and labelled mutants that were killed. `--stale`
+checks the patterns only and runs no tests.
 """
 import os
 import pathlib
@@ -61,19 +19,11 @@ import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-APPLIED = "applied"
-INAPPLICABLE = "inapplicable"
-
 REASONS = ("EQUIVALENT", "UNKILLABLE", "NEEDS A SEAM")
 
 
 def expected_reason(label):
-    """The reason a mutant is expected to survive, or `None` if it is not.
-
-    The convention is the one already in the tree: the reason goes in the label,
-    in parentheses, followed by why. `expected_reason` reads it back so `run`
-    can tell a recorded decision from a finding.
-    """
+    """The `REASONS` entry a label gives in parentheses, or `None`."""
     for reason in REASONS:
         if f"({reason}" in label:
             return reason
@@ -88,23 +38,17 @@ def _tally(values):
 
 
 def _resolve(path):
-    """Anchor a pass's target at the daemon root.
-
-    The passes name their sources both ways — `ROOT / "src/x.ts"` and a bare
-    `"src/x.ts"` — and a bare one is otherwise relative to whatever directory
-    the pass was launched from. `ROOT / path` leaves an absolute path alone and
-    pins the rest, so every caller reads the same file.
-    """
+    """Anchor a pass's target at the daemon root; an absolute path is kept."""
     return ROOT / path
 
 
 def _normalize(mutant, default_src):
-    """Accept the four tuple shapes the passes were written in.
+    """Return `(label, [(path, find, replace), ...])` for any mutant shape.
 
-    Returns `(label, [(path, find, replace), ...])`. Most mutants are a single
-    edit; `(label, [(find, replace), ...])` is one that only means something as
-    a set, which is what a pair of clamps that cover each other needs — remove
-    either and another catches it, remove both and the bound is gone.
+    A mutant is `(label, find, replace)`, `(label, path, find, replace)`,
+    `(path, label, find, replace)`, or `(label, [(find, replace), ...])` for
+    edits that only mean something together, such as two clamps that cover
+    each other.
     """
     if len(mutant) == 2:
         label, edits = mutant
@@ -129,13 +73,10 @@ def _normalize(mutant, default_src):
 
 
 def bunfig_preloads():
-    """The test preloads `bunfig.toml` declares, read back so the sandbox keeps them.
+    """The test preloads `bunfig.toml` declares.
 
-    `bun` reads `bunfig.toml` from its working directory and resolves the paths
-    in it the same way, so running the suite from anywhere else silently drops
-    the preload — `tests/fixture_env.ts` pins `$USER` and installs the temp-root
-    sweeper, and losing it changes what the tests do. Reading the list here
-    rather than naming the file keeps the two from drifting apart.
+    `bun` reads `bunfig.toml` from its working directory, so a suite run from
+    the scratch directory has to be given them explicitly.
     """
     config = ROOT / "bunfig.toml"
     if not config.is_file():
@@ -144,13 +85,7 @@ def bunfig_preloads():
 
 
 def stale(mutants, src):
-    """Report the mutants whose pattern no longer matches its source once.
-
-    No mutant is written and no test is run, so this is seconds over the whole
-    set. A pattern matching zero times is a mutant that has silently stopped
-    testing anything; matching more than once is one that would edit an
-    arbitrary occurrence of the two.
-    """
+    """Report the mutants whose pattern does not match its source exactly once."""
     texts = {}
     found = []
     for mutant in mutants:
@@ -171,8 +106,8 @@ def stale(mutants, src):
 def run(mutants, tests, src=None, timeout=180):
     """Apply each mutant, run `tests`, restore, and report.
 
-    Returns a process exit code: non-zero if anything survived or failed to
-    apply, so a caller can gate on it.
+    Returns non-zero for an unexplained survivor, a stale pattern, or a
+    labelled mutant that was killed.
     """
     src = None if src is None else pathlib.Path(src)
     if "--stale" in sys.argv[1:]:

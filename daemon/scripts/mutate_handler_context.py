@@ -1,60 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over the wire-message builder and `prepareChatContext` (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked, on the evidence that five
-ports in a row had a fixture replay green while still full of holes, and always
-the same way: the case was present and nothing in it was load-bearing.
-
-This one has two halves with different failure modes.
-
-`wire_messages.ts` is where the decisions are, and most of them are about
-*ordering and pairing* rather than values — which turn a `tool_result` lands on,
-whether an owed result survives a dropped turn, whether an image goes before or
-after the stored blocks. Those are exactly the mutants a fixture of single-turn
-cases cannot see, so the scenarios were written as multi-turn from the start.
-
-`context.ts` is wiring: it decides which files load, whether tools are available,
-and what mode reaches the builder. Its mutants are mostly swaps — read the wrong
-file into the wrong slot — because that is the whole surface a wiring bug has.
-
-A mutant is KILLED if `bun test tests/context.test.ts` fails with it
-applied; a survivor means either the fixture cannot see that decision, or the
-code is equivalent under it.
-
-The first pass was 58/67. Six of the nine survivors were real gaps and are now
-cases, and they cluster: five of the six were invisible because a *neighbouring*
-setting made them unreachable, not because the decision was untested.
-
-- Every `text_standin` case used an unreadable image, so "encode anyway" looked
-  the same as "do not encode" — a readable one now separates them.
-- Nothing ever made the snapshot step fail, so both its warn-and-continue and
-  the memory index's canonical fallback were dead. `active_prompt` is now a
-  regular *file* in one case, which fails `create_dir_all` without depending on
-  permissions, and reaches both.
-- No context case carried an image, so the mode this module computes never
-  reached anything that could show it. Two cases now carry the same image with
-  tools off and on, so neither answer can be the constant one.
-- Every case ran under `user_message_timestamps = never`, which is the one mode
-  `has_prior_context` cannot reach. Two `auto` cases now differ only in it.
-- The cache directory is only read when the resize ladder runs, and the replay
-  passed no ladder. It now passes a probe that records the directory it was
-  handed and resizes nothing, so the wiring is pinned without pinning bytes
-  that `resize_parity.json` says outright are not comparable.
-
-The second pass is 64/67. The three that remain are true equivalents and are
-kept as documentation of *why*:
-
-- `input: {caption}` with an absent caption serializes to `{}`, so it is the
-  same request as `input: {}`. The replay compares serialized JSON precisely so
-  that the wire decides this, and the wire says they are the same.
-- `"text" in b` and `b.type === "text"` cannot disagree: `text` is the only
-  `ContentBlock` variant with a `text` field.
-- `renderToolDefs`'s `userName` is dead for every tool that exists — no
-  registered tool description contains `{{user}}`. The subagent path does, and
-  mutant 60 kills it there. Noted at the call site in `context.ts`.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_handler_context.py
+"""Mutation pass over `prepareChatContext` and the wire-message builder:
+images, captions and stand-ins, which turns and blocks ship, provenance, and
+system blocks.
 """
 import pathlib
 import sys
@@ -63,7 +10,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 WIRE = ROOT / "src/handler/wire_messages.ts"
 CONTEXT = ROOT / "src/handler/context.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- mode selection ---------------------------------------------------
     ("mode: the sdk alone is enough, tool defs are not required", WIRE,
@@ -230,7 +176,7 @@ MUTANTS = [
     ("system: text and label are swapped", WIRE,
      "  const system: SystemBlock[] = prompt.system.map((b) => ({ text: b.content, label: b.label }));",
      "  const system: SystemBlock[] = prompt.system.map((b) => ({ text: b.label, label: b.content }));"),
-    ("system: a single block is collapsed the way the Rust used to", WIRE,
+    ("system: a lone block loses its label", WIRE,
      "  const system: SystemBlock[] = prompt.system.map((b) => ({ text: b.content, label: b.label }));",
      "  const system: SystemBlock[] = prompt.system.map((b) => ({ text: b.content, label: b.label }));\n"
      '  if (system.length === 1 && system[0] !== undefined) system[0] = { text: system[0].text, label: "" };'),

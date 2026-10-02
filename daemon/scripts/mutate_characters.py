@@ -1,35 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the CharacterRegistry port (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked, on the evidence that
-five ports in a row had a fixture replay green while still full of holes.
-
-Almost every decision in `characters.ts` is a *cache* decision — whether the
-second call sees the first one's work, and which of four operations drops which
-of three caches. None of it is visible from a single call, so the fixture is
-scripted runs and this harness is the check that the scripts actually reach the
-decisions they were written for.
-
-A mutant is KILLED if `bun test tests/characters.test.ts` fails with it
-applied; a survivor means either the fixture cannot see that decision, or the
-code is equivalent under it.
-
-The first pass was 39/44. One survivor was a no-op mutant of mine — `#scan()`
-returns the list rather than assigning it, so reading `#available` on either
-side of the call is the same read; it was rewritten to lose the old list, which
-is the mutant that matters. Three were real fixture gaps and are now scenarios:
-no character whose workspace preparation *fails*, so a fatal handler survived;
-no config that failed to load and was then FIXED without an invalidation, so
-"the failure is cached too" was unreachable; and nothing recorded about an
-engine beyond its identity, so opening it against the wrong root was invisible
-— the generator now records which root and leaf it was opened under.
-
-The last survivor is a true equivalent and is kept: `discovery_changed` compares
-lists positionally, and a set compare cannot disagree on sorted lists of unique
-directory names. It is noted at the call site in `characters.ts`.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_characters.py
+"""Mutation pass over `CharacterRegistry`: scanning, the engine, config and
+thread caches, reload summaries, and resolving a requested character.
 """
 import pathlib
 import sys
@@ -37,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHARACTERS = ROOT / "src/characters.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- discovery and the available cache --------------------------------
     ("scan: construction does not scan",
@@ -159,9 +129,6 @@ MUTANTS = [
     ("summary: discovery_changed is inverted",
      "      characterDiscoveryChanged: !sameList(before, after),",
      "      characterDiscoveryChanged: sameList(before, after),"),
-    # NOT a reordering: `#scan()` returns the list rather than assigning it, so
-    # reading `#available` on either side of the call gives the same value. The
-    # mutant that matters is the one that loses the old list entirely.
     ("summary: `before` is the new list, not the old one",
      "    const before = this.#available;\n    const after = await this.#scan();",
      "    const after = await this.#scan();\n    const before = after;"),

@@ -6,7 +6,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 THREADS = ROOT / "src/engine/threads.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- thread ids become path segments, so the pattern is a boundary ------
     ("ids: any non-empty string is a thread id",

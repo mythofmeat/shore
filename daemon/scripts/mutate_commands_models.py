@@ -1,94 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the model command surface (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked. Three things here go
-wrong quietly:
-
-- **Resolution order.** Four sources feed "which model is this", and every one
-  of them yields *a* model. Reading the wrong one hands the user a real model
-  they did not choose, and the only symptom is the bill.
-- **The pre-resolved selection.** A discovered model's `qualified_name` is
-  display-only; feeding it back to the resolver always misses. Any path that
-  re-resolves instead of reading the parked value works perfectly on a static
-  catalog and fails only for users on provider discovery.
-- **What gets written.** `switch_model` and `set_model_setting` persist, and a
-  wrong key, wrong scope or wrong file is invisible until the next session
-  loads it back.
-
-A mutant is KILLED if `bun test tests/model_commands.test.ts` fails with
-it applied.
-
-The first pass was 55/70, the second 69/69, and the fourth is 67/67 over a
-rewritten set.
-
-Three deletions moved this surface underneath the mutants. 58338805 removed
-`ProcessSessionCache` and with it `activeResolvedModel` and the writes
-`switch_model` and `reset_model` made to the session object, so five mutants
-over the parked model and the in-memory selection had nothing left to change.
-`resolveActiveModel` and `activeName` now start from the character's saved
-preference via `effectiveChatModel`, which reaches their `[defaults].model` and
-first-catalog-entry fallbacks only when no character is attached. Nothing
-exercised that: the one characterless scenario configured `model = "alpha"`,
-which was also the first catalog entry, so "consult the default" and "take the
-first entry" agreed. Four hand-written cases separate them.
-
-beddae67 deleted the model-id rule table, and #130 deleted the parameter it
-left behind, so applicability now answers from the sdk and the capabilities
-alone. The live input is
-`DiscoveredModelSupport`, which reaches the table only from a discovery cache; the
-recorded caches carried neither `supported_parameters` nor `effort_levels`, so
-both the applicability table and the effort domain answered the same with and
-without them. The setup shape accepts both now, and two cases pin them. Fourteen of the fifteen
-first-pass survivors were real gaps, and the shape never varied: the case was
-present and nothing in it was load-bearing.
-
-- **No argument was ever the empty string.** The Rust reads `name = ""` as
-  absent and falls through to the active model.
-- **The `Ambiguous` error had no route at all.** It needs two *discovery caches*
-  carrying the same bare model id — a short name shared by two static providers
-  is a plain miss, which is the first thing the new scenario checks. The
-  generator only supported one provider; it takes a list now.
-- **The config default was also the first catalog entry**, so "the default is
-  the active-name fallback" and "the first entry is" agreed on every row.
-- **No session ever carried an `active_model` that resolves nowhere**, so the
-  whole reporting fallback was unexercised — and it is the interesting half,
-  because it reports the name rather than swallowing it.
-- **No session carried a *hidden* selection without a pre-resolved copy**, which
-  is the only way to reach the `include_hidden: true` on the fallback resolve.
-- **`all` only ever collapsed models that shared a qualified name too**, so
-  comparing identity and comparing names agreed. Two catalog aliases for one
-  model id now separate them.
-- **No background pin failed to resolve**, so echoing the name the user wrote
-  instead of erroring was dead weight.
-- **`switch_model` was never called with both a bad name and no character**, so
-  which of the two checks runs first was invisible.
-- **`set_model_setting` was never called without a `value` key** — which the
-  Rust reads as null, i.e. clear.
-- **The capability check never saw a target different from the active model in
-  a way that mattered**: a gemini-sdk model targeted by name from an anthropic
-  session.
-- **The preferences file never held two entries at once**, so "drop the entry
-  that emptied" and "clear the file" agreed.
-- **No model id moved an id-sensitive capability rule** — the same gap the
-  settings fixture had. `claude-opus-4-8` and `gemini-3.1-pro` are in the
-  catalog now.
-
-The fifteenth survivor was not a gap: `list_models_active_name` retried through
-the plain catalog after `find_effective_model` failed, and that retry cannot
-succeed — `find_effective_model` *begins* with the same lookup and only reaches
-its own paths once it has failed. Dropped rather than ported.
-
-#117 unified the target flags, so `switch_model` and `reset_model` now write
-sub-agent keys the way they already wrote background ones, `model_info` follows
-a role instead of a name, and a bare `model_settings` answers with the overview
-of every role. Twenty-five mutants cover that. Four were real gaps on the first
-run: pinning one sub-agent by name never proved it left another's pin alone; the
-one erroring role in the overview was also non-inherited, so the error branch of
-the filter was dead; and no sub-agent shared a model with chat, so keying its
-settings by name and keying them by model agreed.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_commands_models.py
+"""Mutation pass over the model commands: listing, switching, background and
+sub-agent pins, model info, and model settings.
 """
 import pathlib
 import sys
@@ -96,7 +8,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/models.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- argument reading ---------------------------------------------------
     ('asName: an empty name is a name', '  return s === undefined || s === "" ? undefined : s;', "  return s;"),
@@ -463,7 +374,7 @@ MUTANTS = [
      "    setting_schema: settingSchema(sdkFromWire(sampler.sdk ?? model.sdk) ?? model.sdk, model.support, model.modelId),",
      "    setting_schema: settingSchema(sdkFromWire(sampler.sdk ?? model.sdk) ?? model.sdk, undefined, model.modelId),"),
 
-    # --- sub-agent pins (#117) ----------------------------------------------
+    # --- sub-agent pins -----------------------------------------------------
     ("sub-agent pin: a named sub-agent writes the shared default",
      '  const key = selector === ALL_SUBAGENTS ? SUBAGENT_MODEL_KEY : subagentModelKey(selector);',
      "  const key = SUBAGENT_MODEL_KEY;"),
@@ -500,7 +411,7 @@ MUTANTS = [
      "  return selector === ALL_SUBAGENTS ? \"sub-agents\" : `sub-agent: ${selector}`;",
      '  return "sub-agents";'),
 
-    # --- info by role (#117) -------------------------------------------------
+    # --- info by role -------------------------------------------------------
     ("info: a role flag is ignored in favour of the active model",
      "  return asName(args[\"subagent\"]) !== undefined || asStr(args[\"background_task\"]) !== undefined;",
      "  return false;"),
@@ -510,7 +421,7 @@ MUTANTS = [
      "  }",
      "  void byRole;"),
 
-    # --- the settings overview (#117) ---------------------------------------
+    # --- the settings overview ----------------------------------------------
     ("overview: a role that only inherits is listed anyway",
      '    row.role === "chat" || row.error !== null || !row.inherited || row.settings.length > 0;',
      "    true;"),
@@ -540,7 +451,7 @@ MUTANTS = [
      "    case \"subagent\":\n      return `subagent:${target.subagent}`;",
      "    case \"subagent\":\n      return `model:${key}`;"),
 
-    # --- naming one setting (#117) ------------------------------------------
+    # --- naming one setting -------------------------------------------------
     ("show: an unknown key is accepted",
      "  if (SAMPLER_KEYS.includes(key)) return key;",
      "  return key;"),

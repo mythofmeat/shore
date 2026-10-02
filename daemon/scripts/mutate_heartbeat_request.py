@@ -1,31 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over the heartbeat's request preparation (#18 / #12).
-
-Two groups, and they fail in different currencies.
-
-**The override** decides which model a heartbeat costs money on. Every mutant
-here still produces a request that runs — what changes is *which* model runs it,
-and the failure mode is a user who configured a background model, sees ticks
-happening, and is billed on their chat model all along. The pre-check mutants
-matter most: `resolveBackgroundModel` falls back silently by design, and this is
-the one caller that must not let it.
-
-**The preparation** decides what the request contains. The expensive one is the
-copy — the cached body is chat's own history and the object every keepalive ping
-refreshes, so a tick that appends to it in place leaves the cache holding a
-prefix no real turn extends. Nothing throws, nothing logs; the provider just
-starts charging cache-write prices.
-
-A mutant is KILLED if `bun test tests/heartbeat_request.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_heartbeat_request.py
+"""Mutation pass over preparing a heartbeat's request: model overrides, the
+cached body it builds on, and how its interval is worded.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 H = "src/autonomy/heartbeat_request.ts"
 
 TESTS = ["tests/heartbeat_request.test.ts"]
@@ -60,7 +38,6 @@ CAP = (
     "        )?.maxToolIterations;"
 )
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the override ---------------------------------------------------------
     ("override: no pre-check, so a typo'd pin silently resolves to the chat model",

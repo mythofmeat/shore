@@ -1,59 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the `compact` command (#18 / #12).
-
-Three kinds of code, and the mutants are aimed differently at each.
-
-The **argument parse** fails by coercing where the Rust refused: a string that
-looks like a number, a `1` that becomes `true`, a negative that becomes a
-clamp. Every one of those failures is silent — a rejected argument and an
-absent one produce the same pass — so the mutants are all "accept one more
-thing than the Rust did".
-
-The **guards** fail by order. Claiming the compaction slot and reading the
-conversation are both cheap and both refuse, so swapping them looks like
-nothing until two clients compact at once and the second is told its
-conversation is empty.
-
-The **renderings** fail by dropping a field, by carrying the wrong one of two
-numbers that are usually equal, or by truncating in the wrong unit. The last is
-the one this file exists for: `chars().take(200)` counts Unicode scalar values
-and `slice(0, 200)` counts UTF-16 code units, and nothing but an astral-plane
-character tells them apart.
-
-A mutant is KILLED if `bun test tests/compact_command.test.ts` fails
-with it applied.
-
-This is **28/28**, from 28/29 on the first pass. One survivor, and it is the
-shape this project has been caught by five times running — the case was there
-and nothing in it was load-bearing:
-
-- **The dry run recomputing `would_write_files` from its preview list.** The
-  only producer, `CompactionManager::compact`, sets the count *from* the list,
-  so every recorded case had them equal and a renderer that recomputed the
-  number was indistinguishable from one that copied the field. The fix is in
-  the fixture, not the assertion: one generated case sets the count to 99
-  against two previews, which makes the renderer's contract — copy what you
-  were given — a thing the replay can see.
-
-Worth writing down about the *replay* rather than the code, because two of
-these mutants only die because of it: rebuilding the outcome from the recorded
-response is how a rendering fixture feeds a mutant its own answer back.
-`outcomeFor` names every field explicitly rather than spreading the response,
-and `expand()` lengthens a preview that came back at the truncation boundary,
-because a preview handed back verbatim passes under any truncation length at
-all — including none.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_compact_command.py
+"""Mutation pass over the `compact` command: argument parsing, its guards, the
+thread and prefix it compacts, its errors and renderings, the preview, and
+completion.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 C = "src/commands/compact.ts"
 R = "src/memory/compaction/run.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the argument parse ---------------------------------------------------
     ('parse: dry_run is truthiness rather than a boolean', 'src/operations/contracts.ts',

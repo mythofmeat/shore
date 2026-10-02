@@ -1,41 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the SWP handshake provider (#18, step 5).
-
-This module answers two questions a client asks once and then trusts for the
-rest of the session, so a wrong answer here does not look like a bug — it looks
-like the daemon.
-
-**Which answers are not errors.** Three states arrive at the same empty
-snapshot and none of them may throw: no character selected (a fresh
-connection), a character with no engine, and a character that has been deleted
-since the client last connected. Turning any of them into a throw locks that
-client out of the daemon over something it merely remembered.
-
-**Which config is read.** A selected character reads its *effective* config, so
-a per-character model override is what the client is shown. Reading the global
-one instead reports a model the character will not use, with no error attached
-anywhere.
-
-**What the config block falls back to.** Caller's choice, then
-`defaults.model`, then the first model in the catalog. The last step is what
-stops a config with no default rendering a blank where the model name goes, and
-the first is what stops a character switch reporting the model it just replaced.
-
-A mutant is KILLED if `bun test tests/swp_handshake.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_handshake.py
+"""Mutation pass over the SWP handshake provider: the hello, the config and
+snapshot it returns, and the model it reports.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 H = "src/swp/handshake.ts"
 
 TESTS = ["tests/swp_handshake.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the hello snapshot ---------------------------------------------------
     ("hello: avatars are looked up under the data dir, so none are ever found",
