@@ -5,7 +5,7 @@ import { EVENT_POLICIES } from "../src/browser/workspace.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import wire from "../src/protocol/wire.generated.json" with { type: "json" };
 import { parseInventorySources } from "./capability_inventory.ts";
-import terminal from "../../docs/capabilities/terminal.generated.json" with { type: "json" };
+import terminal from "../src/browser/terminal_capabilities.generated.json" with { type: "json" };
 
 export function assertDisplayCoverage(choices: Readonly<Record<string, readonly string[]>>, controls: Readonly<Record<string, unknown>>, modes: Readonly<Record<string, ReadonlySet<string>>>): void {
   for (const preference of terminal.view_preferences) {

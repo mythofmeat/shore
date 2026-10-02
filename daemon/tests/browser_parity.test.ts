@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import terminal from "../../docs/capabilities/terminal.generated.json" with { type: "json" };
+import terminal from "../src/browser/terminal_capabilities.generated.json" with { type: "json" };
 import { assertParity, NOT_APPLICABLE, parityUnits, readKnownGaps, TERMINAL_ROUTES, uncoveredUnits, type ParityUnit } from "../scripts/browser_parity.ts";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { requestCatalogue } from "../src/operations/requests.ts";

@@ -8,7 +8,7 @@ import { createVirtualFileSystem } from "typescript/unstable/fs";
 import { commandCatalogue } from "../src/commands/registry.ts";
 
 const ROOT = join(import.meta.dir, "..");
-export const INVENTORY_PATH = join(ROOT, "../docs/capabilities/daemon.generated.json");
+export const INVENTORY_PATH = join(ROOT, "src/web/capabilities.generated.json");
 
 export async function parseInventorySources(texts: readonly string[], extension: "ts" | "tsx" = "ts"): Promise<ts.SourceFile[]> {
   const base = "/__shore_inventory__";
