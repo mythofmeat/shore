@@ -121,15 +121,12 @@ MUTANTS = [
      R,
      "    this.#registered.set(\n      character,\n      pending.then(fn).catch((e: unknown) => {",
      "    fn();\n    this.#registered.set(\n      character,\n      pending.catch((e: unknown) => {"),
-    # Racing each update against the registration rather than chaining it onto
-    # the last survives, and the reason is that every deferred `fn` is
-    # synchronous: three `.then`s on one promise run in registration order, so
-    # the two spellings cannot be told apart today. The chain is kept anyway.
-    # It is what makes `settled()` mean "everything queued has run", and it is
-    # what keeps the ordering correct the day one of these calls becomes async
-    # — which is the day the bug would be a user message restarting an idle
-    # clock a compaction had just reset, with nothing to point at.
-    # ("defer: each update races the registration instead of queueing", ...)
+    ("defer: each update races the registration instead of queueing (EQUIVALENT — every deferred fn is "
+     "synchronous, and callbacks on one promise run in the order they were attached, so the two spellings "
+     "agree; the chain is what keeps the order the day an update becomes async)",
+     R,
+     "    this.#registered.set(\n      character,\n      pending.then(fn)",
+     "    ((_character: string, _chain: Promise<void>) => {})(\n      character,\n      pending.then(fn)"),
     ("defer: an update for an unregistered character is raised rather than dropped",
      R,
      "    if (pending === undefined) {",

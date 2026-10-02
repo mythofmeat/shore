@@ -74,12 +74,6 @@ MUTANTS = [
      "      if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);\n"
      "      return provider.generate(",
      "      const provider = providers[req.sdk];\n      return provider?.generate("),
-    # `KeepaliveService` calls its sender as `this.#send(ping)` at both sites,
-    # so the signal parameter is never populated and dropping it changes
-    # nothing. Kept as a recorded equivalent rather than deleted: it is the
-    # mutant someone will write again, and the reason it cannot die belongs
-    # beside it.
-    # ("keepalive: pings are sent without the abort signal that bounds them", ...)
     ("cache: built without the keepalive, so a real turn never arms a schedule",
      R,
      "  const cache = new LastRequestCache(keepalive);",
@@ -104,14 +98,12 @@ MUTANTS = [
      R,
      '  return (title, body) => notifier.notify("compaction_complete", title, body);',
      '  return (title, body) => notifier.notify("autonomous_message", title, body);'),
-    # Stubbing the `notify:` assignment itself survives, and the reason is a
-    # coverage boundary rather than a gap. Its two ends are each pinned
-    # elsewhere: which event is chosen, by the mutant above; that a delivered
-    # heartbeat message calls `notify` at all, by `heartbeat_tick.test.ts`.
-    # Killing the assignment in between needs a whole heartbeat driven through
-    # `createRuntime`, which pins the assembly's plumbing by re-testing the
-    # tick. Recorded rather than chased.
-    # ("notify: the executor is handed a notifier bound to no event at all", ...)
+    ("notify: the executor is handed a notifier that delivers nothing (NEEDS A SEAM — runtime.test.ts never "
+     "drives a heartbeat through createRuntime; the toggle is pinned by the two mutants above, and that a "
+     "heartbeat message notifies at all by heartbeat_tick.test.ts)",
+     R,
+     "      notifyAutonomousMessage: autonomousMessageNotifier(notifier),",
+     "      notifyAutonomousMessage: () => {},"),
 
     ("retention: starting runtime clocks purges retained diagnostics",
      R,

@@ -1,73 +1,11 @@
 #!/usr/bin/env python3
-"""Mutation pass over the message handler (#18 / #12).
-
-Covers `src/handler/router.ts` — the consumer of `Server.routes()`: what a
-routed message causes, who receives a generation's stream, and what a cancel
-does.
-
-Four things the mutants attack:
-
-- **The launch decision.** That an unresolvable character stops the request
-  rather than launching one, that a `Cancel` never launches, and that a `Regen`
-  does.
-- **Who sees a turn (#247).** That a generation's stream goes to every session
-  viewing its conversation rather than the issuer alone, that a session joining
-  mid-turn is replayed the turn so far exactly once, and that a disconnect
-  never cancels a generation or a state-changing command. All of these fail in
-  the *quiet* direction — the turn still happens, a frontend just never sees
-  it, or it silently stops.
-- **The cancel frame.** That it is sent only when something was running, that
-  it carries the cancel's rid rather than the generation's, and that it is
-  `is_final` with `finish_reason: "cancelled"`. A client waits forever on a
-  missing one and renders two endings on a spurious one.
-- **The rid filter.** Both halves of `is_ascii() && !contains('\\0')`, and that
-  a rejected rid yields `null` rather than failing the request.
-
-A mutant is KILLED if `bun test tests/router.test.ts` fails with it
-applied.
-
-This is **31/32**, from 21/28 on the first pass.
-
-The first pass is the reason this file exists. Two of the seven survivors were
-not fixture holes but **bugs in the port**, and neither would have shown up as a
-failing test:
-
-- **The abort controller was created and its signal never handed over.** The
-  Rust called `JoinHandle::abort()`, which really does stop a tokio task. A
-  promise has no such handle, so `controller.abort()` was a no-op: a cancelled
-  generation kept running and kept streaming into a turn the client had already
-  been told was over. `GenerationParams.signal` is that fix, and it is the whole
-  of the cancellation contract on this side.
-- **A superseded generation cleared its successor's abort handle.** The
-  `finally` compared against `state.abort`, a field that a later launch had
-  already reassigned — so the comparison was `x === x` and the delete always
-  fired. The successor was then uncancellable: `cancelGeneration` would find
-  nothing to abort and send no `stream_end`, and the client would wait forever.
-  It compares against the handle the launch created now, captured in a local.
-
-The other five were ordinary fixture holes: no case sent a `hello` down the
-engine path, none came from a session that had already gone, none had a second
-session holding the lease (so the fanout and the issuer's own sender were
-indistinguishable), none carried a rid that sanitisation would reject, and the
-cancel case used the same rid as the message it cancelled.
-
-One survivor remains, equivalent, kept in the list so a later reader does not
-"fix" it: **a `Cancel` falling through its early return.** The next guard —
-`msg.type !== "message" && msg.type !== "regen"` — catches it, so the two
-branches agree. Kept because the early return is what makes the intent legible
-at the top of the function rather than a consequence three lines down.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_router.py
+"""Mutation pass over `handler/router.ts`: what a routed message causes, who
+receives a generation's stream, and what a cancel does.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTER = ROOT / "src/handler/router.ts"
 ROUTER = "src/handler/router.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # ── acceptance ──────────────────────────────────────────────────────
     ("acceptance only reaches a session still viewing the thread",
@@ -93,7 +31,7 @@ MUTANTS = [
     ("a hello or command is treated as a message",
      '    if (msg.type === "hello" || msg.type === "command") return;',
      "    if (false) return;"),
-    ("a cancel falls through into generation (EQUIVALENT: the core request plan for a cancel has no body, so launching it throws before any generation starts)",
+    ("a cancel falls through into generation",
      '    if (plan.kind === "cancel") {\n'
      "      await this.#cancel(meta.session.sessionId, meta.rid);\n"
      "      return;\n"
