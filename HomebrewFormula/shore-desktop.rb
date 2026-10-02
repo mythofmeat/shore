@@ -23,6 +23,8 @@ class ShoreDesktop < Formula
 
   # Homebrew points every dylib ID that isn't @rpath-relative at the keg, which would break Shore.app's signature.
   preserve_rpath
+  # Electron's empty .lproj directories tell macOS which languages its own menus and dialogs may use.
+  skip_clean "Shore.app"
 
   # desktop/tests/homebrew.test.ts keeps this on the Electron that desktop/bun.lock pins.
   resource "electron" do
@@ -82,6 +84,7 @@ class ShoreDesktop < Formula
 
   test do
     system "codesign", "--verify", "--deep", "--strict", prefix/"Shore.app"
+    assert_predicate prefix/"Shore.app/Contents/Resources/fr.lproj", :directory?
     plist = prefix/"Shore.app/Contents/Info.plist"
     assert_equal version.to_s, shell_output("plutil -extract CFBundleShortVersionString raw #{plist}").chomp
   end
