@@ -378,8 +378,8 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
   expect(await outcomeOf(readFile(checkpointFile, "utf8"))).toThrow();
 });
 
-test("a checkpoint the workspace has moved past stays wedged until a restart throws it away", async () => {
-  const root = await mkdtemp(join(tmpdir(), "shore-compact-wedged-"));
+test.each([false, true])("a checkpoint resumes over an outside edit and keeps it (archive fails: %s)", async (archiveFails) => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-outside-edit-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
@@ -404,62 +404,94 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };
-  const editTurn = response("tool_use", [
-    {
-      type: "tool_use",
-      id: "write-1",
-      name: "edit",
-      input: { path: "memory/fact.md", content: "remembered\n" },
-    },
-  ]);
-  const run = async (llm: CompactionLlm, restart = false) =>
-    await compact(
-      {
-        ...options(
-          dataDir,
-          workspace,
-          memoryStore,
-          await planFor(dataDir, "ada", "main", { keepRecentTurns: 1, restart }),
-          tools,
-          llm,
-        ),
-        restart,
-      },
-      { keepRecentTurns: 1 },
+  const run = async (llm: CompactionLlm, failArchive = false) => {
+    const base = options(
+      dataDir,
+      workspace,
+      memoryStore,
+      await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
+      tools,
+      llm,
     );
+    const conversationMgr = failArchive
+      ? { ...base.conversationMgr, archiveAndRetain: async () => { throw new Error("archive failed"); } }
+      : base.conversationMgr;
+    return await compact({ ...base, conversationMgr }, { keepRecentTurns: 1 });
+  };
 
-  const paused = await run(
-    scripted([editTurn, new Error("429 Monthly usage limit reached. Resets in 10 days.")]),
-  );
+  const paused = await run(scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "write-1", name: "edit", input: { path: "memory/fact.md", content: "remembered\n" } },
+    ]),
+    new Error("provider unavailable"),
+  ]));
   expect(paused.kind).toBe("paused");
 
   await writeFile(join(workspace, "memory/fact.md"), "remembered, then reworded\n", "utf8");
 
-  const wedgedLlm = scripted([]);
-  const wedged = await run(wedgedLlm);
-  expect(wedged).toMatchObject({
-    kind: "paused",
-    reason: "workspace_conflict",
-    detail: "memory/fact.md",
-  });
-  expect(wedgedLlm.calls).toBe(0);
-  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
+  const resumedLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  if (archiveFails) {
+    expect(await outcomeOf(run(resumedLlm, true))).toThrow("archive failed");
+    expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
+  } else {
+    expect(await run(resumedLlm)).toMatchObject({ kind: "compacted", toolRounds: 1, memoryFilesWritten: ["memory/fact.md"] });
+  }
+  expect(resumedLlm.calls).toBe(1);
+  const notes = resumedLlm.requests[0]?.messages.at(-1)?.content.flatMap((b) => b.type === "text" ? [b.text] : []);
+  expect(notes).toEqual([expect.stringContaining("memory/fact.md changed outside it")]);
+  expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("remembered, then reworded\n");
+});
 
-  const restartedLlm = scripted([editTurn, response("end_turn", [{ type: "text", text: "done" }])]);
-  const restarted = await run(restartedLlm, true);
+test("a checkpoint notices an outside edit again after a second pause", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-outside-edit-twice-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
 
-  expect(restarted.kind).toBe("compacted");
-  expect(restarted).toMatchObject({ messageCount: 2, retainedCount: 2, retainedTurns: 1 });
-  expect(restartedLlm.calls).toBe(2);
-  const kept = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
-  expect(kept).not.toBe(activeContent);
-  expect(
-    kept
-      .trim()
-      .split("\n")
-      .map((line) => (JSON.parse(line) as { content: string }).content),
-  ).toEqual(messages.slice(2).map((m) => m.content));
-  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async (_name, input) => {
+      const edit = input as { path: string; content: string };
+      await writeFile(join(workspace, edit.path), edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const run = async (llm: CompactionLlm) => await compact(
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, llm),
+    { keepRecentTurns: 1 },
+  );
+  const notes = (llm: ReturnType<typeof scripted>) =>
+    llm.requests[0]?.messages.at(-1)?.content.flatMap((b) => b.type === "text" ? [b.text] : []);
+
+  expect((await run(scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "write-fact", name: "edit", input: { path: "memory/fact.md", content: "remembered\n" } },
+    ]),
+    new Error("provider unavailable"),
+  ]))).kind).toBe("paused");
+  await writeFile(join(workspace, "memory/fact.md"), "reworded once\n", "utf8");
+
+  const second = scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "write-other", name: "edit", input: { path: "memory/other.md", content: "elsewhere\n" } },
+    ]),
+    new Error("provider unavailable"),
+  ]);
+  expect((await run(second)).kind).toBe("paused");
+  expect(notes(second)).toEqual([expect.stringContaining("memory/fact.md changed outside it")]);
+  await writeFile(join(workspace, "memory/fact.md"), "reworded twice\n", "utf8");
+
+  const third = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  expect((await run(third)).kind).toBe("compacted");
+  expect(notes(third)).toEqual([expect.stringContaining("memory/fact.md changed outside it")]);
+  expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("reworded twice\n");
 });
 
 test("a checkpoint whose source was edited out from under it is discarded instead of wedging", async () => {
@@ -653,7 +685,7 @@ function response(finishReason: string, contentBlocks: GenerateResponse["content
 
 function scripted(
   turns: Array<GenerateResponse | Error>,
-): CompactionLlm & { calls: number; apiKeys: string[] } {
+): CompactionLlm & { calls: number; apiKeys: string[]; requests: SidecarRequest[] } {
   let next = 0;
   return {
     run(callRequest, phase, loopOptions) {
@@ -661,12 +693,14 @@ function scripted(
     },
     calls: 0,
     apiKeys: [],
+    requests: [],
     buildInitialRequest(prompt: string, chat: SidecarRequest) {
       return { ...chat, api_key: "secret-that-must-not-land-on-disk", messages: [{ role: "user", content: [{ type: "text", text: prompt }], transient_tail: 1 }] };
     },
     async generate(request) {
       this.calls += 1;
       this.apiKeys.push(request.api_key);
+      this.requests.push(structuredClone(request));
       const turn = turns[next++];
       if (turn instanceof Error) throw turn;
       if (turn === undefined) throw new Error("script exhausted");

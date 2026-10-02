@@ -54,6 +54,14 @@ export class CharacterHistoryReader {
     return this.store?.readSegment(archiveKey, segment) ?? [];
   }
 
+  readSegmentOrdinals(archiveKey: string, segment: number, ordinals: readonly number[]): Map<number, Message> {
+    if (archiveKey === this.ref.character) return this.main.readSegmentOrdinals(segment, ordinals);
+    if (!archiveKey.startsWith(`${this.ref.character}/`)) {
+      throw new Error(`archive ${archiveKey} does not belong to ${this.ref.character}`);
+    }
+    return this.store?.readSegmentOrdinals(archiveKey, segment, ordinals) ?? new Map<number, Message>();
+  }
+
   archiveDigest(): string {
     return JSON.stringify([
       [this.ref.character, this.main.archiveDigest()],

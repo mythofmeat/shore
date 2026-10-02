@@ -223,4 +223,5 @@ export interface AppliedCompactionWrite {
   previousSymlink?: string;
   resultingContent?: string;
   deleted?: boolean;
+  superseded?: boolean;
 }
