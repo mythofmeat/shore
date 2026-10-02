@@ -6,7 +6,7 @@ import {
   placeContinuationBreakpoints,
   buildAnthropicParams,
 } from "../src/llm/providers/anthropic.ts";
-import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
+import { anthropicToolLoopEvents } from "./support/anthropic_loop.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";

@@ -24,13 +24,10 @@ describe("the Anthropic client has one construction site", () => {
     expect(/\bnew Anthropic\s*\(/.test(readFileSync(FACTORY, "utf8"))).toBe(true);
   });
 
-  test("the adapter owns the client and the tool loop routes through the adapter", () => {
+  test("the adapter owns the client", () => {
     const adapter = readFileSync(join(SRC, "llm", "providers", "anthropic.ts"), "utf8");
-    const loop = readFileSync(join(SRC, "llm", "providers", "anthropic_loop.ts"), "utf8");
 
     expect(adapter).toContain("anthropicClientFor");
-    expect(loop).toContain("new AnthropicProvider()");
-    expect(loop).not.toContain("anthropicClientFor");
   });
 });
 
