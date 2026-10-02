@@ -1,72 +1,12 @@
 #!/usr/bin/env python3
-"""Mutation pass over the turn driver (#18 / #12).
-
-Covers `src/handler/turn.ts` — recording the incoming user turn, seeding the
+"""Mutation pass over `handler/turn.ts`: recording the user turn, seeding the
 activity tracker, the context-token sum that gates compaction, and the
 stream-end frame.
-
-Four things the mutants attack:
-
-- **What counts as a turn.** Which bodies are empty, that a regen appends
-  nothing and returns alternatives rather than `undefined`, and that inline
-  uploads suppress the legacy path list rather than merging with it.
-- **The empty-text-block rule.** An image-only turn must not carry an empty
-  text block. This one fails silently and late — the turn persists fine and
-  breaks a request days later, when a cache breakpoint lands on it.
-- **The backfill filters.** The 90-day cutoff and its boundary, user turns
-  only, tool-result-only turns excluded, segments read as well as the live
-  window, and an empty selection passed as nothing rather than as an empty
-  list.
-- **The token sum.** All three components, and that it saturates rather than
-  wrapping.
-
-A mutant is KILLED if `bun test tests/turn.test.ts` fails with it
-applied.
-
-This is **33/36**, from 30/36 on the first full pass.
-
-The six that lived the first time are the interesting part, and the pattern was
-the one #12 warns about every time — the case was present and nothing in it was
-load-bearing:
-
-- **Whitespace-only text counting as empty.** No case sent any. The Rust checks
-  `is_empty()`, not a trim, so `"   "` *does* get a text block; a case now sends
-  it.
-- **The revision read before the append.** The mutant was broken, not the
-  fixture: it bound an unused const and changed nothing. It now overrides the
-  reader, and dies.
-- **The first message's id instead of the last.** Both the generator and the
-  replay normalised *every* `msg_id` to one sentinel, so the two compared equal.
-  Only a minted `m_<uuid v4>` is normalised now; a seeded id is part of the case
-  and survives, which is what makes the two distinguishable.
-
-Three survivors remain, and all three are kept in the list, marked, so a later
-reader does not "fix" them:
-
-- **The text block before the ingest blocks**, and **content derived from the
-  blocks rather than the body text.** Both are equivalent because
-  `ingestImages` returns an always-empty block list — it says so in its own
-  docstring, and attachments travel in `images`. So the ingest blocks cannot
-  order against anything, and the derived content is always exactly `body.text`.
-  The structure is kept anyway because it is the Rust's and it states where
-  ingest blocks would go if that ever changed.
-- **The cutoff boundary being exclusive.** Not reachable through this seam:
-  `ensure_and_backfill_autonomy` reads `Local::now()` itself, so its cutoff is
-  always milliseconds later than any timestamp the generator can compute. A case
-  claiming to sit on the boundary would freeze whichever side of that skew the
-  run landed on. The fixture says so too.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_turn.py
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-TURN = ROOT / "src/handler/turn.ts"
 TURN = "src/handler/turn.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- what counts as a turn ------------------------------------------------
     ("empty: a body with only images reads as empty",
@@ -108,7 +48,7 @@ MUTANTS = [
     ("blocks: the text block is never appended",
      '  if (body.text !== "") contentBlocks.push({ type: "text", text: body.text });\n',
      ""),
-    ("blocks: the text block goes before the ingest blocks (EQUIVALENT)",
+    ("blocks: the text block goes before the ingest blocks",
      "  const contentBlocks = [...blocks];\n"
      '  if (body.text !== "") contentBlocks.push({ type: "text", text: body.text });',
      "  const contentBlocks = [];\n"
@@ -119,7 +59,7 @@ MUTANTS = [
      '  if (body.text.trim() !== "") contentBlocks.push({ type: "text", text: body.text });'),
 
     # --- the persisted message ------------------------------------------------
-    ("message: content is derived from the blocks rather than the body text (EQUIVALENT)",
+    ("message: content is derived from the blocks rather than the body text",
      "    content: body.text,",
      '    content: contentBlocks.map((b) => (b.type === "text" ? b.text : "")).join(""),'),
     ("message: the turn is persisted as assistant",
@@ -155,7 +95,7 @@ MUTANTS = [
     ("backfill: the window is 9 days rather than 90",
      "const ACTIVITY_BACKFILL_DAYS = 90;",
      "const ACTIVITY_BACKFILL_DAYS = 9;"),
-    ("backfill: the cutoff boundary is exclusive (EQUIVALENT)",
+    ("backfill: the cutoff boundary is exclusive",
      "      if (Number.isNaN(at.getTime()) || at < cutoff) continue;",
      "      if (Number.isNaN(at.getTime()) || at <= cutoff) continue;"),
     ("backfill: there is no cutoff, so a years-old history seeds the tracker",
@@ -170,7 +110,6 @@ MUTANTS = [
     ("backfill: archived segments are not read",
      "i >= 0 && barren < SEGMENTS_PAST_THE_WINDOW",
      "false"),
-    # EQUIVALENT — kept so it is not "fixed" later. See the module docstring.
     ("backfill: segments are read before the live window",
      "  collect(engine.messages());\n  const segments = engine.segments();",
      "  const segments = engine.segments();"),
@@ -205,7 +144,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

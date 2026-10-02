@@ -5,9 +5,9 @@ export const RETRY_BASE_MS = 30_000;
 
 export const RETRY_CAP_MS = 300_000;
 
-export const STABLE_MS = 300_000;
+const STABLE_MS = 300_000;
 
-export interface RetryTuning {
+interface RetryTuning {
   readonly baseMs?: number;
   readonly capMs?: number;
   readonly stableMs?: number;

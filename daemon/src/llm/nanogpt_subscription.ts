@@ -14,7 +14,7 @@ import {
 
 export const NANOGPT_SUBSCRIPTION_TTL_MS = 5 * 60 * 1000;
 
-export type NanoGptWeeklyInputTokens = import("../protocol/NanoGptWeeklyInputTokens.ts").NanoGptWeeklyInputTokens;
+type NanoGptWeeklyInputTokens = import("../protocol/NanoGptWeeklyInputTokens.ts").NanoGptWeeklyInputTokens;
 
 export type NanoGptSubscriptionState = import("../protocol/NanoGptSubscriptionState.ts").NanoGptSubscriptionState;
 

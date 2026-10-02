@@ -1,7 +1,6 @@
 import type { BashResult } from "./bash.ts";
 import { historyText, whyNotClose } from "./history_output.ts";
 import type { HistoryCloseness, SearchHistoryResult } from "./history.ts";
-import type { FetchUrlResult } from "./web.ts";
 import type { HeatmapResult } from "./activity.ts";
 import type { ModelHistoryResult } from "./model_history.ts";
 import { payloadText } from "./media.ts";
@@ -108,15 +107,6 @@ export function formatToolOutput(name: string, value: unknown): string {
     }
     case "search_chat_logs":
       return historyText(value as SearchHistoryResult);
-    case "fetch_url": {
-      const result = value as FetchUrlResult;
-      const range = result.returned_chars === 0 ? "no characters returned" : `characters ${result.offset}–${result.offset + result.returned_chars - 1} of ${result.total_chars}`;
-      const lines = [`${result.url} (${result.content_type}; ${range})`];
-      if (result.next_offset !== undefined) lines.push(`Continue with offset=${result.next_offset} and the same URL and limit. If output is clipped, retry this offset with a smaller limit.`);
-      if (result.body_truncated) lines.push("Download limit reached (5 MiB). Content beyond the downloaded portion is unavailable; pagination cannot recover it.");
-      lines.push("", result.content);
-      return lines.join("\n");
-    }
     case "search":
       return searchText(value as SearchOutput);
     case "activity_heatmap":

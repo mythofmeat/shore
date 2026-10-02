@@ -232,7 +232,7 @@ export async function workspaceIndexStats(dbPath: string) {
   });
 }
 
-export interface StaleEntry {
+interface StaleEntry {
   hash: string;
   row: FileRow;
 }
@@ -602,7 +602,7 @@ function charCount(text: string): number {
 }
 
 export const WORKSPACE_CHUNK_CHARS = 1_200;
-export const WORKSPACE_CHUNK_OVERLAP = 120;
+const WORKSPACE_CHUNK_OVERLAP = 120;
 
 export function chunksForEmbedding(document: string): string[] {
   const chunks = chunkText(document, WORKSPACE_CHUNK_CHARS, WORKSPACE_CHUNK_OVERLAP);

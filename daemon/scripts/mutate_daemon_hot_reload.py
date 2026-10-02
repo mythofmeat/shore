@@ -1,41 +1,11 @@
 #!/usr/bin/env python3
-"""Mutation pass over the config watcher (#18, step 5).
-
-Two families, and they fail in opposite directions.
-
-**Reloading too little.** A path rule that misses `conf.d/*.toml` or a
-character's `config.toml` gives a daemon that looks like it hot-reloads and
-silently does not for half its inputs. The user edits a file, sees nothing
-happen, and has no reason to suspect the filter.
-
-**Reloading too much.** This is the worse one. The config tree also holds every
-character's prompts and memory, and a reload is a natural place to rebuild a
-prompt — so a filter that let `characters/<n>/workspace/**` through would turn a
-filesystem save into a prompt activation boundary. A character writing its own
-memory mid-turn would invalidate the cache it is talking through, and the
-keepalive would then pay for a write that buys nothing. That is why the
-workspace check runs *before* the `.toml` catch-all: the memory directory is
-full of `.toml`.
-
-**Debounce.** An editor writing one file produces several events and a
-`git checkout` produces hundreds. Without the debounce every one of them is a
-config load and a full character rescan.
-
-A mutant is KILLED if `bun test tests/daemon_hot_reload.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_daemon_hot_reload.py
-"""
-import pathlib
+"""Mutation pass over the config watcher: which file changes trigger a reload, and the debounce."""
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 S = "src/daemon/hot_reload.ts"
 
 TESTS = ["tests/daemon_hot_reload.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- reloading too much ---------------------------------------------------
     ("workspace: a workspace save reloads whatever the file is", S,
@@ -130,7 +100,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

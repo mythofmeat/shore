@@ -10,7 +10,7 @@ import { imageCacheDir, markImagesUsed, noteCachedImages } from "./image_cache.t
 const CACHED_IMAGE_SOURCE = "shore_image";
 export const EVICTED_IMAGE = "no longer cached";
 
-export interface ImageReference {
+interface ImageReference {
   sha256: string;
   media_type: string;
   bytes: number;

@@ -1,40 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the daemon instance registry (#18, step 5).
-
-This file is how every CLI finds a daemon, so each way of getting it wrong is a
-way for a running daemon to become unreachable — or for a client to dial one
-that is not there.
-
-**Pruning.** A daemon that was killed never unregisters, so a registry that
-does not prune fills with corpses and hands one to the next `shore` command.
-Pruning too eagerly is worse: signal 0 answers `EPERM` for a live process owned
-by another user, and reading that as dead deletes a running daemon from someone
-else's session. Only a definite `ESRCH` counts.
-
-**Corruption.** Unparseable JSON is a hard failure that keeps a backup, not a
-fresh start. Starting from empty makes every other daemon on the machine
-unreachable with no record of why, and the next write destroys the evidence.
-
-**The lock.** Its whole job is that a read-modify-write is not interleaved. A
-lock that is never taken loses an entry when two daemons start together; one
-that is never released wedges every later reader until it goes stale; one with
-no staleness fallback wedges them forever, because the holder that died is the
-one thing that cannot say so.
-
-A mutant is KILLED if `bun test tests/instances.test.ts` fails with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_instances.py
+"""Mutation pass over the daemon instance registry: pruning, registration,
+reads, the lock, and the atomic write.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 I = "src/daemon/instances.ts"
 
 TESTS = ["tests/instances.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- pruning --------------------------------------------------------------
     ("prune: dead entries are kept, so a client dials a port nobody holds",
@@ -143,7 +116,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

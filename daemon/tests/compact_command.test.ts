@@ -35,6 +35,7 @@ import { testTmp } from "./support/tmp.ts";
 import { DEFAULT_COMPACT_PROMPT } from "../src/memory/compaction/prompts.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { memoryCoverageState } from "./support/memory_coverage.ts";
 
 const SEEDED = [
   ["m_1", "user", "first question"],
@@ -374,15 +375,10 @@ describe("compaction model selection and claim ownership", () => {
     expect(await refusal(() => compact(w.engine, w.ctx, { keep_turns: 0 }))).toEqual({
       kind: "err", code: "internal_error", message: "tools unavailable",
     });
-    const store = HistoryStore.open(join(w.config.dirs.data, HISTORY_DB_FILE));
-    try {
-      for (const message of w.engine.messages()) {
-        expect(store.memoryCoverageState("ada", "compaction", message.version ?? "")).toMatchObject({
-          state: "claimed", claim: checkpoint?.coverageClaim,
-        });
-      }
-    } finally {
-      store.close();
+    for (const message of w.engine.messages()) {
+      expect(memoryCoverageState(join(w.config.dirs.data, HISTORY_DB_FILE), "ada", "compaction", message.version ?? "")).toMatchObject({
+        state: "claimed", claim: checkpoint?.coverageClaim,
+      });
     }
     delete w.ctx.run.tools;
     expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({

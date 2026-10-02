@@ -1,38 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over the parse_config_table / validate_config port (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked, on the evidence that
-five ports in a row had a fixture replay green while still full of holes. This
-is the harness for the assembly and validation half of `config/loader.ts`.
-
-Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/validate.test.ts` fails with it
-applied; a survivor means either the fixture cannot see that decision, or the
-code is equivalent under it.
-
-The decisions worth attacking here are almost all *ordering* and *severity*,
-not values. Which of six checks runs first is invisible unless a config has two
-faults at once; whether a bad reference throws or warns is invisible unless the
-warnings are captured. The fixture is built for both — roughly a dozen cases
-are multi-fault documents that exist only to pin an order, and every case
-records its warnings — so this harness is the check that those cases actually
-reach the decisions they were written for.
-
-The first pass was 82/94 and the survivors were the useful output. Three were
-badly written mutants of mine that edited to a no-op. The other nine were real
-fixture gaps, and every one of them is now a case in the generator: no
-`provider:model_id` sub-agent model, so the entire trusted-path arm of
-`model_ref_resolves` was unreached; no `[[providers]]` array-of-tables, so a
-non-table section could be passed straight through instead of ignored and
-nothing noticed; no catalog error that was not shadowed by a registry error;
-no config setting both `defaults.model` and `defaults.subagent_model`; no
-document warning about a missing MCP server from both the global allowlist and
-a sub-agent's grants; and no budget name carrying a character that Rust's trim
-and JavaScript's disagree about. Final state is 93/93 with no live survivors
-and no documented equivalents.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_config_validate.py
+"""Mutation pass over config assembly and validation in `config/loader.ts`:
+section extraction, model and provider checks, MCP transports, usage limits,
+and auxiliary models.
 """
 import pathlib
 import sys
@@ -40,7 +9,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LOADER = ROOT / "src/config/loader.ts"
 
-# (label, find, replace)
 MUTANTS = [
     # --- section extraction -----------------------------------------------
     ("extract: tools is lifted out before AppConfig is parsed",
@@ -178,8 +146,6 @@ MUTANTS = [
     ("mcp: sub-agent grants are swept before the global allowlist",
      "    ...toolGrants(app.tools),\n    ...[...app.subagents.values()].flatMap((s) => s.tools),",
      "    ...[...app.subagents.values()].flatMap((s) => s.tools),\n    ...toolGrants(app.tools),"),
-    ("a removed web_search grant is not reported",
-     "    if (pattern === \"web_search\") onWarn(", "    if (false) onWarn("),
 
     # --- validateUsageConfig ----------------------------------------------
     ("usage: the timezone check is case insensitive",
@@ -326,7 +292,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

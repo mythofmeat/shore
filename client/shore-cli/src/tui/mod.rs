@@ -1850,7 +1850,6 @@ fn blocks_from_content(
                 let name = tool_names.get(tool_use_id.as_str()).unwrap_or(&"tool");
                 let (output, images) = images::tool_result_parts(content, name);
                 blocks.push(Block::ToolResult {
-                    tool_id: tool_use_id.clone(),
                     tool_name: (*name).to_owned(),
                     output,
                     images,
@@ -2116,7 +2115,6 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
             app.subagent_task_push_block(
                 idx,
                 Block::ToolResult {
-                    tool_id: tr.tool_id,
                     tool_name: tr.tool_name,
                     output: tr.output,
                     images: tr.images,
@@ -2339,7 +2337,6 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
                 transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
             }
             run.push_block(Block::ToolResult {
-                tool_id: tr.tool_id,
                 tool_name: tr.tool_name,
                 output: tr.output,
                 images: tr.images,
@@ -2630,13 +2627,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             app.stream.tool_name = None;
             app.settle_subagent_task(&tr.tool_id, &tr.output, tr.is_error);
-            app.stream_push_tool_result(
-                tr.tool_id,
-                tr.tool_name,
-                tr.output,
-                tr.images,
-                tr.is_error,
-            );
+            app.stream_push_tool_result(tr.tool_name, tr.output, tr.images, tr.is_error);
             if app.auto_scroll {
                 app.scroll_to_bottom();
             }
@@ -4488,7 +4479,6 @@ mod redraw_tests {
                     input: serde_json::json!({ "query": "when did Sam leave?" }),
                 },
                 Block::ToolResult {
-                    tool_id: parent_id.into(),
                     tool_name: "ask_research".into(),
                     output: "June".into(),
                     images: Vec::new(),

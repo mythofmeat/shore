@@ -187,10 +187,6 @@ export class ProviderRegistry {
     return this.providers.get(providerKey);
   }
 
-  isEmpty(): boolean {
-    return this.providers.size === 0;
-  }
-
   get size(): number {
     return this.providers.size;
   }

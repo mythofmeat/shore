@@ -24,9 +24,7 @@ import {
 } from "./budget.ts";
 import { formatLocalAmPm, toRfc3339, zoneFor } from "./zoned.ts";
 
-export type { ClaudePlanWindow };
-
-export const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
+const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
 
 export const CLAUDE_PLAN_REFRESH_MS = 5 * 60 * 1000;
 
@@ -53,7 +51,7 @@ export interface ClaudePlanLimitsState extends ClaudePlanPoll {
 
 export type PlanLimitWarningEvent = Omit<PlanLimitWarning, "rid">;
 
-export type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
+type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
 
 export interface ClaudePlanLimitsOptions {
   cacheDir?: string;
@@ -179,7 +177,7 @@ function persist(): Promise<void> {
   return persisting;
 }
 
-export async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
+async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(state, null, 2));

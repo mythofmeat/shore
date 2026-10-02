@@ -364,7 +364,6 @@ pub(crate) fn fixup_placeholder_cells(
 }
 
 fn diacritic(value: u8) -> char {
-    // Safety: all DIACRITICS entries are valid Unicode code points
     DIACRITICS
         .get(usize::from(value))
         .copied()

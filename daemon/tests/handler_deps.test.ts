@@ -241,7 +241,6 @@ function subagentWorld(root: string): LoadedConfig {
 function dicerollingProvider(seen: SidecarRequest[]): SidecarProvider {
   let call = 0;
   return {
-    // eslint-disable-next-line @typescript-eslint/require-await
     async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
       seen.push(req);
       call += 1;

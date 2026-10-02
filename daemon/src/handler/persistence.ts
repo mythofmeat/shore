@@ -28,7 +28,7 @@ export interface PersistEngine {
   turnCount(): number;
 }
 
-export interface PersistAutonomy {
+interface PersistAutonomy {
   notifyLastRequest(character: string, request: WireRequest, keepalive: KeepaliveArming, thread?: string): void;
   notifyAssistantMessage(character: string, turnCount: number): void;
 }

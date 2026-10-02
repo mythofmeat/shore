@@ -197,10 +197,6 @@ describe("CharacterRegistry", () => {
             writeFileSync(join(dataDir, step.name as string), "not a directory");
             break;
 
-          case "refresh":
-            await required(registry, where).refresh();
-            break;
-
           case "has_character":
             expect(
               required(registry, where).hasCharacter(step.name as string),
@@ -225,11 +221,12 @@ describe("CharacterRegistry", () => {
             let got: unknown;
             try {
               const engine = await required(registry, where).getOrCreate(step.name as string);
+              const characterDir = join(engine.conversationDir, "..", "..");
               got = {
                 ok: true,
                 engine: engineId(engine),
-                root: rootOf(engine.characterDir, dataDir, configDir),
-                leaf: basename(engine.characterDir),
+                root: rootOf(characterDir, dataDir, configDir),
+                leaf: basename(characterDir),
               };
             } catch (e) {
               if (!(e instanceof EngineCharacterNotFound)) throw e;
@@ -250,10 +247,6 @@ describe("CharacterRegistry", () => {
             }
             break;
           }
-
-          case "invalidate_configs":
-            required(registry, where).invalidateConfigs();
-            break;
 
           case "set_runtime_effective_config": {
             const path = join(root, "runtime_override.toml");
@@ -284,29 +277,16 @@ describe("CharacterRegistry", () => {
           case "reload_runtime_state": {
             const reg = required(registry, where);
             const summary = await reg.reloadRuntimeState(reg.globalConfig());
-            expect(summary, where).toEqual({
-              availableBefore: step.summary?.available_before as number,
-              availableAfter: step.summary?.available_after as number,
-              characterDiscoveryChanged: step.summary
-                ?.character_discovery_changed as boolean,
-              droppedEngines: step.summary?.dropped_engines as number,
-            });
+            if (step.summary !== undefined) {
+              expect(summary, where).toEqual({
+                availableBefore: step.summary.available_before,
+                availableAfter: step.summary.available_after,
+                characterDiscoveryChanged: step.summary.character_discovery_changed,
+                droppedEngines: step.summary.dropped_engines,
+              });
+            }
             break;
           }
-
-          case "character_definition":
-            expect(
-              required(registry, where).characterDefinition(step.name as string) ?? null,
-              where,
-            ).toBe(step.result as string | null);
-            break;
-
-          case "user_definition":
-            expect(
-              required(registry, where).userDefinition(step.name as string) ?? null,
-              where,
-            ).toBe(step.result as string | null);
-            break;
 
           default:
             throw new Error(`${where}: unhandled op`);
@@ -494,7 +474,7 @@ describe("the character a bare command lands on", () => {
     expect(registry.resolveCharacter(undefined)).toBe("ada");
 
     writeCharacter(registry.globalConfig().dirs.config, "bea", true);
-    await registry.refresh();
+    await registry.reloadRuntimeState(registry.globalConfig());
 
     expect(registry.resolveCharacter(undefined)).toBe("ada");
   });
@@ -518,7 +498,7 @@ describe("the character a bare command lands on", () => {
       recursive: true,
       force: true,
     });
-    await registry.refresh();
+    await registry.reloadRuntimeState(registry.globalConfig());
 
     expect(registry.selectedCharacter()).toBeUndefined();
     expect(registry.resolveCharacter(undefined)).toBe("bea");

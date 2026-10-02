@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { pidState, takeLock } from "./instances.ts";
 
 export const DATA_DIRECTORY_LEASE_FILE = ".shore-daemon-owner.json";
-export const DATA_DIRECTORY_LOCK_FILE = ".shore-daemon-lock.sqlite";
+const DATA_DIRECTORY_LOCK_FILE = ".shore-daemon-lock.sqlite";
 
 const UNREADABLE_LEASE_GRACE_MS = 10_000;
 const MAX_ACQUIRE_ATTEMPTS = 8;

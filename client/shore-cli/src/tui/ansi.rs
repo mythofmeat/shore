@@ -149,10 +149,7 @@ pub(crate) fn to_lines(text: &str) -> Vec<Line<'static>> {
         .collect()
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "assertions read output the way a person does")
-)]
+#[cfg(test)]
 pub(crate) fn plain(text: &str) -> String {
     to_lines(text)
         .iter()

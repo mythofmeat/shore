@@ -18,12 +18,10 @@ interface StoredSegment { entry: SegmentEntry; messages: Message[] }
 interface WalkStep {
   op: Record<string, unknown>;
   revision: number;
-  history_rewrite_generation: number;
   message_count: number;
   turn_count: number;
   segment_count: number;
   broadcasts: number;
-  display_history: { active_start: number };
 }
 
 interface WalkCase {
@@ -73,27 +71,9 @@ describe("the fixture is real", () => {
     expect(steps).toBeGreaterThanOrEqual(15);
   });
 
-  test("the walk actually exercises both counters moving independently", () => {
-    const all = fixture.engine_walk.flatMap((w) => w.steps);
-    const revOnly = all.filter((s, i) => {
-      const prev = all[i - 1];
-      return (
-        prev !== undefined &&
-        s.revision > prev.revision &&
-        s.history_rewrite_generation === prev.history_rewrite_generation
-      );
-    });
-    const both = all.filter((s, i) => {
-      const prev = all[i - 1];
-      return prev !== undefined && s.history_rewrite_generation > prev.history_rewrite_generation;
-    });
-    expect(revOnly.length, "some ops advance revision alone").toBeGreaterThan(0);
-    expect(both.length, "some ops advance both").toBeGreaterThan(0);
-  });
-
   test("a case exists where archived history is non-empty", () => {
     const withArchive = fixture.engine_walk.filter((w) =>
-      w.steps.some((s) => s.display_history.active_start > 0),
+      w.steps.some((s) => s.segment_count > 0),
     );
     expect(withArchive.length).toBeGreaterThan(0);
   });
@@ -130,33 +110,12 @@ describe("driving the conversation engine", () => {
         const where = `${walk.name} :: ${String(op["op"])}`;
 
         expect(engine.currentRevision(), `${where} revision`).toBe(expected.revision);
-        expect(engine.historyRewriteGeneration(), `${where} generation`).toBe(
-          expected.history_rewrite_generation,
-        );
         expect(engine.messageCount(), `${where} message_count`).toBe(expected.message_count);
         expect(engine.turnCount(), `${where} turn_count`).toBe(expected.turn_count);
         expect(engine.segments().segmentCount(), `${where} segment_count`).toBe(
           expected.segment_count,
         );
         expect(broadcasts, `${where} broadcasts`).toBe(expected.broadcasts);
-
-        const display = await engine.displayHistory();
-        expect(display.activeStart, `${where} display_history.active_start`).toBe(
-          expected.display_history.active_start,
-        );
-
-        const archived: Message[] = [];
-        for (let i = 0; i < engine.segments().segmentCount(); i += 1) {
-          archived.push(...(await engine.segments().readSegment(i)));
-        }
-        expect(
-          display.messages.slice(0, display.activeStart),
-          `${where}: the archived half is merged on its own`,
-        ).toEqual(mergeToolLoopMessages(archived));
-        expect(
-          display.messages.slice(display.activeStart),
-          `${where}: and the live half on its own, so a loop never spans the boundary`,
-        ).toEqual(mergeToolLoopMessages([...engine.messages()]));
 
         const snapshot = JSON.parse(JSON.stringify(engine.historySnapshot({ k: "v" }))) as {
           messages: Message[];
@@ -172,7 +131,7 @@ describe("driving the conversation engine", () => {
         expect(
           snapshot.messages.map((m) => m.msg_id),
           `${where}: a snapshot is the live half of the history, never the archive`,
-        ).toEqual(display.messages.slice(display.activeStart).map((m) => m.msg_id));
+        ).toEqual(mergeToolLoopMessages([...engine.messages()]).map((m) => m.msg_id));
         for (const message of snapshot.messages) {
           for (const image of message.images) {
             expect(
@@ -201,38 +160,19 @@ async function applyOp(
     case "append":
       await engine.appendMessage(op["msg"] as Message);
       return;
-    case "insert_by_timestamp":
-      await engine.insertMessageByTimestamp(op["msg"] as Message);
-      return;
     case "edit":
       await engine.editMessage(op["msg_id"] as string, op["content"] as string);
       return;
     case "delete":
-      await engine.deleteMessage(op["msg_id"] as string);
+      await engine.deleteMessages([op["msg_id"] as string]);
       return;
-    case "truncate_after_last_user_turn": {
-      const removed = await engine.truncateAfterLastUserTurn();
-      expect(removed, "truncate removed count").toBe(op["removed"] as number);
-      return;
-    }
     case "replace_after_last_user_turn": {
       const removed = await engine.replaceAfterLastUserTurn(op["messages"] as Message[]);
       expect(removed, "replace removed count").toBe(op["removed"] as number);
       return;
     }
-    case "set_alt":
-      await engine.setAlt(op["msg_id"] as string, op["index"] as number, op["count"] as number);
-      return;
-    case "add_alt_candidate": {
-      const count = await engine.addAltCandidate(op["msg_id"] as string);
-      expect(count, "add_alt_candidate returned").toBe(op["returned"] as number);
-      return;
-    }
     case "select_alt":
       await engine.selectAlt(op["msg_id"] as string, op["index"] as number);
-      return;
-    case "reset":
-      await engine.reset();
       return;
     case "reload":
       await engine.reload();

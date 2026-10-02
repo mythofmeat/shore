@@ -15,7 +15,7 @@ function sortThreads(threads: readonly ThreadView[]): ThreadView[] {
   return [...threads].sort((a, b) => Number(b.home) - Number(a.home) || (b.last_active ?? b.created_at).localeCompare(a.last_active ?? a.created_at));
 }
 
-export function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {
+function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {
   const [text, tone] = status === "ready" ? ["Connected", "ok"] : status === "error" ? ["Offline", "bad"] : status === "reload_required" ? ["Update ready", "bad"] : ["Reconnecting…", "wait"];
   return <span className="connection" data-tone={tone} title={text}><span className="connection-dot" />{text}</span>;
 }

@@ -113,9 +113,7 @@ describe("browser connection state", () => {
   test("typed actions reject invalid results and failures while preserving correlation and additive results", async () => {
     const f = await fixture(); f.web.activate();
     const b = browserConnection(f.web.origin);
-    const actions = new OperationClient(b.client, () => "nova / main");
-    let outputs = 0;
-    const stopOutput = actions.subscribeOutput(() => { outputs += 1; });
+    const actions = new OperationClient(b.client);
     try {
       await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
       const session = f.swp.sessionRouter.sessions().at(0)?.[0];
@@ -123,10 +121,9 @@ describe("browser connection state", () => {
       // @ts-expect-error the canonical input rejects unknown fields at compile time and runtime
       expect(await outcomeOf(actions.run("edit", { ref: "1", content: "hi", typo: true }))).toThrow("Invalid arguments");
       expect(b.client.pendingCount).toBe(0);
-      for (const scenario of ["invalid", "missing", "wrong-name", "duplicate", "failed", "valid", "quiet", "cleared"] as const) {
+      for (const scenario of ["invalid", "missing", "wrong-name", "duplicate", "failed", "valid"] as const) {
         const observed: string[] = [];
-        const action = actions.run("edit", { ref: "1", content: "hi" }, { remember: scenario !== "quiet", observe: (frame) => { observed.push(frame.type); } });
-        if (scenario === "cleared") actions.clearOutput();
+        const action = actions.run("edit", { ref: "1", content: "hi" }, { observe: (frame) => { observed.push(frame.type); } });
         const outcome = action.then((value) => ({ value }), (error: unknown) => ({ error }));
         await until(() => f.routed.length > 0);
         const route = f.routed.shift();
@@ -147,17 +144,14 @@ describe("browser connection state", () => {
         const result = await outcome;
         expect(actions.pendingOperation(rid)).toBeUndefined();
         expect(observed).toEqual(scenario === "missing" ? ["request_finished"] : scenario === "duplicate" ? ["command_output", "command_output", "request_finished"] : ["command_output", "request_finished"]);
-        if (["valid", "quiet", "cleared"].includes(scenario)) expect(result).toEqual({ value: data });
+        if (scenario === "valid") expect(result).toEqual({ value: data });
         else if ("error" in result) {
           expect(result.error).toBeInstanceOf(scenario === "failed" ? OperationFailure : Error);
           expect(String(result.error)).toContain(scenario === "failed" ? "Message disappeared" : "Invalid result for edit");
         } else throw new Error(`Unexpected success: ${scenario}`);
         expect(b.client.pendingCount).toBe(0);
-        if (scenario === "valid" || scenario === "quiet") { const retained = { name: "edit", data: { ref: "1", edited: true, future_metadata: "valid" }, context: "nova / main" } as const; expect(actions.getOutput()).toEqual(retained); }
-        else expect(actions.getOutput()).toBeUndefined();
       }
-      expect(outputs).toBe(2);
-    } finally { stopOutput(); b.client.stop(); }
+    } finally { b.client.stop(); }
   });
 
   test("advertised pending byte limits apply after socket drain and are released by completion", async () => {

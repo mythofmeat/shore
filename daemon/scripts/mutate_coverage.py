@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over compaction coverage across branches (#203).
-
-Verify that claims become coverage only when archival commits, and that forks
-process inherited material once even across failures and resumptions.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_coverage.py
+"""Mutation pass over compaction coverage: claims become coverage only when an
+archive commits, and forks process inherited material once, across failures
+and resumptions.
 """
 import pathlib
 import sys
@@ -18,7 +14,6 @@ RUN = ROOT / "src/memory/compaction/run.ts"
 PLAN = ROOT / "src/memory/compaction/plan.ts"
 VERSIONS = ROOT / "src/engine/versions.ts"
 
-# (label, [path,] find, replace)
 MUTANTS = [
     # --- a claim is not coverage --------------------------------------------
     ("claim: claiming records coverage outright, so a crashed pass looks done",
@@ -290,7 +285,7 @@ MUTANTS = [
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

@@ -15,7 +15,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ["↑ ↓ PgUp PgDn Home End"], description: "Scroll the conversation", where: "Conversation" },
 ];
 
-export const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export function keyLabel(key: string): string {
   return key === "Mod" ? IS_MAC ? "⌘" : "Ctrl" : key;

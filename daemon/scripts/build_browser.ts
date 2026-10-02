@@ -21,7 +21,7 @@ export const FONT_FACES = ["latin", "latin-ext"].flatMap((subset) => [
 
 type Asset = { type: string; body: string; encoding?: "base64" };
 
-export async function buildBrowserAssets(): Promise<string> {
+async function buildBrowserAssets(): Promise<string> {
   const result = await Bun.build({
     entrypoints: ["main.tsx", "theme_boot.ts"].map((file) => new URL(file, BROWSER).pathname), target: "browser", format: "esm", minify: true, naming: "[name].[ext]",
     define: { SHORE_WEB_CONTRACT: JSON.stringify(WEB_CONTRACT), SHORE_WEB_PROTOCOL: String(WEB_PROTOCOL), "process.env.NODE_ENV": '"production"' },

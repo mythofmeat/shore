@@ -92,7 +92,7 @@ The payload tests capture requests after the installed SDK has serialized them. 
 | Gemini generateContent, generation 3+ | `functionResponse.parts[].inlineData` with function name and call ID |
 | Older Gemini generateContent | Adjacent inline image parts with source labels |
 
-No Responses or Gemini Interactions adapter is added. New structured history clients advertise `multimodal-tool-results`. Clients without it receive readable text projections without base64 image dumps. The canonical Rust schema supports image blocks and string-or-block tool results; existing JSON/blob storage needs no migration.
+New structured history clients advertise `multimodal-tool-results`. Clients without it receive readable text projections without base64 image dumps. The canonical Rust schema supports image blocks and string-or-block tool results.
 
 References checked against installed SDKs and official documentation:
 

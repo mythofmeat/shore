@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { parseRoute, type Route } from "./routing.ts";
 
-export { SETTINGS_PAGES, parseRoute, type Route, type SettingsPage } from "./routing.ts";
+export { SETTINGS_PAGES, type Route, type SettingsPage } from "./routing.ts";
 
 let current = parseRoute(location.hash);
 const listeners = new Set<() => void>();

@@ -8,6 +8,7 @@ import { newMessageVersion, processingUnitId } from "../src/engine/versions.ts";
 import { claimUncovered, coverageIsRedundant } from "../src/memory/coverage.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
+import { memoryCoverageState } from "./support/memory_coverage.ts";
 
 const STAMP = "2026-09-05T00:00:00Z";
 
@@ -185,7 +186,7 @@ describe("compaction coverage and the archive commit", () => {
     );
 
     history.abortCompaction("ada", idx);
-    expect(history.memoryCoverageState("ada", "compaction", required(required(messages[0]).version))).toBeUndefined();
+    expect(memoryCoverageState(path, "ada", "compaction", required(required(messages[0]).version))).toBeUndefined();
     history.close();
   });
 
@@ -198,7 +199,7 @@ describe("compaction coverage and the archive commit", () => {
 
     const restarted = HistoryStore.open(path);
     expect(restarted.coveredMemoryVersions("ada", "compaction", [version]).size).toBe(0);
-    expect(restarted.memoryCoverageState("ada", "compaction", version)?.state).toBe("claimed");
+    expect(memoryCoverageState(path, "ada", "compaction", version)?.state).toBe("claimed");
     expect(
       restarted.claimMemoryCoverage("ada", "compaction", [version], "after", "u", 10 ** 7, 60_000),
     ).toEqual([version]);

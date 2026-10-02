@@ -1,44 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over the chat turn's assembly (#18, step 5).
-
-Wiring fails quietly by construction: every mutant here type-checks, every one
-of them runs, and none of them raises. What each changes is which of several
-identically-shaped things a turn is handed.
-
-**The two per-character backends.** `deferEdit` writes into one character's
-queue and `activityStats` reads one character's tracker. Point either at the
-data root and one character's self-edit is applied to another's prompt at the
-next compaction; drop either and both quietly do nothing, which reads as "no
-edits pending" and "no activity recorded". A chat turn's `set_next_wake` is the
-same kind of wiring: bound to the wrong character it moves someone else's
-heartbeat, and ignoring whether that character's heartbeat runner actually ticks
-it reports a wake that never comes.
-
-**The cached request.** One compaction runner serves every character, so the
-body it extends has to be looked up per pass. A fixed one hands Ada's
-conversation to Nova's compaction — same shape, entirely the wrong bytes, and
-nothing downstream can tell.
-
-**What is read live.** `[usage]` and the keepalive ceiling come off the
-registry's global config on each call. Captured at assembly instead, they answer
-with whatever the daemon started with for the rest of the process, and a budget
-added by `shore config` is simply never enforced.
-
-**The budget check.** It is a read that writes: each threshold it reports is
-marked delivered. It must not run when no budget is configured — an open per
-turn to be told there is nothing to say — and it must not fail a turn that has
-already been persisted and answered.
-
-A mutant is KILLED if the handler assembly or runtime activity tests fail
-with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_deps.py
+"""Mutation pass over the chat turn's assembly in `handler/deps.ts`: which
+directories, ledgers, configs and registries each part of a turn is handed.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 D = "src/handler/deps.ts"
 R = "src/runtime.ts"
 CTX = "src/handler/tool_context.ts"
@@ -46,7 +11,6 @@ SVC = "src/autonomy/service.ts"
 
 TESTS = ["tests/handler_deps.test.ts", "tests/runtime_activity.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the per-character tool backends --------------------------------------
     ("tools: deferred edits queue at the data root, so every character shares one",
@@ -266,7 +230,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

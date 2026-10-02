@@ -9,9 +9,10 @@ import {
   characterWorkspaceDir,
   characterWorkspaceFile,
   discoverCharacters,
-  loadCharacterDefinition,
+  readOrUndefined,
   resolveShoreDirs,
-  resolveUserDefinition,
+  SOUL_FILE,
+  USER_FILE,
   workspaceRoot,
 } from "../src/config/dirs.ts";
 import { workspacePathTriggersReload } from "../src/daemon/hot_reload.ts";
@@ -136,9 +137,9 @@ describe("definition loading", () => {
     write(config, "characters/ada/workspace/SOUL.md", "soul from the config tree\n");
     write(config, "characters/ada/workspace/USER.md", "user from the config tree\n");
 
-    expect(loadCharacterDefinition(config, "ada", ws)).toBe("soul from the root\n");
-    expect(resolveUserDefinition(config, "ada", ws)).toBe("user from the root\n");
-    expect(loadCharacterDefinition(config, "ada")).toBe("soul from the config tree\n");
+    expect(readOrUndefined(characterWorkspaceFile(config, "ada", SOUL_FILE, ws))).toBe("soul from the root\n");
+    expect(readOrUndefined(characterWorkspaceFile(config, "ada", USER_FILE, ws))).toBe("user from the root\n");
+    expect(readOrUndefined(characterWorkspaceFile(config, "ada", SOUL_FILE))).toBe("soul from the config tree\n");
   });
 
 

@@ -8,21 +8,6 @@
 # that write with color ON into a buffer and dump the raw bytes — ANSI escapes
 # and all — so your terminal shows it exactly as the CLI would.
 #
-# Usage:
-#   .claude/skills/run-shore-cli/preview.sh            # every preview
-#   .claude/skills/run-shore-cli/preview.sh log        # just the log render
-#   .claude/skills/run-shore-cli/preview.sh stream     # just live streaming
-#   .claude/skills/run-shore-cli/preview.sh models     # just shore model
-#   .claude/skills/run-shore-cli/preview.sh status     # just shore status
-#   .claude/skills/run-shore-cli/preview.sh errors     # just shore trace errors
-#   .claude/skills/run-shore-cli/preview.sh compact    # just shore compact
-#   .claude/skills/run-shore-cli/preview.sh roles      # just model role changes
-#   .claude/skills/run-shore-cli/preview.sh config-set # just shore config set
-#   .claude/skills/run-shore-cli/preview.sh subagent   # just shore trace subagent
-#   .claude/skills/run-shore-cli/preview.sh wire       # just shore trace calls --wire
-#   .claude/skills/run-shore-cli/preview.sh config-panel  # TUI settings panel
-#   .claude/skills/run-shore-cli/preview.sh pager      # TUI output pager
-#
 # Add a new preview by writing another `#[ignore = "preview: ..."]` `render_preview_*`
 # test that prints its frames between `----- <label> -----` and `----- end -----`;
 # `all` picks it up through the `render_preview` filter.

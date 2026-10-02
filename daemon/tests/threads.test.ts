@@ -32,7 +32,6 @@ import {
   threadModelOf,
   threadTurnCount,
   threadTurnCounts,
-  touchThread,
   writeThreadsIndex,
 } from "../src/engine/threads.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -212,7 +211,7 @@ describe("thread lifecycle", () => {
     expect(await outcomeOf(setHomeThread(root, "aria", "nowhere", NOW))).toThrow(ThreadError);
   });
 
-  test("sets and clears a label, and records last activity", async () => {
+  test("sets and clears a label", async () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW, { label: "Scratch" });
 
@@ -221,10 +220,6 @@ describe("thread lifecycle", () => {
 
     const relabelled = await setThreadLabel(root, "aria", "scratch", "Eval", NOW);
     expect(relabelled.threads[1]?.label).toBe("Eval");
-
-    const later = "2026-09-04T09:00:00.000Z";
-    await touchThread(root, "aria", "scratch", later);
-    expect((await readThreadsIndex(root, "aria"))?.threads[1]?.last_active).toBe(later);
   });
 
   test("pins a thread to its own model and lets the pin be lifted", async () => {

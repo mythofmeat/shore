@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import type { SidecarRequest } from "../types.ts";
 
-export function stripTrailingV1(baseUrl: string): string {
+function stripTrailingV1(baseUrl: string): string {
   return baseUrl.replace(/\/v1\/?$/, "");
 }
 

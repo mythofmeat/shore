@@ -29,12 +29,15 @@ const reply = (overrides: Partial<MappedEvent> = {}): MappedEvent => ({
   ...overrides,
 });
 
+const roomOf = (rooms: RoomBindings, character: string): string | undefined =>
+  new Map(rooms.entries()).get(character);
+
 describe("room bindings", () => {
   test("a character and a room point at each other", () => {
     const rooms = new RoomBindings();
     rooms.bind("!room1:example.com", "alice");
     expect(rooms.characterForRoom("!room1:example.com")).toBe("alice");
-    expect(rooms.roomForCharacter("alice")).toBe("!room1:example.com");
+    expect(roomOf(rooms, "alice")).toBe("!room1:example.com");
     expect(rooms.isBound("!room1:example.com")).toBe(true);
   });
 
@@ -43,7 +46,7 @@ describe("room bindings", () => {
     rooms.bind("!room1:example.com", "alice");
     rooms.bind("!room2:example.com", "alice");
     expect(rooms.characterForRoom("!room1:example.com")).toBeUndefined();
-    expect(rooms.roomForCharacter("alice")).toBe("!room2:example.com");
+    expect(roomOf(rooms, "alice")).toBe("!room2:example.com");
   });
 
   test("binding a room to someone else releases its old character", () => {
@@ -51,7 +54,7 @@ describe("room bindings", () => {
     rooms.bind("!room1:example.com", "alice");
     rooms.bind("!room1:example.com", "bob");
     expect(rooms.characterForRoom("!room1:example.com")).toBe("bob");
-    expect(rooms.roomForCharacter("alice")).toBeUndefined();
+    expect(roomOf(rooms, "alice")).toBeUndefined();
   });
 
   test("unbinding clears both directions, and unbinding nothing is quiet", () => {
@@ -59,7 +62,7 @@ describe("room bindings", () => {
     rooms.bind("!room1:example.com", "alice");
     rooms.unbindRoom("!room1:example.com");
     expect(rooms.characterForRoom("!room1:example.com")).toBeUndefined();
-    expect(rooms.roomForCharacter("alice")).toBeUndefined();
+    expect(roomOf(rooms, "alice")).toBeUndefined();
     expect(() => rooms.unbindRoom("!nothing:example.com")).not.toThrow();
   });
 
@@ -107,31 +110,16 @@ describe("the daemon-message to Matrix-event map", () => {
     expect(map.latestReplyInRoom("!elsewhere:example.com")).toBeUndefined();
   });
 
-  test("content updates in place, and removal works from either side", () => {
+  test("content updates in place, and an event can be removed", () => {
     const map = new EventMap();
     map.record(reply());
     map.updateContent("m1", "edited");
     expect(map.byMsgId("m1")?.content).toBe("edited");
 
-    expect(map.removeMsg("m1")?.eventId).toBe("$e1");
-    expect(map.byMsgId("m1")).toBeUndefined();
-
-    map.record(reply());
     expect(map.removeEvent("$e1")?.msgId).toBe("m1");
     expect(map.byEventId("$e1")).toBeUndefined();
-    expect(map.removeMsg("gone")).toBeUndefined();
-  });
-
-  test("pruning forgets only the room's messages that left history", () => {
-    const map = new EventMap();
-    map.record(reply({ msgId: "m1", eventId: "$e1" }));
-    map.record(reply({ msgId: "m2", eventId: "$e2" }));
-    map.record(reply({ msgId: "m3", eventId: "$e3", roomId: "!other:example.com" }));
-
-    map.pruneMissing("!room:example.com", new Set(["m1"]));
-    expect(map.byMsgId("m1")).toBeDefined();
-    expect(map.byMsgId("m2")).toBeUndefined();
-    expect(map.byMsgId("m3")).toBeDefined();
+    expect(map.byMsgId("m1")).toBeUndefined();
+    expect(map.removeEvent("$gone")).toBeUndefined();
   });
 
   test("the oldest entries fall off past the cap", () => {

@@ -18,7 +18,7 @@ export function useModelListing(state: WorkspaceSnapshot, includeHidden = false,
   useEffect(() => {
     if (state.status !== "ready" || state.character === null) return;
     let alive = true;
-    workspace.actions.run("list_models", { include_hidden: includeHidden, ...(favoritesOnly ? { favorites_only: true } : {}) }, { remember: false })
+    workspace.actions.run("list_models", { include_hidden: includeHidden, ...(favoritesOnly ? { favorites_only: true } : {}) })
       .then((result) => { if (alive) { setListing(result); setError(""); } })
       .catch((failure: unknown) => { if (alive) setError(errorText(failure)); });
     return () => { alive = false; };

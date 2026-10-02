@@ -7,7 +7,6 @@ import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
 import type { ParseResult } from "./duration.ts";
 import type { CacheKeepaliveSetting } from "./keepalive.ts";
 export {
-  keepaliveIntervalMs,
   keepaliveToString,
   parseCacheKeepalive,
   type CacheKeepaliveSetting,
@@ -24,7 +23,7 @@ import {
 import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 
 export type { Sdk };
-export { SDK_VARIANTS, sdkFromWire };
+export { sdkFromWire };
 
 function deserializeSdk(raw: string): ParseResult<Sdk> {
   const sdk = sdkFromWire(raw);
@@ -299,12 +298,12 @@ function warnIgnoredFields(
   }
 }
 
-export interface EmbeddingSettings {
+interface EmbeddingSettings {
   dimensions?: number;
   minSimilarity?: number;
 }
 
-export interface ImageGenSettings {
+interface ImageGenSettings {
   size?: string;
   quality?: string;
   aspectRatio?: string;

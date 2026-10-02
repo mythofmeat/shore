@@ -17,7 +17,7 @@ const PERIODS = [["", "Current budget window"], ["today", "Today"], ["week", "Th
 const DIMENSIONS: readonly [UsageDimension, string][] = [["model", "Model"], ["provider", "Provider"], ["call_type", "Call type"], ["kind", "Kind"], ["api_key", "API key"], ["cost_source", "Cost source"]];
 type View = "summary" | "grouped" | "budget" | "anomalies";
 
-export function BudgetBar({ budget }: { budget: UsageBudget }) {
+function BudgetBar({ budget }: { budget: UsageBudget }) {
   const used = budget.percent_used * 100;
   const percent = Math.min(100, Math.max(0, used));
   return <div className="budget">
@@ -29,7 +29,7 @@ export function BudgetBar({ budget }: { budget: UsageBudget }) {
 
 const PLAN_ACTIONS = { warn: "warns only", block: "blocks Claude calls", pause_background: "pauses background work", pause_heartbeat: "pauses the heartbeat" } as const;
 
-export function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
+function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
   const used = limit.percent_used * 100;
   const percent = Math.min(100, Math.max(0, used));
   const name = PLAN_WINDOWS[limit.window].name;
@@ -56,7 +56,7 @@ const TOTAL_HEAD: [string, "number"][] = [["Calls", "number"], ["Input", "number
 const totals = (row: { call_count: number; total_input: number; total_output: number; total_cache_read: number; total_cache_write: number; total_cost: number }) =>
   [formatNumber(row.call_count), formatNumber(row.total_input), formatNumber(row.total_output), formatNumber(row.total_cache_read), formatNumber(row.total_cache_write), formatCost(row.total_cost)];
 
-export function UsageReport({ result }: { result: UsageResult }) {
+function UsageReport({ result }: { result: UsageResult }) {
   switch (result.mode) {
     case "summary": return <>
       <Table head={["Provider", "Model", ...TOTAL_HEAD]} rows={result.summary.map((row) => [row.provider, <span className="mono">{row.model}</span>, ...totals(row)])} />

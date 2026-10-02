@@ -19,7 +19,7 @@ interface Header {
   arrayOfTables: boolean;
 }
 
-export interface Scan {
+interface Scan {
   assignments: Assignment[];
   headers: Header[];
 }
@@ -134,7 +134,7 @@ function headerPath(
   return { path, arrayOfTables };
 }
 
-export function scanToml(source: string): Scan {
+function scanToml(source: string): Scan {
   const lines = source.split("\n");
   const assignments: Assignment[] = [];
   const headers: Header[] = [];
@@ -219,7 +219,7 @@ function insertionPoint(scan: Scan, table: readonly string[]): number | undefine
   return last;
 }
 
-export type TomlWriteAction = "replaced" | "added-to-section" | "added-section";
+type TomlWriteAction = "replaced" | "added-to-section" | "added-section";
 
 export interface TomlWrite {
   text: string;

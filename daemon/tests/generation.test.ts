@@ -428,7 +428,6 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   });
 
   const provider: SidecarProvider = {
-    // eslint-disable-next-line require-yield
     async *stream(req) {
       requests.push(req);
       yield* events;
@@ -766,7 +765,7 @@ test("regeneration sends history through the last user turn followed by guidance
   expect(JSON.stringify(stored)).not.toContain(guidance);
 });
 
-test("a regenerate's stream_start lists exactly the messages truncating after the last user turn removes", async () => {
+test("a regenerate's stream_start lists exactly the messages after the last user turn", async () => {
   const text = (msg_id: string, role: Message["role"], body: string, second: number): Message => ({
     msg_id, role, content: body, images: [], content_blocks: [{ type: "text", text: body }],
     timestamp: `2026-01-01T10:00:0${String(second)}-05:00`,
@@ -791,9 +790,7 @@ test("a regenerate's stream_start lists exactly the messages truncating after th
   const path = join(await tempRoot("truncate"), "active.jsonl");
   writeDurable(path, history.map((m) => JSON.stringify(m)).join("\n") + "\n");
   const store = await MessageStore.load(path);
-  await store.truncateAfterLastUserTurn();
-  const kept = new Set(store.messages().map((message) => message.msg_id));
-  const truncated = history.map((message) => message.msg_id).filter((id) => !kept.has(id));
+  const truncated = store.messagesAfterLastUserTurn().map((message) => message.msg_id);
   expect(truncated).toEqual(["m_lookup", "m_result", "m_answer"]);
 
   const run = await replayTurn({

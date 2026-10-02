@@ -21,10 +21,6 @@ export interface ResolvedImage {
 
 export type ImageResolution = { image: ResolvedImage } | { omitted: string };
 
-export function resolvedImage(resolution: ImageResolution): ResolvedImage | undefined {
-  return "image" in resolution ? resolution.image : undefined;
-}
-
 export function omissionNotice(label: string, reason: string): string {
   return `[image omitted: ${label} — ${reason}]`;
 }

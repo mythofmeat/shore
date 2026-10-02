@@ -15,8 +15,6 @@ import { engineError, invalidRequest, notFound } from "./errors.ts";
 
 const DEFAULT_LOG_TURNS = 64;
 
-export type Json = unknown;
-
 export type Args = Record<string, unknown>;
 
 function asStr(v: unknown): string | undefined {

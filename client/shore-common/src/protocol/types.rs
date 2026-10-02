@@ -60,10 +60,6 @@ impl ThinkingSignature {
             Self::OpenrouterDetails(_) | Self::ZaiReasoning(_) => None,
         }
     }
-
-    pub fn is_foreign_carrier(&self) -> bool {
-        self.as_opaque().is_none()
-    }
 }
 
 impl From<&str> for ThinkingSignature {
@@ -426,10 +422,6 @@ mod tests {
             ThinkingSignature::from_wire("zair:hmm"),
             ThinkingSignature::ZaiReasoning("hmm".into())
         );
-
-        assert!(!ThinkingSignature::from_wire("sig_abc").is_foreign_carrier());
-        assert!(ThinkingSignature::from_wire("orrd:[]").is_foreign_carrier());
-        assert!(ThinkingSignature::from_wire("zair:hmm").is_foreign_carrier());
     }
 
     #[test]
@@ -437,7 +429,7 @@ mod tests {
         let collided = ThinkingSignature::Opaque("orrd:not-really".into());
         let round_tripped = ThinkingSignature::from_wire(&collided.to_wire());
         assert_ne!(round_tripped, collided);
-        assert!(round_tripped.is_foreign_carrier());
+        assert_eq!(round_tripped.as_opaque(), None);
     }
 
     #[test]

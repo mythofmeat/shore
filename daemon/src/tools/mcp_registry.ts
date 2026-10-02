@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { toolPatternMatches } from "./registry.ts";
-import { InvalidArgs, ToolIoError } from "./errors.ts";
+import { InvalidArgs } from "./errors.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { McpTransportError } from "../mcp/client.ts";
@@ -75,7 +75,7 @@ export function toSpec(
 export type Sleep = (ms: number) => Promise<void>;
 export type RecoveryWait = (ms: number, signal: AbortSignal) => Promise<void>;
 
-export type McpServerState = import("../protocol/McpConnectionState.ts").McpConnectionState;
+type McpServerState = import("../protocol/McpConnectionState.ts").McpConnectionState;
 
 export interface McpServerStatus {
   name: string;
@@ -726,5 +726,3 @@ function normalizeSource(
   }
   return out;
 }
-
-export { InvalidArgs, ToolIoError };

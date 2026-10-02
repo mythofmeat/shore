@@ -77,7 +77,6 @@ function countingProvider(): { calls: number; provider: SidecarProvider } {
         timing: { total_ms: 1, time_to_first_token_ms: 1 },
       } as GenerateResponse);
     },
-    // eslint-disable-next-line require-yield
     stream: async function* (): AsyncGenerator<StreamEvent> {
       state.calls += 1;
       yield {

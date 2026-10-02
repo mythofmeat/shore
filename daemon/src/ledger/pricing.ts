@@ -76,7 +76,7 @@ function priceOrZero(value: unknown): number {
   return parsePrice(value) ?? 0;
 }
 
-export function pricingIsUsable(
+function pricingIsUsable(
   provider: string,
   model: string,
   pricing: ModelPricing,

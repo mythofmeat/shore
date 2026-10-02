@@ -2009,10 +2009,6 @@ fn target_problem_message(problem: &FlagProblem) -> Option<String> {
     ))
 }
 
-#[expect(
-    clippy::format_push_string,
-    reason = "writeln! here would trip only_the_vocabulary_is_allowed_to_hardcode_indentation, and this builds clap help text rather than terminal output"
-)]
 fn render_command_groups(base: &clap::Command) -> String {
     let width = COMMAND_GROUPS
         .iter()

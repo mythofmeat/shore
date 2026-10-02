@@ -2,20 +2,20 @@ import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
 
-export interface MockUsage {
+interface MockUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
   prompt_tokens_details?: { cached_tokens?: number };
 }
 
-export interface MockToolCall {
+interface MockToolCall {
   id?: string;
   name: string;
   arguments: unknown;
 }
 
-export interface MockReply {
+interface MockReply {
   text?: string;
   thinking?: string;
   toolCalls?: MockToolCall[];
@@ -26,7 +26,7 @@ export interface MockReply {
   delayMs?: number;
 }
 
-export interface RecordedRequest {
+interface RecordedRequest {
   path: string;
   method: string;
   headers: Record<string, string>;
@@ -34,7 +34,7 @@ export interface RecordedRequest {
   streaming: boolean;
 }
 
-export interface MockRequestBody extends Record<string, unknown> {
+interface MockRequestBody extends Record<string, unknown> {
   messages: unknown[];
   model?: unknown;
   stream?: unknown;

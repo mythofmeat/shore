@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the config dirs/loader port (#18 / #12).
-
-#12 requires every parity fixture be mutation-checked, on the evidence that
-five ports in a row had a fixture replay green while still full of holes. This
-is the harness for `config/dirs.ts` and `config/loader.ts`.
-
-Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/dirs.test.ts` fails with it applied;
-a survivor means either the fixture cannot see that decision, or the code is
-equivalent under it. The first pass here was 35/52 and the survivors were the
-useful output: two functions with no coverage at all, several conf.d cases
-passing vacuously on a shared key, and three branches that turned out to be
-unreachable and were deleted. Final state is 46/49 with three documented
-equivalents, each noted at its site in the source.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_config_dirs.py
+"""Mutation pass over config directory resolution and loading: path joins, XDG
+lookups, character discovery, includes, conf.d, and per-character overlays.
 """
 import pathlib
 import sys
@@ -24,7 +9,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIRS = ROOT / "src/config/dirs.ts"
 LOAD = ROOT / "src/config/loader.ts"
 
-# (file, label, find, replace)
 MUTANTS = [
     # --- rustJoin ---------------------------------------------------------
     (DIRS, "rustJoin: absolute component no longer replaces",
@@ -137,7 +121,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

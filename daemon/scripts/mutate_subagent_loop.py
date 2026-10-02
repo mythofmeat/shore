@@ -1,38 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation pass over the sub-agent's nested loop driver (#18, step 5).
-
-`subagent.ts` decides what the sub-agent is *told* and is pinned by its own
-fixture. This covers the driving, where four kinds of mistake are all silent.
-
-**The recursion cap.** It is not a depth counter; it is an absent field. The
-nested loop runs against the parent context with `runSubagent` removed, and the
-offered tool subset never contains `ask_*` because sub-agent tools are not in
-the static registry. Either one alone holds the cap — which is the point, since
-a spread that reintroduces the field is one character's difference.
-
-**The model chain.** Spec → `defaults.subagent_model` → `defaults.model`, and
-it stops. Chaining on to the active chat model would invert the feature's whole
-purpose — delegation exists to land on something cheap — while looking exactly
-like it worked, on the expensive model, in the bill.
-
-**The request shape.** The system prompt goes top-level, before the query, with
-the system role intact. The call is typed `subagent` so its spend is
-attributable rather than folded into the turn that delegated.
-
-**The tag.** Every frame the nested loop emits carries the sub-agent's name. An
-untagged frame is rendered by the client as the *primary* model's output, so a
-sub-agent's working notes would read as the character talking.
-
-A mutant is KILLED if `bun test tests/subagent_loop.test.ts` fails with it
-applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_subagent_loop.py
+"""Mutation pass over the sub-agent's nested loop driver: its tool cap, model
+resolution, request shape, and frame tags.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 S = "src/tools/subagent_loop.ts"
 
 TESTS = ["tests/subagent_loop.test.ts"]
@@ -48,7 +19,6 @@ MACRO_INPUT = (
     "  });"
 )
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the recursion cap ----------------------------------------------------
     ("cap: the nested context keeps runSubagent, so a sub-agent can delegate",
@@ -140,7 +110,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

@@ -1,7 +1,7 @@
 {
   "engine_walk": [
     {
-      "name": "revision advances on every mutation; generation only on rewrites",
+      "name": "revision advances on every mutation",
       "character": "Nova",
       "initial_active": null,
       "steps": [
@@ -10,14 +10,10 @@
             "op": "load"
           },
           "revision": 0,
-          "history_rewrite_generation": 0,
           "message_count": 0,
           "turn_count": 0,
           "segment_count": 0,
-          "broadcasts": 0,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 0
         },
         {
           "op": {
@@ -37,14 +33,10 @@
             }
           },
           "revision": 1,
-          "history_rewrite_generation": 0,
           "message_count": 1,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -64,41 +56,10 @@
             }
           },
           "revision": 2,
-          "history_rewrite_generation": 0,
           "message_count": 2,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "insert_by_timestamp",
-            "msg": {
-              "msg_id": "m0",
-              "role": "user",
-              "content": "earlier",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "earlier"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00.5Z"
-            }
-          },
-          "revision": 3,
-          "history_rewrite_generation": 0,
-          "message_count": 3,
-          "turn_count": 2,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -106,78 +67,22 @@
             "msg_id": "m1",
             "content": "hello (edited)"
           },
-          "revision": 4,
-          "history_rewrite_generation": 1,
-          "message_count": 3,
-          "turn_count": 2,
+          "revision": 3,
+          "message_count": 2,
+          "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "add_alt_candidate",
-            "msg_id": "m2",
-            "returned": 2
-          },
-          "revision": 5,
-          "history_rewrite_generation": 1,
-          "message_count": 3,
-          "turn_count": 2,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "set_alt",
-            "msg_id": "m2",
-            "index": 0,
-            "count": 2
-          },
-          "revision": 6,
-          "history_rewrite_generation": 1,
-          "message_count": 3,
-          "turn_count": 2,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
             "op": "delete",
-            "msg_id": "m0"
+            "msg_id": "m2"
           },
-          "revision": 7,
-          "history_rewrite_generation": 2,
-          "message_count": 2,
-          "turn_count": 1,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "truncate_after_last_user_turn",
-            "removed": 1
-          },
-          "revision": 8,
-          "history_rewrite_generation": 3,
+          "revision": 4,
           "message_count": 1,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -196,30 +101,11 @@
               "timestamp": "2026-01-01T00:00:02Z"
             }
           },
-          "revision": 9,
-          "history_rewrite_generation": 3,
+          "revision": 5,
           "message_count": 2,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "truncate_after_last_user_turn",
-            "removed": 1
-          },
-          "revision": 10,
-          "history_rewrite_generation": 4,
-          "message_count": 1,
-          "turn_count": 1,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -239,51 +125,29 @@
                 "timestamp": "2026-01-01T00:00:03Z"
               }
             ],
-            "removed": 0
+            "removed": 1
           },
-          "revision": 11,
-          "history_rewrite_generation": 5,
+          "revision": 6,
           "message_count": 2,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
-        },
-        {
-          "op": {
-            "op": "reset"
-          },
-          "revision": 12,
-          "history_rewrite_generation": 6,
-          "message_count": 0,
-          "turn_count": 0,
-          "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
             "op": "reload"
           },
-          "revision": 13,
-          "history_rewrite_generation": 7,
-          "message_count": 0,
-          "turn_count": 0,
+          "revision": 7,
+          "message_count": 2,
+          "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         }
       ],
       "segments": []
     },
     {
-      "name": "display_history merges each half separately; snapshot is active-only",
+      "name": "a snapshot is the merged live half, never the archive",
       "character": "Ada",
       "initial_active": [
         {
@@ -306,14 +170,10 @@
             "op": "load"
           },
           "revision": 0,
-          "history_rewrite_generation": 0,
           "message_count": 1,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 0,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 0
         },
         {
           "op": {
@@ -337,14 +197,10 @@
             }
           },
           "revision": 1,
-          "history_rewrite_generation": 0,
           "message_count": 2,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -366,14 +222,10 @@
             }
           },
           "revision": 2,
-          "history_rewrite_generation": 0,
           "message_count": 3,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 1
         }
       ],
       "segments": [
@@ -463,14 +315,10 @@
             }
           },
           "revision": 1,
-          "history_rewrite_generation": 0,
           "message_count": 1,
           "turn_count": 1,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -494,14 +342,10 @@
             }
           },
           "revision": 2,
-          "history_rewrite_generation": 0,
           "message_count": 2,
           "turn_count": 2,
           "segment_count": 0,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 0
-          }
+          "broadcasts": 1
         }
       ],
       "segments": []
@@ -536,14 +380,10 @@
             "op": "load"
           },
           "revision": 0,
-          "history_rewrite_generation": 0,
           "message_count": 1,
           "turn_count": 0,
           "segment_count": 1,
-          "broadcasts": 0,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 0
         },
         {
           "op": {
@@ -563,29 +403,10 @@
             }
           },
           "revision": 1,
-          "history_rewrite_generation": 0,
           "message_count": 2,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 2
-          }
-        },
-        {
-          "op": {
-            "op": "truncate_after_last_user_turn",
-            "removed": 0
-          },
-          "revision": 1,
-          "history_rewrite_generation": 0,
-          "message_count": 2,
-          "turn_count": 1,
-          "segment_count": 1,
-          "broadcasts": 0,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -610,14 +431,10 @@
             }
           },
           "revision": 2,
-          "history_rewrite_generation": 0,
           "message_count": 3,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -656,14 +473,10 @@
             }
           },
           "revision": 3,
-          "history_rewrite_generation": 0,
           "message_count": 4,
           "turn_count": 1,
           "segment_count": 1,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 2
-          }
+          "broadcasts": 1
         },
         {
           "op": {
@@ -733,28 +546,20 @@
             ]
           },
           "revision": 3,
-          "history_rewrite_generation": 0,
           "message_count": 4,
           "turn_count": 1,
           "segment_count": 2,
-          "broadcasts": 0,
-          "display_history": {
-            "active_start": 3
-          }
+          "broadcasts": 0
         },
         {
           "op": {
             "op": "reload"
           },
           "revision": 4,
-          "history_rewrite_generation": 1,
           "message_count": 4,
           "turn_count": 1,
           "segment_count": 2,
-          "broadcasts": 1,
-          "display_history": {
-            "active_start": 3
-          }
+          "broadcasts": 1
         }
       ],
       "segments": [

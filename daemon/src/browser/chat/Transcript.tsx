@@ -57,7 +57,7 @@ function StreamingMessage({ stream, saved, character, state, openImage, mobile }
   </article>;
 }
 
-export function EmptyConversation({ character, state }: { character: string; state: WorkspaceSnapshot }) {
+function EmptyConversation({ character, state }: { character: string; state: WorkspaceSnapshot }) {
   const info = state.characters.find((item) => item.name === character);
   return <div className="empty">
     <Avatar name={character} avatar={info?.avatar} size={56} />

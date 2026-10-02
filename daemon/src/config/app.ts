@@ -40,7 +40,6 @@ function unknownField(key: string, known: readonly string[]): string {
 
 type Reader<T> = (value: TomlValue) => ParseResult<T>;
 
-export type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
 export type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";
 import type { ConfigKind as ConfigTypeKind } from "../protocol/ConfigKind.ts";
 import type { ConfigSource as ConfigValueSource } from "../protocol/ConfigSource.ts";
@@ -280,7 +279,7 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-export interface BackgroundDefaultsConfig {
+interface BackgroundDefaultsConfig {
   heartbeat: string | undefined;
   compaction: string | undefined;
 }
@@ -346,7 +345,7 @@ export function resolveDisplayName(
   return defaults.display_name ?? env["USER"] ?? "User";
 }
 
-export type UserTimestampMode = "auto" | "always" | "never";
+type UserTimestampMode = "auto" | "always" | "never";
 
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
@@ -400,7 +399,7 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
   },
 };
 
-export interface AutonomyConfig {
+interface AutonomyConfig {
   enabled: boolean;
   heartbeat: HeartbeatConfig;
 }
@@ -423,7 +422,7 @@ export interface CacheConfig {
   forensics: boolean;
 }
 
-export const defaultCacheConfig = (): CacheConfig => ({
+const defaultCacheConfig = (): CacheConfig => ({
   forensics: false,
 });
 
@@ -454,7 +453,7 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   },
 };
 
-export interface ToolOverride {
+interface ToolOverride {
   max_result_chars: number | undefined;
   max_inline_image_bytes?: number;
   timeout: ConfigDuration | undefined;
@@ -545,7 +544,7 @@ export interface ImageOverride {
   max_bytes: number | undefined;
 }
 
-export interface ImageReadConfig extends ImageOverride {
+interface ImageReadConfig extends ImageOverride {
   tell_model: boolean;
   allow_original: boolean;
 }
@@ -741,7 +740,7 @@ export function parseThinkingReplay(s: string): ThinkingReplay | undefined {
   }
 }
 
-export interface ThinkingConfig {
+interface ThinkingConfig {
   replay_prior_thinking: ThinkingReplay;
 }
 
@@ -776,7 +775,7 @@ const THINKING: StructSpec<ThinkingConfig> = {
 };
 
 export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
-export type RetrievalBinaryMode = "skip" | "metadata" | "try_embed";
+type RetrievalBinaryMode = "skip" | "metadata" | "try_embed";
 
 const RETRIEVAL_MODES: readonly RetrievalMode[] = ["auto", "lexical", "hybrid", "vector"];
 const BINARY_MODES: readonly RetrievalBinaryMode[] = ["skip", "metadata", "try_embed"];
@@ -881,7 +880,7 @@ const CONNECTIONS: StructSpec<ConnectionsConfig> = {
   },
 };
 
-export type NotificationBackend = "notify_send" | "ntfy" | "command";
+type NotificationBackend = "notify_send" | "ntfy" | "command";
 
 const NOTIFICATION_BACKENDS: readonly NotificationBackend[] = [
   "notify_send",

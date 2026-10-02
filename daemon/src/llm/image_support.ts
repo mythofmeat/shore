@@ -173,7 +173,7 @@ export function stripImageBlocks(
 export const MAX_REQUEST_IMAGES = 100;
 export const MAX_REQUEST_IMAGE_BASE64_CHARS = 20_000_000;
 export const REQUEST_IMAGE_DROP_STEP = 50;
-export const REQUEST_IMAGE_DROP_STEP_CHARS = 10_000_000;
+const REQUEST_IMAGE_DROP_STEP_CHARS = 10_000_000;
 
 export function capRequestImages(messages: readonly WireMessage[]): StripOutcome {
   const sizes = messages.flatMap((message) => message.content.flatMap(imagesOf)).map((image) => image.source.data.length);

@@ -7,8 +7,8 @@ import { imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
-export const MAX_READ_LINES = 2000;
-export const MAX_READ_LINE_CHARS = 2000;
+const MAX_READ_LINES = 2000;
+const MAX_READ_LINE_CHARS = 2000;
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 

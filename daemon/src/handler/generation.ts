@@ -93,11 +93,11 @@ export interface GenerationRegistry {
   listThreads(name: string): readonly ThreadRecord[];
 }
 
-export interface GenerationDiagnostics {
+interface GenerationDiagnostics {
   key_fallbacks: { push: (entry: KeyFallbackEntry) => void };
 }
 
-export interface KeyFallbackEntry {
+interface KeyFallbackEntry {
   timestamp: string;
   rid?: string;
   provider: string;

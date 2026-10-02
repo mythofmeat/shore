@@ -120,7 +120,7 @@ export interface KeyCandidate {
   warn_on_fallback: boolean;
 }
 
-export interface ProviderKeyEntry {
+interface ProviderKeyEntry {
   name: string;
   env: string;
   enabled: boolean;

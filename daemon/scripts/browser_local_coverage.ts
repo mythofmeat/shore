@@ -1,6 +1,6 @@
 import { TERMINAL_LOCAL_COMMANDS, TERMINAL_SHORTCUTS } from "../src/browser/preferences.generated.ts";
 
-export const LOCAL_WORKFLOW_FIELDS: Record<string, Record<string, readonly string[]>> = {
+const LOCAL_WORKFLOW_FIELDS: Record<string, Record<string, readonly string[]>> = {
   insert: { home: [], end: [] }, normal: {}, scroll: { direction: ["up", "down", "top", "bottom"], amount: [] },
   images: {}, subagents: {}, editor: {}, image: { target: [] }, cancel: {}, edit_cancel: {}, help: {},
   palette: { scope: ["full", "shortcuts", "config"] }, output: {}, bind: { key: [], command: [], global: [] }, unbind: { key: [], global: [] }, quit: {},

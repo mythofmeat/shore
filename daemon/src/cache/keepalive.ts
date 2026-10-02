@@ -45,15 +45,6 @@ function blockLabel(block: CallBlock): string {
   return `${block.scope === "plan" ? "plan limit" : "usage budget"} "${block.budget_name}"`;
 }
 
-export interface KeepaliveSchedule extends KeepaliveSnapshot {
-  character: string;
-}
-
-export interface KeepaliveDrain {
-  events: KeepaliveEvent[];
-  schedules: KeepaliveSchedule[];
-}
-
 export interface PingNowOutcome {
   status: "sent" | "skipped" | "failed";
   cold: boolean;
@@ -62,10 +53,7 @@ export interface PingNowOutcome {
   detail?: string;
 }
 
-export type PingSender = (
-  req: SidecarRequest,
-  signal?: AbortSignal,
-) => Promise<GenerateResponse>;
+export type PingSender = (req: SidecarRequest) => Promise<GenerateResponse>;
 
 interface Entry {
   keepalive: CacheKeepalive;
@@ -84,7 +72,7 @@ export interface KeepaliveHalt {
   at: number;
 }
 
-export function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
+function keepaliveModelKey(req: Pick<SidecarRequest, "sdk" | "model" | "provider_key">): string {
   return `${req.provider_key ?? req.sdk}:${req.model}`;
 }
 
@@ -134,7 +122,7 @@ export function cachedPrefixTokens(usage: Pick<Usage, "cache_read_tokens" | "cac
   return usage.cache_read_tokens + usage.cache_creation_tokens;
 }
 
-export function heartbeatRefreshedPrefix(
+function heartbeatRefreshedPrefix(
   armed: KeepalivePrefix,
   heartbeat: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
   usage: Pick<Usage, "cache_read_tokens">,

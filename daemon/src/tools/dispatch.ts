@@ -159,12 +159,6 @@ export async function dispatchTool(
         () => name === "edit" ? handleEdit(args, ctx.workspaceDir, ctx.signal) : handleApplyPatch(args, ctx.workspaceDir, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
-    case "delete":
-    case "git":
-    case "fetch_url":
-    case "roll_dice":
-      throw new InvalidArgs(`${name} has been replaced by bash; use a Bash command instead`);
-
     case "search_chat_logs":
       return await handleSearchHistory(args, ctx.conversationDir, {
         character: ctx.characterName,
@@ -187,9 +181,6 @@ export async function dispatchTool(
         new Date(),
         ctx.fetchImpl ?? fetch,
       );
-
-    case "web_search":
-      throw new InvalidArgs("web_search has been removed; use a search tool from a configured MCP server instead");
 
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {
@@ -351,7 +342,7 @@ export function truncateToolResult(output: string, maxChars: number): string {
   return windowToolResult(output, maxChars).output;
 }
 
-export const CANCEL_GRACE_MS = 2_000;
+const CANCEL_GRACE_MS = 2_000;
 
 const STILL_RUNNING = Symbol("still running");
 
@@ -442,4 +433,4 @@ export async function dispatchWithinDeadline(
   throw new ToolTimedOut(seconds, true);
 }
 
-export { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut };
+export { InvalidArgs, NotImplemented };

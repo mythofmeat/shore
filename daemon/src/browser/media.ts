@@ -7,7 +7,6 @@ import { MAX_LIVE_MEDIA_CHARS, recentItems } from "./live_limits.ts";
 export const MAX_LIVE_IMAGES = 128;
 export interface LiveImage extends SendImage { manual?: boolean; toolId?: string; previewData?: string | null | undefined; messageId?: string }
 export interface GalleryImage { id: string; caption: string; data: string | null | undefined; mime: string | undefined }
-export type OpenImage = (source: string, caption?: string) => void;
 
 export function retainLiveImages(images: readonly LiveImage[]): { items: LiveImage[]; limited: boolean } {
   return recentItems(images, MAX_LIVE_IMAGES, MAX_LIVE_MEDIA_CHARS, (image) => Object.values(image).reduce<number>((size, value) => size + (typeof value === "string" ? value.length : 0), 256));

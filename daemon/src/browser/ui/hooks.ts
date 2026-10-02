@@ -9,11 +9,11 @@ export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
 }
 
-export function readStored(key: string): string | null {
+function readStored(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 
-export function writeStored(key: string, value: string): boolean {
+function writeStored(key: string, value: string): boolean {
   try { localStorage.setItem(key, value); return true; } catch { return false; }
 }
 

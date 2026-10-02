@@ -25,7 +25,7 @@ export interface CompactEngine {
   reload(): Promise<void>;
 }
 
-export interface CompactAutonomy {
+interface CompactAutonomy {
   onCompactionComplete(character: string, turnCount: number): void;
 }
 

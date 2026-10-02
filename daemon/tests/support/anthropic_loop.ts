@@ -1,10 +1,10 @@
-import type { ToolPhase } from "../../tools/execute.ts";
-import type { SidecarRequest, StreamEvent } from "../types.ts";
-import { AnthropicProvider } from "./anthropic.ts";
+import type { ToolPhase } from "../../src/tools/execute.ts";
+import type { SidecarRequest, StreamEvent } from "../../src/llm/types.ts";
+import { AnthropicProvider } from "../../src/llm/providers/anthropic.ts";
 import {
   genericToolLoopEvents,
   type ModelCallRetryOptions,
-} from "./generic_loop.ts";
+} from "../../src/llm/providers/generic_loop.ts";
 
 export function anthropicToolLoopEvents(
   req: SidecarRequest,

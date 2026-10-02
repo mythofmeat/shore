@@ -45,10 +45,6 @@ pub struct HistoryDelta {
     pub after: Option<String>,
 }
 
-#[expect(
-    clippy::trivially_copy_pass_by_ref,
-    reason = "serde skip_serializing_if requires a &T predicate signature"
-)]
 fn is_zero(value: &usize) -> bool {
     *value == 0
 }
@@ -443,35 +439,6 @@ impl ServerMessage {
             | ServerMessage::Unknown => None,
         }
     }
-
-    pub fn set_subagent(&mut self, name: &str) {
-        let tag = || Some(name.to_owned());
-        match self {
-            ServerMessage::StreamStart(msg) => msg.subagent = tag(),
-            ServerMessage::StreamChunk(msg) => msg.subagent = tag(),
-            ServerMessage::StreamEnd(msg) => msg.subagent = tag(),
-            ServerMessage::ToolCall(msg) => msg.subagent = tag(),
-            ServerMessage::ToolResult(msg) => msg.subagent = tag(),
-            ServerMessage::SendImage(msg) => msg.subagent = tag(),
-            ServerMessage::Hello(_)
-            | ServerMessage::History(_)
-            | ServerMessage::Shutdown(_)
-            | ServerMessage::Ping(_)
-            | ServerMessage::CommandOutput(_)
-            | ServerMessage::Error(_)
-            | ServerMessage::Phase(_)
-            | ServerMessage::NewMessage(_)
-            | ServerMessage::CacheWarning(_)
-            | ServerMessage::ProviderWarning(_)
-            | ServerMessage::ProviderFallbackWarning(_)
-            | ServerMessage::UsageWarning(_)
-            | ServerMessage::PlanLimitWarning(_)
-            | ServerMessage::ConfigWarning(_)
-            | ServerMessage::RequestAccepted(_)
-            | ServerMessage::RequestFinished(_)
-            | ServerMessage::Unknown => {}
-        }
-    }
 }
 
 #[cfg(test)]
@@ -493,37 +460,15 @@ mod tests {
     }
 
     #[test]
-    fn set_subagent_tags_stream_and_tool_frames() {
-        let mut chunk = ServerMessage::StreamChunk(StreamChunk {
-            rid: None,
-            text: "hi".into(),
-            content_type: "text".into(),
-            subagent: None,
-            task_id: None,
-        });
-        chunk.set_subagent("research");
-        assert_eq!(chunk.subagent(), Some("research"));
-
-        let mut phase = ServerMessage::Phase(Phase {
-            rid: None,
-            phase: "thinking".into(),
-            model: None,
-        });
-        phase.set_subagent("research");
-        assert_eq!(phase.subagent(), None);
-    }
-
-    #[test]
     fn subagent_tag_survives_wire_round_trip() {
-        let mut call = ServerMessage::ToolCall(ToolCall {
+        let call = ServerMessage::ToolCall(ToolCall {
             rid: None,
             tool_id: "t1".into(),
             tool_name: "search".into(),
             input: serde_json::json!({}),
-            subagent: None,
+            subagent: Some("research".into()),
             task_id: None,
         });
-        call.set_subagent("research");
         let wire = serde_json::to_string(&call).unwrap();
         assert!(wire.contains("\"subagent\":\"research\""), "wire: {wire}");
         let back: ServerMessage = serde_json::from_str(&wire).unwrap();

@@ -23,8 +23,8 @@ import { MAX_ATTACHMENT_BYTES } from "../../swp/admission.ts";
 
 const TYPING_TIMEOUT_MS = 20_000;
 
-export const SYNC_START_TIMEOUT_MS = 60_000;
-export const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+const SYNC_START_TIMEOUT_MS = 60_000;
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 export type MediaDownloadResult =
   | { readonly ok: true; readonly bytes: Uint8Array }
@@ -136,10 +136,6 @@ export class MatrixBot {
     const bot = new MatrixBot(client, config.userId, config.log, stopController, stopSignal);
     bot.#listen();
     return bot;
-  }
-
-  get userId(): string {
-    return this.#userId;
   }
 
   get faulted(): Promise<Error> {

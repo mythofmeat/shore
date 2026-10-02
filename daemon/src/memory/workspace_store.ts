@@ -7,8 +7,8 @@ import { dirname, join } from "node:path";
 
 import { characterCacheDir } from "../config/dirs.ts";
 
-export const WORKSPACE_INDEX_DB_FILE = "workspace_index.db";
-export const WORKSPACE_INDEX_SCHEMA_VERSION = 2;
+const WORKSPACE_INDEX_DB_FILE = "workspace_index.db";
+const WORKSPACE_INDEX_SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -66,7 +66,7 @@ export function documentHash(document: string): string {
   return createHash("sha256").update(document).digest("hex");
 }
 
-export function vectorToBytes(vector: readonly number[]): Uint8Array {
+function vectorToBytes(vector: readonly number[]): Uint8Array {
   const floats = new Float32Array(vector.length);
   vector.forEach((value, i) => {
     floats[i] = Math.fround(value);
@@ -74,7 +74,7 @@ export function vectorToBytes(vector: readonly number[]): Uint8Array {
   return new Uint8Array(floats.buffer.slice(0));
 }
 
-export function bytesToVector(bytes: Uint8Array): Float32Array {
+function bytesToVector(bytes: Uint8Array): Float32Array {
   const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   return new Float32Array(copy);
 }
@@ -89,7 +89,7 @@ function removeCacheFiles(path: string): void {
 
 const SQLITE_MAGIC = "SQLite format 3\0";
 
-export function occupiedByForeignFile(path: string): boolean {
+function occupiedByForeignFile(path: string): boolean {
   let size: number;
   try {
     const info = statSync(path);

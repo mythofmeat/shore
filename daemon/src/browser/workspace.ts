@@ -64,7 +64,7 @@ export class Workspace {
   #loadingEarlier = false;
   #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
   constructor(readonly connection: BrowserConnection) {
-    this.actions = new OperationClient(connection, () => this.#state.character === null ? "No conversation selected" : `${this.#state.character} / ${this.#state.thread ?? "main"}`);
+    this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
   }
   getSnapshot = (): WorkspaceSnapshot => this.#state;
@@ -100,9 +100,9 @@ export class Workspace {
   async refreshNavigation(): Promise<void> {
     const generation = ++this.#navigation;
     try {
-      const catalogue = await this.actions.run("discover_operations", {}, { remember: false });
-      const characters = await this.actions.run("list_characters", {}, { remember: false });
-      const threads = catalogue.operations.find((operation) => operation.name === "list_threads")?.available === true ? (await this.actions.run("list_threads", {}, { remember: false })).threads : [];
+      const catalogue = await this.actions.run("discover_operations", {});
+      const characters = await this.actions.run("list_characters", {});
+      const threads = catalogue.operations.find((operation) => operation.name === "list_threads")?.available === true ? (await this.actions.run("list_threads", {})).threads : [];
       if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters, threads });
     } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
   }
@@ -165,7 +165,6 @@ export class Workspace {
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
-      if (update.status === "signed_out") this.actions.clearOutput();
       if (update.status !== "ready") this.#navigation += 1;
       this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();

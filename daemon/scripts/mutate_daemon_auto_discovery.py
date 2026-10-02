@@ -1,37 +1,13 @@
 #!/usr/bin/env python3
-"""Mutation pass over the provider auto-discovery loop (#18, step 5).
-
-Three decisions, and each fails quietly in its own direction.
-
-**Who.** Discovery is opt-in twice over — the provider must be `enabled` and
-must have `discovery.enabled = true`, and an omitted `[discovery]` block is not
-an opt-in. A loop that dropped either check would make outbound requests, on
-the user's own credentials, to providers they never asked it to contact.
-
-**When.** A cache inside its TTL is left alone. Without that check a daemon
-that restarts often makes one request per provider per restart and learns
-nothing it did not already know.
-
-**What a failure costs.** Nothing that can be helped. The previous cache stands
-— which is what `writeCache` being atomic is *for* — and the remaining
-providers still get their turn. A pass that let one provider's failure escape
-would turn a transient outage into a daemon with no model lists at all.
-
-A mutant is KILLED if `bun test tests/daemon_auto_discovery.test.ts` fails with
-it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_daemon_auto_discovery.py
+"""Mutation pass over the provider auto-discovery loop: which providers it
+refreshes, when, and what one failure does to the rest.
 """
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 S = "src/daemon/auto_discovery.ts"
 
 TESTS = ["tests/daemon_auto_discovery.test.ts"]
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- who ------------------------------------------------------------------
     ("who: a disabled provider is refreshed anyway",
@@ -95,7 +71,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

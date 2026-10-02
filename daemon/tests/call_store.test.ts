@@ -193,8 +193,6 @@ function collapse(shape: SchemaShape): unknown {
   };
 }
 
-const HUGE = 1_000_000_000;
-
 describe("querying the calls a store holds", () => {
   test("everything, newest first, ties broken by insertion so the order is stable", () => {
     const store = filled();
@@ -291,70 +289,8 @@ describe("querying the transcripts a store holds", () => {
   });
 });
 
-describe("rotating a store", () => {
-  test("drops what is older than the cutoff", () => {
-    const store = filled();
-    const stats = store.rotate(at(2), HUGE);
-    expect(stats.deleted_by_age).toBeGreaterThan(0);
-    expect(stats.deleted_by_size).toBe(0);
-    expect(ids(store, { limit: 0 })).toEqual(["c4", "c3"]);
-    store.close();
-  });
-
-  test("a cutoff before everything deletes nothing", () => {
-    const store = filled();
-    expect(store.rotate(at(-1), HUGE)).toEqual({ deleted_by_age: 0, deleted_by_size: 0 });
-    expect(store.callCount()).toBe(5);
-    store.close();
-  });
-
-  test("a cutoff after everything empties it", () => {
-    const store = filled();
-    store.rotate(at(60), HUGE);
-    expect(store.callCount()).toBe(0);
-    expect(store.queryTranscripts("heartbeat", null, 0)).toEqual([]);
-    store.close();
-  });
-
-  test("transcripts age out alongside the calls", () => {
-    const store = filled();
-    store.rotate(at(2), HUGE);
-    expect(store.queryTranscripts("heartbeat", "frank", 0)).toEqual([]);
-    store.close();
-  });
-
-  test("rotating twice deletes nothing the second time", () => {
-    const store = filled();
-    store.rotate(at(2), HUGE);
-    expect(store.rotate(at(2), HUGE)).toEqual({ deleted_by_age: 0, deleted_by_size: 0 });
-    store.close();
-  });
-
-  test("a size ceiling drops the oldest until the store fits under it", () => {
-    const store = filled();
-    const stats = store.rotate(at(-1), 1);
-    expect(stats.deleted_by_age).toBe(0);
-    expect(stats.deleted_by_size).toBeGreaterThan(0);
-    store.close();
-  });
-
-  test("the ceiling is a byte count with no unlimited sentinel: zero is a zero ceiling", () => {
-    const store = filled();
-    expect(store.rotate(at(-1), 0).deleted_by_size).toBe(4);
-    expect(store.callCount()).toBe(1);
-    store.close();
-  });
-
-  test("the newest call always survives the ceiling, so the store is never emptied by size", () => {
-    const store = filled();
-    store.rotate(at(-1), 0);
-    expect(ids(store, { limit: 0 })).toEqual(["c4"]);
-    store.close();
-  });
-});
-
 describe("a payload larger than one call may store", () => {
-  test("is truncated to the cap and says so, so the newest-call exemption stays bounded", () => {
+  test("is truncated to the cap and says so", () => {
     const store = CallStore.openInMemory();
     const oversized = "x".repeat(33_554_432 + 4096);
     const id = store.storePayload(oversized);

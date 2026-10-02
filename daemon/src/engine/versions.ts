@@ -9,7 +9,7 @@ export function newMessageVersion(): string {
   return `${VERSION_PREFIX}${crypto.randomUUID()}`;
 }
 
-export function isMessageVersion(value: unknown): value is string {
+function isMessageVersion(value: unknown): value is string {
   return typeof value === "string" && value.startsWith(VERSION_PREFIX) && value.length > VERSION_PREFIX.length;
 }
 
@@ -21,10 +21,6 @@ export function alternativeVersionOf(
   alternative: Pick<MessageAlternative, "version">,
 ): string | undefined {
   return isMessageVersion(alternative.version) ? alternative.version : undefined;
-}
-
-export function withMintedVersion(message: Message, mint = newMessageVersion): Message {
-  return versionOf(message) === undefined ? { ...message, version: mint() } : message;
 }
 
 export function isRealUserTurn(message: Message): boolean {
@@ -51,11 +47,4 @@ export function tailTurnStart(messages: readonly Message[], turns: number | unde
 export function processingUnitId(versions: readonly string[]): string {
   const digest = createHash("sha256").update(versions.join("\n")).digest("hex");
   return `pu_${digest.slice(0, 32)}`;
-}
-
-export function messageVersions(messages: readonly Message[]): string[] {
-  return messages.flatMap((message) => {
-    const version = versionOf(message);
-    return version === undefined ? [] : [version];
-  });
 }

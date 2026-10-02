@@ -1,6 +1,5 @@
 import {
   HistoryStore,
-  characterOfArchiveKey,
   type MemoryPath,
 } from "../engine/history_store.ts";
 import type { Message } from "../engine/types.ts";
@@ -19,7 +18,7 @@ export interface CoverageClaim {
   backgroundMessages: number;
 }
 
-export function newCoverageClaim(): string {
+function newCoverageClaim(): string {
   return `cl_${crypto.randomUUID()}`;
 }
 
@@ -35,7 +34,7 @@ export function versionsIn(messages: readonly Message[]): string[] {
   return versions;
 }
 
-export function unversionedCount(messages: readonly Message[]): number {
+function unversionedCount(messages: readonly Message[]): number {
   return messages.filter((message) => versionOf(message) === undefined).length;
 }
 
@@ -64,7 +63,7 @@ export interface CoverageStore {
   releaseMemoryCoverage(character: string, path: MemoryPath, claim: string): number;
 }
 
-export function coveredPrefixLength(
+function coveredPrefixLength(
   messages: readonly Message[],
   covered: ReadonlySet<string>,
 ): number {
@@ -140,8 +139,4 @@ export function withCoverageStore<T>(dbPath: string, read: (store: HistoryStore)
   } finally {
     store.close();
   }
-}
-
-export function characterOf(archiveKey: string): string {
-  return characterOfArchiveKey(archiveKey);
 }

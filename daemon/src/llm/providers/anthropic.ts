@@ -15,8 +15,7 @@ import type {
   ToolResultBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
-import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage, imageLabel, omissionNotice } from "../images.ts";
+import type { ContentBlock } from "../../engine/types.ts";
 import type {
   GenerateResponse,
   ProviderOptions,
@@ -356,7 +355,7 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
   return content.every((b) => (b as { type?: string }).type === "tool_result");
 }
 
-export function toPlacementTurns(messages: readonly MessageParam[]): PlacementTurn[] {
+function toPlacementTurns(messages: readonly MessageParam[]): PlacementTurn[] {
   return messages.map((m) => ({
     role: m.role,
     toolResultOnly: isToolResultOnlyUser(m),
@@ -628,31 +627,6 @@ function buildTools(tools: ToolDefinition[] | undefined): Tool[] {
   }));
 }
 
-function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockParam[] {
-  if (!images || images.length === 0) return [];
-  const out: ContentBlockParam[] = [];
-  for (const img of images) {
-    const resolution = resolveImage(img);
-    if ("omitted" in resolution) {
-      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
-      continue;
-    }
-    out.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: resolution.image.mediaType as
-          | "image/png"
-          | "image/jpeg"
-          | "image/webp"
-          | "image/gif",
-        data: resolution.image.base64,
-      },
-    });
-  }
-  return out;
-}
-
 function clampEnabledBudget(requested: number, maxTokens: number): number | undefined {
   const ceiling = maxTokens - 1;
   if (ceiling < 1024) return undefined;
@@ -725,6 +699,3 @@ function mergeAnthropicUsage(
     cache_creation_tokens: u.cache_creation_input_tokens ?? prev.cache_creation_tokens,
   };
 }
-
-
-export { imagesToAnthropicBlocks };

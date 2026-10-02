@@ -47,7 +47,7 @@ export function assertThreadId(id: string): void {
   );
 }
 
-export interface ThreadForkOrigin {
+interface ThreadForkOrigin {
   fork_id: string;
   source: string;
   created_at: string;
@@ -153,7 +153,7 @@ function isThreadsIndex(raw: unknown): raw is ThreadsIndex {
   return threads.every(isThreadRecord);
 }
 
-export async function readThreadsIndexIn(
+async function readThreadsIndexIn(
   characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
@@ -299,21 +299,6 @@ export async function threadChatModel(
   const index = await readThreadsIndex(data, character);
   if (index === undefined) return undefined;
   return threadRecord(index, thread ?? homeThread(index))?.chat_model;
-}
-
-export async function touchThread(
-  data: string,
-  character: string,
-  id: string,
-  now: string,
-): Promise<ThreadsIndex | undefined> {
-  const index = await readThreadsIndex(data, character);
-  if (index === undefined) return undefined;
-  const current = threadRecord(index, id);
-  if (current === undefined) return index;
-  const next = replaceThread(index, { ...current, last_active: now });
-  await writeThreadsIndex(data, character, next);
-  return next;
 }
 
 export interface ArchiveThreadOptions {

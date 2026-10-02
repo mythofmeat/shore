@@ -29,6 +29,7 @@ import {
 import { COVERAGE_LEASE_MS, claimUncovered } from "../src/memory/coverage.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
+import { memoryCoverageState } from "./support/memory_coverage.ts";
 
 const STAMP = "2026-09-05T00:00:00Z";
 
@@ -251,7 +252,7 @@ describe("deciding whether a compaction has anything new to write", () => {
     try {
       for (const untouched of [w.messages[0], w.messages[1], w.messages[3]]) {
         expect(
-          after.memoryCoverageState("ada", "compaction", required(required(untouched).version)),
+          memoryCoverageState(join(w.dataDir, HISTORY_DB_FILE), "ada", "compaction", required(required(untouched).version)),
         ).toBeUndefined();
       }
       after.releaseMemoryCoverage("ada", "compaction", "someone-else");

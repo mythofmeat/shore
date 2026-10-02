@@ -1,13 +1,8 @@
 import { threadFile, readDurable, writeDurable, deleteDurable } from "../../storage/files.ts";
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
-
-import { threadDataDir } from "../../config/dirs.ts";
 
 import type { GenerateResponse, SidecarRequest } from "../../llm/types.ts";
 import type { AppliedCompactionWrite, ToolOutput } from "./types.ts";
-
-const CHECKPOINT_FILE = "compaction-checkpoint.json";
 
 export type CompactionPauseReason =
   | "budget"
@@ -46,10 +41,6 @@ export interface CompactionCheckpoint {
   coverageClaim?: string;
   request: SidecarRequest;
   loop: CheckpointLoopState;
-}
-
-export function checkpointPath(dataDir: string, character: string, thread: string): string {
-  return join(threadDataDir(dataDir, character, thread), CHECKPOINT_FILE);
 }
 
 export function hashCompactionSource(content: string): string {

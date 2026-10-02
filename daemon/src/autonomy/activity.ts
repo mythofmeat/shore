@@ -67,7 +67,7 @@ function record(at: number): Recorded {
   };
 }
 
-export type WeekdayCounts = Readonly<Record<Weekday, number>>;
+type WeekdayCounts = Readonly<Record<Weekday, number>>;
 
 export interface ActivityWindow {
   readonly localNow: number;

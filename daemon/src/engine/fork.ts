@@ -42,7 +42,7 @@ export class ForkBusy extends Error {
   }
 }
 
-export interface ForkMarker {
+interface ForkMarker {
   version: 1;
   fork_id: string;
   character: string;
@@ -53,7 +53,7 @@ export interface ForkMarker {
   turn_count: number;
 }
 
-export interface ForkSource {
+interface ForkSource {
   messages(): readonly Message[];
 }
 
@@ -65,7 +65,7 @@ export interface ForkThreadOptions {
   source?: ForkSource;
 }
 
-export type ForkStage = "context" | "provenance" | "publish";
+type ForkStage = "context" | "provenance" | "publish";
 
 export interface ForkResult {
   index: ThreadsIndex;

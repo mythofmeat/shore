@@ -17,7 +17,7 @@ import { withCallCapture } from "../src/llm/capture.ts";
 import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.ts";
 import { EARLIER_CONVERSATION_NOT_SHOWN } from "../src/engine/prompt.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
-import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
+import { anthropicToolLoopEvents } from "./support/anthropic_loop.ts";
 import { consumeStream } from "../src/llm/stream.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { installWireCapture } from "../src/llm/wire_capture.ts";

@@ -10,11 +10,6 @@ pub(crate) enum Block {
         input: serde_json::Value,
     },
     ToolResult {
-        #[expect(
-            dead_code,
-            reason = "stored for protocol fidelity; TUI renders by tool_name"
-        )]
-        tool_id: String,
         tool_name: String,
         output: String,
         images: Vec<ImageRef>,

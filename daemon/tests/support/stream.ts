@@ -28,13 +28,3 @@ export async function* eventsForResponse(
     timing: response.timing,
   };
 }
-
-export function streamOf(
-  next: (req: never) => Promise<GenerateResponse> | GenerateResponse,
-): (req: never) => AsyncIterable<StreamEvent> {
-  return (req) => ({
-    async *[Symbol.asyncIterator]() {
-      yield* eventsForResponse(await next(req));
-    },
-  });
-}

@@ -1,39 +1,7 @@
 #!/usr/bin/env python3
-"""Mutation pass over what an image costs the context window.
-
-The prompt trims history to what it estimates will fit, so an image estimate
-that is wrong in either direction is a silent failure. Too high and the
-conversation's text is trimmed away to make room for pictures that were never
-that expensive, which is what the flat 5,334-token guess did to every picture
-small enough to cost less. Too low and the request goes out larger than the
-budget allows. Every mutant below still returns a plausible number.
-
-Five groups.
-
-**The model's tier** decides the ceiling. Claude 4.7 and later downscale an
-image to 2576px / 4,784 patches, earlier models to 1568px / 1,568. A model id
-that names no Claude version is given the higher ceiling, so an unknown model
-is overcounted rather than under.
-
-**The cost** is the patch count after two resizes: Shore's own 2000px one in
-`prepare_images.ts`, then the model's. The second is a port of Anthropic's
-reference implementation, including its half-to-even rounding.
-
-**Reading the size** from a header without decoding the image. Each format has a
-guard that turns malformed data into "unknown size", which is counted at the
-tier's ceiling; losing a guard turns the same data into a wrong size instead.
-
-**The estimate** sums those costs over a message's blocks and attachments, and
-the trim, the chat context and the status line each pass the active model's
-tier through.
-
-**Compaction** keeps as many recent turns as fit its reserve, and now counts a
-retained message's pictures and tool output toward it, not only its text.
-
-A mutant is KILLED if the tests below fail with it applied.
-
-Run from the repository root:
-    python3 daemon/scripts/mutate_image_tokens.py
+"""Mutation pass over what an image costs the context window: tiers, dimension
+parsing for each format, and every estimate that trims a window or plans
+compaction.
 """
 import sys
 
@@ -41,7 +9,6 @@ T = "src/llm/image_tokens.ts"
 D = "src/llm/image_dimensions.ts"
 P = "src/engine/prompt.ts"
 
-# (label, file, find, replace)
 MUTANTS = [
     # --- the model's tier ------------------------------------------------------
     ("tier: Claude 4.7 counts as standard",
@@ -251,7 +218,7 @@ MUTANTS = [
 ]
 
 
-from mutation import run as _run_mutants  # noqa: E402
+from mutation import run as _run_mutants
 
 
 def main() -> int:

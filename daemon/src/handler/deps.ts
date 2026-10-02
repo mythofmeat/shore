@@ -510,7 +510,7 @@ export interface ConfigReloadAssembly extends CommandAssembly {
   emitEvent: (message: ServerMessage) => void;
 }
 
-export function configWarning(
+function configWarning(
   path: string,
   character: string | undefined,
   cause: unknown,
