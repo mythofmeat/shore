@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise shared control routing and resumable compaction cancellation."""
+"""Exercise shared control routing, resumable compaction cancellation, and resuming a pass the user asks for."""
 import sys
 from mutation import run
 
@@ -31,6 +31,16 @@ MUTANTS = [
      'if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);', ''),
     ("cancelled tools start another provider call", "src/llm/providers/generic_loop.ts",
      'this.abort.signal.throwIfAborted();', ''),
+    ("compact is not the user's own pass", "src/commands/compact.ts",
+     '          foreground: true,\n', ''),
+    ("compact's model calls are labelled background", "src/handler/deps.ts",
+     '        }, { foreground: true }),', '        }),'),
+    ("a pass forgets it was asked for", R,
+     '          foreground: options.foreground ?? false,\n', ''),
+    ("a pass the user asked for replays a stored pause", M,
+     '  if (opts.foreground !== true && checkpoint.state === "paused"', '  if (checkpoint.state === "paused"'),
+    ("a pause forgets what stopped it", M,
+     '  checkpoint.pauseDetail = stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));', '  delete checkpoint.pauseDetail;'),
 ]
 
 if __name__ == "__main__":

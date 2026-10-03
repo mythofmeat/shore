@@ -1113,6 +1113,41 @@ test.each([false, true])("compaction resumes a deletion without repeating it and
   }
 });
 
+test("a budget pause names the budget, automatic passes wait for its reset, and the user's own pass does not", async () => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  config.app.usage.budgets.push({ name: "background", period: "month", cost_usd: 1, limit: "pause_background" } as never);
+  const ledger = Ledger.create(join(config.dirs.data, "shore.db"));
+  ledger.database.query(
+    `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+       total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+     VALUES (?1, 'ada', 'anthropic', 'default', 'claude-fixture', 'message',
+       10, 5, 0, 0, 100, 10, 'end_turn', 0, 'pricing_catalog', 5.0)`,
+  ).run(new Date().toISOString());
+  ledger.close();
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([response([{ type: "text", text: "Finished." }])], seen);
+  const background = { config, generate: compactionGenerate({ config, providers: { anthropic: provider } }) };
+
+  const first = await runCompactionPass("ada", background, { keepTurnsOverride: 0 });
+  if (first?.kind !== "paused") throw new Error(`expected a paused pass, got ${String(first?.kind)}`);
+  expect(first.reason).toBe("budget");
+  expect(first.detail).toContain('budget "background" is over its month limit ($5.00/$1.00)');
+  expect(first.resumeAt).toBeDefined();
+  expect(await runCompactionPass("ada", background, { keepTurnsOverride: 0 })).toMatchObject({
+    kind: "paused", reason: "budget", detail: first.detail, resumeAt: first.resumeAt,
+  });
+  expect(seen).toEqual([]);
+
+  const asked = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }, { foreground: true }),
+  }, { keepTurnsOverride: 0, foreground: true });
+  expect(asked?.kind).toBe("compacted");
+  expect(seen).toHaveLength(1);
+});
+
 test("compaction delivers structured read images to the next model round", async () => {
   const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
   const config = await world();

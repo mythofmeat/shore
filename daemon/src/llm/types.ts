@@ -95,6 +95,7 @@ export interface CallContext {
   workspace_dir?: string;
   thread?: string;
   call_type: string;
+  foreground?: boolean;
   api_key_name?: string;
   thinking_enabled: boolean;
   cache_ttl?: string;

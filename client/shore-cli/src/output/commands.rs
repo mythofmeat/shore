@@ -1440,7 +1440,7 @@ fn pause_reason_text(data: &serde_json::Value) -> String {
     let named = match reason {
         "source_conflict" => "the conversation changed since the pass started",
         "iteration_limit" => "hit its tool-round ceiling",
-        "budget" => "blocked by a usage budget",
+        "budget" => "blocked by a usage limit",
         "provider" => "the model provider failed",
         other => other,
     };
@@ -2652,6 +2652,31 @@ mod tests {
         assert!(
             !rendered.contains("Memory files"),
             "a paused pass has no written-file count to report: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_budget_pause_names_the_limit_that_stopped_it() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "paused",
+            "character": "heidi",
+            "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
+            "message_count": 34,
+            "compacted_turns": 8,
+            "tool_rounds": 8,
+            "tools_called": ["read"],
+            "reason": "budget",
+            "detail": "Claude 5-hour limit is at 100% (limit 100%, background work paused); resets 5:00 PM",
+            "resume_at": "2026-10-03T07:00:00.385+00:00",
+        }));
+
+        assert!(
+            rendered.contains("blocked by a usage limit (Claude 5-hour limit is at 100%"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("2026-10-03T07:00:00.385+00:00"),
+            "{rendered}"
         );
     }
 

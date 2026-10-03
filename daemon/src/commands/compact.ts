@@ -68,6 +68,7 @@ export async function compact(
         {
           dryRun,
           restart,
+          foreground: true,
           ...(engine.thread === undefined ? {} : { thread: engine.thread }),
           ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
         },
