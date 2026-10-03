@@ -94,6 +94,7 @@ test("restart expires old sessions and transfers and honors a reduced session ca
   a.recovery.saveArchive("a".repeat(64), saved("importing"));
   await a.close();
   const b = open(config, origin, 1);
+  expect(b.recovery.archives()).toEqual([]);
   expect(b.sessions.read(first.request)).toBeDefined(); expect(b.sessions.read(second.request)).toBeUndefined();
   const previous = b.sessions.read(first.request);
   const newest = signIn(b.sessions);

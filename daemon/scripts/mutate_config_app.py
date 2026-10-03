@@ -238,9 +238,6 @@ MUTANTS = [
      'required: ["description", "prompt"],', 'required: ["prompt", "description"],'),
     ("schema: cost_usd is optional",
      '  required: ["cost_usd"],', ""),
-    ("schema: tools.config is keyed like any other map, not by tool name",
-     '    config: readMap(struct(TOOL_OVERRIDE), "tools"),',
-     "    config: readMap(struct(TOOL_OVERRIDE)),"),
 ]
 
 

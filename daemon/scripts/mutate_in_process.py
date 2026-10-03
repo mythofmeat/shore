@@ -21,7 +21,7 @@ MUTANTS = [
      P,
      "    character,\n    call_type: callType,",
      "    call_type: callType,"),
-    ("ledger: the existing context is discarded, taking the ledger path with it",
+    ("ledger: the existing context is discarded, taking the thread the call belongs to with it",
      P,
      "  request.context = {\n    ...request.context,\n    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, \"shore.db\"),",
      '  request.context = {\n    ledger: rustJoin(config.dirs.data, "shore.db"),'),

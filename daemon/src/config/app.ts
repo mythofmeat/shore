@@ -171,7 +171,7 @@ function readSeq<T>(inner: Reader<T>): Reader<T[]> {
 const readStringSeq = readSeq(readString);
 const readF64Seq = readSeq(readF64);
 
-function readMap<V>(inner: Reader<V>, keySource?: ConfigValueSource): Reader<Map<string, V>> {
+function readMap<V>(inner: Reader<V>): Reader<Map<string, V>> {
   return typed(
     (v) => {
       if (!isTable(v)) return { err: invalidType(v, "a map") };
@@ -183,11 +183,7 @@ function readMap<V>(inner: Reader<V>, keySource?: ConfigValueSource): Reader<Map
       }
       return { ok: out };
     },
-    {
-      kind: "map",
-      item: typeOf(inner as Reader<unknown>),
-      ...(keySource === undefined ? {} : { keySource }),
-    },
+    { kind: "map", item: typeOf(inner as Reader<unknown>) },
   );
 }
 
@@ -499,7 +495,7 @@ const TOOLS: StructSpec<ToolsConfig> = {
     max_result_chars: readUsize,
     max_inline_image_bytes: readUsize,
     timeout: readDuration,
-    config: readMap(struct(TOOL_OVERRIDE), "tools"),
+    config: readMap(struct(TOOL_OVERRIDE)),
   },
 };
 

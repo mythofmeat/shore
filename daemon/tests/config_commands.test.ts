@@ -274,6 +274,18 @@ describe("configCheck", () => {
     expect(result.info).toContain("Default model: deepseek:deepseek-v4-flash");
   });
 
+  test("a subscription model needs no api key, and a disabled provider has none to offer", async () => {
+    const w = await build(
+      "mid",
+      '[chat."claude_agent:claude-sub"]\n\n[providers.anthropic]\nenabled = false\napi_key_env = "SHORE_FIXTURE_KEY_SET"\n\n' +
+        '[chat."anthropic:claude-off"]\n',
+    );
+    const result = configCheck(w.ctx, ENV) as { warnings: string[] };
+
+    expect(result.warnings.join(" ")).not.toContain("claude_agent:claude-sub");
+    expect(result.warnings).toContain("Provider 'anthropic' has no enabled keys (needed by model anthropic:claude-off)");
+  });
+
   test("an MCP bearer token variable that is unset or blank is called out", async () => {
     const mcp = (name: string, variable: string) => `\n[mcp.${name}]\nurl = "https://mcp.example.invalid/mcp"\nbearer_token_env = "${variable}"\n`;
     const w = await build("mid", mcp("present", "SHORE_FIXTURE_KEY_SET") + mcp("blank", "SHORE_FIXTURE_KEY_BLANK") + mcp("absent", "SHORE_FIXTURE_KEY_MISSING"));
@@ -390,6 +402,17 @@ describe("config set", () => {
     const before = await readFile(w.ctx.configPath, "utf8");
     expect(() => config(w.ctx, { key, value })).toThrow(error);
     expect(await readFile(w.ctx.configPath, "utf8")).toBe(before);
+  });
+
+  test("a model the catalog lacks is not found, and a value the key cannot hold is a bad request", async () => {
+    const w = await build("mid", FURNISHED);
+    expect(() => config(w.ctx, { key: "chat.model", value: "ghost" })).toThrow(expect.objectContaining({ code: "not_found" }));
+    expect(() => config(w.ctx, { key: "heartbeat.enabled", value: "maybe" })).toThrow(expect.objectContaining({ code: "invalid_request" }));
+  });
+
+  test("the result names the key in its canonical spelling, however it was written", async () => {
+    const w = await build("mid", FURNISHED);
+    expect(config(w.ctx, { key: '"heartbeat"."enabled"', value: "false" })).toMatchObject({ set: "heartbeat.enabled", value: false });
   });
 
   test("a saved preference masks the fallback model", async () => {

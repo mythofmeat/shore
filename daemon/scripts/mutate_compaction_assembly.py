@@ -17,7 +17,9 @@ MUTANTS = [
      A,
      "  const keep = Math.min(keepLastN, lines.length);",
      "  const keep = Math.max(0, Math.min(keepLastN, lines.length) - 1);"),
-    ("split: the keep count is not clamped to what exists",
+    ("split: the keep count is not clamped to what exists (EQUIVALENT: past the "
+     "end, splitAt goes negative, and slice(0, negative) and slice(negative) "
+     "split the lines exactly as the clamp does)",
      A,
      "  const keep = Math.min(keepLastN, lines.length);",
      "  const keep = keepLastN;"),
@@ -62,7 +64,7 @@ from mutation import run as _run_mutants
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/compaction_assembly.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/compaction_assembly.test.ts", "tests/archive_writer.test.ts"])
 
 
 if __name__ == "__main__":

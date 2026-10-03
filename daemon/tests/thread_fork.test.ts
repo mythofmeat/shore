@@ -1,4 +1,4 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { durableExists, writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -231,7 +231,7 @@ describe("forking a thread", () => {
     const result = await forkThread(root, "ada", "eval", "eval-b", { now: () => NOW });
     expect(result.child.compaction).toBe(true);
     expect(result.child.chat_model).toBe("anthropic:opus");
-    expect(existsSync(join(root, "ada", "threads", "eval-b", "compaction-checkpoint.json"))).toBe(
+    expect(durableExists(join(root, "ada", "threads", "eval-b", "compaction-checkpoint.json"))).toBe(
       false,
     );
     expect(existsSync(join(root, "ada", "threads", "eval-b", "segments"))).toBe(false);

@@ -1,0 +1,45 @@
+name: mutation sweep
+
+# verify only checks that every mutant's pattern still matches (mutate --stale). This runs every
+# mutant, which takes too long for each pull request, so labels that stopped being true and new
+# survivors are caught within a week.
+on:
+  schedule:
+    - cron: "0 12 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    defaults:
+      run:
+        working-directory: daemon
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: rustup update stable --no-self-update
+      - id: rust
+        run: echo "version=$(rustc +stable --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/shore/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
+      - run: bun run build:patch
+      - run: bun install --frozen-lockfile
+      - name: bun run mutate (shard ${{ matrix.shard }} of 8)
+        run: |
+          passes=$(ls scripts/mutate_*.py | sed 's|.*/mutate_||; s|\.py$||' | sort | awk 'NR % 8 == ${{ matrix.shard }}')
+          bun run mutate $passes

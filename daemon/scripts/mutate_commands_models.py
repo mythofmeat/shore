@@ -70,7 +70,9 @@ MUTANTS = [
     ('background: "all" accepts differing models',
      "  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
      "  if (true as boolean) return first;\n\n  const mapping = resolved.map(([task, m])"),
-    ('background: "all" compares qualified names rather than identity',
+    ('background: "all" compares qualified names rather than identity (EQUIVALENT: '
+     "every resolved model's qualifiedName is built as `${providerKey}:${modelId}`, "
+     "and a provider key holds no colon, so the two comparisons agree)",
      "    ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,\n"
      "  );\n  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
      "    ([, m]) => m.qualifiedName === first.qualifiedName,\n"
@@ -339,7 +341,8 @@ MUTANTS = [
     ("set: every entry is dropped, not just the emptied one",
      "  if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);",
      "  if (samplerIsEmpty(entry.sampler)) slot.clear();"),
-    ("set: the entry is keyed by qualified name",
+    ("set: the entry is keyed by qualified name (EQUIVALENT: preferenceKey builds "
+     "`${provider}:${modelId}`, the same string every resolved model's qualifiedName is)",
      '    target.kind === "subagent" ? target.subagent : preferenceKey(model.providerKey, model.modelId);',
      '    target.kind === "subagent" ? target.subagent : model.qualifiedName;'),
     ("set: an existing entry is overwritten rather than extended",

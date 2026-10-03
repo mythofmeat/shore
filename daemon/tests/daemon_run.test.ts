@@ -1502,12 +1502,16 @@ describe("hot reload", () => {
     try {
       await client.awaitFrame("hello");
 
-      await writeFile(
-        join(place.root, "config", "characters", "ada", "config.toml"),
-        "[behavior]\nnot_a_field = ",
-      );
+      const warned = async (count: number) => {
+        await untilAdopted(() => client.frames.filter((frame) => frame["type"] === "config_warning").length >= count);
+      };
+      const overlay = join(place.root, "config", "characters", "ada", "config.toml");
+      await writeFile(overlay, "[behavior]\nnot_a_field = ");
+      await warned(1);
       await writeFile(place.configPath, `[tools]\nmax_result_chars = 9999\n`);
-      await client.awaitFrame("config_warning");
+      await warned(2);
+      await writeFile(overlay, "[behavior]\nstill_not_a_field = ");
+      await warned(3);
 
       expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
     } finally {

@@ -109,7 +109,9 @@ MUTANTS = [
     ("config: the runtime override does not take",
      "  setRuntimeEffectiveConfig(name: string, config: LoadedConfig): void {\n    this.#charConfigs.set(name, config);",
      "  setRuntimeEffectiveConfig(name: string, config: LoadedConfig): void {"),
-    ("config: the override is merged against the registry's own dir",
+    ("config: the override is merged against the registry's own dir (EQUIVALENT: "
+     "runtime.ts creates the registry with config.dirs.config, and a reload keeps "
+     "the directories the daemon started with)",
      "        this.#charConfigs.set(name, loadCharacterConfig(this.#globalConfig, name));",
      "        this.#charConfigs.set(\n          name,\n          loadCharacterConfig({ ...this.#globalConfig, dirs: { ...this.#globalConfig.dirs, config: this.#configDir } }, name),\n        );"),
 

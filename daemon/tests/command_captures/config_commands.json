@@ -175,7 +175,7 @@
       "ok": {
         "valid": false,
         "warnings": [
-          "API key env var $ANTHROPIC_API_KEY not set (needed by model anthropic:claude-primary)"
+          "API key env var $SHORE_FIXTURE_KEY_MISSING not set (needed by model anthropic_secondary:claude-secondary)"
         ],
         "info": [
           "2 chat model(s) configured",
@@ -218,12 +218,12 @@
         "defaults_model": null,
         "chat_models": 1
       },
-      "note": "`std::env::var` gives `Ok(\"\")`, so a blank value counts as set and the only warning is the missing default model.",
+      "note": "A blank variable is not a key: requests skip it, so the check reports it as unset next to the missing default model.",
       "ok": {
         "valid": false,
         "warnings": [
           "No default model set. First chat model will be used.",
-          "API key env var $ANTHROPIC_API_KEY not set (needed by model anthropic:claude-blank)"
+          "API key env var $SHORE_FIXTURE_KEY_BLANK not set (needed by model anthropic:claude-blank)"
         ],
         "info": [
           "1 chat model(s) configured"

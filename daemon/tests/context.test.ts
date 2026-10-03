@@ -238,8 +238,8 @@ async function contextFixture(c: ContextCase): Promise<{
   const charDataDir = characterDataDir(dataDir, c.input.character);
   const activeDir = join(charDataDir, "active_prompt");
   if (c.input.block_active_prompt) {
-    await mkdir(charDataDir, { recursive: true });
-    await writeFile(activeDir, "not a directory");
+    await writeFile(join(canonical, "TOOLS.md"), await Bun.file(join(import.meta.dir, "../prompts/engine/default_tools.md")).text());
+    await writeFile(join(canonical, "memory"), "not a directory");
   } else {
     for (const f of c.input.active_files) writePromptSnapshotFile(join(activeDir, f.name), f.content);
   }
@@ -393,7 +393,7 @@ describe("prepareChatContext", () => {
       expectJson(got.prompt.messages, c.prompt_messages.map((m) => promptMessage(m, dir)));
 
       if (c.active_after === null) {
-        expect((await lstat(activeDir)).isFile()).toBe(true);
+        expect(await readdir(activeDir).catch(() => [])).toEqual([]);
       } else if (c.active_after === "absent") {
         expect(await lstat(activeDir).catch(() => undefined)).toBeUndefined();
       } else {

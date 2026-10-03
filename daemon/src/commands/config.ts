@@ -29,6 +29,8 @@ import { restartRequiredChanges } from "../config/restart.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
+import { credentialEntry } from "../handler/tool_context.ts";
+import { isKeylessSdk, readCandidateEnv, resolveKeyCandidates } from "../llm/credentials.ts";
 import { formatConfigPath, parseConfigPath, publicConfig } from "../config/surface.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { ConfigSources } from "../protocol/ConfigSources.ts";
@@ -144,12 +146,16 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
   }
 
   for (const model of ctx.config.models.chat.values()) {
-    const keyEnv = model.apiKeyEnv;
-    if (keyEnv !== undefined && env[keyEnv] === undefined) {
-      warnings.push(
-        `API key env var $${keyEnv} not set (needed by model ${model.qualifiedName})`,
-      );
-    }
+    if (isKeylessSdk(model.sdk)) continue;
+    const entry = ctx.config.providers.get(model.providerKey);
+    const candidates = resolveKeyCandidates(model.providerKey, entry === undefined ? undefined : credentialEntry(entry), model.apiKeyEnv);
+    if (candidates.some((candidate) => readCandidateEnv(candidate, env) !== undefined)) continue;
+    const names = candidates.map((candidate) => `$${candidate.env}`).join(", ");
+    warnings.push(
+      candidates.length === 0
+        ? `Provider '${model.providerKey}' has no enabled keys (needed by model ${model.qualifiedName})`
+        : `API key env var ${names} not set (needed by model ${model.qualifiedName})`,
+    );
   }
   for (const [name, server] of ctx.config.app.mcp) {
     if (server.bearer_token_env !== undefined && mcpBearerToken(server, env) === undefined) {

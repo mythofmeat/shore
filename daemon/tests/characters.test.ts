@@ -453,6 +453,24 @@ test("an invalid character overlay fails closed with the rejected field", async 
   );
 });
 
+test("an overlay written after a character's first read waits for a reload, as an edit to one does", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(join(configDir, "characters", "Alice", "workspace"), { recursive: true });
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[chat]\ndisplay_name = \"GLOBAL\"\n");
+  writeFileSync(join(configDir, "characters", "Alice", "workspace", "SOUL.md"), "Alice");
+  const global = loadFrom(join(configDir, "config.toml"));
+  const registry = await CharacterRegistry.create(configDir, dataDir, global);
+
+  expect(registry.effectiveConfig("Alice")).toBe(global);
+  writeFileSync(join(configDir, "characters", "Alice", "config.toml"), "[chat]\ndisplay_name = \"ALICE\"\n");
+  expect(registry.effectiveConfig("Alice")).toBe(global);
+  await registry.reloadRuntimeState(global);
+  expect(registry.effectiveConfig("Alice").app.defaults.display_name).toBe("ALICE");
+});
+
 describe("the character a bare command lands on", () => {
   const registryWith = async (names: readonly string[]): Promise<CharacterRegistry> => {
     const root = makeRoot();

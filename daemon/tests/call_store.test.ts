@@ -250,6 +250,30 @@ describe("querying the calls a store holds", () => {
     store.close();
   });
 
+  test("a summary reads each field back from its own column", () => {
+    const store = filled();
+    const byId = new Map(store.queryCalls({ limit: 0 }).map((c) => [c.call_id, c]));
+    expect(byId.get("c1")).toEqual({
+      id: 1,
+      call_id: "c1",
+      ts: "2026-01-15T12:00:00+00:00",
+      call_type: "message",
+      character: "frank",
+      model: "claude-x",
+      provider: "anthropic",
+      finish_reason: "end_turn",
+      usage: { input_tokens: 100, output_tokens: 20, cache_read_tokens: 80, cache_write_tokens: 0 },
+      duration_ms: 1234,
+      error: null,
+      request_bytes: 13,
+      response_bytes: 14,
+    });
+    expect(byId.get("c2")).toMatchObject({ call_type: "heartbeat", duration_ms: null, error: "overloaded_error" });
+    expect(byId.get("c3")).toMatchObject({ duration_ms: 0 });
+    expect(byId.get("c5")?.ts).toBe("2026-01-15T12:00:00.750+00:00");
+    store.close();
+  });
+
   test("callCount counts calls, not transcripts", () => {
     const store = filled();
     expect(store.callCount()).toBe(5);
@@ -270,6 +294,38 @@ describe("querying the transcripts a store holds", () => {
     expect(store.queryTranscripts("heartbeat", "frank", 0)).toHaveLength(3);
     expect(store.queryTranscripts("heartbeat", null, 0)).toHaveLength(4);
     expect(store.queryTranscripts("heartbeat", "wren", 0)).toHaveLength(0);
+    store.close();
+  });
+
+  test("newest first, and entries written in the same second come back newest first too", () => {
+    const store = filled();
+    expect(store.queryTranscripts("heartbeat", "frank", 0).map((r) => r.entry)).toEqual([
+      { text: "second tick" },
+      { text: "tool result" },
+      { text: "hi" },
+    ]);
+    store.close();
+  });
+
+  test("a transcript row reads each field back from its own column", () => {
+    const store = filled();
+    expect(store.queryTranscripts("dreaming", null, 0)).toEqual([
+      {
+        id: 4,
+        ts: "2026-01-15T12:00:02+00:00",
+        source: "dreaming",
+        character: "wren",
+        call_type: "compaction",
+        iteration: 0,
+        model: "claude-x",
+        provider: "anthropic",
+        finish_reason: "end_turn",
+        usage: { input_tokens: 11, output_tokens: 22, cache_read_tokens: 33, cache_write_tokens: 0 },
+        entry: "not json {",
+      },
+    ]);
+    expect(store.queryTranscripts("heartbeat", "frank", 0)[1]).toMatchObject({ id: 2, iteration: 1 });
+    expect(store.queryTranscripts("heartbeat", null, 1)[0]).toMatchObject({ character: null, call_type: null });
     store.close();
   });
 
@@ -343,6 +399,7 @@ describe("what a call body costs to store", () => {
   test("an empty body is stored, not treated as absent", () => {
     const store = filled();
     expect(store.getCall(4)?.request).toBe("");
+    expect(store.getCall(4)?.response).toBe("");
     expect(store.getCall(4)?.request_bytes).toBe(0);
     expect(storedRequestBytes(store, "c4")).toBeGreaterThan(0);
     store.close();

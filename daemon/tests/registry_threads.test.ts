@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFileSync } from "./support/stored_files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync,
@@ -179,6 +180,21 @@ describe("the registry as the thread authority", () => {
   });
 
 
+
+  test("a fork copies the parent the daemon holds, not a file rewritten under it", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    const line = (version: string) =>
+      `${JSON.stringify({ msg_id: "u1", role: "user", content: "hello", images: [], content_blocks: [{ type: "text", text: "hello" }], timestamp: "2026-09-05T00:00:00.000Z", version })}\n`;
+    const active = join(dataDir, "aria", "threads", MAIN_THREAD, "active.jsonl");
+    writeDurable(active, line("mv_held"));
+    await registry.getOrCreate("aria", MAIN_THREAD);
+    writeDurable(active, line("mv_rewritten"));
+
+    await registry.forkThread("aria", MAIN_THREAD, "spin");
+
+    const child = await registry.getOrCreate("aria", "spin");
+    expect(child.messages().map((m) => m.version)).toEqual(["mv_held"]);
+  });
 
   test("a fork while that character is compacting answers busy rather than half-copying", async () => {
     const { registry, dataDir } = await registryWith("aria");

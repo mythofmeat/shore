@@ -82,8 +82,6 @@ MUTANTS = [
      'delete table.include;', ''),
     (LOAD, "loader: a missing include is fatal",
      'if (!exists(includePath)) continue;', 'if (!exists(includePath)) throw new ConfigError("read_file", "missing", includePath);'),
-    (LOAD, "loader: non-string include entries are used",
-     'if (typeof item !== "string") continue;', ''),
     (LOAD, "loader: includes merge under the base instead of over it",
      'deepMerge(table, read(readFileOrThrow(includePath), "parse_include", includePath));',
      'const inc = read(readFileOrThrow(includePath), "parse_include", includePath);\n      deepMerge(inc, table);\n      Object.assign(table, inc);'),

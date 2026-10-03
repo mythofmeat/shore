@@ -17,7 +17,9 @@ MUTANTS = [
     ("extract: the raw table is captured after extraction, not before",
      "  const rawTable = structuredClone(table);\n\n  const remainder = { ...table };",
      "  const remainder = { ...table };"),
-    ("extract: a non-table section is passed through instead of ignored",
+    ("extract: a non-table section is passed through instead of ignored (EQUIVALENT: "
+     "normalizeSource rejects every layer whose chat, embedding, image_generation or "
+     "providers is not a table, so no such table reaches the extraction)",
      "  return isTable(value) ? value : undefined;",
      "  return value === undefined ? undefined : (value as TomlTable);"),
     ("extract: the catalog does not inherit registry transport defaults",
@@ -29,7 +31,9 @@ MUTANTS = [
     ("extract: a catalog failure reports as an app parse failure",
      'throw new ConfigError("catalog", e.message);',
      'throw new ConfigError("parse_app", e.message);'),
-    ("extract: the registry is built before AppConfig is parsed",
+    ("extract: the registry is built before AppConfig is parsed (EQUIVALENT: the order "
+     "only matters when both fail, and normalizeSource has already parsed each layer's "
+     "AppConfig, so a merged table cannot fail to parse)",
      '  const parsed = parseAppConfig(remainder);\n'
      '  if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);\n'
      '  const app = parsed.ok;\n'
