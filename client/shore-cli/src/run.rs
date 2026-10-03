@@ -759,12 +759,24 @@ async fn follow_log_stream(
     filter: output::LogFilter,
     mut previous_segment: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut reply_streaming = false;
     loop {
         let msg = conn.recv().await?;
+        let main_agent = msg.subagent().is_none() && msg.task_id().is_none();
+        if let ServerMessage::StreamStart(_) = msg {
+            reply_streaming |= main_agent;
+        } else if let ServerMessage::StreamEnd(end) = &msg {
+            reply_streaming &= !(main_agent && end.is_final);
+        } else if let ServerMessage::Error(_) = msg {
+            reply_streaming = false;
+        } else {
+        }
         if msg.subagent().is_some() && !filter.subagent_tools {
             continue;
         }
         match &msg {
+            ServerMessage::NewMessage(nm)
+                if reply_streaming && nm.message.role == Role::Assistant => {}
             ServerMessage::NewMessage(nm) if log_role_matches(role, &nm.message.role) => {
                 output::print_new_message(nm, nm.character.as_deref().unwrap_or(follow_char));
             }
