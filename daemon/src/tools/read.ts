@@ -1,16 +1,19 @@
-import type { FileHandle } from "node:fs/promises";
-import { extname } from "node:path";
-import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
+import { stat, type FileHandle } from "node:fs/promises";
+import { extname, relative, sep } from "node:path";
+import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES, toolMediaOf } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
+import { linkedFile, namedFile, workspaceNames } from "./workspace_names.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_LINE_CHARS = 2000;
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd", ".mkdn"]);
+
+const LINK = /^(!?)\[\[([^[\]\n]*)\]\]$/;
 
 function positiveInteger(input: Record<string, unknown>, name: string, fallback: number, maximum = Number.MAX_SAFE_INTEGER): number {
   const value = input[name] === undefined ? fallback : input[name];
@@ -20,16 +23,54 @@ function positiveInteger(input: Record<string, unknown>, name: string, fallback:
   return value;
 }
 
+async function absence(path: string): Promise<string | undefined> {
+  try {
+    return (await stat(path)).isDirectory() ? "is a folder" : undefined;
+  } catch (error) {
+    return ["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "") ? "does not exist" : undefined;
+  }
+}
+
+async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<{ path: string; note?: string }> {
+  const value = String(input.file_path).trim();
+  const link = LINK.exec(value);
+  if (link !== null) {
+    try {
+      return { path: linkedFile(await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") };
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw new ToolIoError(`${value}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const absent = await absence(requested);
+  const name = relative(workspaceDir, requested);
+  if (absent === undefined || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
+  try {
+    const found = namedFile(await workspaceNames(workspaceDir, signal), name.split(sep));
+    return { path: found.path, note: `[${value} ${absent}; found ${found.link} by name.]` };
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw new ToolIoError(`${requested} ${absent}; ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function withNote(value: unknown, note: string | undefined): unknown {
+  if (note === undefined) return value;
+  const payload = toolMediaOf(value) ?? { value, media: [], extra: [] };
+  return carryToolMedia({ ...payload, notes: [note, ...(payload.notes ?? [])] });
+}
+
 export async function handleRead(
   input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal, maxChars = 50_000,
   maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES, images: ImagesConfig = defaultImagesConfig(),
 ): Promise<unknown> {
   signal?.throwIfAborted();
-  const path = filePath(input, workspaceDir);
+  const requested = filePath(input, workspaceDir);
   const offset = positiveInteger(input, "offset", 1);
   const limit = positiveInteger(input, "limit", MAX_READ_LINES, MAX_READ_LINES);
   const original = input.original ?? false;
   if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
+  const { path, note } = await locate(input, requested, workspaceDir, signal);
   const file = await openRegularFile(path);
   try {
     const header = Buffer.alloc(12);
@@ -40,13 +81,13 @@ export async function handleRead(
       if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs("offset and limit apply only to text files");
       if (original && !images.read.allow_original) throw new InvalidArgs("original is turned off by images.read.allow_original; images are sent at the configured size");
       const { description, image } = await readImage(file, path, mime, signal);
-      return carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] });
+      return withNote(carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] }), note);
     }
     if (original) throw new InvalidArgs("original applies only to image files");
     const page = await readText(file, path, offset, limit, maxChars, signal);
-    return MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
+    return withNote(MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
       ? await expandMarkdownImages(file, path, workspaceDir, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
-      : page.output;
+      : page.output, note);
   } finally {
     await file.close();
   }
