@@ -283,7 +283,7 @@ export function claudePlanBlockFor(request: SidecarRequest, now: number = Date.n
   const context = request.context;
   if (!runsOnClaudePlan(request) || context === undefined) return undefined;
   const report = claudePlanLimitsReport(context.usage, now);
-  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context.call_type));
+  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context));
   return limit === undefined ? undefined : planBlock(limit, zoneFor(context.usage?.timezone ?? "local"));
 }
 

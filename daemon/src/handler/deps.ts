@@ -622,7 +622,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
           providers: a.providers,
           config: runtime.config,
           ...(a.env === undefined ? {} : { env: a.env }),
-        }),
+        }, { foreground: true }),
         tools: runtimeToolDeps(a),
       },
       repoint: async (character, config) => {

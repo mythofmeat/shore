@@ -26,6 +26,14 @@ MUTANTS = [
      "  request.context = {\n    ...request.context,\n    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, \"shore.db\"),",
      '  request.context = {\n    ledger: rustJoin(config.dirs.data, "shore.db"),'),
 
+    ("ledger: the user's own compaction is labelled background, so a background budget blocks it",
+     P,
+     "    call_type: callType,\n    foreground,\n",
+     "    call_type: callType,\n"),
+    ("ledger: the budget gate is not told a compaction was asked for",
+     "src/ledger/gate.ts",
+     "      foreground: context.foreground,\n",
+     ""),
     # --- which action runs ----------------------------------------------------
     ("action: a max_turns compaction runs here too, compacting the same turns twice",
      P,

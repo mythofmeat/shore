@@ -7,6 +7,7 @@ import sys
 PLAN = "src/ledger/plan_limits.ts"
 FETCH = "src/llm/claude_plan_limits.ts"
 GATE = "src/ledger/gate.ts"
+BUDGET = "src/ledger/budget.ts"
 RECORD = "src/ledger/record.ts"
 USAGE = "src/ledger/usage.ts"
 REGISTRY = "src/commands/registry.ts"
@@ -126,8 +127,16 @@ MUTANTS = [
      "  return true;"),
     ("gate: the action is ignored, so conversation stops at the limit too",
      PLAN,
-     "  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context.call_type));",
+     "  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context));",
      "  const limit = report?.windows.find((item) => item.over_limit);"),
+    ("gate: a compaction the user asked for is paused as background work",
+     PLAN,
+     "  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context));",
+     "  const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, { call_type: context.call_type }));"),
+    ("gate: a foreground call is still paused as background work",
+     BUDGET,
+     "      return call.foreground !== true && isBackgroundCall(call.call_type);",
+     "      return isBackgroundCall(call.call_type);"),
     ("gate: landing exactly on the limit still runs",
      PLAN,
      "  const over = reading.percent_used >= policy.limit_fraction;",

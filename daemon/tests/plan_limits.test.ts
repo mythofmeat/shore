@@ -27,6 +27,7 @@ import { Ledger, isSubscriptionCall, setSubscriptionProviders } from "../src/led
 import { usageReport } from "../src/ledger/usage.ts";
 import { toRfc3339 } from "../src/ledger/zoned.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { required } from "../src/util/required.ts";
 import type { UsageResult } from "../src/protocol/UsageResult.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -278,6 +279,17 @@ describe("the call gate", () => {
     expect(budgetBlockFor(claudeCall("heartbeat", { timezone: "utc" }), NOW)?.summary).toBe(
       "Claude 5-hour limit is at 100% (limit 100%, background work paused); resets 2026-09-27 09:00 AM",
     );
+  });
+
+  test("a compaction the user asked for is not background work, so only a block policy stops it", async () => {
+    await seed(poll(1, 0.3));
+    const asked = (usage?: UsageConfig): SidecarRequest => {
+      const request = claudeCall("compaction", usage);
+      return { ...request, context: { ...required(request.context), foreground: true } };
+    };
+    expect(budgetBlockFor(asked(), NOW)).toBeUndefined();
+    const blocking = policy({ five_hour: { warn_fractions: [0.8], limit_fraction: 1, limit_action: "block" } });
+    expect(budgetBlockFor(asked(blocking), NOW)).toMatchObject({ budget_name: "Claude 5-hour limit", scope: "plan" });
   });
 
   test("a block policy stops conversation too", async () => {

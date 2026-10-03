@@ -38,7 +38,7 @@ import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "./support/usage_fixture.
 import { ledgerFor } from "../src/ledger/record.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import { threadFile } from "../src/storage/files.ts";
-import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { isOperationName, validOperationResult } from "../src/browser/operation_validators.generated.js";
 import { outcomeOf } from "./support/outcome.ts";
@@ -496,6 +496,43 @@ describe("coming up", () => {
       }, { keepTurnsOverride: 1 });
       expect(resumed?.kind).toBe("compacted");
       expect(readDurable(active)).not.toBe(before);
+    } finally { client.close(); daemon.stop(); await daemon.done; }
+  });
+
+  test("shore compact is the user's own request, so neither a background budget nor its paused checkpoint holds it back", async () => {
+    const budget = `[[budgets]]\nname = "background"\nperiod = "month"\ncost_usd = 1\nlimit_action = "pause_background"\n`;
+    const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n${budget}`);
+    const compactStream = compactionFixture();
+    const chat = scriptedProvider("Stored fixture reply");
+    const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+      if (request.context?.call_type === "compaction") yield* compactStream(request, signal); else yield* chat.stream(request, signal);
+    } };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const finish = async (request: BrowserRequest, rid: string): Promise<unknown> => {
+      client.send({ ...request, rid });
+      await until(() => client.frames.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid), `${rid} did not finish`);
+      return client.frames.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+    };
+    try {
+      await client.awaitFrame("history");
+      await finish({ type: "message", text: "pause memory once", stream: true, images: [], image_data: [] }, "chat");
+      const config = daemon.runtime.registry.globalConfig();
+      required(ledgerFor(join(config.dirs.data, "shore.db"))).database.query(
+        `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+         VALUES (?1, 'ada', 'anthropic', 'default', 'claude-opus-4-8', 'message',
+           10, 5, 0, 0, 100, 10, 'end_turn', 0, 'pricing_catalog', 5.0)`,
+      ).run(new Date().toISOString());
+
+      expect(await finish({ type: "command", name: "compact", args: { keep_turns: 0 } }, "first")).toMatchObject({
+        status: "paused", reason: "provider", detail: "llm: Memory fixture provider temporarily unavailable",
+      });
+      const checkpoint = required(await loadCompactionCheckpoint(config.dirs.data, "ada", "main"));
+      await saveCompactionCheckpoint(config.dirs.data, { ...checkpoint, pauseReason: "budget", resumeAt: "2999-01-01T00:00:00.000Z" }, "main");
+
+      expect(await finish({ type: "command", name: "compact", args: {} }, "resume")).toMatchObject({ status: "compacted" });
     } finally { client.close(); daemon.stop(); await daemon.done; }
   });
 

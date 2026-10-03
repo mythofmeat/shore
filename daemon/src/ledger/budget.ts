@@ -188,8 +188,11 @@ export interface BudgetCallContext {
   api_key_name?: string | undefined;
   model: string;
   call_type: string;
+  foreground?: boolean | undefined;
   character: string;
 }
+
+type GatedCall = Pick<BudgetCallContext, "call_type" | "foreground">;
 
 export interface CallBlock {
   budget_name: string;
@@ -879,7 +882,7 @@ export function enforceBudgetForCall(
 
     if (
       overWithProjection &&
-      shouldBlock(config, budget, status.action, call.call_type)
+      shouldBlock(budget, status.action, call)
     ) {
       return withMessage({
         budget_name: status.name,
@@ -896,7 +899,7 @@ export function enforceBudgetForCall(
     if (
       pace !== undefined &&
       pace.current_cost + projected >= pace.allowance &&
-      shouldBlock(config, budget, pace.action, call.call_type)
+      shouldBlock(budget, pace.action, call)
     ) {
       return withMessage({
         budget_name: status.name,
@@ -918,7 +921,7 @@ export function enforceBudgetForCall(
     );
     if (
       crossedBudget !== undefined &&
-      shouldBlock(config, budget, warnAction, call.call_type)
+      shouldBlock(budget, warnAction, call)
     ) {
       return withMessage({
         budget_name: status.name,
@@ -941,7 +944,7 @@ export function enforceBudgetForCall(
     if (
       pace !== undefined &&
       crossedPace !== undefined &&
-      shouldBlock(config, budget, paceWarn, call.call_type)
+      shouldBlock(budget, paceWarn, call)
     ) {
       return withMessage({
         budget_name: status.name,
@@ -1066,27 +1069,26 @@ function callTypeMatchesUsageKind(callType: string, usageKind: string): boolean 
 }
 
 function shouldBlock(
-  config: UsageConfig,
   budget: UsageBudgetConfig,
   action: UsageBudgetAction,
-  callType: string,
+  call: GatedCall,
 ): boolean {
-  if (callType === "compaction" && compactionAllowed(budget)) {
+  if (call.call_type === "compaction" && compactionAllowed(budget)) {
     return false;
   }
-  return actionBlocks(action, callType);
+  return actionBlocks(action, call);
 }
 
-export function actionBlocks(action: UsageBudgetAction, callType: string): boolean {
+export function actionBlocks(action: UsageBudgetAction, call: GatedCall): boolean {
   switch (action) {
     case "warn":
       return false;
     case "block":
       return true;
     case "pause_background":
-      return isBackgroundCall(callType);
+      return call.foreground !== true && isBackgroundCall(call.call_type);
     case "pause_heartbeat":
-      return isHeartbeatCall(callType);
+      return isHeartbeatCall(call.call_type);
   }
 }
 

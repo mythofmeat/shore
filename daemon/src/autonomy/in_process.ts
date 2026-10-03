@@ -225,9 +225,9 @@ export type CompactionGenerate = (
   signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
-export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
+export function compactionGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): CompactionGenerate {
   return async (request, model, character, sink, tools, options, signal) => {
-    labelAccountedCall(request, deps.config, character, "compaction");
+    labelAccountedCall(request, deps.config, character, "compaction", foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
@@ -249,6 +249,7 @@ function labelAccountedCall(
   config: LoadedConfig,
   character: string,
   callType: string,
+  foreground = false,
 ): void {
   const options = request.provider_options;
   request.context = {
@@ -256,6 +257,7 @@ function labelAccountedCall(
     ledger: request.context?.ledger ?? rustJoin(config.dirs.data, "shore.db"),
     character,
     call_type: callType,
+    foreground,
     thinking_enabled: options?.thinking_enabled === true,
     ...(options?.cache_ttl === undefined ? {} : { cache_ttl: options.cache_ttl }),
     ...(options?.reasoning_effort === undefined

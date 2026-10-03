@@ -41,7 +41,6 @@ import {
   saveCompactionCheckpoint,
   type CheckpointLoopState,
   type CompactionCheckpoint,
-  type CompactionPauseReason,
 } from "./checkpoint.ts";
 import {
   countTurns,
@@ -497,6 +496,7 @@ export interface CompactOptions {
   tools: CompactionTools;
   maxToolIterations?: number;
   resumable?: boolean;
+  foreground?: boolean;
   coverage?: CompactionCoverage;
   emit?: FrameSink;
   signal?: AbortSignal;
@@ -576,7 +576,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   checkpoint.request.api_key = initialRequest.api_key;
   if (opts.coverage === undefined) delete checkpoint.coverageClaim;
   else checkpoint.coverageClaim = opts.coverage.claim;
-  if (checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
+  if (opts.foreground !== true && checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
   if (checkpointSourceIsCompatible(checkpoint, plan.sourceContent)) {
@@ -942,7 +942,6 @@ async function stillAsWritten(write: AppliedCompactionWrite): Promise<boolean> {
 function pausedOutcome(
   opts: CompactOptions,
   checkpoint: CompactionCheckpoint,
-  reasonOverride?: string,
 ): CompactionOutcome {
   return {
     kind: "paused",
@@ -952,7 +951,7 @@ function pausedOutcome(
     compactedTurns: checkpoint.compactedTurns,
     toolRounds: checkpoint.loop.toolRounds,
     toolsCalled: checkpoint.loop.toolsCalled,
-    reason: reasonOverride ?? checkpoint.pauseReason ?? "provider",
+    reason: checkpoint.pauseReason ?? "provider",
     ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
     ...(checkpoint.resumeAt === undefined ? {} : { resumeAt: checkpoint.resumeAt }),
   };
@@ -960,21 +959,14 @@ function pausedOutcome(
 
 async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheckpoint, error: unknown): Promise<CompactionOutcome> {
   if (opts.resumable !== true) throw error;
+  const stop = budgetStopIn(error);
   checkpoint.state = "paused";
-  checkpoint.pauseReason = pauseReason(error);
-  const resetAt = budgetResetAt(error);
-  if (resetAt === undefined) delete checkpoint.resumeAt;
-  else checkpoint.resumeAt = resetAt;
+  checkpoint.pauseReason = stop === undefined ? "provider" : "budget";
+  checkpoint.pauseDetail = stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));
+  if (stop?.resetAt === undefined) delete checkpoint.resumeAt;
+  else checkpoint.resumeAt = stop.resetAt;
   await persistCheckpoint(opts, checkpoint);
-  return pausedOutcome(opts, checkpoint, error instanceof Error ? error.message : String(error));
-}
-
-function pauseReason(e: unknown): CompactionPauseReason {
-  return budgetStopIn(e) === undefined ? "provider" : "budget";
-}
-
-function budgetResetAt(e: unknown): string | undefined {
-  return budgetStopIn(e)?.resetAt;
+  return pausedOutcome(opts, checkpoint);
 }
 
 async function currentActiveContent(opts: CompactOptions): Promise<string> {

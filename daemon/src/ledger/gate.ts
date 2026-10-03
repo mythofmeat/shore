@@ -42,6 +42,7 @@ function costBudgetBlock(
       api_key_name: context.api_key_name,
       model: request.model,
       call_type: context.call_type,
+      foreground: context.foreground,
       character: context.character,
     },
     now,

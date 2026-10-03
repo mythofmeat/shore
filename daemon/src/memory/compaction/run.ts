@@ -84,6 +84,7 @@ export interface CompactionRunOptions {
   keepTurnsOverride?: number;
   restart?: boolean;
   retainTrailingAutonomous?: boolean;
+  foreground?: boolean;
 }
 
 export async function runCompaction(
@@ -94,11 +95,9 @@ export async function runCompaction(
   const outcome = await runCompactionPass(character, deps, options);
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
   if (outcome.kind === "paused") {
-    deps.notify?.(
-      `Shore - ${character}`,
-      `Compaction paused after ${outcome.toolRounds} rounds (${outcome.reason}); conversation kept`,
-    );
-    throw new CompactionPaused(outcome.checkpointId, outcome.reason, outcome.resumeAt);
+    const why = outcome.detail ?? outcome.reason;
+    deps.notify?.(`Shore - ${character}`, `Compaction paused after ${outcome.toolRounds} rounds (${why}); conversation kept`);
+    throw new CompactionPaused(outcome.checkpointId, why, outcome.resumeAt);
   }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
 }
@@ -265,6 +264,7 @@ export async function runCompactionPass(
           chatRequest,
           dataDir,
           resumable: true,
+          foreground: options.foreground ?? false,
           tools: resolved.tools,
           ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
           ...(resolved.maxToolIterations === undefined
