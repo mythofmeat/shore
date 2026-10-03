@@ -39,7 +39,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        file_path: { type: "string", minLength: 1, description: "File to read. Absolute, or relative to the workspace root." },
+        file_path: { type: "string", minLength: 1, description: "File to read. Absolute, relative to the workspace root, or a [[link]] copied from a Markdown file." },
         offset: { type: "integer", minimum: 1, description: "First text line to return, numbered from 1. Default 1. Not accepted for images." },
         limit: { type: "integer", minimum: 1, maximum: 2000, description: "Maximum text lines to return. Default 2000, maximum 2000. The result character budget can shorten the page." },
         original: { type: "boolean", description: "Send an image file at the full resolution the model accepts instead of the reduced copy. Default false. Image files only." },
