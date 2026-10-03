@@ -59,7 +59,6 @@ export interface ThreadRecord {
   id: string;
   label?: string;
   created_at: string;
-  last_active?: string;
   chat_model?: string;
   compaction: boolean;
   forked_from?: ThreadForkOrigin;
@@ -97,18 +96,30 @@ function isUserTurnLine(raw: unknown): boolean {
   return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);
 }
 
-export async function threadTurnCount(
+export interface ThreadActivity {
+  turns: number;
+  last_active?: string;
+}
+
+function messageTime(raw: unknown): number {
+  if (typeof raw !== "object" || raw === null) return Number.NaN;
+  const timestamp = (raw as Partial<Message>).timestamp;
+  return typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
+}
+
+export async function threadActivity(
   data: string,
   character: string,
   id: string,
-): Promise<number> {
+): Promise<ThreadActivity> {
   let raw: string;
   try {
     raw = readDurable(threadFile(data, character, id, "active.jsonl"));
   } catch {
-    return 0;
+    return { turns: 0 };
   }
   let turns = 0;
+  let latest = -Infinity;
   for (const line of raw.split("\n")) {
     if (line.trim() === "") continue;
     let parsed: unknown;
@@ -118,19 +129,21 @@ export async function threadTurnCount(
       continue;
     }
     if (isUserTurnLine(parsed)) turns += 1;
+    const time = messageTime(parsed);
+    if (time > latest) latest = time;
   }
-  return turns;
+  return latest === -Infinity ? { turns } : { turns, last_active: new Date(latest).toISOString() };
 }
 
-export async function threadTurnCounts(
+export async function threadActivities(
   data: string,
   character: string,
   ids: readonly string[],
-): Promise<Map<string, number>> {
-  const counted = await Promise.all(
-    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),
+): Promise<Map<string, ThreadActivity>> {
+  const read = await Promise.all(
+    ids.map(async (id) => [id, await threadActivity(data, character, id)] as const),
   );
-  return new Map(counted);
+  return new Map(read);
 }
 
 export function homeThread(index: ThreadsIndex | undefined): string {

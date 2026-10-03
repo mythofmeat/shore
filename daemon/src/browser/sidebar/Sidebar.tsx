@@ -6,13 +6,10 @@ import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { navigate } from "../app/route.ts";
 import { perform, workspace } from "../app/state.ts";
+import { sortThreads } from "./order.ts";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
-}
-
-function sortThreads(threads: readonly ThreadView[]): ThreadView[] {
-  return [...threads].sort((a, b) => Number(b.home) - Number(a.home) || (b.last_active ?? b.created_at).localeCompare(a.last_active ?? a.created_at));
 }
 
 function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {

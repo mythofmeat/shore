@@ -19,7 +19,7 @@ import {
   createThread,
   ensureThreads,
   readThreadsIndex,
-  threadTurnCounts,
+  threadActivities,
 } from "../src/engine/threads.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { versionOf } from "../src/engine/versions.ts";
@@ -336,7 +336,8 @@ describe("forking a thread", () => {
     ]);
 
     await forkThread(root, "ada", "main", "spin", { now: () => NOW, turns: 1 });
-    expect(await threadTurnCounts(root, "ada", ["main", "spin"])).toEqual(
+    const activity = await threadActivities(root, "ada", ["main", "spin"]);
+    expect(new Map([...activity].map(([id, read]) => [id, read.turns]))).toEqual(
       new Map([
         ["main", 2],
         ["spin", 1],

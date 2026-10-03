@@ -203,7 +203,7 @@ MUTANTS = [
      "  try {\n"
      '    raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));\n'
      "  } catch {\n"
-     "    return 0;\n"
+     "    return { turns: 0 };\n"
      "  }",
      '  raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));'),
     ("turns: a torn tail line stops the count instead of being skipped",
@@ -217,8 +217,20 @@ MUTANTS = [
      "    raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));",
      "    raw = readDurable(threadFile(data, character, MAIN_THREAD, \"active.jsonl\"));"),
     ("turns: the roster is counted, but every entry gets the first thread's count",
-     "    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),",
-     "    ids.map(async (id) => [id, await threadTurnCount(data, character, ids[0] ?? id)] as const),"),
+     "    ids.map(async (id) => [id, await threadActivity(data, character, id)] as const),",
+     "    ids.map(async (id) => [id, await threadActivity(data, character, ids[0] ?? id)] as const),"),
+    ("last_active: the last line's time wins over the newest",
+     "    if (time > latest) latest = time;",
+     "    if (!Number.isNaN(time)) latest = time;"),
+    ("last_active: an undated line wipes out the time before it",
+     "    if (time > latest) latest = time;",
+     "    if (!(time <= latest)) latest = time;"),
+    ("last_active: a thread with no dated line claims a time anyway",
+     "  return latest === -Infinity ? { turns } :",
+     "  return false ? { turns } :"),
+    ("last_active: the stored offset is passed through rather than read as an instant",
+     "  return typeof timestamp === \"string\" ? Date.parse(timestamp) : Number.NaN;",
+     "  return typeof timestamp === \"string\" ? Date.parse(timestamp.slice(0, 19) + \"Z\") : Number.NaN;"),
 
     # --- archiving lets go of the SDK session too ----------------------------
     ("archive: the SDK session outlives the thread, so a new one of the same name resumes it",
