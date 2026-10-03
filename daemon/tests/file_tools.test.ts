@@ -253,15 +253,15 @@ test("Markdown read skips wikilink images that match no file or more than one", 
   expect(result.isError).toBe(false);
   expect(resultImages(result)).toHaveLength(1);
   const text = resultText(result);
-  expect(text).toContain("[Markdown image [[img.png]] not attached: 2 workspace files match (a/img.png, b/img.png); add folders to the link to pick one]");
+  expect(text).toContain("[Markdown image ![[img.png]] not attached: 2 pictures match: ![[a/img.png]], ![[b/img.png]]]");
   expect(text.match(/\[\[img\.png\]\] not attached/g)).toHaveLength(1);
-  expect(text).toContain("[Markdown image [[mg.png]] not attached: no file in the workspace matches it]");
-  expect(text).toContain("[Markdown image [[x/pic.png]] not attached: no file in the workspace matches it]");
+  expect(text).toContain("[Markdown image ![[mg.png]] not attached: no picture matches; did you mean ![[a/img.png]], ![[b/img.png]]?]");
+  expect(text).toContain("[Markdown image ![[x/pic.png]] not attached: no picture matches; did you mean ![[pic.png]]?]");
 
   for (const dir of ["c", "d"]) await mkdir(join(ctx.workspaceDir, dir));
   for (const file of ["c/img.png", "d/img.png"]) await put(file, Buffer.from(PNG, "base64"));
   await put("crowded.md", "![[img.png]]\n");
-  expect(resultText(await run("read", { file_path: "crowded.md" }))).toContain("4 workspace files match (a/img.png, b/img.png, c/img.png and 1 more)");
+  expect(resultText(await run("read", { file_path: "crowded.md" }))).toContain("4 pictures match: ![[a/img.png]], ![[b/img.png]], ![[c/img.png]] and 1 more]");
 });
 
 test("Markdown read searches hidden folders for wikilink images but not .git or symlinks", async () => {
@@ -275,13 +275,15 @@ test("Markdown read searches hidden folders for wikilink images but not .git or 
   const result = await run("read", { file_path: "links.md" });
   expect(resultImages(result)).toHaveLength(1);
   expect(resultText(result)).not.toContain("[[pic.png]] not attached");
-  expect(resultText(result)).toContain("[Markdown image [[alias.png]] not attached: no file in the workspace matches it]");
+  expect(resultText(result)).toContain("[Markdown image ![[alias.png]] not attached: no picture matches]");
 });
 
 test("Markdown read leaves wikilinks that are not visible image embeds as text", async () => {
   const { put, run } = await world();
   await put("img.png", Buffer.from(PNG, "base64"));
   await put("b.png", Buffer.from(PNG, "base64"));
+  await put("Some Note.md", "");
+  await put("notes.md", "");
   const source = "[[img.png]] ![[Some Note]] ![[notes.md]] ![[img.png\n\\![[img.png]] `![[img.png]]` ![img.png]] !\\[[img.png]]\n```\n![[img.png]]\n```\n";
   await put("examples.md", source);
   const examples = await run("read", { file_path: "examples.md" });
@@ -296,6 +298,130 @@ test("Markdown read leaves wikilinks that are not visible image embeds as text",
   expect(resultImages(first)).toHaveLength(1);
   expect(resultText(first)).not.toContain("b.png]] not");
   expect(resultImages(await run("read", { file_path: "paged.md", offset: 2 }))).toHaveLength(1);
+});
+
+test("Markdown read finds wikilink pictures without an extension and reports embeds that name nothing", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of [".attachments", "art", "old"]) await mkdir(join(ctx.workspaceDir, dir));
+  await put(".attachments/harbor.webp", Buffer.from(PNG, "base64"));
+  for (const file of ["art/sketch.png", "art/sketch.JPG", "old/sketch.png"]) await put(file, Buffer.from(PNG, "base64"));
+  await put("market.md", "# Market\n");
+  await put("links.md", "![[harbor|the harbor]]\n![[sketch]]\n![[sketch.JPG]]\n![[old/sketch]]\n![[market]] ![[market#Stalls]] ![[#Intro]]\n![[lost-note]]\n");
+  await put("typos.md", "![[Harbor]]\n![[sketch.jpg]]\n");
+  const result = await run("read", { file_path: "links.md" });
+  const text = resultText(result) + resultText(await run("read", { file_path: "typos.md" }));
+  expect(resultImages(result)).toHaveLength(3);
+  expect(text).toContain(`[the harbor (${join(ctx.workspaceDir, ".attachments/harbor.webp")}) attached`);
+  for (const file of ["art/sketch.JPG", "old/sketch.png"]) expect(text).toContain(`[${join(ctx.workspaceDir, file)} attached`);
+  expect(text).toContain("[Markdown image ![[sketch]] not attached: 3 pictures match: ![[sketch.JPG]], ![[art/sketch.png]], ![[old/sketch.png]]]");
+  for (const embed of ["![[market]]", "![[market#Stalls]]", "![[#Intro]]"]) expect(text).not.toContain(`${embed} not attached`);
+  expect(text).toContain("[Markdown image ![[lost-note]] not attached: no picture matches]");
+  expect(text).toContain("[Markdown image ![[Harbor]] not attached: no picture matches; did you mean ![[harbor.webp]]?]");
+  expect(text).toContain("[Markdown image ![[sketch.jpg]] not attached: no picture matches; did you mean ![[sketch.JPG]], ![[art/sketch.png]], ![[old/sketch.png]]?]");
+});
+
+test("a leading slash anchors a wikilink at the workspace root", async () => {
+  const { put, run, ctx } = await world();
+  await mkdir(join(ctx.workspaceDir, "a"));
+  for (const file of ["img.png", "a/img.png"]) await put(file, Buffer.from(PNG, "base64"));
+  await put("links.md", "![[img.png]]\n![[/img.png]]\n![[/a/img.png]]\n![[/b/img.png]]\n");
+  const text = resultText(await run("read", { file_path: "links.md" }));
+  expect(text).toContain("[Markdown image ![[img.png]] not attached: 2 pictures match: ![[a/img.png]], ![[/img.png]]]");
+  expect(text).toContain(`${join(ctx.workspaceDir, "img.png")} attached`);
+  expect(text).toContain(`${join(ctx.workspaceDir, "a/img.png")} attached`);
+  expect(text).toContain("[Markdown image ![[/b/img.png]] not attached: no picture matches; did you mean ![[a/img.png]], ![[/img.png]]?]");
+  expect(resultText(await run("read", { file_path: "/img.png" }))).toContain("ENOENT");
+});
+
+test("read opens a [[link]] by note or picture name anywhere in the workspace", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of ["places/harbor", ".attachments"]) await mkdir(join(ctx.workspaceDir, dir), { recursive: true });
+  const market = await put("places/harbor/market.md", "# Market\n");
+  const portrait = await put(".attachments/portrait.png", Buffer.from(PNG, "base64"));
+  for (const file_path of ["[[market]]", "[[market.md]]", "[[harbor/market|the market]]", "[[market#Stalls]]", " [[/places/harbor/market]] ", "![[market]]"]) {
+    const result = await run("read", { file_path });
+    expect(result.isError).toBe(false);
+    expect(resultText(result)).toBe(`${market}: lines 1–1\n1\t# Market\nEnd of file.`);
+  }
+  for (const file_path of ["![[portrait.png]]", "![[portrait|a portrait]]", "[[portrait.png]]"]) {
+    const result = await run("read", { file_path });
+    expect(resultText(result)).toStartWith(`${portrait}: image/png`);
+    expect(resultImages(result)).toHaveLength(1);
+  }
+  expect(resultText(await run("read", { file_path: "[[places/market]]" }))).toBe("io: [[places/market]]: no note matches; did you mean [[market]]?");
+  expect(resultText(await run("read", { file_path: "[[portrait]]" }))).toBe("io: [[portrait]]: no note matches");
+  expect(resultText(await run("read", { file_path: "![[mrket]]" }))).toBe("io: ![[mrket]]: no picture or note matches; did you mean [[market]]?");
+  for (const file_path of ["[[]]", "[[#Stalls]]", "[[|alias]]"]) {
+    expect(resultText(await run("read", { file_path }))).toBe(`io: ${file_path}: the link names no file`);
+  }
+});
+
+test("read lists every file a name fits as links with the fewest folders that pick each one", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of ["north/places", "south/places", "places", "art", "old"]) await mkdir(join(ctx.workspaceDir, dir), { recursive: true });
+  for (const file of ["inn.md", "north/places/inn.md", "places/inn.md", "south/places/inn.md"]) await put(file, `${file}\n`);
+  for (const file of ["art/sketch.png", "art/sketch.jpg", "old/sketch.png"]) await put(file, Buffer.from(PNG, "base64"));
+  const inns = await run("read", { file_path: "[[inn]]" });
+  expect(inns.isError).toBe(true);
+  expect(resultText(inns)).toBe("io: [[inn]]: 4 notes match: [[/inn]], [[north/places/inn]], [[/places/inn]], [[south/places/inn]]");
+  for (const [file_path, file] of [["[[/inn]]", "inn.md"], ["[[north/places/inn]]", "north/places/inn.md"], ["[[/places/inn]]", "places/inn.md"], ["[[south/places/inn]]", "south/places/inn.md"]] as const) {
+    expect(resultText(await run("read", { file_path }))).toStartWith(`${join(ctx.workspaceDir, file)}: lines 1–1\n1\t${file}`);
+  }
+  expect(resultText(await run("read", { file_path: "![[sketch]]" }))).toBe("io: ![[sketch]]: 3 pictures match: ![[sketch.jpg]], ![[art/sketch.png]], ![[old/sketch.png]]");
+  for (const [file_path, file] of [["![[sketch.jpg]]", "art/sketch.jpg"], ["![[art/sketch.png]]", "art/sketch.png"], ["![[old/sketch.png]]", "old/sketch.png"]] as const) {
+    expect(resultText(await run("read", { file_path }))).toStartWith(`${join(ctx.workspaceDir, file)}: image/png`);
+  }
+});
+
+test("read tries a missing path or a folder as a name and says it did", async () => {
+  const { root, put, run, ctx } = await world();
+  for (const dir of ["places/harbor", "lighthouse", "notes", "art"]) await mkdir(join(ctx.workspaceDir, dir), { recursive: true });
+  const market = await put("places/harbor/market.md", "# Market\n");
+  const lighthouse = await put("notes/lighthouse.md", "# Lighthouse\n");
+  const portrait = await put("art/portrait.png", Buffer.from(PNG, "base64"));
+  await put("MEMORY.md", "# Memory\n");
+  const named = await run("read", { file_path: "market" });
+  expect(named.isError).toBe(false);
+  expect(resultText(named)).toBe(`${market}: lines 1–1\n1\t# Market\nEnd of file.\n[market does not exist; found [[market]] by name.]`);
+  expect(resultText(await run("read", { file_path: "harbor/market.md" }))).toEndWith("[harbor/market.md does not exist; found [[market]] by name.]");
+  expect(resultText(await run("read", { file_path: "lighthouse" }))).toBe(`${lighthouse}: lines 1–1\n1\t# Lighthouse\nEnd of file.\n[lighthouse is a folder; found [[lighthouse]] by name.]`);
+  const picture = await run("read", { file_path: "portrait.png" });
+  expect(resultText(picture)).toStartWith(`${portrait}: image/png`);
+  expect(resultText(picture)).toContain("[portrait.png does not exist; found ![[portrait.png]] by name.]");
+  expect(resultImages(picture)).toHaveLength(1);
+  expect(resultText(await run("read", { file_path: "MEMORY.md" }))).toBe(`${join(ctx.workspaceDir, "MEMORY.md")}: lines 1–1\n1\t# Memory\nEnd of file.`);
+  const stale = join(ctx.workspaceDir, "old/market.md");
+  expect(resultText(await run("read", { file_path: stale }))).toBe(`io: ${stale} does not exist; tried as [[old/market.md]]: no note matches; did you mean [[market]]?`);
+  expect(resultText(await run("read", { file_path: "portrait" }))).toBe(`io: ${join(ctx.workspaceDir, "portrait")} does not exist; tried as [[portrait]]: no note matches`);
+  for (const file_path of [join(root, "market"), "../market", "."]) {
+    const outside = await run("read", { file_path });
+    expect(outside.isError).toBe(true);
+    expect(resultText(outside)).not.toContain("tried as");
+  }
+});
+
+test("read leaves notes in hidden folders and all-caps notes out of names but reads them by path", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of [".drafts", "memory", "docs", "log"]) await mkdir(join(ctx.workspaceDir, dir));
+  for (const file of [".drafts/market.md", ".pier.md", "memory/MEMORY.md", "docs/README.md", "README.md", "log/2026-10-03.md", "NPC-list.md"]) await put(file, `${file}\n`);
+  expect(resultText(await run("read", { file_path: "[[market]]" }))).toBe("io: [[market]]: no note matches");
+  expect(resultText(await run("read", { file_path: "[[.pier]]" }))).toBe("io: [[.pier]]: no note matches");
+  expect(resultText(await run("read", { file_path: "[[MEMORY]]" }))).toBe("io: [[MEMORY]]: no note matches; all-caps notes are skipped as names, so read it by path: memory/MEMORY.md");
+  expect(resultText(await run("read", { file_path: "[[README]]" }))).toBe("io: [[README]]: no note matches; all-caps notes are skipped as names, so read one by path: README.md, docs/README.md");
+  for (const [file_path, file] of [["[[2026-10-03]]", "log/2026-10-03.md"], ["[[NPC-list]]", "NPC-list.md"]] as const) {
+    expect(resultText(await run("read", { file_path }))).toContain(`1\t${file}`);
+  }
+  for (const file of [".drafts/market.md", "memory/MEMORY.md"]) expect(resultText(await run("read", { file_path: file }))).toContain(`1\t${file}`);
+});
+
+test("read suggests the closest names when nothing matches, including ones off only by case", async () => {
+  const { put, run, ctx } = await world();
+  await mkdir(join(ctx.workspaceDir, "art"));
+  for (const file of ["Harbor.md", "harbour.md", "market.md"]) await put(file, `${file}\n`);
+  await put("art/harbor.png", Buffer.from(PNG, "base64"));
+  expect(resultText(await run("read", { file_path: "[[harbor]]" }))).toBe("io: [[harbor]]: no note matches; did you mean [[Harbor]], [[harbour]]?");
+  expect(resultText(await run("read", { file_path: "![[harbr]]" }))).toBe("io: ![[harbr]]: no picture or note matches; did you mean ![[harbor.png]], [[Harbor]]?");
+  expect(resultText(await run("read", { file_path: "[[lighthouse]]" }))).toBe("io: [[lighthouse]]: no note matches");
 });
 
 test("Markdown read preserves text when local images are missing, invalid, or too large", async () => {

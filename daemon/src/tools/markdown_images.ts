@@ -1,11 +1,12 @@
-import { readdir, type FileHandle } from "node:fs/promises";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import type { FileHandle } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import type { Definition, Image, ImageReference, Nodes, Text } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { readBoundedFile } from "./file_access.ts";
 import { MAX_INLINE_TOOL_IMAGES, MAX_LISTED_MEDIA_NOTES, carryToolMedia, type ToolResultPayload } from "./media.ts";
 import { base64Bytes } from "../util/base64.ts";
-import { IMAGE_EXTENSIONS, readImageAt } from "./read_image.ts";
+import { readImageAt } from "./read_image.ts";
+import { embeddedPicture, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 
 const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
 
@@ -47,7 +48,7 @@ function wikilinkImages(source: string, node: Text, visible: (start: number, end
     while (offset - escapes > start && source[offset - escapes - 1] === "\\") escapes += 1;
     const target = (match[1] ?? "").trim();
     const option = match[2]?.trim();
-    if (escapes % 2 === 1 || !IMAGE_EXTENSIONS.has(extname(target).toLowerCase()) || !visible(offset, offset + match[0].length)) return [];
+    if (escapes % 2 === 1 || !visible(offset, offset + match[0].length)) return [];
     return [{ alt: option === undefined || WIKILINK_SIZE.test(option) ? undefined : option, target, wikilink: true }];
   });
 }
@@ -76,29 +77,6 @@ function imageRefs(source: string, page: TextPage): ImageRef[] {
   });
 }
 
-async function workspaceFilesNamed(workspaceDir: string, targets: readonly string[], signal?: AbortSignal): Promise<string[]> {
-  const names = new Set(targets.map((target) => basename(target)));
-  const files: string[] = [];
-  const pending = [workspaceDir];
-  for (let dir = pending.pop(); dir !== undefined; dir = pending.pop()) {
-    signal?.throwIfAborted();
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (entry.isDirectory() && entry.name !== ".git") pending.push(join(dir, entry.name));
-      else if (entry.isFile() && names.has(entry.name)) files.push(relative(workspaceDir, join(dir, entry.name)));
-    }
-  }
-  return files.sort();
-}
-
-function wikilinkPath(target: string, workspaceDir: string, files: readonly string[]): string {
-  const matches = files.filter((file) => file === target || file.endsWith(`/${target}`));
-  const [only] = matches;
-  if (only === undefined) throw new Error("no file in the workspace matches it");
-  if (matches.length > 1) throw new Error(`${String(matches.length)} workspace files match (${listSome(matches)}); add folders to the link to pick one`);
-  return resolve(workspaceDir, only);
-}
-
 function overBudgetNote(urls: readonly string[], maxImageBytes: number): string {
   const reason = maxImageBytes === 0
     ? "inline images are disabled for this tool"
@@ -117,8 +95,7 @@ export async function expandMarkdownImages(
     const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error("file changed while reading; retry to expand images");
     const refs = imageRefs(source, page);
-    const wikilinks = refs.filter((ref) => ref.wikilink).map((ref) => ref.target);
-    const workspaceFiles = wikilinks.length === 0 ? [] : await workspaceFilesNamed(workspaceDir, wikilinks, signal);
+    let names: Promise<WorkspaceNames> | undefined;
     const shownRefs = new Set<string>();
     const paths = new Set<string>();
     const failures: string[] = [];
@@ -128,11 +105,11 @@ export async function expandMarkdownImages(
     const fits = (size: number) => bytesAfterResize(size) <= budget.remaining;
     for (const { alt, target, wikilink } of refs) {
       signal?.throwIfAborted();
-      const shown = wikilink ? `[[${target}]]` : target;
+      const shown = wikilink ? `![[${target}]]` : target;
       if (shownRefs.has(shown)) continue;
       shownRefs.add(shown);
       try {
-        const imagePath = wikilink ? wikilinkPath(target, workspaceDir, workspaceFiles) : localImagePath(target, path);
+        const imagePath = wikilink ? embeddedPicture(await (names ??= workspaceNames(workspaceDir, signal)), target, MAX_LISTED_MEDIA_NOTES) : localImagePath(target, path);
         if (imagePath === undefined || paths.has(imagePath)) continue;
         paths.add(imagePath);
         if (paths.size > MAX_INLINE_TOOL_IMAGES) continue;
