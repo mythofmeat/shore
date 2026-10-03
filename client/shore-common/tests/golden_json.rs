@@ -114,8 +114,10 @@ fn request_accepted_names_the_request_whose_message_was_saved() {
 
 #[test]
 fn structured_image_history_preserves_nested_wire_data_and_display_images() {
-    let frame: ServerMessage =
-        assert_golden(include_str!("../../../fixtures/protocol/rich-history.json"));
+    let frame: ServerMessage = assert_golden(&shared_fixture(
+        "server",
+        Some("history_with_image_tool_result"),
+    ));
     assert_variant!(frame, ServerMessage::History(history) => {
         let message = history.messages.first().unwrap();
         let ContentBlock::ToolResult { content, is_error, .. } = message.content_blocks.get(1).unwrap() else { panic!("Missing structured tool result"); };

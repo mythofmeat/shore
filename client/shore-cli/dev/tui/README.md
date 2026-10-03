@@ -7,20 +7,20 @@ Fixture mode also skips terminal image-protocol probing.
 Interactive fixture mode:
 
 ```sh
-SHORE_TUI_FIXTURE=dev/tui/fixtures/markdown.md target/debug/shore
+SHORE_TUI_FIXTURE=dev/tui/README.md target/debug/shore
 ```
 
 One-shot render to stdout:
 
 ```sh
-SHORE_TUI_FIXTURE=dev/tui/fixtures/markdown.md \
+SHORE_TUI_FIXTURE=dev/tui/README.md \
 SHORE_TUI_FIXTURE_RENDER=80x24 \
 target/debug/shore
 ```
 
 Useful env vars:
 
-- `SHORE_TUI_FIXTURE`: markdown file to render as an offline transcript entry.
+- `SHORE_TUI_FIXTURE`: any markdown file to render as an offline transcript entry.
 - `SHORE_TUI_FIXTURE_ROLE`: `assistant`, `user`, or `system`; defaults to
   `assistant`.
 - `SHORE_TUI_FIXTURE_REPEAT`: repeat the fixture entry to exercise scrolling.

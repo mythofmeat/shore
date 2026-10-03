@@ -1,5 +1,0 @@
-[
-  { "name": "export_character", "input": { "character": "ada", "output": "/fixture/ada.tar.gz" }, "result": { "character": "ada", "archive": "/fixture/ada.tar.gz", "bytes": 1234, "live": true, "call_diagnostics": "included", "external_memory": "rebuild_from_archived_segments" } },
-  { "name": "import_character", "input": { "archive": "/fixture/ada.tar.gz" }, "result": { "character": "ada", "archive": "/fixture/ada.tar.gz", "imported": true, "external_memory": "queued_for_rebuild_when_retain_is_enabled" } },
-  { "name": "delete_character", "input": { "character": "ada", "confirm": "ada", "archive": "/fixture/ada.tar.gz" }, "result": { "character": "ada", "deleted": true, "removed": ["/fixture/config/ada", "/fixture/data/ada"], "archive": "/fixture/ada.tar.gz" } }
-]

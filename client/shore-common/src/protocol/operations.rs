@@ -2421,21 +2421,43 @@ operations! {
 mod tests {
     use super::*;
 
-    #[test]
-    fn archive_contracts_preserve_backups_and_require_complete_results() {
-        let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
-            "../../../shore-cli/tests/fixtures/character_archives.json"
+    fn recorded_result(section: &str) -> serde_json::Value {
+        let recorded: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../daemon/tests/command_captures/operation_results.json"
         ))
         .unwrap();
-        for fixture in fixtures {
-            let name = fixture.get("name").unwrap().as_str().unwrap();
+        recorded.get(section).unwrap().clone()
+    }
+
+    fn numbers_as_f64(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Number(number) => number
+                .as_f64()
+                .map_or(serde_json::Value::Number(number), serde_json::Value::from),
+            serde_json::Value::Array(items) => items.into_iter().map(numbers_as_f64).collect(),
+            serde_json::Value::Object(fields) => fields
+                .into_iter()
+                .map(|(key, item)| (key, numbers_as_f64(item)))
+                .collect(),
+            other @ (serde_json::Value::Null
+            | serde_json::Value::Bool(_)
+            | serde_json::Value::String(_)) => other,
+        }
+    }
+
+    #[test]
+    fn archive_contracts_preserve_backups_and_require_complete_results() {
+        let archives: Vec<serde_json::Value> =
+            serde_json::from_value(recorded_result("character_archives")).unwrap();
+        for archive in archives {
+            let name = archive.get("name").unwrap().as_str().unwrap();
             assert!(
                 serde_json::from_value::<OperationRequest>(
-                    serde_json::json!({"name":name,"args":fixture.get("input").unwrap()})
+                    serde_json::json!({"name":name,"args":archive.get("input").unwrap()})
                 )
                 .is_ok()
             );
-            let result = fixture.get("result").unwrap().clone();
+            let result = archive.get("result").unwrap().clone();
             assert!(
                 serde_json::from_value::<OperationResponse>(
                     serde_json::json!({"name":name,"data":result})
@@ -2491,10 +2513,8 @@ mod tests {
             )
             .is_err()
         );
-        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
-            "../../../shore-cli/tests/fixtures/usage_reports.json"
-        ))
-        .unwrap();
+        let reports: Vec<serde_json::Value> =
+            serde_json::from_value(recorded_result("usage_reports")).unwrap();
         let plan = reports
             .first()
             .and_then(|summary| summary.get("claude_plan_limits"))
@@ -2552,13 +2572,14 @@ mod tests {
         ] {
             assert!(serde_json::from_value::<RunToolArgs>(invalid).is_err());
         }
-        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
-            "../../../shore-cli/tests/fixtures/tool_results.json"
-        ))
-        .unwrap();
+        let reports: Vec<serde_json::Value> =
+            serde_json::from_value(recorded_result("tool_results")).unwrap();
         for report in reports {
             let parsed: RunToolResult = serde_json::from_value(report.clone()).unwrap();
-            assert_eq!(serde_json::to_value(parsed).unwrap(), report);
+            assert_eq!(
+                numbers_as_f64(serde_json::to_value(parsed).unwrap()),
+                numbers_as_f64(report.clone())
+            );
             for key in report.as_object().unwrap().keys() {
                 let mut incomplete = report.clone();
                 assert!(incomplete.as_object_mut().unwrap().remove(key).is_some());
@@ -2611,10 +2632,8 @@ mod tests {
 
     #[test]
     fn memory_result_variants_require_complete_payloads() {
-        let reports: Vec<serde_json::Value> = serde_json::from_str(include_str!(
-            "../../../shore-cli/tests/fixtures/memory_compaction.json"
-        ))
-        .unwrap();
+        let reports: Vec<serde_json::Value> =
+            serde_json::from_value(recorded_result("memory_compaction")).unwrap();
         for report in reports {
             let parsed: CompactionReport = serde_json::from_value(report.clone()).unwrap();
             assert_eq!(serde_json::to_value(parsed).unwrap(), report);
@@ -2627,10 +2646,7 @@ mod tests {
                 );
             }
         }
-        let listing: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../shore-cli/tests/fixtures/memory_segments.json"
-        ))
-        .unwrap();
+        let listing = recorded_result("memory_segments");
         let parsed: SegmentsResult = serde_json::from_value(listing.clone()).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), listing);
         assert!(

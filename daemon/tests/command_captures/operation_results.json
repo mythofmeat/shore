@@ -1,0 +1,636 @@
+{
+  "character_archives": [
+    {
+      "name": "export_character",
+      "input": {
+        "character": "ada",
+        "output": "/fixture/ada.tar.gz"
+      },
+      "result": {
+        "character": "ada",
+        "archive": "/fixture/ada.tar.gz",
+        "bytes": 1234,
+        "live": true,
+        "call_diagnostics": "included",
+        "external_memory": "rebuild_from_archived_segments"
+      }
+    },
+    {
+      "name": "import_character",
+      "input": {
+        "archive": "/fixture/ada.tar.gz"
+      },
+      "result": {
+        "character": "ada",
+        "archive": "/fixture/ada.tar.gz",
+        "imported": true,
+        "external_memory": "queued_for_rebuild_when_retain_is_enabled"
+      }
+    },
+    {
+      "name": "delete_character",
+      "input": {
+        "character": "ada",
+        "confirm": "ada",
+        "archive": "/fixture/ada.tar.gz"
+      },
+      "result": {
+        "character": "ada",
+        "deleted": true,
+        "removed": [
+          "/fixture/config/ada",
+          "/fixture/data/ada"
+        ],
+        "archive": "/fixture/ada.tar.gz"
+      }
+    }
+  ],
+  "diagnostic_call": {
+    "enabled": true,
+    "call": {
+      "id": 2,
+      "call_id": "fixture-call-2",
+      "ts": "2026-09-01T12:00:00Z",
+      "call_type": "message",
+      "character": "ada",
+      "model": "fixture",
+      "provider": "test",
+      "finish_reason": "end_turn",
+      "duration_ms": 1,
+      "error": null,
+      "usage": {
+        "input_tokens": 4,
+        "output_tokens": 2,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "request_bytes": 10,
+      "response_bytes": 20,
+      "request": {
+        "future_payload": {
+          "inspectable": true
+        }
+      },
+      "response": "Unparsed provider response"
+    },
+    "wire": [],
+    "diff": {
+      "from_payload": 1,
+      "to_payload": 2,
+      "from_call": 1,
+      "to_call": 2,
+      "source": "internal",
+      "chunks": {
+        "equal": 0,
+        "added": 1,
+        "removed": 1
+      },
+      "bytes": {
+        "equal": 0,
+        "added": 10,
+        "removed": 8
+      },
+      "entries": [
+        {
+          "op": "added",
+          "hash": "fixture",
+          "bytes": 10,
+          "text": "new request"
+        }
+      ]
+    },
+    "future_detail": "still visible"
+  },
+  "diagnostic_status": {
+    "character": "ada",
+    "keepalive_halts": [],
+    "message_count": 4,
+    "turn_count": 4,
+    "context_tokens": 12,
+    "active_model": "fixture:model",
+    "config_dir": "/fixture/config",
+    "data_dir": "/fixture/data",
+    "cache_dir": "/fixture/cache",
+    "pending_deferred_edit_count": 0,
+    "pending_deferred_edits": [],
+    "tokens": {
+      "input": 4,
+      "output": 2,
+      "cache_read": 1,
+      "cache_write": 0
+    },
+    "autonomy": null,
+    "activity": null,
+    "index": null,
+    "history_index": null,
+    "sections": [
+      "tokens",
+      "autonomy",
+      "activity",
+      "index",
+      "history_index",
+      "daemon"
+    ],
+    "daemon": {
+      "state": "running"
+    },
+    "session": {
+      "turns": 4
+    }
+  },
+  "memory_compaction": [
+    {
+      "character": "ada",
+      "message_count": 4,
+      "compacted_turns": 1,
+      "status": "compacted",
+      "turn_count": 2,
+      "retained_count": 2,
+      "retained_turns": 1,
+      "memory_files_written": [
+        "memory/fact.md"
+      ],
+      "new_conversation_id": "conversation-2",
+      "tool_rounds": 2,
+      "tools_called": [
+        "edit"
+      ]
+    },
+    {
+      "character": "ada",
+      "message_count": 4,
+      "compacted_turns": 1,
+      "status": "rotated",
+      "turn_count": 2,
+      "retained_count": 2,
+      "retained_turns": 1,
+      "dry_run": true,
+      "memory_files_written": [],
+      "archived_messages": 2
+    },
+    {
+      "character": "ada",
+      "message_count": 4,
+      "compacted_turns": 1,
+      "status": "dry_run",
+      "turn_count": 2,
+      "retained_count": 2,
+      "retained_turns": 1,
+      "would_write_files": 1,
+      "file_ops_preview": [
+        {
+          "path": "memory/fact.md",
+          "content_preview": "A lasting fact"
+        }
+      ],
+      "tool_rounds": 2,
+      "tools_called": [
+        "edit"
+      ]
+    },
+    {
+      "character": "ada",
+      "message_count": 4,
+      "compacted_turns": 1,
+      "status": "paused",
+      "checkpoint_id": "checkpoint-1",
+      "tool_rounds": 2,
+      "tools_called": [
+        "edit"
+      ],
+      "reason": "provider_error",
+      "detail": "fixture failure",
+      "resume_at": null
+    },
+    {
+      "character": "ada",
+      "message_count": 4,
+      "compacted_turns": 1,
+      "status": "truncated",
+      "turn_count": 2,
+      "tool_rounds": 2,
+      "tools_called": [
+        "edit"
+      ],
+      "truncated_turns": 1,
+      "partial_writes": [
+        "memory/fact.md"
+      ]
+    }
+  ],
+  "memory_segments": {
+    "character": "ada",
+    "thread": "main",
+    "count": 1,
+    "segments": [
+      {
+        "index": 4,
+        "compacted_at": "2026-08-20T12:00:00Z",
+        "first_message_at": "2026-08-20T10:00:00Z",
+        "last_message_at": "2026-08-20T11:00:00Z",
+        "message_count": 2,
+        "excluded": false,
+        "label": null,
+        "note": null,
+        "memory_before": null,
+        "memory_after": null
+      }
+    ]
+  },
+  "tool_results": [
+    {
+      "mode": "tool_definition",
+      "tool": "fixture",
+      "kind": "mcp",
+      "enabled": false,
+      "description": "Tool definition fixture",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "enabled"
+              ]
+            }
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      }
+    },
+    {
+      "tool": "fixture",
+      "character": "ada",
+      "kind": "mcp",
+      "enabled": false,
+      "input": {
+        "entries": [
+          {
+            "text": "first\nsecond",
+            "enabled": null
+          }
+        ],
+        "count": 0,
+        "active": false
+      },
+      "ok": true,
+      "rejected": false,
+      "duration_ms": 1.25,
+      "output": "Tool output window",
+      "truncated": true,
+      "result_chars": 48,
+      "raw": "Complete tool output including the hidden ending",
+      "calls": [
+        {
+          "tool": "read",
+          "subagent": "worker",
+          "ok": true,
+          "input": "{\"path\":\"notes.md\"}",
+          "output": "Nested fixture output"
+        }
+      ]
+    },
+    {
+      "tool": "edit",
+      "character": "ada",
+      "kind": "builtin",
+      "enabled": true,
+      "input": {},
+      "ok": false,
+      "rejected": true,
+      "duration_ms": 0,
+      "output": "Invalid tool input: missing path",
+      "truncated": false,
+      "result_chars": 32,
+      "raw": null,
+      "calls": []
+    },
+    {
+      "tool": "ask_worker",
+      "character": "ada",
+      "kind": "subagent",
+      "enabled": true,
+      "input": {
+        "query": "Look for notes"
+      },
+      "ok": false,
+      "rejected": false,
+      "duration_ms": 2,
+      "output": "Provider fixture unavailable",
+      "truncated": false,
+      "result_chars": 28,
+      "raw": null,
+      "calls": [
+        {
+          "tool": "read",
+          "subagent": null,
+          "ok": false,
+          "input": "{\"path\":\"missing.md\"}",
+          "output": "Missing file"
+        }
+      ]
+    }
+  ],
+  "usage_reports": [
+    {
+      "mode": "summary",
+      "period": "budget",
+      "period_since": "2026-09-01T00:00:00Z",
+      "timezone": "utc",
+      "summary": [
+        {
+          "provider": "anthropic",
+          "model": "usage-model-a",
+          "call_count": 1,
+          "total_input": 1000,
+          "total_output": 100,
+          "total_cache_read": 1000,
+          "total_cache_write": 0,
+          "total_cost": 3.5
+        }
+      ],
+      "cache_health": [
+        {
+          "character": "nova",
+          "state": "warm",
+          "streak": 1
+        }
+      ],
+      "anomaly_count_7d": 1,
+      "anomaly_counts_7d": [
+        {
+          "anomaly": "unexpected_write",
+          "calls": 1,
+          "cache_write_tokens": 2500
+        }
+      ],
+      "cache_coverage": [
+        {
+          "state": "cold",
+          "reason": "prefix changed",
+          "calls": 1,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 2500
+        }
+      ],
+      "cost_sources": [
+        {
+          "cost_source": "pricing_catalog",
+          "calls": 1,
+          "unpriced_calls": 0,
+          "total_cost": 3.5
+        }
+      ],
+      "rate_limits": [
+        {
+          "host": "api.anthropic.com",
+          "observed_at": "2026-09-10T00:00:00Z",
+          "requests_remaining": 12,
+          "requests_limit": 1000,
+          "input_tokens_remaining": 1200,
+          "input_tokens_limit": 100000,
+          "output_tokens_remaining": 100,
+          "output_tokens_limit": 1000,
+          "resets_at": "2026-09-11T00:00:00Z"
+        }
+      ],
+      "nanogpt_subscription": {
+        "version": 1,
+        "fetched_at": "2026-09-10T00:00:00Z",
+        "active": true,
+        "state": "active",
+        "weeklyInputTokens": {
+          "used": 12000000,
+          "remaining": 48000000,
+          "limit": 60000000,
+          "resetAt": "2026-09-14T00:00:00Z"
+        },
+        "routing": {
+          "recommendedMode": "subscription"
+        }
+      },
+      "claude_plan_limits": {
+        "updated_at": "2026-09-10T00:00:00Z",
+        "subscription_type": "max",
+        "windows": [
+          {
+            "window": "five_hour",
+            "percent_used": 0.42,
+            "resets_at": "2026-09-10T03:00:00Z",
+            "status": "ok",
+            "warning_thresholds": [
+              0.8,
+              0.95
+            ],
+            "crossed_warn_at": [],
+            "limit_at": 1,
+            "action": "pause_background",
+            "over_limit": false
+          },
+          {
+            "window": "seven_day",
+            "percent_used": 0.91,
+            "resets_at": "2026-09-14T00:00:00Z",
+            "status": "over_limit",
+            "warning_thresholds": [
+              0.8,
+              0.95
+            ],
+            "crossed_warn_at": [
+              0.8
+            ],
+            "limit_at": 0.9,
+            "action": "block",
+            "over_limit": true
+          }
+        ]
+      },
+      "call_attempts": {
+        "pending": 0,
+        "unresolved": 1,
+        "estimated_cost_at_risk": 0.25
+      },
+      "budgets": [
+        {
+          "name": "Nova monthly",
+          "period": "month",
+          "period_start": "2026-09-01T00:00:00Z",
+          "period_end": "2026-10-01T00:00:00Z",
+          "reset_at": "2026-10-01T00:00:00Z",
+          "timezone": "utc",
+          "current_cost": 3.75,
+          "cost_limit": 2,
+          "percent_used": 1.875,
+          "status": "over_limit",
+          "action": "warn",
+          "effective_action": "warn",
+          "warning_thresholds": [
+            0.5,
+            1
+          ],
+          "crossed_warn_at": [
+            0.5,
+            1
+          ],
+          "over_limit": true,
+          "compaction_allowed_over_budget": false,
+          "filters": {
+            "character": "nova",
+            "provider": null,
+            "api_key": null,
+            "model": null,
+            "call_type": null,
+            "usage_kind": []
+          },
+          "pace": {
+            "period": "day",
+            "window_start": "2026-09-10T00:00:00Z",
+            "window_end": "2026-09-11T00:00:00Z",
+            "allowance": 1,
+            "base_allowance": 1,
+            "rollover": 0,
+            "debt_adjustment": 0,
+            "current_cost": 3.75,
+            "remaining": -2.75,
+            "percent_used": 3.75,
+            "periods_remaining": 20,
+            "status": "over_limit",
+            "action": "warn",
+            "effective_action": "warn",
+            "warning_thresholds": [
+              0.5,
+              1
+            ],
+            "crossed_warn_at": [
+              0.5,
+              1
+            ],
+            "over_limit": true
+          }
+        }
+      ]
+    },
+    {
+      "mode": "summary_by",
+      "dimension": "cost_source",
+      "period": "all",
+      "summary": [
+        {
+          "group": "pricing_catalog",
+          "call_count": 1,
+          "total_input": 1000,
+          "total_output": 100,
+          "total_cache_read": 1000,
+          "total_cache_write": 0,
+          "total_cost": 3.5
+        }
+      ]
+    },
+    {
+      "mode": "budget",
+      "timezone": "utc",
+      "budgets": [
+        {
+          "name": "Nova monthly",
+          "period": "month",
+          "period_start": "2026-09-01T00:00:00Z",
+          "period_end": "2026-10-01T00:00:00Z",
+          "reset_at": "2026-10-01T00:00:00Z",
+          "timezone": "utc",
+          "current_cost": 3.75,
+          "cost_limit": 2,
+          "percent_used": 1.875,
+          "status": "over_limit",
+          "action": "warn",
+          "effective_action": "warn",
+          "warning_thresholds": [
+            0.5,
+            1
+          ],
+          "crossed_warn_at": [
+            0.5,
+            1
+          ],
+          "over_limit": true,
+          "compaction_allowed_over_budget": false,
+          "filters": {
+            "character": "nova",
+            "provider": null,
+            "api_key": null,
+            "model": null,
+            "call_type": null,
+            "usage_kind": []
+          },
+          "pace": {
+            "period": "day",
+            "window_start": "2026-09-10T00:00:00Z",
+            "window_end": "2026-09-11T00:00:00Z",
+            "allowance": 1,
+            "base_allowance": 1,
+            "rollover": 0,
+            "debt_adjustment": 0,
+            "current_cost": 3.75,
+            "remaining": -2.75,
+            "percent_used": 3.75,
+            "periods_remaining": 20,
+            "status": "over_limit",
+            "action": "warn",
+            "effective_action": "warn",
+            "warning_thresholds": [
+              0.5,
+              1
+            ],
+            "crossed_warn_at": [
+              0.5,
+              1
+            ],
+            "over_limit": true
+          }
+        }
+      ],
+      "call_attempts": {
+        "pending": 0,
+        "unresolved": 1,
+        "estimated_cost_at_risk": 0.25
+      }
+    },
+    {
+      "mode": "anomalies",
+      "anomalies": [
+        {
+          "ts": "2026-09-10T00:00:00Z",
+          "character": "nova",
+          "model": "usage-model-a",
+          "call_type": "heartbeat",
+          "anomaly": "unexpected_write",
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 2500
+        }
+      ]
+    },
+    {
+      "mode": "csv",
+      "data": "ts,character,provider\n2026-09-10,nova,anthropic"
+    },
+    {
+      "mode": "tsv",
+      "data": "ts\tcharacter\tprovider\n2026-09-10\tnova\tanthropic"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { outcomeOf, rejectionOf } from "../support/outcome.ts";
+import { outcomeOf, rejectionOf } from "./outcome.ts";
 
 const TIMEOUT_MS = 100;
 const neverSettles = (): Promise<never> => new Promise<never>(() => {});

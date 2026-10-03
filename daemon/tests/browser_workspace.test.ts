@@ -21,10 +21,10 @@ import type { Message } from "../src/protocol/Message.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
 import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
-import toolResults from "../../client/shore-cli/tests/fixtures/tool_results.json" with { type: "json" };
+import { OPERATION_RESULTS } from "./support/operation_results.ts";
 
 test("built-in, subagent and connected tool schemas reach structured controls and omissions fail", () => {
-  const schemas = [...ALL_TOOLS.map((tool) => ({ name: tool.name, schema: tool.parameters })), { name: "ask_worker", schema: SUBAGENT_INPUT_SCHEMA }, { name: "mcp__fixture__nested", schema: toolResults[0]?.input_schema }];
+  const schemas = [...ALL_TOOLS.map((tool) => ({ name: tool.name, schema: tool.parameters })), { name: "ask_worker", schema: SUBAGENT_INPUT_SCHEMA }, { name: "mcp__fixture__nested", schema: OPERATION_RESULTS.tool_results[0]?.input_schema }];
   const renderers = new Set<string>(CONTROL_KINDS);
   expect(() => assertToolControlCoverage(schemas, renderers)).not.toThrow();
   for (const kind of ["array", "object", "boolean", "string", "integer", "json", "union", "null"]) {

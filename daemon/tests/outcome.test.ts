@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
-const NEVER_SETTLING = join(import.meta.dir, "fixtures", "never_settling_assertions.ts");
+const NEVER_SETTLING = join(import.meta.dir, "support", "never_settling_assertions.ts");
 const NEVER_SETTLING_TESTS = 3;
 const NEVER_SETTLING_TIMEOUT_MS = 100;
 const HANG_GUARD_MS = 30_000;

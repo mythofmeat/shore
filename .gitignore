@@ -42,8 +42,8 @@ out/
 .env.*
 !.env.example
 *.pem
-!daemon/tests/fixtures/web-tls/cert.pem
-!daemon/tests/fixtures/web-tls/key.pem
+!daemon/tests/support/web-tls/cert.pem
+!daemon/tests/support/web-tls/key.pem
 *.key
 worktree/
 .worktree/

@@ -4091,7 +4091,7 @@ pub(crate) mod scenario_tests {
         use crate::tui::app::{BudgetFocus, UsageBudget, UsageDisplay, UsageLevel};
         let fixtures: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/display_budgets.json"
+            "/../../daemon/tests/browser_captures/display_budgets.json"
         )))
         .unwrap();
         let level = |value: &serde_json::Value| UsageLevel {
@@ -4176,7 +4176,7 @@ pub(crate) mod scenario_tests {
         use crate::tui::app::{PlanLimit, PlanWindow, UsageDisplay, usage_level_from_json};
         let fixtures: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/display_budgets.json"
+            "/../../daemon/tests/browser_captures/display_budgets.json"
         )))
         .unwrap();
         for fixture in fixtures.get("plan").unwrap().as_array().unwrap() {

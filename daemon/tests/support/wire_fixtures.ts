@@ -66,6 +66,51 @@ export const SERVER_FIXTURES = {
     "selected_character": "alice",
     "revision": 12
   } satisfies ServerMessage,
+  history_with_image_tool_result: {
+    "type": "history",
+    "rid": "images",
+    "messages": [
+      {
+        "msg_id": "tool-answer",
+        "role": "assistant",
+        "content": "Image result",
+        "images": [],
+        "content_blocks": [
+          {
+            "type": "tool_use",
+            "id": "read-image",
+            "name": "read_image",
+            "input": {
+              "path": "example.png"
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "read-image",
+            "content": [
+              {
+                "type": "text",
+                "text": "Image result"
+              },
+              {
+                "type": "image",
+                "source": {
+                  "type": "base64",
+                  "media_type": "image/png",
+                  "data": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          }
+        ],
+        "timestamp": "2026-09-12T00:00:00Z"
+      }
+    ],
+    "config": {},
+    "selected_character": "ada",
+    "selected_thread": "main",
+    "revision": 3
+  } satisfies ServerMessage,
   shutdown: {
     "type": "shutdown"
   } satisfies ServerMessage,

@@ -340,8 +340,8 @@ describe("browser authentication boundary", () => {
   });
 
   test("HTTPS serves a verified TLS connection and a host-only secure cookie for WSS", async () => {
-    const tls_cert = new URL("./fixtures/web-tls/cert.pem", import.meta.url).pathname;
-    const tls_key = new URL("./fixtures/web-tls/key.pem", import.meta.url).pathname;
+    const tls_cert = new URL("./support/web-tls/cert.pem", import.meta.url).pathname;
+    const tls_key = new URL("./support/web-tls/key.pem", import.meta.url).pathname;
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", tls_cert, tls_key } }); f.web.activate();
     expect(f.web.origin).toStartWith("https://");
     const { cookie, response } = await f.login();

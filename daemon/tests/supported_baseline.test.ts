@@ -36,7 +36,7 @@ test("the oldest supported release's archive restores current data through the c
     dirs, hasCharacter: () => false, withSnapshot: async run => await run(),
     refreshDiscovery: async () => { refreshed = true; }, releaseCharacter: async () => {},
   };
-  const archive = join(import.meta.dir, "fixtures/supported-baseline/ada.shore.tar.gz");
+  const archive = join(import.meta.dir, "support/supported-baseline/ada.shore.tar.gz");
   expect(await importCharacter(context, { archive })).toMatchObject({ character: "ada", imported: true });
   expect(refreshed).toBe(true);
   expect(await readFile(join(dirs.workspace, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
