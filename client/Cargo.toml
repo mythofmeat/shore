@@ -3,7 +3,7 @@ resolver = "2"
 members = ["shore-common", "shore-cli"]
 
 [workspace.package]
-version = "4.21.2"
+version = "4.22.0"
 publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
