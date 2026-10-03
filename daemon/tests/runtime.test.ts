@@ -125,6 +125,20 @@ describe("what assembly creates", () => {
     }
   });
 
+  test("a later start recreates a removed cache directory, after the one-time image move has run", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-cache-");
+    try {
+      await (await createRuntime({ config, providers: {}, connectMcp: NO_MCP })).shutdown();
+      await rm(config.dirs.cache, { recursive: true, force: true });
+
+      const again = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      expect(existsSync(config.dirs.cache)).toBe(true);
+      await again.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("the ledger exists with its schema, so the first recorded call has somewhere to go", async () => {
     const { root, config } = await dirsUnder("shore-runtime-ledger-");
     try {

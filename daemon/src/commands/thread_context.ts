@@ -1,5 +1,5 @@
 import type { ConversationEngine } from "../engine/conversation.ts";
-import { threadTurnCounts } from "../engine/threads.ts";
+import { threadActivities } from "../engine/threads.ts";
 import { internalError } from "./errors.ts";
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import type { ThreadContext } from "./threads.ts";
@@ -54,7 +54,7 @@ export async function threadListingContext(
             session.signal,
           ),
         }),
-    turns: await threadTurnCounts(
+    activity: await threadActivities(
       session.dataDir,
       base.character,
       base.registry.listThreads(base.character).map((t) => t.id),

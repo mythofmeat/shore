@@ -30,8 +30,8 @@ import {
   setThreadModel,
   threadChatModel,
   threadModelOf,
-  threadTurnCount,
-  threadTurnCounts,
+  threadActivities,
+  threadActivity,
   writeThreadsIndex,
 } from "../src/engine/threads.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -398,14 +398,14 @@ describe("counting a thread's turns", () => {
       assistant("reply"),
     ]);
 
-    expect(await threadTurnCount(root, "aria", "scratch")).toBe(2);
+    expect((await threadActivity(root, "aria", "scratch")).turns).toBe(2);
   });
 
   test("a tool result is the model's work coming back, not a turn the user took", async () => {
     const root = await dataDir();
     await writeActive(root, "scratch", [user("go"), assistant("calling"), toolResult()]);
 
-    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+    expect((await threadActivity(root, "aria", "scratch")).turns).toBe(1);
   });
 
   test("a line from before blocks existed is still a turn the user took", async () => {
@@ -414,13 +414,13 @@ describe("counting a thread's turns", () => {
       { msg_id: "old", role: "user", content: "typed before blocks", timestamp: NOW },
     ]);
 
-    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+    expect((await threadActivity(root, "aria", "scratch")).turns).toBe(1);
   });
 
   test("a thread with nothing said in it counts zero rather than failing", async () => {
     const root = await dataDir();
 
-    expect(await threadTurnCount(root, "aria", "never-opened")).toBe(0);
+    expect((await threadActivity(root, "aria", "never-opened")).turns).toBe(0);
   });
 
   test("a torn line is skipped, so a half-written file still counts", async () => {
@@ -429,7 +429,29 @@ describe("counting a thread's turns", () => {
     await mkdir(dir, { recursive: true });
     writeDurable(join(dir, "active.jsonl"), `${JSON.stringify(user("kept"))}\n{"role":"user","conte\n`);
 
-    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+    expect((await threadActivity(root, "aria", "scratch")).turns).toBe(1);
+  });
+
+  test("the newest message, in UTC, is when the thread was last active", async () => {
+    const root = await dataDir();
+    await writeActive(root, "scratch", [
+      { ...user("first"), timestamp: "2026-09-03T22:30:00+10:00" },
+      { ...assistant("reply"), timestamp: "2026-09-03T21:45:00+10:00" },
+      { msg_id: "undated", role: "assistant", content: "" },
+    ]);
+
+    expect(await threadActivity(root, "aria", "scratch")).toEqual({
+      turns: 1,
+      last_active: "2026-09-03T12:30:00.000Z",
+    });
+  });
+
+  test("a thread with no dated line has no last activity", async () => {
+    const root = await dataDir();
+    await writeActive(root, "scratch", [{ msg_id: "undated", role: "user", content: "hi" }]);
+
+    expect(await threadActivity(root, "aria", "scratch")).toEqual({ turns: 1 });
+    expect(await threadActivity(root, "aria", "never-opened")).toEqual({ turns: 0 });
   });
 
   test("counts every named thread on its own", async () => {
@@ -437,7 +459,8 @@ describe("counting a thread's turns", () => {
     await writeActive(root, MAIN_THREAD, [user("one"), user("two")]);
     await writeActive(root, "scratch", [user("only")]);
 
-    expect(await threadTurnCounts(root, "aria", [MAIN_THREAD, "scratch", "gone"])).toEqual(
+    const activity = await threadActivities(root, "aria", [MAIN_THREAD, "scratch", "gone"]);
+    expect(new Map([...activity].map(([id, read]) => [id, read.turns]))).toEqual(
       new Map([
         [MAIN_THREAD, 2],
         ["scratch", 1],

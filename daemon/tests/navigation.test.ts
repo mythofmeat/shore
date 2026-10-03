@@ -303,7 +303,8 @@ describe("characterInfo", () => {
       {},
       [
         ["config/characters/mid/workspace/SOUL.md", "x"],
-        ["data/mid/deferred_edits.jsonl/"],
+        ["data/mid/"],
+        ["data/shore.db", "not a database"],
       ],
     ],
     [

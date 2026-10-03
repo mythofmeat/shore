@@ -82,6 +82,21 @@ function resolve(w: World) {
 const selects = (provider: string, modelId: string) =>
   `[selected]\nprovider = ${JSON.stringify(provider)}\nmodel_id = ${JSON.stringify(modelId)}\n`;
 
+describe("a thread's pin", () => {
+  test("a provider pair resolves as a saved selection of it does, past the effective catalog", () => {
+    const w = world({ catalog: '["openrouter:anthropic/claude-opus-4-6"]\n\n["anthropic:claude-sonnet-4-6"]', defaultModel: "anthropic:claude-sonnet-4-6" });
+    w.config.providers = ProviderRegistry.fromSection({ openrouter: { enabled: false } });
+    const pinned = "openrouter:anthropic/claude-opus-4-6";
+
+    const viaPin = resolveChatModelForCharacter(configView(w.config), CHARACTER, findEffectiveModel, pinned);
+    w.charPrefs(selects("openrouter", "anthropic/claude-opus-4-6"));
+    const viaSelection = resolveChatModelForCharacter(configView(w.config), CHARACTER, findEffectiveModel);
+
+    expect(viaPin?.qualifiedName).toBe(pinned);
+    expect(viaSelection?.qualifiedName).toBe(pinned);
+  });
+});
+
 describe("which model", () => {
   test("a character selection wins", () => {
     const w = world({ defaultModel: "claude-opus-4-6" });

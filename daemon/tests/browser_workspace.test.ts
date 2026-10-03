@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { actionControl, CONTROL_KINDS, controlFor, initialValue } from "../src/browser/forms.ts";
-import { mergeHistory, EVENT_POLICIES, inspectableRequest, Workspace } from "../src/browser/workspace.ts";
+import { mergeHistory, EVENT_POLICIES, inspectableRequest, touchThread, Workspace } from "../src/browser/workspace.ts";
+import { sortThreads } from "../src/browser/sidebar/order.ts";
+import type { ThreadView } from "../src/protocol/ThreadView.ts";
 import { BrowserConnection, type BrowserRequest, type ConnectionUpdate } from "../src/browser/connection.ts";
 import { ConversationRequests } from "../src/browser/chat/requests.ts";
 import { blockViews, regenReplaces, replyBlocks, savedPart, visibleStreams } from "../src/browser/chat/transcript.ts";
@@ -382,4 +384,39 @@ test("history deltas retain image bytes omitted by the daemon's incremental fram
   const history = { messages: [{ ...message("image"), images: [{ path: "stable.png" }] }], config: {}, revision: 2, delta: { base_revision: 1, after: null } };
   expect(mergeHistory(previous, history)?.at(0)?.images).toEqual([{ path: "stable.png", data: "aW1hZ2U=" }]);
   expect(mergeHistory(previous, { ...history, messages: [{ ...message("image"), images: [{ path: "stable.png", data: "bmV3" }] }] })?.at(0)?.images).toEqual([{ path: "stable.png", data: "bmV3" }]);
+});
+
+test("a turn in an older thread lists it above threads created after it, with home still first", () => {
+  const thread = (id: string, created_at: string, home = false): ThreadView => ({ id, created_at, compaction: false, home, current: false });
+  const threads = [thread("main", "2026-09-01T00:00:00.000Z", true), thread("old", "2026-09-02T00:00:00.000Z"), thread("new", "2026-09-03T00:00:00.000Z")];
+  expect(sortThreads(threads).map((item) => item.id)).toEqual(["main", "new", "old"]);
+  const reply = (character: string, timestamp: string): Extract<ServerMessage, { type: "new_message" }> => ({ type: "new_message", revision: 1, character, thread: "old", msg_id: "a1", role: "assistant", content: "hi", images: [], content_blocks: [], timestamp });
+  const touched = touchThread(threads, "nova", reply("nova", "2026-09-04T09:00:00+10:00"));
+  expect(touched.find((item) => item.id === "old")?.last_active).toBe("2026-09-03T23:00:00.000Z");
+  expect(touched.find((item) => item.id === "new")).not.toHaveProperty("last_active");
+  expect(sortThreads(touched).map((item) => item.id)).toEqual(["main", "old", "new"]);
+  expect(touchThread(threads, "nova", reply("ada", "2026-09-04T09:00:00+10:00"))).toBe(threads);
+  expect(touchThread(threads, "nova", reply("nova", "now"))).toBe(threads);
+});
+
+test("a reply that arrives while the sidebar is open moves its thread up", async () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const thread = (id: string, created_at: string): ThreadView => ({ id, created_at, compaction: false, home: id === "main", current: false });
+  const listed = [thread("main", "2026-09-01T00:00:00.000Z"), thread("old", "2026-09-02T00:00:00.000Z"), thread("new", "2026-09-03T00:00:00.000Z")];
+  workspace.actions.run = (async (name: string) => {
+    await Promise.resolve();
+    if (name === "discover_operations") return { operations: [{ name: "list_threads", available: true }], requests: [] };
+    if (name === "list_characters") return { characters: [] };
+    return { threads: listed };
+  }) as never;
+  await workspace.refreshNavigation();
+  connection.frame({ type: "history", config: {}, revision: 1, selected_character: "nova", selected_thread: "old", messages: [] });
+  connection.frame({ type: "new_message", revision: 2, character: "nova", thread: "old", msg_id: "a1", role: "assistant", content: "hi", images: [], content_blocks: [], timestamp: "2026-09-04T09:00:00+10:00" });
+  expect(sortThreads(workspace.getSnapshot().threads).map((item) => item.id)).toEqual(["main", "old", "new"]);
 });

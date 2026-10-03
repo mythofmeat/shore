@@ -45,6 +45,18 @@ for (const keep of [0, 1, 4, 10]) {
   });
 }
 
+test("blank lines between messages are not counted as messages to keep", async () => {
+  const data = await mkdtemp(join(tmpdir(), "shore-archive-blank-"));
+  roots.push(data);
+  const dir = join(data, "ada/threads/main");
+  await mkdir(dir, { recursive: true });
+  const active = threadFile(data, "ada", "main", "active.jsonl");
+  const spaced = messages.map(row => JSON.stringify(row) + "\n\n").join("");
+  writeDurable(active, spaced);
+  await archiveAndRetain(dir, { dbPath: join(data, "shore.db"), archiveKey: "ada" }, 2, spaced, () => stamp, () => "next", "spaced");
+  expect(readDurable(active)).toBe(jsonl(messages.slice(2)));
+});
+
 test("retrying a completed compaction does not create another archive segment", async () => {
   const data = await mkdtemp(join(tmpdir(), "shore-archive-retry-"));
   roots.push(data);

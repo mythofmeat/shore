@@ -307,6 +307,52 @@ describe("ensureAndBackfillAutonomy", () => {
   }
 });
 
+describe("the activity window", () => {
+  const userAt = (msg_id: string, at: Date) => ({
+    msg_id,
+    role: "user",
+    content: msg_id,
+    images: [],
+    content_blocks: [{ type: "text", text: msg_id }],
+    timestamp: at.toISOString(),
+  });
+
+  test("a turn exactly ninety days old is counted, and one a millisecond older is not", async () => {
+    const root = await tempRoot();
+    try {
+      const now = new Date("2026-04-01T00:00:00.000Z");
+      const edge = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const dataDir = await seedCharacter(root, [userAt("older", new Date(edge.getTime() - 1)), userAt("edge", edge)]);
+      const rec = recorder();
+      const engine = await ConversationEngine.load("ada", dataDir);
+
+      await ensureAndBackfillAutonomy(rec.ctx, engine, "ada", stubConfig(root), now);
+
+      expect(rec.backfills.map((b) => b.timestamps.map((t) => t.getTime()))).toEqual([[edge.getTime()]]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a body that names pictures without sending them", () => {
+  test("still takes a turn, which says the pictures did not arrive", async () => {
+    const root = await tempRoot();
+    try {
+      const dataDir = await seedCharacter(root, []);
+      const rec = recorder();
+      const engine = await ConversationEngine.load("ada", dataDir);
+
+      await appendUserTurn(rec.ctx, engine, dataDir, "ada", { text: "", images: ["/client/only/photo.png"], image_data: [] }, false);
+
+      expect(engine.messages()).toHaveLength(1);
+      expect(JSON.stringify(engine.messages()[0]?.content_blocks)).toContain("photo.png");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("contextTokensFor", () => {
   for (const c of fixture.context_tokens) {
     test(c.name, () => {

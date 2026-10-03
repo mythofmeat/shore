@@ -11,7 +11,14 @@ H = "src/browser/theme.ts"
 S = "src/browser/app/shortcuts.ts"
 F = "src/browser/settings/format.ts"
 P = "scripts/browser_parity.ts"
+O = "src/browser/sidebar/order.ts"
 MUTANTS = [
+    ("a reply leaves its thread where it was in the sidebar", W, 'threads: touchThread(this.#state.threads, this.#state.character, message) });', '});'),
+    ("a reply in another character's thread of the same name moves this one", W, 'if (message.character !== character || Number.isNaN(time)) return threads;', 'if (Number.isNaN(time)) return threads;'),
+    ("a reply moves every thread", W, 'threads.map((item) => item.id === thread ?', 'threads.map((item) => true ?'),
+    ("a reply's local offset is compared as written", W, 'last_active: new Date(time).toISOString() }', 'last_active: message.timestamp }'),
+    ("threads ordered by creation alone", O, '(b.last_active ?? b.created_at).localeCompare(a.last_active ?? a.created_at)', 'b.created_at.localeCompare(a.created_at)'),
+    ("home no longer listed first", O, 'Number(b.home) - Number(a.home) || ', ''),
     ("a labelled segment loses its number", T, ': `Segment ${String(segment.index)} · ${segment.label}`', ': segment.label'),
     ("one message is counted as messages", T, 'segment.message_count === 1 ? "message" : "messages"', '"messages"'),
     ("an excluded segment is not marked", T, '...(segment.excluded ? ["excluded from memory"] : [])', '...([] as string[])'),

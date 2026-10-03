@@ -1,6 +1,5 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { durableExists, writeDurable } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -438,7 +437,7 @@ describe("retiring a pass another branch finished for it", () => {
 
     expect(outcome?.kind).toBe("rotated");
     expect(
-      existsSync(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
+      durableExists(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
     ).toBe(false);
     const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
     try {
@@ -531,7 +530,7 @@ describe("retiring a pass another branch finished for it", () => {
 
     expect(outcome).toBeUndefined();
     expect(
-      existsSync(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
+      durableExists(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
     ).toBe(false);
     const after = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
     try {

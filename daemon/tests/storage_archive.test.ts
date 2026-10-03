@@ -101,3 +101,22 @@ test("export size is scoped to the character rather than the shared database", (
   try { expect(exported.query("SELECT * FROM state_files").all()).toEqual([]); } finally { exported.close(); }
   expect(() => exportUnifiedDatabase(databasePath(source.data), "other", join(source.root, "large.db"), 1024 * 1024)).toThrow("processing limit");
 });
+
+test("an archive that still carries the retired character stats table imports, and opening drops the table", () => {
+  const source = dirs(); initializeDatabase(source.data);
+  const archive = join(source.root, "older.db");
+  withStorage(source.data, db => {
+    db.run("CREATE TABLE history_character_stats (character TEXT PRIMARY KEY, display_count INTEGER NOT NULL, turn_count INTEGER NOT NULL)");
+    db.query("INSERT INTO history_character_stats VALUES (?1, ?2, ?3)").run("ada", 7, 3);
+    db.query("VACUUM INTO ?1").run(archive);
+  });
+  const older = new Database(archive, { readonly: true });
+  try { expect(older.query("SELECT * FROM history_character_stats").all()).toHaveLength(1); } finally { older.close(); }
+  const target = dirs();
+  expect(() => importUnifiedDatabase(databasePath(target.data), archive, "ada", source.data, target.data)).not.toThrow();
+  exportUnifiedDatabase(databasePath(source.data), "ada", join(source.root, "export.db"));
+  for (const path of [databasePath(target.data), join(source.root, "export.db")]) {
+    const db = new Database(path, { readonly: true });
+    try { expect(db.query("SELECT name FROM sqlite_master WHERE name = 'history_character_stats'").all()).toEqual([]); } finally { db.close(); }
+  }
+});

@@ -50,6 +50,13 @@ export function mergeHistory(previous: readonly Message[], history: History): Me
   return [...previous.slice(0, index + 1), ...retainImages(history.messages, previous)];
 }
 
+export function touchThread(threads: ThreadView[], character: string | null, message: Extract<ServerMessage, { type: "new_message" }>): ThreadView[] {
+  const time = Date.parse(message.timestamp);
+  if (message.character !== character || Number.isNaN(time)) return threads;
+  const thread = message.thread ?? "main";
+  return threads.map((item) => item.id === thread ? { ...item, last_active: new Date(time).toISOString() } : item);
+}
+
 function retainImages(messages: readonly Message[], previous: readonly Message[], live: readonly SendImage[] = []): Message[] {
   const images = new Map([...previous.flatMap((message) => message.images), ...live].filter((image) => image.data !== undefined && image.data !== null).map((image) => [image.path, image.data]));
   return messages.map((message) => ({ ...message, images: message.images.map((image) => {
@@ -245,7 +252,7 @@ export class Workspace {
         const exists = this.#state.messages.some((item) => item.msg_id === message.msg_id);
         if (exists) return;
         const messages = [...this.#state.messages, message];
-        this.#patch({ messages: retainImages(messages, this.#state.messages, this.#state.media), media: reconcileImages(this.#state.media, messages, this.#state.messages) }); return;
+        this.#patch({ messages: retainImages(messages, this.#state.messages, this.#state.media), media: reconcileImages(this.#state.media, messages, this.#state.messages), threads: touchThread(this.#state.threads, this.#state.character, message) }); return;
       }
       case "stream_start": case "stream_chunk": case "stream_end": case "tool_call": case "tool_result":
         this.#stream(message);

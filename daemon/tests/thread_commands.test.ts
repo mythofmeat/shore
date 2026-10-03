@@ -150,10 +150,21 @@ describe("what a listed thread says about itself", () => {
   ): ThreadContext {
     return {
       ...ctx(registry),
-      turns,
+      activity: new Map([...turns].map(([id, count]) => [id, { turns: count }])),
       ...(warm === undefined ? {} : { warm }),
     };
   }
+
+  test("a thread reports when it was last active, and one never spoken in does not", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = listThreads({
+      ...ctx(registry),
+      activity: new Map([[MAIN_THREAD, { turns: 2, last_active: "2026-10-03T09:00:00.000Z" }]]),
+    });
+
+    expect(out.threads.find((t) => t.id === MAIN_THREAD)?.last_active).toBe("2026-10-03T09:00:00.000Z");
+    expect(out.threads.find((t) => t.id === "eval")).not.toHaveProperty("last_active");
+  });
 
   test("each thread carries its own turn count", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);

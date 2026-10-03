@@ -139,11 +139,7 @@ CREATE TABLE IF NOT EXISTS memory_coverage (
 CREATE INDEX IF NOT EXISTS idx_memory_coverage_claim
     ON memory_coverage (character, path, state, claimed_at);
 
-CREATE TABLE IF NOT EXISTS history_character_stats (
-    character     TEXT PRIMARY KEY,
-    display_count INTEGER NOT NULL,
-    turn_count    INTEGER NOT NULL
-);
+DROP TABLE IF EXISTS history_character_stats;
 
 CREATE TABLE IF NOT EXISTS history_archive_revision (
     character TEXT PRIMARY KEY,
@@ -298,12 +294,6 @@ export class HistoryStore {
 
   finishCompaction(character: string, idx: number): void {
     this.#db.transaction(() => {
-      const row = this.#db
-        .query(
-          `SELECT committed FROM history_segments
-           WHERE character = ?1 AND idx = ?2`,
-        )
-        .get(character, idx) as { committed: number } | null;
       const pending = this.#db
         .query(
           "SELECT coverage_claim FROM history_pending WHERE character = ?1 AND segment = ?2",
@@ -321,9 +311,6 @@ export class HistoryStore {
           "compaction",
           pending.coverage_claim,
         );
-      }
-      if (row?.committed === 0) {
-        this.#updateCharacterStats(character, this.#segmentTurnCount(character, idx));
       }
     })();
   }
@@ -404,20 +391,6 @@ export class HistoryStore {
       )
       .get(character) as { n: number };
     return row.n;
-  }
-
-  displayMessageCount(character: string): number {
-    const row = this.#db
-      .query("SELECT display_count FROM history_character_stats WHERE character = ?1")
-      .get(character) as { display_count: number } | null;
-    return row?.display_count ?? 0;
-  }
-
-  displayTurnCount(character: string): number {
-    const row = this.#db
-      .query("SELECT turn_count FROM history_character_stats WHERE character = ?1")
-      .get(character) as { turn_count: number } | null;
-    return row?.turn_count ?? 0;
   }
 
   segmentDisplayBounds(character: string, idx: number): HistoryDisplayBounds | undefined {
@@ -831,7 +804,6 @@ export class HistoryStore {
     messages: Message[],
     committed: boolean,
   ): void {
-    const previousTurnCount = this.#committedSegmentTurnCount(character, idx);
     const normalizedMessages = messages.map((message) => normalizeMessage(message));
     this.#deleteSegment(character, idx);
     this.#db
@@ -870,12 +842,6 @@ export class HistoryStore {
       this.#insertMessage(character, idx, ordinal, message);
     });
     reindexDisplayMetadata(this.#db, character, idx);
-    if (committed) {
-      const nextTurnCount = normalizedMessages.filter(
-        (message) => message.role === "user" && displayKind(message) !== DISPLAY_TOOL_RESULT,
-      ).length;
-      this.#updateCharacterStats(character, nextTurnCount - previousTurnCount);
-    }
   }
 
   #deleteSegment(character: string, idx: number): void {
@@ -903,52 +869,6 @@ export class HistoryStore {
       )
       .get(character, idx) as { n: number };
     return row.n;
-  }
-
-  #segmentTurnCount(character: string, idx: number): number {
-    const row = this.#db
-      .query(
-        "SELECT COUNT(*) AS n FROM history_messages WHERE character = ?1 AND segment = ?2 AND is_user_turn = 1",
-      )
-      .get(character, idx) as { n: number };
-    return row.n;
-  }
-
-  #updateCharacterStats(character: string, turnDelta: number): void {
-    const display = this.#db
-      .query(
-        `SELECT COALESCE(MAX(m.display_seq) + 1, 0) AS n
-         FROM history_messages m
-         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE m.character = ?1 AND s.committed = 1`,
-      )
-      .get(character) as { n: number };
-    const current = this.#db
-      .query("SELECT turn_count FROM history_character_stats WHERE character = ?1")
-      .get(character) as { turn_count: number } | null;
-    let turns: number;
-    if (current === null) {
-      const row = this.#db
-        .query(
-          `SELECT COUNT(*) AS n
-           FROM history_messages m
-           JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-           WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1`,
-        )
-        .get(character) as { n: number };
-      turns = row.n;
-    } else {
-      turns = current.turn_count + turnDelta;
-    }
-    this.#db
-      .query(
-        `INSERT INTO history_character_stats (character, display_count, turn_count)
-         VALUES (?1, ?2, ?3)
-         ON CONFLICT (character) DO UPDATE SET
-           display_count = excluded.display_count,
-           turn_count = excluded.turn_count`,
-      )
-      .run(character, display.n, turns);
   }
 
   #alternative(row: BodyRow, character: string, metrics?: HistoryReadMetrics): MessageAlternative {

@@ -107,6 +107,13 @@ describe("authoritative coercion", () => {
     expect(sampler.replayPriorThinking).toBe("none");
   });
 
+  test("an unknown key is refused when clearing as well as when setting", () => {
+    const sampler: SamplerSettings = {};
+    expect(() => applySamplerValue(sampler, "no_such_setting", null)).toThrow("unknown setting key: no_such_setting");
+    expect(() => applySamplerValue(sampler, "no_such_setting", 1)).toThrow("unknown setting key: no_such_setting");
+    expect(sampler).toEqual({});
+  });
+
   test("parses durations and JSON-object strings into persisted types", () => {
     const sampler: SamplerSettings = {};
     applySamplerValue(sampler, "cache_keepalive", "55m");

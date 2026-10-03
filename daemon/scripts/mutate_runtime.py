@@ -32,7 +32,7 @@ MUTANTS = [
      R,
      "    mkdirSync(dir, { recursive: true });",
      "    mkdirSync(dir, { recursive: false });"),
-    ("dirs: the cache dir is skipped, which the call store then cannot open under",
+    ("dirs: the cache dir is skipped, so a later start has none once the one-time image move stops making it",
      R,
      "    config.dirs.cache,\n    config.dirs.runtime,",
      "    config.dirs.runtime,"),

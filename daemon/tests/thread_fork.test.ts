@@ -1,4 +1,4 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { durableExists, writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -19,7 +19,7 @@ import {
   createThread,
   ensureThreads,
   readThreadsIndex,
-  threadTurnCounts,
+  threadActivities,
 } from "../src/engine/threads.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { versionOf } from "../src/engine/versions.ts";
@@ -231,7 +231,7 @@ describe("forking a thread", () => {
     const result = await forkThread(root, "ada", "eval", "eval-b", { now: () => NOW });
     expect(result.child.compaction).toBe(true);
     expect(result.child.chat_model).toBe("anthropic:opus");
-    expect(existsSync(join(root, "ada", "threads", "eval-b", "compaction-checkpoint.json"))).toBe(
+    expect(durableExists(join(root, "ada", "threads", "eval-b", "compaction-checkpoint.json"))).toBe(
       false,
     );
     expect(existsSync(join(root, "ada", "threads", "eval-b", "segments"))).toBe(false);
@@ -336,7 +336,8 @@ describe("forking a thread", () => {
     ]);
 
     await forkThread(root, "ada", "main", "spin", { now: () => NOW, turns: 1 });
-    expect(await threadTurnCounts(root, "ada", ["main", "spin"])).toEqual(
+    const activity = await threadActivities(root, "ada", ["main", "spin"]);
+    expect(new Map([...activity].map(([id, read]) => [id, read.turns]))).toEqual(
       new Map([
         ["main", 2],
         ["spin", 1],

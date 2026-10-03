@@ -9,6 +9,7 @@ import {
   ThreadError,
   type ArchiveThreadOptions,
   type NewThread,
+  type ThreadActivity,
   type ThreadRecord,
   type ThreadsIndex,
 } from "../engine/threads.ts";
@@ -64,7 +65,7 @@ export interface ThreadContext {
   registry: ThreadRegistry;
   character: string;
   current: string;
-  turns?: ReadonlyMap<string, number>;
+  activity?: ReadonlyMap<string, ThreadActivity>;
   warm?: string;
   signal?: AbortSignal;
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
@@ -77,11 +78,13 @@ function threadCommandError(e: unknown): unknown {
 }
 
 function view(ctx: ThreadContext, record: ThreadRecord, home: string, current: string): ThreadView {
+  const activity = ctx.activity?.get(record.id);
   return {
     ...record,
     home: record.id === home,
     current: record.id === current,
-    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),
+    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0 }),
+    ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
     ...(ctx.warm === record.id ? { warm: true } : {}),
   };
 }

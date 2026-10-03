@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over the `thread` listing: each thread's own turn count, and
-which thread holds the warm cache slot.
+"""Mutation pass over the `thread` listing: each thread's own turn count and
+last activity, and which thread holds the warm cache slot.
 """
 import pathlib
 import sys
@@ -12,21 +12,25 @@ TESTS = ["tests/thread_commands.test.ts", "tests/keepalive_service.test.ts"]
 
 MUTANTS = [
     # --- how far along each thread is ----------------------------------------
-    ("turns: every row reports the count of the thread the session is in",
+    ("turns: every row reports the activity of the thread the session is in",
      T,
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),",
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(current) ?? 0 }),"),
+     "  const activity = ctx.activity?.get(record.id);",
+     "  const activity = ctx.activity?.get(current);"),
     ("turns: a thread the count did not reach is reported as unknown rather than zero",
      T,
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),",
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) }),"),
+     "    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0 }),",
+     "    ...(ctx.activity === undefined ? {} : { turns: activity?.turns }),"),
     ("turns: a daemon that counted nothing says every thread is empty",
      T,
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),",
-     "    turns: ctx.turns?.get(record.id) ?? 0,"),
+     "    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0 }),",
+     "    turns: activity?.turns ?? 0,"),
     ("turns: the count is dropped from the listing entirely",
      T,
-     "    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),\n",
+     "    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0 }),\n",
+     ""),
+    ("last_active: dropped from the listing, so the sidebar orders by creation",
+     T,
+     "    ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),\n",
      ""),
 
     # --- which thread holds the cache slot -----------------------------------

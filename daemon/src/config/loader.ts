@@ -217,8 +217,7 @@ export function loadRawConfigTable(
     throw new ConfigError("parse_app", `${configFile}: include must be a list of file paths`);
   }
   if (Array.isArray(includes)) {
-    for (const item of includes) {
-      if (typeof item !== "string") continue;
+    for (const item of includes as string[]) {
       const includePath = rustJoin(configDirectory, item);
       if (!exists(includePath)) continue;
       deepMerge(table, read(readFileOrThrow(includePath), "parse_include", includePath));

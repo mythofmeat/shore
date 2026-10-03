@@ -86,8 +86,8 @@ test("pending compactions are hidden and recover from either side of the active-
 
   const aborted = store.beginCompaction("ada", entry, messages, "before\n", "after\n");
   expect(store.segmentCount("ada")).toBe(0);
-  expect(store.displayMessageCount("ada")).toBe(0);
-  expect(store.displayTurnCount("ada")).toBe(0);
+  expect(store.segmentDisplayBounds("ada", aborted)).toBeUndefined();
+  expect(store.segmentTurnCount("ada", aborted)).toBe(0);
   store.recoverPending("ada", "before\n");
   expect(store.hasSegment("ada", aborted)).toBe(false);
 
@@ -96,8 +96,8 @@ test("pending compactions are hidden and recover from either side of the active-
   store.recoverPending("ada", "after\n");
   expect(store.hasSegment("ada", committed)).toBe(true);
   expect(store.readSegment("ada", committed)).toEqual(messages);
-  expect(store.displayMessageCount("ada")).toBe(1);
-  expect(store.displayTurnCount("ada")).toBe(1);
+  expect(store.segmentDisplayBounds("ada", committed)).toEqual({ start: 0, end: 1 });
+  expect(store.segmentTurnCount("ada", committed)).toBe(1);
   store.close();
 });
 
@@ -179,8 +179,6 @@ describe("storage-native display paging", () => {
     put(1, [toolResult("r1", "t1"), toolAssistant("a2", "t2")]);
     put(2, [toolResult("r2", "t2"), message("a3", "done"), message("u2", "next")]);
 
-    expect(store.displayMessageCount("ada")).toBe(3);
-    expect(store.displayTurnCount("ada")).toBe(2);
     expect([0, 1, 2].map((idx) => store.segmentDisplayBounds("ada", idx))).toEqual([
       { start: 0, end: 2 },
       { start: 1, end: 2 },

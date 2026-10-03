@@ -644,6 +644,7 @@ describe("running a heartbeat", () => {
 
     expect(seen[0]?.context?.ledger).toBe(join(config.dirs.data, "shore.db"));
     expect(seen[0]?.context?.call_type).toBe("heartbeat");
+    expect(seen[0]?.context?.thread).toBe("main");
   });
 
   test("writes one transcript row per round", async () => {

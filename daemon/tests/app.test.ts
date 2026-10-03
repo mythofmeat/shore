@@ -806,6 +806,49 @@ describe("when a document has more than one thing wrong", () => {
       'invalid type: string "yes", expected a boolean',
     );
   });
+
+  test("a bad value is reported before an unknown key that sorts after it", () => {
+    expect(rejected("[memory.compaction]\nenabled = \"yes\"\nzzz_unknown = 1\n")).toBe(
+      'invalid type: string "yes", expected a boolean',
+    );
+  });
+});
+
+describe("what a rejected value is told it should have been", () => {
+  test("an unknown key names every field of the table, in the order the table declares them", () => {
+    expect(rejected("bogus = 1\n")).toBe(
+      "unknown field `bogus`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `images`, `memory`, " +
+        "`cache`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, " +
+        "`image_generation`, `providers`",
+    );
+  });
+
+  test("a table of two fields names both, and a table of one names it alone", () => {
+    expect(rejected("[behavior]\nbogus = 1\n")).toBe(
+      "unknown field `bogus`, expected `autonomy` or `user_message_timestamps`",
+    );
+    expect(rejected("[memory.thinking]\nbogus = 1\n")).toBe(
+      "unknown field `bogus`, expected `replay_prior_thinking`",
+    );
+  });
+
+  test("an enum given a number says it wants a string", () => {
+    expect(rejected("[memory.retrieval]\nmode = 1\n")).toBe("invalid type: unit variant, expected string only");
+  });
+
+  test("a negative count is an invalid value, not an invalid type", () => {
+    expect(rejected("[memory.retrieval]\nmax_file_bytes = -1\n")).toBe("invalid value: integer `-1`, expected u64");
+  });
+
+  test("a list or a table where a scalar belongs is named by its kind alone", () => {
+    expect(rejected("[memory.compaction]\nenabled = [1]\n")).toBe("invalid type: sequence, expected a boolean");
+  });
+
+  test("thinking replay given a number reports the untagged enum it failed", () => {
+    expect(rejected("[memory.thinking]\nreplay_prior_thinking = 1\n")).toBe(
+      "data did not match any variant of untagged enum BoolOrStr",
+    );
+  });
 });
 
 describe("a config.toml sets what it says and nothing else", () => {
@@ -816,6 +859,7 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("subagent keys sort by code point, not UTF-16 order", () => {
+    expect(Object.keys(at(parsed("[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n"), "subagents") as object)).toEqual(["zed", "ﬀute", "🎵drum"]);
     const cfg = parsed("[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n");
     expect(at(cfg, "subagents"), "subagents").toMatchObject({"zed":{"description":"z","prompt":"p","tools":[],"model":null,"max_iterations":null},"ﬀute":{"description":"f","prompt":"p","tools":[],"model":null,"max_iterations":null},"🎵drum":{"description":"d","prompt":"p","tools":[],"model":null,"max_iterations":null}});
   });
@@ -904,6 +948,11 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "behavior.autonomy.heartbeat.min_interval"), "behavior.autonomy.heartbeat.min_interval").toEqual("500ms");
     expect(at(cfg, "behavior.autonomy.heartbeat.max_interval"), "behavior.autonomy.heartbeat.max_interval").toEqual("3h");
     expect(at(cfg, "behavior.autonomy.heartbeat.wrap_up_grace_rounds"), "behavior.autonomy.heartbeat.wrap_up_grace_rounds").toEqual(1);
+  });
+
+  test("a finished reply notifies unless that event is turned off", () => {
+    expect(at(parsed(""), "notifications.events.message_complete")).toBe(true);
+    expect(at(parsed("[notifications.events]\nmessage_complete = false\n"), "notifications.events.message_complete")).toBe(false);
   });
 
 
@@ -1346,6 +1395,17 @@ describe("a per-tool limit", () => {
 
   test("a zero deadline means no deadline, not an instant one", () => {
     expect(timeoutFor(toolsOf("[tools]\ntimeout = \"0s\"\n"), "read")).toBeUndefined();
+  });
+
+  test("a tool's own zero lifts its deadline, and its own deadline outlives a global zero", () => {
+    const tools = toolsOf('[tools]\ntimeout = "30s"\n\n[tools.config.git]\ntimeout = "0s"\n');
+    expect(timeoutFor(tools, "git")).toBeUndefined();
+    const unlimited = toolsOf('[tools]\ntimeout = "0s"\n\n[tools.config.git]\ntimeout = "5m"\n');
+    expect(timeoutFor(unlimited, "git")?.asMillis()).toBe(300_000);
+  });
+
+  test("a tool runs for five minutes unless configured otherwise", () => {
+    expect(timeoutFor(toolsOf(""), "read")?.asMillis()).toBe(300_000);
   });
 });
 

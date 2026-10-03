@@ -177,7 +177,9 @@ MUTANTS = [
     ("zstd: a stored blob is not decompressed before it is returned",
      '  return new TextDecoder("utf-8").decode(zstdDecompressSync(blob));',
      '  return new TextDecoder("utf-8").decode(blob);'),
-    ("zstd: an absent blob decompresses to an empty string rather than null",
+    ("zstd: an absent blob decompresses to an empty string rather than null "
+     "(EQUIVALENT: headersFrom falls back to no headers for both, since an empty "
+     "string is not JSON, and entry_zstd is NOT NULL and read with ?? \"\")",
      "  if (!(blob instanceof Uint8Array)) return null;",
      '  if (!(blob instanceof Uint8Array)) return "";'),
     ("zstd: headers and transcript entries are stored as latin-1 rather than UTF-8",

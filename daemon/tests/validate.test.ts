@@ -144,6 +144,14 @@ describe("a config that shore can act on", () => {
     expect(digest.chat).toEqual(["anthropic:claude-opus-4-6"]);
     expect(digest.enabled_tools).toEqual(["read", "write"]);
   });
+  test("layers that each pass but together give a provider both key forms fail as a registry error", () => {
+    const merged = {
+      providers: { anthropic: { api_key_env: "GLOBAL_KEY", keys: [{ name: "overlay", env: "OVERLAY_KEY" }] } },
+    } as TomlTable;
+    expect(() => parseConfigTable(merged, { ...DIRS }, () => {}, [], true)).toThrow(
+      expect.objectContaining({ kind: "provider_registry" }),
+    );
+  });
   test("non-table chat is rejected", () => {
     expect(refused("chat = \"nope\"")).toContain("must be a table");
   });
