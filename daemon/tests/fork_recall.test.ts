@@ -218,8 +218,8 @@ describe("recalling a message that a fork copied", () => {
       message("asked", shared, "user"),
       message("asked again", newMessageVersion(), "user"),
     ]);
-    expect(store.displayTurnCount("ada")).toBe(1);
-    expect(store.displayTurnCount("ada/spin")).toBe(2);
+    expect(store.segmentTurnCount("ada", 0)).toBe(1);
+    expect(store.segmentTurnCount("ada/spin", 0)).toBe(2);
     store.close();
   });
 

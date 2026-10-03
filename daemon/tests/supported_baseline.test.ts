@@ -57,7 +57,7 @@ test("the oldest supported release's archive restores current data through the c
   const history = HistoryStore.open(path);
   try {
     expect(history.readSegment("ada", 0)[0]?.content).toBe("saved conversation for ada");
-    expect(history.displayMessageCount("ada")).toBe(1);
+    expect(history.segmentDisplayBounds("ada", 0)).toEqual({ start: 0, end: 1 });
     expect(history.archiveKeys("bea")).toEqual([]);
   } finally { history.close(); }
   const calls = CallStore.open(path);
