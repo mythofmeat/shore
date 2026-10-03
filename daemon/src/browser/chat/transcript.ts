@@ -1,4 +1,6 @@
 import type { CompactionReport } from "../../protocol/CompactionReport.ts";
+import type { CompactionPassEnd } from "../../protocol/CompactionPassEnd.ts";
+import type { CompactionWatchResult } from "../../protocol/CompactionWatchResult.ts";
 import type { ContentBlock } from "../../protocol/ContentBlock.ts";
 import type { Message } from "../../protocol/Message.ts";
 import type { ToolResultContent } from "../../protocol/ToolResultContent.ts";
@@ -198,6 +200,17 @@ export function compactionPhase(activity: readonly { id: number; type: string; d
   if (phase === null || phase.id < finished) return null;
   const round = /round (\d+)/.exec(phase.text)?.[1];
   return round === undefined || round === "1" ? "Compacting context…" : `Compacting context (round ${round})…`;
+}
+
+export function compactionWatchSummary(result: CompactionWatchResult): string {
+  if (result.pass === null) return "No compaction is running.";
+  const outcome = passSummary(result.pass);
+  return result.state === "idle" ? `No compaction is running. The last one ended at ${new Date(result.pass.ended_at).toLocaleTimeString()}: ${outcome}` : outcome;
+}
+
+function passSummary(pass: CompactionPassEnd): string {
+  if (pass.error !== null) return `Compaction failed: ${pass.error}.`;
+  return pass.report === null ? "There was nothing to compact." : compactionSummary(pass.report);
 }
 
 export function compactionSummary(report: CompactionReport): string {

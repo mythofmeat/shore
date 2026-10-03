@@ -1,5 +1,5 @@
 import { requestCatalogue } from "../operations/requests.ts";
-import { compact } from "./compact.ts";
+import { cancelCompaction, compact, watchCompaction } from "./compact.ts";
 import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "./archive.ts";
 import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
@@ -140,6 +140,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     if (compaction === undefined) throw internalError("compact is not available in this build");
     return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.signal === undefined ? {} : { signal: context.session.signal }), ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
   }),
+  compact_watch: register("compact_watch", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["read"], confirmation: "none", label: "Watch the running compaction", fields: {} },
+    (context) => watchCompaction(engineOf(context).characterName, { config: context.session.config, emit: context.session.emit, signal: context.session.signal })),
+  compact_cancel: register("compact_cancel", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["runtime_write"], confirmation: "none", label: "Stop the running compaction", fields: {} },
+    (context) => cancelCompaction(engineOf(context).characterName, { config: context.session.config, emit: context.session.emit, signal: context.session.signal })),
   segments: register("segments", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "none", label: "Inspect and manage segments", fields: {
     action: { label: "Segment action", hint: "Omit to list segments; inspection and edits require an index" },
     index: { label: "Segment index" },

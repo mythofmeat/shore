@@ -130,7 +130,7 @@ fn checked_rem_u64(value: u64, divisor: u64) -> u64 {
     value.checked_rem(divisor).unwrap_or_default()
 }
 
-fn format_duration_compact(secs: i64) -> String {
+pub(crate) fn format_duration_compact(secs: i64) -> String {
     let neg = secs < 0;
     let mut remaining_seconds = secs.unsigned_abs();
     let days = checked_div_u64(remaining_seconds, SECONDS_PER_DAY);

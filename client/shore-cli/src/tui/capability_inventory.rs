@@ -31,6 +31,8 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
         "--subagent-tools",
     ],
     &["compact", "0", "--restart"],
+    &["compact", "--watch"],
+    &["compact", "--cancel"],
     &["clear", "--exclude", "--note", "archived"],
     &["segments"],
     &["segments", "show", "1"],

@@ -24,7 +24,7 @@ MUTANTS = [
     ("compaction tools lose cancellation", R,
      'if (deps.signal !== undefined) toolCtx.signal = deps.signal;', ''),
     ("compaction cannot guard its archive boundary", R,
-     '          ...(deps.signal === undefined ? {} : { signal: deps.signal }),\n        },', '        },'),
+     '        ...(deps.signal === undefined ? {} : { signal: deps.signal }),\n      },', '      },'),
     ("completed model work archives despite cancellation", M,
      '      opts.emit,\n    );\n    opts.signal?.throwIfAborted();', '      opts.emit,\n    );'),
     ("late cancellation still archives active history", M,
@@ -32,15 +32,15 @@ MUTANTS = [
     ("cancelled tools start another provider call", "src/llm/providers/generic_loop.ts",
      'this.abort.signal.throwIfAborted();', ''),
     ("compact is not the user's own pass", "src/commands/compact.ts",
-     '          foreground: true,\n', ''),
+     '          trigger: "manual",\n', '          trigger: "idle",\n'),
     ("compact's model calls are labelled background", "src/handler/deps.ts",
      '        }, { foreground: true }),', '        }),'),
     ("a pass forgets it was asked for", R,
-     '          foreground: options.foreground ?? false,\n', ''),
+     '        foreground: options.trigger === "manual",\n', ''),
     ("a pass the user asked for replays a stored pause", M,
      '  if (opts.foreground !== true && checkpoint.state === "paused"', '  if (checkpoint.state === "paused"'),
     ("a pause forgets what stopped it", M,
-     '  checkpoint.pauseDetail = stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));', '  delete checkpoint.pauseDetail;'),
+     '    : stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));', '    : undefined;'),
 ]
 
 if __name__ == "__main__":

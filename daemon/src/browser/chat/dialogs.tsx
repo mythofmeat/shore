@@ -4,7 +4,7 @@ import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { compactionSummary } from "./transcript.ts";
+import { compactionSummary, compactionWatchSummary } from "./transcript.ts";
 
 export type ConversationDialog = "rename" | "fork" | "compact" | "clear" | "guidance" | "system" | "archive";
 
@@ -43,6 +43,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
   const [name, setName] = useState("");
   const [turns, setTurns] = useState("");
   const [restart, setRestart] = useState(false);
+  const [running, setRunning] = useState<"compact" | "watch" | "cancel">("compact");
   const label = thread === undefined ? state.thread ?? "" : threadLabel(thread);
   switch (dialog) {
     case "rename": return <Form title="Rename conversation" close={close} busy={busy} error={error} action="Save" submit={() => run(async () => {
@@ -59,13 +60,20 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>New conversation name</span><input className="input" autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field"><span>Copy only the last turns <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="All turns" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
     </Form>;
-    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action="Compact" submit={() => run(async () => {
+    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action={{ compact: "Compact", watch: "Follow", cancel: "Stop" }[running]} danger={running === "cancel"} submit={() => run(async () => {
+      if (running === "watch") return compactionWatchSummary(await workspace.actions.run("compact_watch", {}));
+      if (running === "cancel") return compactionWatchSummary(await workspace.actions.run("compact_cancel", {}));
       const report = await workspace.actions.run("compact", { ...(turns === "" ? {} : { keep_turns: Number(turns) }), ...(restart ? { restart: true } : {}) });
       await resync(state); return compactionSummary(report);
     })}>
-      <p className="form-text">Summarizes older turns into memory so the conversation fits the model’s context. Recent turns stay as they are.</p>
-      <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
-      <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Restart a paused compaction instead of resuming it</label>
+      <p className="form-text">Summarizes older turns into memory so the conversation fits the model’s context. Recent turns stay as they are. The compaction runs on the daemon, so closing this tab doesn’t stop it.</p>
+      <label className="field"><span>What to do</span><select className="select" value={running} onChange={(event) => setRunning(event.target.value as "compact" | "watch" | "cancel")}>
+        <option value="compact">Compact now</option><option value="watch">Follow the compaction already running</option><option value="cancel">Stop the running compaction</option>
+      </select></label>
+      {running === "compact" ? <>
+        <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
+        <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Restart a paused compaction instead of resuming it</label>
+      </> : <p className="form-hint">{running === "watch" ? "Shows the running compaction’s progress until it ends, whoever started it." : "The compaction pauses with its progress kept; compact again to resume it."}</p>}
     </Form>;
     case "clear": return <Form title="Clear context" close={close} busy={busy} error={error} action="Clear" danger submit={() => run(async () => {
       const result = await workspace.actions.run("clear", { ...(text.trim() === "" ? {} : { note: text.trim() }), ...(restart ? { exclude: true } : {}) });

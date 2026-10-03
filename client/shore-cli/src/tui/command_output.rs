@@ -375,6 +375,9 @@ pub(crate) fn render(
         "compact" => Some(written(|out| {
             crate::output::commands::write_compact_result(out, data, TUI_OUTPUT_WIDTH);
         })),
+        "compact_watch" | "compact_cancel" => Some(written(|out| {
+            crate::output::compaction::write_watch_result(out, data, TUI_OUTPUT_WIDTH);
+        })),
         "segments" => Some(render_segments(data)),
         "clear" => Some(format!(
             "Archived {} messages into segment #{}.",

@@ -635,6 +635,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "compact_watch"
+              },
+              "data": {
+                "$ref": "#/$defs/CompactionWatchResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "compact_cancel"
+              },
+              "data": {
+                "$ref": "#/$defs/CompactionWatchResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "segments"
               },
               "data": {
@@ -3054,6 +3086,90 @@
           "content_preview"
         ]
       },
+      "CompactionWatchResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/CompactionWatchState"
+          },
+          "pass": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassEnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "state",
+          "pass"
+        ]
+      },
+      "CompactionWatchState": {
+        "type": "string",
+        "enum": [
+          "finished",
+          "cancelled",
+          "idle"
+        ]
+      },
+      "CompactionPassEnd": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/$defs/CompactionTrigger"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "trigger",
+          "started_at",
+          "ended_at",
+          "report",
+          "error"
+        ]
+      },
+      "CompactionTrigger": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "idle",
+          "turn",
+          "deep_archive"
+        ]
+      },
       "SegmentsResult": {
         "anyOf": [
           {
@@ -3680,6 +3796,16 @@
               }
             ]
           },
+          "compaction": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionStatusReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -4234,6 +4360,128 @@
           "unavailable",
           "retrying",
           "invalid"
+        ]
+      },
+      "CompactionStatusReport": {
+        "type": "object",
+        "properties": {
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionCheckpointStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassEnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "running",
+          "paused",
+          "last"
+        ]
+      },
+      "CompactionPassProgress": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/$defs/CompactionTrigger"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "trigger",
+          "started_at",
+          "phase",
+          "last_tool"
+        ]
+      },
+      "CompactionCheckpointStatus": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "checkpoint_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resume_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tool_rounds": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "compacted_turns": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
+          "checkpoint_id",
+          "reason",
+          "detail",
+          "resume_at",
+          "tool_rounds",
+          "compacted_turns",
+          "updated_at"
         ]
       },
       "ErrorLogResult": {
@@ -8631,6 +8879,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "compact_watch"
+              },
+              "data": {
+                "$ref": "#/$defs/CompactionWatchResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "compact_cancel"
+              },
+              "data": {
+                "$ref": "#/$defs/CompactionWatchResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "segments"
               },
               "data": {
@@ -11050,6 +11330,90 @@
           "content_preview"
         ]
       },
+      "CompactionWatchResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/CompactionWatchState"
+          },
+          "pass": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassEnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "state",
+          "pass"
+        ]
+      },
+      "CompactionWatchState": {
+        "type": "string",
+        "enum": [
+          "finished",
+          "cancelled",
+          "idle"
+        ]
+      },
+      "CompactionPassEnd": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/$defs/CompactionTrigger"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "trigger",
+          "started_at",
+          "ended_at",
+          "report",
+          "error"
+        ]
+      },
+      "CompactionTrigger": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "idle",
+          "turn",
+          "deep_archive"
+        ]
+      },
       "SegmentsResult": {
         "anyOf": [
           {
@@ -11676,6 +12040,16 @@
               }
             ]
           },
+          "compaction": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionStatusReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -12230,6 +12604,128 @@
           "unavailable",
           "retrying",
           "invalid"
+        ]
+      },
+      "CompactionStatusReport": {
+        "type": "object",
+        "properties": {
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionCheckpointStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CompactionPassEnd"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "running",
+          "paused",
+          "last"
+        ]
+      },
+      "CompactionPassProgress": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/$defs/CompactionTrigger"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "thread",
+          "trigger",
+          "started_at",
+          "phase",
+          "last_tool"
+        ]
+      },
+      "CompactionCheckpointStatus": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "checkpoint_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resume_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tool_rounds": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "compacted_turns": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
+          "checkpoint_id",
+          "reason",
+          "detail",
+          "resume_at",
+          "tool_rounds",
+          "compacted_turns",
+          "updated_at"
         ]
       },
       "ErrorLogResult": {

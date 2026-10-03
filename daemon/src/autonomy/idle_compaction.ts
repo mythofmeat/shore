@@ -30,7 +30,7 @@ export async function runIdleCompaction(
       completion = await runCompaction(character, {
         ...deps.run,
         config: deps.config,
-      });
+      }, "idle");
     } catch (e) {
       shoreLog.warn(
         `shore: idle compaction for ${character} failed, will retry on the next idle tick: ` +

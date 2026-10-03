@@ -774,7 +774,7 @@
     },
     {
       "path": "shore compact",
-      "about": "Summarize the conversation into memory and shorten the active window",
+      "about": "Summarize the conversation into memory and shorten the active window. The pass runs on the daemon and is shown live: its reasoning, tool calls and results. Ctrl-C only stops watching; the pass carries on",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -797,7 +797,10 @@
           "max_values": 1,
           "defaults": [],
           "choices": [],
-          "conflicts": [],
+          "conflicts": [
+            "watch",
+            "cancel"
+          ],
           "env": null
         },
         {
@@ -807,6 +810,55 @@
           "aliases": [],
           "short_aliases": [],
           "help": "Throw away a paused checkpoint and summarize from scratch. Use this when a pass stopped partway — out of quota, provider down, memory files edited since — and `shore compact` keeps reporting paused. The memory it already wrote stays; those turns get summarized again",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "watch",
+            "cancel"
+          ],
+          "env": null
+        },
+        {
+          "id": "watch",
+          "short": null,
+          "long": "watch",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Follow the compaction already running, whoever started it, from what it has done so far to how it ends. With none running, show how the last pass ended",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "cancel"
+          ],
+          "env": null
+        },
+        {
+          "id": "cancel",
+          "short": null,
+          "long": "cancel",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Stop the running compaction. It pauses with its checkpoint kept, so `shore compact` resumes it later",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -7521,6 +7573,26 @@
           "restart": true,
           "keep_turns": 0
         }
+      }
+    },
+    {
+      "argv": [
+        "compact",
+        "--watch"
+      ],
+      "mapping": {
+        "name": "compact_watch",
+        "args": {}
+      }
+    },
+    {
+      "argv": [
+        "compact",
+        "--cancel"
+      ],
+      "mapping": {
+        "name": "compact_cancel",
+        "args": {}
       }
     },
     {

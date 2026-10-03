@@ -536,6 +536,72 @@ describe("coming up", () => {
     } finally { client.close(); daemon.stop(); await daemon.done; }
   });
 
+  test("a compaction outlives the client that started it and can be watched, reported and stopped from another", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[tools]\nenabled = ["bash"]\n`);
+    const cleanup = new AbortController();
+    const compactStream = compactionFixture(cleanup.signal);
+    const chat = scriptedProvider("Stored fixture reply");
+    const provider: SidecarProvider = { ...chat, async *stream(request, signal) {
+      if (request.context?.call_type === "compaction") yield* compactStream(request, signal); else yield* chat.stream(request, signal);
+    } };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const clients: Client[] = [];
+    const open = async (): Promise<Client> => {
+      const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+      clients.push(client);
+      await client.awaitFrame("history");
+      return client;
+    };
+    const finished = (client: Client, rid: string): boolean => client.frames.some((frame) => frame["type"] === "request_finished" && frame["rid"] === rid);
+    const run = async (client: Client, request: BrowserRequest, rid: string): Promise<unknown> => {
+      client.send({ ...request, rid });
+      await until(() => finished(client, rid), `${rid} did not finish`);
+      return client.frames.find((frame) => frame["type"] === "command_output" && frame["rid"] === rid)?.["data"];
+    };
+    const command = (name: string, args: Record<string, unknown> = {}): BrowserRequest => ({ type: "command", name, args });
+    const compaction = async (client: Client, rid: string): Promise<unknown> => ((await run(client, command("status"), rid)) as { compaction?: unknown }).compaction;
+    try {
+      const starter = await open();
+      for (const [index, text] of ["cancel memory once", "Keep the recent turn"].entries()) {
+        await run(starter, { type: "message", text, stream: true, images: [], image_data: [] }, `chat-${String(index)}`);
+      }
+      starter.send({ ...command("compact", { keep_turns: 1 }), rid: "started" });
+      const waiting = (client: Client, rid: string): boolean => client.frames.some((frame) => frame["rid"] === rid && frame["type"] === "stream_chunk" && String(frame["text"]).endsWith("Waiting for compaction cancellation"));
+      await until(() => waiting(starter, "started"), "Compaction did not reach its held provider call");
+      starter.close();
+
+      const watcher = await open();
+      expect(await compaction(watcher, "status-running")).toMatchObject({
+        running: { thread: "main", trigger: "manual", phase: "compacting round 2", last_tool: "bash" }, paused: null, last: null,
+      });
+      watcher.send({ ...command("compact_watch"), rid: "watch" });
+      await until(() => waiting(watcher, "watch"), "The watcher was not caught up on the running pass");
+      expect(watcher.frames.some((frame) => frame["rid"] === "watch" && frame["type"] === "tool_call" && frame["tool_name"] === "bash" && frame["subagent"] === "compaction")).toBe(true);
+
+      const stopper = await open();
+      await run(stopper, command("compact", { keep_turns: 0 }), "refused");
+      expect(stopper.frames.find((frame) => frame["type"] === "request_finished" && frame["rid"] === "refused")).toMatchObject({
+        outcome: "failed", error: { code: "busy", message: expect.stringContaining("shore compact --watch") as unknown },
+      });
+      const attacher = await open();
+      attacher.send({ ...command("compact"), rid: "attached" });
+      await until(() => waiting(attacher, "attached"), "A second compact did not follow the running pass");
+      const stopped = { state: "cancelled", pass: { trigger: "manual", report: { status: "paused", reason: "cancelled", detail: "Compaction cancelled on request" }, error: null } };
+      expect(await run(stopper, command("compact_cancel"), "cancel")).toMatchObject(stopped);
+      await until(() => finished(attacher, "attached"), "The attached compact did not see the pass end");
+      expect(attacher.frames.find((frame) => frame["type"] === "command_output" && frame["rid"] === "attached")?.["data"]).toMatchObject(stopped.pass.report);
+      await until(() => finished(watcher, "watch"), "The watcher did not see the pass end");
+      expect(watcher.frames.find((frame) => frame["type"] === "command_output" && frame["rid"] === "watch")?.["data"]).toMatchObject({ ...stopped, state: "finished" });
+      expect(await compaction(watcher, "status-paused")).toMatchObject({
+        running: null, paused: { reason: "cancelled", detail: "Compaction cancelled on request", tool_rounds: 1 }, last: stopped.pass,
+      });
+      expect(await run(watcher, command("compact_watch"), "watch-idle")).toMatchObject({ state: "idle", pass: stopped.pass });
+
+      expect(await run(watcher, command("compact"), "resume")).toMatchObject({ status: "compacted", retained_turns: 1 });
+      expect(await compaction(watcher, "status-done")).toMatchObject({ running: null, paused: null, last: { trigger: "manual", report: { status: "compacted" } } });
+    } finally { cleanup.abort(); for (const client of clients) client.close(); daemon.stop(); await daemon.done; }
+  });
+
   test("manual tool progress and image results are correlated through both native and browser sessions", async () => {
     const data = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUqdjCwMDAxMDAwMDAAAAOigFED/mW/QAAAABJRU5ErkJggg==";
     const observed: unknown[][] = [];

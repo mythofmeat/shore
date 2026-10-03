@@ -1,6 +1,7 @@
 pub(crate) mod autonomy;
 pub(crate) mod catalog;
 pub(crate) mod commands;
+pub(crate) mod compaction;
 pub(crate) mod config;
 pub(crate) mod history;
 pub(crate) mod reasoning;
