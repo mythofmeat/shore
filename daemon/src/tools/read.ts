@@ -3,14 +3,12 @@ import { extname } from "node:path";
 import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
-import { imageMime, readImage } from "./read_image.ts";
+import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_LINE_CHARS = 2000;
-
-const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd", ".mkdn"]);
 
@@ -47,7 +45,7 @@ export async function handleRead(
     if (original) throw new InvalidArgs("original applies only to image files");
     const page = await readText(file, path, offset, limit, maxChars, signal);
     return MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
-      ? await expandMarkdownImages(file, path, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
+      ? await expandMarkdownImages(file, path, workspaceDir, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
       : page.output;
   } finally {
     await file.close();

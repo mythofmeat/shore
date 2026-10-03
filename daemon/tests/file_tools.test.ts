@@ -218,6 +218,86 @@ test("Markdown read leaves remote and data references as text without fetching t
   } finally { await server.stop(true); }
 });
 
+test("Markdown read expands wikilink images by unique name anywhere in the workspace", async () => {
+  const { put, run, ctx, exec, root } = await world();
+  await mkdir(join(ctx.workspaceDir, "memory", ".attachments"), { recursive: true });
+  await mkdir(join(ctx.workspaceDir, "art", "sheets"), { recursive: true });
+  await put("memory/.attachments/portrait one.png", Buffer.from(PNG, "base64"));
+  await put("art/sheets/card.png", Buffer.from(PNG, "base64"));
+  await put("art/sheets/back.png", Buffer.from(PNG, "base64"));
+  await put("memory/journal.md", "# Day one\n\n![[portrait one.png|Ada at the pier]]\n![[portrait one.png]] ![[sheets/card.png|300]]\n![[ art/sheets/back.png ]]\n");
+  const frames: ServerMessage[] = [];
+  exec.sendDirect = (frame) => { frames.push(frame); };
+  const result = await run("read", { file_path: "memory/journal.md" });
+  expect(result.isError).toBe(false);
+  expect(resultText(result)).toContain("3\t![[portrait one.png|Ada at the pier]]");
+  expect(resultText(result)).not.toContain("not attached");
+  expect(resultImages(result)).toHaveLength(3);
+  const captions = required(frames.find((candidate) => candidate.type === "tool_result")).images?.map((image) => image.caption);
+  expect(captions).toEqual([
+    `Ada at the pier (${join(ctx.workspaceDir, "memory/.attachments/portrait one.png")})`,
+    join(ctx.workspaceDir, "art/sheets/card.png"),
+    join(ctx.workspaceDir, "art/sheets/back.png"),
+  ]);
+
+  await writeFile(join(root, "outside.md"), "![[card.png]]\n");
+  expect(resultImages(await run("read", { file_path: join(root, "outside.md") }))).toHaveLength(1);
+});
+
+test("Markdown read skips wikilink images that match no file or more than one", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of ["a", "b", "ax"]) await mkdir(join(ctx.workspaceDir, dir));
+  for (const file of ["a/img.png", "b/img.png", "ax/pic.png"]) await put(file, Buffer.from(PNG, "base64"));
+  await put("links.md", "![[img.png]]\n![[img.png]]\n![[mg.png]]\n![[x/pic.png]]\n![[b/img.png]]\n");
+  const result = await run("read", { file_path: "links.md" });
+  expect(result.isError).toBe(false);
+  expect(resultImages(result)).toHaveLength(1);
+  const text = resultText(result);
+  expect(text).toContain("[Markdown image [[img.png]] not attached: 2 workspace files match (a/img.png, b/img.png); add folders to the link to pick one]");
+  expect(text.match(/\[\[img\.png\]\] not attached/g)).toHaveLength(1);
+  expect(text).toContain("[Markdown image [[mg.png]] not attached: no file in the workspace matches it]");
+  expect(text).toContain("[Markdown image [[x/pic.png]] not attached: no file in the workspace matches it]");
+
+  for (const dir of ["c", "d"]) await mkdir(join(ctx.workspaceDir, dir));
+  for (const file of ["c/img.png", "d/img.png"]) await put(file, Buffer.from(PNG, "base64"));
+  await put("crowded.md", "![[img.png]]\n");
+  expect(resultText(await run("read", { file_path: "crowded.md" }))).toContain("4 workspace files match (a/img.png, b/img.png, c/img.png and 1 more)");
+});
+
+test("Markdown read searches hidden folders for wikilink images but not .git or symlinks", async () => {
+  const { put, run, ctx } = await world();
+  for (const dir of [".attachments", ".git"]) await mkdir(join(ctx.workspaceDir, dir));
+  await put(".attachments/pic.png", Buffer.from(PNG, "base64"));
+  await put(".git/pic.png", Buffer.from(PNG, "base64"));
+  await symlink(join(ctx.workspaceDir, ".attachments"), join(ctx.workspaceDir, "linked"));
+  await symlink(join(ctx.workspaceDir, ".attachments", "pic.png"), join(ctx.workspaceDir, "alias.png"));
+  await put("links.md", "![[pic.png]]\n![[alias.png]]\n");
+  const result = await run("read", { file_path: "links.md" });
+  expect(resultImages(result)).toHaveLength(1);
+  expect(resultText(result)).not.toContain("[[pic.png]] not attached");
+  expect(resultText(result)).toContain("[Markdown image [[alias.png]] not attached: no file in the workspace matches it]");
+});
+
+test("Markdown read leaves wikilinks that are not visible image embeds as text", async () => {
+  const { put, run } = await world();
+  await put("img.png", Buffer.from(PNG, "base64"));
+  await put("b.png", Buffer.from(PNG, "base64"));
+  const source = "[[img.png]] ![[Some Note]] ![[notes.md]] ![[img.png\n\\![[img.png]] `![[img.png]]` ![img.png]] !\\[[img.png]]\n```\n![[img.png]]\n```\n";
+  await put("examples.md", source);
+  const examples = await run("read", { file_path: "examples.md" });
+  expect(resultImages(examples)).toHaveLength(0);
+  expect(resultText(examples)).not.toContain("not attached");
+
+  await put("escaped.md", "\\\\![[img.png]]\n");
+  expect(resultImages(await run("read", { file_path: "escaped.md" }))).toHaveLength(1);
+
+  await put("paged.md", "first ![[img.png]]\nsecond ![[b.png]]\n");
+  const first = await run("read", { file_path: "paged.md", limit: 1 });
+  expect(resultImages(first)).toHaveLength(1);
+  expect(resultText(first)).not.toContain("b.png]] not");
+  expect(resultImages(await run("read", { file_path: "paged.md", offset: 2 }))).toHaveLength(1);
+});
+
 test("Markdown read preserves text when local images are missing, invalid, or too large", async () => {
   const { put, run, exec } = await world();
   exec.limits.max_inline_image_bytes = 10 * 1024 * 1024;
