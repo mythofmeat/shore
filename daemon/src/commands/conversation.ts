@@ -7,7 +7,11 @@ import type {
   ConversationEngine,
   DisplayHistoryPage,
   HistoryPageLimit,
+  HistoryScope,
 } from "../engine/conversation.ts";
+import { presentSegment, type SegmentRecord } from "../engine/segments.ts";
+import { MAIN_THREAD } from "../config/dirs.ts";
+import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import type { ImageRef, Message, Role } from "../engine/types.ts";
 import { embedImageData, embedMessagesImageData } from "../engine/wire_images.ts";
 import { localRfc3339 } from "../util/time.ts";
@@ -98,14 +102,35 @@ function matchesRole(message: Message, role: Role | undefined): boolean {
   return role === undefined || message.role === role;
 }
 
-function resolveHistoryBefore(args: Args): number | "active" | undefined {
-  if (!("before" in args)) return undefined;
+function resolveHistoryBefore(args: Args): number | undefined {
   const before = args["before"];
-  if (before === "active") return before;
-
+  if (before === undefined || before === null) return undefined;
   const index = asU64(before);
-  if (index === undefined) throw invalidRequest('before must be "active" or a message cursor');
+  if (index === undefined) throw invalidRequest("before must be a message cursor");
   return index;
+}
+
+function historyScope(args: Args): HistoryScope {
+  const segment = args["segment"];
+  if (segment === undefined || segment === null) return "current";
+  const index = asU64(segment);
+  if (index === undefined) throw invalidRequest("segment must be a non-negative integer");
+  return index;
+}
+
+function readHistoryPage(
+  engine: ConversationEngine,
+  args: Args,
+  before: number | undefined,
+): OperationResult<"history_page"> {
+  const scope = historyScope(args);
+  const role = roleFilter(args);
+  const history = engine.displayHistoryPage(scope, before, historyPageLimit(args));
+  if (history === undefined) {
+    const where = engine.thread === MAIN_THREAD ? engine.characterName : `${engine.characterName} thread ${engine.thread}`;
+    throw notFound(`segment ${String(scope)} not found for ${where}`);
+  }
+  return historyPagePayload(history, role, engine.characterName);
 }
 
 function historyPagePayload(
@@ -116,11 +141,8 @@ function historyPagePayload(
   const page = history.messages
     .filter((msg) => matchesRole(msg, role))
     .map((msg) => structuredClone(msg));
-  const activePageStart = history.messages
-    .slice(0, history.activeStart)
-    .filter((msg) => matchesRole(msg, role)).length;
 
-  embedMessagesImageData(page.slice(activePageStart));
+  if (history.segment === undefined) embedMessagesImageData(page);
   shoreLog.debug(
     `shore: history page for ${character} (durable; ` +
       `segments=${String(history.metrics.segments_read)}, rows=${String(history.metrics.rows_read)}, ` +
@@ -130,14 +152,18 @@ function historyPagePayload(
 
   return {
     messages: page,
-    active_start: activePageStart,
     cursor: history.cursor,
     next_before: history.cursor,
-    has_more_before: history.cursor > 0,
-    global_active_start: history.globalActiveStart,
-    total_messages: history.totalTurns,
+    has_more_before: history.hasMoreBefore,
     total_turns: history.totalTurns,
+    segment: presentOptionalSegment(history.segment),
+    previous_segment: presentOptionalSegment(history.previousSegment),
+    next_segment: presentOptionalSegment(history.nextSegment),
   };
+}
+
+function presentOptionalSegment(record: SegmentRecord | undefined): SegmentSummary | null {
+  return record === undefined ? null : presentSegment(record);
 }
 
 export function get(engine: ConversationEngine, args: Args): OperationResult<"get"> {
@@ -154,21 +180,12 @@ export function get(engine: ConversationEngine, args: Args): OperationResult<"ge
   return msg;
 }
 
-export async function log(engine: ConversationEngine, args: Args): Promise<OperationResult<"log">> {
-  const history = await engine.displayHistoryPage(undefined, historyPageLimit(args));
-  const role = roleFilter(args);
-
-  return historyPagePayload(history, role, engine.characterName);
+export function log(engine: ConversationEngine, args: Args): OperationResult<"log"> {
+  return readHistoryPage(engine, args, undefined);
 }
 
-export async function historyPage(engine: ConversationEngine, args: Args): Promise<OperationResult<"history_page">> {
-  const history = await engine.displayHistoryPage(
-    resolveHistoryBefore(args),
-    historyPageLimit(args),
-  );
-  const role = roleFilter(args);
-
-  return historyPagePayload(history, role, engine.characterName);
+export function historyPage(engine: ConversationEngine, args: Args): OperationResult<"history_page"> {
+  return readHistoryPage(engine, args, resolveHistoryBefore(args));
 }
 
 export async function edit(engine: ConversationEngine, args: Args): Promise<OperationResult<"edit">> {

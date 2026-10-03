@@ -115,7 +115,7 @@ test("delta-capable clients receive suffixes while legacy clients receive full s
   await engine.appendMessage(message("two"));
   server.setHandshakeProvider({
     hello: async () => ({ characters: [{ name: "ada" }] }),
-    history: async () => ({ messages: engine.historySnapshot({}).messages as unknown as import("../src/protocol/Message.ts").Message[], config: {}, activeStart: 0, selectedCharacter: "ada", selectedThread: "main", revision: engine.currentRevision() }),
+    history: async () => ({ messages: engine.historySnapshot({}).messages as unknown as import("../src/protocol/Message.ts").Message[], config: {}, previousSegment: null, selectedCharacter: "ada", selectedThread: "main", revision: engine.currentRevision() }),
   });
   const modern = await server.attachLocal({ clientType: "test", clientName: "modern", character: "ada", thread: "main", capabilities: ["history-deltas"] });
   const legacy = await server.attachLocal({ clientType: "test", clientName: "legacy", character: "ada", thread: "main" });

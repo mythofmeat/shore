@@ -9447,6 +9447,15 @@
         },
         "role": {
           "$ref": "#/$defs/Role"
+        },
+        "segment": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false,
@@ -9472,11 +9481,6 @@
             "$ref": "#/$defs/Message"
           }
         },
-        "active_start": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "cursor": {
           "type": "integer",
           "format": "uint",
@@ -9490,31 +9494,51 @@
         "has_more_before": {
           "type": "boolean"
         },
-        "global_active_start": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "total_messages": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "total_turns": {
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "previous_segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "messages",
-        "active_start",
         "cursor",
         "next_before",
         "has_more_before",
-        "global_active_start",
-        "total_messages",
-        "total_turns"
+        "total_turns",
+        "segment",
+        "previous_segment",
+        "next_segment"
       ],
       "$defs": {
         "Message": {
@@ -9846,6 +9870,75 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "SegmentSummary": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compacted_at": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "excluded": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "index",
+            "first_message_at",
+            "last_message_at",
+            "compacted_at",
+            "message_count",
+            "excluded",
+            "label",
+            "note",
+            "memory_before",
+            "memory_after"
           ]
         }
       }
@@ -9877,8 +9970,23 @@
         "role": {
           "$ref": "#/$defs/Role"
         },
+        "segment": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "before": {
-          "$ref": "#/$defs/HistoryBefore"
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false,
@@ -9889,24 +9997,6 @@
             "user",
             "assistant",
             "system"
-          ]
-        },
-        "HistoryBefore": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            },
-            {
-              "$ref": "#/$defs/HistoryBoundary"
-            }
-          ]
-        },
-        "HistoryBoundary": {
-          "type": "string",
-          "enum": [
-            "active"
           ]
         }
       }
@@ -9922,11 +10012,6 @@
             "$ref": "#/$defs/Message"
           }
         },
-        "active_start": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "cursor": {
           "type": "integer",
           "format": "uint",
@@ -9940,31 +10025,51 @@
         "has_more_before": {
           "type": "boolean"
         },
-        "global_active_start": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "total_messages": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "total_turns": {
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "previous_segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_segment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SegmentSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "messages",
-        "active_start",
         "cursor",
         "next_before",
         "has_more_before",
-        "global_active_start",
-        "total_messages",
-        "total_turns"
+        "total_turns",
+        "segment",
+        "previous_segment",
+        "next_segment"
       ],
       "$defs": {
         "Message": {
@@ -10296,6 +10401,75 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "SegmentSummary": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_message_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compacted_at": {
+              "type": "string"
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "excluded": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_before": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "memory_after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "index",
+            "first_message_at",
+            "last_message_at",
+            "compacted_at",
+            "message_count",
+            "excluded",
+            "label",
+            "note",
+            "memory_before",
+            "memory_after"
           ]
         }
       }

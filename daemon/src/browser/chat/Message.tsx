@@ -189,9 +189,9 @@ function Swipe({ message, last, busy }: { message: Message; last: boolean; busy:
   </div>;
 }
 
-export const MessageRow = memo(function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage }: {
+export const MessageRow = memo(function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage, readOnly = false }: {
   message: Message; character: string; avatar: CharacterAvatar | null | undefined; last: boolean; lastUser?: boolean; metadata: StreamMetadata | undefined;
-  display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage;
+  display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage; readOnly?: boolean;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
   useEffect(() => {
@@ -204,7 +204,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;
-  const actions: MenuItem[] = [
+  const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },
     { label: "Edit", icon: "edit", onSelect: () => setMode("edit") },
     ...(assistant && last ? [{ label: "Regenerate", icon: "regenerate" as const, onSelect: regenerate, disabled: busy }] : []),
@@ -215,9 +215,11 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   return <article className={`message ${message.role} ${mode !== "view" ? "active" : ""} ${last ? "last" : ""}`} aria-label={`${assistant ? character : "You"}, ${timeLabel(message.timestamp)}`} data-role={message.role}>
     {mode === "view" && !mobile ? <div className="message-actions" role="toolbar" aria-label="Message actions">
       <IconButton icon="copy" label="Copy" onClick={copy} />
-      <IconButton icon="edit" label="Edit" onClick={() => setMode("edit")} />
-      {assistant && last ? <IconButton icon="regenerate" label="Regenerate" disabled={busy} onClick={regenerate} /> : null}
-      <IconButton icon="trash" label="Delete" onClick={() => setMode("delete")} />
+      {readOnly ? null : <>
+        <IconButton icon="edit" label="Edit" onClick={() => setMode("edit")} />
+        {assistant && last ? <IconButton icon="regenerate" label="Regenerate" disabled={busy} onClick={regenerate} /> : null}
+        <IconButton icon="trash" label="Delete" onClick={() => setMode("delete")} />
+      </>}
     </div> : null}
     {assistant ? <Avatar name={character} avatar={avatar} size={mobile ? 32 : 36} /> : <UserAvatar size={mobile ? 32 : 36} />}
     <div className="message-main">
@@ -229,7 +231,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
       </div>
       {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body"><MessageBody message={message} display={display} openImage={openImage} /></div>}
       {meta === "" ? null : <div className="message-metadata">{meta}</div>}
-      {assistant && mode === "view" ? <Swipe message={message} last={last} busy={busy} /> : null}
+      {assistant && mode === "view" && !readOnly ? <Swipe message={message} last={last} busy={busy} /> : null}
       {mode === "delete" ? <DeleteConfirm message={message} done={() => setMode("view")} /> : null}
     </div>
   </article>;

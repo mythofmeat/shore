@@ -8,7 +8,7 @@ import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
 import { checkAttachments, restoredDraft } from "../src/browser/request_forms.ts";
 import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/chat/sending.ts";
 import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
-import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
+import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
 import { Markdown, markdownBlocks, safeHref, type SettledMarkdown } from "../src/browser/markdown.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
@@ -16,7 +16,7 @@ import { DEFAULT_THEME, THEME_STORAGE_KEY, ThemeStore, isThemeId, storedTheme } 
 
 const message = (id: string, role: Message["role"], timestamp: string, extra: Partial<Message> = {}): Message => ({ msg_id: id, role, content: id, images: [], content_blocks: [], timestamp, ...extra });
 
-test("transcript items add day dividers, one context boundary and mark only the last assistant reply", () => {
+test("transcript items add day dividers and mark only the last assistant reply", () => {
   const now = new Date(2026, 8, 25, 12);
   const messages = [
     message("a", "assistant", new Date(2026, 8, 24, 21).toISOString()),
@@ -24,12 +24,24 @@ test("transcript items add day dividers, one context boundary and mark only the 
     message("c", "assistant", new Date(2026, 8, 25, 8, 1).toISOString()),
     message("d", "user", new Date(2026, 8, 25, 8, 2).toISOString()),
   ];
-  const items = transcriptItems(messages, 1, now);
-  expect(items.map((item) => item.kind === "message" ? item.message.msg_id : item.kind === "day" ? item.label : "context")).toEqual(["Yesterday", "a", "context", "Today", "b", "c", "d"]);
+  const items = transcriptItems(messages, now);
+  expect(items.map((item) => item.kind === "message" ? item.message.msg_id : item.label)).toEqual(["Yesterday", "a", "Today", "b", "c", "d"]);
   expect(items.filter((item) => item.kind === "message" && item.last).map((item) => item.kind === "message" ? item.message.msg_id : "")).toEqual(["c"]);
-  expect(transcriptItems(messages, 0, now).some((item) => item.kind === "context")).toBe(false);
   expect(lastAssistantIndex([message("x", "user", "")])).toBe(-1);
-  expect(transcriptItems([message("bad", "user", "not a date")], 0, now).map((item) => item.kind)).toEqual(["message"]);
+  expect(transcriptItems([message("bad", "user", "not a date")], now).map((item) => item.kind)).toEqual(["message"]);
+});
+
+test("a segment is named by its index and label, and described by size, dates and exclusion", () => {
+  const now = new Date(2026, 9, 2, 12);
+  const segment = { index: 12, first_message_at: new Date(2026, 8, 28, 9).toISOString(), last_message_at: new Date(2026, 9, 1, 22).toISOString(), compacted_at: "", message_count: 340, excluded: false, label: null, note: null, memory_before: null, memory_after: null };
+  const day = (date: Date, year = false) => date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: year ? "numeric" : undefined });
+  expect(segmentName(segment)).toBe("Segment 12");
+  expect(segmentName({ ...segment, label: "the trip" })).toBe("Segment 12 · the trip");
+  expect(segmentDetail(segment, now)).toBe(`340 messages · ${day(new Date(2026, 8, 28))} – ${day(new Date(2026, 9, 1))}`);
+  expect(segmentDetail({ ...segment, message_count: 1, last_message_at: segment.first_message_at, excluded: true }, now)).toBe(`1 message · ${day(new Date(2026, 8, 28))} · excluded from memory`);
+  expect(segmentDetail({ ...segment, first_message_at: null, last_message_at: "not a date" }, now)).toBe("340 messages");
+  expect(segmentDetail({ ...segment, first_message_at: null }, now)).toBe(`340 messages · ${day(new Date(2026, 9, 1))}`);
+  expect(segmentDetail({ ...segment, first_message_at: new Date(2025, 11, 30).toISOString(), last_message_at: null }, now)).toBe(`340 messages · ${day(new Date(2025, 11, 30), true)}`);
 });
 
 test("day labels use Today, Yesterday, weekdays within a week and dates beyond it", () => {
@@ -162,21 +174,21 @@ test("finished streams disappear once their message arrives or their request is 
   expect(visibleStreams(streams, [], new Set()).map((item) => item.rid)).toEqual(["live"]);
 });
 
-test("until the daemon lists what a regeneration replaces, the guess is everything after the last real user turn within the active context", () => {
+test("until the daemon lists what a regeneration replaces, the guess is everything after the last real user turn", () => {
   const toolResult = message("r", "user", "", { content_blocks: [{ type: "tool_result", tool_use_id: "t", content: "ok", is_error: false }] });
   const messages = [message("u", "user", ""), message("a1", "assistant", ""), toolResult, message("a2", "assistant", ""), message("s", "system", "")];
-  expect(optimisticRegenReplaces(messages, 0)).toEqual(["a1", "r", "a2", "s"]);
-  expect(optimisticRegenReplaces([message("u", "user", "", { content_blocks: [] })], 0)).toEqual([]);
-  expect(optimisticRegenReplaces([message("a", "assistant", ""), message("b", "assistant", "")], 1)).toEqual(["b"]);
-  expect(regenReplaces(messages, 0, [], true)).toEqual(["a1", "r", "a2", "s"]);
+  expect(optimisticRegenReplaces(messages)).toEqual(["a1", "r", "a2", "s"]);
+  expect(optimisticRegenReplaces([message("u", "user", "", { content_blocks: [] })])).toEqual([]);
+  expect(optimisticRegenReplaces([message("a", "assistant", ""), message("b", "assistant", "")])).toEqual(["a", "b"]);
+  expect(regenReplaces(messages, [], true)).toEqual(["a1", "r", "a2", "s"]);
 });
 
 test("a started regeneration hides exactly the messages its stream_start lists", () => {
   const messages = [message("u", "user", ""), message("kept", "assistant", ""), message("old", "assistant", "")];
-  expect(regenReplaces(messages, 0, [{ replaces: ["old"] }], false)).toEqual(["old"]);
-  expect(regenReplaces(messages, 0, [{ replaces: ["old"] }, {}], false)).toEqual(["old"]);
-  expect(regenReplaces(messages, 0, [{}, { replaces: [] }], false)).toEqual([]);
-  expect(regenReplaces(messages, 0, [], false)).toEqual([]);
+  expect(regenReplaces(messages, [{ replaces: ["old"] }], false)).toEqual(["old"]);
+  expect(regenReplaces(messages, [{ replaces: ["old"] }, {}], false)).toEqual(["old"]);
+  expect(regenReplaces(messages, [{}, { replaces: [] }], false)).toEqual([]);
+  expect(regenReplaces(messages, [], false)).toEqual([]);
 });
 
 test("a message that wasn't saved comes back ahead of the draft and the draft stays sendable", () => {

@@ -42,6 +42,6 @@ test("browser operation validators run without dynamic code generation", async (
   expect(bundle.success).toBe(true);
   const script = await bundle.outputs.at(0)?.text();
   expect(script).toBeDefined();
-  const result: unknown = runInNewContext(`${script}; [module.exports.validOperationInput('history_page', {before:'active'}), module.exports.validOperationInput('history_page', {before:null}), module.exports.validOperationResult('edit', {ref:'1', edited:true})];`, { TextEncoder, module: { exports: {} } }, { contextCodeGeneration: { strings: false, wasm: false }, timeout: 5000 });
+  const result: unknown = runInNewContext(`${script}; [module.exports.validOperationInput('history_page', {segment:2, before:40}), module.exports.validOperationInput('history_page', {before:'active'}), module.exports.validOperationResult('edit', {ref:'1', edited:true})];`, { TextEncoder, module: { exports: {} } }, { contextCodeGeneration: { strings: false, wasm: false }, timeout: 5000 });
   expect(result).toEqual([true, false, true]);
 });

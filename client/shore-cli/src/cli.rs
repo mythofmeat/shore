@@ -295,6 +295,10 @@ pub(crate) enum CliCommand {
         #[arg(short = 'n', long = "turns", alias = "count", default_value = "64")]
         count: u32,
 
+        /// Read an archived segment instead of the current context
+        #[arg(short = 's', long, conflicts_with_all = ["msg_ref", "follow"])]
+        segment: Option<u32>,
+
         /// Show only messages from one role
         #[arg(long, value_enum)]
         role: Option<LogRole>,
@@ -778,6 +782,14 @@ pub(crate) enum UiCommand {
         amount: Option<u16>,
     },
 
+    /// Show an archived conversation segment, or go back to the current context
+    Segment {
+        /// `older` or `newer` to step from what is shown, `current` to go
+        /// back, or a segment number to jump to
+        #[arg(value_parser = segment_target)]
+        target: SegmentTarget,
+    },
+
     /// Open the fullscreen image viewer on the nearest image
     Images,
 
@@ -844,6 +856,25 @@ pub(crate) enum UiCommand {
 
     /// Leave the TUI
     Quit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SegmentTarget {
+    Older,
+    Newer,
+    Current,
+    Index(u32),
+}
+
+fn segment_target(raw: &str) -> Result<SegmentTarget, String> {
+    match raw {
+        "older" => Ok(SegmentTarget::Older),
+        "newer" => Ok(SegmentTarget::Newer),
+        "current" => Ok(SegmentTarget::Current),
+        number => number.parse().map(SegmentTarget::Index).map_err(|_| {
+            format!("expected older, newer, current or a segment number, not {raw:?}")
+        }),
+    }
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -2493,6 +2524,7 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         msg_ref,
         role,
         count,
+        segment,
         ..
     } = cmd
     else {
@@ -2508,6 +2540,7 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         turns: Some(u64::from(*count)),
         count: None,
         role: role.map(LogRole::as_protocol_role),
+        segment: segment.map(u64::from),
     })
 }
 
@@ -4946,6 +4979,7 @@ mod tests {
             CliCommand::Log {
                 msg_ref: None,
                 count: 20,
+                segment: Some(3),
                 role: None,
                 follow: false,
                 json: false,
@@ -4966,6 +5000,7 @@ mod tests {
             CliCommand::Log {
                 msg_ref: Some("last".into()),
                 count: 20,
+                segment: None,
                 role: None,
                 follow: false,
                 json: false,

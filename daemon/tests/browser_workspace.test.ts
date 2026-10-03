@@ -18,6 +18,7 @@ import { settingSchema } from "../src/llm/settings.ts";
 import { SDK_VARIANTS } from "../src/llm/types.ts";
 import { assertBrowserCoverage, switchCases } from "../scripts/browser_coverage.ts";
 import type { Message } from "../src/protocol/Message.ts";
+import type { SegmentSummary } from "../src/protocol/SegmentSummary.ts";
 import type { OperationDescriptor } from "../src/protocol/OperationDescriptor.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
 import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
@@ -137,7 +138,7 @@ test("a regeneration started in another client hides exactly the messages its st
   connection.frame({ type: "history", config: {}, revision: 1, selected_character: "nova", selected_thread: "main", messages: [message("question"), reply("kept"), reply("old")] });
   const hidden = () => {
     const state = workspace.getSnapshot();
-    return regenReplaces(state.messages, state.activeStart, visibleStreams(state.streams, state.messages, new Set()), false);
+    return regenReplaces(state.messages, visibleStreams(state.streams, state.messages, new Set()), false);
   };
   connection.frame({ type: "stream_start", rid: "elsewhere", regen: false });
   expect(hidden()).toEqual([]);
@@ -289,17 +290,96 @@ test("conversation requests track when the daemon saved the message and when the
   expect(requests.getSnapshot().size).toBe(0);
 });
 
-test("history deltas replace the suffix, preserve archived pages, and detect absent anchors", () => {
-  const previous = [message("archive"), message("question"), message("old-answer")];
+test("history deltas replace the suffix and detect absent anchors", () => {
+  const previous = [message("opening"), message("question"), message("old-answer")];
   const history = { messages: [message("new-answer")], config: {}, revision: 2, delta: { base_revision: 1, after: "question" } };
-  expect(mergeHistory(previous, 1, history)?.map((item) => item.msg_id)).toEqual(["archive", "question", "new-answer"]);
-  expect(mergeHistory(previous, 1, { ...history, delta: { ...history.delta, after: null } })?.map((item) => item.msg_id)).toEqual(["archive", "new-answer"]);
-  expect(mergeHistory(previous, 1, { ...history, delta: { ...history.delta, after: "missing" } })).toBeUndefined();
+  expect(mergeHistory(previous, history)?.map((item) => item.msg_id)).toEqual(["opening", "question", "new-answer"]);
+  expect(mergeHistory(previous, { ...history, delta: { ...history.delta, after: null } })?.map((item) => item.msg_id)).toEqual(["new-answer"]);
+  expect(mergeHistory(previous, { ...history, delta: { ...history.delta, after: "missing" } })).toBeUndefined();
+  expect(mergeHistory(previous, { messages: [message("whole")], config: {}, revision: 3 })?.map((item) => item.msg_id)).toEqual(["whole"]);
+});
+
+test("a segment view pages one archived segment at a time and leaves the live conversation alone", async () => {
+  class Connection extends BrowserConnection {
+    listeners = new Set<(update: ConnectionUpdate) => void>();
+    override subscribe(listener: (update: ConnectionUpdate) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+    frame(frame: ServerMessage) { for (const listener of this.listeners) listener({ kind: "frame", message: frame }); }
+  }
+  const connection = new Connection({ origin: "http://localhost", contract: WEB_CONTRACT, protocol: WEB_PROTOCOL });
+  const workspace = new Workspace(connection);
+  const summary = (index: number): SegmentSummary => ({ index, first_message_at: null, last_message_at: null, compacted_at: "2026-10-01T00:00:00Z", message_count: 2, excluded: false, label: null, note: null, memory_before: null, memory_after: null });
+  let latest = 1;
+  const calls: unknown[] = [];
+  workspace.actions.run = (async (name: string, input: Record<string, unknown>) => {
+    calls.push([name, input]);
+    await Promise.resolve();
+    const index = input["segment"] as number;
+    const early = input["before"] === 10;
+    const messages = input["count"] === 0 ? [] : early ? [message(`s${String(index)}-early`)] : [message(`s${String(index)}-a`), message(`s${String(index)}-b`)];
+    const cursor = early ? 8 : 10;
+    return { messages, cursor, next_before: cursor, has_more_before: index === 1 && !early, total_turns: 2, segment: summary(index), previous_segment: index > 0 ? summary(index - 1) : null, next_segment: index < latest ? summary(index + 1) : null };
+  }) as never;
+  const view = () => workspace.getSnapshot().segmentView;
+  const live = { type: "history" as const, config: {}, selected_character: "nova", selected_thread: "main" };
+  const settle = async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); };
+
+  connection.frame({ ...live, revision: 1, messages: [message("live")], previous_segment: summary(1) });
+  expect(workspace.getSnapshot().previousSegment?.index).toBe(1);
+  expect(view()).toBeNull();
+
+  await workspace.openOlder();
+  expect(calls.at(-1)).toEqual(["history_page", { segment: 1, turns: 32 }]);
+  expect(view()?.segment.index).toBe(1);
+  expect(view()?.messages.map((item) => item.msg_id)).toEqual(["s1-a", "s1-b"]);
+  expect([view()?.previous?.index, view()?.next, view()?.hasEarlier, view()?.seenLive]).toEqual([0, null, true, "live"]);
+
+  await workspace.loadEarlierInSegment();
+  expect(calls.at(-1)).toEqual(["history_page", { segment: 1, before: 10, turns: 32 }]);
+  expect(view()?.messages.map((item) => item.msg_id)).toEqual(["s1-early", "s1-a", "s1-b"]);
+  expect(view()?.hasEarlier).toBe(false);
+  const asked = calls.length;
+  await workspace.loadEarlierInSegment();
+  expect(calls).toHaveLength(asked);
+
+  await workspace.openOlder();
+  expect([view()?.segment.index, view()?.previous, view()?.next?.index]).toEqual([0, null, 1]);
+  await workspace.openOlder();
+  expect(view()?.segment.index).toBe(0);
+  await workspace.openNewer();
+  expect(view()?.segment.index).toBe(1);
+  await workspace.openNewer();
+  expect(view()).toBeNull();
+  expect(workspace.getSnapshot().messages.map((item) => item.msg_id)).toEqual(["live"]);
+
+  await workspace.openSegment(1);
+  connection.frame({ ...live, revision: 2, messages: [message("reply")], delta: { base_revision: 1, after: "live" } });
+  expect(view()?.segment.index).toBe(1);
+  expect(workspace.getSnapshot().messages.map((item) => item.msg_id)).toEqual(["live", "reply"]);
+  connection.frame({ ...live, revision: 3, messages: [message("reply")], previous_segment: summary(1) });
+  await settle();
+  expect(calls.at(-1)).not.toEqual(["history_page", { segment: 1, count: 0 }]);
+  latest = 2;
+  connection.frame({ ...live, revision: 4, messages: [message("kept")], previous_segment: summary(2) });
+  await settle();
+  expect(calls.at(-1)).toEqual(["history_page", { segment: 1, count: 0 }]);
+  expect([view()?.segment.index, view()?.next?.index, view()?.messages.length]).toEqual([1, 2, 2]);
+
+  const superseded = workspace.openSegment(0);
+  workspace.closeSegment();
+  await superseded;
+  expect(view()).toBeNull();
+
+  await workspace.openSegment(1);
+  connection.frame({ ...live, revision: 5, messages: [], selected_thread: "side" });
+  expect(view()).toBeNull();
+  expect(workspace.getSnapshot().previousSegment).toBeNull();
+  workspace.closeSegment();
+  expect(view()).toBeNull();
 });
 
 test("history deltas retain image bytes omitted by the daemon's incremental frames", () => {
   const previous = [{ ...message("image"), images: [{ path: "stable.png", data: "aW1hZ2U=" }] }];
   const history = { messages: [{ ...message("image"), images: [{ path: "stable.png" }] }], config: {}, revision: 2, delta: { base_revision: 1, after: null } };
-  expect(mergeHistory(previous, 0, history)?.at(0)?.images).toEqual([{ path: "stable.png", data: "aW1hZ2U=" }]);
-  expect(mergeHistory(previous, 0, { ...history, messages: [{ ...message("image"), images: [{ path: "stable.png", data: "bmV3" }] }] })?.at(0)?.images).toEqual([{ path: "stable.png", data: "bmV3" }]);
+  expect(mergeHistory(previous, history)?.at(0)?.images).toEqual([{ path: "stable.png", data: "aW1hZ2U=" }]);
+  expect(mergeHistory(previous, { ...history, messages: [{ ...message("image"), images: [{ path: "stable.png", data: "bmV3" }] }] })?.at(0)?.images).toEqual([{ path: "stable.png", data: "bmV3" }]);
 });

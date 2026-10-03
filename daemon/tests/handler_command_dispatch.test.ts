@@ -120,7 +120,7 @@ function fakes(
       if (opts.historyFails !== undefined) return Promise.reject(opts.historyFails);
       return Promise.resolve({
         messages: [],
-        activeStart: 0,
+        previousSegment: null,
         config: { active_model: "anthropic:opus" },
         selectedCharacter,
         selectedThread: selectedThread ?? null,

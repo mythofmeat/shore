@@ -594,6 +594,29 @@
           "env": null
         },
         {
+          "id": "segment",
+          "short": "s",
+          "long": "segment",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Read an archived segment instead of the current context",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [
+            "msg_ref",
+            "follow"
+          ],
+          "env": null
+        },
+        {
           "id": "role",
           "short": null,
           "long": "role",
@@ -6746,6 +6769,56 @@
       ]
     },
     {
+      "path": "shore ui segment",
+      "about": "Show an archived conversation segment, or go back to the current context",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "target",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "`older` or `newer` to step from what is shown, `current` to go back, or a segment number to jump to",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore ui images",
       "about": "Open the fullscreen image viewer on the nearest image",
       "long_about": null,
@@ -7538,6 +7611,22 @@
         "name": "get",
         "args": {
           "ref": "last"
+        }
+      }
+    },
+    {
+      "argv": [
+        "log",
+        "--segment",
+        "2",
+        "--turns",
+        "8"
+      ],
+      "mapping": {
+        "name": "log",
+        "args": {
+          "turns": 8,
+          "segment": 2
         }
       }
     },
@@ -9036,6 +9125,14 @@
       [
         "G",
         "ui scroll bottom"
+      ],
+      [
+        "[",
+        "ui segment older"
+      ],
+      [
+        "]",
+        "ui segment newer"
       ],
       [
         "t",

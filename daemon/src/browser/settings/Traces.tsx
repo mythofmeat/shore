@@ -95,7 +95,7 @@ function ConversationLog({ state }: { state: WorkspaceSnapshot }) {
       <select className="select" aria-label="Role" value={role} onChange={(event) => setRole(event.target.value as Role | "")}><option value="">All roles</option><option value="user">You</option><option value="assistant">Character</option><option value="system">System</option></select>
     </div>
     <Loading error={log.error} ready={log.data !== undefined}>
-      <p className="setting-description">{formatNumber(log.data?.total_messages)} messages, {formatNumber(log.data?.total_turns)} turns in total.</p>
+      <p className="setting-description">{formatNumber(log.data?.total_turns)} turns in the current context.</p>
       <div className="segment-messages">{log.data?.messages.map((message) => <div key={message.msg_id} className="segment-message"><span className="setting-label">{message.role} · {formatTime(message.timestamp)}</span><Markdown text={message.content} /></div>)}</div>
     </Loading>
   </>;

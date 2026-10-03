@@ -360,3 +360,49 @@ test("while the tab is unfocused a reply shows a desktop notification and an unr
   await expect(page).toHaveTitle("nova · Shore");
   await check();
 });
+
+test("a cleared context becomes a segment you open, read without editing, and leave", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "wren");
+  await send(page, "Before the clear");
+  await page.getByRole("button", { name: "Conversation options" }).click();
+  await page.getByRole("menuitem", { name: "Clear context…" }).click();
+  const clear = page.getByRole("dialog", { name: "Clear context" });
+  await clear.getByLabel("Note for the segment").fill("first evening");
+  await clear.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(clear).toBeHidden();
+
+  const edge = page.locator(".segment-edge");
+  await expect(edge).toContainText("Before this: Segment 0");
+  await expect(edge.getByRole("separator")).toHaveText("Context starts here");
+  await expect(page.locator("article.message")).toHaveCount(0);
+  await send(page, "After the clear");
+  await expect(page.locator("article.message.user")).toHaveCount(1);
+
+  await edge.getByRole("button", { name: "View" }).click();
+  const banner = page.locator(".segment-banner");
+  await expect(banner).toContainText("Viewing Segment 0");
+  await expect(page.locator("article.message.user")).toContainText("Before the clear");
+  await expect(page.locator(".transcript")).toContainText("Start of the conversation");
+  await expect(page.locator(".transcript")).toContainText("After this: the current conversation");
+  const archived = page.locator("article.message.user").first();
+  await archived.hover();
+  await expect(archived.getByRole("button", { name: "Copy" })).toBeVisible();
+  await expect(archived.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(archived.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
+
+  await banner.getByRole("button", { name: "Back to current" }).click();
+  await expect(banner).toBeHidden();
+  await expect(page.locator("article.message.user")).toContainText("After the clear");
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Memory & segments", exact: true }).click();
+  await page.locator(".segment").getByRole("button", { name: "Open in conversation" }).click();
+  await expect(page.locator(".segment-banner")).toContainText("Viewing Segment 0");
+  await page.getByLabel("Message", { exact: true }).fill("Sent from a segment view");
+  await page.getByLabel("Message", { exact: true }).press("Enter");
+  await expect(page.locator(".segment-banner")).toBeHidden();
+  await expect(page.locator("article.message.assistant").last()).toContainText("Sent from a segment view");
+  await check();
+});

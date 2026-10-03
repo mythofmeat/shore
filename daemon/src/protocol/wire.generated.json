@@ -929,6 +929,75 @@
           "autonomous"
         ]
       },
+      "SegmentSummary": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "first_message_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_message_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compacted_at": {
+            "type": "string"
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "excluded": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory_before": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "first_message_at",
+          "last_message_at",
+          "compacted_at",
+          "message_count",
+          "excluded",
+          "label",
+          "note",
+          "memory_before",
+          "memory_after"
+        ]
+      },
       "History": {
         "type": "object",
         "properties": {
@@ -954,10 +1023,15 @@
               "$ref": "#/$defs/Message"
             }
           },
-          "active_start": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
+          "previous_segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "config": {
             "default": null

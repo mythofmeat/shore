@@ -5,11 +5,13 @@ import { archiveKey, threadDataDir } from "../config/dirs.ts";
 import {
   HISTORY_DB_FILE,
   HistoryStore,
+  type HistoryDisplayBounds,
   type HistoryDisplaySlice,
   type SegmentRecord,
 } from "./history_store.ts";
 import { MessageNotFound } from "./message_store";
 import type { Message } from "./types";
+import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 
 export type { SegmentRecord } from "./history_store.ts";
 
@@ -50,20 +52,36 @@ export class SegmentReader {
     return this.history?.segmentCount(this.character) ?? 0;
   }
 
-  displayMessageCount(): number {
-    return this.history?.displayMessageCount(this.character) ?? 0;
+  latestEntry(): SegmentRecord | undefined {
+    return this.history?.latestEntry(this.character);
   }
 
-  displayTurnCount(): number {
-    return this.history?.displayTurnCount(this.character) ?? 0;
+  entry(index: number): SegmentRecord | undefined {
+    return this.history?.entry(this.character, index);
   }
 
-  displayStartForTurns(end: number, turns: number): number {
-    return this.history?.displayStartForTurns(this.character, end, turns) ?? end;
+  entryBefore(index: number): SegmentRecord | undefined {
+    return this.history?.entryBefore(this.character, index);
   }
 
-  readDisplayRange(start: number, end: number): HistoryDisplaySlice {
-    return this.history?.readDisplayRange(this.character, start, end) ?? {
+  entryAfter(index: number): SegmentRecord | undefined {
+    return this.history?.entryAfter(this.character, index);
+  }
+
+  displayBounds(index: number): HistoryDisplayBounds | undefined {
+    return this.history?.segmentDisplayBounds(this.character, index);
+  }
+
+  turnCount(index: number): number {
+    return this.history?.segmentTurnCount(this.character, index) ?? 0;
+  }
+
+  startForTurns(index: number, end: number, turns: number): number {
+    return this.history?.segmentStartForTurns(this.character, index, end, turns) ?? end;
+  }
+
+  readDisplayRange(index: number, start: number, end: number): HistoryDisplaySlice {
+    return this.history?.readSegmentDisplayRange(this.character, index, start, end) ?? {
       messages: [],
       metrics: { segments_read: 0, rows_read: 0, decoded_body_bytes: 0 },
     };
@@ -75,10 +93,6 @@ export class SegmentReader {
 
   entries(): readonly SegmentRecord[] {
     return this.history?.entries(this.character) ?? [];
-  }
-
-  entry(index: number): SegmentRecord | undefined {
-    return this.entries().find(entry => entry.idx === index);
   }
 
   async readSegment(index: number): Promise<Message[]> {
@@ -119,4 +133,19 @@ async function recoverPending(history: HistoryStore, ref: ConversationRef): Prom
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
   history.recoverPending(ref.archiveKey, active);
+}
+
+export function presentSegment(record: SegmentRecord): SegmentSummary {
+  return {
+    index: record.idx,
+    first_message_at: record.first_message_at,
+    last_message_at: record.last_message_at,
+    compacted_at: record.compacted_at,
+    message_count: record.message_count,
+    excluded: record.excluded === true,
+    label: record.label ?? null,
+    note: record.note ?? null,
+    memory_before: record.memory_before ?? null,
+    memory_after: record.memory_after ?? null,
+  };
 }

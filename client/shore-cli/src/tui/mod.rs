@@ -32,7 +32,8 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
 use shore_common::protocol::operations::{
-    ConfigReloadArgs, ConfigReloadResult, Operation, ReloadConfiguration, UsageArgs, UsageReport,
+    ConfigReloadArgs, ConfigReloadResult, ConversationPage, Operation, ReloadConfiguration,
+    UsageArgs, UsageReport,
 };
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
@@ -43,8 +44,8 @@ use tracing_subscriber::EnvFilter;
 use app::UsageBudget;
 use app::{
     AltChoice, App, Block, COMPACTION_SUBAGENT, CompactionRun, ConnectionStatus, ConversationEntry,
-    EffectiveSamplerSnapshot, InputState, Replaced, SubagentSection, Turn, TurnState, UsageDisplay,
-    UsageLevel, UsageScope, compaction_round_from_phase,
+    EffectiveSamplerSnapshot, InputState, Replaced, SegmentRequest, SubagentSection, Turn,
+    TurnState, UsageDisplay, UsageLevel, UsageScope, compaction_round_from_phase,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -674,6 +675,8 @@ fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&st
     app.input.exit_command_mode();
     app.pending_images.clear();
     app.editing_ref = None;
+    let _closed = app.close_segment_view();
+    app.previous_segment = None;
     app.entries.clear();
     app.image_cache.clear();
     app.image_index.clear();
@@ -1147,7 +1150,7 @@ fn prepare_for_reconnect(app: &mut App) {
     app.pending_sampler_settings_rid = None;
     app.pending_palette_commands.clear();
     app.invalidate_palette_catalog();
-    app.history_page_loading = false;
+    app.pending_segment_page = None;
     app.pending_subagent_trace_ids.clear();
     app.clear_usage_limits();
 }
@@ -1509,7 +1512,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
         ConnEvent::Connected {
             characters,
             history,
-            active_start,
+            previous_segment,
             config,
             selected_character,
             selected_thread,
@@ -1544,8 +1547,9 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             }
             app.set_active_model(config.get("active_model").and_then(|v| v.as_str()));
 
-            rebuild_entries_from_history(app, history, active_start);
-            reset_history_paging(app);
+            let _closed = app.close_segment_view();
+            app.previous_segment = previous_segment;
+            rebuild_entries_from_history(app, history);
             transmit_entry_images(app);
 
             app.set_status("connected");
@@ -1588,38 +1592,23 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
     }
 }
 
-fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<ConversationEntry> {
+fn build_history_entries(messages: Vec<Message>) -> Vec<ConversationEntry> {
     let mut entries = Vec::new();
-    let boundary_at = active_start.min(messages.len());
-    let archived_turns = count_user_turns(messages.get(..boundary_at).unwrap_or(&messages));
-    let mut inserted_boundary = false;
-    for (index, msg) in messages.into_iter().enumerate() {
-        if boundary_at > 0 && index == boundary_at {
-            entries.push(ConversationEntry::ArchiveBoundary {
-                archived_count: archived_turns,
-            });
-            inserted_boundary = true;
-        }
+    for msg in messages {
         expand_msg(msg, &mut entries);
-    }
-
-    if boundary_at > 0 && !inserted_boundary {
-        entries.push(ConversationEntry::ArchiveBoundary {
-            archived_count: archived_turns,
-        });
     }
     entries
 }
 
-fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>, active_start: usize) {
+fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>) {
     app.replaced.rebuilt_from(0, &messages);
-    app.entries = build_history_entries(messages, active_start);
+    app.entries = build_history_entries(messages);
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
     app.grew_above_viewport = true;
     app.history_version = app.history_version.wrapping_add(1);
 }
 
-fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start: usize) {
+fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>) {
     let in_flight = app
         .entries
         .last()
@@ -1628,7 +1617,7 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
     let prev_metadata = in_flight.and_then(|turn| turn.metadata.clone());
     let prev_msg_id = in_flight.and_then(|turn| turn.msg_id.clone());
 
-    app.entries = build_history_entries(messages, active_start);
+    app.entries = build_history_entries(messages);
     app.grew_above_viewport = true;
 
     if !app.stream.active {
@@ -1685,73 +1674,28 @@ fn accumulate_metadata(slot: &mut Option<StreamMetadata>, incoming: &StreamMetad
     }
 }
 
-fn count_user_turns(messages: &[Message]) -> usize {
-    messages
-        .iter()
-        .filter(|msg| msg.role == Role::User && !msg.is_tool_result_only())
-        .count()
-}
-
-fn reset_history_paging(app: &mut App) {
-    app.pending_history_page = None;
-    app.history_next_before = None;
-    app.history_has_more_before = true;
-    app.history_page_loading = false;
-}
-
-fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
-    app.history_page_loading = false;
-    app.history_next_before = data
-        .get("next_before")
-        .and_then(serde_json::Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok());
-    app.history_has_more_before = data
-        .get("has_more_before")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-
-    let Some(messages) = data.get("messages").and_then(|v| v.as_array()) else {
+fn absorb_segment_page(app: &mut App, request: SegmentRequest, data: &serde_json::Value) {
+    let Ok(mut page) = serde_json::from_value::<ConversationPage>(data.clone()) else {
+        app.set_error("could not read the segment page");
         return;
     };
-
-    let mut page_messages = Vec::new();
-    for msg_val in messages {
-        if let Ok(msg) = serde_json::from_value::<Message>(msg_val.clone()) {
-            page_messages.push(msg);
+    let entries = build_history_entries(std::mem::take(&mut page.messages));
+    match request {
+        SegmentRequest::Open => {
+            let opened = page.segment.as_ref().map(|summary| summary.index);
+            if app.show_segment(page, entries) {
+                if let Some(index) = opened {
+                    app.set_status(format!(
+                        "viewing segment {index} · [ older · ] newer · ui segment current"
+                    ));
+                }
+            } else {
+                app.set_error("the daemon sent no segment");
+            }
         }
+        SegmentRequest::Earlier => app.prepend_segment_page(page, entries),
+        SegmentRequest::Neighbours => app.refresh_segment_neighbours(page),
     }
-
-    let loaded_turns = count_user_turns(&page_messages);
-    let mut page_entries = Vec::new();
-    for msg in page_messages {
-        expand_msg(msg, &mut page_entries);
-    }
-
-    if page_entries.is_empty() {
-        return;
-    }
-
-    if let Some(boundary_idx) = app
-        .entries
-        .iter()
-        .position(|entry| matches!(entry, ConversationEntry::ArchiveBoundary { .. }))
-    {
-        if let Some(ConversationEntry::ArchiveBoundary { archived_count }) =
-            app.entries.get_mut(boundary_idx)
-        {
-            *archived_count = archived_count.saturating_add(loaded_turns);
-        }
-    } else {
-        page_entries.push(ConversationEntry::ArchiveBoundary {
-            archived_count: loaded_turns,
-        });
-    }
-    app.replaced.prepended(page_entries.len());
-    drop(app.entries.splice(0..0, page_entries));
-
-    splice_subagent_sections(&mut app.entries, &app.subagent_traces);
-    app.grew_above_viewport = true;
-    app.history_version = app.history_version.wrapping_add(1);
 }
 
 fn splice_subagent_sections(
@@ -2737,55 +2681,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             let mut refresh_usage = false;
             match co.name.as_str() {
-                "log" => {
-                    if let Some(messages) = co.data.get("messages").and_then(|v| v.as_array()) {
-                        app.image_cache.clear();
-                        let history: Vec<Message> = messages
-                            .iter()
-                            .filter_map(|msg_val| {
-                                serde_json::from_value::<Message>(msg_val.clone()).ok()
-                            })
-                            .collect();
-                        let active_start = co
-                            .data
-                            .get("active_start")
-                            .and_then(serde_json::Value::as_u64)
-                            .and_then(|value| usize::try_from(value).ok())
-                            .unwrap_or_default();
-                        rebuild_entries_from_history(app, history, active_start);
-                        app.history_next_before = co
-                            .data
-                            .get("next_before")
-                            .and_then(serde_json::Value::as_u64)
-                            .and_then(|value| usize::try_from(value).ok());
-                        app.history_has_more_before = co
-                            .data
-                            .get("has_more_before")
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(false);
-                        app.history_page_loading = false;
-                        transmit_entry_images(app);
-                        if app.auto_scroll {
-                            app.scroll_to_bottom();
-                        }
-                        return UiEffect {
-                            cmds: subagent_trace_fetch(app),
-                            redraw: RedrawEffect::Immediate,
-                        };
-                    }
-                }
                 "history_page" => {
-                    if app.pending_history_page.as_deref() != co.rid.as_deref()
-                        || app.pending_history_page.is_none()
-                    {
+                    let Some((rid, request)) = app.pending_segment_page.take() else {
+                        return UiEffect::redraw(RedrawEffect::None);
+                    };
+                    if Some(rid.as_str()) != co.rid.as_deref() {
+                        app.pending_segment_page = Some((rid, request));
                         return UiEffect::redraw(RedrawEffect::None);
                     }
-                    app.pending_history_page = None;
-                    prepend_history_page(app, &co.data);
-                    return UiEffect {
-                        cmds: subagent_trace_fetch(app),
-                        redraw: RedrawEffect::Immediate,
-                    };
+                    absorb_segment_page(app, request, &co.data);
+                    return UiEffect::redraw(RedrawEffect::Immediate);
                 }
                 "subagent_trace" => {
                     absorb_subagent_traces(app, &co.data);
@@ -3308,7 +3213,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             {
                 app.palette_catalog_loaded = false;
             }
-            app.history_page_loading = false;
+            if app
+                .pending_segment_page
+                .as_ref()
+                .is_some_and(|(rid, _)| Some(rid.as_str()) == err.rid.as_deref())
+            {
+                app.pending_segment_page = None;
+            }
             if sampler_settings_error && app.is_setting_palette_open() {
                 app.update_completions();
             }
@@ -3403,17 +3314,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             ConversationEntry::System { msg_id, .. } => {
                                 msg_id.as_deref() == Some(id)
                             }
-                            ConversationEntry::ArchiveBoundary { .. } => false,
                         })
                         .map(|index| index.saturating_add(1)),
-                    None => Some(
-                        app.entries
-                            .iter()
-                            .rposition(|entry| {
-                                matches!(entry, ConversationEntry::ArchiveBoundary { .. })
-                            })
-                            .map_or(0, |index| index.saturating_add(1)),
-                    ),
+                    None => Some(0),
                 };
                 let Some(keep) = keep_position else {
                     return UiEffect {
@@ -3443,7 +3346,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.replaced.rebuilt_from(keep, &messages);
                 let suffix = app.entries.split_off(keep);
                 let mut prefix = std::mem::replace(&mut app.entries, suffix);
-                reconcile_streaming_turn(app, messages, 0);
+                reconcile_streaming_turn(app, messages);
                 prefix.append(&mut app.entries);
                 app.entries = prefix;
                 app.history_version = app.history_version.wrapping_add(1);
@@ -3471,12 +3374,18 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             app.image_cache.clear();
             app.replaced.rebuilt_from(0, &hist.messages);
-            reconcile_streaming_turn(app, hist.messages, hist.active_start);
-            reset_history_paging(app);
+            reconcile_streaming_turn(app, hist.messages);
+            let moved = hist.previous_segment.as_ref().map(|summary| summary.index)
+                != app.previous_segment.as_ref().map(|summary| summary.index);
+            app.previous_segment = hist.previous_segment;
             app.history_version = app.history_version.wrapping_add(1);
             transmit_entry_images(app);
+            let mut cmds = subagent_trace_fetch(app);
+            if moved {
+                cmds.extend(input::refresh_segment_neighbours(app));
+            }
             return UiEffect {
-                cmds: subagent_trace_fetch(app),
+                cmds,
                 redraw: RedrawEffect::Immediate,
             };
         }
@@ -3524,7 +3433,7 @@ mod redraw_tests {
     #[test]
     fn structured_history_images_reach_the_existing_tui_viewer() {
         let history = recorded_image_history();
-        let entries = build_history_entries(history.messages, 0);
+        let entries = build_history_entries(history.messages);
         let turn = entries.first().unwrap().as_turn().unwrap();
         assert!(turn.images.is_empty());
         let images: Vec<_> = turn
@@ -3613,7 +3522,7 @@ mod redraw_tests {
     }
 
     #[test]
-    fn a_filtered_log_recovers_from_a_missing_delta_anchor() {
+    fn a_log_reply_leaves_the_transcript_and_a_missing_delta_anchor_resyncs() {
         let mut app = App::default();
         let message = |id: &str, role: &str| {
             serde_json::json!({
@@ -3636,14 +3545,14 @@ mod redraw_tests {
             }))
             .unwrap(),
         );
-        assert!(app.entries.is_empty());
+        assert_eq!(app.entries.len(), 2);
 
         let effect = handle_server_message(
             &mut app,
             history(
                 3,
                 serde_json::json!([message("reply", "assistant"), message("next", "user")]),
-                serde_json::json!({"base_revision": 2, "after": "user"}),
+                serde_json::json!({"base_revision": 2, "after": "gone"}),
             ),
         );
         assert_eq!(effect.cmds.len(), 1);
@@ -3709,7 +3618,7 @@ mod redraw_tests {
                 server_name: "test".into(),
                 characters: vec![],
                 history: vec![],
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: Some("ada".into()),
                 selected_thread: Some("side".into()),
@@ -3721,7 +3630,7 @@ mod redraw_tests {
     }
 
     #[test]
-    fn a_history_delta_replaces_only_the_suffix_and_preserves_paging() {
+    fn a_history_delta_replaces_only_the_suffix_and_keeps_an_open_segment() {
         let mut app = App::default();
         let message = |id: &str, role: &str| {
             serde_json::json!({
@@ -3737,7 +3646,7 @@ mod redraw_tests {
         }))
         .unwrap();
         let _ = handle_server_message(&mut app, full);
-        app.history_has_more_before = false;
+        assert!(app.show_segment(app::segment_page_fixture(4, None, None, false), vec![]));
         let prefix = app
             .entries
             .first()
@@ -3789,7 +3698,66 @@ mod redraw_tests {
                 .as_deref(),
             Some("aW1hZ2U=")
         );
-        assert!(!app.history_has_more_before);
+        assert_eq!(
+            app.segment_view.as_ref().map(|view| view.summary.index),
+            Some(4)
+        );
+    }
+
+    #[test]
+    fn a_full_history_frame_names_the_previous_segment_and_refreshes_an_open_view() {
+        let mut app = App::default();
+        let full = |revision: u64, previous: serde_json::Value| -> ServerMessage {
+            serde_json::from_value(serde_json::json!({
+                "type": "history", "messages": [], "selected_character": "ada",
+                "selected_thread": "main", "revision": revision, "previous_segment": previous
+            }))
+            .unwrap()
+        };
+        let summary = |index: u64| serde_json::to_value(app::segment_fixture(index, None)).unwrap();
+        let effect = handle_server_message(&mut app, full(1, summary(2)));
+        assert_eq!(app.previous_segment.as_ref().map(|s| s.index), Some(2));
+        assert!(
+            !effect.cmds.iter().any(|cmd| matches!(cmd, ConnCommand::Send(ClientMessage::Command(c)) if c.name == "history_page"))
+        );
+
+        assert!(app.show_segment(app::segment_page_fixture(2, Some(1), None, false), vec![]));
+        let same = handle_server_message(&mut app, full(2, summary(2)));
+        assert!(same.cmds.iter().all(|cmd| !matches!(cmd, ConnCommand::Send(ClientMessage::Command(c)) if c.name == "history_page")));
+
+        let moved = handle_server_message(&mut app, full(3, summary(3)));
+        let refresh = moved
+            .cmds
+            .iter()
+            .find_map(|cmd| match cmd {
+                ConnCommand::Send(ClientMessage::Command(c)) if c.name == "history_page" => Some(c),
+                ConnCommand::Send(_) | ConnCommand::Shutdown => None,
+            })
+            .expect("a new segment refreshes the open view's neighbours");
+        assert_eq!(refresh.args, serde_json::json!({"segment": 2, "count": 0}));
+        assert!(matches!(
+            app.pending_segment_page,
+            Some((_, SegmentRequest::Neighbours))
+        ));
+        let rid = refresh.rid.clone().unwrap();
+        let mut page =
+            serde_json::to_value(app::segment_page_fixture(2, Some(1), Some(3), false)).unwrap();
+        *page.get_mut("messages").unwrap() = serde_json::json!([]);
+        let _ = handle_server_message(
+            &mut app,
+            serde_json::from_value(serde_json::json!({"type": "command_output", "name": "history_page", "rid": rid, "data": page})).unwrap(),
+        );
+        assert_eq!(
+            app.segment_view
+                .as_ref()
+                .and_then(|view| view.next.as_ref())
+                .map(|next| next.index),
+            Some(3)
+        );
+        assert!(app.pending_segment_page.is_none());
+
+        let _ = handle_server_message(&mut app, full(4, serde_json::Value::Null));
+        assert!(app.previous_segment.is_none());
     }
 
     #[test]
@@ -4001,7 +3969,7 @@ mod redraw_tests {
                 delta: None,
                 rid: None,
                 messages: vec![],
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: Some("heidi".into()),
                 selected_thread: Some("eval".into()),
@@ -4025,7 +3993,7 @@ mod redraw_tests {
                 delta: None,
                 rid: None,
                 messages: vec![],
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: Some("heidi".into()),
                 selected_thread: None,
@@ -4192,7 +4160,7 @@ mod redraw_tests {
                 &format!("Reply {i}"),
             ));
         }
-        rebuild_entries_from_history(&mut app, messages.clone(), 0);
+        rebuild_entries_from_history(&mut app, messages.clone());
         drop(render_app_to_string(&mut app, 80, 30));
 
         app.scroll_up(20);
@@ -4207,7 +4175,7 @@ mod redraw_tests {
                 delta: None,
                 rid: None,
                 messages,
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: None,
                 selected_thread: None,
@@ -5335,9 +5303,7 @@ mod redraw_tests {
                 ConversationEntry::System { content, .. } if content.contains("Models:") => {
                     Some(content.clone())
                 }
-                ConversationEntry::Turn(_)
-                | ConversationEntry::System { .. }
-                | ConversationEntry::ArchiveBoundary { .. } => None,
+                ConversationEntry::Turn(_) | ConversationEntry::System { .. } => None,
             })
             .expect("`:model` prints the model list");
         assert!(listing.contains("deepseek:deepseek-v4-pro"), "{listing}");
@@ -5536,11 +5502,10 @@ mod redraw_tests {
             .unwrap();
             let _ = handle_server_message(&mut app, arrival);
             app.input.set_text("replacement".into());
-            let Action::SendMulti(commands) = input::handle_event(&mut app, enter) else {
-                panic!("saving should send the edit and refresh history");
-            };
-            let Some(ConnCommand::Send(ClientMessage::Command(edit))) = commands.first() else {
-                panic!("first command should be the edit");
+            let Action::Send(ConnCommand::Send(ClientMessage::Command(edit))) =
+                input::handle_event(&mut app, enter)
+            else {
+                panic!("saving should send the edit");
             };
             assert_eq!(edit.name, "edit");
             assert_eq!(
@@ -6305,7 +6270,7 @@ mod redraw_tests {
             }),
             rid: None,
             messages,
-            active_start: 0,
+            previous_segment: None,
             config: serde_json::json!({}),
             selected_character: None,
             selected_thread: None,
@@ -6325,7 +6290,7 @@ mod redraw_tests {
                     "Why did the chicken cross the road?",
                 ),
             ],
-            active_start: 0,
+            previous_segment: None,
             config: serde_json::json!({}),
             selected_character: None,
             selected_thread: thread.map(str::to_owned),
@@ -6492,26 +6457,29 @@ mod redraw_tests {
     }
 
     #[test]
-    fn older_history_loaded_during_a_regen_keeps_the_same_entries_hidden() {
+    fn a_segment_opened_during_a_regen_leaves_the_live_entries_hidden() {
         let mut app = App::default();
         joke_prompt(&mut app);
         partial_reply_without_an_id(&mut app, "Why did the chicken");
         start_regen(&mut app);
 
-        prepend_history_page(
-            &mut app,
-            &serde_json::json!({
-                "messages": [
-                    simple_message(Role::User, "m_earlier", "Knock knock"),
-                    simple_message(Role::Assistant, "m_earlier_reply", "Who is there?"),
-                ],
-                "has_more_before": false,
-            }),
-        );
+        let mut page =
+            serde_json::to_value(app::segment_page_fixture(3, None, None, false)).unwrap();
+        *page.get_mut("messages").unwrap() = serde_json::json!([
+            simple_message(Role::User, "m_earlier", "Knock knock"),
+            simple_message(Role::Assistant, "m_earlier_reply", "Who is there?"),
+        ]);
+        absorb_segment_page(&mut app, SegmentRequest::Open, &page);
 
-        let paged = screen(&mut app);
-        assert!(paged.contains("Who is there?"), "{paged}");
-        assert!(!paged.contains("chicken"), "{paged}");
+        let viewing = screen(&mut app);
+        assert!(viewing.contains("Who is there?"), "{viewing}");
+        assert!(viewing.contains("viewing segment 3"), "{viewing}");
+        assert!(!viewing.contains("chicken"), "{viewing}");
+
+        assert!(app.close_segment_view());
+        let live = screen(&mut app);
+        assert!(!live.contains("Who is there?"), "{live}");
+        assert!(!live.contains("chicken"), "{live}");
     }
 
     #[test]
@@ -6996,12 +6964,10 @@ mod reliability_tests {
                 crossterm::event::KeyModifiers::NONE,
             )),
         );
-        let Action::SendMulti(commands) = action else {
-            panic!("expected edit")
+        let Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) = action else {
+            panic!("expected a single edit command")
         };
-        let ConnCommand::Send(ClientMessage::Command(cmd)) = commands.first().unwrap() else {
-            panic!("expected command")
-        };
+        assert_eq!(cmd.name, "edit");
         assert_eq!(cmd.args.get("ref").unwrap(), "stable-message-id");
     }
     #[test]
@@ -7014,9 +6980,10 @@ mod reliability_tests {
         let _ = handle_server_message(
             &mut app,
             frame(
-                json!({"type":"command_output","name":"history_page","data":{"messages":[msg("main-old","wrong thread page")],"active_start":1,"has_more_before":false}}),
+                json!({"type":"command_output","name":"history_page","data":{"messages":[msg("main-old","wrong thread page")],"cursor":0,"next_before":0,"has_more_before":false,"total_turns":0,"segment":null,"previous_segment":null,"next_segment":null}}),
             ),
         );
+        assert!(app.segment_view.is_none());
         assert!(
             !app.entries
                 .iter()
@@ -7031,10 +6998,9 @@ mod reliability_tests {
             .map(|n| format!("line {n}\n"))
             .collect::<String>()
             + "TAIL_SENTINEL";
-        app.entries = build_history_entries(
-            vec![serde_json::from_value(msg("long", &format!("```\n{body}\n```"))).unwrap()],
-            0,
-        );
+        app.entries = build_history_entries(vec![
+            serde_json::from_value(msg("long", &format!("```\n{body}\n```"))).unwrap(),
+        ]);
         let rendered = render_app_to_string(&mut app, 80, 24).unwrap();
         assert!(app.conv_cache.lines.len() > 65535);
         assert!(app.conv_cache.content_visual > 65535);
@@ -7105,8 +7071,7 @@ mod conversation_reliability_tests {
             ..App::default()
         };
         let page_rid = app.next_request_id("history_page");
-        app.pending_history_page = Some(page_rid.clone());
-        app.history_page_loading = true;
+        app.pending_segment_page = Some((page_rid.clone(), crate::tui::app::SegmentRequest::Open));
         let catalog_rid = app.begin_palette_catalog_request("models");
         let _effect = handle_server_message(
             &mut app,
@@ -7129,17 +7094,23 @@ mod conversation_reliability_tests {
         assert!(app.entries.is_empty());
         assert!(app.model_names.is_empty());
         assert!(app.pending_palette_catalog.is_empty());
-        assert!(!app.history_page_loading);
+        assert!(app.pending_segment_page.is_none());
+        assert!(app.segment_view.is_none());
         let fresh = app.next_request_id("history_page");
-        app.pending_history_page = Some(fresh.clone());
+        app.pending_segment_page = Some((fresh.clone(), crate::tui::app::SegmentRequest::Open));
+        let mut page =
+            serde_json::to_value(crate::tui::app::segment_page_fixture(0, None, None, false))
+                .unwrap();
+        *page.get_mut("messages").unwrap() = json!([{"msg_id":"right", "role":"assistant", "content":"right conversation", "content_blocks":[{"type":"text","text":"right conversation"}], "timestamp":""}]);
         let _new_page = handle_server_message(
             &mut app,
             frame(
-                json!({"type":"command_output", "name":"history_page", "rid":fresh, "data":{"messages":[{"msg_id":"right", "role":"assistant", "content":"right conversation", "content_blocks":[{"type":"text","text":"right conversation"}], "timestamp":""}], "active_start":0, "has_more_before":false}}),
+                json!({"type":"command_output", "name":"history_page", "rid":fresh, "data":page}),
             ),
         );
+        assert!(app.entries.is_empty());
         assert_eq!(
-            app.entries
+            app.visible_entries()
                 .iter()
                 .find_map(ConversationEntry::as_turn)
                 .unwrap()

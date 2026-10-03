@@ -7,9 +7,9 @@ use tracing::debug;
 
 use crate::cli::{
     CharacterCommand, CliCommand, ConfigCommand, MsgCommand, PaletteScope, ScrollDirection,
-    UiCommand, ViewKey,
+    SegmentTarget, SegmentsCommand, UiCommand, ViewKey,
 };
-use crate::tui::app::{App, ConversationEntry, InputMode, PaletteMode};
+use crate::tui::app::{App, ConversationEntry, InputMode, PaletteMode, SegmentRequest};
 use crate::tui::connection::ConnCommand;
 use crate::tui::keymap::{Scope, key_token};
 
@@ -153,29 +153,111 @@ fn handle_help_overlay(app: &mut App, key: KeyEvent) -> Action {
     Action::Redraw
 }
 
-fn redraw_or_load_older_history(app: &mut App) -> Action {
-    if app.history_page_loading || !app.history_has_more_before {
+fn redraw_or_load_earlier_in_segment(app: &mut App) -> Action {
+    let Some(view) = &app.segment_view else {
+        return Action::Redraw;
+    };
+    if app.pending_segment_page.is_some() || !view.has_more_before {
         return Action::Redraw;
     }
     if app.scroll_offset < app.conversation_max_scroll.saturating_sub(2) {
         return Action::Redraw;
     }
+    let args = serde_json::json!({
+        "segment": view.summary.index,
+        "before": view.next_before,
+        "turns": HISTORY_PAGE_TURNS,
+    });
+    Action::Send(segment_page_request(app, SegmentRequest::Earlier, args))
+}
 
-    app.history_page_loading = true;
+fn segment_page_request(
+    app: &mut App,
+    request: SegmentRequest,
+    args: serde_json::Value,
+) -> ConnCommand {
     let rid = app.next_request_id("history_page");
-    app.pending_history_page = Some(rid.clone());
-    let before = app.history_next_before.map_or_else(
-        || serde_json::Value::String("active".into()),
-        serde_json::Value::from,
-    );
-    Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+    app.pending_segment_page = Some((rid.clone(), request));
+    ConnCommand::Send(ClientMessage::Command(Command {
         rid: Some(rid),
         name: "history_page".into(),
-        args: serde_json::json!({
-            "before": before,
-            "turns": HISTORY_PAGE_TURNS,
-        }),
-    })))
+        args,
+    }))
+}
+
+pub(crate) fn refresh_segment_neighbours(app: &mut App) -> Option<ConnCommand> {
+    let index = app.segment_view.as_ref()?.summary.index;
+    if matches!(app.pending_segment_page, Some((_, SegmentRequest::Open))) {
+        return None;
+    }
+    let args = serde_json::json!({ "segment": index, "count": 0 });
+    Some(segment_page_request(app, SegmentRequest::Neighbours, args))
+}
+
+fn open_segment(app: &mut App, index: u64) -> Action {
+    let args = serde_json::json!({ "segment": index, "turns": HISTORY_PAGE_TURNS });
+    Action::Send(segment_page_request(app, SegmentRequest::Open, args))
+}
+
+fn run_segment_command(app: &mut App, target: SegmentTarget) -> Action {
+    match target {
+        SegmentTarget::Older => {
+            let previous = app
+                .segment_view
+                .as_ref()
+                .map_or(app.previous_segment.as_ref(), |view| view.previous.as_ref())
+                .map(|summary| summary.index);
+            if let Some(index) = previous {
+                return open_segment(app, index);
+            }
+            app.set_status(if app.segment_view.is_some() {
+                "this is the first segment"
+            } else {
+                "nothing before the current context"
+            });
+        }
+        SegmentTarget::Newer => match app
+            .segment_view
+            .as_ref()
+            .map(|view| view.next.as_ref().map(|summary| summary.index))
+        {
+            Some(Some(index)) => return open_segment(app, index),
+            Some(None) => {
+                let _closed = app.close_segment_view();
+                app.set_status("back in the current context");
+            }
+            None => app.set_status("already in the current context"),
+        },
+        SegmentTarget::Current => {
+            let closed = app.close_segment_view();
+            app.set_status(if closed {
+                "back in the current context"
+            } else {
+                "already in the current context"
+            });
+        }
+        SegmentTarget::Index(index) => return open_segment(app, u64::from(index)),
+    }
+    Action::Redraw
+}
+
+fn segment_to_open(command: &CliCommand) -> Option<u64> {
+    if let CliCommand::Segments {
+        subcommand: Some(SegmentsCommand::Show { index }),
+        ..
+    } = command
+    {
+        return Some(u64::from(*index));
+    }
+    if let CliCommand::Log {
+        segment: Some(index),
+        msg_ref: None,
+        ..
+    } = command
+    {
+        return Some(u64::from(*index));
+    }
+    None
 }
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
@@ -403,20 +485,12 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
 
             if let Some(edit_ref) = app.editing_ref.take() {
                 app.set_status(format!("edited message ({edit_ref})"));
-                return Action::SendMulti(vec![
-                    ConnCommand::Send(ClientMessage::Command(Command {
-                        rid: None,
+                return Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+                    rid: None,
 
-                        name: "edit".into(),
-                        args: serde_json::json!({ "ref": edit_ref, "content": text }),
-                    })),
-                    ConnCommand::Send(ClientMessage::Command(Command {
-                        rid: None,
-
-                        name: "log".into(),
-                        args: serde_json::json!({}),
-                    })),
-                ]);
+                    name: "edit".into(),
+                    args: serde_json::json!({ "ref": edit_ref, "content": text }),
+                })));
             }
 
             let images = std::mem::take(&mut app.pending_images);
@@ -466,7 +540,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
 
         (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
             app.scroll_up(10);
-            redraw_or_load_older_history(app)
+            redraw_or_load_earlier_in_segment(app)
         }
         (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
             app.scroll_down(10);
@@ -874,8 +948,7 @@ fn visible_message_ids(app: &App) -> Vec<Option<String>> {
                 msg_id: Some(msg_id),
                 ..
             } => Some(Some(msg_id.clone())),
-            ConversationEntry::System { msg_id: None, .. }
-            | ConversationEntry::ArchiveBoundary { .. } => None,
+            ConversationEntry::System { msg_id: None, .. } => None,
         })
         .collect()
 }
@@ -1048,17 +1121,19 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             match direction {
                 ScrollDirection::Up => {
                     app.scroll_up(usize::from(lines));
-                    return redraw_or_load_older_history(app);
+                    return redraw_or_load_earlier_in_segment(app);
                 }
                 ScrollDirection::Down => app.scroll_down(usize::from(lines)),
                 ScrollDirection::Top => {
                     app.scroll_up(usize::MAX);
-                    return redraw_or_load_older_history(app);
+                    return redraw_or_load_earlier_in_segment(app);
                 }
                 ScrollDirection::Bottom => app.scroll_to_bottom(),
             }
             Action::Redraw
         }
+
+        UiCommand::Segment { target } => run_segment_command(app, *target),
 
         UiCommand::Images => {
             let Some(index) = nearest_image(app) else {
@@ -1265,6 +1340,7 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
     if text.trim().is_empty() && images.is_empty() {
         return Action::Redraw;
     }
+    let _closed = app.close_segment_view();
 
     if app.stream.active {
         app.input.set_text(text);
@@ -1373,6 +1449,26 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
     }
     if let CliCommand::Ui { command: ui } = &command {
         return run_ui_command(app, ui);
+    }
+    if let Some(index) = segment_to_open(&command) {
+        return open_segment(app, index);
+    }
+    if let (
+        Some(view),
+        CliCommand::Msg {
+            command:
+                MsgCommand::Regen { .. }
+                | MsgCommand::Alt { .. }
+                | MsgCommand::Edit { .. }
+                | MsgCommand::Delete { .. },
+        },
+    ) = (&app.segment_view, &command)
+    {
+        let index = view.summary.index;
+        app.set_error(format!(
+            "segment {index} is read-only; press ] or run `ui segment current` to change the current context"
+        ));
+        return Action::Redraw;
     }
 
     match &command {
@@ -1632,9 +1728,7 @@ fn delete_target_description(app: &App, msg_ref: &str) -> String {
             content,
             ..
         } if msg_id == msg_ref => Some(("system".to_owned(), content.clone())),
-        ConversationEntry::Turn(_)
-        | ConversationEntry::System { .. }
-        | ConversationEntry::ArchiveBoundary { .. } => None,
+        ConversationEntry::Turn(_) | ConversationEntry::System { .. } => None,
     });
     let Some((role, content)) = target else {
         return format!("conversation entry {msg_ref:?}");
@@ -2084,10 +2178,25 @@ mod tests {
     }
 
     #[test]
-    fn scroll_top_requests_older_history_page() {
+    fn scrolling_up_never_pages_past_the_current_context() {
         let mut app = App::default();
         app.input.mode = InputMode::Normal;
-        app.history_has_more_before = true;
+        app.previous_segment = Some(crate::tui::app::segment_fixture(4, None));
+        app.conversation_max_scroll = 1;
+
+        let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('k')));
+        assert!(matches!(action, Action::Redraw));
+        assert!(app.pending_segment_page.is_none());
+    }
+
+    #[test]
+    fn scrolling_to_the_top_of_a_segment_pages_earlier_within_it() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Normal;
+        assert!(app.show_segment(
+            crate::tui::app::segment_page_fixture(4, Some(3), None, true),
+            vec![]
+        ));
         app.conversation_max_scroll = 1;
 
         let cmd = sent_command(handle_key(
@@ -2095,12 +2204,100 @@ mod tests {
             make_key(KeyModifiers::NONE, KeyCode::Char('k')),
         ));
         assert_eq!(cmd.name, "history_page");
-        assert_eq!(cmd.args.get("before"), Some(&serde_json::json!("active")));
         assert_eq!(
-            cmd.args.get("turns"),
-            Some(&serde_json::json!(HISTORY_PAGE_TURNS))
+            cmd.args,
+            serde_json::json!({"segment": 4, "before": 10, "turns": HISTORY_PAGE_TURNS})
         );
-        assert!(app.history_page_loading);
+        assert!(matches!(
+            app.pending_segment_page,
+            Some((_, SegmentRequest::Earlier))
+        ));
+        let again = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('k')));
+        assert!(matches!(again, Action::Redraw));
+    }
+
+    #[test]
+    fn brackets_step_through_segments_and_back_to_the_current_context() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Normal;
+        let key = |target: &mut App, c: char| {
+            handle_key(target, make_key(KeyModifiers::NONE, KeyCode::Char(c)))
+        };
+
+        assert!(matches!(key(&mut app, '['), Action::Redraw));
+        assert!(app.pending_segment_page.is_none());
+        assert!(matches!(key(&mut app, ']'), Action::Redraw));
+
+        app.previous_segment = Some(crate::tui::app::segment_fixture(4, None));
+        let open = sent_command(key(&mut app, '['));
+        assert_eq!(
+            open.args,
+            serde_json::json!({"segment": 4, "turns": HISTORY_PAGE_TURNS})
+        );
+        assert!(matches!(
+            app.pending_segment_page,
+            Some((_, SegmentRequest::Open))
+        ));
+
+        assert!(app.show_segment(
+            crate::tui::app::segment_page_fixture(4, Some(3), None, false),
+            vec![]
+        ));
+        let older = sent_command(key(&mut app, '['));
+        assert_eq!(older.args.get("segment"), Some(&serde_json::json!(3)));
+
+        assert!(app.show_segment(
+            crate::tui::app::segment_page_fixture(3, None, Some(4), false),
+            vec![]
+        ));
+        assert!(matches!(key(&mut app, '['), Action::Redraw));
+        let newer = sent_command(key(&mut app, ']'));
+        assert_eq!(newer.args.get("segment"), Some(&serde_json::json!(4)));
+
+        assert!(app.show_segment(
+            crate::tui::app::segment_page_fixture(4, Some(3), None, false),
+            vec![]
+        ));
+        assert!(matches!(key(&mut app, ']'), Action::Redraw));
+        assert!(app.segment_view.is_none());
+    }
+
+    #[test]
+    fn segment_commands_open_a_view_and_a_viewed_segment_refuses_message_changes() {
+        let mut app = App::default();
+        let open = sent_command(dispatch_cli_command(&mut app, "segments show 2"));
+        assert_eq!(
+            open.args,
+            serde_json::json!({"segment": 2, "turns": HISTORY_PAGE_TURNS})
+        );
+        let jump = sent_command(dispatch_cli_command(&mut app, "ui segment 7"));
+        assert_eq!(jump.args.get("segment"), Some(&serde_json::json!(7)));
+        let logged = sent_command(dispatch_cli_command(&mut app, "log --segment 5"));
+        assert_eq!(logged.args.get("segment"), Some(&serde_json::json!(5)));
+
+        assert!(app.show_segment(
+            crate::tui::app::segment_page_fixture(2, None, None, false),
+            vec![]
+        ));
+        assert!(matches!(
+            dispatch_cli_command(&mut app, "msg regen"),
+            Action::Redraw
+        ));
+        assert!(app.segment_view.is_some());
+        assert!(matches!(
+            dispatch_cli_command(&mut app, "ui segment current"),
+            Action::Redraw
+        ));
+        assert!(app.segment_view.is_none());
+        assert!(matches!(
+            dispatch_cli_command(&mut app, "ui segment current"),
+            Action::Redraw
+        ));
+        assert!(matches!(
+            dispatch_cli_command(&mut app, "ui segment sideways"),
+            Action::Redraw
+        ));
+        assert!(app.pending_segment_page.is_none());
     }
 
     #[test]

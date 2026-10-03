@@ -66,7 +66,7 @@ MUTANTS = [
      R,
      "      handshake,\n      emitEvent:",
      "      handshake: { hello: () => Promise.resolve({ characters: [] }),\n"
-     "                 history: () => Promise.resolve({ messages: [], activeStart: 0, config: {},\n"
+     "                 history: () => Promise.resolve({ messages: [], previousSegment: null, config: {},\n"
      "                                                  selectedCharacter: null, revision: 0 }) },\n"
      "      emitEvent:"),
 

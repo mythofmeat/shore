@@ -19,6 +19,7 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["msg", "alt", "2", "--ref", "last"],
     &["log"],
     &["log", "last"],
+    &["log", "--segment", "2", "--turns", "8"],
     &[
         "log",
         "--turns",

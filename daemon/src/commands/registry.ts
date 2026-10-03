@@ -90,6 +90,7 @@ const historyFields = {
   turns: { label: "Recent turns", hint: "Defaults to 64; takes precedence over message count" },
   count: { label: "Message count", hint: "Used when recent turns is omitted" },
   role: { label: "Role filter" },
+  segment: { label: "Segment", hint: "An archived segment's index; omit for the current context" },
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
@@ -252,7 +253,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, (context) => ({ operations: commandCatalogue(context), requests: requestCatalogue(context.engine !== undefined) })),
   log: register("log", { ...conversationPresentation, label: "Read conversation history", fields: historyFields },
     (context, args) => log(engineOf(context), args)),
-  history_page: register("history_page", { ...conversationPresentation, label: "Read earlier history", fields: { ...historyFields, before: { label: "Before cursor", hint: "A message cursor, or active for the start of the active context" } } },
+  history_page: register("history_page", { ...conversationPresentation, label: "Read earlier history", fields: { ...historyFields, before: { label: "Before cursor", hint: "A cursor from an earlier page; omit for the end of the segment" } } },
     (context, args) => historyPage(engineOf(context), args)),
   get: register("get", { ...conversationPresentation, label: "Inspect message", fields: { ref: messageRef, role: historyFields.role } },
     (context, args) => get(engineOf(context), args)),

@@ -3,12 +3,12 @@ import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
-import { mergeToolLoopMessages } from "../src/engine/merge.ts";
-import { SegmentReader } from "../src/engine/segments.ts";
+import { SegmentReader, presentSegment } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { handleSearchHistory } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
+import { required } from "../src/util/required.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 function message(id: string, content: string): Message {
@@ -164,19 +164,16 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
 
 
 describe("storage-native display paging", () => {
-  test("one display group can cross several archived segments", () => {
+  const entry = (count: number) => ({
+    file: HISTORY_DB_FILE,
+    message_count: count,
+    compacted_at: "2026-08-13T10:01:00+10:00",
+  });
+
+  test("a display group that crosses segments is read one segment at a time", () => {
     const store = HistoryStore.openInMemory();
     const put = (idx: number, messages: Message[]) => {
-      store.putSegment(
-        "ada",
-        idx,
-        {
-          file: HISTORY_DB_FILE,
-          message_count: messages.length,
-          compacted_at: "2026-08-13T10:01:00+10:00",
-        },
-        messages,
-      );
+      store.putSegment("ada", idx, entry(messages.length), messages);
     };
     put(0, [message("u1", "hello"), toolAssistant("a1", "t1")]);
     put(1, [toolResult("r1", "t1"), toolAssistant("a2", "t2")]);
@@ -184,35 +181,47 @@ describe("storage-native display paging", () => {
 
     expect(store.displayMessageCount("ada")).toBe(3);
     expect(store.displayTurnCount("ada")).toBe(2);
-    expect(store.displayStartForTurns("ada", 3, 1)).toBe(2);
-    expect(store.displayStartForTurns("ada", 3, 2)).toBe(0);
+    expect([0, 1, 2].map((idx) => store.segmentDisplayBounds("ada", idx))).toEqual([
+      { start: 0, end: 2 },
+      { start: 1, end: 2 },
+      { start: 1, end: 3 },
+    ]);
+    expect([0, 1, 2].map((idx) => store.segmentTurnCount("ada", idx))).toEqual([1, 0, 1]);
+    expect(store.segmentStartForTurns("ada", 2, 3, 1)).toBe(2);
+    expect(store.segmentStartForTurns("ada", 2, 3, 2)).toBe(0);
+    expect(store.segmentStartForTurns("ada", 0, 2, 1)).toBe(0);
+    expect(store.segmentStartForTurns("ada", 0, 2, 0)).toBe(2);
+    expect(store.segmentStartForTurns("ada", 2, 2, 1)).toBe(0);
+    expect(store.readSegmentDisplayRange("ada", 0, 0, 1).messages.map((row) => row.msg_id)).toEqual(["u1"]);
+    expect(store.readSegmentDisplayRange("ada", 1, 5, 9).metrics.segments_read).toBe(0);
 
-    const slice = store.readDisplayRange("ada", 1, 2);
-    expect(slice.messages.map((entry) => entry.msg_id)).toEqual(["a1", "r1", "a2", "r2", "a3"]);
-    expect(mergeToolLoopMessages(slice.messages).map((entry) => entry.msg_id)).toEqual(["a3"]);
-    expect(slice.metrics.rows_read).toBe(5);
-    expect(slice.metrics.segments_read).toBe(3);
-    expect(slice.metrics.decoded_body_bytes).toBeGreaterThan(0);
+    const middle = store.readSegmentDisplayRange("ada", 1, 1, 2);
+    expect(middle.messages.map((row) => row.msg_id)).toEqual(["r1", "a2"]);
+    expect(middle.metrics.rows_read).toBe(2);
+    expect(middle.metrics.segments_read).toBe(1);
+    expect(middle.metrics.decoded_body_bytes).toBeGreaterThan(0);
+
+    const last = store.readSegmentDisplayRange("ada", 2, 1, 3);
+    expect(last.messages.map((row) => row.msg_id)).toEqual(["r2", "a3", "u2"]);
+    expect(store.readSegmentDisplayRange("ada", 2, 2, 2).messages).toEqual([]);
     store.close();
   });
 
-  test("a page reads the same bounded rows in a short and a long archive", () => {
+  test("reading the newest segment costs the same in a short and a long archive", () => {
     const measure = (segments: number) => {
       const store = HistoryStore.openInMemory();
       for (let idx = 0; idx < segments; idx += 1) {
         store.putSegment(
           "ada",
           idx,
-          {
-            file: HISTORY_DB_FILE,
-            message_count: 2,
-            compacted_at: "2026-08-13T10:01:00+10:00",
-          },
+          entry(2),
           [message(`u${String(idx).padStart(4, "0")}`, "prompt"), message(`a${String(idx).padStart(4, "0")}`, "reply")],
         );
       }
-      const end = store.displayMessageCount("ada");
-      const slice = store.readDisplayRange("ada", end - 8, end);
+      const newest = segments - 1;
+      const bounds = store.segmentDisplayBounds("ada", newest);
+      if (bounds === undefined) throw new Error("newest segment has no display rows");
+      const slice = store.readSegmentDisplayRange("ada", newest, bounds.start, bounds.end);
       store.close();
       return slice.metrics;
     };
@@ -220,11 +229,72 @@ describe("storage-native display paging", () => {
     const short = measure(10);
     const long = measure(250);
     expect(short).toEqual(long);
-    expect(long.rows_read).toBe(8);
-    expect(long.segments_read).toBe(4);
+    expect(long.rows_read).toBe(2);
+    expect(long.segments_read).toBe(1);
   });
 
+  test("a turn budget larger than its segment does not run on into earlier ones", () => {
+    const store = HistoryStore.openInMemory();
+    for (const idx of [0, 1, 2]) store.putSegment("ada", idx, entry(2), [message(`u${String(idx)}`, "prompt"), message(`a${String(idx)}`, "reply")]);
 
+    expect(store.segmentDisplayBounds("ada", 2)).toEqual({ start: 4, end: 6 });
+    expect(store.segmentStartForTurns("ada", 2, 6, 1)).toBe(4);
+    expect(store.segmentStartForTurns("ada", 2, 6, 2)).toBe(0);
+    store.close();
+  });
+
+  test("a presented segment keeps its own times, label and exclusion", () => {
+    const store = HistoryStore.openInMemory();
+    store.putSegment("ada", 0, { ...entry(2), label: "trip", excluded: true }, [
+      { ...message("u1", "out"), timestamp: "2026-09-28T10:00:00Z" },
+      { ...message("a1", "back"), timestamp: "2026-10-01T22:00:00Z" },
+    ]);
+
+    expect(presentSegment(required(store.entry("ada", 0)))).toEqual({
+      index: 0, first_message_at: "2026-09-28T10:00:00Z", last_message_at: "2026-10-01T22:00:00Z",
+      compacted_at: "2026-08-13T10:01:00+10:00", message_count: 2, excluded: true, label: "trip",
+      note: null, memory_before: null, memory_after: null,
+    });
+    store.close();
+  });
+
+  test("a segment with nothing to display has no bounds", () => {
+    const store = HistoryStore.openInMemory();
+    store.putSegment("ada", 0, entry(1), [message("u1", "hello")]);
+    store.putSegment("ada", 1, entry(1), [toolResult("r9", "t9")]);
+
+    expect(store.segmentDisplayBounds("ada", 1)).toBeUndefined();
+    expect(store.segmentDisplayBounds("ada", 7)).toBeUndefined();
+    expect(store.segmentDisplayBounds("bea", 0)).toBeUndefined();
+    store.close();
+  });
+
+  test("segment lookups find neighbours in order and skip a pending compaction", () => {
+    const store = HistoryStore.openInMemory();
+    store.putSegment("ada", 0, entry(1), [message("u1", "one")]);
+    store.putSegment("ada", 2, { ...entry(1), label: "trip" }, [message("u2", "two")]);
+    store.putSegment("bea", 5, entry(1), [message("u3", "elsewhere")]);
+    const pending = store.beginCompaction("ada", entry(1), [message("u4", "pending")], "before", "after");
+
+    expect(pending).toBe(3);
+    expect(store.entry("ada", 2)?.label).toBe("trip");
+    expect(store.entry("ada", 1)).toBeUndefined();
+    expect(store.entry("ada", pending)).toBeUndefined();
+    expect(store.latestEntry("ada")?.idx).toBe(2);
+    expect(store.entryBefore("ada", 2)?.idx).toBe(0);
+    expect(store.entryBefore("ada", 0)).toBeUndefined();
+    expect(store.entryAfter("ada", 0)?.idx).toBe(2);
+    expect(store.entryAfter("ada", 2)).toBeUndefined();
+    expect(store.latestEntry("cyd")).toBeUndefined();
+    expect(store.entry("ada", 2)).toEqual(store.entries("ada")[1]);
+
+    store.finishCompaction("ada", pending);
+    expect(store.latestEntry("ada")?.idx).toBe(pending);
+    expect(store.entryAfter("ada", 0)?.idx).toBe(2);
+    expect(store.entryBefore("ada", pending)?.idx).toBe(2);
+    expect(store.entryAfter("ada", 2)?.idx).toBe(pending);
+    store.close();
+  });
 });
 
 describe("archive revision", () => {

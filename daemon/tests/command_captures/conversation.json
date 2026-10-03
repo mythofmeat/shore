@@ -390,9 +390,7 @@
         },
         {
           "op": "history_page",
-          "args": {
-            "before": "active"
-          },
+          "args": {},
           "history_pushes": 0
         }
       ]
@@ -546,70 +544,67 @@
           "history_pushes": 0
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": "active"
+            "segment": 0
           },
           "history_pushes": 0
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": "active",
+            "segment": 0,
+            "count": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "segment": 0,
             "turns": 1
           },
           "history_pushes": 0
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": 3
+            "segment": null
           },
           "history_pushes": 0
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": 0
+            "segment": 1
           },
-          "history_pushes": 0
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "segment 1 not found for TestChar"
+          }
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": 99
-          },
-          "history_pushes": 0
-        },
-        {
-          "op": "history_page",
-          "args": {
-            "before": "somewhere"
+            "segment": -1
           },
           "history_pushes": 0,
           "err": {
             "code": "invalid_request",
-            "message": "before must be \"active\" or a message cursor"
+            "message": "segment must be a non-negative integer"
           }
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": -1
+            "segment": "0"
           },
           "history_pushes": 0,
           "err": {
             "code": "invalid_request",
-            "message": "before must be \"active\" or a message cursor"
+            "message": "segment must be a non-negative integer"
           }
-        },
-        {
-          "op": "history_page",
-          "args": {
-            "before": "active",
-            "count": 1
-          },
-          "history_pushes": 0
         },
         {
           "op": "history_page",
@@ -633,12 +628,106 @@
         {
           "op": "history_page",
           "args": {
+            "before": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 0
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 99
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": null
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "segment": 0,
+            "before": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "segment": 0,
+            "before": 0
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "segment": 0,
+            "before": 99
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "segment": 0,
+            "before": 1,
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be a message cursor"
+          }
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "somewhere"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be a message cursor"
+          }
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": -1
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be a message cursor"
+          }
+        },
+        {
+          "op": "history_page",
+          "args": {
             "before": 1.5
           },
           "history_pushes": 0,
           "err": {
             "code": "invalid_request",
-            "message": "before must be \"active\" or a message cursor"
+            "message": "before must be a message cursor"
           }
         },
         {
@@ -658,7 +747,7 @@
           "history_pushes": 0
         }
       ],
-      "note": "two archived, two active: active_start and global_active_start diverge from 0"
+      "note": "two archived, two active: each page stays inside the one segment it was asked for"
     },
     {
       "name": "tool-loop messages are merged before paging",
@@ -1029,9 +1118,9 @@
           "history_pushes": 0
         },
         {
-          "op": "history_page",
+          "op": "log",
           "args": {
-            "before": "active"
+            "segment": 0
           },
           "history_pushes": 0
         },
@@ -1051,7 +1140,7 @@
           "history_pushes": 1
         }
       ],
-      "note": "archived scrollback keeps image refs as labels; the active tail carries bytes"
+      "note": "archived segment pages keep image refs as labels; current-context pages carry bytes"
     },
     {
       "name": "get resolves against the merged, role-filtered list",

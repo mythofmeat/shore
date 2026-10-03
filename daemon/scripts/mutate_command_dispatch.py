@@ -153,9 +153,12 @@ MUTANTS = [
     ("frame: the pushed history always carries a rid", CONNECTION,
      "    ...(rid === undefined ? {} : { rid }),",
      "    rid: rid ?? null,"),
-    ("frame: active_start is on the wire at zero", CONNECTION,
-     "    ...(history.activeStart === 0 ? {} : { active_start: history.activeStart }),",
-     "    active_start: history.activeStart,"),
+    ("frame: previous_segment is on the wire as null", CONNECTION,
+     "    ...(history.previousSegment === null ? {} : { previous_segment: history.previousSegment }),",
+     "    previous_segment: history.previousSegment,"),
+    ("frame: the segment before the context never reaches the client", CONNECTION,
+     "    ...(history.previousSegment === null ? {} : { previous_segment: history.previousSegment }),",
+     ""),
 ]
 
 TESTS = [

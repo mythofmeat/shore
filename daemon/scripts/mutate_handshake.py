@@ -53,12 +53,12 @@ MUTANTS = [
     ("engine: an empty snapshot drops the config block the client renders from",
      H,
      "      messages: [],\n"
-     "      activeStart: 0,\n"
+     "      previousSegment: null,\n"
      "      config: historyConfigSnapshot(\n"
      "        config,\n"
      "        snapshotActiveModel(config, selectedCharacter, activeModel, undefined),\n"
      "      ),",
-     "      messages: [],\n      activeStart: 0,\n      config: {},"),
+     "      messages: [],\n      previousSegment: null,\n      config: {},"),
 
     # --- what a live snapshot carries -----------------------------------------
     ("snapshot: the revision is always zero, so the client never sees a change",
@@ -81,10 +81,14 @@ MUTANTS = [
      H,
      "  return registry.listThreads(character).some((t) => t.id === selected) ? selected : undefined;",
      "  return selected;"),
-    ("snapshot: an unset active_start becomes NaN rather than zero",
+    ("snapshot: the segment before the context is never reported",
      H,
-     "    activeStart: history.active_start ?? 0,",
-     "    activeStart: history.active_start as number,"),
+     "    previousSegment: history.previous_segment ?? null,",
+     "    previousSegment: null,"),
+    ("snapshot: an unset previous segment stays undefined rather than null",
+     H,
+     "    previousSegment: history.previous_segment ?? null,",
+     "    previousSegment: history.previous_segment as null,"),
 
     # --- the model the config block reports -----------------------------------
     ("model: the caller's choice is ignored in favour of a fresh resolution",

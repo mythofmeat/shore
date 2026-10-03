@@ -10,7 +10,8 @@ import {
   threadDataDir,
 } from "../config/dirs.ts";
 
-import { HISTORY_DB_FILE, HistoryStore, type SegmentRecord } from "../engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../engine/history_store.ts";
+import { presentSegment } from "../engine/segments.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
@@ -18,7 +19,6 @@ import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { SegmentAction } from "../protocol/SegmentAction.ts";
-import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 type Args = OperationInput<"segments">;
 
 
@@ -191,21 +191,6 @@ export async function clear(
 function missing(idx: number, character: string, thread: string): string {
   const where = thread === MAIN_THREAD ? character : `${character} thread ${thread}`;
   return `segment ${String(idx)} not found for ${where}`;
-}
-
-function presentSegment(record: SegmentRecord): SegmentSummary {
-  return {
-    index: record.idx,
-    first_message_at: record.first_message_at,
-    last_message_at: record.last_message_at,
-    compacted_at: record.compacted_at,
-    message_count: record.message_count,
-    excluded: record.excluded === true,
-    label: record.label ?? null,
-    note: record.note ?? null,
-    memory_before: record.memory_before ?? null,
-    memory_after: record.memory_after ?? null,
-  };
 }
 
 function segmentIndex(value: unknown): number {

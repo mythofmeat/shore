@@ -1,7 +1,10 @@
 ---
-source: crates/cli/src/output/transcript.rs
+source: shore-cli/src/output/transcript.rs
 expression: output
 ---
+── current context · 23 turns · last 1 turn shown ──────────────────────
+before this: segment 12 "harbor" · Sep 28 – Oct 1 · 340 messages · shore log --segment 12
+
 ── You ·  ──────────────────────────────────────────────────────────────
 Please patch the config loader.
   📎 failing config
@@ -20,8 +23,6 @@ I'll inspect the loader and patch it.
  │   found DefaultsConfig
 
 The fix belongs in the alias migration.
-
-─────────── 1 archived turn above · outside current context ────────────
 
  │ ✓ result
  │   apply_patch ok

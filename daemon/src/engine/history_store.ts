@@ -217,6 +217,11 @@ export interface HistoryReadMetrics {
   decoded_body_bytes: number;
 }
 
+export interface HistoryDisplayBounds {
+  start: number;
+  end: number;
+}
+
 export interface HistoryDisplaySlice {
   messages: Message[];
   metrics: HistoryReadMetrics;
@@ -415,19 +420,37 @@ export class HistoryStore {
     return row?.turn_count ?? 0;
   }
 
-  displayStartForTurns(character: string, end: number, turns: number): number {
+  segmentDisplayBounds(character: string, idx: number): HistoryDisplayBounds | undefined {
+    const row = this.#db
+      .query(
+        `SELECT MIN(m.display_seq) AS first, MAX(m.display_seq) AS last
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1
+           AND m.display_seq IS NOT NULL`,
+      )
+      .get(character, idx) as { first: number | null; last: number | null };
+    if (row.first === null || row.last === null) return undefined;
+    return { start: row.first, end: row.last + 1 };
+  }
+
+  segmentTurnCount(character: string, idx: number): number {
+    return this.#committedSegmentTurnCount(character, idx);
+  }
+
+  segmentStartForTurns(character: string, idx: number, end: number, turns: number): number {
     if (turns <= 0) return end;
     const row = this.#db
       .query(
         `SELECT m.display_seq
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
-           AND m.display_seq < ?2
+         WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1 AND m.is_user_turn = 1
+           AND m.display_seq < ?3
          ORDER BY m.display_seq DESC
-         LIMIT 1 OFFSET ?3`,
+         LIMIT 1 OFFSET ?4`,
       )
-      .get(character, end, turns - 1) as { display_seq: number } | null;
+      .get(character, idx, end, turns - 1) as { display_seq: number } | null;
     return row?.display_seq ?? 0;
   }
 
@@ -439,22 +462,41 @@ export class HistoryStore {
   }
 
   entries(character: string): SegmentRecord[] {
-    const rows = this.#db
-      .query(
-        `SELECT s.idx, s.file, s.message_count, s.compacted_at, s.compaction_id,
-                s.memory_before, s.memory_after, s.excluded, s.label, s.note,
-                (SELECT m.timestamp FROM history_messages m
-                 WHERE m.character = s.character AND m.segment = s.idx
-                 ORDER BY m.ordinal ASC LIMIT 1) AS first_message_at,
-                (SELECT m.timestamp FROM history_messages m
-                 WHERE m.character = s.character AND m.segment = s.idx
-                 ORDER BY m.ordinal DESC LIMIT 1) AS last_message_at
-         FROM history_segments s
-         WHERE s.character = ?1 AND s.committed = 1 ORDER BY s.idx`,
-      )
-      .all(character) as (Omit<SegmentRecord,
-        "compaction_id" | "memory_before" | "memory_after" | "excluded" | "label" | "note"
-      > & {
+    return this.#segmentRecords("ORDER BY s.idx", character);
+  }
+
+  entry(character: string, idx: number): SegmentRecord | undefined {
+    return this.#segmentRecords("AND s.idx = ?2", character, idx)[0];
+  }
+
+  latestEntry(character: string): SegmentRecord | undefined {
+    return this.#segmentRecords("ORDER BY s.idx DESC LIMIT 1", character)[0];
+  }
+
+  entryBefore(character: string, idx: number): SegmentRecord | undefined {
+    return this.#segmentRecords("AND s.idx < ?2 ORDER BY s.idx DESC LIMIT 1", character, idx)[0];
+  }
+
+  entryAfter(character: string, idx: number): SegmentRecord | undefined {
+    return this.#segmentRecords("AND s.idx > ?2 ORDER BY s.idx LIMIT 1", character, idx)[0];
+  }
+
+  #segmentRecords(clause: string, character: string, idx?: number): SegmentRecord[] {
+    const query = this.#db.query(
+      `SELECT s.idx, s.file, s.message_count, s.compacted_at, s.compaction_id,
+              s.memory_before, s.memory_after, s.excluded, s.label, s.note,
+              (SELECT m.timestamp FROM history_messages m
+               WHERE m.character = s.character AND m.segment = s.idx
+               ORDER BY m.ordinal ASC LIMIT 1) AS first_message_at,
+              (SELECT m.timestamp FROM history_messages m
+               WHERE m.character = s.character AND m.segment = s.idx
+               ORDER BY m.ordinal DESC LIMIT 1) AS last_message_at
+       FROM history_segments s
+       WHERE s.character = ?1 AND s.committed = 1 ${clause}`,
+    );
+    const rows = (idx === undefined ? query.all(character) : query.all(character, idx)) as (Omit<SegmentRecord,
+      "compaction_id" | "memory_before" | "memory_after" | "excluded" | "label" | "note"
+    > & {
       compaction_id: string | null;
       memory_before: string | null;
       memory_after: string | null;
@@ -674,7 +716,7 @@ export class HistoryStore {
     return new Map(rows.map((row, i) => [row.ordinal, required(messages[i])]));
   }
 
-  readDisplayRange(character: string, start: number, end: number): HistoryDisplaySlice {
+  readSegmentDisplayRange(character: string, idx: number, start: number, end: number): HistoryDisplaySlice {
     const metrics: HistoryReadMetrics = {
       segments_read: 0,
       rows_read: 0,
@@ -688,14 +730,14 @@ export class HistoryStore {
                 m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE m.character = ?1 AND s.committed = 1
-           AND m.display_seq >= ?2 AND m.display_seq < ?3
-         ORDER BY m.segment, m.ordinal`,
+         WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1
+           AND m.display_seq >= ?3 AND m.display_seq < ?4
+         ORDER BY m.ordinal`,
       )
-      .all(character, start, end) as MessageRow[];
+      .all(character, idx, start, end) as MessageRow[];
 
     metrics.rows_read = rows.length;
-    metrics.segments_read = new Set(rows.map((row) => row.segment)).size;
+    metrics.segments_read = rows.length === 0 ? 0 : 1;
     return { messages: this.#messagesFromRows(rows, character, metrics), metrics };
   }
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::error::ErrorCode;
-use crate::protocol::operations::ClaudePlanWindow;
+use crate::protocol::operations::{ClaudePlanWindow, SegmentSummary};
 use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, StreamMetadata};
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
@@ -23,8 +23,8 @@ pub struct History {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub messages: Vec<Message>,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub active_start: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_segment: Option<SegmentSummary>,
     #[serde(default)]
     #[ts(type = "unknown")]
     pub config: serde_json::Value,
@@ -43,10 +43,6 @@ pub struct HistoryDelta {
     #[ts(type = "number")]
     pub base_revision: u64,
     pub after: Option<String>,
-}
-
-fn is_zero(value: &usize) -> bool {
-    *value == 0
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]

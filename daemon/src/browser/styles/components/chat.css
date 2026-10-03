@@ -58,6 +58,65 @@
   font-style: italic;
 }
 
+.segment-edge {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.segment-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--line-3);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  font-size: var(--text-md);
+}
+
+.segment-link-text,
+.segment-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.segment-link-name,
+.segment-banner-name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.segment-link-detail,
+.segment-banner-detail {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.segment-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(var(--content-width), 100%);
+  margin: 8px auto 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: var(--text-md);
+}
+
+.shell[data-layout="mobile"] .segment-banner {
+  width: auto;
+  margin: 6px 8px 4px;
+}
+
 .message {
   position: relative;
   display: flex;

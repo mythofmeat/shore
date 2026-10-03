@@ -36,7 +36,6 @@ impl Replaced {
             .iter()
             .rposition(|entry| match entry {
                 ConversationEntry::Turn(turn) => turn.is_real_user_turn(),
-                ConversationEntry::ArchiveBoundary { .. } => true,
                 ConversationEntry::System { .. } => false,
             })
             .map_or(0, |index| index.saturating_add(1));
@@ -73,9 +72,5 @@ impl Replaced {
         } else {
             self.tail.end = self.tail.end.min(index);
         }
-    }
-
-    pub(crate) fn prepended(&mut self, count: usize) {
-        self.tail = self.tail.start.saturating_add(count)..self.tail.end.saturating_add(count);
     }
 }

@@ -37,9 +37,9 @@ def message(text):
 
 
 def history_page(messages):
-    return {"messages": messages, "active_start": 0, "cursor": 0, "next_before": 0,
-            "has_more_before": False, "global_active_start": 0,
-            "total_messages": len(messages), "total_turns": len(messages)}
+    return {"messages": messages, "cursor": 0, "next_before": 0, "has_more_before": False,
+            "total_turns": len(messages), "segment": None, "previous_segment": None,
+            "next_segment": None}
 
 
 def terminal_frame(rid, text):
@@ -609,7 +609,7 @@ class ReliabilityFlows(unittest.TestCase):
             send({"type": "command_output", "rid": request["rid"], "name": "log", "data": {"messages": []}})
         result, _ = run_cli(["log", "--json"], respond)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(b"active_start", result.stderr)
+        self.assertIn(b"cursor", result.stderr)
         self.assertEqual(result.stdout, b"")
 
     def test_provider_results_are_validated_without_losing_additive_fields(self):

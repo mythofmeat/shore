@@ -88,6 +88,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     };
     if (!unchanged()) { toasts.show("The conversation changed before sending. Your draft was kept.", "error"); return; }
     try { checkAttachments(submitted.images); } catch (error) { toasts.show(errorText(error), "error"); return; }
+    workspace.closeSegment();
     const rid = randomUUID();
     let kept = true;
     let accepted = false;

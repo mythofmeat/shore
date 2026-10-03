@@ -8,6 +8,8 @@ import type { ContentBlock } from "../protocol/ContentBlock.ts";
 import type { History } from "../protocol/History.ts";
 import type { Message } from "../protocol/Message.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
+import type { ConversationPage } from "../protocol/ConversationPage.ts";
+import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
@@ -22,11 +24,13 @@ export interface LiveRound { reasoning: string; text: string; tools: string[] }
 export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; tools: string[]; round: LiveRound; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
 export const liveTurn = (key: string, rid: string | null, subagent: string | null): LiveTurn => ({ key, rid, subagent, text: "", reasoning: "", blocks: [], tools: [], round: { reasoning: "", text: "", tools: [] }, final: false, msgId: null, metadata: null });
 export interface Activity { id: number; type: string; data: unknown; previewLimited: boolean }
+export interface SegmentView { segment: SegmentSummary; previous: SegmentSummary | null; next: SegmentSummary | null; messages: Message[]; before: number; hasEarlier: boolean; seenLive: string | null }
+export const SEGMENT_PAGE_TURNS = 32;
 export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
-  messages: Message[]; metadata: Record<string, StreamMetadata>; activeStart: number; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
+  messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
-  character: string | null; thread: string | null; hasEarlier: boolean; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
+  character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
 }
 
 export const EVENT_POLICIES = {
@@ -39,9 +43,9 @@ export const EVENT_POLICIES = {
   ping: "connection", shutdown: "connection",
 } satisfies Record<ServerMessage["type"], string>;
 
-export function mergeHistory(previous: readonly Message[], activeStart: number, history: History): Message[] | undefined {
+export function mergeHistory(previous: readonly Message[], history: History): Message[] | undefined {
   if (history.delta === undefined || history.delta === null) return history.messages;
-  const index = history.delta.after === null ? activeStart - 1 : previous.findLastIndex((message) => message.msg_id === history.delta?.after);
+  const index = history.delta.after === null ? -1 : previous.findLastIndex((message) => message.msg_id === history.delta?.after);
   if (history.delta.after !== null && index < 0) return undefined;
   return [...previous.slice(0, index + 1), ...retainImages(history.messages, previous)];
 }
@@ -54,6 +58,10 @@ function retainImages(messages: readonly Message[], previous: readonly Message[]
   }) }));
 }
 
+function neighbours(page: ConversationPage, segment: SegmentSummary): Pick<SegmentView, "segment" | "previous" | "next"> {
+  return { segment, previous: page.previous_segment, next: page.next_segment };
+}
+
 export type FrameScheduler = (callback: () => void) => void;
 
 export class Workspace {
@@ -63,10 +71,9 @@ export class Workspace {
   #framePending = false;
   #navigation = 0;
   #eventId = 0;
-  #historyEpoch = 0;
-  #before: number | "active" = "active";
+  #segmentEpoch = 0;
   #loadingEarlier = false;
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, activeStart: 0, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, hasEarlier: true, uncertain: [] };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [] };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -88,22 +95,48 @@ export class Workspace {
   report(error: unknown): void { this.#patch({ error: error instanceof Error ? error.message : String(error) }); }
   dismissError(): void { this.#patch({ error: "" }); }
   acknowledge(rid: string): void { this.#patch({ uncertain: this.#state.uncertain.filter((item) => item.rid !== rid) }); }
-  addEarlier(messages: Message[]): void {
-    const ids = new Set(this.#state.messages.map((message) => message.msg_id));
-    const earlier = messages.filter((message) => !ids.has(message.msg_id));
-    this.#patch({ messages: [...earlier, ...this.#state.messages], activeStart: this.#state.activeStart + earlier.length });
+  async openSegment(index: number): Promise<void> {
+    const epoch = ++this.#segmentEpoch;
+    const page = await this.actions.run("history_page", { segment: index, turns: SEGMENT_PAGE_TURNS });
+    if (epoch !== this.#segmentEpoch || page.segment === null) return;
+    this.#patch({ segmentView: { ...neighbours(page, page.segment), messages: page.messages, before: page.next_before, hasEarlier: page.has_more_before, seenLive: this.#state.messages.at(-1)?.msg_id ?? null } });
   }
-  async loadEarlier(): Promise<void> {
-    if (this.#loadingEarlier || !this.#state.hasEarlier) return;
+  async openOlder(): Promise<void> {
+    const view = this.#state.segmentView;
+    const previous = view === null ? this.#state.previousSegment : view.previous;
+    if (previous !== null) await this.openSegment(previous.index);
+  }
+  async openNewer(): Promise<void> {
+    const next = this.#state.segmentView?.next ?? null;
+    if (next === null) this.closeSegment();
+    else await this.openSegment(next.index);
+  }
+  closeSegment(): void {
+    this.#segmentEpoch += 1;
+    if (this.#state.segmentView !== null) this.#patch({ segmentView: null });
+  }
+  async loadEarlierInSegment(): Promise<void> {
+    const view = this.#state.segmentView;
+    if (view === null || this.#loadingEarlier || !view.hasEarlier) return;
     this.#loadingEarlier = true;
-    const epoch = this.#historyEpoch;
+    const epoch = this.#segmentEpoch;
     try {
-      const page = await this.actions.run("history_page", { before: this.#before, turns: 32 });
-      if (epoch !== this.#historyEpoch) return;
-      this.#before = page.next_before;
-      this.addEarlier(page.messages);
-      this.#patch({ hasEarlier: page.has_more_before });
+      const page = await this.actions.run("history_page", { segment: view.segment.index, before: view.before, turns: SEGMENT_PAGE_TURNS });
+      const current = this.#state.segmentView;
+      if (epoch !== this.#segmentEpoch || current === null) return;
+      const ids = new Set(current.messages.map((message) => message.msg_id));
+      this.#patch({ segmentView: { ...current, messages: [...page.messages.filter((message) => !ids.has(message.msg_id)), ...current.messages], before: page.next_before, hasEarlier: page.has_more_before } });
     } finally { this.#loadingEarlier = false; }
+  }
+  async #refreshSegmentNeighbours(): Promise<void> {
+    const view = this.#state.segmentView;
+    if (view === null) return;
+    const epoch = this.#segmentEpoch;
+    try {
+      const page = await this.actions.run("history_page", { segment: view.segment.index, count: 0 });
+      const current = this.#state.segmentView;
+      if (epoch === this.#segmentEpoch && current !== null && page.segment !== null) this.#patch({ segmentView: { ...current, ...neighbours(page, page.segment) } });
+    } catch (error) { this.report(error); }
   }
   #activity(type: string, data: unknown): void {
     const preview = inspectionPreview(data);
@@ -178,7 +211,8 @@ export class Workspace {
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") this.#navigation += 1;
-      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [] } : {}) });
+      if (update.status === "signed_out") this.#segmentEpoch += 1;
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -191,16 +225,20 @@ export class Workspace {
     switch (message.type) {
       case "hello": this.#patch({ characters: message.characters }); return;
       case "history": {
-        const messages = mergeHistory(this.#state.messages, this.#state.activeStart, message);
+        const messages = mergeHistory(this.#state.messages, message);
         if (messages === undefined) { this.connection.reconnect(); return; }
         const character = message.selected_character ?? null;
         const thread = message.selected_thread ?? null;
         const changed = character !== this.#state.character || thread !== this.#state.thread;
         const historyOnly = message.config !== null && typeof message.config === "object" && !Array.isArray(message.config) && Object.keys(message.config).length === 0;
-        if (message.delta === undefined || message.delta === null) { this.#historyEpoch += 1; this.#before = "active"; }
-        this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), activeStart: message.delta === undefined || message.delta === null ? message.active_start ?? 0 : this.#state.activeStart,
-          character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, hasEarlier: message.delta === undefined || message.delta === null ? true : this.#state.hasEarlier, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
+        const full = message.delta === undefined || message.delta === null;
+        const previousSegment = full ? message.previous_segment ?? null : this.#state.previousSegment;
+        const moved = previousSegment?.index !== this.#state.previousSegment?.index;
+        if (changed) this.#segmentEpoch += 1;
+        this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
+          character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void this.refreshNavigation();
+        if (!changed && moved) void this.#refreshSegmentNeighbours();
         return;
       }
       case "new_message": {

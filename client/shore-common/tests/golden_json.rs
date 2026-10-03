@@ -186,7 +186,7 @@ fn history_golden() {
         assert_eq!(second.alt_count, Some(2));
         assert_eq!(field(&h.config, "model"), "claude-haiku-4-5-20251001");
         assert_eq!(h.selected_character.as_deref(), Some("alice"));
-        assert_eq!(h.active_start, 0);
+        assert!(h.previous_segment.is_none());
         assert_eq!(h.revision, 12);
     }
     );
