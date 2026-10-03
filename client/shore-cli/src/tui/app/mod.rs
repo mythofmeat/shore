@@ -1,4 +1,5 @@
 use ratatui::text::Line;
+use shore_common::protocol::operations::SegmentSummary;
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::tui::images::ImageCache;
@@ -9,6 +10,7 @@ mod compaction;
 mod conversation;
 mod input;
 mod notifications;
+mod segments;
 mod stream;
 mod usage;
 
@@ -18,6 +20,7 @@ pub(crate) use compaction::*;
 pub(crate) use conversation::*;
 pub(crate) use input::*;
 pub(crate) use notifications::*;
+pub(crate) use segments::*;
 pub(crate) use stream::*;
 pub(crate) use usage::*;
 
@@ -304,7 +307,9 @@ pub(crate) struct App {
     pub request_seq: u64,
     pub retired_streams: std::collections::HashSet<String>,
     pub pending_navigation: Option<String>,
-    pub pending_history_page: Option<String>,
+    pub pending_segment_page: Option<(String, SegmentRequest)>,
+    pub previous_segment: Option<SegmentSummary>,
+    pub segment_view: Option<SegmentView>,
     pub entries: Vec<ConversationEntry>,
     pub stream: StreamState,
     pub replaced: Replaced,
@@ -341,9 +346,6 @@ pub(crate) struct App {
     pub auto_scroll: bool,
     pub conversation_max_scroll: usize,
     pub grew_above_viewport: bool,
-    pub history_next_before: Option<usize>,
-    pub history_has_more_before: bool,
-    pub history_page_loading: bool,
     pub image_cache: ImageCache,
     pub show_thinking: bool,
     pub show_tools: bool,
@@ -391,7 +393,9 @@ impl Default for App {
             request_seq: 0,
             retired_streams: std::collections::HashSet::new(),
             pending_navigation: None,
-            pending_history_page: None,
+            pending_segment_page: None,
+            previous_segment: None,
+            segment_view: None,
             entries: Vec::new(),
             stream: StreamState::default(),
             replaced: Replaced::default(),
@@ -433,9 +437,6 @@ impl Default for App {
             auto_scroll: true,
             conversation_max_scroll: 0,
             grew_above_viewport: false,
-            history_next_before: None,
-            history_has_more_before: false,
-            history_page_loading: false,
             image_cache: ImageCache::new(),
             show_thinking: true,
             show_tools: true,
@@ -500,8 +501,7 @@ impl App {
         self.replaced = Replaced::default();
         self.request_epoch = self.request_epoch.wrapping_add(1);
         self.pending_navigation = None;
-        self.pending_history_page = None;
-        self.history_page_loading = false;
+        self.pending_segment_page = None;
         self.pending_edit_prefill = None;
         self.pending_thread_refresh_rid = None;
         self.pending_sampler_settings_rid = None;
@@ -557,9 +557,6 @@ impl App {
                     (3_u64 << 56)
                         | (u64::try_from(content.len()).unwrap_or(u64::MAX) << 24)
                         | u64::from(*count)
-                }
-                ConversationEntry::ArchiveBoundary { archived_count } => {
-                    (7_u64 << 56) | u64::try_from(*archived_count).unwrap_or(u64::MAX)
                 }
             }
         };

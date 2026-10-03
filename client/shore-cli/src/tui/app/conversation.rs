@@ -106,9 +106,6 @@ pub(crate) enum ConversationEntry {
         count: u32,
         timestamp: String,
     },
-    ArchiveBoundary {
-        archived_count: usize,
-    },
 }
 
 impl ConversationEntry {
@@ -144,21 +141,20 @@ impl ConversationEntry {
         match self {
             ConversationEntry::Turn(turn) => turn.msg_id.as_deref(),
             ConversationEntry::System { msg_id, .. } => msg_id.as_deref(),
-            ConversationEntry::ArchiveBoundary { .. } => None,
         }
     }
 
     pub(crate) fn as_turn(&self) -> Option<&Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
-            ConversationEntry::System { .. } | ConversationEntry::ArchiveBoundary { .. } => None,
+            ConversationEntry::System { .. } => None,
         }
     }
 
     pub(crate) fn as_turn_mut(&mut self) -> Option<&mut Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
-            ConversationEntry::System { .. } | ConversationEntry::ArchiveBoundary { .. } => None,
+            ConversationEntry::System { .. } => None,
         }
     }
 }

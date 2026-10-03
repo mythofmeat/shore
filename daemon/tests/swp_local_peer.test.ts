@@ -22,7 +22,7 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
       history: (selected) =>
         Promise.resolve({
           messages: [],
-          activeStart: 0,
+          previousSegment: null,
           config: { active_model: "test:model" },
           selectedCharacter: selected,
           selectedThread: null,
@@ -234,7 +234,7 @@ describe("what the peer receives", () => {
       hello: async () => ({ characters: [{ name: "ada" }, { name: "bee" }] }),
       history: async (character) => {
         if (++calls > 1) { started.resolve(); await release.promise; }
-        return { messages: [], activeStart: 0, config: {}, selectedCharacter: character, selectedThread: "main", revision: 4 };
+        return { messages: [], previousSegment: null, config: {}, selectedCharacter: character, selectedThread: "main", revision: 4 };
       },
     });
     const peer = await server.attachLocal({ clientType: "bridge", clientName: "refreshing", character: "ada" });
@@ -343,14 +343,14 @@ describe("what the peer receives", () => {
           refreshing?.();
           await held;
         }
-        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+        return { messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
       },
     });
     const peer = await server.attachLocal({ clientType: "bridge", clientName: "refreshing" });
     const events = peer.events();
     await events.next();
     server.broadcast({
-      type: "history", messages: [], active_start: 0, config: {}, revision: 1,
+      type: "history", messages: [], config: {}, revision: 1,
       selected_character: "ada", selected_thread: "main", delta: { base_revision: 0, after: null },
     });
     await started;
@@ -371,7 +371,7 @@ describe("what the peer receives", () => {
       history: async () => {
         historyStarted?.();
         await held;
-        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+        return { messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
       },
     });
     const attaching = server.attachLocal({ clientType: "browser", clientName: "cancelled", signal: controller.signal });

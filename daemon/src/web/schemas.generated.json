@@ -7976,11 +7976,6 @@
               "$ref": "#/$defs/Message"
             }
           },
-          "active_start": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
           "cursor": {
             "type": "integer",
             "format": "uint",
@@ -7994,31 +7989,51 @@
           "has_more_before": {
             "type": "boolean"
           },
-          "global_active_start": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "total_messages": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
           "total_turns": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous_segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "messages",
-          "active_start",
           "cursor",
           "next_before",
           "has_more_before",
-          "global_active_start",
-          "total_messages",
-          "total_turns"
+          "total_turns",
+          "segment",
+          "previous_segment",
+          "next_segment"
         ]
       },
       "MessageEdited": {
@@ -16220,11 +16235,6 @@
               "$ref": "#/$defs/Message"
             }
           },
-          "active_start": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
           "cursor": {
             "type": "integer",
             "format": "uint",
@@ -16238,31 +16248,51 @@
           "has_more_before": {
             "type": "boolean"
           },
-          "global_active_start": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "total_messages": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
           "total_turns": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous_segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_segment": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SegmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "messages",
-          "active_start",
           "cursor",
           "next_before",
           "has_more_before",
-          "global_active_start",
-          "total_messages",
-          "total_turns"
+          "total_turns",
+          "segment",
+          "previous_segment",
+          "next_segment"
         ]
       },
       "MessageEdited": {

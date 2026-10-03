@@ -148,7 +148,7 @@ async function harness(
       history: (selected) =>
         Promise.resolve({
           messages: [],
-          activeStart: 0,
+          previousSegment: null,
           config: {},
           selectedCharacter: selected,
           selectedThread: null,

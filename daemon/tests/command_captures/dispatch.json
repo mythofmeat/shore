@@ -78,24 +78,24 @@
         "kind": "command_output",
         "name": "log",
         "data_keys": [
-          "active_start",
           "cursor",
-          "global_active_start",
           "has_more_before",
           "messages",
           "next_before",
-          "total_messages",
+          "next_segment",
+          "previous_segment",
+          "segment",
           "total_turns"
         ],
         "data_shape": {
           "messages": "array[3]",
-          "active_start": "number:0",
           "cursor": "number:0",
           "next_before": "number:0",
           "has_more_before": "bool",
-          "global_active_start": "number:0",
-          "total_messages": "number:2",
-          "total_turns": "number:2"
+          "total_turns": "number:2",
+          "segment": "null",
+          "previous_segment": "null",
+          "next_segment": "null"
         }
       }
     },
@@ -108,24 +108,24 @@
         "kind": "command_output",
         "name": "history_page",
         "data_keys": [
-          "active_start",
           "cursor",
-          "global_active_start",
           "has_more_before",
           "messages",
           "next_before",
-          "total_messages",
+          "next_segment",
+          "previous_segment",
+          "segment",
           "total_turns"
         ],
         "data_shape": {
           "messages": "array[2]",
-          "active_start": "number:0",
           "cursor": "number:0",
           "next_before": "number:0",
           "has_more_before": "bool",
-          "global_active_start": "number:0",
-          "total_messages": "number:2",
-          "total_turns": "number:2"
+          "total_turns": "number:2",
+          "segment": "null",
+          "previous_segment": "null",
+          "next_segment": "null"
         }
       }
     },

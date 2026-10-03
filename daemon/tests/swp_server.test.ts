@@ -63,7 +63,7 @@ function providerNaming(names: readonly string[]): HandshakeProvider {
     history: () =>
       Promise.resolve({
         messages: [],
-        activeStart: 0,
+        previousSegment: null,
         config: {},
         selectedCharacter: null,
         selectedThread: null,
@@ -231,7 +231,7 @@ describe("stopping", () => {
       history: async () => {
         beganHistory();
         await held;
-        return { messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
+        return { messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 0 };
       },
     });
     const { port } = await server.bind();
@@ -402,7 +402,7 @@ describe("what a connection produces", () => {
     try {
       server.setHandshakeProvider({
         hello: () => Promise.resolve({ characters: [{ name: "ada" }, { name: "bea" }] }),
-        history: () => Promise.resolve({ messages: [], activeStart: 0, config: {}, selectedCharacter: "ada", selectedThread: null, revision: 0 }),
+        history: () => Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: null, revision: 0 }),
       });
       const frames: Record<string, unknown>[] = [];
       let buffered = "";

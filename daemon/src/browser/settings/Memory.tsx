@@ -4,7 +4,8 @@ import type { SegmentInspection } from "../../protocol/SegmentInspection.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Markdown } from "../markdown.tsx";
 import { Spinner } from "../ui/controls.tsx";
-import { workspace } from "../app/state.ts";
+import { perform, workspace } from "../app/state.ts";
+import { navigate } from "../app/route.ts";
 import { SettingsSection } from "./layout.tsx";
 import { formatTime, Loading, NeedsCharacter, useAction, useOperation } from "./shared.tsx";
 
@@ -45,6 +46,7 @@ function Segment({ segment, changed }: { segment: SegmentSummary; changed: () =>
     </div>
     <div className="actions-row tight">
       <button type="button" className="button" aria-expanded={open} onClick={show}>{open ? "Hide" : "View"}</button>
+      <button type="button" className="button ghost" onClick={() => perform(async () => { await workspace.openSegment(segment.index); navigate({ view: "chat" }); })}>Open in conversation</button>
       <button type="button" className="button ghost" disabled={busy} onClick={() => act(segment.excluded ? "include" : "exclude")}>{segment.excluded ? "Include in memory" : "Exclude from memory"}</button>
       <TextEdit label="Label" value={segment.label} busy={busy} save={(value) => act("label", value)} />
       <TextEdit label="Note" value={segment.note} busy={busy} save={(value) => act("note", value)} />

@@ -43,7 +43,7 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
       hello: async () => ({ characters: [{ name: "ada" }, { name: "bo" }] }),
       history: async (selected, thread) => {
         histories += 1;
-        return { messages: [], activeStart: 0, config: {}, selectedCharacter: selected, selectedThread: thread ?? "main", revision: 0 };
+        return { messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: thread ?? "main", revision: 0 };
       },
     },
   });
@@ -795,7 +795,7 @@ test("large snapshots open in the browser and matching full broadcasts refresh t
   const messages = [{ msg_id: "large-image", role: "user" as const, content: "Photo", content_blocks: [], timestamp: "2026-09-24T00:00:00Z", images: [{ path: "large.png", data: "A".repeat(33 * 1024 * 1024) }] }];
   const f = await fixture({}, {
     hello: async () => ({ characters: [{ name: "ada" }] }),
-    history: async () => ({ messages, activeStart: 0, config, selectedCharacter: "ada", selectedThread: "main", revision: 0 }),
+    history: async () => ({ messages, previousSegment: null, config, selectedCharacter: "ada", selectedThread: "main", revision: 0 }),
   }); f.web.activate();
   const b = browserConnection(f.web.origin);
   try {

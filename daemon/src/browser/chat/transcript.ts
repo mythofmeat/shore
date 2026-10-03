@@ -3,11 +3,11 @@ import type { CompactionPassEnd } from "../../protocol/CompactionPassEnd.ts";
 import type { CompactionWatchResult } from "../../protocol/CompactionWatchResult.ts";
 import type { ContentBlock } from "../../protocol/ContentBlock.ts";
 import type { Message } from "../../protocol/Message.ts";
+import type { SegmentSummary } from "../../protocol/SegmentSummary.ts";
 import type { ToolResultContent } from "../../protocol/ToolResultContent.ts";
 
 export type TranscriptItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "context"; key: string }
   | { kind: "message"; key: string; message: Message; index: number; last: boolean };
 
 function dayKey(date: Date): string {
@@ -28,16 +28,33 @@ export function timeLabel(timestamp: string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+export function segmentName(segment: Pick<SegmentSummary, "index" | "label">): string {
+  return segment.label === null ? `Segment ${String(segment.index)}` : `Segment ${String(segment.index)} · ${segment.label}`;
+}
+
+function segmentDay(value: string | null, now: Date): string {
+  if (value === null) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}
+
+export function segmentDetail(segment: SegmentSummary, now = new Date()): string {
+  const first = segmentDay(segment.first_message_at, now);
+  const last = segmentDay(segment.last_message_at, now);
+  const dates = first === last || last === "" ? first : first === "" ? last : `${first} – ${last}`;
+  return [`${String(segment.message_count)} ${segment.message_count === 1 ? "message" : "messages"}`, ...(dates === "" ? [] : [dates]), ...(segment.excluded ? ["excluded from memory"] : [])].join(" · ");
+}
+
 export function lastAssistantIndex(messages: readonly Message[]): number {
   return messages.findLastIndex((message) => message.role === "assistant");
 }
 
-export function transcriptItems(messages: readonly Message[], activeStart: number, now = new Date()): TranscriptItem[] {
+export function transcriptItems(messages: readonly Message[], now = new Date()): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const lastAssistant = lastAssistantIndex(messages);
   let previousDay = "";
   messages.forEach((message, index) => {
-    if (index === activeStart && index > 0) items.push({ kind: "context", key: `context:${message.msg_id}` });
     const date = new Date(message.timestamp);
     if (!Number.isNaN(date.getTime())) {
       const key = dayKey(date);
@@ -180,13 +197,13 @@ export function visibleStreams<T extends { subagent: string | null; final: boole
 
 const realUserTurn = (message: Message): boolean => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every((block) => block.type === "tool_result"));
 
-export function optimisticRegenReplaces(messages: readonly Message[], activeStart: number): string[] {
-  return messages.slice(Math.max(messages.findLastIndex(realUserTurn) + 1, activeStart)).map((message) => message.msg_id);
+export function optimisticRegenReplaces(messages: readonly Message[]): string[] {
+  return messages.slice(messages.findLastIndex(realUserTurn) + 1).map((message) => message.msg_id);
 }
 
-export function regenReplaces(messages: readonly Message[], activeStart: number, visible: readonly { replaces?: readonly string[] }[], pendingRegen: boolean): string[] {
+export function regenReplaces(messages: readonly Message[], visible: readonly { replaces?: readonly string[] }[], pendingRegen: boolean): string[] {
   const listed = visible.flatMap((stream) => stream.replaces ?? []);
-  return [...new Set(pendingRegen ? [...listed, ...optimisticRegenReplaces(messages, activeStart)] : listed)];
+  return [...new Set(pendingRegen ? [...listed, ...optimisticRegenReplaces(messages)] : listed)];
 }
 
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {

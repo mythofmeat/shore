@@ -273,19 +273,24 @@ describe("the history snapshot", () => {
     expect(snapshot.selectedCharacter).toBe("ada");
   });
 
-  test("a push snapshot starts at zero, because it carries no scrollback", async () => {
+  test("a snapshot names the segment before the current context, and null when there is none", async () => {
     const root = await mkdtemp(testTmp("shore-handshake-start-"));
     const config = configFor(root, { model: "chat.fixture" });
-
-    const snapshot = await buildSessionHistorySnapshot(
+    const previous = {
+      index: 3, first_message_at: "2026-09-28T10:00:00Z", last_message_at: "2026-10-01T09:00:00Z",
+      compacted_at: "2026-10-01T09:05:00Z", message_count: 12, excluded: false, label: "trip",
+      note: null, memory_before: null, memory_after: null,
+    };
+    const snapshotFor = async (history: Partial<History>) => await buildSessionHistorySnapshot(
       registry({
         globalConfig: () => config,
-        getOrCreate: () => Promise.resolve(engineWith({ selected_character: "ada" })),
+        getOrCreate: () => Promise.resolve(engineWith({ selected_character: "ada", ...history })),
       }),
       "ada",
     );
 
-    expect(snapshot.activeStart).toBe(0);
+    expect((await snapshotFor({ previous_segment: previous })).previousSegment).toEqual(previous);
+    expect((await snapshotFor({})).previousSegment).toBeNull();
   });
 
   test("with no character selected the registry is never asked for an engine", async () => {

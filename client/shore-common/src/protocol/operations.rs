@@ -2042,16 +2042,10 @@ wire_types! {
         #[schemars(with = "Role")]
         #[ts(optional)]
         pub role: Option<Role>,
-    }
-
-    #[serde(rename_all = "snake_case")]
-    pub enum HistoryBoundary { Active }
-
-    #[serde(untagged)]
-    pub enum HistoryBefore {
-        #[ts(type = "number")]
-        Cursor(u64),
-        Boundary(HistoryBoundary),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub segment: Option<u64>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2066,10 +2060,14 @@ wire_types! {
         #[schemars(with = "Role")]
         #[ts(optional)]
         pub role: Option<Role>,
-        #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_present")]
-        #[schemars(with = "HistoryBefore")]
-        #[ts(optional)]
-        pub before: Option<HistoryBefore>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub segment: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub before: Option<u64>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2123,13 +2121,16 @@ wire_types! {
 
     pub struct ConversationPage {
         pub messages: Vec<Message>,
-        pub active_start: usize,
         pub cursor: usize,
         pub next_before: usize,
         pub has_more_before: bool,
-        pub global_active_start: usize,
-        pub total_messages: usize,
         pub total_turns: usize,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub segment: Option<SegmentSummary>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub previous_segment: Option<SegmentSummary>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub next_segment: Option<SegmentSummary>,
     }
 
     pub struct MessageEdited {
@@ -2898,12 +2899,20 @@ mod tests {
         );
         assert!(
             serde_json::from_value::<HistoryPageArgs>(
-                serde_json::json!({"before":"active","role":"assistant"})
+                serde_json::json!({"segment":2,"before":40,"role":"assistant"})
             )
             .is_ok()
         );
         assert!(
-            serde_json::from_value::<HistoryPageArgs>(serde_json::json!({"before":null})).is_err()
+            serde_json::from_value::<HistoryPageArgs>(serde_json::json!({"before":"active"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<ConversationLogArgs>(serde_json::json!({"segment":0})).is_ok()
+        );
+        assert!(
+            serde_json::from_value::<ConversationLogArgs>(serde_json::json!({"segment":-1}))
+                .is_err()
         );
         assert!(
             serde_json::from_value::<ConversationLogArgs>(serde_json::json!({"before":1})).is_err()

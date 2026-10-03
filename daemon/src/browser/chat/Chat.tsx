@@ -75,7 +75,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Wor
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />
     {state.character === null ? <NoCharacter state={state} /> : <>
-      <Transcript key={`${state.character}/${state.thread ?? ""}`} state={state} character={state.character} mobile={mobile} />
+      <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} state={state} character={state.character} mobile={mobile} />
       <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />
     </>}
   </>;

@@ -10,7 +10,7 @@ use shore_common::protocol::types::Role;
 
 use crate::tui::app::{
     AltChoice, App, Block as TurnBlock, CompactionRun, ConversationEntry, InputMode, PaletteMode,
-    Turn, ValueEditorKind, format_elapsed,
+    SegmentView, Turn, ValueEditorKind, format_elapsed,
 };
 use crate::tui::images;
 use crate::tui::keymap::Scope;
@@ -951,15 +951,16 @@ fn build_conversation_lines(
     content_width: u16,
 ) -> (Vec<Line<'static>>, Vec<crate::tui::app::ImageEntry>, usize) {
     let settled_fingerprint = app.conversation_fingerprint(content_width).settled();
+    let live = app.segment_view.is_none();
     let settled_entries = app
-        .entries
+        .visible_entries()
         .iter()
         .enumerate()
         .position(|(index, entry)| {
             entry.as_turn().is_some_and(|turn| turn.is_streaming())
-                || app.replaced.hides(index, entry)
+                || (live && app.replaced.hides(index, entry))
         })
-        .unwrap_or(app.entries.len());
+        .unwrap_or(app.visible_entries().len());
     let reuse = app.conv_cache.settled_fingerprint == settled_fingerprint
         && app.conv_cache.settled_entries <= settled_entries;
     let first = if reuse {
@@ -986,8 +987,15 @@ fn build_conversation_lines(
     }
     app.conv_cache.settled_fingerprint = settled_fingerprint;
 
-    for (index, entry) in app.entries.iter().enumerate().skip(first) {
-        if app.replaced.hides(index, entry) {
+    if first == 0 {
+        push_segment_header(&mut lines, app, content_width);
+    }
+    let entries = app
+        .segment_view
+        .as_ref()
+        .map_or(&app.entries, |view| &view.entries);
+    for (index, entry) in entries.iter().enumerate().skip(first) {
+        if live && app.replaced.hides(index, entry) {
             continue;
         }
         let from = lines.len();
@@ -1026,9 +1034,6 @@ fn build_conversation_lines(
                 }
                 lines.push(Line::from(""));
             }
-            ConversationEntry::ArchiveBoundary { archived_count } => {
-                push_archive_boundary(&mut lines, content_width, *archived_count);
-            }
         }
         squeeze_blank_lines_from(&mut lines, from);
         if index.saturating_add(1) <= settled_entries {
@@ -1042,16 +1047,20 @@ fn build_conversation_lines(
         app.entries.last().and_then(ConversationEntry::as_turn),
         Some(turn) if turn.is_streaming()
     );
-    if app.stream.active && !trailing_streaming {
+    if live && app.stream.active && !trailing_streaming {
         render_streaming_header(&mut lines, app);
         render_streaming_content(&mut lines, app, content_width);
     }
 
-    if app.compaction.is_some() {
+    if live && app.compaction.is_some() {
         render_compaction(&mut lines, app, content_width, &mut image_index);
     }
 
-    if lines.is_empty() && !app.stream.active && app.compaction.is_none() {
+    if let Some(view) = &app.segment_view {
+        push_segment_footer(&mut lines, view, content_width);
+    }
+
+    if live && app.entries.is_empty() && !app.stream.active && app.compaction.is_none() {
         let hint_style = Style::default().fg(Color::DarkGray);
         lines.push(Line::from(vec![
             Span::raw("  "),
@@ -1070,41 +1079,96 @@ fn build_conversation_lines(
     (lines, image_index, content_visual)
 }
 
-fn push_archive_boundary(
-    lines: &mut Vec<Line<'static>>,
-    content_width: u16,
-    archived_turns: usize,
-) {
-    if archived_turns == 0 {
-        return;
+fn push_segment_header(lines: &mut Vec<Line<'static>>, app: &App, content_width: u16) {
+    let now = Local::now();
+    let muted = Style::default().fg(Color::DarkGray);
+    match &app.segment_view {
+        None => {
+            let Some(previous) = &app.previous_segment else {
+                return;
+            };
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!(
+                        "before this: {} \u{00b7} [ to view",
+                        crate::output::segment_detail(previous, now)
+                    ),
+                    muted,
+                ),
+            ]));
+            lines.push(centered_rule(" context starts here ", content_width));
+        }
+        Some(view) => {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!(
+                        "viewing {}",
+                        crate::output::segment_detail(&view.summary, now)
+                    ),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]));
+            let above = if view.has_more_before {
+                "scroll up for earlier messages in this segment".to_owned()
+            } else {
+                view.previous.as_ref().map_or_else(
+                    || "start of the conversation".to_owned(),
+                    |previous| {
+                        format!(
+                            "before this: {} \u{00b7} [ to view",
+                            crate::output::segment_name(previous)
+                        )
+                    },
+                )
+            };
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(above, muted),
+            ]));
+            lines.push(centered_rule("", content_width));
+        }
     }
-
     lines.push(Line::from(""));
+}
 
-    let label = if archived_turns == 1 {
-        " 1 archived turn above · outside current context ".to_owned()
-    } else {
-        format!(" {archived_turns} archived turns above · outside current context ")
-    };
+fn push_segment_footer(lines: &mut Vec<Line<'static>>, view: &SegmentView, content_width: u16) {
+    let after = view.next.as_ref().map_or_else(
+        || "after this: the current context \u{00b7} ] to return".to_owned(),
+        |next| {
+            format!(
+                "after this: {} \u{00b7} ] to view",
+                crate::output::segment_name(next)
+            )
+        },
+    );
+    lines.push(centered_rule("", content_width));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(after, Style::default().fg(Color::DarkGray)),
+    ]));
+}
+
+fn centered_rule(label: &str, content_width: u16) -> Line<'static> {
     let width = usize::from(content_width);
-    let label_width = unicode_width::UnicodeWidthStr::width(label.as_str());
-
+    let label_width = unicode_width::UnicodeWidthStr::width(label);
     let text = if width > label_width {
         let left = width
             .saturating_sub(label_width)
             .checked_div(2)
             .unwrap_or_default();
         let right = width.saturating_sub(label_width.saturating_add(left));
-        format!("{}{}{}", "─".repeat(left), label, "─".repeat(right))
+        format!(
+            "{}{}{}",
+            "\u{2500}".repeat(left),
+            label,
+            "\u{2500}".repeat(right)
+        )
     } else {
         label.trim().to_owned()
     };
-
-    lines.push(Line::from(Span::styled(
-        text,
-        Style::default().fg(Color::DarkGray),
-    )));
-    lines.push(Line::from(""));
+    Line::from(Span::styled(text, Style::default().fg(Color::DarkGray)))
 }
 
 fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -1391,6 +1455,19 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .borders(Borders::TOP)
         .title(mode_label)
         .border_style(Style::default().fg(border_color));
+    if let Some(view) = &app.segment_view {
+        let fresh = if app.live_moved_on() {
+            " \u{00b7} new messages"
+        } else {
+            ""
+        };
+        block = block.title(Span::styled(
+            format!(" segment {} (read-only){fresh} ", view.summary.index),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
     if app.in_side_thread() {
         block = block.title(Span::styled(
             format!(" \u{2387} {} ", app.thread_name),
@@ -3586,7 +3663,7 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
-    fn scenario_history_marks_archived_boundary() {
+    fn scenario_history_names_the_segment_before_the_context() {
         use shore_common::protocol::server_msg::History;
         use shore_common::protocol::types::{ContentBlock, Message, Role};
 
@@ -3635,7 +3712,7 @@ pub(crate) mod scenario_tests {
                 delta: None,
                 rid: None,
                 messages: history_msgs,
-                active_start: 1,
+                previous_segment: Some(crate::tui::app::segment_fixture(12, Some("harbor"))),
                 config: serde_json::json!({}),
                 selected_character: None,
                 selected_thread: None,
@@ -3643,11 +3720,12 @@ pub(crate) mod scenario_tests {
             }),
         );
 
-        let f = h.render("archived boundary");
+        let f = h.render("context start");
         assert!(f.contains("old context"));
         assert!(f.contains("active reply"));
-        assert!(f.contains("archived"));
-        assert!(f.contains("outside current context"));
+        assert!(f.contains("before this: segment 12 \"harbor\""), "{f}");
+        assert!(f.contains("context starts here"), "{f}");
+        assert!(!f.contains("outside current context"), "{f}");
     }
 
     #[test]
@@ -5619,17 +5697,18 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
-    fn scenario_scrolled_up_viewport_holds_when_older_history_is_prepended() {
+    fn scenario_scrolled_up_viewport_holds_when_earlier_segment_messages_are_prepended() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
+        let mut entries = Vec::new();
         for i in 0..20 {
-            h.app.entries.push(ConversationEntry::user(
+            entries.push(ConversationEntry::user(
                 format!("Message {i}"),
                 vec![],
                 format!("t{i}"),
             ));
-            h.app.entries.push(ConversationEntry::assistant(
+            entries.push(ConversationEntry::assistant(
                 None,
                 format!("Reply {i}"),
                 vec![],
@@ -5637,6 +5716,10 @@ pub(crate) mod scenario_tests {
                 None,
             ));
         }
+        assert!(h.app.show_segment(
+            crate::tui::app::segment_page_fixture(4, None, None, true),
+            entries
+        ));
 
         let _ = h.render("bottom anchored");
         h.app.scroll_up(500);
@@ -5648,24 +5731,33 @@ pub(crate) mod scenario_tests {
                     "msg_id": format!("old{i}"),
                     "role": if i % 2 == 0 { "user" } else { "assistant" },
                     "content": format!("Older {i}"),
+                    "images": [],
+                    "content_blocks": [{"type": "text", "text": format!("Older {i}")}],
                     "timestamp": format!("o{i}"),
                 })
             })
             .collect();
-        crate::tui::prepend_history_page(
-            &mut h.app,
-            &serde_json::json!({
-                "messages": page,
-                "has_more_before": false,
-            }),
+        let prepended = page
+            .into_iter()
+            .flat_map(|message| {
+                let mut expanded = Vec::new();
+                crate::tui::expand_msg(serde_json::from_value(message).unwrap(), &mut expanded);
+                expanded
+            })
+            .collect();
+        h.app.prepend_segment_page(
+            crate::tui::app::segment_page_fixture(4, None, None, false),
+            prepended,
         );
 
         let after = h.render_with_blank_rows("older page prepended");
 
+        let row_of = |screen: &str| screen.lines().position(|line| line.contains("Message 0"));
+        assert!(row_of(&before).is_some(), "{before}");
         assert_eq!(
-            top_rows(&before, 20),
-            top_rows(&after, 20),
-            "loading older history should push content in above the viewport, not move it\nbefore:\n{before}\nafter:\n{after}"
+            row_of(&before),
+            row_of(&after),
+            "loading earlier messages should push content in above the viewport, not move it\nbefore:\n{before}\nafter:\n{after}"
         );
         assert!(
             !h.app.grew_above_viewport,
@@ -6609,7 +6701,7 @@ pub(crate) mod scenario_tests {
                 delta: None,
                 rid: None,
                 messages: history_msgs,
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: None,
                 selected_thread: None,
@@ -6727,7 +6819,7 @@ pub(crate) mod scenario_tests {
                     msg("m_1", Role::Assistant, "PRIOR_REPLY"),
                     msg("m_2", Role::User, "second question"),
                 ],
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: None,
                 selected_thread: None,
@@ -6845,7 +6937,7 @@ pub(crate) mod scenario_tests {
                 delta: None,
                 rid: None,
                 messages: history_msgs,
-                active_start: 0,
+                previous_segment: None,
                 config: serde_json::json!({}),
                 selected_character: None,
                 selected_thread: None,

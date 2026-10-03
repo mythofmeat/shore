@@ -12,6 +12,7 @@ use shore_common::protocol::client_msg::{
     Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload, Regen,
 };
 use shore_common::protocol::error::ErrorCode;
+use shore_common::protocol::operations::SegmentSummary;
 use shore_common::protocol::server_msg::{
     CacheWarning, CommandOutput, Error, History, MessageOrigin, NewMessage, Phase, Ping,
     ProviderFallbackWarning, SendImage, ServerHello, ServerMessage, Shutdown, StreamChunk,
@@ -311,6 +312,33 @@ fn arb_character_info() -> impl Strategy<Value = CharacterInfo> {
         .prop_map(|(name, avatar)| CharacterInfo { name, avatar })
 }
 
+fn arb_segment_summary() -> impl Strategy<Value = SegmentSummary> {
+    (
+        0_u64..20,
+        prop::option::of(arb_ident()),
+        arb_ident(),
+        0_usize..500,
+        any::<bool>(),
+        prop::option::of(arb_small_string()),
+    )
+        .prop_map(
+            |(index, first_message_at, compacted_at, message_count, excluded, label)| {
+                SegmentSummary {
+                    index,
+                    last_message_at: first_message_at.clone(),
+                    first_message_at,
+                    compacted_at,
+                    message_count,
+                    excluded,
+                    label,
+                    note: None,
+                    memory_before: None,
+                    memory_after: None,
+                }
+            },
+        )
+}
+
 fn arb_server_message() -> BoxedStrategy<ServerMessage> {
     prop_oneof![
         (
@@ -330,18 +358,18 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
         (
             prop::option::of(arb_ident()),
             prop::collection::vec(arb_message(), 0..3),
-            0_usize..3,
+            prop::option::of(arb_segment_summary()),
             arb_json(),
             prop::option::of(arb_ident()),
             0_u64..100,
         )
             .prop_map(
-                |(rid, messages, active_start, config, selected_character, revision)| {
+                |(rid, messages, previous_segment, config, selected_character, revision)| {
                     ServerMessage::History(History {
                         delta: None,
                         rid,
                         messages,
-                        active_start,
+                        previous_segment,
                         config,
                         selected_character,
                         selected_thread: None,

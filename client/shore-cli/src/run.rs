@@ -1,9 +1,9 @@
 use shore_common::protocol::operations::{
-    CancelCompaction, ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter,
-    DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs,
-    NamedOperationArgs, Operation, OperationResponse, ReadStatus, ReloadConfiguration, ResetModel,
-    ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs, SwitchThread, SwitchThreadArgs,
-    is_registered_operation,
+    CancelCompaction, ConfigReloadArgs, ConversationLog, ConversationLogArgs, ConversationPage,
+    CreateCharacter, DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage,
+    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReadStatus,
+    ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
+    SwitchThread, SwitchThreadArgs, is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -29,13 +29,6 @@ fn log_role_matches(filter: Option<&LogRole>, role: &Role) -> bool {
         Some(LogRole::Assistant | LogRole::Character) => *role == Role::Assistant,
         Some(LogRole::System) => *role == Role::System,
     }
-}
-
-fn active_start_index(data: &serde_json::Value) -> usize {
-    data["active_start"]
-        .as_u64()
-        .and_then(|value| usize::try_from(value).ok())
-        .unwrap_or(0)
 }
 
 #[derive(Debug)]
@@ -628,6 +621,7 @@ async fn handle_log_command(
         subagent_tools,
         count,
         follow,
+        segment,
         ..
     } = cmd
     else {
@@ -654,20 +648,22 @@ async fn handle_log_command(
         return Ok(());
     }
 
-    let (_, data) = execute_operation_with_raw::<ConversationLog>(
+    let (page, data) = execute_operation_with_raw::<ConversationLog>(
         conn,
         ConversationLogArgs {
             turns: Some(u64::from(*count)),
             count: None,
             role: role.map(LogRole::as_protocol_role),
+            segment: segment.map(u64::from),
         },
     )
     .await?;
 
-    render_log_list(&data, *json, *content, display_character, filter)?;
+    render_log_list(&page, &data, *json, *content, display_character, filter)?;
 
     if *follow {
-        follow_log_stream(conn, role.as_ref(), display_character, filter).await?;
+        let previous = page.previous_segment.map(|summary| summary.index);
+        follow_log_stream(conn, role.as_ref(), display_character, filter, previous).await?;
     }
     Ok(())
 }
@@ -725,6 +721,7 @@ async fn fetch_single_message(
 }
 
 fn render_log_list(
+    page: &ConversationPage,
     data: &serde_json::Value,
     json: bool,
     content: bool,
@@ -744,12 +741,13 @@ fn render_log_list(
                 cli_out!("{c}");
             }
         }
-    } else if output::use_decoration() {
-        let active_start = active_start_index(data);
-        output::print_log_with_boundary(messages, active_start, display_character, filter);
     } else {
-        let active_start = active_start_index(data);
-        output::print_log_plain_with_boundary(messages, active_start, display_character, filter);
+        let frame = output::SegmentFrame::of_page(page, chrono::Local::now());
+        if output::use_decoration() {
+            output::print_log_framed(messages, &frame, display_character, filter);
+        } else {
+            output::print_log_plain_framed(messages, &frame, display_character, filter);
+        }
     }
     Ok(())
 }
@@ -759,6 +757,7 @@ async fn follow_log_stream(
     role: Option<&LogRole>,
     follow_char: &str,
     filter: output::LogFilter,
+    mut previous_segment: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let msg = conn.recv().await?;
@@ -798,6 +797,18 @@ async fn follow_log_stream(
             }
             ServerMessage::Phase(phase) if log_role_matches(role, &Role::Assistant) => {
                 output::print_phase(phase);
+            }
+            ServerMessage::History(history) if history.delta.is_none() => {
+                let latest = history
+                    .previous_segment
+                    .as_ref()
+                    .map(|summary| summary.index);
+                if latest != previous_segment
+                    && let Some(index) = latest
+                {
+                    output::print_segment_boundary(index);
+                }
+                previous_segment = latest;
             }
             ServerMessage::Shutdown(_) => break,
             ServerMessage::Hello(_)
@@ -2234,7 +2245,7 @@ mod tests {
             delta: None,
             rid: None,
             messages: vec![],
-            active_start: 0,
+            previous_segment: None,
             config: serde_json::json!({}),
             selected_character: None,
             selected_thread: None,

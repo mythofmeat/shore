@@ -107,7 +107,7 @@ fn reconnect_retires_navigation_and_accepts_new_history_updates() {
             server_name: "test".into(),
             characters: vec![],
             history: vec![],
-            active_start: 0,
+            previous_segment: None,
             config: json!({}),
             selected_character: Some("ada".into()),
             selected_thread: Some("main".into()),

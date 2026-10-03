@@ -854,6 +854,75 @@
               "autonomous"
             ]
           },
+          "SegmentSummary": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "first_message_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "last_message_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "compacted_at": {
+                "type": "string"
+              },
+              "message_count": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              },
+              "excluded": {
+                "type": "boolean"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "memory_before": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "memory_after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "index",
+              "first_message_at",
+              "last_message_at",
+              "compacted_at",
+              "message_count",
+              "excluded",
+              "label",
+              "note",
+              "memory_before",
+              "memory_after"
+            ]
+          },
           "History": {
             "type": "object",
             "properties": {
@@ -879,10 +948,15 @@
                   "$ref": "#/$defs/Message"
                 }
               },
-              "active_start": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
+              "previous_segment": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SegmentSummary"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "config": {
                 "default": null
@@ -2317,6 +2391,75 @@
               "autonomous"
             ]
           },
+          "SegmentSummary": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "first_message_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "last_message_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "compacted_at": {
+                "type": "string"
+              },
+              "message_count": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              },
+              "excluded": {
+                "type": "boolean"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "memory_before": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "memory_after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "index",
+              "first_message_at",
+              "last_message_at",
+              "compacted_at",
+              "message_count",
+              "excluded",
+              "label",
+              "note",
+              "memory_before",
+              "memory_after"
+            ]
+          },
           "History": {
             "type": "object",
             "properties": {
@@ -2342,10 +2485,15 @@
                   "$ref": "#/$defs/Message"
                 }
               },
-              "active_start": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
+              "previous_segment": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SegmentSummary"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "config": {
                 "default": null
@@ -3411,8 +3559,8 @@
     "ConfigWarning": "{ rid?: string | null, path: string, character?: string | null, message: string, }",
     "ConfigWidth": "\"usize\" | \"u32\" | \"u64\"",
     "ContentBlock": "{ \"type\": \"text\", text: string, } | { \"type\": \"thinking\", thinking: string, signature?: string | null, } | { \"type\": \"tool_use\", id: string, name: string, input: unknown, thought_signature?: string, } | { \"type\": \"redacted_thinking\", data: string, } | { \"type\": \"image\", source: ImageSource, } | { \"type\": \"tool_result\", tool_use_id: string, content: ToolResultContent, is_error?: boolean | null, }",
-    "ConversationLogArgs": "{ turns?: number | null, count?: number | null, role?: Role, }",
-    "ConversationPage": "{ messages: Array<Message>, active_start: number, cursor: number, next_before: number, has_more_before: boolean, global_active_start: number, total_messages: number, total_turns: number, }",
+    "ConversationLogArgs": "{ turns?: number | null, count?: number | null, role?: Role, segment?: number | null, }",
+    "ConversationPage": "{ messages: Array<Message>, cursor: number, next_before: number, has_more_before: boolean, total_turns: number, segment: SegmentSummary | null, previous_segment: SegmentSummary | null, next_segment: SegmentSummary | null, }",
     "CreateThreadArgs": "{ name: string, label?: string | null, model?: string | null, compaction?: boolean | null, }",
     "DeleteCharacterArgs": "{ character: string, confirm: string, archive?: string, }",
     "DeleteCharacterResult": "{ character: string, deleted: boolean, removed: Array<string>, archive: string | null, }",
@@ -3443,13 +3591,11 @@
     "HeartbeatEventKind": "\"tick_fired\" | \"call_failed\" | \"message_sent\" | \"message_skipped\" | \"tool_use\" | \"dormant\" | \"wake\" | \"timeout\" | \"dormant_ping\" | \"budget_paused\" | \"recap_written\" | \"recap_missing\"",
     "HeartbeatLogResult": "{ events: Array<HeartbeatEvent>, }",
     "HeartbeatTranscriptEntry": "{ reasoning: Array<string>, text: string, tool_calls: Array<TranscriptToolCall>, }",
-    "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, active_start?: number, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
-    "HistoryBefore": "number | HistoryBoundary",
-    "HistoryBoundary": "\"active\"",
+    "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, previous_segment?: SegmentSummary | null, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
     "HistoryDelta": "{ base_revision: number, after: string | null, }",
     "HistoryIndexResult": "DiagnosticIndexError | HistoryIndexStatus",
     "HistoryIndexStatus": "{ path: string, messages: number, chunks: number, embedded: number, pending: number, model: string | null, background: IndexBackgroundStatus, }",
-    "HistoryPageArgs": "{ turns?: number | null, count?: number | null, role?: Role, before?: HistoryBefore, }",
+    "HistoryPageArgs": "{ turns?: number | null, count?: number | null, role?: Role, segment?: number | null, before?: number | null, }",
     "HttpExchange": "{ id: number, call_id: string, seq: number, ts: string, character: string | null, call_type: string | null, rid: string | null, method: string, url: string, status: number | null, status_text: string | null, duration_ms: number | null, error: string | null, request_bytes: number, response_bytes: number, request_headers?: Array<[string, string]>, response_headers?: Array<[string, string]>, request_body?: unknown, response_body?: unknown, }",
     "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
     "ImageSource": "{ \"type\": \"base64\", media_type: string, data: string, }",

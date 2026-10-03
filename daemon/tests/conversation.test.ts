@@ -28,7 +28,8 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { mergeToolLoopMessages } from "../src/engine/merge.ts";
 import type { ImageRef, Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
-import { displayHistoryOf } from "./support/display_history.ts";
+import { displayHistoryOf, displayScopeOf, type DisplayScope } from "./support/display_history.ts";
+import { presentSegment, type SegmentRecord } from "../src/engine/segments.ts";
 
 interface WireError {
   code: string;
@@ -123,9 +124,9 @@ async function runStep(engine: ConversationEngine, step: Step): Promise<unknown>
     case "get":
       return get(engine, args);
     case "log":
-      return await log(engine, args);
+      return log(engine, args);
     case "history_page":
-      return await historyPage(engine, args);
+      return historyPage(engine, args);
     case "list_alternatives":
       return listAlternatives(engine, args);
     case "edit":
@@ -196,64 +197,62 @@ function expectImagesEmbedded(images: readonly ImageRef[], want: boolean, label:
   }
 }
 
+function presentOptional(record: SegmentRecord | undefined): unknown {
+  return record === undefined ? null : presentSegment(record);
+}
+
 function expectPage(
   row: Record<string, unknown>,
-  history: { messages: Message[]; activeStart: number },
+  scope: DisplayScope | undefined,
   args: Record<string, unknown>,
   label: string,
 ): void {
+  expect(scope, `${label}: a page only comes back for a segment that exists`).toBeDefined();
+  const history = scope as DisplayScope;
   const page = row["messages"] as Message[];
   const cursor = row["cursor"] as number;
-  const activeStart = row["active_start"] as number;
   const role = args["role"];
+  const live = history.segment === undefined;
 
   expect(row["next_before"], `${label}: the page tells you where to ask for the one before it`).toBe(
     cursor,
   );
-  expect(row["has_more_before"], `${label}: there is more before iff this page is not the start`).toBe(
-    cursor > 0,
+  expect(row["has_more_before"], `${label}: there is more before iff this page does not start its segment`).toBe(
+    cursor > history.offset,
   );
-  expect(
-    row["global_active_start"],
-    `${label}: the page says where the live file starts in the whole history`,
-  ).toBe(history.activeStart);
+  expect(row["segment"], `${label}: the page names the segment it came from`).toEqual(
+    presentOptional(history.segment),
+  );
+  expect(row["previous_segment"], `${label}: the page names the segment before its own`).toEqual(
+    presentOptional(history.previous),
+  );
+  expect(row["next_segment"], `${label}: the page names the segment after its own`).toEqual(
+    presentOptional(history.next),
+  );
 
   const turns = history.messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;
-  expect(row["total_turns"], `${label}: the total counts typed turns, not this page`).toBe(turns);
-  expect(row["total_messages"], `${label}: the two totals are one number under two names`).toBe(
-    row["total_turns"],
-  );
-
-  expect(
-    activeStart >= 0 && activeStart <= page.length,
-    `${label}: active_start points into the page it came with`,
-  ).toBe(true);
+  expect(row["total_turns"], `${label}: the total counts this segment's typed turns, not this page`).toBe(turns);
 
   const positions = new Map<string, number[]>();
   history.messages.forEach((m, i) => {
     positions.set(m.msg_id, [...(positions.get(m.msg_id) ?? []), i]);
   });
-  let previous = cursor - 1;
+  const first = cursor - history.offset;
+  let previous = first - 1;
   page.forEach((msg, i) => {
     const at = (positions.get(msg.msg_id) ?? []).find((n) => n > previous);
-    expect(at, `${label}: entry ${i} is a message of this conversation`).toBeDefined();
+    expect(at, `${label}: entry ${i} is a message of this segment`).toBeDefined();
     const idx = at as number;
     expect(idx > previous, `${label}: the page runs forwards from its cursor`).toBe(true);
-    expect(idx >= cursor, `${label}: nothing before the cursor is on the page`).toBe(true);
+    expect(idx >= first, `${label}: nothing before the cursor is on the page`).toBe(true);
     previous = idx;
 
     if (role === undefined) {
-      expect(idx, `${label}: an unfiltered page is an unbroken run from the cursor`).toBe(cursor + i);
+      expect(idx, `${label}: an unfiltered page is an unbroken run from the cursor`).toBe(first + i);
     } else {
       expect(msg.role, `${label}: a filtered page holds only that role`).toBe(role as never);
     }
 
-    expect(
-      i < activeStart,
-      `${label}: entry ${i} is above active_start iff it comes from an archived segment`,
-    ).toBe(idx < history.activeStart);
-
-    const live = i >= activeStart;
     expectImagesEmbedded(msg.images, live, `${label}: entry ${i}`);
     for (const alternative of msg.alternatives ?? []) {
       expectImagesEmbedded(alternative.images, live, `${label}: entry ${i} alternative`);
@@ -266,28 +265,34 @@ function expectPage(
     typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined;
   const count = u64(args["count"]);
   const wanted = u64(args["turns"]);
+  const atStart = cursor === history.offset;
   if (wanted === 0) {
     expect(page.length, `${label}: asking for no turns asks for no messages`).toBe(0);
   } else if (wanted === undefined && count !== undefined) {
     expect(
-      page.length === count || cursor === 0,
-      `${label}: count asks for that many messages, or everything there is`,
+      page.length === count || atStart,
+      `${label}: count asks for that many messages, or everything the segment has`,
     ).toBe(true);
   } else {
     const asked = wanted ?? 64;
     const users = page.filter((m) => m.role === "user").length;
     expect(
-      users === asked || cursor === 0,
+      users === asked || atStart,
       `${label}: turns wins over count, and asks for that many user messages`,
     ).toBe(true);
   }
+}
+
+function segmentOf(args: Record<string, unknown>): number | undefined {
+  const segment = args["segment"];
+  return typeof segment === "number" && Number.isInteger(segment) && segment >= 0 ? segment : undefined;
 }
 
 function expectShapeOf(
   step: Step,
   result: unknown,
   engine: ConversationEngine,
-  history: { messages: Message[]; activeStart: number },
+  history: DisplayScope | undefined,
   before: Snapshot,
   mergedBefore: Message[],
   label: string,
@@ -583,7 +588,7 @@ describe("conversation commands", () => {
         expand(scenario.initial_messages ?? scenario.active, root) as never,
       );
       const display = await displayHistoryOf(engine);
-      expect(serdeShape(display.messages)).toEqual(
+      expect(serdeShape(display)).toEqual(
         expand(scenario.initial_display_history ?? scenario.active, root) as never,
       );
 
@@ -592,7 +597,7 @@ describe("conversation commands", () => {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         const before = snapshot(engine);
         const mergedBefore = mergeToolLoopMessages([...engine.messages()]);
-        const history = await displayHistoryOf(engine);
+        const history = await displayScopeOf(engine, segmentOf(step.args));
 
         let result: unknown;
         let thrown: unknown;
@@ -638,7 +643,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
 
   test("a longer conversation is cut to the last 64", async () => {
     const engine = await engineOf(66);
-    const page = (await log(engine, {})) as { messages: Message[]; cursor: number };
+    const page = (log(engine, {})) as { messages: Message[]; cursor: number };
 
     expect(page.messages.length).toBe(64);
     expect(page.cursor).toBe(2);
@@ -648,7 +653,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
   test("asking for more than there is gives everything, not an error", async () => {
     const engine = await engineOf(66);
     for (const turns of [66, 67, 400]) {
-      const page = (await log(engine, { turns })) as { messages: Message[]; cursor: number };
+      const page = (log(engine, { turns })) as { messages: Message[]; cursor: number };
       expect(page.messages.length, `turns: ${turns}`).toBe(66);
       expect(page.cursor, `turns: ${turns}`).toBe(0);
     }
@@ -656,7 +661,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
 
   test("a conversation shorter than the bound is not padded or truncated", async () => {
     const engine = await engineOf(5);
-    const page = (await log(engine, {})) as { messages: Message[] };
+    const page = (log(engine, {})) as { messages: Message[] };
     expect(page.messages.length).toBe(5);
   });
 });
@@ -687,23 +692,23 @@ describe("which page an argument asks for", () => {
   test("turns wins over count when both are given", async () => {
     const engine = await engineOf(alternating(12));
 
-    const both = ids(await log(engine, { count: 3, turns: 1 }));
-    expect(both).toEqual(ids(await log(engine, { turns: 1 })));
-    expect(both).not.toEqual(ids(await log(engine, { count: 3 })));
+    const both = ids(log(engine, { count: 3, turns: 1 }));
+    expect(both).toEqual(ids(log(engine, { turns: 1 })));
+    expect(both).not.toEqual(ids(log(engine, { count: 3 })));
   });
 
   test("history_page with no cursor reads the end, the same as log", async () => {
     const engine = await engineOf(alternating(12));
 
-    const page = await historyPage(engine, { turns: 2 });
-    expect(ids(page)).toEqual(ids(await log(engine, { turns: 2 })));
+    const page = historyPage(engine, { turns: 2 });
+    expect(ids(page)).toEqual(ids(log(engine, { turns: 2 })));
     expect(ids(page).length).toBeGreaterThan(0);
   });
 
   test("a cursor of zero reads the start, not the end", async () => {
     const engine = await engineOf(alternating(12));
 
-    expect(ids(await historyPage(engine, { before: 0, count: 4 }))).toEqual([]);
+    expect(ids(historyPage(engine, { before: 0, count: 4 }))).toEqual([]);
   });
 });
 
@@ -718,110 +723,103 @@ describe("storage-native conversation paging", () => {
   });
   const jsonl = (messages: readonly Message[]) =>
     messages.map((message) => JSON.stringify(message)).join("\n") + "\n";
+  const segmentEntry = (count: number) => ({
+    file: HISTORY_DB_FILE,
+    message_count: count,
+    compacted_at: "2026-01-01T00:00:00Z",
+  });
 
-  test("every page reads bounded rows independent of lifetime history", async () => {
+  test("every page of a segment reads bounded rows, however much history came before it", async () => {
     const root = await mkdtemp(testTmp("shore-bounded-history-"));
     const characterDir = join(root, "TestChar");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     writeDurable(join(characterDir, "threads", "main", "active.jsonl"), "");
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    const expected: string[] = [];
     for (let segment = 0; segment < 200; segment += 1) {
       const suffix = String(segment).padStart(4, "0");
-      const messages = [
+      store.putSegment("TestChar", segment, segmentEntry(2), [
         archivedMessage(`u${suffix}`, "user"),
         archivedMessage(`a${suffix}`, "assistant"),
-      ];
-      expected.push(...messages.map((message) => message.msg_id));
-      store.putSegment(
-        "TestChar",
-        segment,
-        {
-          file: HISTORY_DB_FILE,
-          message_count: messages.length,
-          compacted_at: "2026-01-01T00:00:00Z",
-        },
-        messages,
-      );
+      ]);
     }
+    const long = Array.from({ length: 40 }, (_, i) =>
+      archivedMessage(`l${String(i).padStart(2, "0")}`, i % 2 === 0 ? "user" : "assistant"),
+    );
+    store.putSegment("TestChar", 200, segmentEntry(long.length), long);
     store.close();
 
     const engine = await ConversationEngine.load("TestChar", root, () => {});
     const loaded: string[] = [];
     const decodedSizes = new Set<number>();
     let before: number | undefined;
+    let pages = 0;
     for (;;) {
-      const page = await engine.displayHistoryPage(before, { kind: "count", value: 8 });
+      pages += 1;
+      expect(pages, "a 40-message segment pages out in 5 pages of 8").toBeLessThanOrEqual(5);
+      const page = required(engine.displayHistoryPage(200, before, { kind: "count", value: 8 }));
       expect(page.metrics.rows_read).toBeLessThanOrEqual(8);
-      expect(page.metrics.segments_read).toBeLessThanOrEqual(4);
-      if (page.messages.length === 8) decodedSizes.add(page.metrics.decoded_body_bytes);
+      expect(page.metrics.segments_read).toBeLessThanOrEqual(1);
+      expect(page.segment?.idx).toBe(200);
+      decodedSizes.add(page.metrics.decoded_body_bytes);
       loaded.unshift(...page.messages.map((message) => message.msg_id));
-      if (page.cursor === 0) break;
+      if (!page.hasMoreBefore) break;
       before = page.cursor;
     }
 
-    expect(loaded).toEqual(expected);
+    expect(loaded).toEqual(long.map((message) => message.msg_id));
     expect(decodedSizes.size).toBe(1);
+
+    const current = required(engine.displayHistoryPage("current", undefined, { kind: "count", value: 8 }));
+    expect(current.messages).toEqual([]);
+    expect(current.metrics.rows_read).toBe(0);
+    expect(current.previousSegment?.idx).toBe(200);
     engine.segments().close();
   });
 
-  test("a numeric cursor survives active appends and compaction movement", async () => {
+  test("an archived segment's cursor survives active appends and a later compaction", async () => {
     const root = await mkdtemp(testTmp("shore-stable-history-"));
     const characterDir = join(root, "TestChar");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
-    const archived = [archivedMessage("u0", "user"), archivedMessage("a0", "assistant")];
-    const active = [
+    const archived = [
+      archivedMessage("u0", "user"),
+      archivedMessage("a0", "assistant"),
       archivedMessage("u1", "user"),
       archivedMessage("a1", "assistant"),
+    ];
+    const active = [
       archivedMessage("u2", "user"),
       archivedMessage("a2", "assistant"),
+      archivedMessage("u3", "user"),
+      archivedMessage("a3", "assistant"),
     ];
     const dbPath = join(root, HISTORY_DB_FILE);
     const store = HistoryStore.open(dbPath);
-    store.putSegment(
-      "TestChar",
-      0,
-      {
-        file: HISTORY_DB_FILE,
-        message_count: archived.length,
-        compacted_at: "2026-01-01T00:00:00Z",
-      },
-      archived,
-    );
+    store.putSegment("TestChar", 0, segmentEntry(archived.length), archived);
     store.close();
     writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
 
     const engine = await ConversationEngine.load("TestChar", root, () => {});
-    const before = 4;
-    const original = await engine.displayHistoryPage(before, { kind: "count", value: 2 });
-    expect(original.messages.map((message) => message.msg_id)).toEqual(["u1", "a1"]);
+    const page = () => required(engine.displayHistoryPage(0, 2, { kind: "count", value: 2 }));
+    const original = page();
+    expect(original.messages.map((message) => message.msg_id)).toEqual(["u0", "a0"]);
+    expect(original.nextSegment).toBeUndefined();
 
-    await engine.appendMessage(archivedMessage("u3", "user"));
-    const afterAppend = await engine.displayHistoryPage(before, { kind: "count", value: 2 });
-    expect(afterAppend.messages).toEqual(original.messages);
-    expect(afterAppend.cursor).toBe(original.cursor);
+    await engine.appendMessage(archivedMessage("u4", "user"));
+    expect(page().messages).toEqual(original.messages);
+    expect(page().cursor).toBe(original.cursor);
 
     const compactionStore = HistoryStore.open(dbPath);
-    compactionStore.putSegment(
-      "TestChar",
-      1,
-      {
-        file: HISTORY_DB_FILE,
-        message_count: 2,
-        compacted_at: "2026-01-01T00:01:00Z",
-      },
-      active.slice(0, 2),
-    );
+    compactionStore.putSegment("TestChar", 1, segmentEntry(2), active.slice(0, 2));
     compactionStore.close();
-    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl([...active.slice(2), archivedMessage("u3", "user")]));
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), jsonl([...active.slice(2), archivedMessage("u4", "user")]));
     await engine.reload();
 
-    const afterCompaction = await engine.displayHistoryPage(before, {
-      kind: "count",
-      value: 2,
-    });
-    expect(afterCompaction.messages).toEqual(original.messages);
-    expect(afterCompaction.cursor).toBe(original.cursor);
+    expect(page().messages).toEqual(original.messages);
+    expect(page().cursor).toBe(original.cursor);
+    expect(page().nextSegment?.idx).toBe(1);
+    const current = required(engine.displayHistoryPage("current", undefined, { kind: "turns", value: 64 }));
+    expect(current.messages.map((message) => message.msg_id)).toEqual(["u3", "a3", "u4"]);
+    expect(current.previousSegment?.idx).toBe(1);
     engine.segments().close();
   });
 });
@@ -1093,7 +1091,7 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
   });
 });
 
-describe("a turn budget spent across the archive boundary", () => {
+describe("a page stops at its segment's edge", () => {
   const msg = (id: string, role: "user" | "assistant"): Message => ({
     msg_id: id,
     role,
@@ -1128,29 +1126,96 @@ describe("a turn budget spent across the archive boundary", () => {
     return await ConversationEngine.load("TestChar", root, () => {});
   }
 
-  test("storage is asked only for the turns the active tail did not cover", async () => {
+  test("a current page never reaches into the archive", async () => {
     const engine = await engineOf();
-    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
-
-    expect(page.cursor).toBe(2);
-    expect(page.messages.map((m) => m.msg_id)).toEqual(["u1", "a1", "ux", "ax"]);
-    expect(page.activeStart).toBe(2);
-  });
-
-  test("a cursor set before an archived user turn hands off at the cursor, not the boundary", async () => {
-    const engine = await engineOf();
-    const page = await engine.displayHistoryPage(2, { kind: "turns", value: 1 });
+    const page = required(engine.displayHistoryPage("current", undefined, { kind: "turns", value: 2 }));
 
     expect(page.cursor).toBe(0);
-    expect(page.messages.map((m) => m.msg_id)).toEqual(["u0", "a0"]);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["ux", "ax"]);
+    expect(page.hasMoreBefore).toBe(false);
+    expect(page.metrics.rows_read).toBe(0);
+    expect(page.segment).toBeUndefined();
+    expect(page.previousSegment?.idx).toBe(1);
+    expect(page.nextSegment).toBeUndefined();
   });
 
-  test("a page wholly inside the active tail reads no archive rows", async () => {
+  test("an archived page holds only its own segment, however many turns are asked for", async () => {
     const engine = await engineOf();
-    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 1 });
+    const newest = required(engine.displayHistoryPage(1, undefined, { kind: "turns", value: 5 }));
+    const oldest = required(engine.displayHistoryPage(0, undefined, { kind: "turns", value: 5 }));
 
-    expect(page.cursor).toBe(5);
-    expect(page.messages.map((m) => m.msg_id)).toEqual(["ax"]);
-    expect(page.activeStart).toBe(0);
+    expect(newest.messages.map((m) => m.msg_id)).toEqual(["u1", "a1"]);
+    expect(newest.cursor).toBe(2);
+    expect(newest.hasMoreBefore).toBe(false);
+    expect([newest.previousSegment?.idx, newest.nextSegment?.idx]).toEqual([0, undefined]);
+    expect(oldest.messages.map((m) => m.msg_id)).toEqual(["u0", "a0"]);
+    expect([oldest.previousSegment?.idx, oldest.nextSegment?.idx]).toEqual([undefined, 1]);
+  });
+
+  test("a cursor outside the segment is clamped to it", async () => {
+    const engine = await engineOf();
+    const past = required(engine.displayHistoryPage(1, 99, { kind: "count", value: 1 }));
+    const before = required(engine.displayHistoryPage(1, 0, { kind: "count", value: 4 }));
+
+    expect(past.messages.map((m) => m.msg_id)).toEqual(["a1"]);
+    expect(past.cursor).toBe(3);
+    expect(past.hasMoreBefore).toBe(true);
+    expect(before.messages).toEqual([]);
+    expect(before.cursor).toBe(2);
+    expect(before.hasMoreBefore).toBe(false);
+  });
+
+  test("an archived page merges its tool loops like the current context does", async () => {
+    const root = await mkdtemp(testTmp("shore-segment-tools-"));
+    await mkdir(join(root, "TestChar", "threads", "main"), { recursive: true });
+    writeDurable(join(root, "TestChar", "threads", "main", "active.jsonl"), "");
+    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    store.putSegment("TestChar", 0, { file: HISTORY_DB_FILE, message_count: 4, compacted_at: "2026-01-01T00:00:00Z" }, [
+      msg("u0", "user"),
+      { ...msg("t0", "assistant"), content_blocks: [{ type: "tool_use", id: "tool-0", name: "search", input: {} }] },
+      { ...msg("r0", "user"), content_blocks: [{ type: "tool_result", tool_use_id: "tool-0", content: "found" }] },
+      msg("a0", "assistant"),
+    ]);
+    store.close();
+    const engine = await ConversationEngine.load("TestChar", root, () => {});
+
+    const page = required(engine.displayHistoryPage(0, undefined, { kind: "turns", value: 4 }));
+    expect(page.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+  });
+
+  test("a snapshot names the newest segment before the current context", async () => {
+    const engine = await engineOf();
+
+    expect(engine.historySnapshot({}).previous_segment).toMatchObject({ index: 1, message_count: 2 });
+  });
+
+  test("a segment that does not exist has no page", async () => {
+    const engine = await engineOf();
+
+    expect(engine.displayHistoryPage(2, undefined, { kind: "count", value: 1 })).toBeUndefined();
+  });
+
+  test("the page payload names its segment and both neighbours", async () => {
+    const engine = await engineOf();
+
+    expect(historyPage(engine, { segment: 0, count: 4 })).toMatchObject({
+      cursor: 0, next_before: 0, has_more_before: false, total_turns: 1,
+      segment: { index: 0 }, previous_segment: null, next_segment: { index: 1 },
+    });
+    expect(historyPage(engine, { segment: 1, count: 1 })).toMatchObject({
+      cursor: 3, has_more_before: true, segment: { index: 1 }, previous_segment: { index: 0 }, next_segment: null,
+    });
+    expect(historyPage(engine, { segment: 1, before: 3, count: 4 })).toMatchObject({ cursor: 2, has_more_before: false });
+    expect(log(engine, {})).toMatchObject({ segment: null, previous_segment: { index: 1 }, next_segment: null, total_turns: 1 });
+  });
+
+  test("a missing segment on a side thread is reported against that thread", async () => {
+    const root = await mkdtemp(testTmp("shore-side-segment-"));
+    await mkdir(join(root, "TestChar", "threads", "side"), { recursive: true });
+    writeDurable(join(root, "TestChar", "threads", "side", "active.jsonl"), "");
+    const engine = await ConversationEngine.load("TestChar", root, () => {}, "side");
+
+    expect(() => log(engine, { segment: 3 })).toThrow("segment 3 not found for TestChar thread side");
+    expect(engine.historySnapshot({})).not.toHaveProperty("previous_segment");
   });
 });

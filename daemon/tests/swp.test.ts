@@ -8,6 +8,7 @@ import {
   MAX_CONSECUTIVE_LAGS,
   PING_INTERVAL_MS,
   SWP_V1,
+  historyMessage,
   performHandshake,
   type HandshakeProvider,
 } from "../src/swp/connection";
@@ -292,7 +293,6 @@ describe("event_matches_session", () => {
     const history = {
       type: "history",
       messages: [],
-      active_start: 0,
       config: {},
       selected_character: "frank",
       revision: 1,
@@ -396,6 +396,19 @@ describe("route_client_message", () => {
   }
 });
 
+describe("the history frame", () => {
+  const snapshot = { messages: [], config: {}, selectedCharacter: "frank", selectedThread: "main", revision: 3 };
+  const previous = {
+    index: 4, first_message_at: "2026-09-28T10:00:00Z", last_message_at: "2026-10-01T22:00:00Z", compacted_at: "2026-10-01T22:05:00Z",
+    message_count: 12, excluded: false, label: "trip", note: null, memory_before: null, memory_after: null,
+  };
+
+  test("names the segment before the current context, and leaves the field off when there is none", () => {
+    expect(historyMessage({ ...snapshot, previousSegment: previous })).toMatchObject({ type: "history", previous_segment: previous });
+    expect(historyMessage({ ...snapshot, previousSegment: null })).not.toHaveProperty("previous_segment");
+  });
+});
+
 describe("handshake", () => {
   for (const c of fixture.handshake) {
     test(c.name, async () => {
@@ -406,7 +419,7 @@ describe("handshake", () => {
           ? () =>
               Promise.resolve({
                 messages: [],
-                activeStart: 0,
+                previousSegment: null,
                 config: {},
                 selectedCharacter: "forced-by-history",
                 selectedThread: null,
@@ -424,7 +437,7 @@ describe("handshake", () => {
                 timestamp: "2026-01-01T00:00:00Z",
               },
             ] as never,
-            activeStart: 0,
+            previousSegment: null,
             config: { defaults: true },
             selectedCharacter: selected,
             selectedThread: null,
@@ -490,7 +503,6 @@ describe("history is routed to the thread that asked for it", () => {
   const history = (thread?: string): ServerMessage => ({
       type: "history",
       messages: [],
-      active_start: 0,
       config: {},
       selected_character: "frank",
       ...(thread === undefined ? {} : { selected_thread: thread }),

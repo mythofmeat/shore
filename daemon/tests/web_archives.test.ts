@@ -37,7 +37,7 @@ function upload(body: NonNullable<RequestInit["body"]> = "archive bytes", header
 
 async function fixture(limits: Partial<ArchiveTransferLimits> = {}, singleCharacter = false) {
   const server = new Server({ addr: "127.0.0.1:0", serverName: "archive-test", authenticate: () => true,
-    handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], activeStart: 0, config: {}, selectedCharacter, selectedThread: null, revision: 0 }) },
+    handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: null, revision: 0 }) },
   });
   const commands: CommandRoute[] = [];
   await server.bind();

@@ -277,8 +277,10 @@ describe("executable operation contracts", () => {
   test("conversation optional values preserve the daemon's null and integer semantics in both clients", () => {
     for (const [name, input] of [
       ["log", { turns: 0, count: null, role: "assistant" }],
-      ["history_page", { before: "active", count: 1, role: "system" }],
+      ["history_page", { segment: 2, before: 40, count: 1, role: "system" }],
       ["history_page", { before: 0 }],
+      ["history_page", { before: null, segment: null }],
+      ["log", { segment: 0, turns: 3 }],
       ["get", { ref: "-1", role: "user" }],
       ["alt", { ref: null, index: null, position: 2, direction: "previous" }],
       ["delete", { refs: ["1", "last"] }],
@@ -289,7 +291,8 @@ describe("executable operation contracts", () => {
     }
     for (const [name, input] of [
       ["log", { role: null }], ["get", { ref: "last", role: null }],
-      ["history_page", { before: null }], ["log", { before: 1 }],
+      ["history_page", { before: "active" }], ["log", { before: 1 }],
+      ["log", { segment: -1 }], ["history_page", { segment: "0" }],
       ["log", { count: -1 }], ["history_page", { before: Number.MAX_SAFE_INTEGER + 1 }],
       ["alt", { direction: "backwards" }], ["delete", { refs: [1] }],
     ] as const) {

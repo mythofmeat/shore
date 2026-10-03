@@ -5,6 +5,7 @@ import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
 import type { ServerMessage } from "../protocol/ServerMessage";
+import type { SegmentSummary } from "../protocol/SegmentSummary";
 import type { RecvResult, Subscription } from "./broadcast";
 import { AdmissionError, admitClientMessage } from "./admission.ts";
 import {
@@ -36,7 +37,7 @@ export interface HelloSnapshot {
 
 export interface HistorySnapshot {
   readonly messages: readonly Message[];
-  readonly activeStart: number;
+  readonly previousSegment: SegmentSummary | null;
   readonly config: unknown;
   readonly selectedCharacter: string | null;
   readonly selectedThread: string | null;
@@ -53,7 +54,7 @@ export const DEFAULT_HANDSHAKE: HandshakeProvider = {
   history: (selectedCharacter) =>
     Promise.resolve({
       messages: [],
-      activeStart: 0,
+      previousSegment: null,
       config: {},
       selectedCharacter,
       selectedThread: null,
@@ -216,7 +217,7 @@ export function historyMessage(history: HistorySnapshot, rid?: string): ServerMe
     type: "history",
     ...(rid === undefined ? {} : { rid }),
     messages: history.messages as Message[],
-    ...(history.activeStart === 0 ? {} : { active_start: history.activeStart }),
+    ...(history.previousSegment === null ? {} : { previous_segment: history.previousSegment }),
     config: history.config,
     ...(history.selectedThread === null ? {} : { selected_thread: history.selectedThread }),
     ...(history.selectedCharacter === null

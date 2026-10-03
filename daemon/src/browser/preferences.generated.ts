@@ -97,6 +97,9 @@ export const TERMINAL_LOCAL_COMMANDS = {
     ],
     "amount": []
   },
+  "segment": {
+    "target": []
+  },
   "images": {},
   "subagents": {},
   "editor": {},

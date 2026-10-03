@@ -397,7 +397,7 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
     hello: async () => ({ characters: [{ name: "Yuna" }, { name: "frank" }] }),
     history: async (character: string | null) => ({
       messages: [],
-      activeStart: 0,
+      previousSegment: null,
       config: {},
       selectedCharacter: character,
       selectedThread: null,

@@ -3,21 +3,23 @@ import type { WorkspaceSnapshot } from "../workspace.ts";
 import { conversationImages, imageFilename, mediaSource } from "../media.ts";
 import { Dialog, Spinner } from "../ui/controls.tsx";
 import { perform, workspace } from "../app/state.ts";
+import { segmentName } from "./transcript.ts";
 
 export function GalleryDialog({ state, close }: { state: WorkspaceSnapshot; close: () => void }) {
-  const images = useMemo(() => conversationImages(state.messages, state.streams, state.media).flatMap((image) => {
+  const view = state.segmentView;
+  const images = useMemo(() => (view === null ? conversationImages(state.messages, state.streams, state.media) : conversationImages(view.messages, [], [])).flatMap((image) => {
     const source = mediaSource(image.data, image.mime);
     return source === undefined ? [] : [{ ...image, source }];
-  }), [state.messages, state.streams, state.media]);
+  }), [view, state.messages, state.streams, state.media]);
   const [open, setOpen] = useState<number>();
   const [loading, setLoading] = useState(false);
   const selected = open === undefined ? undefined : images[open];
-  return <Dialog title={selected === undefined ? "Images in this conversation" : selected.caption} close={() => { if (selected === undefined) close(); else setOpen(undefined); }} wide>
+  return <Dialog title={selected === undefined ? view === null ? "Images in the current context" : `Images in ${segmentName(view.segment)}` : selected.caption} close={() => { if (selected === undefined) close(); else setOpen(undefined); }} wide>
     {selected === undefined ? <>
-      {images.length === 0 ? <p className="form-text">No images in the loaded part of this conversation.</p> : <div className="gallery-grid">
+      {images.length === 0 ? <p className="form-text">{view === null ? "No images in the current context." : "No images in the loaded part of this segment."}</p> : <div className="gallery-grid">
         {images.map((image, index) => <button key={image.id} type="button" className="image-thumb" aria-label={`Open ${image.caption}`} onClick={() => setOpen(index)}><img src={image.source} alt={image.caption} loading="lazy" /></button>)}
       </div>}
-      {state.hasEarlier ? <div className="form-actions">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button" onClick={() => { setLoading(true); perform(async () => { try { await workspace.loadEarlier(); } finally { setLoading(false); } }); }}>Load images from earlier messages</button>}</div> : null}
+      {view?.hasEarlier === true ? <div className="form-actions">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button" onClick={() => { setLoading(true); perform(async () => { try { await workspace.loadEarlierInSegment(); } finally { setLoading(false); } }); }}>Load images from earlier in this segment</button>}</div> : null}
     </> : <>
       <img className="lightbox-image" src={selected.source} alt={selected.caption} />
       <div className="dialog-footer">

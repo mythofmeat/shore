@@ -23,7 +23,7 @@ pub(crate) const DEFAULT_GLOBAL_KEYS: [(&str, &str); 3] = [
     ("ctrl+v", "ui image paste"),
 ];
 
-pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 22] = [
+pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 24] = [
     ("i", "ui insert"),
     ("a", "ui insert --end"),
     ("A", "ui insert --end"),
@@ -35,6 +35,8 @@ pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 22] = [
     ("d", "ui scroll down 10"),
     ("u", "ui scroll up 10"),
     ("G", "ui scroll bottom"),
+    ("[", "ui segment older"),
+    ("]", "ui segment newer"),
     ("t", "view thinking"),
     ("T", "view tools"),
     ("s", "view subagent"),

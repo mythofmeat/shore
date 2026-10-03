@@ -79,7 +79,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       const result = await workspace.actions.run("clear", { ...(text.trim() === "" ? {} : { note: text.trim() }), ...(restart ? { exclude: true } : {}) });
       await resync(state); return `Cleared ${String(result.message_count)} messages from the active context`;
     })}>
-      <p className="form-text">Starts a fresh context. Earlier messages are kept as a segment you can review under Settings → Memory & segments.</p>
+      <p className="form-text">Starts a fresh context. Earlier messages are kept as a segment you can open from the top of the conversation.</p>
       <label className="field"><span>Note for the segment <span className="muted">(optional)</span></span><input className="input" value={text} onChange={(event) => setText(event.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Exclude the cleared messages from memory</label>
     </Form>;

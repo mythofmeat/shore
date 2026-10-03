@@ -69,7 +69,7 @@ export async function buildSessionHistorySnapshot(
   if (engine === undefined) {
     return {
       messages: [],
-      activeStart: 0,
+      previousSegment: null,
       config: historyConfigSnapshot(
         config,
         snapshotActiveModel(config, selectedCharacter, activeModel, undefined),
@@ -84,7 +84,7 @@ export async function buildSessionHistorySnapshot(
   const thread = engine.thread;
   return {
     messages: history.messages,
-    activeStart: history.active_start ?? 0,
+    previousSegment: history.previous_segment ?? null,
     config: historyConfigSnapshot(
       config,
       snapshotActiveModel(

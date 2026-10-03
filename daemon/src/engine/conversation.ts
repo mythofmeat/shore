@@ -12,15 +12,16 @@ import {
 import { HISTORY_DB_FILE } from "./history_store.ts";
 import { toolLoopGroups, mergeToolLoopMessages } from "./merge";
 import { MessageStore, type AltSelection, type PendingAlt } from "./message_store";
-import { SegmentReader } from "./segments";
+import { SegmentReader, presentSegment, type SegmentRecord } from "./segments";
 import type { Message } from "./types";
+import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import { imageDataForPath, embedMessagesImageData } from "./wire_images";
 
 
 export interface History {
   rid?: string;
   messages: Message[];
-  active_start?: number;
+  previous_segment?: SegmentSummary;
   config: unknown;
   selected_character?: string;
   selected_thread?: string;
@@ -41,12 +42,16 @@ interface HistoryPageMetrics {
   page_bytes: number;
 }
 
+export type HistoryScope = "current" | number;
+
 export interface DisplayHistoryPage {
   messages: Message[];
-  activeStart: number;
   cursor: number;
-  globalActiveStart: number;
+  hasMoreBefore: boolean;
   totalTurns: number;
+  segment: SegmentRecord | undefined;
+  previousSegment: SegmentRecord | undefined;
+  nextSegment: SegmentRecord | undefined;
   metrics: HistoryPageMetrics;
 }
 
@@ -159,55 +164,67 @@ export class ConversationEngine {
     return this.#messages.pendingRegenAlt();
   }
 
-  async displayHistoryPage(
-    before: number | "active" | undefined,
+  displayHistoryPage(
+    scope: HistoryScope,
+    before: number | undefined,
     limit: HistoryPageLimit,
-  ): Promise<DisplayHistoryPage> {
-    const globalActiveStart = this.#segments.displayMessageCount();
+  ): DisplayHistoryPage | undefined {
+    return scope === "current" ? this.#currentPage(before, limit) : this.#segmentPage(scope, before, limit);
+  }
+
+  #currentPage(before: number | undefined, limit: HistoryPageLimit): DisplayHistoryPage {
     const active = mergeToolLoopMessages([...this.#messages.messages()]);
-    const totalMessages = globalActiveStart + active.length;
-    const end = historyEnd(before, globalActiveStart, totalMessages);
-    const activeEnd = Math.max(end - globalActiveStart, 0);
+    const end = Math.min(before ?? active.length, active.length);
     const start =
       limit.kind === "count"
         ? Math.max(0, end - limit.value)
-        : this.#pageStartByTurns(active, globalActiveStart, activeEnd, end, limit.value);
-    const archiveStart = Math.min(start, globalActiveStart);
-    const archiveEnd = Math.min(end, globalActiveStart);
-    const archivedSlice = this.#segments.readDisplayRange(archiveStart, archiveEnd);
-    const archived = mergeToolLoopMessages(archivedSlice.messages);
-    const activeStart = Math.max(start - globalActiveStart, 0);
-    const activePage = active.slice(activeStart, activeEnd);
-    const messages = [...archived, ...activePage];
-
+        : activeStartForTurns(active, end, limit.value);
+    const messages = active.slice(start, end);
     return {
       messages,
-      activeStart: archived.length,
       cursor: start,
-      globalActiveStart,
-      totalTurns: this.#segments.displayTurnCount() + countUserTurns(active),
+      hasMoreBefore: start > 0,
+      totalTurns: countUserTurns(active),
+      segment: undefined,
+      previousSegment: this.#segments.latestEntry(),
+      nextSegment: undefined,
       metrics: {
-        ...archivedSlice.metrics,
+        segments_read: 0,
+        rows_read: 0,
+        decoded_body_bytes: 0,
         page_bytes: encodedMessageBytes(messages),
       },
     };
   }
 
-  #pageStartByTurns(
-    active: readonly Message[],
-    globalActiveStart: number,
-    activeEnd: number,
-    end: number,
-    turns: number,
-  ): number {
-    if (turns === 0) return end;
-    let remaining = turns;
-    for (let index = activeEnd - 1; index >= 0; index -= 1) {
-      if (requiredMessage(active, index).role !== "user") continue;
-      remaining -= 1;
-      if (remaining === 0) return globalActiveStart + index;
-    }
-    return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), remaining);
+  #segmentPage(
+    index: number,
+    before: number | undefined,
+    limit: HistoryPageLimit,
+  ): DisplayHistoryPage | undefined {
+    const segment = this.#segments.entry(index);
+    if (segment === undefined) return undefined;
+    const bounds = this.#segments.displayBounds(index) ?? { start: 0, end: 0 };
+    const end = Math.min(Math.max(before ?? bounds.end, bounds.start), bounds.end);
+    const start = Math.max(
+      bounds.start,
+      limit.kind === "count" ? end - limit.value : this.#segments.startForTurns(index, end, limit.value),
+    );
+    const slice = this.#segments.readDisplayRange(index, start, end);
+    const messages = mergeToolLoopMessages(slice.messages);
+    return {
+      messages,
+      cursor: start,
+      hasMoreBefore: start > bounds.start,
+      totalTurns: this.#segments.turnCount(index),
+      segment,
+      previousSegment: this.#segments.entryBefore(index),
+      nextSegment: this.#segments.entryAfter(index),
+      metrics: {
+        ...slice.metrics,
+        page_bytes: encodedMessageBytes(messages),
+      },
+    };
   }
 
   async appendMessage(msg: Message): Promise<void> {
@@ -287,8 +304,10 @@ export class ConversationEngine {
   historySnapshot(config: unknown): History {
     const messages = structuredClone(mergeToolLoopMessages([...this.#messages.messages()]));
     embedMessagesImageData(messages);
+    const previous = this.#segments.latestEntry();
     const history: History = {
       messages,
+      ...(previous === undefined ? {} : { previous_segment: presentSegment(previous) }),
       config,
       selected_character: this.#characterName,
       selected_thread: this.#thread,
@@ -345,13 +364,15 @@ export class ConversationEngine {
 
 }
 
-function historyEnd(
-  before: number | "active" | undefined,
-  activeStart: number,
-  total: number,
-): number {
-  if (before === "active") return activeStart;
-  return Math.min(before ?? total, total);
+function activeStartForTurns(active: readonly Message[], end: number, turns: number): number {
+  if (turns === 0) return end;
+  let remaining = turns;
+  for (let index = end - 1; index >= 0; index -= 1) {
+    if (requiredMessage(active, index).role !== "user") continue;
+    remaining -= 1;
+    if (remaining === 0) return index;
+  }
+  return 0;
 }
 
 function countUserTurns(messages: readonly Message[]): number {
