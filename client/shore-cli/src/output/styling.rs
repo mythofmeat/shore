@@ -355,19 +355,21 @@ pub(crate) fn print_subagent_tool_call(call: &ToolCall) {
 fn print_tool_call_styled(call: &ToolCall, color: Tone) {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();
-    let mut state = lock_chunk_state();
+    tool_call_to(&mut out, &mut lock_chunk_state(), call, color);
+}
 
-    flush_thinking(&mut out, &mut state);
-    begin_block(&mut out, &mut state, true);
+fn tool_call_to(out: &mut impl Write, state: &mut ChunkState, call: &ToolCall, color: Tone) {
+    flush_thinking(out, state);
+    begin_block(out, state, true);
     state.was_thinking = false;
 
     let header = match primary_tool_arg(&call.input) {
         Some(arg) => format!("{} \u{00b7} {arg}", call.tool_name),
         None => call.tool_name.clone(),
     };
-    write_sigil_header(&mut out, SIGIL_TOOL, &header, color);
+    write_sigil_header(out, SIGIL_TOOL, &header, color);
     if let Some(input) = format_tool_input(&call.input) {
-        write_process_body(&mut out, &input);
+        write_process_body(out, &input);
     }
     state.at_line_start = true;
 }
@@ -383,10 +385,17 @@ pub(crate) fn print_subagent_tool_result(result: &ToolResult) {
 fn print_tool_result_styled(result: &ToolResult, ok_color: Tone) {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();
-    let mut state = lock_chunk_state();
+    tool_result_to(&mut out, &mut lock_chunk_state(), result, ok_color);
+}
 
-    flush_thinking(&mut out, &mut state);
-    begin_block(&mut out, &mut state, true);
+fn tool_result_to(
+    out: &mut impl Write,
+    state: &mut ChunkState,
+    result: &ToolResult,
+    ok_color: Tone,
+) {
+    flush_thinking(out, state);
+    begin_block(out, state, true);
     state.was_thinking = false;
 
     let (sigil, label, color) = if result.is_error {
@@ -394,9 +403,9 @@ fn print_tool_result_styled(result: &ToolResult, ok_color: Tone) {
     } else {
         (SIGIL_OK, "result", ok_color)
     };
-    write_sigil_header(&mut out, sigil, label, color);
+    write_sigil_header(out, sigil, label, color);
     let body = format_tool_output(&result.output);
-    write_process_body(&mut out, &body);
+    write_process_body(out, &body);
     state.at_line_start = true;
 }
 
@@ -408,6 +417,47 @@ pub(crate) fn print_stream_start(regen: bool) {
     let mut out = stdout.lock();
 
     paint(&mut out, Tone::Muted, "(regenerating...) ");
+    _ = out.flush();
+}
+
+pub(crate) fn print_phase_header(phase: &Phase) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    phase_header_to(&mut out, &mut lock_chunk_state(), phase);
+    let _ignored = out.flush();
+}
+
+fn phase_header_to(out: &mut impl Write, state: &mut ChunkState, phase: &Phase) {
+    flush_thinking(out, state);
+    begin_block(out, state, true);
+    state.was_thinking = false;
+    write_sigil_header(out, SIGIL_SUBAGENT, &phase.phase, COLOR_SUBAGENT);
+    state.at_line_start = true;
+}
+
+pub(crate) fn end_live_output() {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    end_live_output_to(&mut out, &mut lock_chunk_state());
+    let _ignored = out.flush();
+}
+
+fn end_live_output_to(out: &mut impl Write, state: &mut ChunkState) {
+    flush_thinking(out, state);
+    if state.has_emitted {
+        if !state.at_line_start {
+            let _ignored = writeln!(out);
+        }
+        let _ignored = writeln!(out);
+    }
+    *state = ChunkState::INITIAL;
+}
+
+pub(crate) fn print_notice(text: &str) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    paint(&mut out, Tone::Muted, text);
+    _ = writeln!(out);
     _ = out.flush();
 }
 
@@ -556,6 +606,93 @@ mod tests {
         set_color_enabled(false);
         let mut stdout = io::stdout();
         let _ignored = stdout.write_all(b"\n----- STREAMING RENDER (live tokens) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"\n----- end -----\n");
+        _ = stdout.flush();
+    }
+
+    fn compaction_pass(out: &mut Vec<u8>) {
+        let mut state = ChunkState::default();
+        let phase = |text: &str| Phase {
+            rid: None,
+            phase: text.to_owned(),
+            model: None,
+        };
+        phase_header_to(out, &mut state, &phase("compacting round 1"));
+        for c in [
+            "The oldest turns are about the move to Canberra and the new job. ",
+            "The people file already has the sister; the job needs its own note.\n",
+        ] {
+            print_chunk_to(out, &mut state, &chunk("thinking", c));
+        }
+        let call = ToolCall {
+            rid: None,
+            tool_id: "t1".into(),
+            tool_name: "edit".into(),
+            input: serde_json::json!({ "path": "memory/work.md", "content": "# Work\nStarted at the library in March." }),
+            subagent: Some("compaction".into()),
+            task_id: None,
+        };
+        tool_call_to(out, &mut state, &call, COLOR_TOOL);
+        let result = ToolResult {
+            rid: None,
+            tool_id: "t1".into(),
+            tool_name: "edit".into(),
+            output: "wrote memory/work.md".into(),
+            images: Vec::new(),
+            is_error: false,
+            subagent: Some("compaction".into()),
+            task_id: None,
+        };
+        tool_result_to(out, &mut state, &result, COLOR_RESULT);
+        phase_header_to(out, &mut state, &phase("compacting round 2"));
+        print_chunk_to(
+            out,
+            &mut state,
+            &chunk("thinking", "Everything older is written up.\n"),
+        );
+        print_chunk_to(out, &mut state, &chunk("text", "Memory updated: work.md."));
+        end_live_output_to(out, &mut state);
+    }
+
+    #[test]
+    fn a_compaction_pass_streams_its_rounds_reasoning_and_tools_in_order() {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        compaction_pass(&mut buf);
+        let text = String::from_utf8(buf).unwrap();
+        let order = [
+            "compacting round 1",
+            "Thinking",
+            "The oldest turns are about the move",
+            "edit \u{00b7} memory/work.md",
+            "result",
+            "wrote memory/work.md",
+            "compacting round 2",
+            "Everything older is written up.",
+            "Memory updated: work.md.",
+        ];
+        let mut rest = text.as_str();
+        for needle in order {
+            let at = rest
+                .find(needle)
+                .unwrap_or_else(|| panic!("{needle:?} missing from what follows:\n{rest}"));
+            rest = rest
+                .get(at.saturating_add(needle.len())..)
+                .unwrap_or_default();
+        }
+        assert!(text.ends_with("\n\n"), "{text:?}");
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh compaction-stream"]
+    fn render_preview_compaction_stream() {
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+        compaction_pass(&mut buf);
+        set_color_enabled(false);
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- SHORE COMPACT (live pass) -----\n");
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"\n----- end -----\n");
         _ = stdout.flush();

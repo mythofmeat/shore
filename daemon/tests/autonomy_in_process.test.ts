@@ -30,6 +30,7 @@ import { interpretResult } from "../src/mcp/client.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { sizedImage } from "./support/sized_image.ts";
+import { lastPass } from "../src/memory/compaction/activity.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -1131,19 +1132,20 @@ test("a budget pause names the budget, automatic passes wait for its reset, and 
   const provider = scriptedProvider([response([{ type: "text", text: "Finished." }])], seen);
   const background = { config, generate: compactionGenerate({ config, providers: { anthropic: provider } }) };
 
-  const first = await runCompactionPass("ada", background, { keepTurnsOverride: 0 });
+  const first = await runCompactionPass("ada", background, { keepTurnsOverride: 0, trigger: "idle" });
   if (first?.kind !== "paused") throw new Error(`expected a paused pass, got ${String(first?.kind)}`);
   expect(first.reason).toBe("budget");
   expect(first.detail).toContain('budget "background" is over its month limit ($5.00/$1.00)');
   expect(first.resumeAt).toBeDefined();
-  expect(await runCompactionPass("ada", background, { keepTurnsOverride: 0 })).toMatchObject({
+  expect(await runCompactionPass("ada", background, { keepTurnsOverride: 0, trigger: "idle" })).toMatchObject({
     kind: "paused", reason: "budget", detail: first.detail, resumeAt: first.resumeAt,
   });
   expect(seen).toEqual([]);
+  expect(lastPass(config.dirs.data, "ada")).toMatchObject({ trigger: "idle", end: { kind: "outcome", outcome: { kind: "paused", reason: "budget" } } });
 
   const asked = await runCompactionPass("ada", {
     config, generate: compactionGenerate({ config, providers: { anthropic: provider } }, { foreground: true }),
-  }, { keepTurnsOverride: 0, foreground: true });
+  }, { keepTurnsOverride: 0, trigger: "manual" });
   expect(asked?.kind).toBe("compacted");
   expect(seen).toHaveLength(1);
 });

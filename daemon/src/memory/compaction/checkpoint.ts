@@ -6,6 +6,7 @@ import type { AppliedCompactionWrite, ToolOutput } from "./types.ts";
 
 export type CompactionPauseReason =
   | "budget"
+  | "cancelled"
   | "provider"
   | "iteration_limit"
   | "source_conflict"

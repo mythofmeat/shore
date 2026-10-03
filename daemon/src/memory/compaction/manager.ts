@@ -960,13 +960,20 @@ function pausedOutcome(
 async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheckpoint, error: unknown): Promise<CompactionOutcome> {
   if (opts.resumable !== true) throw error;
   const stop = budgetStopIn(error);
+  const cancelled = opts.signal?.aborted === true;
   checkpoint.state = "paused";
-  checkpoint.pauseReason = stop === undefined ? "provider" : "budget";
-  checkpoint.pauseDetail = stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));
+  checkpoint.pauseReason = cancelled ? "cancelled" : stop === undefined ? "provider" : "budget";
+  checkpoint.pauseDetail = cancelled
+    ? describeAbort(opts.signal?.reason)
+    : stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));
   if (stop?.resetAt === undefined) delete checkpoint.resumeAt;
   else checkpoint.resumeAt = stop.resetAt;
   await persistCheckpoint(opts, checkpoint);
   return pausedOutcome(opts, checkpoint);
+}
+
+function describeAbort(reason: unknown): string {
+  return reason instanceof Error && reason.message !== "" ? reason.message : "Compaction cancelled";
 }
 
 async function currentActiveContent(opts: CompactOptions): Promise<string> {

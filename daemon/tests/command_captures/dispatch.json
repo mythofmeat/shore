@@ -222,6 +222,7 @@
           "autonomy",
           "cache_dir",
           "character",
+          "compaction",
           "config_dir",
           "context_tokens",
           "data_dir",
@@ -251,7 +252,8 @@
           "activity": "object",
           "index": "null",
           "history_index": "null",
-          "sections": "array[5]"
+          "compaction": "object",
+          "sections": "array[6]"
         }
       }
     },

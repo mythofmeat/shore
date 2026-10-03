@@ -47,6 +47,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "refresh_provider_models" => print_provider_refresh(data),
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "compact" => print_compact_result(data),
+        "compact_watch" | "compact_cancel" => print_compaction_watch(data),
         "segments" => print_segments(data),
         "clear" => print_clear_result(data),
         "config_reload" => print_config_reload(data),
@@ -1409,6 +1410,12 @@ fn print_compact_result(data: &serde_json::Value) {
     write_compact_result(&mut out, data, term_width());
 }
 
+fn print_compaction_watch(data: &serde_json::Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    super::compaction::write_watch_result(&mut out, data, term_width());
+}
+
 fn planned_turns(data: &serde_json::Value) -> u64 {
     data["compacted_turns"]
         .as_u64()
@@ -1428,7 +1435,7 @@ fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn pause_reason_text(data: &serde_json::Value) -> String {
+pub(crate) fn pause_reason_text(data: &serde_json::Value) -> String {
     let reason = data["reason"].as_str().unwrap_or("unknown");
     let detail = data["detail"].as_str().filter(|d| !d.is_empty());
     if reason == "workspace_conflict" {
@@ -1436,6 +1443,9 @@ fn pause_reason_text(data: &serde_json::Value) -> String {
             Some(path) => format!("{path} changed since the pass wrote it"),
             None => "memory files changed since the pass wrote them".to_owned(),
         };
+    }
+    if reason == "cancelled" {
+        return detail.unwrap_or("cancelled").to_owned();
     }
     let named = match reason {
         "source_conflict" => "the conversation changed since the pass started",

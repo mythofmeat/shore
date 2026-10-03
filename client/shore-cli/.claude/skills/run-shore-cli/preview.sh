@@ -21,6 +21,7 @@ case "${1:-all}" in
   errors) filter=render_preview_errors ;;
   compact) filter=render_preview_compaction_result ;;
   compaction-lane) filter=render_preview_compaction_lane ;;
+  compaction-stream) filter=render_preview_compaction_stream ;;
   roles)  filter=render_preview_model_roles ;;
   config-set) filter=render_preview_config_set ;;
   subagent) filter=render_preview_subagent ;;
@@ -28,7 +29,7 @@ case "${1:-all}" in
   config-panel) filter=render_preview_config_panel ;;
   pager)  filter=render_preview_output_pager ;;
   all|"") filter=render_preview ;;
-  *) echo "usage: preview.sh [log|stream|models|status|errors|compact|compaction-lane|roles|config-set|subagent|wire|config-panel|pager|all]" >&2; exit 2 ;;
+  *) echo "usage: preview.sh [log|stream|models|status|errors|compact|compaction-lane|compaction-stream|roles|config-set|subagent|wire|config-panel|pager|all]" >&2; exit 2 ;;
 esac
 
 # --test-threads=1 keeps each preview's blocks together on stdout; colour is set

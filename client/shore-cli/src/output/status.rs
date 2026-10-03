@@ -83,6 +83,12 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     if pending > 0 {
         rows.add_toned("pending edits", &pending.to_string(), Tone::Warn);
     }
+    if let Some((line, tone)) = data
+        .get("compaction")
+        .and_then(|compaction| super::compaction::status_row(compaction, chrono::Local::now()))
+    {
+        rows.add_toned("compaction", &line, tone);
+    }
     if let Some(mcp) = data.get("mcp") {
         let configured = number(mcp, "configured");
         let connected = number(mcp, "connected");
@@ -256,6 +262,10 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "mcp" {
         write_mcp_section(out, value);
+        return true;
+    }
+    if name == "compaction" {
+        super::compaction::write_status_section(out, value, chrono::Local::now());
         return true;
     }
     section(out, name, None);

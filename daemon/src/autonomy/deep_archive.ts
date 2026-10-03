@@ -188,6 +188,7 @@ async function compactionArchive(
         ...deps.run,
         config: deps.config,
       },
+      "deep_archive",
       { thread, keepTurnsOverride: 0, retainTrailingAutonomous: true },
     );
   } catch (e) {

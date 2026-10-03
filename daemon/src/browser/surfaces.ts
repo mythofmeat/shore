@@ -15,7 +15,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "edit", "edit.ref", "edit.content", "get", "get.ref", "@editor",
     "delete", "delete.refs",
     "@follow", "@content", "@thinking", "@tools", "@subagents",
-    "compact", "compact.keep_turns", "compact.restart", "clear", "clear.exclude", "clear.note",
+    "compact", "compact.keep_turns", "compact.restart", "compact_watch", "compact_cancel", "@compaction_watch", "@compaction_cancel", "clear", "clear.exclude", "clear.note",
     "list_characters", "create_character", "create_character.name",
     "list_threads", "create_thread", "create_thread.name", "create_thread.label", "create_thread.model", "create_thread.compaction",
     "thread_label", "thread_label.name", "thread_label.label", "thread_model", "thread_model.name", "thread_model.model",

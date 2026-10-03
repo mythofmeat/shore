@@ -41,7 +41,9 @@ import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
-import { compact, countTurns, tryBeginCompaction } from "./manager.ts";
+import { compact, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
+import { startPass } from "./activity.ts";
+import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
 import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
 import {
@@ -84,15 +86,16 @@ export interface CompactionRunOptions {
   keepTurnsOverride?: number;
   restart?: boolean;
   retainTrailingAutonomous?: boolean;
-  foreground?: boolean;
+  trigger?: CompactionTrigger;
 }
 
 export async function runCompaction(
   character: string,
   deps: CompactionRunDeps,
-  options: CompactionRunOptions = {},
+  trigger: Exclude<CompactionTrigger, "manual">,
+  options: Omit<CompactionRunOptions, "trigger"> = {},
 ): Promise<CompactionCompletion> {
-  const outcome = await runCompactionPass(character, deps, options);
+  const outcome = await runCompactionPass(character, deps, { ...options, trigger });
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
   if (outcome.kind === "paused") {
     const why = outcome.detail ?? outcome.reason;
@@ -172,133 +175,153 @@ export async function runCompactionPass(
     const guard = tryBeginCompaction(dataDir, character);
     if (guard === undefined) throw CompactionError.busy(character);
 
-    let coverage: CompactionCoverage | undefined;
+    const trigger = options.trigger ?? "manual";
+    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
     try {
-      const loaded = await loadMessagesForCompaction(dataDir, character, thread);
-      if (loaded.messages.length === 0) return undefined;
+      const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
+      pass.finish(outcome);
+      return outcome;
+    } catch (e) {
+      pass.fail(e);
+      throw e;
+    }
+  });
+}
 
-      const effective = effectiveConfig(character, deps.config);
-      const compaction = effective.app.memory.compaction;
-      const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
-        keepRecentTurns: compaction.keep_recent_turns,
-        maxContextTokens: compaction.max_context_tokens,
+async function passUnderGuard(
+  character: string,
+  deps: CompactionRunDeps,
+  options: CompactionRunOptions,
+  thread: string,
+  guard: CompactionRunGuard,
+): Promise<CompactionOutcome | undefined> {
+  const dataDir = deps.config.dirs.data;
+  let coverage: CompactionCoverage | undefined;
+  try {
+    const loaded = await loadMessagesForCompaction(dataDir, character, thread);
+    if (loaded.messages.length === 0) return undefined;
+
+    const effective = effectiveConfig(character, deps.config);
+    const compaction = effective.app.memory.compaction;
+    const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
+      keepRecentTurns: compaction.keep_recent_turns,
+      maxContextTokens: compaction.max_context_tokens,
+      ...(options.keepTurnsOverride === undefined
+        ? {}
+        : { keepTurnsOverride: options.keepTurnsOverride }),
+      retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
+      restart: options.restart ?? false,
+    });
+    if (plan === undefined) throw CompactionError.insufficientMessages();
+
+    if (!compaction.write_memory) {
+      return await rotateWithoutMemoryWrite(
+        character,
+        thread,
+        deps,
+        effective,
+        plan,
+        loaded.conversationDir,
+        options,
+      );
+    }
+
+    const planned = planCompactionCoverage(character, effective, plan, options);
+    if (planned.blocked === true) {
+      throw new CompactionError(
+        "busy",
+        `Compaction for ${character}/${thread} is waiting for another pass's memory claim ` +
+          `to finish or expire; conversation kept`,
+      );
+    }
+    coverage = planned.coverage;
+    if (planned.redundant) {
+      if (plan.checkpoint !== undefined) {
+        const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);
+        if (settled) return undefined;
+      }
+      shoreLog.info(
+        `shore: the whole archival range for ${character}/${thread} was already written to ` +
+          `memory from another branch; rotating it into the archive without a second pass`,
+      );
+      return await rotateWithoutMemoryWrite(
+        character,
+        thread,
+        deps,
+        effective,
+        plan,
+        loaded.conversationDir,
+        options,
+        "archive-only rotation; this range was already covered by another branch's compaction",
+      );
+    }
+
+    const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
+      deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
+    const resolved = await resolveDeps(character, deps, effective, thread,
+      [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
+
+    const outcome = await compact(
+      {
+        conversationId: character,
+        plan,
+        promptTemplate: resolved.promptTemplate,
+        charName: character,
+        thread,
+        userName: resolved.displayName,
+        llm: resolved.llm,
+        conversationMgr: conversationManager(
+          loaded.conversationDir,
+          {
+            dbPath: join(dataDir, HISTORY_DB_FILE),
+            archiveKey: archiveKey(character, thread),
+          },
+          deps.now ?? (() => new Date().toISOString()),
+          deps.newId ?? (() => crypto.randomUUID()),
+        ),
+        ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
+        dryRun: options.dryRun ?? false,
+        restart: options.restart ?? false,
         ...(options.keepTurnsOverride === undefined
           ? {}
           : { keepTurnsOverride: options.keepTurnsOverride }),
-        retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
-        restart: options.restart ?? false,
-      });
-      if (plan === undefined) throw CompactionError.insufficientMessages();
+        chatRequest,
+        dataDir,
+        resumable: true,
+        foreground: options.trigger === "manual",
+        tools: resolved.tools,
+        ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
+        ...(resolved.maxToolIterations === undefined
+          ? {}
+          : { maxToolIterations: resolved.maxToolIterations }),
+        ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
+        ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+      },
+      {
+        keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
+        maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
+      },
+    );
 
-      if (!compaction.write_memory) {
-        return await rotateWithoutMemoryWrite(
-          character,
-          thread,
-          deps,
-          effective,
-          plan,
-          loaded.conversationDir,
-          options,
-        );
-      }
+    await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
+      await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
+    });
 
-      const planned = planCompactionCoverage(character, effective, plan, options);
-      if (planned.blocked === true) {
-        throw new CompactionError(
-          "busy",
-          `Compaction for ${character}/${thread} is waiting for another pass's memory claim ` +
-            `to finish or expire; conversation kept`,
-        );
-      }
-      coverage = planned.coverage;
-      if (planned.redundant) {
-        if (plan.checkpoint !== undefined) {
-          const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);
-          if (settled) return undefined;
+    return outcome;
+  } finally {
+    try {
+      if (coverage !== undefined) {
+        const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread);
+        if (checkpoint?.coverageClaim !== coverage.claim) {
+          releaseCompactionCoverage(dataDir, character, coverage.claim);
         }
-        shoreLog.info(
-          `shore: the whole archival range for ${character}/${thread} was already written to ` +
-            `memory from another branch; rotating it into the archive without a second pass`,
-        );
-        return await rotateWithoutMemoryWrite(
-          character,
-          thread,
-          deps,
-          effective,
-          plan,
-          loaded.conversationDir,
-          options,
-          "archive-only rotation; this range was already covered by another branch's compaction",
-        );
       }
-
-      const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
-        deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
-      const resolved = await resolveDeps(character, deps, effective, thread,
-        [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
-
-      const outcome = await compact(
-        {
-          conversationId: character,
-          plan,
-          promptTemplate: resolved.promptTemplate,
-          charName: character,
-          thread,
-          userName: resolved.displayName,
-          llm: resolved.llm,
-          conversationMgr: conversationManager(
-            loaded.conversationDir,
-            {
-              dbPath: join(dataDir, HISTORY_DB_FILE),
-              archiveKey: archiveKey(character, thread),
-            },
-            deps.now ?? (() => new Date().toISOString()),
-            deps.newId ?? (() => crypto.randomUUID()),
-          ),
-          ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
-          dryRun: options.dryRun ?? false,
-          restart: options.restart ?? false,
-          ...(options.keepTurnsOverride === undefined
-            ? {}
-            : { keepTurnsOverride: options.keepTurnsOverride }),
-          chatRequest,
-          dataDir,
-          resumable: true,
-          foreground: options.foreground ?? false,
-          tools: resolved.tools,
-          ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
-          ...(resolved.maxToolIterations === undefined
-            ? {}
-            : { maxToolIterations: resolved.maxToolIterations }),
-          ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
-          ...(deps.signal === undefined ? {} : { signal: deps.signal }),
-        },
-        {
-          keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
-          maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
-        },
-      );
-
-      await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
-        await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
-      });
-
-      return outcome;
+    } catch (e) {
+      shoreLog.warn(`shore: failed to release uncheckpointed compaction claim for ${character}/${thread}: ${String(e)}`);
     } finally {
-      try {
-        if (coverage !== undefined) {
-          const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread);
-          if (checkpoint?.coverageClaim !== coverage.claim) {
-            releaseCompactionCoverage(dataDir, character, coverage.claim);
-          }
-        }
-      } catch (e) {
-        shoreLog.warn(`shore: failed to release uncheckpointed compaction claim for ${character}/${thread}: ${String(e)}`);
-      } finally {
-        guard.release();
-      }
+      guard.release();
     }
-  });
+  }
 }
 
 interface ResolvedDeps {
@@ -564,7 +587,7 @@ export function compactionRunner(
       return runCompaction(character, {
         ...rest,
         config,
-      }, thread === undefined ? {} : { thread });
+      }, "turn", thread === undefined ? {} : { thread });
     },
     applyDeferredEdits: (charDataDir, configDir, charName, workspaceRoot, thread) =>
       applyDeferredEdits(charDataDir, configDir, charName, workspaceRoot, thread),

@@ -211,7 +211,7 @@ MUTANTS = [
      "  }"),
     ("wedge: the checkpoint is rotated over without being retired",
      RUN,
-     '\n        if (plan.checkpoint !== undefined) {\n          const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);\n          if (settled) return undefined;\n        }\n        ',
+     '\n      if (plan.checkpoint !== undefined) {\n        const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);\n        if (settled) return undefined;\n      }\n      ',
      ''),
     ("recovery: an already-archived pass is re-run instead of recognised",
      MANAGER,

@@ -54,8 +54,8 @@ MUTANTS = [
      '  shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);\n'
      '  await reloadAndApplyDeferred(character, deps, "Idle compaction");'),
     ("pass: the compaction runs without the character's effective config", I,
-     '\n      completion = await runCompaction(character, {\n        ...deps.run,\n        config: deps.config,\n      });',
-     '    completion = await runCompaction(character, {\n      ...deps.run,\n    } as never);'),
+     '\n      completion = await runCompaction(character, {\n        ...deps.run,\n        config: deps.config,\n      }, "idle");',
+     '    completion = await runCompaction(character, {\n      ...deps.run,\n    } as never, "idle");'),
 ]
 
 

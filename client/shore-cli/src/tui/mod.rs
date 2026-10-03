@@ -2649,7 +2649,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::CommandOutput(co) => {
-            if co.name == "compact" {
+            if matches!(
+                co.name.as_str(),
+                "compact" | "compact_watch" | "compact_cancel"
+            ) {
                 app.compaction = None;
             }
             if let Some(kind) = app.take_palette_catalog_request(co.rid.as_deref()) {

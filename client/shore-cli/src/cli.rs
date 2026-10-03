@@ -1,8 +1,8 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, ClearArgs,
-    ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
+    ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
+    ClearArgs, ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
     ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
     DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
     FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
@@ -13,7 +13,7 @@ use shore_common::protocol::operations::{
     RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
     SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
     SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
-    TranscriptArgs, TranscriptSource,
+    TranscriptArgs, TranscriptSource, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -324,20 +324,34 @@ pub(crate) enum CliCommand {
         subagent_tools: bool,
     },
 
-    /// Summarize the conversation into memory and shorten the active window
+    /// Summarize the conversation into memory and shorten the active window.
+    /// The pass runs on the daemon and is shown live: its reasoning, tool
+    /// calls and results. Ctrl-C only stops watching; the pass carries on.
     #[command(display_order = 2)]
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
         /// older is folded into markdown memory. 0 keeps none of it, leaving
         /// only the prompt files and the memory index.
+        #[arg(conflicts_with_all = ["watch", "cancel"])]
         keep_turns: Option<u32>,
 
         /// Throw away a paused checkpoint and summarize from scratch. Use this
         /// when a pass stopped partway — out of quota, provider down, memory
         /// files edited since — and `shore compact` keeps reporting paused. The
         /// memory it already wrote stays; those turns get summarized again.
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["watch", "cancel"])]
         restart: bool,
+
+        /// Follow the compaction already running, whoever started it, from what
+        /// it has done so far to how it ends. With none running, show how the
+        /// last pass ended.
+        #[arg(long, conflicts_with = "cancel")]
+        watch: bool,
+
+        /// Stop the running compaction. It pauses with its checkpoint kept, so
+        /// `shore compact` resumes it later.
+        #[arg(long)]
+        cancel: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2676,11 +2690,19 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     let CliCommand::Compact {
         keep_turns,
         restart,
+        watch,
+        cancel,
         ..
     } = cmd
     else {
         return None;
     };
+    if *watch {
+        return operation_to_swp::<WatchCompaction>(EmptyOperationArgs {});
+    }
+    if *cancel {
+        return operation_to_swp::<CancelCompaction>(EmptyOperationArgs {});
+    }
     operation_to_swp::<CompactConversation>(CompactArgs {
         dry_run: None,
         keep_turns: keep_turns.map(u64::from),
@@ -4840,6 +4862,8 @@ mod tests {
         let cmd = CliCommand::Compact {
             keep_turns: Some(0),
             restart: false,
+            watch: false,
+            cancel: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -4852,12 +4876,32 @@ mod tests {
         let cmd = CliCommand::Compact {
             keep_turns: Some(0),
             restart: true,
+            watch: false,
+            cancel: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "compact");
         assert_eq!(arg(&args, "keep_turns"), 0);
         assert_eq!(arg(&args, "restart"), true);
+    }
+
+    #[test]
+    fn compact_watch_and_cancel_reach_their_own_operations() {
+        let (watch, watch_args) =
+            to_swp_command(parsed_command(&parse(&["compact", "--watch"])), None).unwrap();
+        assert_eq!(watch, "compact_watch");
+        assert_eq!(watch_args, serde_json::json!({}));
+        let (cancel, _) =
+            to_swp_command(parsed_command(&parse(&["compact", "--cancel"])), None).unwrap();
+        assert_eq!(cancel, "compact_cancel");
+        for args in [
+            &["compact", "--watch", "--cancel"][..],
+            &["compact", "--watch", "3"],
+            &["compact", "--cancel", "--restart"],
+        ] {
+            assert!(try_parse(args).is_err(), "{args:?}");
+        }
     }
 
     #[test]
@@ -5040,6 +5084,8 @@ mod tests {
             CliCommand::Compact {
                 keep_turns: None,
                 restart: false,
+                watch: false,
+                cancel: false,
                 json: false,
             },
             CliCommand::Config {
