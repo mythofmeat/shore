@@ -1,7 +1,7 @@
 {
   "name": "shore-desktop",
   "productName": "Shore",
-  "version": "4.24.2",
+  "version": "4.24.3",
   "description": "Desktop app for Shore's browser client",
   "private": true,
   "type": "module",
@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit --project src/shell/tsconfig.json && tsc --noEmit --project tests/tsconfig.e2e.json",
     "test": "bun test",
     "test:e2e": "bun run build && bun run scripts/e2e.ts",
+    "app:macos": "bun run build && bun run scripts/macos-app.ts",
     "icons": "bun run scripts/icons.ts"
   },
   "devDependencies": {

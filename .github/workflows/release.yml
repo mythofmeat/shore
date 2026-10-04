@@ -21,11 +21,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
-      actions: read
       contents: write
-      pull-requests: write
     outputs:
-      tag: ${{ steps.merge.outputs.tag }}
+      version: ${{ steps.bump.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - id: bump
@@ -42,6 +40,7 @@ jobs:
             sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
             sed -n 's/^      tag: "v\(.*\)"$/\1/p' HomebrewFormula/*.rb
+            sed -n 's/^  version "\(.*\)"$/\1/p' Casks/*.rb
           }
           current=$(versions | sort -u)
           if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
@@ -63,6 +62,7 @@ jobs:
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
           sed -i "s/^      tag: \"v.*\"$/      tag: \"v$version\"/" HomebrewFormula/*.rb
+          sed -i "s/^  version \".*\"$/  version \"$version\"/" Casks/*.rb
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
             exit 1
@@ -73,18 +73,70 @@ jobs:
           git commit -am "chore(release): v$version"
           git push origin "release/v$version"
           echo "version=$version" >>"$GITHUB_OUTPUT"
+
+  # The cask pins Shore.app's zip by checksum, so the zip is built from the release branch before it merges and
+  # its checksum goes in with the version. The squash merge changes nothing the app is built from.
+  macos:
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release/v${{ needs.version.outputs.version }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run app:macos
+        working-directory: desktop
+      - run: |
+          sha=$(shasum -a 256 "out/desktop/Shore-$VERSION-arm64.zip" | cut -d' ' -f1)
+          sed -i '' "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" Casks/shore-desktop.rb
+          if ! grep -q "^  sha256 \"$sha\"$" Casks/shore-desktop.rb; then
+            echo "::error::The cask's checksum didn't move to $sha."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): Shore.app v$VERSION checksum"
+          git push origin "HEAD:release/v$VERSION"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: out/desktop/Shore-${{ needs.version.outputs.version }}-arm64.zip
+
+  merge:
+    needs: [version, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    outputs:
+      tag: ${{ steps.merge.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release/v${{ needs.version.outputs.version }}
       # main only takes commits that passed verify, and pull requests opened with the default
       # GITHUB_TOKEN don't trigger it, so the version bump goes through one opened with a personal token.
       - env:
           GH_TOKEN: ${{ secrets.DEPS_PR_TOKEN }}
-          VERSION: ${{ steps.bump.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           gh pr create --base main --head "release/v$VERSION" --title "chore(release): v$VERSION" \
             --body "Opened by the release workflow, which merges it once verify passes, then tags the merge and publishes v$VERSION."
       - id: merge
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.bump.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           sha=$(git rev-parse HEAD)
           for _ in $(seq 30); do
@@ -106,14 +158,14 @@ jobs:
           echo "tag=v$VERSION" >>"$GITHUB_OUTPUT"
 
   arch:
-    needs: version
+    needs: merge
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
     steps:
       - run: pacman -Syu --noconfirm git
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ needs.merge.outputs.tag }}
       # makepkg refuses to run as root, and makepkg --syncdeps installs the build dependencies with sudo.
       - run: |
           useradd --create-home builder
@@ -130,7 +182,7 @@ jobs:
           path: /build/*.pkg.tar.zst
 
   release:
-    needs: [version, arch]
+    needs: [merge, arch, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -143,4 +195,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.version.outputs.tag }}
+          TAG: ${{ needs.merge.outputs.tag }}
