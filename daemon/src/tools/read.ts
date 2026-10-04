@@ -81,8 +81,7 @@ export async function handleRead(
   if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
   const { path, note } = await locate(input, requested, workspaceDir, signal);
   if (await isFolder(path)) {
-    if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs("offset and limit apply only to text files");
-    if (original) throw new InvalidArgs("original applies only to image files");
+    if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs("offset, limit and original do not apply to folders");
     return withNote(await readFolder(path, maxChars, signal), note);
   }
   const file = await openRegularFile(path);
