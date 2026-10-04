@@ -1288,3 +1288,31 @@ describe("work outlives the client that started it", () => {
     expect(h.frames.get(3)).toEqual([]);
   });
 });
+
+describe("shutting down", () => {
+  test("active generations are listed with their character, thread and start", async () => {
+    const h = harness(["Alice"], 1);
+    expect(h.handler.activeGenerations()).toEqual([]);
+    const before = Date.now();
+    await h.handler.handleRouted({ kind: "engine", msg: message("r1", "hi", true), meta: meta("Alice", 1, "r1", "message") });
+    const [active] = h.handler.activeGenerations();
+    expect(active).toMatchObject({ character: "Alice", thread: null });
+    expect(active?.startedAt).toBeGreaterThanOrEqual(before);
+
+    await h.handler.cancelGeneration(1, null, "test");
+    await h.handler.drain();
+    expect(h.handler.activeGenerations()).toEqual([]);
+  });
+
+  test("a closed handler finishes what is running and refuses new messages as busy", async () => {
+    const h = harness(["Alice"], 1);
+    await h.handler.handleRouted({ kind: "engine", msg: message("r1", "hi", true), meta: meta("Alice", 1, "r1", "message") });
+    h.handler.close();
+    expect(h.started[0]?.signal.aborted).toBe(false);
+
+    await h.handler.handleRouted({ kind: "engine", msg: message("r2", "again", true), meta: meta("Alice", 1, "r2", "message") });
+    expect(h.started).toHaveLength(1);
+    expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "error", code: "busy", rid: "r2" });
+    expect(h.handler.activeGenerations()).toHaveLength(1);
+  });
+});

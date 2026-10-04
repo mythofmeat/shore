@@ -256,12 +256,14 @@ const WEB: StructSpec<WebConfig> = {
 export interface DaemonConfig {
   addr: string;
   image_cache_bytes: number;
+  shutdown_grace: ConfigDuration;
   web: WebConfig;
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
   addr: "127.0.0.1:7320",
   image_cache_bytes: DEFAULT_IMAGE_CACHE_BYTES,
+  shutdown_grace: ConfigDuration.fromSecs(29 * 60),
   web: defaultWebConfig(),
 });
 
@@ -271,6 +273,7 @@ const DAEMON: StructSpec<DaemonConfig> = {
   fields: {
     addr: readString,
     image_cache_bytes: readUsize,
+    shutdown_grace: readDuration,
     web: struct(WEB),
   },
 };

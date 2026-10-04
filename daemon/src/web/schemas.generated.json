@@ -3825,6 +3825,16 @@
               }
             ]
           },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RunningStatusReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -4501,6 +4511,86 @@
           "tool_rounds",
           "compacted_turns",
           "updated_at"
+        ]
+      },
+      "RunningStatusReport": {
+        "type": "object",
+        "properties": {
+          "work": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/RunningWork"
+            }
+          },
+          "shutdown": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ShutdownWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "work",
+          "shutdown"
+        ]
+      },
+      "RunningWork": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/RunningWorkKind"
+          },
+          "character": {
+            "type": "string"
+          },
+          "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "running_secs": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "character",
+          "thread",
+          "started_at",
+          "running_secs"
+        ]
+      },
+      "RunningWorkKind": {
+        "type": "string",
+        "enum": [
+          "message",
+          "heartbeat",
+          "compaction"
+        ]
+      },
+      "ShutdownWindow": {
+        "type": "object",
+        "properties": {
+          "requested_at": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested_at",
+          "deadline"
         ]
       },
       "ErrorLogResult": {
@@ -12084,6 +12174,16 @@
               }
             ]
           },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RunningStatusReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -12760,6 +12860,86 @@
           "tool_rounds",
           "compacted_turns",
           "updated_at"
+        ]
+      },
+      "RunningStatusReport": {
+        "type": "object",
+        "properties": {
+          "work": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/RunningWork"
+            }
+          },
+          "shutdown": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ShutdownWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "work",
+          "shutdown"
+        ]
+      },
+      "RunningWork": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/RunningWorkKind"
+          },
+          "character": {
+            "type": "string"
+          },
+          "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "running_secs": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "character",
+          "thread",
+          "started_at",
+          "running_secs"
+        ]
+      },
+      "RunningWorkKind": {
+        "type": "string",
+        "enum": [
+          "message",
+          "heartbeat",
+          "compaction"
+        ]
+      },
+      "ShutdownWindow": {
+        "type": "object",
+        "properties": {
+          "requested_at": {
+            "type": "string"
+          },
+          "deadline": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested_at",
+          "deadline"
         ]
       },
       "ErrorLogResult": {

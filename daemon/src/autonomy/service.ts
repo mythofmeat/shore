@@ -49,6 +49,11 @@ export interface ActivityReport {
   messageCount: number;
 }
 
+export interface HeartbeatView {
+  character: string;
+  startedAt: number;
+}
+
 interface Entry {
   runner: CharacterAutonomy;
   inFlight: boolean;
@@ -86,6 +91,8 @@ export class AutonomyService {
   readonly #executor: AutonomyExecutor;
   readonly #now: () => number;
   #keepalive: KeepaliveService | undefined;
+  #closed = false;
+  readonly #ticks = new Set<Promise<void>>();
 
   constructor(executor: AutonomyExecutor, now: () => number = () => Date.now()) {
     this.#executor = executor;
@@ -164,6 +171,29 @@ export class AutonomyService {
   }
 
   async tick(): Promise<void> {
+    if (this.#closed) return;
+    const work = this.#tickDue();
+    this.#ticks.add(work);
+    try {
+      await work;
+    } finally {
+      this.#ticks.delete(work);
+    }
+  }
+
+  async quiesce(): Promise<void> {
+    this.#closed = true;
+    await Promise.allSettled(this.#ticks);
+  }
+
+  runningHeartbeats(): HeartbeatView[] {
+    return [...this.#entries].flatMap(([character, { runner }]) => {
+      const startedAt = runner.heartbeatStartedAt;
+      return startedAt === undefined ? [] : [{ character, startedAt }];
+    });
+  }
+
+  async #tickDue(): Promise<void> {
     const due: [string, Entry][] = [];
     for (const pair of this.#entries) {
       pair[1].runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(pair[0])));

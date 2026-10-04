@@ -24,6 +24,7 @@ import { commandOperations, isRegisteredOperation, runRegisteredOperation } from
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
+import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ArchiveContext } from "./archive.ts";
 
 export interface CommandSession {
@@ -57,6 +58,7 @@ export interface CommandDeps {
   workspaceIndex?: WorkspaceIndexSource;
   historyIndex?: HistoryIndexSource;
   mcpStatus?: () => readonly McpServerStatus[];
+  running?: () => RunningStatusReport;
   archive?: ArchiveContext;
   onCharacterCreated?: (character: string) => Promise<void>;
 }

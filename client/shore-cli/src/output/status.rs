@@ -89,6 +89,10 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     {
         rows.add_toned("compaction", &line, tone);
     }
+    if let Some(running) = data.get("running").filter(|value| !value.is_null()) {
+        let (line, tone) = super::running::status_row(running);
+        rows.add_toned("running", &line, tone);
+    }
     if let Some(mcp) = data.get("mcp") {
         let configured = number(mcp, "configured");
         let connected = number(mcp, "connected");
@@ -266,6 +270,10 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "compaction" {
         super::compaction::write_status_section(out, value, chrono::Local::now());
+        return true;
+    }
+    if name == "running" {
+        super::running::write_status_section(out, value);
         return true;
     }
     section(out, name, None);
@@ -726,5 +734,62 @@ mod tests {
         for line in render(&payload()).lines() {
             assert!(!line.ends_with(' '), "trailing whitespace: {line:?}");
         }
+    }
+
+    fn with_running(running: Value) -> Value {
+        let mut data = payload();
+        if let Some(map) = data.as_object_mut() {
+            _ = map.insert("running".to_owned(), running);
+        }
+        data
+    }
+
+    #[test]
+    fn an_idle_daemon_says_it_is_safe_to_restart() {
+        let out = render(&with_running(json!({"work": [], "shutdown": null})));
+        assert!(out.contains("nothing \u{00b7} safe to restart"), "{out}");
+    }
+
+    #[test]
+    fn running_work_names_its_kind_character_and_age() {
+        let out = render(&with_running(json!({
+            "work": [
+                {"kind": "heartbeat", "character": "qifei", "thread": null,
+                 "started_at": "2026-10-05T01:00:00+00:00", "running_secs": 252},
+                {"kind": "message", "character": "heidi", "thread": "main",
+                 "started_at": "2026-10-05T01:04:00+00:00", "running_secs": 12}
+            ],
+            "shutdown": null
+        })));
+        assert!(
+            out.contains("heartbeat for qifei \u{00b7} 4m, message for heidi \u{00b7} 12s"),
+            "{out}"
+        );
+        assert!(!out.contains("safe to restart"), "{out}");
+    }
+
+    #[test]
+    fn a_draining_daemon_says_it_is_stopping() {
+        let out = render(&with_running(json!({
+            "work": [{"kind": "heartbeat", "character": "qifei", "thread": null,
+                      "started_at": "2026-10-05T01:00:00+00:00", "running_secs": 60}],
+            "shutdown": {"requested_at": "2026-10-05T01:01:00+00:00", "deadline": "2026-10-05T01:27:00+00:00"}
+        })));
+        assert!(out.contains("stopping once this finishes"), "{out}");
+    }
+
+    #[test]
+    fn the_running_section_lists_threads_and_start_times() {
+        set_color_enabled(false);
+        let data = with_running(json!({
+            "work": [{"kind": "message", "character": "heidi", "thread": "main",
+                      "started_at": "2026-10-05T01:04:00+00:00", "running_secs": 12}],
+            "shutdown": null
+        }));
+        let mut buf = Vec::new();
+        assert!(write_section(&mut buf, &data, "running"));
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(out.contains("message"), "{out}");
+        assert!(out.contains("thread main"), "{out}");
     }
 }

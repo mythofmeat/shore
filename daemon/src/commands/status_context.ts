@@ -41,5 +41,6 @@ export function statusContext(
         ? undefined
         : { ...deps.historyIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
     ...(deps.mcpStatus === undefined ? {} : { mcpServers: deps.mcpStatus() }),
+    ...(deps.running === undefined ? {} : { running: deps.running() }),
   };
 }

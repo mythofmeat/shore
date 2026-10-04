@@ -75,6 +75,7 @@ export class CharacterAutonomy {
   readonly #activity = new ActivityTracker();
   readonly #now: () => number;
   #state: RunnerState;
+  #heartbeatStartedAt: number | undefined;
 
   constructor(opts: {
     character: string;
@@ -123,6 +124,10 @@ export class CharacterAutonomy {
 
   get log(): HeartbeatLog {
     return this.#log;
+  }
+
+  get heartbeatStartedAt(): number | undefined {
+    return this.#heartbeatStartedAt;
   }
 
   get heartbeatMayTick(): boolean {
@@ -302,12 +307,17 @@ export class CharacterAutonomy {
     try {
       if (heartbeat === "run_tick") {
         this.note("tick_fired", "Heartbeat tick fired", now);
-        this.#apply(
-          await this.#executor.runHeartbeatTick(this.#character, {
-            scheduleNextWake: (hours, reason) =>
-              this.scheduleNextWake(hours, reason, this.#now()),
-          }),
-        );
+        this.#heartbeatStartedAt = now;
+        try {
+          this.#apply(
+            await this.#executor.runHeartbeatTick(this.#character, {
+              scheduleNextWake: (hours, reason) =>
+                this.scheduleNextWake(hours, reason, this.#now()),
+            }),
+          );
+        } finally {
+          this.#heartbeatStartedAt = undefined;
+        }
       }
 
       if (decision.compaction !== undefined) {

@@ -1608,6 +1608,69 @@ describe("going down", () => {
     }
   });
 
+  test("a shutdown lets a running reply finish and reach its client, says so in status, and refuses new turns", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "late", () => {}) });
+    const talker = await Client.open(daemon.port, "ada");
+    const watcher = await Client.open(daemon.port, "ada");
+    try {
+      await talker.awaitFrame("hello");
+      await watcher.awaitFrame("hello");
+      watcher.send({ type: "command", name: "status", args: {}, rid: "idle" });
+      const idle = await watcher.awaitFrame("command_output");
+      expect((idle["data"] as Record<string, unknown>)["running"]).toEqual({ work: [], shutdown: null });
+      watcher.frames.length = 0;
+
+      talker.send({ type: "message", text: "hi", stream: true, images: [] });
+      await talker.awaitFrame("stream_start");
+      let stopped = false;
+      const draining = daemon.shutdown().then(() => { stopped = true; });
+
+      watcher.send({ type: "command", name: "status", args: {}, rid: "busy" });
+      const busy = (await watcher.awaitFrame("command_output"))["data"] as Record<string, unknown>;
+      const report = busy["running"] as { work: unknown[]; shutdown: { requested_at: string; deadline: string } };
+      expect(report.work).toMatchObject([{ kind: "message", character: "ada", thread: "main" }]);
+      expect(Date.parse(report.shutdown.deadline) - Date.parse(report.shutdown.requested_at)).toBe(29 * 60_000);
+      expect(busy["sections"]).toContain("running");
+
+      watcher.send({ type: "message", text: "another", stream: true, images: [] });
+      expect(await watcher.awaitFrame("error")).toMatchObject({ code: "busy" });
+      expect(stopped).toBe(false);
+
+      release();
+      await draining;
+      await daemon.done;
+      running.length = 0;
+      await talker.awaitFrame("shutdown");
+      const types = talker.frames.map((frame) => frame["type"]);
+      expect(types).toContain("stream_end");
+      expect(types.indexOf("stream_end")).toBeLessThan(types.indexOf("shutdown"));
+    } finally {
+      talker.close();
+      watcher.close();
+    }
+  });
+
+  test("a shutdown stops anyway once the grace period runs out", async () => {
+    const place = await layout(`${MODEL_CONFIG}[daemon]\nshutdown_grace = "1s"\n`);
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "too late", () => {}) });
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "message", text: "hi", stream: true, images: [] });
+      await client.awaitFrame("stream_start");
+      const began = Date.now();
+      await daemon.shutdown();
+      expect(Date.now() - began).toBeGreaterThanOrEqual(900);
+      await client.awaitFrame("shutdown");
+      release();
+    } finally {
+      client.close();
+    }
+  });
+
   test("the clocks stop with the daemon, so no keepalive ticks after the exit", async () => {
     const place = await layout();
     const daemon = await startDaemon({

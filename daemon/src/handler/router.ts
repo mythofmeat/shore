@@ -125,6 +125,7 @@ export interface MessageHandlerDeps {
     signal: AbortSignal,
   ) => Promise<ServerMessage>;
   readonly runGeneration: RunGeneration;
+  readonly now?: () => number;
   readonly commandChangesState?: (cmd: Command) => boolean;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -147,7 +148,13 @@ interface Viewer {
   readonly thread: string | null;
 }
 
-interface ActiveGeneration {
+export interface GenerationView {
+  readonly character: string;
+  readonly thread: string | null;
+  readonly startedAt: number;
+}
+
+interface ActiveGeneration extends GenerationView {
   readonly scope: string;
   readonly abort: () => void;
   readonly rid: string | null;
@@ -187,6 +194,7 @@ export class MessageHandler {
   readonly #generations = new Map<string, ActiveGeneration>();
   readonly #queues = new Map<number, Promise<void>>();
   readonly #commands = new Set<ActiveCommand>();
+  #closed = false;
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
@@ -198,6 +206,14 @@ export class MessageHandler {
 
   get queuedSessionCount(): number {
     return this.#queues.size;
+  }
+
+  activeGenerations(): GenerationView[] {
+    return [...this.#generations.values()].map(({ character, thread, startedAt }) => ({ character, thread, startedAt }));
+  }
+
+  close(): void {
+    this.#closed = true;
   }
 
   async run(routes: AsyncIterable<RoutedMessage>): Promise<void> {
@@ -412,6 +428,16 @@ export class MessageHandler {
       return;
     }
 
+    if (this.#closed) {
+      const message = "The daemon is shutting down. Send this again once it has restarted.";
+      await this.#deps.router.sendToSession(
+        meta.session.sessionId,
+        withRid({ type: "error", code: "busy", message }, meta.rid),
+      );
+      await this.#finishRequest(meta, meta.rid, "failed", { code: "busy", message });
+      return;
+    }
+
     await this.launchGeneration(meta, plan.body, plan.regen, resolved.name);
   }
 
@@ -424,6 +450,7 @@ export class MessageHandler {
     const issuer = meta.session.sessionId;
     const rid = sanitiseRid(body.rid);
     const scope = this.#scope(charName, meta.session.selectedThread);
+    const thread = this.#deps.registry.resolveThread?.(charName, meta.session.selectedThread) ?? meta.session.selectedThread;
 
     const previous = this.#generations.get(scope);
     if (previous !== undefined) {
@@ -442,6 +469,9 @@ export class MessageHandler {
     const controller = new AbortController();
     const generation: ActiveGeneration = {
       scope,
+      character: charName,
+      thread,
+      startedAt: (this.#deps.now ?? Date.now)(),
       abort: () => controller.abort(),
       rid,
       viewers,

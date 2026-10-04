@@ -5,7 +5,8 @@ import type { CompactionStatusReport } from "./CompactionStatusReport";
 import type { HistoryIndexResult } from "./HistoryIndexResult";
 import type { KeepaliveHaltReport } from "./KeepaliveHaltReport";
 import type { McpStatusReport } from "./McpStatusReport";
+import type { RunningStatusReport } from "./RunningStatusReport";
 import type { TokenCounts } from "./TokenCounts";
 import type { WorkspaceIndexResult } from "./WorkspaceIndexResult";
 
-export type StatusReport = { character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, index: WorkspaceIndexResult | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, sections: Array<string>, };
+export type StatusReport = { character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, index: WorkspaceIndexResult | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, running?: RunningStatusReport, sections: Array<string>, };

@@ -29,6 +29,7 @@ import { compactionRunner } from "../memory/compaction/run.ts";
 import type { NotificationService } from "../notifications.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
+import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { commandCatalogue } from "../commands/registry.ts";
 import { changesState } from "../operations/policy.ts";
@@ -330,6 +331,7 @@ export interface CommandAssembly {
   handshake: HandshakeProvider;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   env?: NodeJS.ProcessEnv | undefined;
+  running?: () => RunningStatusReport;
 }
 
 export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
@@ -650,6 +652,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       mcpTools: () => runtime.mcp.current.allTools(),
     },
     mcpStatus: () => runtime.mcp.current.serverStatus(),
+    ...(a.running === undefined ? {} : { running: a.running }),
     workspaceIndex: {
       indexPathFor: (character) => {
         if (!runtime.registry.hasCharacter(character)) return undefined;

@@ -640,3 +640,39 @@ test("foreground turns defer only their character until all concurrent replies f
     await service.shutdown();
   });
 });
+
+describe("shutting down", () => {
+  test("a running heartbeat is reported and waited for, and no tick starts after", async () => {
+    await inTempDir(async (root) => {
+      const { service, executor, now } = build();
+      const { promise: released, resolve: release } = Promise.withResolvers<void>();
+      executor.runHeartbeatTick = async (character) => {
+        executor.calls.push(`${character}:heartbeat`);
+        await released;
+        return { events: [] };
+      };
+      await service.register(registration("nova", characterDir(root, "nova")));
+      expect(service.runningHeartbeats()).toEqual([]);
+
+      service.forceHeartbeatNow("nova");
+      const ticking = service.tick();
+      await Promise.resolve();
+      expect(service.runningHeartbeats()).toEqual([{ character: "nova", startedAt: START }]);
+
+      let quiet = false;
+      const quiescing = service.quiesce().then(() => { quiet = true; });
+      await Bun.sleep(10);
+      expect(quiet).toBe(false);
+
+      release();
+      await quiescing;
+      await ticking;
+      expect(service.runningHeartbeats()).toEqual([]);
+
+      now.value += 100 * HOUR;
+      service.forceHeartbeatNow("nova");
+      await service.tick();
+      expect(executor.calls).toEqual(["nova:heartbeat"]);
+    });
+  });
+});
