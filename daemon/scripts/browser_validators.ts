@@ -14,6 +14,7 @@ export function browserValidators(): Record<string, string> {
     ServerMessage: wire.server,
     ClientMessage: wire.client,
     WebSessionInfo: web.session,
+    WebLoginCode: web.login_code,
     WebProblem: web.problem,
     WebArchiveInfo: web.archive_info,
     WebArchiveList: web.archive_list,

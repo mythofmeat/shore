@@ -6,6 +6,7 @@ export const SETTINGS_PAGES = [
   { id: "providers", label: "Providers", group: "Daemon" },
   { id: "usage", label: "Usage & budgets", group: "Daemon" },
   { id: "configuration", label: "Configuration", group: "Daemon" },
+  { id: "devices", label: "Devices", group: "Daemon" },
   { id: "memory", label: "Memory & segments", group: "Advanced" },
   { id: "diagnostics", label: "Diagnostics", group: "Advanced" },
   { id: "traces", label: "Traces & call log", group: "Advanced" },

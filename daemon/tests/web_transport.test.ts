@@ -6,6 +6,8 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostname } from "node:os";
+import type { WebLoginCode } from "../src/protocol/WebLoginCode.ts";
+import type { WebProblem } from "../src/protocol/WebProblem.ts";
 import type { WebRequestList } from "../src/protocol/WebRequestList.ts";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { tokenMatches } from "../src/config/token.ts";
@@ -19,7 +21,8 @@ import type { HandshakeProvider } from "../src/swp/connection.ts";
 import { Server } from "../src/swp/server.ts";
 import type { ControlRoutedMessage, RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
-import { WEB_LIMITS, webBinding, webRequestOrigin } from "../src/web/policy.ts";
+import { LoginCodes } from "../src/web/auth.ts";
+import { pageOrigin, WEB_LIMITS, webBinding } from "../src/web/policy.ts";
 import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 
@@ -311,10 +314,35 @@ describe("browser authentication boundary", () => {
     }
   });
 
+  test("an HTTPS proxy that passes on the Host header needs no configuration, and other ports stay out", async () => {
+    const f = await fixture(); f.web.activate();
+    for (const origin of ["https://shore.test-tailnet.ts.net:8443", "https://shore.test-tailnet.ts.net"]) {
+      const headers = { host: new URL(origin).host, origin };
+      const login = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      expect(login.status).toBe(200);
+      expect(login.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
+      expect(login.headers.get("set-cookie")).toContain("Secure");
+      const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+      if (cookie === undefined) throw new Error("Missing browser cookie");
+      expect((await fetch(`${f.web.origin}/api/session`, { method: "POST", headers: { ...headers, cookie } })).status).toBe(200);
+      const browser = connectBrowser(f.web.origin, cookie, WEB_SUBPROTOCOL, { headers });
+      await browser.attach();
+      await browser.close();
+      for (const foreign of ["https://shore.test-tailnet.ts.net:9443", "https://other.test-tailnet.ts.net:8443"]) {
+        const refused = await fetch(`${f.web.origin}/api/session`, { method: "POST", headers: { host: headers.host, origin: foreign, cookie } });
+        expect(refused.status).toBe(403);
+        expect((await refused.json() as WebProblem).message).toContain(`daemon.web.public_origin = "${foreign}"`);
+      }
+    }
+  });
+
   test("HTTPS proxy configuration allows direct HTTP access with working cookies and logout for each", async () => {
     const origin = "https://shore.example";
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin } }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
+    const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+    expect(rewritten.status).toBe(200);
+    expect(rewritten.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
     for (const accessOrigin of [origin, target, "http://shore.test-tailnet.ts.net:17340"]) {
       const headers = { host: new URL(accessOrigin).host, origin: accessOrigin };
       const secure = accessOrigin.startsWith("https:");
@@ -414,6 +442,9 @@ describe("browser authentication boundary", () => {
     }
     expect((await f.api("/api/session", cookie, {}, { "sec-fetch-site": "same-site" })).status).toBe(403);
     expect((await f.api("/api/session", cookie, {}, { host: "evil.example" })).status).toBe(403);
+    const bare = await fetch(`${f.web.origin}/api/session`, { method: "POST", headers: { cookie } });
+    expect(bare.status).toBe(403);
+    expect((await bare.json() as WebProblem).message).toContain("no Origin header");
     expect((await f.api("/api/session", cookie)).status).toBe(200);
     const forged = connectBrowser(f.web.origin, cookie, WEB_SUBPROTOCOL, { headers: { origin: "https://evil.example" } });
     expect(await outcomeOf(forged.opened)).toThrow("rejected"); await forged.closed;
@@ -442,13 +473,92 @@ describe("browser authentication boundary", () => {
     expect(f.swp.sessionRouter.sessions()).toEqual([]);
   });
 
-  test("a sign-in expires even while its socket remains active", async () => {
+  test("a sign-in nothing renews expires even while its socket remains active", async () => {
     const f = await fixture({ sessionLifetimeMs: 150 }); f.web.activate();
     const { cookie } = await f.login();
     const browser = connectBrowser(f.web.origin, cookie); await browser.attach();
     expect((await browser.closed).code).toBe(4001);
     expect(f.swp.sessionRouter.sessions()).toEqual([]);
     expect((await f.api("/api/session", cookie)).status).toBe(401);
+  });
+});
+
+describe("staying signed in and signing in other devices", () => {
+  test("using a sign-in renews it with the same cookie, and an open tab keeps it alive", async () => {
+    const f = await fixture({ sessionLifetimeMs: 2000 }); f.web.activate();
+    const { cookie, info } = await f.login();
+    await Bun.sleep(50);
+    const renewed = await f.api("/api/session", cookie);
+    expect(renewed.status).toBe(200);
+    expect((await renewed.json() as WebSessionInfo).expires_at).toBeGreaterThan(info.expires_at);
+    expect(renewed.headers.get("set-cookie")?.split(";", 1)[0]).toBe(cookie);
+    expect(renewed.headers.get("set-cookie")).toContain("HttpOnly");
+    const b = browserConnection(f.web.origin);
+    try {
+      await b.client.signIn(TOKEN); await until(() => b.client.status === "ready");
+      await Bun.sleep(2600);
+      expect(b.client.status).toBe("ready");
+      expect(b.sockets).toHaveLength(1);
+    } finally { b.client.stop(); }
+  });
+
+  test("a signed-in browser's code signs in one other browser, once", async () => {
+    const f = await fixture(); f.web.activate();
+    expect((await f.api("/api/login-code")).status).toBe(401);
+    const { cookie } = await f.login();
+    const created = await f.api("/api/login-code", cookie);
+    expect(created.status).toBe(200);
+    expect(created.headers.get("cache-control")).toBe("no-store");
+    const code = await created.json() as WebLoginCode;
+    expect(code.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(code.expires_at - Date.now()).toBeGreaterThan(WEB_LIMITS.loginCodeMs - 5000);
+    expect(code.expires_at - Date.now()).toBeLessThanOrEqual(WEB_LIMITS.loginCodeMs);
+    const phone = await f.api("/api/login", "", { token: code.code });
+    expect(phone.status).toBe(200);
+    const phoneCookie = phone.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    expect(phoneCookie).not.toBe(cookie);
+    expect((await f.api("/api/session", phoneCookie)).status).toBe(200);
+    expect((await f.api("/api/session", cookie)).status).toBe(200);
+    expect((await f.api("/api/login", "", { token: code.code })).status).toBe(401);
+    const next = await (await f.api("/api/login-code", phoneCookie)).json() as WebLoginCode;
+    const laptop = browserConnection(f.web.origin);
+    const late = browserConnection(f.web.origin);
+    try {
+      await laptop.client.signIn(next.code, "This link was used"); await until(() => laptop.client.status === "ready");
+      expect(await outcomeOf(late.client.signIn(next.code, "This link was used"))).toThrow("This link was used");
+      expect(late.client.status).toBe("signed_out");
+      expect(late.client.detail).toBe("This link was used");
+      expect(await outcomeOf(late.client.signIn("wrong", "This link was used"))).toThrow("This link was used");
+    } finally { laptop.client.stop(); late.client.stop(); }
+    const fromClient = await laptop.client.loginCode();
+    expect((await f.api("/api/login", "", { token: fromClient.code })).status).toBe(200);
+  });
+
+  test("sign-in codes expire, and only the newest few stay usable", async () => {
+    const f = await fixture({ loginCodeMs: 50 }); f.web.activate();
+    const { cookie } = await f.login();
+    const stale = await (await f.api("/api/login-code", cookie)).json() as WebLoginCode;
+    await Bun.sleep(80);
+    expect((await f.api("/api/login", "", { token: stale.code })).status).toBe(401);
+    const codes = new LoginCodes(60_000, 2);
+    const [first, second, third] = [codes.create(), codes.create(), codes.create()];
+    expect(codes.redeem(first.code)).toBe(false);
+    expect(codes.redeem(third.code)).toBe(true);
+    expect(codes.redeem(second.code)).toBe(true);
+    expect(codes.redeem(second.code)).toBe(false);
+  });
+
+  test("a page whose origin the daemon refuses shows why instead of retrying", async () => {
+    const f = await fixture(); f.web.activate();
+    const b = browserConnection(f.web.origin, { fetch: (url, options) => fetch(url, { ...options, headers: { ...Object.fromEntries(new Headers(options.headers)), origin: "https://shore.example:8443" } }) });
+    try {
+      b.client.connect();
+      await until(() => b.client.status === "error");
+      expect(b.client.detail).toContain('daemon.web.public_origin = "https://shore.example:8443"');
+      await Bun.sleep(50);
+      expect(b.client.status).toBe("error");
+      expect(b.updates.filter((update) => update.kind === "status" && update.status === "reconnecting")).toEqual([]);
+    } finally { b.client.stop(); }
   });
 });
 
@@ -696,14 +806,19 @@ describe("web listener policy", () => {
     expect(webBinding({ ...defaultWebConfig(), public_origin: "http://shore.example", tls_key: "key.pem", tls_cert: "cert.pem" })).toMatchObject({ secure: true });
   });
 
-  test("all hostnames and numeric addresses work with an optional proxy scheme", () => {
+  test("a page on any hostname is accepted when its host and port are the ones the daemon sees, over HTTP or HTTPS", () => {
+    const request = (host: string, headers: Record<string, string>) => new Request(`http://${host}/api/session`, { method: "POST", headers });
     for (const host of ["localhost:17340", "127.0.0.1:17340", "192.168.1.10:7340", "[::1]:17340", "[fd00::1]:7340", hostname(), "100.101.102.103:7340", "shore.test-tailnet.ts.net:7340", "lab-box:7340", "alias.example:17340"]) {
-      const url = new URL(`http://${host}`);
-      expect(webRequestOrigin(url, undefined)).toBe(url.origin);
+      for (const origin of [`http://${host}`, `https://${host}`]) expect(pageOrigin(request(host, { origin }), undefined)).toEqual({ origin });
     }
-    expect(webRequestOrigin(new URL("http://shore.example/workspace"), "https://shore.example")).toBe("https://shore.example");
-    expect(webRequestOrigin(new URL("http://localhost:7340/workspace"), "https://shore.example")).toBe("http://localhost:7340");
-    expect(webRequestOrigin(new URL("https://shore.example/workspace"), "http://shore.example")).toBe("http://shore.example");
+    expect(pageOrigin(request("127.0.0.1:7340", { origin: "https://shore.example" }), "https://shore.example")).toEqual({ origin: "https://shore.example" });
+    expect(JSON.stringify(pageOrigin(request("127.0.0.1:7340", { origin: "http://localhost:7340" }), "https://shore.example"))).toContain("reach the daemon as 127.0.0.1:7340");
+    for (const origin of ["http://lab-box:7341", "http://lab-box.evil.example:7340", "http://lab-box", "null", "", "lab-box:7340"]) {
+      expect(pageOrigin(request("lab-box:7340", { origin }), undefined)).toHaveProperty("refused");
+    }
+    expect(pageOrigin(request("lab-box:7340", {}), undefined)).toHaveProperty("refused");
+    expect(pageOrigin(request("lab-box:7340", { origin: "http://lab-box:7340", "sec-fetch-site": "same-site" }), undefined)).toHaveProperty("refused");
+    expect(pageOrigin(request("lab-box:7340", { origin: "http://lab-box:7340", "sec-fetch-site": "same-origin" }), undefined)).toEqual({ origin: "http://lab-box:7340" });
   });
 });
 

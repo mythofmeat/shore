@@ -23,6 +23,12 @@ export function useStoredFlag(key: string, fallback: boolean): [boolean, (value:
   return [value, update];
 }
 
+export function useStoredText(key: string, fallback: () => string): [string, (value: string) => void] {
+  const [value, setValue] = useState(() => readStored(key) ?? fallback());
+  const update = useCallback((next: string) => { setValue(next); writeStored(key, next); }, [key]);
+  return [value, update];
+}
+
 export function useEscape(active: boolean, action: () => void): void {
   useEffect(() => {
     if (!active) return;

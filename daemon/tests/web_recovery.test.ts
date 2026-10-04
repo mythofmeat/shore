@@ -74,6 +74,20 @@ test("restart preserves session ownership and original expiry using hashes, neve
   expect(c.recovery.archives()).toEqual([]);
 });
 
+test("renewing a sign-in saves its new expiry, and only the browser holding it can renew it", async () => {
+  const config = await options(); const a = open(config); const signed = signIn(a.sessions); const other = signIn(a.sessions);
+  const before = signed.session.expiresAt;
+  await Bun.sleep(20);
+  const cookie = a.sessions.renew(signed.session, signed.request);
+  expect(cookie.split(";", 1)[0]).toBe(signed.cookie.split(";", 1)[0]);
+  expect(signed.session.expiresAt).toBeGreaterThan(before);
+  expect(() => a.sessions.renew(signed.session, other.request)).toThrow("Only the browser holding a sign-in can renew it");
+  await a.close();
+  const b = open(config);
+  expect(b.sessions.read(signed.request)?.expiresAt).toBe(signed.session.expiresAt);
+  expect(b.sessions.read(other.request)?.expiresAt).toBe(other.session.expiresAt);
+});
+
 test.each(["token", "origin"])("changing the %s invalidates old credentials and transfers before serving", async (changed) => {
   const config = await options(); const a = open(config); const signed = signIn(a.sessions);
   a.recovery.saveArchive(signed.session.id, saved("uncertain"));

@@ -4,7 +4,7 @@ import { createCharacter, send, signIn, watchPage } from "./helpers.ts";
 
 test.use({ usageSeed: true });
 
-const PAGES = ["Models", "Characters", "Appearance", "Keyboard shortcuts", "Providers", "Usage & budgets", "Configuration", "Memory & segments", "Diagnostics", "Traces & call log", "Tool runner", "Character archives", "Debug"];
+const PAGES = ["Models", "Characters", "Appearance", "Keyboard shortcuts", "Providers", "Usage & budgets", "Configuration", "Devices", "Memory & segments", "Diagnostics", "Traces & call log", "Tool runner", "Character archives", "Debug"];
 
 test("every settings page renders readable content without raw objects or page errors", async ({ page }) => {
   const check = await watchPage(page);

@@ -20,6 +20,14 @@ pub struct WebSessionInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebLoginCode {
+    pub code: String,
+    #[ts(type = "number")]
+    pub expires_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub enum WebProblemCode {
@@ -154,6 +162,7 @@ mod tests {
         let schema = serde_json::json!({
             "login": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebLogin>(),
             "session": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSessionInfo>(),
+            "login_code": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebLoginCode>(),
             "problem": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebProblem>(),
             "archive_export": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebArchiveExport>(),
             "archive_info": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebArchiveInfo>(),

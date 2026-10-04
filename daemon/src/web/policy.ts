@@ -8,6 +8,8 @@ export const WEB_LIMITS = {
   pendingRequests: 32,
   requestsPerSecond: 128,
   loginAttemptsPerMinute: 60,
+  loginCodeMs: 5 * 60_000,
+  loginCodes: 8,
   handshakeTimeoutMs: 10_000,
   drainTimeoutMs: 10_000,
 } as const;
@@ -38,14 +40,20 @@ export function webBinding(config: WebConfig): { hostname: string; port: number;
   return { hostname, port, secure: tls || origin?.protocol === "https:" };
 }
 
-export function webRequestOrigin(url: URL, publicOrigin: string | undefined): string {
-  return publicOrigin !== undefined && url.host === new URL(publicOrigin).host ? publicOrigin : url.origin;
+function originHost(origin: string): string | undefined {
+  try {
+    const url = new URL(origin);
+    return url.origin === origin && ["http:", "https:"].includes(url.protocol) ? url.host : undefined;
+  } catch { return undefined; }
 }
 
-export function sameOrigin(request: Request, origin: string): boolean {
-  return request.headers.get("origin") === origin &&
-    new URL(request.url).host === new URL(origin).host &&
-    !["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "");
+export function pageOrigin(request: Request, publicOrigin: string | undefined): { origin: string } | { refused: string } {
+  const origin = request.headers.get("origin");
+  if (origin === null) return { refused: "Only the Shore page in a browser can use this endpoint, and this request has no Origin header" };
+  if (["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "")) return { refused: "Another site’s page can’t use this daemon" };
+  const host = new URL(request.url).host;
+  if (origin === publicOrigin || originHost(origin) === host) return { origin };
+  return { refused: `This page is on ${origin}, but its requests reach the daemon as ${host}. If a proxy sits in front of Shore, make it pass on the original Host header, or set daemon.web.public_origin = "${origin}".` };
 }
 
 export function securityHeaders(): Headers {

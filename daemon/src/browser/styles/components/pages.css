@@ -577,3 +577,41 @@ kbd {
 .data-table .mono {
   white-space: nowrap;
 }
+
+.login-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.qr-code {
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+}
+
+.qr-code .qr-light {
+  fill: var(--qr-light);
+}
+
+.qr-code .qr-dark {
+  fill: var(--qr-dark);
+}
+
+.login-code-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.login-code-link {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-body);
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -5,6 +5,8 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 export declare function validClientMessage(value: unknown): value is ClientMessage;
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 export declare function validWebSessionInfo(value: unknown): value is WebSessionInfo;
+import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
+export declare function validWebLoginCode(value: unknown): value is WebLoginCode;
 import type { WebProblem } from "../protocol/WebProblem.ts";
 export declare function validWebProblem(value: unknown): value is WebProblem;
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
