@@ -120,9 +120,17 @@ export async function cancelPass(dataDir: string, character: string, reason: str
 
 export function runningPass(dataDir: string, character: string): RunningPassView | undefined {
   const pass = running.get(characterDataDir(dataDir, character));
-  return pass === undefined
-    ? undefined
-    : { character: pass.character, thread: pass.thread, trigger: pass.trigger, startedAt: pass.startedAt, phase: pass.phase, lastTool: pass.lastTool };
+  return pass === undefined ? undefined : passView(pass);
+}
+
+export function runningPasses(dataDir: string): RunningPassView[] {
+  return [...running]
+    .filter(([key, pass]) => key === characterDataDir(dataDir, pass.character))
+    .map(([, pass]) => passView(pass));
+}
+
+function passView(pass: RunningPass): RunningPassView {
+  return { character: pass.character, thread: pass.thread, trigger: pass.trigger, startedAt: pass.startedAt, phase: pass.phase, lastTool: pass.lastTool };
 }
 
 export function lastPass(dataDir: string, character: string): EndedPass | undefined {

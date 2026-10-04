@@ -857,6 +857,30 @@ wire_types! {
         pub pass: Option<CompactionPassEnd>,
     }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum RunningWorkKind { Message, Heartbeat, Compaction }
+
+    pub struct RunningWork {
+        pub kind: RunningWorkKind,
+        pub character: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub thread: Option<String>,
+        pub started_at: String,
+        #[ts(type = "number")]
+        pub running_secs: u64,
+    }
+
+    pub struct ShutdownWindow {
+        pub requested_at: String,
+        pub deadline: String,
+    }
+
+    pub struct RunningStatusReport {
+        pub work: Vec<RunningWork>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub shutdown: Option<ShutdownWindow>,
+    }
+
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
     pub struct DiagnosticCountArgs {
@@ -1144,6 +1168,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub compaction: Option<CompactionStatusReport>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub running: Option<RunningStatusReport>,
         pub sections: Vec<String>,
     }
 

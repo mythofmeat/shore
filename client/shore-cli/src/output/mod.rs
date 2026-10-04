@@ -5,6 +5,7 @@ pub(crate) mod compaction;
 pub(crate) mod config;
 pub(crate) mod history;
 pub(crate) mod reasoning;
+pub(crate) mod running;
 pub(crate) mod spinner;
 pub(crate) mod status;
 pub(crate) mod styling;

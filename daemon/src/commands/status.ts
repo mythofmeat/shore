@@ -15,6 +15,7 @@ import type { AutonomyStatusReport } from "../protocol/AutonomyStatusReport.ts";
 import type { McpStatusReport } from "../protocol/McpStatusReport.ts";
 import type { ActivityStatusReport } from "../protocol/ActivityStatusReport.ts";
 import type { CompactionStatusReport } from "../protocol/CompactionStatusReport.ts";
+import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import { homeThreadOf } from "../engine/threads.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { lastPass, runningPass } from "../memory/compaction/activity.ts";
@@ -43,6 +44,7 @@ export interface StatusContext {
   workspaceIndex?: WorkspaceIndexSource | undefined;
   historyIndex?: HistoryIndexSource | undefined;
   mcpServers?: readonly McpServerStatus[] | undefined;
+  running?: RunningStatusReport | undefined;
 }
 
 function countArg(args: Args, fallback: number): number {
@@ -145,6 +147,7 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
     history_index: await historyIndexSection(ctx.historyIndex, ctx.characterName),
     ...(mcp === undefined ? {} : { mcp }),
     compaction: await compactionSection(ctx),
+    ...(ctx.running === undefined ? {} : { running: ctx.running }),
   };
   return {
     character: ctx.characterName,

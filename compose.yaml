@@ -17,7 +17,8 @@
 # The same daemon without compose:
 #
 #   docker build -f daemon/Dockerfile -t shore-daemon .
-#   docker run -d --name shore-daemon -p 127.0.0.1:7320:7320 -p 127.0.0.1:7340:7340 \
+#   docker run -d --name shore-daemon --stop-timeout 1800 \
+#     -p 127.0.0.1:7320:7320 -p 127.0.0.1:7340:7340 \
 #     -v "$PWD/config:/config" -v "$PWD/workspace:/workspace" \
 #     -v shore-data:/data -v shore-cache:/cache -v shore-home:/home/app \
 #     shore-daemon
@@ -35,6 +36,9 @@ services:
         # Sets /etc/localtime in the image. Keep it the same as TZ below.
         TZ: ${TZ:-UTC}
     restart: unless-stopped
+    # On stop the daemon finishes replies and heartbeats already running, for
+    # up to daemon.shutdown_grace (29m by default). Keep this a little longer.
+    stop_grace_period: 30m
     environment:
       TZ: ${TZ:-UTC}
     ports:

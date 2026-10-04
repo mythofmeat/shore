@@ -41,7 +41,7 @@ MUTANTS = [
      '  const startup = resolveStartup({ ...cli, addr: undefined }, env, {'),
     ("order: nothing drains the route stream, so a client is answered by nobody",
      R,
-     "  const handlerDone = handler.run(server.routes());",
+     "  const handlerDone = messages.run(server.routes());",
      "  const handlerDone = Promise.resolve();"),
     ("order: the instance is registered before the bind, so a failed bind leaves an entry",
      R,
@@ -140,6 +140,24 @@ MUTANTS = [
      D,
      "    await applyReloadedConfig(a, config);",
      "    void config;"),
+
+    # --- draining before a stop -----------------------------------------------
+    ("drain: a shutdown stops at once instead of waiting for running work",
+     R,
+     '        await bounded(idle, "running work", log, graceMs);',
+     "        void idle;"),
+    ("drain: new messages are still taken while the daemon drains",
+     R,
+     "        messages.close();\n",
+     ""),
+    ("drain: status never hears about the running work",
+     R,
+     "      running,\n      ...(log === undefined ? {} : { log }),",
+     "      ...(log === undefined ? {} : { log }),"),
+    ("drain: the grace period is ignored and the drain waits for ever",
+     R,
+     '        await bounded(idle, "running work", log, graceMs);',
+     "        await idle;"),
 
     # --- the address string ---------------------------------------------------
     ("addr: an IPv6 host is not bracketed, so the string splits on the wrong colon",

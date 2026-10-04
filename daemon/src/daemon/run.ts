@@ -31,6 +31,7 @@ import { version as DAEMON_VERSION } from "../../package.json";
 import { startAutoDiscovery } from "./auto_discovery.ts";
 import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
+import { describeWork, runningReport, type ShutdownWindowState } from "./running.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -101,6 +102,7 @@ export interface RunningDaemon {
   readonly web?: RunningWebServer;
   readonly done: Promise<void>;
   stop(): void;
+  shutdown(): Promise<void>;
 }
 
 export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon> {
@@ -252,6 +254,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     const handshake = buildHandshakeProvider(runtime.registry);
     server.setHandshakeProvider(handshake);
 
+    let handler: MessageHandler | undefined;
+    let shutdownWindow: ShutdownWindowState | undefined;
+    const running = () => runningReport({
+      dataDir: loaded.dirs.data,
+      generations: () => handler?.activeGenerations() ?? [],
+      heartbeats: () => runtime.autonomy.runningHeartbeats(),
+      shutdown: () => shutdownWindow,
+    });
+
     const assembly = {
       runtime,
       providers: runtime.providers,
@@ -261,6 +272,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       emitEvent: (message: ServerMessage) => server.broadcast(message),
       diagnostics,
       env,
+      running,
       ...(log === undefined ? {} : { log }),
     };
     await registerKnownCharacters(runtime, assembly.autonomy, log);
@@ -268,10 +280,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
     rollback.push(() => { clocks.stop(); });
 
-    const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
-    server.setControlHandler((routed) => handler.handleControl(routed));
+    handler = new MessageHandler(buildMessageHandlerDeps(assembly));
+    const messages = handler;
+    server.setControlHandler((routed) => messages.handleControl(routed));
 
-    const handlerDone = handler.run(server.routes());
+    const handlerDone = messages.run(server.routes());
     rollback.push(async () => { await handlerDone; });
     web?.activate();
     if (web !== undefined) log?.info?.("Browser transport listening", { origin: web.origin });
@@ -347,6 +360,36 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       log?.info?.("Daemon shut down cleanly");
     })();
 
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      void web?.stop().catch((error: unknown) => {
+        log?.warn?.("Browser transport shutdown failed", { error: String(error) });
+      });
+      server.stop();
+    };
+    const graceMs = loaded.app.daemon.shutdown_grace.asMillis();
+    let draining: Promise<void> | undefined;
+    const shutdown = () => {
+      draining ??= (async () => {
+        const requestedAt = Date.now();
+        shutdownWindow = { requestedAt, deadline: requestedAt + graceMs };
+        messages.close();
+        const idle = Promise.all([messages.drain(), runtime.autonomy.quiesce()]);
+        const work = running().work;
+        if (work.length > 0) {
+          log?.info?.("Waiting for running work to finish before stopping", {
+            work: describeWork(work),
+            grace_secs: Math.round(graceMs / 1000),
+          });
+        }
+        await bounded(idle, "running work", log, graceMs);
+        stop();
+      })();
+      return draining;
+    };
+
     return {
       host: bound.host,
       port: bound.port,
@@ -355,12 +398,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       server,
       ...(web === undefined ? {} : { web }),
       done,
-      stop: () => {
-        void web?.stop().catch((error: unknown) => {
-          log?.warn?.("Browser transport shutdown failed", { error: String(error) });
-        });
-        server.stop();
-      },
+      stop,
+      shutdown,
     };
   } catch (error) {
     server.stop();
@@ -382,9 +421,16 @@ export function describeRejection(reason: unknown): string {
 async function runDaemon(options: DaemonOptions): Promise<void> {
   const daemon = await startDaemon(options);
 
+  let signalled = false;
   const stop = (signal: NodeJS.Signals) => () => {
-    options.log?.info?.(`Received ${signal}`);
-    daemon.stop();
+    if (signalled) {
+      options.log?.info?.(`Received ${signal} again; stopping now`);
+      daemon.stop();
+      return;
+    }
+    signalled = true;
+    options.log?.info?.(`Received ${signal}; send it again to stop without waiting`);
+    void daemon.shutdown();
   };
   const handlers: [NodeJS.Signals, () => void][] = [
     ["SIGINT", stop("SIGINT")],
