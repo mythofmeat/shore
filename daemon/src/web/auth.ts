@@ -11,6 +11,7 @@ export interface WebSession {
 }
 
 interface StoredSession extends WebSession {
+  expiresAt: number;
   controller: AbortController;
   timer?: ReturnType<typeof setTimeout>;
 }
@@ -35,10 +36,14 @@ export class WebSessions {
     }
   }
 
+  #presented(request: Request, secure: boolean): string | undefined {
+    const token = new CookieMap(request.headers.get("cookie") ?? "").get(`${secure ? "__Host-" : ""}${this.#name}`);
+    return token === null || token === undefined || !/^[A-Za-z0-9_-]{43}$/.test(token) ? undefined : token;
+  }
+
   read(request: Request, secure = this.#secure): WebSession | undefined {
-    const id = new CookieMap(request.headers.get("cookie") ?? "").get(`${secure ? "__Host-" : ""}${this.#name}`);
-    if (id === null || id === undefined || !/^[A-Za-z0-9_-]{43}$/.test(id)) return undefined;
-    return this.get(sessionDigest(id));
+    const token = this.#presented(request, secure);
+    return token === undefined ? undefined : this.get(sessionDigest(token));
   }
 
   get(id: string): WebSession | undefined {
@@ -65,6 +70,18 @@ export class WebSessions {
     return this.#restore(id, expiresAt);
   }
 
+  renew(session: WebSession, request: Request, secure = this.#secure): string {
+    const stored = this.#sessions.get(session.id);
+    const token = this.#presented(request, secure);
+    if (stored === undefined || token === undefined || sessionDigest(token) !== stored.id) throw new Error("Only the browser holding a sign-in can renew it");
+    const expiresAt = Date.now() + this.#lifetime;
+    this.recovery?.renewSession(stored.id, expiresAt);
+    stored.expiresAt = expiresAt;
+    clearTimeout(stored.timer);
+    this.#arm(stored);
+    return this.#cookie(token, expiresAt, secure);
+  }
+
   #restore(id: string, expiresAt: number): WebSession {
     const controller = new AbortController();
     const session: StoredSession = { id, controller, signal: controller.signal, expiresAt };
@@ -83,9 +100,13 @@ export class WebSessions {
   cookie(session?: WebSession, secure = this.#secure): string {
     const token = session === undefined ? "" : this.#cookies.get(session.id);
     if (token === undefined) throw new Error("Only a new browser sign-in can issue a cookie");
+    return this.#cookie(token, session?.expiresAt, secure);
+  }
+
+  #cookie(token: string, expiresAt: number | undefined, secure: boolean): string {
     return new Cookie(`${secure ? "__Host-" : ""}${this.#name}`, token, {
       httpOnly: true, sameSite: "strict", secure, path: "/",
-      ...(session === undefined ? { maxAge: 0 } : { expires: new Date(session.expiresAt) }),
+      ...(expiresAt === undefined ? { maxAge: 0 } : { expires: new Date(expiresAt) }),
     }).toString();
   }
 
@@ -107,4 +128,33 @@ export class WebSessions {
     }
     this.#sessions.clear(); this.#cookies.clear();
   }
+}
+
+export class LoginCodes {
+  readonly #codes = new Map<string, number>();
+
+  constructor(readonly lifetime: number, readonly capacity: number) {}
+
+  create(): { code: string; expiresAt: number } {
+    const now = Date.now();
+    for (const [id, expiresAt] of this.#codes) if (expiresAt <= now) this.#codes.delete(id);
+    while (this.#codes.size >= this.capacity) {
+      const oldest = this.#codes.keys().next().value;
+      if (oldest === undefined) break;
+      this.#codes.delete(oldest);
+    }
+    const code = randomBytes(32).toString("base64url");
+    const expiresAt = now + this.lifetime;
+    this.#codes.set(sessionDigest(code), expiresAt);
+    return { code, expiresAt };
+  }
+
+  redeem(code: string): boolean {
+    const id = sessionDigest(code);
+    const expiresAt = this.#codes.get(id);
+    this.#codes.delete(id);
+    return expiresAt !== undefined && expiresAt > Date.now();
+  }
+
+  clear(): void { this.#codes.clear(); }
 }

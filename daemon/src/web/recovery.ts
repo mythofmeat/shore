@@ -65,6 +65,10 @@ export class WebRecovery {
     this.#db.query("INSERT INTO sessions VALUES (?, ?)").run(id, expiresAt);
   }
 
+  renewSession(id: string, expiresAt: number): void {
+    this.#db.query("UPDATE sessions SET expires_at = ? WHERE id = ?").run(expiresAt, id);
+  }
+
   revokeSession(id: string): void { this.#db.query("DELETE FROM sessions WHERE id = ?").run(id); }
 
   archives(): { owner: string; info: WebArchiveInfo }[] {

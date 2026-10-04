@@ -1,8 +1,9 @@
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
-import { validClientMessage, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
+import { validClientMessage, validWebLoginCode, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
 import { SyncState, type SyncSnapshot } from "./sync.ts";
 import { parseServerFrame } from "./wire.ts";
 import { randomUUID } from "./platform.ts";
@@ -55,6 +56,7 @@ export class BrowserConnection {
   #abort: AbortController | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #handshake: ReturnType<typeof setTimeout> | undefined;
+  #renewal: ReturnType<typeof setTimeout> | undefined;
   #generation = 0;
   #retries = 0;
   #wanted = false;
@@ -95,17 +97,25 @@ export class BrowserConnection {
     });
   }
 
-  async signIn(token: string): Promise<void> {
+  async signIn(token: string, rejected?: string): Promise<void> {
     this.stop();
     const generation = this.#generation;
     const response = await this.#post("/api/login", { token }, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000));
     if (generation !== this.#generation) return;
     if (!response.ok) {
       const problem: unknown = await response.json();
-      this.#setStatus("signed_out", validWebProblem(problem) ? problem.message : "Sign-in failed");
+      this.#setStatus("signed_out", response.status === 401 && rejected !== undefined ? rejected : validWebProblem(problem) ? problem.message : "Sign-in failed");
       throw new Error(this.#detail);
     }
     this.connect();
+  }
+
+  async loginCode(): Promise<WebLoginCode> {
+    const response = await this.#post("/api/login-code", undefined, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000));
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(validWebProblem(body) ? body.message : "Could not create a sign-in code");
+    if (!validWebLoginCode(body)) throw new Error("The daemon sent an unexpected sign-in code. Reload the page.");
+    return body;
   }
 
   async signOut(): Promise<void> {
@@ -138,6 +148,7 @@ export class BrowserConnection {
     this.#generation += 1;
     clearTimeout(this.#timer);
     clearTimeout(this.#handshake);
+    clearTimeout(this.#renewal);
     this.#abort?.abort();
     this.#abort = undefined;
     const socket = this.#socket;
@@ -173,7 +184,7 @@ export class BrowserConnection {
       if (generation !== this.#generation) return;
       if (!response.ok) {
         const detail = validWebProblem(body) ? body.message : "Could not check the browser session";
-        this.#lost(response.status === 401 ? "signed_out" : response.status === 409 ? "reload_required" : "reconnecting", detail);
+        this.#lost(response.status === 401 ? "signed_out" : response.status === 409 ? "reload_required" : response.status === 403 ? "error" : "reconnecting", detail);
         return;
       }
       if (!validWebSessionInfo(body)) { this.#lost("error", "The daemon returned an invalid session contract"); return; }
@@ -181,6 +192,7 @@ export class BrowserConnection {
         this.#lost("reload_required", "Shore was upgraded. Reload this page to continue."); return;
       }
       this.#session = body;
+      this.#renewLater(generation, body.expires_at);
       const socket = (this.#options.socket ?? ((url, subprotocol) => new WebSocket(url, subprotocol)))(
         this.#options.origin.replace(/^http/, "ws") + "/api/swp", `shore-web-${String(body.protocol)}.${body.contract}`,
       );
@@ -208,6 +220,22 @@ export class BrowserConnection {
       if (generation !== this.#generation) return;
       this.#lost("reconnecting", error instanceof Error ? error.message : "Could not connect to the daemon");
     }
+  }
+
+  #renewLater(generation: number, expiresAt: number): void {
+    clearTimeout(this.#renewal);
+    const delay = Math.max(1000, Math.min(12 * 60 * 60 * 1000, (expiresAt - Date.now()) / 2));
+    this.#renewal = setTimeout(() => { void this.#renew(generation); }, delay);
+  }
+
+  async #renew(generation: number): Promise<void> {
+    const response = await this.#post("/api/session", undefined, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000)).catch(() => undefined);
+    const body: unknown = await response?.json().catch(() => undefined);
+    if (generation !== this.#generation) return;
+    if (response?.ok === true && validWebSessionInfo(body)) {
+      this.#session = body;
+      this.#renewLater(generation, body.expires_at);
+    } else this.#renewal = setTimeout(() => { void this.#renew(generation); }, 60_000);
   }
 
   #receive(text: string): void {

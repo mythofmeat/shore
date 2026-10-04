@@ -1,6 +1,7 @@
 import type { ValidateFunction } from "ajv/dist/2020.js";
 import { contractValidator } from "../operations/validation.ts";
 import type { WebLogin } from "../protocol/WebLogin.ts";
+import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebArchiveExport } from "../protocol/WebArchiveExport.ts";
@@ -19,6 +20,7 @@ function onFirstUse<T>(schema: object): (value: unknown) => value is T {
 
 export const validWebLogin = onFirstUse<WebLogin>(schemas.login);
 export const validWebSession = onFirstUse<WebSessionInfo>(schemas.session);
+export const validWebLoginCode = onFirstUse<WebLoginCode>(schemas.login_code);
 export const validWebProblem = onFirstUse<WebProblem>(schemas.problem);
 export const validWebArchiveExport = onFirstUse<WebArchiveExport>(schemas.archive_export);
 export const validWebArchiveInfo = onFirstUse<WebArchiveInfo>(schemas.archive_info);

@@ -50,6 +50,25 @@
       "max_pending_requests"
     ]
   },
+  "login_code": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebLoginCode",
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "expires_at": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "code",
+      "expires_at"
+    ]
+  },
   "problem": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "WebProblem",

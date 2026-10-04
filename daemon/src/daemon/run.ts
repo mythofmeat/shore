@@ -118,6 +118,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     config_path: startup.configPath,
     bind_addr: startup.bindAddr,
     bind_addr_source: sourceLabel(startup.bindAddrSource),
+    web_addr: startup.web.enabled ? startup.web.bind_addr : "off",
     token_source: startup.token.source,
   });
   if (startup.token.source === "generated") {
@@ -168,10 +169,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   let web: RunningWebServer | undefined;
   try {
-    if (loaded.app.daemon.web.enabled) {
+    if (startup.web.enabled) {
       const { startWebServer } = await import("../web/server.ts");
       web = startWebServer({
-        config: loaded.app.daemon.web,
+        config: startup.web,
         server,
         authenticate: (presented) => tokenMatches(startup.token.token, presented),
         recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },

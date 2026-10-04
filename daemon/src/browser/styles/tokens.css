@@ -23,4 +23,6 @@
   --z-drawer: 40;
   --z-menu: 50;
   --z-toast: 70;
+  --qr-dark: #000;
+  --qr-light: #fff;
 }

@@ -3788,6 +3788,7 @@
     "WebArchivePhase": "\"uploading\" | \"ready\" | \"exporting\" | \"importing\" | \"imported\" | \"failed\" | \"uncertain\"",
     "WebArchiveResult": "{ \"name\": \"export_character\", \"data\": ExportCharacterResult } | { \"name\": \"import_character\", \"data\": ImportCharacterResult }",
     "WebLogin": "{ token: string, }",
+    "WebLoginCode": "{ code: string, expires_at: number, }",
     "WebProblem": "{ code: WebProblemCode, message: string, }",
     "WebProblemCode": "\"unauthorized\" | \"forbidden\" | \"invalid_request\" | \"too_many_requests\" | \"reload_required\" | \"unavailable\" | \"not_found\"",
     "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, accepted?: boolean, result?: OperationResponse, result_omitted: boolean, error?: Error, }",

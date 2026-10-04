@@ -6,6 +6,7 @@ import { archiveStatus, parsePairs, requestStatus, sourceLabel } from "../src/br
 import { adjacent, globalAction, paletteMatches, type KeyInput } from "../src/browser/app/shortcuts.ts";
 import { compactionPhase, compactionSummary } from "../src/browser/chat/transcript.ts";
 import { fieldLabel } from "../src/browser/ui/labels.ts";
+import { deviceOrigin, loginCodeIn, loginLink, loopbackOrigin } from "../src/browser/login_link.ts";
 
 test("key=value lines keep everything after the first equals sign and reject malformed lines", () => {
   expect(parsePairs("path=notes/trip.md\n\ncommand=echo a=b\nempty=")).toEqual({ path: "notes/trip.md", command: "echo a=b", empty: "" });
@@ -76,4 +77,18 @@ test("compaction notices follow the latest phase until its request finishes, and
   ];
   expect(new Set(reports.map(compactionSummary)).size).toBe(reports.length);
   expect(compactionSummary(reports[4] as CompactionReport)).toContain("budget");
+});
+
+test("sign-in links carry a one-time code in the fragment, and device addresses default like the desktop app", () => {
+  const code = "a".repeat(43);
+  expect(loginLink("https://shore.example:8443", code)).toBe(`https://shore.example:8443/#login=${code}`);
+  expect(loginCodeIn(`#login=${code}`)).toBe(code);
+  for (const hash of ["", "#settings/devices", `#login=${code}x`, `#login=${code.slice(1)}`, `#login=${"!".repeat(43)}`]) expect(loginCodeIn(hash)).toBeUndefined();
+  expect(deviceOrigin("my-computer")).toBe("http://my-computer:7340");
+  expect(deviceOrigin(" my-computer:7341 ")).toBe("http://my-computer:7341");
+  expect(deviceOrigin("https://shore.example")).toBe("https://shore.example");
+  expect(deviceOrigin("http://shore.example:7340/")).toBe("http://shore.example:7340");
+  for (const text of ["", "  ", "ftp://shore.example", "https://user:pass@shore.example", "https://shore.example/path", "https://shore.example/?view=chat", "http://"]) expect(deviceOrigin(text)).toBeUndefined();
+  for (const origin of ["http://localhost:7340", "http://127.0.0.1:7340", "http://[::1]:7340", "http://shore.localhost"]) expect(loopbackOrigin(origin)).toBe(true);
+  for (const origin of ["http://my-computer:7340", "http://100.101.102.103:7340", "http://127.example"]) expect(loopbackOrigin(origin)).toBe(false);
 });

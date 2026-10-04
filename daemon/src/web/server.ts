@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import type { WebConfig } from "../config/app.ts";
+import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { Server } from "../swp/server.ts";
-import { WebSessions, type WebSession } from "./auth.ts";
+import { LoginCodes, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
-import { validWebLogin, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
-import { readSmallJson, sameOrigin, securityHeaders, webBinding, webRequestOrigin, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
+import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
+import { pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 
@@ -20,6 +21,7 @@ export interface WebServerOptions {
   readonly server: Server;
   readonly authenticate: (token: string) => boolean;
   readonly sessionLifetimeMs?: number;
+  readonly loginCodeMs?: number;
   readonly handshakeTimeoutMs?: number;
   readonly drainTimeoutMs?: number;
   readonly archiveLimits?: Partial<ArchiveTransferLimits>;
@@ -59,6 +61,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   let active = false;
   let stopping: Promise<void> | undefined;
   const loginFailures = new Map<string, { start: number; count: number }>();
+  const codes = new LoginCodes(options.loginCodeMs ?? WEB_LIMITS.loginCodeMs, WEB_LIMITS.loginCodes);
   let loginRequests = 0;
   let archives: ArchiveTransfers;
   let recovery: WebRecovery | undefined;
@@ -72,8 +75,6 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     }),
     async fetch(request, http) {
       const url = new URL(request.url);
-      const requestOrigin = webRequestOrigin(url, config.public_origin);
-      const secureCookie = requestOrigin.startsWith("https:");
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
       if (request.method === "GET" || request.method === "HEAD") {
         const asset = servedAssets.get(url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname);
@@ -83,7 +84,9 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           return new Response(request.method === "HEAD" ? null : asset.body, { headers });
         }
       }
-      if (!sameOrigin(request, requestOrigin)) return problem(403, "forbidden", "Use the daemon's own browser origin");
+      const page = pageOrigin(request, config.public_origin);
+      if ("refused" in page) return problem(403, "forbidden", page.refused);
+      const secureCookie = page.origin.startsWith("https:");
 
       if (url.pathname === "/api/login" && request.method === "POST") {
         const now = Date.now();
@@ -98,7 +101,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           if (!validWebLogin(body)) {
             return problem(400, "invalid_request", "Supply a token to sign in");
           }
-          if (!options.authenticate(body.token)) {
+          if (!options.authenticate(body.token) && !codes.redeem(body.token)) {
             const failures = loginFailures.get(client) ?? { start: now, count: 0 };
             if (failures.count >= WEB_LIMITS.loginAttemptsPerMinute) return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
             failures.count += 1;
@@ -177,7 +180,15 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         return new Response(null, { status: 204, headers });
       }
       if (url.pathname === "/api/session" && request.method === "POST") {
-        return Response.json(sessionInfo(session, config.max_queued_bytes), { headers: securityHeaders() });
+        const headers = securityHeaders();
+        headers.set("set-cookie", sessions.renew(session, request, secureCookie));
+        return Response.json(sessionInfo(session, config.max_queued_bytes), { headers });
+      }
+      if (url.pathname === "/api/login-code" && request.method === "POST") {
+        const created = codes.create();
+        const body: WebLoginCode = { code: created.code, expires_at: created.expiresAt };
+        if (!validWebLoginCode(body)) throw new Error("Invalid browser sign-in code response");
+        return Response.json(body, { headers: securityHeaders() });
       }
       if (url.pathname === "/api/swp" && request.method === "GET") {
         if (request.headers.get("sec-websocket-protocol") !== WEB_SUBPROTOCOL) {
@@ -228,6 +239,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     stop() {
       if (stopping !== undefined) return stopping;
       active = false;
+      codes.clear();
       const drained = Promise.all([peers.stop(), archives.close()]);
       sessions.close();
       stopping = (async () => {
