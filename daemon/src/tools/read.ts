@@ -5,6 +5,7 @@ import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
+import { readFolder } from "./read_folder.ts";
 import { linkedFile, namedFile, workspaceNames } from "./workspace_names.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
@@ -23,12 +24,17 @@ function positiveInteger(input: Record<string, unknown>, name: string, fallback:
   return value;
 }
 
-async function absence(path: string): Promise<string | undefined> {
+async function missing(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isDirectory() ? "is a folder" : undefined;
+    await stat(path);
+    return false;
   } catch (error) {
-    return ["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "") ? "does not exist" : undefined;
+    return ["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "");
   }
+}
+
+async function isFolder(path: string): Promise<boolean> {
+  return (await stat(path).catch(() => undefined))?.isDirectory() ?? false;
 }
 
 async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<{ path: string; note?: string }> {
@@ -42,15 +48,18 @@ async function locate(input: Record<string, unknown>, requested: string, workspa
       throw new ToolIoError(`${value}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  const absent = await absence(requested);
   const name = relative(workspaceDir, requested);
-  if (absent === undefined || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
+  const folder = await isFolder(requested);
+  const looked = folder ? !/[\\/]$/.test(value) : await missing(requested);
+  if (!looked || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
   try {
-    const found = namedFile(await workspaceNames(workspaceDir, signal), name.split(sep));
-    return { path: found.path, note: `[${value} ${absent}; found ${found.link} by name.]` };
+    const found = namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
+    const why = folder ? `is a folder; found ${found.link} by name. Read ${value}/ to list the folder` : `does not exist; found ${found.link} by name`;
+    return { path: found.path, note: `[${value} ${why}.]` };
   } catch (error) {
     signal?.throwIfAborted();
-    throw new ToolIoError(`${requested} ${absent}; ${error instanceof Error ? error.message : String(error)}`);
+    if (folder) return { path: requested };
+    throw new ToolIoError(`${requested} does not exist; ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -71,6 +80,10 @@ export async function handleRead(
   const original = input.original ?? false;
   if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
   const { path, note } = await locate(input, requested, workspaceDir, signal);
+  if (await isFolder(path)) {
+    if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs("offset, limit and original do not apply to folders");
+    return withNote(await readFolder(path, maxChars, signal), note);
+  }
   const file = await openRegularFile(path);
   try {
     const header = Buffer.alloc(12);
