@@ -9,7 +9,7 @@ class ShoreDesktop < Formula
   desc "Desktop app for the shore AI character engine's browser client"
   homepage "https://github.com/mythofmeat/shore"
   url "https://github.com/mythofmeat/shore.git",
-      tag: "v4.24.1"
+      tag: "v4.24.2"
   license all_of: [
     { any_of: ["MIT", "Apache-2.0"] },
     "OFL-1.1", # the Geist fonts
