@@ -94,8 +94,10 @@ WORKDIR /workspace
 
 # Listen on every interface inside the container; publish the port to choose
 # who can reach it. Clients use the service's name instead, e.g.
-# SHORE_ADDR=shore-daemon:7320.
+# SHORE_ADDR=shore-daemon:7320. SHORE_WEB_ADDR serves the browser client;
+# set it empty to leave that to [daemon.web] in config.toml.
 ENV SHORE_ADDR=0.0.0.0:7320
+ENV SHORE_WEB_ADDR=0.0.0.0:7340
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache

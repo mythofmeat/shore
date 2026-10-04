@@ -156,6 +156,24 @@ listen_addr = "127.0.0.1:7000"
     expect(startup.bindAddrSource).toBe("env");
   });
 
+  test("SHORE_WEB_ADDR turns the browser client on at its address, and a blank one leaves it to the config", async () => {
+    const { path, env } = await configRoot(`
+[daemon.web]
+bind_addr = "127.0.0.1:7341"
+`);
+
+    expect(resolveStartup({ config: path }, env).web).toMatchObject({ enabled: false, bind_addr: "127.0.0.1:7341" });
+    expect(resolveStartup({ config: path }, { ...env, SHORE_WEB_ADDR: "  " }).web).toMatchObject({ enabled: false, bind_addr: "127.0.0.1:7341" });
+    expect(resolveStartup({ config: path }, { ...env, SHORE_WEB_ADDR: " 0.0.0.0:7340 " }).web).toMatchObject({ enabled: true, bind_addr: "0.0.0.0:7340" });
+    let caught: unknown;
+    try {
+      resolveStartup({ config: path }, { ...env, SHORE_WEB_ADDR: "7340" });
+    } catch (e) {
+      caught = e;
+    }
+    expect((caught as StartupError).message).toContain('Invalid SHORE_WEB_ADDR "7340"');
+  });
+
   test("a config that will not parse is fatal, and names the file", async () => {
     const { path, env } = await configRoot("this is not = = toml");
 

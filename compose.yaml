@@ -4,6 +4,9 @@
 #   docker compose up -d --build
 #   docker compose run --rm shore      # the terminal client, connected to the daemon below
 #
+# The browser client is at http://localhost:7340. Sign in with the token in
+# config/token, then sign in other devices from Settings › Devices.
+#
 # On first start the daemon writes config/config.toml and config/token. Put
 # provider keys in config/.env (ANTHROPIC_API_KEY=...) and each character's
 # SOUL.md in workspace/<name>/.
@@ -14,7 +17,7 @@
 # The same daemon without compose:
 #
 #   docker build -f daemon/Dockerfile -t shore-daemon .
-#   docker run -d --name shore-daemon -p 127.0.0.1:7320:7320 \
+#   docker run -d --name shore-daemon -p 127.0.0.1:7320:7320 -p 127.0.0.1:7340:7340 \
 #     -v "$PWD/config:/config" -v "$PWD/workspace:/workspace" \
 #     -v shore-data:/data -v shore-cache:/cache -v shore-home:/home/app \
 #     shore-daemon
@@ -35,12 +38,11 @@ services:
     environment:
       TZ: ${TZ:-UTC}
     ports:
-      # Loopback only. Publishing it wider, e.g. "7320:7320", lets anyone who
+      # Loopback only. Publishing them wider, e.g. "7340:7340", lets anyone who
       # can reach the port and holds config/token drive the daemon.
       - "127.0.0.1:7320:7320"
-      # The browser client, once config.toml has [daemon.web] enabled = true
-      # and bind_addr = "0.0.0.0:7340":
-      # - "127.0.0.1:7340:7340"
+      # The browser client.
+      - "127.0.0.1:7340:7340"
     volumes:
       - ./config:/config
       - ./workspace:/workspace

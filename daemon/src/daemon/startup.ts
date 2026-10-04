@@ -1,8 +1,10 @@
 import { statSync } from "node:fs";
 
+import type { WebConfig } from "../config/app.ts";
 import { rustJoin, configDir } from "../config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "../config/loader.ts";
 import { resolveDaemonToken, type ResolvedToken } from "../config/token.ts";
+import { webBinding } from "../web/policy.ts";
 
 export interface Cli {
   readonly config?: string | undefined;
@@ -29,6 +31,7 @@ export interface StartupConfig {
   readonly token: ResolvedToken;
   readonly bindAddr: string;
   readonly bindAddrSource: StartupValueSource;
+  readonly web: WebConfig;
 }
 
 export class StartupError extends Error {
@@ -113,7 +116,17 @@ export function resolveStartup(
     token,
     bindAddr,
     bindAddrSource,
+    web: resolveWebConfig(loaded.app.daemon.web, env),
   };
+}
+
+export function resolveWebConfig(config: WebConfig, env: NodeJS.ProcessEnv): WebConfig {
+  const addr = env["SHORE_WEB_ADDR"]?.trim();
+  if (addr === undefined || addr === "") return config;
+  const web = { ...config, enabled: true, bind_addr: addr };
+  try { webBinding(web); }
+  catch (error) { throw new StartupError("load_config", `Invalid SHORE_WEB_ADDR ${JSON.stringify(addr)}: ${error instanceof Error ? error.message : String(error)}`); }
+  return web;
 }
 
 export function resolveExplicitConfigPath(path: string | undefined): string | undefined {
