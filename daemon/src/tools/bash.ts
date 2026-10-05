@@ -11,7 +11,7 @@ export interface BashResult {
   prompt_files_changed: string[];
 }
 
-const PROMPT_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
+const PROMPT_FILES = ["SOUL.md", "USER.md", "TOOLS.md", "MEMORY.md"];
 
 async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
   return await Promise.all(PROMPT_FILES.map(async (path) => {

@@ -250,7 +250,7 @@ describe("characterInfo", () => {
       {},
       [
         ["config/characters/mid/workspace/TOOLS.md", "tools"],
-        ["config/characters/mid/workspace/AGENTS.md", "agents"],
+        ["config/characters/mid/workspace/USER.md", "user"],
       ],
     ],
     [
@@ -286,7 +286,7 @@ describe("characterInfo", () => {
         [
           "data/mid/deferred_edits.jsonl",
           '{"path":"USER.md"}\n' +
-            '{"path":"AGENTS.md"}\n' +
+            '{"path":"TOOLS.md"}\n' +
             '{"path":"USER.md"}\n' +
             "not json at all\n" +
             '{"path":42}\n' +

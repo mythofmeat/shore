@@ -3,7 +3,6 @@
     "protected_paths": [
       "SOUL.md",
       "USER.md",
-      "AGENTS.md",
       "TOOLS.md"
     ],
     "memory_index_file": "MEMORY.md",
@@ -89,7 +88,7 @@
       "name": "queue normalises a leading slash",
       "op": {
         "fn": "queue_deferred_edit",
-        "path": "/AGENTS.md"
+        "path": "/TOOLS.md"
       },
       "before": {},
       "after": {},
@@ -97,7 +96,7 @@
       "err": null,
       "before_state": {},
       "after_state": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiQUdFTlRTLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTIzODg5MTIrMDA6MDAifQo="
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVE9PTFMubWQiLCJ0aW1lc3RhbXAiOiIyMDI2LTA4LTAyVDAyOjMzOjM0LjAxMjM4ODkxMiswMDowMCJ9Cg=="
       }
     },
     {
@@ -210,17 +209,17 @@
       "before": {},
       "after": {},
       "returns": [
-        "AGENTS.md",
         "MEMORY.md",
         "SOUL.md",
+        "TOOLS.md",
         "USER.md"
       ],
       "err": null,
       "before_state": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlRPT0xTLm1kIiwidGltZXN0YW1wIjoidCJ9Cg=="
       },
       "after_state": {
-        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IkFHRU5UUy5tZCIsInRpbWVzdGFtcCI6InQifQo="
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiVVNFUi5tZCIsInRpbWVzdGFtcCI6InQifQp7InBhdGgiOiJTT1VMLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlVTRVIubWQiLCJ0aW1lc3RhbXAiOiJ0In0KeyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoidCJ9CnsicGF0aCI6IlRPT0xTLm1kIiwidGltZXN0YW1wIjoidCJ9Cg=="
       }
     },
     {
@@ -457,20 +456,20 @@
         "fn": "changed_prompt_files"
       },
       "before": {
-        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg=="
+        "config/characters/Iris/workspace/TOOLS.md": "YWdlbnRzCg=="
       },
       "after": {
-        "config/characters/Iris/workspace/AGENTS.md": "YWdlbnRzCg=="
+        "config/characters/Iris/workspace/TOOLS.md": "YWdlbnRzCg=="
       },
       "returns": [
-        "AGENTS.md"
+        "TOOLS.md"
       ],
       "err": null,
       "before_state": {
-        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+        "data/active_prompt/TOOLS.md": "YWdlbnRzCgo="
       },
       "after_state": {
-        "data/active_prompt/AGENTS.md": "YWdlbnRzCgo="
+        "data/active_prompt/TOOLS.md": "YWdlbnRzCgo="
       }
     },
     {

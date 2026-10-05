@@ -4,9 +4,8 @@ import { join } from "node:path";
 
 import { CommandError } from "../src/commands/errors.ts";
 import { createCharacter } from "../src/commands/navigation.ts";
-import { builtinSystemPrompt } from "../src/engine/prompt.ts";
 import { loadActivePromptFile } from "../src/memory/deferred_edits.ts";
-import { AGENTS_FILE, SOUL_FILE, TOOLS_FILE, USER_FILE } from "../src/config/dirs.ts";
+import { SOUL_FILE, TOOLS_FILE, USER_FILE } from "../src/config/dirs.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const tempRoot = () => mkdtemp(testTmp("shore-create-char-"));
@@ -47,12 +46,12 @@ describe("where the scaffold lands", () => {
 });
 
 describe("what the scaffold contains", () => {
-  test("all four prompt files are written, not just SOUL.md", async () => {
+  test("all three prompt files are written, not just SOUL.md", async () => {
     const config = await tempRoot();
 
     const out = createCharacter(config, { name: "ada" });
 
-    expect(out.created_files).toEqual([SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE]);
+    expect(out.created_files).toEqual([SOUL_FILE, USER_FILE, TOOLS_FILE]);
     for (const file of out.created_files) {
       expect(await readdir(out.workspace_dir)).toContain(file);
     }
@@ -64,13 +63,11 @@ describe("what the scaffold contains", () => {
     expect(await readFile(join(out.workspace_dir, SOUL_FILE), "utf8")).toBe("You are ada.\n");
   });
 
-  test("AGENTS.md is a copy of the built-in system prompt, taken at scaffold time", async () => {
+  test("no AGENTS.md is written; the system prompt comes from config", async () => {
     const config = await tempRoot();
     const out = createCharacter(config, { name: "ada" });
 
-    const written = await readFile(join(out.workspace_dir, AGENTS_FILE), "utf8");
-    expect(written).toBe(builtinSystemPrompt());
-    expect(written.length).toBeGreaterThan(0);
+    expect(await readdir(out.workspace_dir)).not.toContain("AGENTS.md");
   });
 
   test("USER.md and TOOLS.md are empty, so an unedited scaffold adds nothing", async () => {

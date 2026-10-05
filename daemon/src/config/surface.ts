@@ -18,6 +18,7 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("cache.forensics", "daemon.cache_forensics"),
   field("defaults.model", "chat.model"),
   field("defaults.display_name", "chat.display_name"),
+  field("defaults.system_prompt", "chat.system_prompt"),
   field("defaults.embedding", "embedding.model"),
   field("defaults.image_generation", "image.model"),
   field("defaults.subagent_model", "subagents.model"),
@@ -78,6 +79,7 @@ export const MODEL_FIELDS = [
   "max_context_tokens", "max_output_tokens", "temperature", "top_p", "reasoning_effort",
   "budget_tokens", "cache_ttl", "replay_prior_thinking",
   "max_tool_iterations", "openrouter_provider", "gemini_generation", "zai_clear_thinking", "supports_images",
+  "system_prompt",
 ] as const;
 
 export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "mcp", "timeout", "max_result_chars", "max_inline_image_bytes"];

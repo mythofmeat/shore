@@ -92,7 +92,6 @@ describe("applying a deferred edit", () => {
     expect(fixture.constants.protected_paths).toEqual([
       "SOUL.md",
       "USER.md",
-      "AGENTS.md",
       "TOOLS.md",
     ]);
     expect(fixture.constants.queue_file).toBe("deferred_edits.jsonl");

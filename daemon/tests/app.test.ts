@@ -1451,6 +1451,7 @@ function defaultsFromJson(json: {
   image_generation: string | null;
   subagent_model: string | null;
   display_name: string | null;
+  system_prompt?: string | null;
 }): DefaultsConfig {
   const or = (v: string | null) => v ?? undefined;
   return {
@@ -1463,6 +1464,7 @@ function defaultsFromJson(json: {
     image_generation: or(json.image_generation),
     subagent_model: or(json.subagent_model),
     display_name: or(json.display_name),
+    system_prompt: or(json.system_prompt ?? null),
   };
 }
 

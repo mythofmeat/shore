@@ -6,7 +6,6 @@ import { compareByCodePoint } from "../util/sort.ts";
 export const CHARACTER_WORKSPACE_DIR = "workspace";
 export const SOUL_FILE = "SOUL.md";
 export const USER_FILE = "USER.md";
-export const AGENTS_FILE = "AGENTS.md";
 export const TOOLS_FILE = "TOOLS.md";
 const MEMORY_DIR = "memory";
 

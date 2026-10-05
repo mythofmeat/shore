@@ -65,6 +65,7 @@ export interface ModelConfigFields {
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
   supportsImages?: boolean;
+  systemPrompt?: string;
 }
 
 const FIELD_KEYS = [
@@ -84,6 +85,7 @@ const FIELD_KEYS = [
   "geminiGeneration",
   "zaiClearThinking",
   "supportsImages",
+  "systemPrompt",
 ] as const satisfies readonly (keyof ModelConfigFields)[];
 
 export function mergeFrom(target: ModelConfigFields, overlay: ModelConfigFields): void {
@@ -139,6 +141,7 @@ export interface ResolvedModel {
   support?: DiscoveredModelSupport;
   discoveredSupportsImages?: boolean;
   supportsImages?: boolean;
+  systemPrompt?: string;
 }
 
 export function resolvedReplayPriorThinking(
@@ -242,6 +245,7 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
   assignIfPresent(resolved, "replayPriorThinking", merged.replayPriorThinking);
   assignIfPresent(resolved, "maxToolIterations", merged.maxToolIterations);
+  assignIfPresent(resolved, "systemPrompt", merged.systemPrompt);
   return resolved;
 }
 
@@ -700,6 +704,7 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
     ["baseUrl", "base_url"],
     ["reasoningEffort", "reasoning_effort"],
     ["cacheTtl", "cache_ttl"],
+    ["systemPrompt", "system_prompt"],
   ];
   for (const [field, key] of strings) {
     const read = readString(table, key);

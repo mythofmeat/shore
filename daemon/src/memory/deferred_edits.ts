@@ -25,7 +25,7 @@ import {
 import { localRfc3339 } from "../util/time.ts";
 import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { type: "text" };
 
-const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
+const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
 
 const MEMORY_INDEX_FILE = "MEMORY.md";
 

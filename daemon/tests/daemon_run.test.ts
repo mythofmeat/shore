@@ -1138,12 +1138,11 @@ describe("registered operation socket flows", () => {
         rid: "create", name: "create_character", data: {
           character: "nova", workspace_dir: workspace,
           config_dir: join(place.root, "config", "characters", "nova"),
-          created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"],
+          created_files: ["SOUL.md", "USER.md", "TOOLS.md"],
         },
       });
       expect(await readFile(join(workspace, "SOUL.md"), "utf8")).toBe("You are nova.\n");
       expect(await readFile(join(workspace, "USER.md"), "utf8")).toBe("");
-      expect(await readFile(join(workspace, "AGENTS.md"), "utf8")).not.toBe("");
       expect(await readFile(join(workspace, "TOOLS.md"), "utf8")).toBe("");
       client.frames.length = 0;
       client.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });
@@ -1346,7 +1345,7 @@ describe("optional browser transport", () => {
     try {
       await browser.attach();
       browser.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
-      expect(await browser.frame("command_output", "create")).toMatchObject({ data: { character: "nova", created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] } });
+      expect(await browser.frame("command_output", "create")).toMatchObject({ data: { character: "nova", created_files: ["SOUL.md", "USER.md", "TOOLS.md"] } });
       expect(daemon.runtime.historyIndex.registeredCharacters()).toContain("nova");
       expect(daemon.runtime.workspaceIndex.registeredCharacters()).toContain("nova");
       expect(daemon.runtime.autonomy.status("nova")).toBeDefined();

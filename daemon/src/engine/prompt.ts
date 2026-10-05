@@ -30,8 +30,6 @@ const SECS_PER_DAY = 86_400;
 
 const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
-export const builtinSystemPrompt = (): string => `${BUILTIN_SYSTEM_TEMPLATE}\n`;
-
 export type UserTimestampMode = "never" | "always" | "auto";
 
 interface SystemBlock {
@@ -107,12 +105,12 @@ function buildSystemBlocks(params: PromptParams): SystemBlock[] {
     ["time", ""],
   ]);
 
-  const system: SystemBlock[] = [
-    {
-      label: "system",
-      content: renderTemplate(params.system_prompt ?? BUILTIN_SYSTEM_TEMPLATE, vars),
-    },
-  ];
+  const system: SystemBlock[] = [];
+
+  const systemPrompt = params.system_prompt ?? BUILTIN_SYSTEM_TEMPLATE;
+  if (systemPrompt.trim() !== "") {
+    system.push({ label: "system", content: renderTemplate(systemPrompt, vars) });
+  }
 
   const toolsGuidance = present(params.tools_guidance);
   if (toolsGuidance !== undefined) {

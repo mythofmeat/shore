@@ -1,9 +1,12 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { anyToolEnabled } from "../config/app.ts";
-import { AGENTS_FILE, SOUL_FILE, TOOLS_FILE, USER_FILE } from "../config/dirs.ts";
+import { SOUL_FILE, TOOLS_FILE, USER_FILE } from "../config/dirs.ts";
 import {
   resolvedReplayPriorThinking,
   toRequestModel,
@@ -43,6 +46,24 @@ export interface PreparedChatContext {
   system: SystemBlock[];
   toolDefs: ToolDefinition[] | undefined;
   prompt: AssembledPrompt;
+}
+
+export async function loadSystemPrompt(
+  config: LoadedConfig,
+  resolved: ResolvedModel,
+): Promise<string | undefined> {
+  const configured = resolved.systemPrompt ?? config.app.defaults.system_prompt;
+  if (configured === undefined) return undefined;
+  const path = resolve(config.dirs.config, configured);
+  try {
+    return await readFile(path, "utf8");
+  } catch (e) {
+    throw new Error(
+      `system_prompt "${configured}" for ${resolved.qualifiedName} could not be read at ${path}: ` +
+        (e instanceof Error ? e.message : String(e)),
+      { cause: e },
+    );
+  }
 }
 
 export async function prepareChatContext(
@@ -88,7 +109,7 @@ export async function prepareChatContext(
     );
   const characterDefinition = await promptFile(SOUL_FILE);
   const userDefinition = await promptFile(USER_FILE);
-  const systemPrompt = await promptFile(AGENTS_FILE);
+  const systemPrompt = await loadSystemPrompt(config, resolved);
   const toolsGuidance = await promptFile(TOOLS_FILE);
   const memoryIndex = await loadMemoryIndex(
     characterDataDir,

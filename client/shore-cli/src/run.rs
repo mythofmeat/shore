@@ -1393,10 +1393,6 @@ fn forget_deleted_character(name: &str) {
 const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
     ("SOUL.md", "who the character is"),
     ("USER.md", "who you are, to them"),
-    (
-        "AGENTS.md",
-        "the system prompt (a copy of the built-in one)",
-    ),
     ("TOOLS.md", "extra guidance on using tools"),
 ];
 

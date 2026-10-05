@@ -9,6 +9,7 @@ import { required } from "../src/util/required.ts";
 import { resolveShoreDirs } from "../src/config/dirs.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
 import { parseConfigPath, publicConfig } from "../src/config/surface.ts";
+import { findModel } from "../src/config/models.ts";
 
 const dirs = resolveShoreDirs({ SHORE_CONFIG_DIR: "/tmp/config-surface" });
 const read = (text: string) => parseConfigTable(Bun.TOML.parse(text) as Record<string, unknown>, dirs, () => {});
@@ -27,6 +28,26 @@ describe("flat configuration", () => {
     expect(() => read('[heartbeat]\ninterval=60')).toThrow();
     expect(() => read('[heartbeat]\ninterval="60"')).toThrow();
     expect(() => read('[chat]\nreasoning_replay=true')).toThrow();
+  });
+
+  test("system_prompt is set per model, per provider and under chat", () => {
+    const cfg = read([
+      "[chat]",
+      'system_prompt = "prompts/system/base.md"',
+      "[providers.anthropic]",
+      'system_prompt = "prompts/system/anthropic.md"',
+      '[chat."anthropic:claude-opus-5-5"]',
+      'system_prompt = "prompts/system/opus-5-5.md"',
+      '[chat."anthropic:claude-opus-5"]',
+    ].join("\n"));
+    expect(cfg.app.defaults.system_prompt).toBe("prompts/system/base.md");
+    expect(findModel(cfg.models, "anthropic:claude-opus-5-5").systemPrompt).toBe("prompts/system/opus-5-5.md");
+    expect(findModel(cfg.models, "anthropic:claude-opus-5").systemPrompt).toBe("prompts/system/anthropic.md");
+    expect(publicConfig(serializeConfigValue(cfg.app) as Record<string, unknown>).chat).toMatchObject({
+      system_prompt: "prompts/system/base.md",
+    });
+    expect(() => read('[chat."anthropic:claude-opus-5-5"]\nsystem_prompt = 1')).toThrow();
+    expect(() => read("[chat]\nsystem_prompt = 1")).toThrow();
   });
 
   test("inline image byte budgets parse, resolve, and round-trip through public config", () => {
