@@ -78,7 +78,7 @@ export function idleAnchorMessage(
 
 export interface RebuildDeps {
   env?: NodeJS.ProcessEnv;
-  mcpRegistry?: Pick<McpRegistry, "toolDefsFiltered">;
+  mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">;
   newId?: () => string;
   now?: () => string;
   timeZone?: string;
@@ -89,7 +89,7 @@ export async function rebuildRequestFromDisk(
   character: string,
   dataDir: string,
   config: LoadedConfig,
-  deps: RebuildDeps = {},
+  deps: RebuildDeps,
 ): Promise<(BuiltRequest & ToolConversation) | undefined> {
   const characterDir = characterDataDir(dataDir, character);
   const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
@@ -120,7 +120,7 @@ export async function rebuildRequestFromDisk(
   if (resolved === undefined) return undefined;
 
   const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, thread, false))) > 0;
-  const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(toolGrants(config.app.tools)) ?? [];
+  const mcpToolDefs = deps.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));
 
   try {
     const built = await buildChatShapeRequestFromDisk(

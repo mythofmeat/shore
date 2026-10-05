@@ -84,7 +84,7 @@ export class LastRequestCache {
     character: string,
     dataDir: string,
     config: LoadedConfig,
-    deps: RebuildDeps = {},
+    deps: RebuildDeps,
   ): Promise<KeepaliveReprime> {
     const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
     const decision = reprimeDecision(

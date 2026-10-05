@@ -31,6 +31,7 @@ import { carryToolMedia } from "../src/tools/media.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { lastPass } from "../src/memory/compaction/activity.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -152,6 +153,7 @@ describe("running a heartbeat", () => {
 
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache,
       providers: {
@@ -171,6 +173,7 @@ describe("running a heartbeat", () => {
     const config = await world();
     const appended: Message[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config, appended),
       cache: new LastRequestCache(),
       providers: {
@@ -252,6 +255,7 @@ describe("running a heartbeat", () => {
     const config = await world();
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: {
@@ -377,6 +381,7 @@ describe("running a heartbeat", () => {
     const seen: SidecarRequest[] = [];
 
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: {
@@ -414,6 +419,7 @@ describe("running a heartbeat", () => {
     const asked: { hours: number; reason: string }[] = [];
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: {
@@ -456,6 +462,7 @@ describe("running a heartbeat", () => {
     const asked: number[] = [];
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: {
@@ -490,6 +497,7 @@ describe("running a heartbeat", () => {
     config.app.behavior.autonomy.enabled = true;
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: {
@@ -499,7 +507,7 @@ describe("running a heartbeat", () => {
 
     await executor.runHeartbeatTick("ada", NO_HOOKS);
 
-    const chat = await rebuildRequestFromDisk("ada", config.dirs.data, config, { thread: "main" });
+    const chat = await rebuildRequestFromDisk("ada", config.dirs.data, config, { ...NO_MCP, thread: "main" });
     expect(chat?.request.tools?.map((tool) => tool.name)).toContain("set_next_wake");
     expect(seen[0]?.tools).toEqual(chat?.request.tools);
   });
@@ -507,6 +515,7 @@ describe("running a heartbeat", () => {
   test("a failed model call ends the tick without throwing, and is logged as a failure", async () => {
     const config = await world();
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: { anthropic: scriptedProvider([]) },
@@ -524,6 +533,7 @@ describe("running a heartbeat", () => {
     const rows: { entry_json: string }[] = [];
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       callStore: {
@@ -577,6 +587,7 @@ describe("running a heartbeat", () => {
       anthropic: { api_key_env: KEY_ENV },
     });
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config, appended),
       cache: new LastRequestCache(),
       tools: {
@@ -633,6 +644,7 @@ describe("running a heartbeat", () => {
     } as never, undefined);
 
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache,
       providers: {
@@ -651,6 +663,7 @@ describe("running a heartbeat", () => {
     const config = await world();
     const rows: { call_type?: string | null }[] = [];
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       callStore: {
@@ -725,6 +738,7 @@ describe("the other two actions", () => {
     } = {},
   ): InProcessAutonomyExecutor {
     return new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: { anthropic: scriptedProvider([]) },
@@ -744,6 +758,35 @@ describe("the other two actions", () => {
 
     expect(result.failed).not.toContain("not the autonomy loop's to run");
   });
+
+  for (const [label, run] of [
+    ["an idle compaction", (executor: InProcessAutonomyExecutor) => executor.runCompaction("ada", "idle")],
+    ["the deep archive", (executor: InProcessAutonomyExecutor) => executor.runDeepArchive("ada", 1)],
+  ] as const) {
+    test(`${label} re-arms the keepalive with the MCP tools real calls send`, async () => {
+      const config = await world();
+      config.app.tools.enabled_tools = ["bash", "mcp__notes__search"];
+      writeDurable(join(config.dirs.data, "ada", "threads", "main", "active.jsonl"), ["hi", "hello", "boats?", "they float", "why?", "buoyancy"]
+        .map((text, i) => JSON.stringify(message(i % 2 === 0 ? "user" : "assistant", `m_${String(i + 1)}`, text)))
+        .join("\n") + "\n");
+      const cache = new LastRequestCache();
+      const result = await run(new InProcessAutonomyExecutor({
+        registry: registryFor(config),
+        cache,
+        providers: { anthropic: scriptedProvider([response([{ type: "text", text: "Summary." }])]) },
+        rebuild: {
+          mcpRegistry: {
+            toolDefsFiltered: () => [
+              { name: "mcp__notes__search", description: "search notes", input_schema: { type: "object", properties: {} } },
+            ],
+          },
+        },
+      }));
+
+      expect(result.failed).toBeUndefined();
+      expect(cache.get("ada")?.tools?.map((tool) => tool.name)).toContain("mcp__notes__search");
+    });
+  }
 
   test("the deep archive takes the coverage count it is given", async () => {
     const result = await executorFor(await world()).runDeepArchive("ada", 1);
@@ -788,6 +831,7 @@ test("Claude SDK heartbeats execute workspace tools, schedule a wake, and delive
   const wakes: [number, string][] = [];
   const transcripts: unknown[] = [];
   const executor = new InProcessAutonomyExecutor({
+    rebuild: NO_MCP,
     registry: registryFor(config, appended),
     cache: new LastRequestCache(),
     providers: {
@@ -826,6 +870,7 @@ test("an SDK heartbeat cannot move the clock when set_next_wake is left off the 
   });
   const wakes: number[] = [];
   const executor = new InProcessAutonomyExecutor({
+    rebuild: NO_MCP,
     registry: registryFor(config),
     cache: new LastRequestCache(),
     providers: {
@@ -861,6 +906,7 @@ test.each([false, true])("SDK heartbeat preserves completed work on SDK failure 
   });
   const appended: Message[] = [];
   const executor = new InProcessAutonomyExecutor({
+    rebuild: NO_MCP,
     registry: registryFor(config, appended),
     cache: new LastRequestCache(),
     providers: {
@@ -898,6 +944,7 @@ test("SDK heartbeat respects the configured tool round budget", async () => {
   const appended: Message[] = [];
   const wakes: number[] = [];
   const executor = new InProcessAutonomyExecutor({
+    rebuild: NO_MCP,
     registry: registryFor(config, appended),
     cache: new LastRequestCache(),
     providers: {
@@ -1199,6 +1246,7 @@ test("an image a heartbeat's tool reads is held to the heartbeat's model", async
   const config = await world();
   const { provider, seen } = await readOriginalOnOlderModel(config);
   const executor = new InProcessAutonomyExecutor({
+    rebuild: NO_MCP,
     registry: registryFor(config),
     cache: new LastRequestCache(),
     providers: { anthropic: provider },

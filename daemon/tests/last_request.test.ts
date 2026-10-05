@@ -29,6 +29,7 @@ import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -232,6 +233,7 @@ describe("rebuildRequestFromDisk", () => {
         c.segments,
       ]);
       const request = await rebuildRequestFromDisk("ada", dataDir, config, {
+        ...NO_MCP,
         newId: () => "m_<uuid>",
         now: () => "2026-01-01T12:00:00-05:00",
         timeZone: fixture.timezone,
@@ -259,12 +261,12 @@ describe("rebuildRequestFromDisk", () => {
         .map((m) => JSON.stringify(m))
         .join("\n")}\n`);
 
-    const beforeMove = await rebuildRequestFromDisk("ada", dataDir, config);
+    const beforeMove = await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP);
     expect(JSON.stringify(beforeMove?.request.messages)).not.toContain("side thread");
 
     await setHomeThread(dataDir, "ada", "scratch", now);
 
-    const afterMove = await rebuildRequestFromDisk("ada", dataDir, config);
+    const afterMove = await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP);
     expect(JSON.stringify(afterMove?.request.messages)).toContain("side thread");
   });
 
@@ -284,7 +286,7 @@ describe("rebuildRequestFromDisk", () => {
     const now = "2026-09-03T12:00:00.000Z";
     await setThreadModel(dataDir, "ada", "main", "chat.other", now);
 
-    const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config);
+    const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP);
     expect(rebuilt?.request.model).toBe("claude-other");
   });
 
@@ -306,11 +308,11 @@ describe("rebuildRequestFromDisk", () => {
     writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${JSON.stringify(turn("user", "m_su", "a turn in the side thread"))}\n` +
         `${JSON.stringify(turn("assistant", "m_sa", "noted"))}\n`);
 
-    expect((await rebuildRequestFromDisk("ada", dataDir, config))?.request.model).toBe(
+    expect((await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP))?.request.model).toBe(
       "claude-fixture",
     );
     expect(
-      (await rebuildRequestFromDisk("ada", dataDir, config, { thread: "scratch" }))?.request.model,
+      (await rebuildRequestFromDisk("ada", dataDir, config, { ...NO_MCP, thread: "scratch" }))?.request.model,
     ).toBe("claude-other");
   });
 
@@ -318,7 +320,7 @@ describe("rebuildRequestFromDisk", () => {
     const { config, dataDir } = await world([]);
     config.models = emptyCatalog();
     config.app.defaults.model = undefined;
-    expect(await rebuildRequestFromDisk("ada", dataDir, config)).toBeUndefined();
+    expect(await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP)).toBeUndefined();
   });
 
   test("the MCP surface reaches the request — the keepalive's whole reason", async () => {
@@ -331,7 +333,7 @@ describe("rebuildRequestFromDisk", () => {
     const withMcp = await rebuildRequestFromDisk("ada", dataDir, config, {
       mcpRegistry: { toolDefsFiltered: () => [def] as never },
     });
-    const withoutMcp = await rebuildRequestFromDisk("ada", dataDir, config);
+    const withoutMcp = await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP);
 
     expect(withMcp?.request.tools?.map((t) => t.name)).toContain("mcp__notes__search");
     expect(withoutMcp?.request.tools?.map((t) => t.name) ?? []).not.toContain("mcp__notes__search");
@@ -349,7 +351,7 @@ describe("reprimeDecision", () => {
         fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
         fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
       ]);
-      const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config);
+      const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config, NO_MCP);
       expect(rebuilt).toBeDefined();
       expect(reprimeDecision(rebuilt).kind).toBe(c.decision as never);
     });
@@ -462,7 +464,7 @@ describe("LastRequestCache", () => {
       fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
     ]);
 
-    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(decision.kind).toBe("push");
     expect(cache.get("ada")).toBeDefined();
     expect(k.armed).toHaveLength(1);
@@ -482,7 +484,7 @@ describe("LastRequestCache", () => {
       cacheTtl: "1h",
     } as never);
 
-    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(decision.kind === "push" && decision.keepalive.intervalMs).toBe(3_300_000);
     expect(k.armed[0]?.keepalive_interval_ms).toBe(3_300_000);
   });
@@ -495,7 +497,7 @@ describe("LastRequestCache", () => {
       fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
     ]);
 
-    await cache.reprimeFromDisk("ada", dataDir, config);
+    await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect("keepalive_interval_ms" in (k.armed[0] ?? {})).toBe(false);
   });
 
@@ -512,7 +514,7 @@ describe("LastRequestCache", () => {
       cacheKeepalivePings: 9,
     } as never);
 
-    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(decision.kind === "push" && decision.keepalive.pings).toBe(9);
     expect(k.armed[0]?.keepalive_pings).toBe(9);
     expect(k.armed[0]?.context?.keepalive_window_secs).toBe(5400);
@@ -526,7 +528,7 @@ describe("LastRequestCache", () => {
       fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
     ]);
 
-    await cache.reprimeFromDisk("ada", dataDir, config);
+    await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(k.armed[0]?.context?.keepalive_window_secs).toBe(0);
     expect("keepalive_pings" in (k.armed[0] ?? {})).toBe(false);
   });
@@ -543,11 +545,11 @@ describe("LastRequestCache", () => {
     await createThread(dataDir, "ada", "scratch", now);
     writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${pair("scratch").map((m) => JSON.stringify(m)).join("\n")}\n`);
 
-    await cache.reprimeFromDisk("ada", dataDir, config);
+    await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(k.armed[0]?.context?.thread).toBe("main");
 
     await setHomeThread(dataDir, "ada", "scratch", now);
-    await cache.reprimeFromDisk("ada", dataDir, config);
+    await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(k.armed[1]?.context?.thread).toBe("scratch");
   });
 
@@ -562,7 +564,7 @@ describe("LastRequestCache", () => {
     await createThread(dataDir, "ada", "scratch", "2026-09-03T12:00:00.000Z");
     writeDurable(join(dataDir, "ada", "threads", "scratch", "active.jsonl"), `${pair("scratch", "a turn in the side thread").map((m) => JSON.stringify(m)).join("\n")}\n`);
 
-    const decision = await cache.reprimeFromDisk("ada", dataDir, config, { thread: "scratch" });
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, { ...NO_MCP, thread: "scratch" });
 
     expect(k.armed[0]?.context?.thread).toBe("scratch");
     expect(JSON.stringify(decision.kind === "push" && decision.request.messages)).toContain(
@@ -578,7 +580,7 @@ describe("LastRequestCache", () => {
       fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
     ]);
 
-    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, NO_MCP);
     expect(decision.kind).toBe("disarm");
     expect(k.disarmed).toEqual(["ada"]);
     expect(cache.get("ada")).toBeDefined();
@@ -652,6 +654,7 @@ describe("keepalivePingNowCommand", () => {
         config,
         dataDir,
         lastRequest: cache,
+        rebuild: NO_MCP,
         keepalive: {
           pingNow: (character: string) => {
             calls.push(character);

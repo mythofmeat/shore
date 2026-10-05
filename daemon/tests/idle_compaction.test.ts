@@ -17,6 +17,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -114,6 +115,7 @@ function writingModel(seen: { messages: unknown[] }[] = []) {
 function deps(config: LoadedConfig, over: Partial<IdleCompactionDeps> = {}): IdleCompactionDeps {
   const raw = over.run?.generate ?? writingModel();
   return {
+    rebuild: NO_MCP,
     config,
     cache: new LastRequestCache(),
     ...over,
@@ -282,7 +284,7 @@ describe("runIdleCompaction: reporting", () => {
   test("no compaction dependencies is a failure, not a silent skip", async () => {
     const { config, characterDir } = await world();
 
-    const result = await runIdleCompaction("ada", { config, cache: new LastRequestCache() });
+    const result = await runIdleCompaction("ada", { config, cache: new LastRequestCache(), rebuild: NO_MCP });
 
     expect(result).toEqual({
       events: [],

@@ -112,7 +112,7 @@ export function applyHeartbeatModelOverride(
 export interface PrepareHeartbeatDeps {
   thread?: string;
   cache: LastRequestCache;
-  rebuild?: RebuildDeps;
+  rebuild: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   timeZone?: string;

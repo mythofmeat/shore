@@ -35,7 +35,7 @@ export interface InProcessExecutorDeps {
   notifyCompactionComplete?: (title: string, body: string) => void;
   callStore?: Pick<CallStore, "recordTranscript">;
   tools?: ToolContextDeps;
-  rebuild?: RebuildDeps;
+  rebuild: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   beginForeground?: () => () => void;
   runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
@@ -56,7 +56,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
       return await runHeartbeatTick(character, config, {
         cache: this.#deps.cache,
-        ...(this.#deps.rebuild === undefined ? {} : { rebuild: this.#deps.rebuild }),
+        rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
       generate: async (request, phase, signal) => {
@@ -149,6 +149,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runIdleCompaction(character, {
         config,
         cache: this.#deps.cache,
+        rebuild: this.#deps.rebuild,
         run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
       });
@@ -164,6 +165,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runDeepIdleArchive(character, {
         config,
         cache: this.#deps.cache,
+        rebuild: this.#deps.rebuild,
         run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
         ...(this.#deps.notifyCompactionComplete === undefined

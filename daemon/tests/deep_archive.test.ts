@@ -26,6 +26,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 interface Shape {
   role: string;
@@ -170,6 +171,7 @@ describe("deepArchiveNotification", () => {
 
 function deps(config: LoadedConfig, over: Partial<DeepArchiveDeps> = {}): DeepArchiveDeps {
   return {
+    rebuild: NO_MCP,
     config,
     cache: new LastRequestCache(),
     now: () => "2026-01-01T10:00:00-05:00",

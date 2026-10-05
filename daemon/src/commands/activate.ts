@@ -13,7 +13,7 @@ export interface SessionActivateContext {
   register: (character: string, config: LoadedConfig) => Promise<boolean>;
   config: LoadedConfig;
   dataDir: string;
-  rebuild?: RebuildDeps;
+  rebuild: RebuildDeps;
   now?: () => number;
 }
 
@@ -29,7 +29,7 @@ async function ensurePrefix(
     character,
     ctx.dataDir,
     ctx.config,
-    ctx.rebuild ?? {},
+    ctx.rebuild,
   );
   return decision.kind === "disarm" ? "no cached or rebuildable request" : undefined;
 }

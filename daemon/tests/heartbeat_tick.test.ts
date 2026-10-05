@@ -25,6 +25,7 @@ import { BudgetBlocked } from "../src/llm/generate.ts";
 import type { BudgetBlock } from "../src/ledger/budget.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -116,6 +117,7 @@ function recordingEngine(appended: Message[], revision = 7): HeartbeatEngine {
 
 function tickDeps(over: Partial<Omit<HeartbeatTickDeps, "generate">> & { generate?: () => Promise<GenerateResponse | undefined> } = {}): HeartbeatTickDeps {
   return {
+    rebuild: NO_MCP,
     cache: new LastRequestCache(),
     dispatch: async () => ({ output: "ok", isError: false }),
     newId: () => "m_fixed",
