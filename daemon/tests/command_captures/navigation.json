@@ -330,7 +330,7 @@
     },
     {
       "name": "every bootstrap file present, plus a config override",
-      "note": "`bootstrap_files` is in the declared order SOUL/USER/AGENTS/TOOLS, which is not alphabetical.",
+      "note": "`bootstrap_files` is in the declared order SOUL/USER/TOOLS, which is not alphabetical; a stray AGENTS.md is not one of them.",
       "ok": {
         "name": "mid",
         "active": true,
@@ -341,7 +341,6 @@
         "bootstrap_files": [
           "SOUL.md",
           "USER.md",
-          "AGENTS.md",
           "TOOLS.md"
         ],
         "has_config_override": true,
@@ -352,7 +351,7 @@
     },
     {
       "name": "bootstrap files keep declaration order with SOUL absent",
-      "note": "AGENTS before TOOLS even though only those two exist, and `has_definition` is false.",
+      "note": "USER before TOOLS even though only those two exist, and `has_definition` is false.",
       "ok": {
         "name": "mid",
         "active": true,
@@ -361,7 +360,7 @@
         "has_definition": false,
         "definition_preview": null,
         "bootstrap_files": [
-          "AGENTS.md",
+          "USER.md",
           "TOOLS.md"
         ],
         "has_config_override": false,
@@ -460,8 +459,8 @@
         ],
         "has_config_override": false,
         "pending_deferred_edits": [
-          "AGENTS.md",
           "SOUL.md",
+          "TOOLS.md",
           "USER.md"
         ],
         "data_dir": "<root>/data/mid",

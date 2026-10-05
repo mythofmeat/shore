@@ -126,7 +126,7 @@ const WORKSPACE_PATHS: string[] = [
     "memory/日記/a.md",
   ];
 
-const PROTECTED_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
+const PROTECTED_FILES = ["SOUL.md", "USER.md", "TOOLS.md"];
 const PROMPT_VISIBLE_FILES = [...PROTECTED_FILES, "MEMORY.md"];
 
 describe("what counts as a path inside the workspace", () => {

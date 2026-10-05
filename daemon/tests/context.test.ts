@@ -27,6 +27,7 @@ import {
 } from "../src/handler/wire_messages.ts";
 import { testTmp } from "./support/tmp.ts";
 import { sizedImage } from "./support/sized_image.ts";
+import { outcomeOf } from "./support/outcome.ts";
 
 interface FixturePromptMessage {
   role: Role;
@@ -295,8 +296,8 @@ describe("prepareChatContext", () => {
   test("prompt files reach system blocks with their own formatting intact", async () => {
     const base = contextCases[0];
     if (base === undefined) throw new Error("missing context fixture");
+    const systemPrompt = { label: "system", content: "\n# My instructions\n<rules>Be concise.</rules>\n" };
     const files = [
-      { name: "AGENTS.md", label: "system", content: "\n# My instructions\n<rules>Be concise.</rules>\n" },
       { name: "TOOLS.md", label: "tools_guidance", content: "Use bash when needed.\n" },
       { name: "SOUL.md", label: "character", content: "<my_identity>My own framing.</my_identity>\n" },
       { name: "USER.md", label: "user", content: "  User-authored whitespace.\n\n" },
@@ -306,18 +307,116 @@ describe("prepareChatContext", () => {
     c.input.active_files = [];
     c.input.canonical_files = files;
     const { config, charDataDir, resolved } = await contextFixture(c);
+    await writeFile(join(config.dirs.config, "system.md"), systemPrompt.content);
     const got = await prepareChatContext({
       character: c.input.character,
       characterDataDir: charDataDir,
       config,
-      resolved,
+      resolved: { ...resolved, systemPrompt: "system.md" },
       messages: c.input.messages,
       hasPriorContext: false,
       mcpToolDefs: [],
       timeZone: ZONE,
     });
-    expect(got.system).toEqual(files.map(({ label, content }) => ({ label, text: content })));
-    expect(got.prompt.system).toEqual(files.map(({ label, content }) => ({ label, content })));
+    const blocks = [systemPrompt, ...files];
+    expect(got.system).toEqual(blocks.map(({ label, content }) => ({ label, text: content })));
+    expect(got.prompt.system).toEqual(blocks.map(({ label, content }) => ({ label, content })));
+  });
+
+  describe("the opening system block", () => {
+    const opening = async (
+      setup: (configDir: string, app: AppConfig) => Promise<void>,
+      model: Partial<ResolvedModel> = {},
+      messages?: Message[],
+    ): Promise<string | undefined> => {
+      const base = contextCases[0];
+      if (base === undefined) throw new Error("missing context fixture");
+      const c = structuredClone(base);
+      c.input.active_files = [];
+      c.input.canonical_files = [{ name: "AGENTS.md", content: "A stale workspace copy.\n" }];
+      const { config, charDataDir, resolved } = await contextFixture(c);
+      await setup(config.dirs.config, config.app);
+      const got = await prepareChatContext({
+        character: c.input.character,
+        characterDataDir: charDataDir,
+        config,
+        resolved: { ...resolved, ...model },
+        messages: messages ?? c.input.messages,
+        hasPriorContext: false,
+        mcpToolDefs: [],
+        timeZone: ZONE,
+      });
+      return got.prompt.system.find((b) => b.label === "system")?.content;
+    };
+    const write = async (configDir: string, path: string, content: string): Promise<void> => {
+      await mkdir(join(configDir, path, ".."), { recursive: true });
+      await writeFile(join(configDir, path), content);
+    };
+
+    test("without a configured file it is the built-in prompt, never a workspace AGENTS.md", async () => {
+      expect(await opening(async () => {})).toBe(
+        "You are heidi, in conversation with Ash.\n" +
+          "This is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\n" +
+          "Be consistent with established details and avoid fabricating memory.",
+      );
+    });
+
+    test("the model's file is read from any depth under the config dir, with template variables", async () => {
+      const got = await opening(
+        (dir) => write(dir, "prompts/system/anthropic/opus-5-5.md", "You are {{char}}; {{user}} is here.\n"),
+        { systemPrompt: "prompts/system/anthropic/opus-5-5.md" },
+      );
+      expect(got).toBe("You are heidi; Ash is here.\n");
+    });
+
+    test("the model's file wins over chat.system_prompt, which applies when the model sets none", async () => {
+      const setup = async (dir: string, app: AppConfig): Promise<void> => {
+        await write(dir, "base.md", "base\n");
+        await write(dir, "opus.md", "opus\n");
+        app.defaults.system_prompt = "base.md";
+      };
+      expect(await opening(setup, { systemPrompt: "opus.md" })).toBe("opus\n");
+      expect(await opening(setup)).toBe("base\n");
+    });
+
+    test("an edit lands on the next request, even mid-conversation", async () => {
+      const base = contextCases[0];
+      if (base === undefined) throw new Error("missing context fixture");
+      const c = structuredClone(base);
+      c.input.active_files = [];
+      c.input.canonical_files = [];
+      const { config, charDataDir, resolved } = await contextFixture(c);
+      const path = join(config.dirs.config, "live.md");
+      const messages: Message[] = [
+        { msg_id: "u1", role: "user", content: "hi", images: [], content_blocks: [], timestamp: "2026-09-30T00:00:00Z" },
+      ];
+      const system = async (): Promise<string | undefined> =>
+        (await prepareChatContext({
+          character: c.input.character,
+          characterDataDir: charDataDir,
+          config,
+          resolved: { ...resolved, systemPrompt: "live.md" },
+          messages,
+          hasPriorContext: false,
+          activeConversation: true,
+          mcpToolDefs: [],
+          timeZone: ZONE,
+        })).prompt.system.find((b) => b.label === "system")?.content;
+
+      await writeFile(path, "first\n");
+      expect(await system()).toBe("first\n");
+      await writeFile(path, "second\n");
+      expect(await system()).toBe("second\n");
+    });
+
+    test("a whitespace-only file leaves the block out", async () => {
+      expect(await opening((dir) => write(dir, "empty.md", " \n"), { systemPrompt: "empty.md" })).toBeUndefined();
+    });
+
+    test("a missing file fails the request and names the setting, the model and the path", async () => {
+      const failure = await outcomeOf(opening(async () => {}, { systemPrompt: "prompts/missing.md" }));
+      expect(failure).toThrow(/system_prompt "prompts\/missing\.md" for chat\.test could not be read at .*prompts\/missing\.md/);
+    });
   });
 
   test("the model's resolution tier decides how many pictures fit", async () => {

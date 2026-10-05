@@ -700,9 +700,9 @@
         "cache_dir": "<tmp>/cache",
         "pending_deferred_edit_count": 3,
         "pending_deferred_edits": [
-          "AGENTS.md",
           "MEMORY.md",
-          "SOUL.md"
+          "SOUL.md",
+          "TOOLS.md"
         ],
         "tokens": {
           "input": 0,

@@ -249,6 +249,7 @@ function describeOption(path: readonly string[]): string {
     discover: "Discover this provider's models; false by default.",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
+    system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",
     max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
     image_cache_bytes: "Most bytes the image cache keeps for every character together: images users send, their reduced copies and images tools return. Past it the least recently used go first; an image a model request read in the last hour stays. Defaults to 512 MiB.",
     shutdown_grace: "How long a stopping daemon waits for replies, heartbeats and compactions already running before it stops anyway. New messages are refused meanwhile, and a second stop signal stops at once. Defaults to 29m, which covers 90% of heartbeat turns and leaves a minute of a 30m Docker stop_grace_period for the exit itself.",

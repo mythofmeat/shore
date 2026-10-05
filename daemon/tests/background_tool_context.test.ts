@@ -32,7 +32,7 @@ beforeEach(() => {
 
 afterAll(restoreTestEnv);
 const KEY = "SHORE_BACKGROUND_CONTEXT_KEY";
-const PROMPT_FILES = ["MEMORY.md", "SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
+const PROMPT_FILES = ["MEMORY.md", "SOUL.md", "USER.md", "TOOLS.md"];
 const ARCHIVE_TOOL: ToolDefinition = {
   name: "mcp__archive__recall", description: "Recall the archive",
   input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },

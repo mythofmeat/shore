@@ -118,7 +118,7 @@ const DEFERRED_LINES = [
   "{not json",
   JSON.stringify({ timestamp: "2026-01-15T09:00:04+00:00" }),
   "",
-  JSON.stringify({ path: "AGENTS.md", timestamp: "2026-01-15T09:00:05+00:00" }),
+  JSON.stringify({ path: "TOOLS.md", timestamp: "2026-01-15T09:00:05+00:00" }),
 ];
 
 function evenWeeks(): number[] {

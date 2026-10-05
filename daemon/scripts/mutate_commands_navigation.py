@@ -120,13 +120,13 @@ MUTANTS = [
 
     # --- character_info: the rest of the report -------------------------------
     ("info: bootstrap files are sorted rather than kept in declaration order",
-     "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>",
-     "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].toSorted().filter((file) =>"),
+     "    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE].filter((file) =>",
+     "    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE].toSorted().filter((file) =>"),
     ("info: bootstrap files are not filtered by what is present",
-     "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>\n"
+     "    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE].filter((file) =>\n"
      "      pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),\n"
      "    ),",
-     "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE],"),
+     "    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE],"),
     ("info: the config override is looked for in the workspace",
      '    has_config_override: pathExists(rustJoin(charDir, "config.toml")),',
      '    has_config_override: pathExists(rustJoin(workspaceDir, "config.toml")),'),

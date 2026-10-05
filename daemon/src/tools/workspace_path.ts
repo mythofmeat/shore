@@ -10,7 +10,7 @@ export class PathError extends Error {
   }
 }
 
-const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
+const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
 
 const MEMORY_INDEX_DEFERRED_PATH = "MEMORY.md";
 

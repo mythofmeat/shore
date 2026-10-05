@@ -1653,8 +1653,8 @@
       ]
     },
     {
-      "name": "all four prompt files load from the active snapshot",
-      "note": "SOUL, USER, AGENTS and TOOLS each land in their own labelled block",
+      "name": "the workspace prompt files load from the active snapshot",
+      "note": "SOUL, USER and TOOLS each land in their own labelled block",
       "input": {
         "character": "heidi",
         "display_name": "Ash",
@@ -1666,10 +1666,6 @@
           {
             "name": "USER.md",
             "content": "Ash likes brevity.\n"
-          },
-          {
-            "name": "AGENTS.md",
-            "content": "Be terse.\n"
           },
           {
             "name": "TOOLS.md",
@@ -1721,7 +1717,7 @@
       ],
       "system": [
         {
-          "text": "Be terse.\n",
+          "text": "You are heidi, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
           "label": "system"
         },
         {
@@ -1758,10 +1754,6 @@
         }
       ],
       "active_after": [
-        {
-          "name": "AGENTS.md",
-          "content": "Be terse.\n"
-        },
         {
           "name": "MEMORY.md",
           "content": "- a memory\n"

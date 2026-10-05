@@ -304,6 +304,7 @@ export interface DefaultsConfig {
   image_generation: string | undefined;
   subagent_model: string | undefined;
   display_name: string | undefined;
+  system_prompt: string | undefined;
 }
 
 const defaultDefaultsConfig = (): DefaultsConfig => ({
@@ -313,6 +314,7 @@ const defaultDefaultsConfig = (): DefaultsConfig => ({
   image_generation: undefined,
   subagent_model: undefined,
   display_name: undefined,
+  system_prompt: undefined,
 });
 
 const DEFAULTS: StructSpec<DefaultsConfig> = {
@@ -325,6 +327,7 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
     image_generation: optional(readImageModelName),
     subagent_model: optional(readChatModelName),
     display_name: optional(readString),
+    system_prompt: optional(readString),
   },
 };
 

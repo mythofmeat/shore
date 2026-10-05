@@ -141,7 +141,7 @@
     },
     {
       "input": "AGENTS.md",
-      "output": "AGENTS.md"
+      "output": null
     },
     {
       "input": "TOOLS.md",

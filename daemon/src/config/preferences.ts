@@ -607,6 +607,7 @@ function synthesizeSelectedProviderModel(
   if (entry.sdk !== undefined) fields.sdk = entry.sdk;
   if (entry.baseUrl !== undefined) fields.baseUrl = entry.baseUrl;
   if (entry.apiKeyEnv !== undefined) fields.apiKeyEnv = entry.apiKeyEnv;
+  if (entry.defaults.systemPrompt !== undefined) fields.systemPrompt = entry.defaults.systemPrompt;
 
   return resolvedModelFromParts(
     modelId,

@@ -1,7 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import {
-  AGENTS_FILE,
   SOUL_FILE,
   TOOLS_FILE,
   USER_FILE,
@@ -16,7 +15,6 @@ import {
   readOrUndefined,
   rustJoin,
 } from "../config/dirs.ts";
-import { builtinSystemPrompt } from "../engine/prompt.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import type { CharacterCreated } from "../protocol/CharacterCreated.ts";
 import type { CharacterDetails } from "../protocol/CharacterDetails.ts";
@@ -114,7 +112,7 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
     has_definition: hasDefinition,
     definition_preview:
       definition === undefined ? null : Array.from(definition).slice(0, PREVIEW_CHARS).join(""),
-    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>
+    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE].filter((file) =>
       pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),
     ),
     has_config_override: pathExists(rustJoin(charDir, "config.toml")),
@@ -132,7 +130,6 @@ const scaffoldedFiles = (
 ): readonly (readonly [file: string, content: string])[] => [
   [SOUL_FILE, soulTemplate(name)],
   [USER_FILE, ""],
-  [AGENTS_FILE, builtinSystemPrompt()],
   [TOOLS_FILE, ""],
 ];
 

@@ -1,4 +1,3 @@
-import { writePromptSnapshotFile } from "./support/storage.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -8,7 +7,7 @@ import rawFixture from "./handler_captures/setup.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
-import { characterDataDir, characterWorkspaceDir } from "../src/config/dirs.ts";
+import { characterWorkspaceDir } from "../src/config/dirs.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import {
@@ -284,12 +283,13 @@ describe("buildGenerationRequest", () => {
       const workspace = characterWorkspaceDir(dirs.config, "heidi");
       await mkdir(workspace, { recursive: true });
       await writeFile(join(workspace, "SOUL.md"), "I am heidi.\n");
-      const activePrompt = join(characterDataDir(dirs.data, "heidi"), "active_prompt");
-      writePromptSnapshotFile(join(activePrompt, "AGENTS.md"), "Answer as heidi, tersely.\n");
+      await mkdir(join(dirs.config, "prompts", "system"), { recursive: true });
+      await writeFile(join(dirs.config, "prompts", "system", "terse.md"), "Answer as heidi, tersely.\n");
       await mkdir(dirs.cache, { recursive: true });
 
       const app = defaultAppConfig();
       app.defaults.display_name = "Ash";
+      app.defaults.system_prompt = "prompts/system/terse.md";
       app.behavior.user_message_timestamps = c.input.timestamps;
       app.tools.enabled_tools = c.input.enabled_tools;
 

@@ -970,7 +970,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "failed to parse model entry [chat.anthropic.claude-opus-4-6]: unknown field `cache_keepalive`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `sdk`, `api_key_env`, `base_url`"
+      "err": "failed to parse model entry [chat.anthropic.claude-opus-4-6]: unknown field `cache_keepalive`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `system_prompt`, `sdk`, `api_key_env`, `base_url`"
     },
     {
       "name": "cache_ttl_empty_string_disables",
@@ -1178,7 +1178,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "failed to parse model entry [chat.anthropic.x]: unknown field `cache_keepalive_for`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `sdk`, `api_key_env`, `base_url`"
+      "err": "failed to parse model entry [chat.anthropic.x]: unknown field `cache_keepalive_for`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `system_prompt`, `sdk`, `api_key_env`, `base_url`"
     },
     {
       "name": "aux_bare_alias_key",
