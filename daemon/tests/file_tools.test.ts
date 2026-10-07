@@ -147,6 +147,25 @@ test("Markdown read expands local images beside the numbered source text", async
   expect(required(frame.images?.[0]).caption).toContain("Chart");
 });
 
+test("Markdown read places each picture right after the line that embeds it", async () => {
+  const { put, run, ctx } = await world();
+  await put("a.png", Buffer.from(PNG, "base64"));
+  await put("b.png", Buffer.from(PNG, "base64"));
+  await put("story.md", "We met at the pier.\n![[a.png|the pier]]\nThen the market.\n![market](b.png) and more\nThe end.\n");
+  const result = await run("read", { file_path: "story.md" });
+  if (result.block.type !== "tool_result" || typeof result.block.content === "string") throw new Error("missing images");
+  const blocks = result.block.content.map((block) => block.type === "text" ? block.text : block.type);
+  expect(blocks).toHaveLength(5);
+  expect(blocks[0]).toMatch(/1\tWe met at the pier\.\n2\t!\[\[a\.png\|the pier\]\]\n\[the pier \(.*a\.png\) attached/);
+  expect(blocks[1]).toBe("image");
+  expect(blocks[2]).toStartWith("3\tThen the market.\n4\t![market](b.png) and more\n[market (");
+  expect(blocks[2]).not.toContain("We met");
+  expect(blocks[3]).toBe("image");
+  expect(blocks[4]).toBe("5\tThe end.\nEnd of file.");
+  expect(result.output).toBe(resultText(result));
+  expect(resultText(result)).toContain(join(ctx.workspaceDir, "b.png"));
+});
+
 test("Markdown read resolves reference definitions outside the requested page and deduplicates paths", async () => {
   const { put, run } = await world();
   await put("chart.png", Buffer.from(PNG, "base64"));
