@@ -54,6 +54,11 @@
             "subagents": []
           },
           {
+            "tool": "read_chat_logs",
+            "main": false,
+            "subagents": []
+          },
+          {
             "tool": "model_history",
             "main": false,
             "subagents": []
@@ -142,6 +147,11 @@
           },
           {
             "tool": "search_chat_logs",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "read_chat_logs",
             "main": false,
             "subagents": []
           },

@@ -6,7 +6,7 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { SegmentReader, presentSegment } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
-import { handleSearchHistory } from "../src/tools/history.ts";
+import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 import { required } from "../src/util/required.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -132,33 +132,21 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
 
-  const search = await handleSearchHistory({ query: "hello" }, characterDir, {
-    character: "ada",
-    dbPath,
-    timeZone: "Australia/Canberra",
-  });
-  expect(search.results).toEqual([
-    {
-      thread: "main", segment: 0, ordinal: 0,
-      msg_id: "u1",
-      role: "user",
-      timestamp: "2026-08-13T10:00:00+10:00",
-      model: null,
-      text: "hello",
-      locations: [{ thread: "main", segment: 0, ordinal: 0 }],
-      before: [],
-      after: [
-        {
-          thread: "main", segment: 0, ordinal: 1,
-          msg_id: "a1",
-          role: "assistant",
-          timestamp: "2026-08-13T10:00:00+10:00",
-          model: null,
-          text: "hi",
-        },
-      ],
-    },
-  ]);
+  const options = { character: "ada", dbPath, timeZone: "Australia/Canberra" };
+  expect(await handleSearchChatLogs({ query: "hello", all_time: true }, characterDir, options)).toBe([
+    "hello: 1 match, showing 1–1, best match first",
+    "",
+    "2026-08-13 Thu 10:00  user  [hello]  u1",
+  ].join("\n"));
+  expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe([
+    "u1 in main: 0 before, 1 after (Australia/Canberra)",
+    "",
+    "▶ 2026-08-13 Thu 10:00  user  u1",
+    "hello",
+    "",
+    "2026-08-13 Thu 10:00  ada  a1",
+    "hi",
+  ].join("\n"));
 });
 
 

@@ -7,7 +7,7 @@ import { handleBash, withPromptChanges } from "./bash.ts";
 import { handleRead } from "./read.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
-import { handleSearchHistory } from "./history.ts";
+import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import type { FetchLike } from "./web.ts";
@@ -51,6 +51,7 @@ export interface ToolContext {
   minSimilarity?: number;
   memoryIndexPath?: string;
   historyIndexPath?: string;
+  userName?: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
   trackWorkspaceWrite?: (name: string, input: unknown, write: () => Promise<unknown>) => Promise<unknown>;
@@ -140,6 +141,15 @@ export function deferEditTo(
   };
 }
 
+function chatLogOptions(ctx: ToolContext): ChatLogOptions {
+  return {
+    character: ctx.characterName,
+    dbPath: ctx.historyDbPath,
+    ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
+    ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
+  };
+}
+
 export async function dispatchTool(
   name: string,
   input: unknown,
@@ -160,14 +170,10 @@ export async function dispatchTool(
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "search_chat_logs":
-      return await handleSearchHistory(args, ctx.conversationDir, {
-        character: ctx.characterName,
-        dbPath: ctx.historyDbPath,
-        ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
-        ...(ctx.embedder === undefined ? {} : { embedder: ctx.embedder }),
-        ...(ctx.minSimilarity === undefined ? {} : { minSimilarity: ctx.minSimilarity }),
-        defaultMode: ctx.retrievalMode,
-      });
+      return await handleSearchChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
+
+    case "read_chat_logs":
+      return await handleReadChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
 
     case "model_history":
       return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);

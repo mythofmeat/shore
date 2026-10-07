@@ -16,7 +16,7 @@ import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { resolveEmbedder, resolveMinSimilarity } from "../memory/retrieval.ts";
 import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
-import type { RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
+import { resolveDisplayName, type RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
@@ -112,6 +112,7 @@ export async function buildToolContext(
     retrievalMode: config.app.memory.retrieval.mode,
     memoryIndexPath: indexPath(config.dirs.cache, charName),
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
+    userName: resolveDisplayName(config.app.defaults),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),

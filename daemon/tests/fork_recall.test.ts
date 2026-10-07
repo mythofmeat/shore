@@ -6,8 +6,7 @@ import { tmpdir } from "node:os";
 import { HistoryStore, type SegmentEntry } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { newMessageVersion } from "../src/engine/versions.ts";
-import { handleSearchHistory } from "../src/tools/history.ts";
-import { required } from "../src/util/required.ts";
+import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 
 const roots: string[] = [];
 const STAMP = "2026-09-05T00:00:00Z";
@@ -26,8 +25,18 @@ async function fixture() {
     conversationDir,
     character: "ada",
     dbPath: join(dir, "history.db"),
-    path: join(dir, "search.db"),
+    indexPath: join(dir, "chat_logs.db"),
+    timeZone: "UTC",
+    now: () => Date.parse("2026-09-06T00:00:00Z"),
   };
+}
+
+async function search(f: Awaited<ReturnType<typeof fixture>>, input: Record<string, unknown>): Promise<string> {
+  return await handleSearchChatLogs(input, f.conversationDir, f);
+}
+
+async function read(f: Awaited<ReturnType<typeof fixture>>, input: Record<string, unknown>): Promise<string> {
+  return await handleReadChatLogs(input, f.conversationDir, f);
 }
 
 function message(text: string, version?: string, role: Message["role"] = "assistant"): Message {
@@ -79,17 +88,13 @@ describe("recalling a message that a fork copied", () => {
     ]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(1);
-    const hit = required(result.results[0]);
-    expect(hit["locations"]).toEqual([
-      { thread: "main", segment: 0, ordinal: 1 },
-      { thread: "spin", segment: 0, ordinal: 1 },
-    ]);
+    const out = await search(f, { query: "needle" });
+    expect(out).toContain("needle: 1 match, showing 1–1, best match first");
+    expect(out).toContain(`${message("needle", shared).msg_id} · also in spin`);
+    const there = await read(f, { around: message("needle", shared).msg_id, thread: "spin" });
+    expect(there).toContain("in spin: 1 before, 1 after");
+    expect(there).toContain("spin before");
+    expect(there).toContain("spin after");
   });
 
   test("neighbours come from the representative's own thread, never mixed", async () => {
@@ -108,15 +113,13 @@ describe("recalling a message that a fork copied", () => {
     ]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    const hit = required(result.results[0]);
-    expect(hit["thread"]).toBe("main");
-    expect(hit["before"]).toMatchObject([{ thread: "main", text: "main before" }]);
-    expect(hit["after"]).toMatchObject([{ thread: "main", text: "main after" }]);
+    const out = await read(f, { around: message("needle", shared).msg_id });
+    expect(out).toContain("in main: 1 before, 1 after");
+    expect(out).toContain("Also in thread spin.");
+    expect(out).toContain("main before");
+    expect(out).toContain("main after");
+    expect(out).not.toContain("spin before");
+    expect(out).not.toContain("spin after");
   });
 
   test("equal text from two separate events stays two results", async () => {
@@ -126,12 +129,7 @@ describe("recalling a message that a fork copied", () => {
     put(store, "ada/spin", 0, [message("needle", newMessageVersion())]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(2);
+    expect(await search(f, { query: "needle" })).toContain("needle: 2 matches");
   });
 
   test("an edited copy is a different version, so it comes back on its own", async () => {
@@ -142,12 +140,7 @@ describe("recalling a message that a fork copied", () => {
     put(store, "ada/spin", 0, [message("needle after the edit", newMessageVersion())]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(2);
+    expect(await search(f, { query: "needle" })).toContain("needle: 2 matches");
   });
 
   test("excluding one occurrence keeps the message findable through the other", async () => {
@@ -159,15 +152,10 @@ describe("recalling a message that a fork copied", () => {
     store.setExcluded("ada", 0, true);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(1);
-    expect(required(result.results[0])["locations"]).toEqual([
-      { thread: "spin", segment: 0, ordinal: 0 },
-    ]);
+    const out = await search(f, { query: "needle" });
+    expect(out).toContain("needle: 1 match");
+    expect(out).toContain("[spin] [needle]");
+    expect(out).not.toContain("also in");
   });
 
   test("copies are folded together before the limit, so distinct matches are not crowded out", async () => {
@@ -180,16 +168,10 @@ describe("recalling a message that a fork copied", () => {
     put(store, "ada/c", 0, [message("needle distinct", newMessageVersion())]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 2 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(2);
-    expect(result.results.map((hit) => String(hit["text"])).sort((a, b) => a.localeCompare(b))).toEqual([
-      "needle distinct",
-      "needle shared",
-    ]);
+    const out = await search(f, { query: "needle", limit: 2 });
+    expect(out).toContain("needle: 2 matches, showing 1–2");
+    expect(out).toContain("[needle] shared");
+    expect(out).toContain("[needle] distinct");
   });
 
   test("counts separate distinct events from their copies", async () => {
@@ -200,13 +182,21 @@ describe("recalling a message that a fork copied", () => {
     put(store, "ada/spin", 0, [message("needle", shared)]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.searched_message_occurrences).toBe(3);
-    expect(result.searched_messages).toBe(2);
+    expect(await search(f, { query: "absent" })).toContain("Searched 2 archived messages");
+  });
+
+  test("a fork thread reads with the messages it copied", async () => {
+    const f = await fixture();
+    const shared = newMessageVersion();
+    const answer = message("answered in spin", newMessageVersion());
+    const store = HistoryStore.open(f.dbPath);
+    put(store, "ada", 0, [message("asked first", shared, "user")]);
+    put(store, "ada/spin", 0, [message("asked first", shared, "user"), answer]);
+    store.close();
+
+    const context = await read(f, { around: answer.msg_id, thread: "spin" });
+    expect(context).toContain("in spin: 1 before, 0 after");
+    expect(context).toContain("asked first");
   });
 
   test("each archive counts its own display turns, a shared turn included", async () => {
@@ -230,12 +220,8 @@ describe("recalling a message that a fork copied", () => {
     put(store, "ada/spin", 0, [message("needle", shared)]);
     store.close();
 
-    const result = await handleSearchHistory(
-      { query: "needle", mode: "lexical", max_results: 50 },
-      f.conversationDir,
-      f,
-    );
-    expect(result.count).toBe(1);
-    expect(required(result.results[0])["thread"]).toBe("spin");
+    const out = await search(f, { query: "needle" });
+    expect(out).toContain("needle: 1 match");
+    expect(out).toContain("[spin] [needle]");
   });
 });
