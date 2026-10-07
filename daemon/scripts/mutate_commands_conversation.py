@@ -320,9 +320,11 @@ MUTANTS = [
     ("edit: resolves against the raw store rather than the merged list",
      "  const merged = mergeToolLoopMessages([...engine.messages()]);\n"
      "  const msgId = resolveRef(merged, rawRef);\n"
+     "  const previous = replyVersion(engine.messages(), msgId);\n"
      "  try {\n"
      "    await engine.editMessage(msgId, content);",
      "  const msgId = resolveRef([...engine.messages()], rawRef);\n"
+     "  const previous = replyVersion(engine.messages(), msgId);\n"
      "  try {\n"
      "    await engine.editMessage(msgId, content);"),
 

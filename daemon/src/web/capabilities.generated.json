@@ -3498,7 +3498,7 @@
     "ActivityStatusReport": "{ hour_histogram: Array<number>, hour_classifications: Array<ActivityHourClass>, has_sufficient_heatmap: boolean, engagement_score: number, sessions_per_day: number, message_count: number, turn_count: number, }",
     "AlternativeDirection": "\"next\" | \"prev\" | \"previous\" | \"first\" | \"last\"",
     "AlternativeListing": "{ ref: string, alt_index: number | null, position: number | null, alt_count: number, alternatives: Array<AlternativeView>, }",
-    "AlternativeSelected": "{ ref: string, alt_index: number, position: number, alt_count: number, content: string, }",
+    "AlternativeSelected": "{ ref: string, alt_index: number, position: number, alt_count: number, content: string, workspace?: WorkspaceRewind, }",
     "AlternativeView": "{ index: number, position: number, active: boolean, content: string, images: Array<ImageRef>, timestamp: string, }",
     "AutonomyHeartbeatState": "\"Active\" | \"Dormant\"",
     "AutonomyStatusReport": "{ heartbeat_state: AutonomyHeartbeatState, ticks_without_user: number, dormant_after_heartbeat_turns: number, default_interval_secs: number, next_wake_at?: string, seconds_until_wake?: number, last_user_at?: string, seconds_since_user?: number, min_interval_secs: number, max_interval_secs: number, dormant_after_idle_time_secs: number, recent_events: Array<HeartbeatEvent>, }",
@@ -3622,7 +3622,7 @@
     "MessageEdited": "{ ref: string, edited: boolean, }",
     "MessageOrigin": "\"user_input\" | \"assistant_reply\" | \"autonomous\"",
     "MessageReferences": "string | Array<string>",
-    "MessagesDeleted": "{ deleted: Array<string>, }",
+    "MessagesDeleted": "{ deleted: Array<string>, workspace?: WorkspaceRewind, }",
     "ModelActive": "{ active: string | null, }",
     "ModelFavorite": "{ qualified_name: string, provider: string, model_id: string, favorite: boolean, changed: boolean, favorites: Array<string>, }",
     "ModelInfoArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, }",
@@ -3798,6 +3798,8 @@
     "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, accepted?: boolean, result?: OperationResponse, result_omitted: boolean, error?: Error, }",
     "WebRequestList": "{ requests: Array<WebRequestInfo>, max_records: number, max_result_bytes: number, }",
     "WebRequestPhase": "\"running\" | \"uncertain\" | \"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
-    "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }"
+    "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }",
+    "WorkspaceKept": "\"later_turns\"",
+    "WorkspaceRewind": "{ restored: Array<string>, skipped: Array<string>, kept?: WorkspaceKept, }"
   }
 }

@@ -65,6 +65,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
+import { pruneTurns, recordTurn, redoTurns, replyVersions, snapshotTree, undoTurns, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {
   readonly thread: string;
@@ -256,110 +257,136 @@ async function runGenerationCore(
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }
 
-  const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-  const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
-
-  await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
-  notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
-
-  const built = await buildGenerationRequest({
-    engine,
-    dataDir: deps.dataDir,
-    charName,
-    config,
-    resolved,
-    regen,
-    mcpRegistry: deps.mcpRegistry,
-  });
-  const request: SidecarRequest = {
-    ...built.request,
-    ...(imageSupport === undefined ? {} : { supports_images: imageSupport }),
-    messages: withRegenGuidance(
-      built.request.messages,
-      regen ? params.body.guidance : undefined,
-    ),
-    context: callContext(deps, config, charName, engine.thread, params.rid, keepaliveWindowSecs(built.keepalive_interval_ms, built.keepalive_pings), (built.request.provider_options === undefined
-        ? {}
-        : { options: built.request.provider_options })),
-  };
-
-  const subagentHistory: Message[] =
-    config.app.subagents.size === 0
-      ? []
-      : [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
-
-  let intermediatePersisted = false;
-  const persistIntermediate = async (message: Message): Promise<void> => {
-    params.signal.throwIfAborted();
-    const persisted = message.role === "assistant"
-      ? {
-          ...message,
-          provider_key: resolved.providerKey,
-          model: request.model,
-        }
-      : message;
-    if (regen && !intermediatePersisted) {
-      await engine.replaceAfterLastUserTurn([persisted]);
-    } else {
-      await engine.appendMessage(persisted);
+  const workspaceTurns = workspaceTurnsFor(config.dirs, charName);
+  const replaced = regen ? replyVersions(engine.messagesAfterLastUserTurn()) : [];
+  if (replaced.length > 0) await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
+  const known = new Set(replyVersions(engine.messages()));
+  const before = await snapshotTree(workspaceTurns);
+  const settleWorkspace = async (): Promise<void> => {
+    const messages = engine.messages();
+    const newest = replyVersions(messages).filter((version) => !known.has(version)).at(-1);
+    if (newest !== undefined) {
+      await recordTurn(workspaceTurns, engine.thread, newest, before);
+      await pruneTurns(workspaceTurns, engine.thread, messages);
+    } else if (replaced.length > 0) {
+      await redoTurns(workspaceTurns, engine.thread, replaced);
     }
-    intermediatePersisted = true;
   };
 
-  const { result, intermediate } = await streamTurn(deps, {
-    config,
-    charName,
-    resolved,
-    request,
-    regen: regen && { replaces },
-    conversation: subagentHistory,
-    send: (message) => void params.send(message),
-    ...(params.rid === null ? {} : { rid: params.rid }),
-    signal: params.signal,
-    now,
-    newMessageId,
-    persistIntermediate,
-  }).catch((e: unknown) => {
-    if (imageSupport !== false && isImageRejection(e)) {
-      recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
-      throw new ImagesUnsupportedError(resolved.qualifiedName, countImageBlocks(request.messages));
-    }
-    throw e;
-  });
+  let result: StreamResult;
+  let built: Awaited<ReturnType<typeof buildGenerationRequest>>;
+  try {
+    const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
+    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
 
-  params.signal.throwIfAborted();
-  applyIntermediateMessages(request, intermediate, result.model);
+    await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
+    notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
 
-  const persistCtx: PersistContext = {
-    emitEvent: deps.emitEvent,
-    sendDirect: (message) => void params.send(message),
-    autonomy,
-    notifier: deps.notifier,
-    newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
-    newlyCrossedPlanLimitWarnings: deps.newlyCrossedPlanLimitWarnings,
-    now,
-    newMessageId,
-  };
-  const { context: _perCall, ...sentBody } = request;
-  await persistAndNotify(persistCtx, engine, {
-    charName,
-    resolvedProviderKey: resolved.providerKey,
-    onClaudePlan: runsOnClaudePlan(request),
-    result,
-    request: {
-      ...sentBody,
+    built = await buildGenerationRequest({
+      engine,
+      dataDir: deps.dataDir,
+      charName,
+      config,
+      resolved,
+      regen,
+      mcpRegistry: deps.mcpRegistry,
+    });
+    const request: SidecarRequest = {
+      ...built.request,
+      ...(imageSupport === undefined ? {} : { supports_images: imageSupport }),
+      messages: withRegenGuidance(
+        built.request.messages,
+        regen ? params.body.guidance : undefined,
+      ),
+      context: callContext(deps, config, charName, engine.thread, params.rid, keepaliveWindowSecs(built.keepalive_interval_ms, built.keepalive_pings), (built.request.provider_options === undefined
+          ? {}
+          : { options: built.request.provider_options })),
+    };
+
+    const subagentHistory: Message[] =
+      config.app.subagents.size === 0
+        ? []
+        : [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
+
+    let intermediatePersisted = false;
+    const persistIntermediate = async (message: Message): Promise<void> => {
+      params.signal.throwIfAborted();
+      const persisted = message.role === "assistant"
+        ? {
+            ...message,
+            provider_key: resolved.providerKey,
+            model: request.model,
+          }
+        : message;
+      if (regen && !intermediatePersisted) {
+        await engine.replaceAfterLastUserTurn([persisted]);
+      } else {
+        await engine.appendMessage(persisted);
+      }
+      intermediatePersisted = true;
+    };
+
+    const streamed = await streamTurn(deps, {
+      config,
+      charName,
+      resolved,
+      request,
+      regen: regen && { replaces },
+      conversation: subagentHistory,
+      send: (message) => void params.send(message),
       ...(params.rid === null ? {} : { rid: params.rid }),
-    },
-    keepaliveIntervalMs: built.keepalive_interval_ms,
-    keepalivePings: built.keepalive_pings,
-    toolIntermediateMessages: intermediate,
-    replaceGeneratedTail: intermediatePersisted,
-    wallClockMs: clock() - startedAt,
-    ...(regenAlt === undefined ? {} : { regenAlt }),
-  });
+      signal: params.signal,
+      now,
+      newMessageId,
+      persistIntermediate,
+    }).catch((e: unknown) => {
+      if (imageSupport !== false && isImageRejection(e)) {
+        recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
+        throw new ImagesUnsupportedError(resolved.qualifiedName, countImageBlocks(request.messages));
+      }
+      throw e;
+    });
+    result = streamed.result;
+    const intermediate = streamed.intermediate;
 
-  emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
-  await flushFrames();
+    params.signal.throwIfAborted();
+    applyIntermediateMessages(request, intermediate, result.model);
+
+    const persistCtx: PersistContext = {
+      emitEvent: deps.emitEvent,
+      sendDirect: (message) => void params.send(message),
+      autonomy,
+      notifier: deps.notifier,
+      newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
+      newlyCrossedPlanLimitWarnings: deps.newlyCrossedPlanLimitWarnings,
+      now,
+      newMessageId,
+    };
+    const { context: _perCall, ...sentBody } = request;
+    await persistAndNotify(persistCtx, engine, {
+      charName,
+      resolvedProviderKey: resolved.providerKey,
+      onClaudePlan: runsOnClaudePlan(request),
+      result,
+      request: {
+        ...sentBody,
+        ...(params.rid === null ? {} : { rid: params.rid }),
+      },
+      keepaliveIntervalMs: built.keepalive_interval_ms,
+      keepalivePings: built.keepalive_pings,
+      toolIntermediateMessages: intermediate,
+      replaceGeneratedTail: intermediatePersisted,
+      wallClockMs: clock() - startedAt,
+      ...(regenAlt === undefined ? {} : { regenAlt }),
+    });
+
+    emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
+    await flushFrames();
+  } catch (error) {
+    await settleWorkspace();
+    throw error;
+  }
+  await settleWorkspace();
 
   if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) return;
   const compaction = config.app.memory.compaction;

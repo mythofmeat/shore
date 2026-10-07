@@ -32,6 +32,7 @@ import { outcomeOf } from "./support/outcome.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { lastPass } from "../src/memory/compaction/activity.ts";
 import { NO_MCP } from "./support/rebuild.ts";
+import { recordedTurns, workspaceTurnsFor } from "../src/tools/workspace_turns.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -190,6 +191,35 @@ describe("running a heartbeat", () => {
     expect(result.events).toEqual([
       { kind: "message_sent", detail: "Autonomous message sent: the tide is out" },
     ]);
+  });
+
+  test("a tick that sends a message records its workspace changes under it", async () => {
+    const config = await world();
+    const appended: Message[] = [];
+    const turns = workspaceTurnsFor(config.dirs, "ada");
+    const scripted = scriptedProvider([
+      response([{ type: "text", text: "<sendMessage>left you a note</sendMessage>" }]),
+    ]);
+    const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
+      registry: registryFor(config, appended),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: {
+          ...scripted,
+          stream: async function* (req: SidecarRequest) {
+            await writeFile(join(turns.workspace, "note.md"), "from a heartbeat\n");
+            yield* scripted.stream(req);
+          },
+        },
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    const version = String(appended[0]?.version);
+    expect(version).toStartWith("mv_");
+    expect(await recordedTurns(turns, "main", [version])).toEqual([version]);
   });
 
   test("a cold-cache tick advertises enabled MCP tools", async () => {

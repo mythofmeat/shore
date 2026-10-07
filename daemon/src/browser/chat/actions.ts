@@ -1,4 +1,6 @@
 import type { Message } from "../../protocol/Message.ts";
+import type { WorkspaceRewind } from "../../protocol/WorkspaceRewind.ts";
+import { workspaceNote } from "./workspace_note.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
@@ -11,7 +13,12 @@ export async function swipe(message: Message, direction: "prev" | "next", last: 
     if (last) await conversation.regenerate(undefined, streamReplies());
     return;
   }
-  await workspace.actions.run("alt", { ref: message.msg_id, direction });
+  showWorkspaceNote((await workspace.actions.run("alt", { ref: message.msg_id, direction })).workspace);
+}
+
+export function showWorkspaceNote(rewind: WorkspaceRewind | undefined): void {
+  const note = workspaceNote(rewind);
+  if (note !== undefined) toasts.show(note);
 }
 
 export async function makeHome(state: WorkspaceSnapshot): Promise<void> {

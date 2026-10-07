@@ -121,6 +121,21 @@ const provider: SidecarProvider = {
       yield { type: "done", content: "Found both notes.", finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
       return;
     }
+    const noted = request.messages.at(-1)?.content.flatMap((block) => block.type === "tool_result" && block.tool_use_id.startsWith("note-") ? [block] : []) ?? [];
+    if (question.includes("workspace note fixture") || noted.length > 0) {
+      const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      const result = noted[0];
+      if (result === undefined) {
+        yield { type: "tool_use", id: `note-${String(generation)}`, name: "bash", input: { command: `echo "SEEN[$(ls notes 2>/dev/null | tr '\\n' ' ')]"; mkdir -p notes; echo hi > notes/reply-${String(generation)}.md` } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+        return;
+      }
+      const output = typeof result.content === "string" ? result.content : result.content.map((block) => block.type === "text" ? block.text : "").join("");
+      const text = `Before ${result.tool_use_id} the notes were [${(/SEEN\[([^\]]*)\]/.exec(output)?.[1] ?? "?").trim()}]`;
+      yield { type: "text", text };
+      yield { type: "done", content: text, finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      return;
+    }
     if (question.includes("run worker display fixture")) {
       yield { type: "tool_use", id: "display-worker", name: "ask_worker", input: { query: "Inspect the tool fixture" } };
       yield { type: "done", content: "", finish_reason: "tool_use", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };

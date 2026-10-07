@@ -8016,10 +8016,57 @@
             "items": {
               "type": "string"
             }
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceRewind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "deleted"
+        ]
+      },
+      "WorkspaceRewind": {
+        "type": "object",
+        "properties": {
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceKept"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "restored",
+          "skipped"
+        ]
+      },
+      "WorkspaceKept": {
+        "type": "string",
+        "enum": [
+          "later_turns"
         ]
       },
       "AlternativeListing": {
@@ -8125,6 +8172,16 @@
           },
           "content": {
             "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceRewind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -16213,10 +16270,57 @@
             "items": {
               "type": "string"
             }
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceRewind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "deleted"
+        ]
+      },
+      "WorkspaceRewind": {
+        "type": "object",
+        "properties": {
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceKept"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "restored",
+          "skipped"
+        ]
+      },
+      "WorkspaceKept": {
+        "type": "string",
+        "enum": [
+          "later_turns"
         ]
       },
       "AlternativeListing": {
@@ -16322,6 +16426,16 @@
           },
           "content": {
             "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WorkspaceRewind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

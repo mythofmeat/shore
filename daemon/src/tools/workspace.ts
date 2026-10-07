@@ -7,7 +7,7 @@ import { rustTrim } from "../memory/lines";
 
 export type ToolInput = Record<string, unknown>;
 
-const GIT_SAFETY_FLAGS: readonly string[] = [
+export const GIT_SAFETY_FLAGS: readonly string[] = [
   "-c",
   "core.hooksPath=/dev/null",
   "-c",

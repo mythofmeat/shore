@@ -10857,11 +10857,60 @@
           "items": {
             "type": "string"
           }
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceRewind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "deleted"
-      ]
+      ],
+      "$defs": {
+        "WorkspaceRewind": {
+          "type": "object",
+          "properties": {
+            "restored": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kept": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkspaceKept"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "restored",
+            "skipped"
+          ]
+        },
+        "WorkspaceKept": {
+          "type": "string",
+          "enum": [
+            "later_turns"
+          ]
+        }
+      }
     }
   },
   {
@@ -11067,6 +11116,16 @@
         },
         "content": {
           "type": "string"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceRewind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -11075,7 +11134,46 @@
         "position",
         "alt_count",
         "content"
-      ]
+      ],
+      "$defs": {
+        "WorkspaceRewind": {
+          "type": "object",
+          "properties": {
+            "restored": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kept": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkspaceKept"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "restored",
+            "skipped"
+          ]
+        },
+        "WorkspaceKept": {
+          "type": "string",
+          "enum": [
+            "later_turns"
+          ]
+        }
+      }
     }
   },
   {

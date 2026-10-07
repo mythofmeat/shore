@@ -7,6 +7,7 @@ import type { Message } from "../src/protocol/Message.ts";
 import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
 import { checkAttachments, restoredDraft } from "../src/browser/request_forms.ts";
 import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/chat/sending.ts";
+import { workspaceNote } from "../src/browser/chat/workspace_note.ts";
 import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
 import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
 import { Markdown, markdownBlocks, safeHref, type SettledMarkdown } from "../src/browser/markdown.tsx";
@@ -319,4 +320,13 @@ test("theme choice persists, applies to the document, survives storage failures 
   expect(storedTheme({ getItem: () => "neon" })).toBe(DEFAULT_THEME);
   expect(storedTheme({ getItem: () => { throw new Error("blocked"); } })).toBe(DEFAULT_THEME);
   expect(isThemeId("fog")).toBe(true);
+});
+
+test("workspace notes say what a delete or swipe did to the files", () => {
+  expect(workspaceNote(undefined)).toBeUndefined();
+  expect(workspaceNote({ restored: [], skipped: [] })).toBeUndefined();
+  expect(workspaceNote({ restored: [], skipped: [], kept: "later_turns" })).toBe("Workspace files kept: later turns build on this one");
+  expect(workspaceNote({ restored: ["a.md"], skipped: [] })).toBe("Restored 1 workspace file");
+  expect(workspaceNote({ restored: ["a.md", "b.md"], skipped: ["c.md"] })).toBe("Restored 2 workspace files; 1 workspace file changed since and was left as is: c.md");
+  expect(workspaceNote({ restored: [], skipped: ["a", "b", "c", "d"] })).toBe("4 workspace files changed since and were left as is: a, b, c, …");
 });
