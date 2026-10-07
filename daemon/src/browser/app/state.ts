@@ -69,6 +69,12 @@ export function streamReplies(): boolean {
   try { return localStorage.getItem(STREAM_KEY) !== "false"; } catch { return true; }
 }
 
+export const ENTER_SENDS_KEY = "shore.enter-sends";
+
+export function enterSends(): boolean {
+  try { return localStorage.getItem(ENTER_SENDS_KEY) !== "false"; } catch { return true; }
+}
+
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

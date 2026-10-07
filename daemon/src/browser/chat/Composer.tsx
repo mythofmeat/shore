@@ -10,7 +10,7 @@ import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
+import { conversation, enterSends, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
 import { swipe } from "./actions.ts";
 import { EffortChip } from "./effort.tsx";
 import { droppedNotice } from "./sending.ts";
@@ -154,7 +154,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
             return;
           }
           if (event.key !== "Enter") return;
-          const submit = event.ctrlKey || event.metaKey || (!mobile && !event.shiftKey && !event.altKey);
+          const submit = event.ctrlKey || event.metaKey || (!mobile && enterSends() && !event.shiftKey && !event.altKey);
           if (submit) { event.preventDefault(); void send(); }
         }} />
       <div className="composer-bar">

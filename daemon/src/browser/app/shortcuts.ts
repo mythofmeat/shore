@@ -15,6 +15,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ["↑ ↓ PgUp PgDn Home End"], description: "Scroll the conversation", where: "Conversation" },
 ];
 
+const MOD_ENTER_SENDS: Shortcut = { keys: ["Mod", "Enter"], description: "Send (Enter for a new line)", where: "Message box" };
+
+export function shortcutsFor(enterSends: boolean): readonly Shortcut[] {
+  return enterSends ? SHORTCUTS : SHORTCUTS.map((item) => item.keys.length === 1 && item.keys[0] === "Enter" ? MOD_ENTER_SENDS : item);
+}
+
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export function keyLabel(key: string): string {

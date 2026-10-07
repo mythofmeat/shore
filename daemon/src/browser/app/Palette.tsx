@@ -5,8 +5,8 @@ import { Icon, type IconName } from "../ui/icons.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { openConversationDialog, openEffortMenu, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
-import { keyLabel, paletteMatches, SHORTCUTS } from "./shortcuts.ts";
-import { perform, workspace } from "./state.ts";
+import { keyLabel, paletteMatches, shortcutsFor } from "./shortcuts.ts";
+import { enterSends, perform, workspace } from "./state.ts";
 
 export type PaletteScope = "full" | "shortcuts" | "config";
 interface Command { id: string; label: string; detail?: string; icon: IconName; group: string; run: () => void }
@@ -24,7 +24,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
   }, [scope, keys.length, state.status]);
   const commands = useMemo<Command[]>(() => {
     const run = (work: () => void) => () => { close(); work(); };
-    if (scope === "shortcuts") return SHORTCUTS.map((item, index) => ({ id: `shortcut:${String(index)}`, label: item.description, detail: item.keys.map(keyLabel).join(" "), icon: "info", group: item.where, run: run(() => navigate({ view: "settings", page: "keyboard" })) }));
+    if (scope === "shortcuts") return shortcutsFor(enterSends()).map((item, index) => ({ id: `shortcut:${String(index)}`, label: item.description, detail: item.keys.map(keyLabel).join(" "), icon: "info", group: item.where, run: run(() => navigate({ view: "settings", page: "keyboard" })) }));
     if (scope === "config") return keys.map((key) => ({ id: `config:${key}`, label: key, icon: "settings", group: "Settings keys", run: run(() => { requestConfigSearch(key); navigate({ view: "settings", page: "configuration" }); }) }));
     const conversation = state.character === null ? [] : [
       { id: "new-thread", label: "New conversation", icon: "plus" as const, group: "Conversation", run: run(newThread) },
