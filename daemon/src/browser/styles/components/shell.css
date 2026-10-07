@@ -191,7 +191,7 @@
 .shell[data-layout="mobile"] .sidebar-item.thread {
   min-height: 44px;
   padding-left: 52px;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--font-scale));
 }
 
 .connection {
@@ -200,7 +200,7 @@
   gap: 6px;
   padding-right: 8px;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   white-space: nowrap;
 }
 

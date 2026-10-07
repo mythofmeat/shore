@@ -42,7 +42,7 @@
   gap: 12px;
   margin: 8px 0;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .divider::before,
@@ -157,14 +157,14 @@
 }
 
 .message-name {
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--font-scale));
   font-weight: 600;
 }
 
 .message-meta time,
 .responding {
   color: var(--text-3);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .responding {
@@ -598,7 +598,7 @@ button.chip:hover {
 .edit-hint {
   flex: 1;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .shell[data-layout="mobile"] .edit-hint {
@@ -784,7 +784,7 @@ button.chip:hover {
 }
 
 .shell[data-layout="mobile"] .composer textarea {
-  font-size: 16px;
+  font-size: max(16px, calc(16px * var(--font-scale)));
   padding: 6px 0 8px;
 }
 
@@ -822,7 +822,7 @@ button.chip:hover {
 .composer-status {
   flex: 1;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .send {
