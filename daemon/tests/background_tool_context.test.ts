@@ -25,6 +25,7 @@ import { required } from "../src/util/required.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 beforeEach(() => {
   setTestEnv(KEY, "fixture-key");
@@ -273,7 +274,7 @@ test.each(["anthropic", "alternate"])("heartbeat applies a same-ID alias's token
       maxOutputTokens: 512, maxToolIterations: 1,
     });
     w.config.app.defaults.background.heartbeat = "quiet";
-    const prepared = required(await prepareHeartbeatRequest("ada", w.config, { cache: w.runtime.cache }));
+    const prepared = required(await prepareHeartbeatRequest("ada", w.config, { cache: w.runtime.cache, rebuild: NO_MCP }));
     expect(prepared.request.model).toBe(MODEL.modelId);
     expect(prepared.request.provider_key).toBe(providerKey);
     expect(prepared.request.max_tokens).toBe(512);

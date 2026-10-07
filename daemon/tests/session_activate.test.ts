@@ -20,6 +20,7 @@ import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 const CHARACTER = "ada";
 const MINUTE = 60_000;
@@ -175,6 +176,7 @@ async function harnessFor(
     tick: () => keepaliveService.tick(),
     activate: async () =>
       await sessionActivateCommand(CHARACTER, {
+        rebuild: NO_MCP,
         keepalive: keepaliveService,
         lastRequest: cache,
         autonomy,
@@ -240,7 +242,7 @@ describe("session_activate", () => {
 
   test("a schedule that is already running is resumed, not re-primed", async () => {
     const h = await harnessFor(BETWEEN_TURNS);
-    const built = await rebuildRequestFromDisk(CHARACTER, h.dataDir, h.config, {});
+    const built = await rebuildRequestFromDisk(CHARACTER, h.dataDir, h.config, NO_MCP);
     if (built === undefined) throw new Error("the fixture conversation did not rebuild");
     h.cache.set(CHARACTER, built.request, {
       intervalMs: built.keepalive_interval_ms,

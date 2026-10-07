@@ -578,7 +578,7 @@ async function resolveChatRequest(
 export function compactionRunner(
   deps: Omit<CompactionRunDeps, "config"> & {
     cache?: LastRequestCache;
-    rebuild?: RebuildDeps;
+    rebuild: RebuildDeps;
   },
 ): CompactionRunner {
   return {

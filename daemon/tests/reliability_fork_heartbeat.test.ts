@@ -14,6 +14,7 @@ import type { SidecarRequest } from "../src/llm/types.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 afterAll(restoreTestEnv);
 
@@ -36,6 +37,7 @@ test("a first client can connect while a heartbeat is generating and receive its
   const started = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const tick = runHeartbeatTick("ada", h.config, {
+    rebuild: NO_MCP,
     cache: new LastRequestCache(),
     dispatch: async () => ({ output: "ok", isError: false }),
     budgetBlockFor: () => undefined,

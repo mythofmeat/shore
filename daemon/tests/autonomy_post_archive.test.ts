@@ -18,6 +18,7 @@ import type { GenerateResponse, SidecarProvider } from "../src/llm/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -140,6 +141,7 @@ describe("autonomy compaction reloads the engine it shares with chat", () => {
     expect(engine.messages().length).toBe(6);
 
     const executor = new InProcessAutonomyExecutor({
+      rebuild: NO_MCP,
       registry,
       cache: new LastRequestCache(),
       providers: { anthropic: writingProvider() },
@@ -170,7 +172,7 @@ describe("post-archive memory writes hold the compaction guard", () => {
       },
     };
 
-    await reloadAndApplyDeferred("ada", { config, cache: new LastRequestCache(), engine }, "test");
+    await reloadAndApplyDeferred("ada", { config, cache: new LastRequestCache(), rebuild: NO_MCP, engine }, "test");
 
     expect(acquiredDuringApply).toBe(false);
   });
@@ -178,7 +180,7 @@ describe("post-archive memory writes hold the compaction guard", () => {
   test("the guard is released afterwards, so the next compaction can begin", async () => {
     const { config } = await world();
 
-    await reloadAndApplyDeferred("ada", { config, cache: new LastRequestCache() }, "test");
+    await reloadAndApplyDeferred("ada", { config, cache: new LastRequestCache(), rebuild: NO_MCP }, "test");
 
     const guard = tryBeginCompaction(config.dirs.data, "ada");
     expect(guard).toBeDefined();

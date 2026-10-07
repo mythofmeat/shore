@@ -19,6 +19,7 @@ import type { Message } from "../src/engine/types.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import type { KeepalivePrefix } from "../src/cache/keepalive.ts";
 import { testTmp } from "./support/tmp.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 beforeEach(() => {
   setTestEnv(CHAT_ENV, "chat-secret");
@@ -245,7 +246,7 @@ describe("preparing a heartbeat body", () => {
     cache.set("alice", cached, undefined);
     const beforeLength = cached.messages.length;
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared).toBeDefined();
     expect(prepared?.request.messages.at(-1)?.role).toBe("system");
@@ -259,7 +260,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     const last = prepared?.request.messages.at(-1);
     expect(last?.role).toBe("system");
@@ -282,7 +283,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("next wake in 3 hours");
@@ -300,7 +301,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("next wake in 1 hour");
@@ -317,7 +318,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toStartWith("[Thursday 2026-07-30 · 1:00 PM]");
@@ -339,7 +340,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("char-level");
@@ -355,7 +356,7 @@ describe("preparing a heartbeat body", () => {
     cached.context = { character: "alice", call_type: "message", thinking_enabled: false, rid: "r_1" };
     cache.set("alice", cached, undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared?.request.context?.rid).toBeUndefined();
     expect(prepared?.request.context?.call_type).toBe("heartbeat");
@@ -368,7 +369,7 @@ describe("preparing a heartbeat body", () => {
     await withConversation(config);
     const cache = new LastRequestCache();
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared).toBeDefined();
     const now = cache.get("alice");
@@ -394,7 +395,7 @@ describe("preparing a heartbeat body", () => {
       disarm: () => {},
     } as never);
 
-    await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
     expect(armed[0]?.keepalive_pings).toBe(9);
@@ -412,6 +413,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-opus-slowthink"));
     const prepared = await prepareHeartbeatRequest("alice", config, {
+      rebuild: NO_MCP,
       cache,
       env: ENV,
       ...PINNED,
@@ -427,7 +429,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared).toBeDefined();
     expect(prepared?.request.messages.at(-1)?.role).toBe("system");
@@ -439,7 +441,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared?.override?.name).toBe("slowthink");
     expect(prepared?.maxToolIterations).toBe(9);
@@ -451,7 +453,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared?.override).toBeUndefined();
     expect(prepared?.maxToolIterations).toBe(4);
@@ -478,7 +480,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared?.override).toBeUndefined();
     expect(prepared?.maxToolIterations).toBe(9);
@@ -510,7 +512,7 @@ describe("preparing a heartbeat body", () => {
     sideRequest.context = { character: "alice", thread: "eval", call_type: "message", thinking_enabled: false };
     cache.set("alice", sideRequest);
 
-    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED, rebuild: NO_MCP });
 
     expect(prepared?.maxToolIterations).toBe(4);
     expect(prepared?.request.model).toBe("claude-sonnet-chat");

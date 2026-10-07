@@ -9,6 +9,7 @@ import { readState } from "../src/storage/store.ts";
 import { compactionRunner } from "../src/memory/compaction/run.ts";
 import { handleCompactionOutcome } from "../src/memory/compaction/background.ts";
 import type { StreamEvent, SidecarRequest } from "../src/llm/types.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 
 function gate() {
   let release!: () => void;
@@ -102,7 +103,7 @@ for (const enabled of [false, true]) {
     h.deps.autonomy.shouldCompactNow = () => { throw new Error("side thread changed the home scheduler"); };
     h.deps.autonomy.notifyLastRequest = () => { throw new Error("side thread replaced the home request"); };
     h.deps.autonomy.onCompactionComplete = () => { throw new Error("side thread reset home coverage"); };
-    h.deps.compaction = compactionRunner({ generate: async () => { throw new Error("archive only"); } });
+    h.deps.compaction = compactionRunner({ rebuild: NO_MCP, generate: async () => { throw new Error("archive only"); } });
     await h.run();
     const diskMain = await ConversationEngine.load("ada", h.config.dirs.data);
     expect(diskMain.messageCount()).toBe(6);

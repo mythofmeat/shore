@@ -19,7 +19,7 @@ export interface KeepalivePingContext {
   lastRequest: LastRequestCache;
   config: LoadedConfig;
   dataDir: string;
-  rebuild?: RebuildDeps;
+  rebuild: RebuildDeps;
 }
 
 async function pingNow(
@@ -35,7 +35,7 @@ async function pingNow(
       character,
       ctx.dataDir,
       ctx.config,
-      ctx.rebuild ?? {},
+      ctx.rebuild,
     );
     if (decision.kind === "disarm") {
       return { kind: "skipped", detail: "no cached or rebuildable request" };

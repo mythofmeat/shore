@@ -16,7 +16,7 @@ export interface PostArchiveDeps {
   config: LoadedConfig;
   cache: LastRequestCache;
   engine?: PostArchiveEngine;
-  rebuild?: RebuildDeps;
+  rebuild: RebuildDeps;
 }
 
 export async function reloadAndApplyDeferred(
@@ -57,5 +57,5 @@ export async function repoint(
   reason: InvalidationReason,
 ): Promise<void> {
   deps.cache.invalidate(character, reason);
-  await deps.cache.reprimeFromDisk(character, deps.config.dirs.data, deps.config, deps.rebuild ?? {});
+  await deps.cache.reprimeFromDisk(character, deps.config.dirs.data, deps.config, deps.rebuild);
 }
