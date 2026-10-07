@@ -13,6 +13,7 @@ import { toasts } from "../ui/toast.tsx";
 import { conversation, enterSends, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
 import { swipe } from "./actions.ts";
 import { EffortChip } from "./effort.tsx";
+import { QUOTE_EVENT, QUOTE_READY_EVENT, withQuote } from "./quote.ts";
 import { droppedNotice } from "./sending.ts";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
@@ -63,6 +64,29 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     node.style.height = `${String(Math.min(node.scrollHeight, mobile ? 160 : 280))}px`;
   }, [draft.text, mobile]);
   useEffect(() => { if (loaded && !mobile) area.current?.focus(); }, [loaded, mobile, key]);
+  const quoted = useRef(false);
+  useEffect(() => {
+    if (!loaded) return;
+    const onQuote = (event: Event) => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      const value = store.current ?? current.current;
+      const text = withQuote(value.text, event.detail);
+      if (text === value.text) return;
+      quoted.current = true;
+      void change({ ...value, text });
+    };
+    addEventListener(QUOTE_EVENT, onQuote);
+    return () => removeEventListener(QUOTE_EVENT, onQuote);
+  });
+  useEffect(() => { if (loaded) dispatchEvent(new Event(QUOTE_READY_EVENT)); }, [loaded]);
+  useLayoutEffect(() => {
+    const node = area.current;
+    if (!quoted.current || node === null) return;
+    quoted.current = false;
+    node.focus();
+    node.setSelectionRange(node.value.length, node.value.length);
+    node.scrollTop = node.scrollHeight;
+  }, [draft.text]);
 
   const attach = async (list: readonly File[]) => {
     if (list.length === 0) return;

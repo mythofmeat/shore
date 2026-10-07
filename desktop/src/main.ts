@@ -34,6 +34,7 @@ class Desktop {
   #navigation = 0;
   #attempt = 0;
   #unread = false;
+  #quotable = false;
   readonly #secureOrigin: string | null;
 
   constructor(readonly settingsPath: string) {
@@ -57,6 +58,7 @@ class Desktop {
     ipcMain.on("shell:retry", (event) => { if (this.#fromShell(event)) this.#showDaemon(); });
     ipcMain.on("shell:edit", (event) => { if (this.#fromShell(event)) this.#showConnect(); });
     ipcMain.on("page:focus", (event) => { if (this.#onDaemon(event.senderFrame?.url ?? "")) this.#show(); });
+    ipcMain.on("page:quote-ready", (event) => { if (this.#onDaemon(event.senderFrame?.url ?? "")) this.#quotable = true; });
     void app.whenReady().then(() => { this.#ready(); });
   }
 
@@ -108,6 +110,7 @@ class Desktop {
       if (mainFrame && code !== ERR_ABORTED && this.#onDaemon(url)) this.#failAfterLoad(describeLoadFailure(description));
     });
     contents.on("did-navigate", (_event, url, status) => {
+      this.#quotable = false;
       if (!this.#onDaemon(url)) return;
       if (status >= 400) { this.#showFailure(describeHttpFailure(status)); return; }
       this.#attempt = 0;
@@ -127,7 +130,8 @@ class Desktop {
         copyText: (text) => { clipboard.writeText(text); },
         copyImage: () => { contents.copyImageAt(params.x, params.y); },
         saveImage: (url) => { contents.downloadURL(url); },
-      });
+        quote: () => { contents.send("page:quote"); },
+      }, this.#quotable && this.#onDaemon(contents.getURL()));
       if (template.length > 0) Menu.buildFromTemplate(template).popup({ window });
     });
     window.on("close", (event) => {
