@@ -111,6 +111,8 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
   const buffer = Buffer.alloc(32_768);
   const lines: string[] = [];
   const ranges: TextPage["ranges"] = [];
+  const lineEnds: { source: number; output: number }[] = [];
+  let renderedChars = 0;
   let sourceOffset = 0;
   let lineStart = 0;
   let line = "";
@@ -128,6 +130,8 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
     if (lines.length > 0 && (lines.length >= limit || outputChars + length > budget)) return false;
     lines.push(rendered);
     const text = line + (newline && lineChars <= lineLimit ? "\n" : "");
+    renderedChars += rendered.length + 1;
+    lineEnds.push({ source: lineStart + text.length, output: renderedChars });
     const previous = ranges.at(-1);
     if (previous?.end === lineStart) {
       previous.end += text.length;
@@ -169,8 +173,13 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
       break;
     }
   }
-  if (lines.length === 0) return { output: position === 0 ? `${path}: empty file` : `${path}: offset ${offset} is beyond EOF`, ranges };
+  if (lines.length === 0) return { output: position === 0 ? `${path}: empty file` : `${path}: offset ${offset} is beyond EOF`, ranges, lineEnds: [] };
   const end = offset + lines.length - 1;
   const notice = more ? `Partial view. Continue with offset=${end + 1} and limit=${limit}.` : "End of file.";
-  return { output: `${path}: lines ${offset}–${end}\n${lines.join("\n")}\n${notice}`, ranges };
+  const header = `${path}: lines ${offset}–${end}\n`;
+  return {
+    output: `${header}${lines.join("\n")}\n${notice}`,
+    ranges,
+    lineEnds: lineEnds.map(({ source, output }) => ({ source, output: header.length + output })),
+  };
 }
