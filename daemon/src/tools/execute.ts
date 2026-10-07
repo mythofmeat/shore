@@ -40,6 +40,7 @@ import {
   type ToolResultPayload,
 } from "./media.ts";
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
+import { toolResultText } from "../llm/types.ts";
 import { base64Bytes } from "../util/base64.ts";
 
 export interface ToolExecution {
@@ -131,7 +132,8 @@ export async function runToolUse(
   const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
   const attached = await attachToolMedia(payload, exec, toolUse);
   isError ||= attached.failed;
-  const output = joinLines([windowed.output, ...(payload?.notes ?? []), ...attached.notes]);
+  const content = toolResultContent(windowed, [...(payload?.notes ?? []), ...attached.notes], attached.placed);
+  const output = toolResultText(content);
 
   if (!isError && toolUse.name === "generate_image") {
     attachGeneratedImage(okValue, intermediateMessages, exec);
@@ -143,7 +145,7 @@ export async function runToolUse(
     block: {
       type: "tool_result",
       tool_use_id: toolUse.id,
-      content: toolResultContent(output, attached.blocks),
+      content,
       is_error: isError,
     },
     output,
@@ -163,8 +165,14 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "image/gif": "gif",
 };
 
+interface PlacedImage {
+  block: ContentBlock;
+  notes: string[];
+  at?: number;
+}
+
 interface AttachedMedia {
-  blocks: ContentBlock[];
+  placed: PlacedImage[];
   images: ImageRef[];
   notes: string[];
   failed: boolean;
@@ -174,9 +182,30 @@ function joinLines(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join("\n");
 }
 
-function toolResultContent(output: string, blocks: ContentBlock[]): string | ContentBlock[] {
-  if (blocks.length === 0) return output;
-  return output === "" ? blocks : [{ type: "text", text: output }, ...blocks];
+function toolResultContent(windowed: ToolResultWindow, notes: string[], placed: PlacedImage[]): string | ContentBlock[] {
+  if (placed.length === 0) return joinLines([windowed.output, ...notes]);
+  const fits = (at: number | undefined): at is number => !windowed.truncated && at !== undefined && at <= windowed.output.length;
+  const inline = placed.filter((image) => fits(image.at)).toSorted((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  const content: ContentBlock[] = [];
+  let text: string[] = [];
+  const show = (image: PlacedImage) => {
+    const caption = joinLines([...text, ...image.notes]);
+    if (caption !== "") content.push({ type: "text", text: caption });
+    content.push(image.block);
+    text = [];
+  };
+  let cursor = 0;
+  for (const image of inline) {
+    const at = image.at ?? cursor;
+    text.push(windowed.output.slice(cursor, at).replace(/\n$/, ""));
+    show(image);
+    cursor = at;
+  }
+  text.push(windowed.output.slice(cursor), ...notes);
+  for (const image of placed.filter((candidate) => !fits(candidate.at))) show(image);
+  const rest = joinLines(text);
+  if (rest !== "") content.push({ type: "text", text: rest });
+  return content;
 }
 
 async function attachToolMedia(
@@ -184,7 +213,7 @@ async function attachToolMedia(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
 ): Promise<AttachedMedia> {
-  const attached: AttachedMedia = { blocks: [], images: [], notes: [], failed: false };
+  const attached: AttachedMedia = { placed: [], images: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
   const maxBytes = inlineImageBytesFor(exec.limits, toolUse.name);
   let inlinedBytes = 0;
@@ -192,9 +221,8 @@ async function attachToolMedia(
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse, index);
-    if (saved === undefined) {
-      attached.notes.push(`[${item.label}: a separate media copy could not be saved]`);
-    } else {
+    const unsaved = saved === undefined ? [`[${item.label}: a separate media copy could not be saved]`] : [];
+    if (saved !== undefined) {
       exec.sendDirect({
         type: "send_image",
         ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
@@ -204,7 +232,8 @@ async function attachToolMedia(
       });
     }
     const original: ImageRef = { path: saved ?? `tool-image:${toolUse.id}:${String(index)}`, caption: item.label, data: item.data };
-    if (attached.blocks.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
+    if (attached.placed.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
+      attached.notes.push(...unsaved);
       skipped.push(item.label);
       attached.images.push(original);
       continue;
@@ -216,19 +245,20 @@ async function attachToolMedia(
       if ("omitted" in resolution) throw new Error(resolution.omitted);
       const bytes = base64Bytes(block.source.data);
       if (bytes > maxBytes - inlinedBytes) {
+        attached.notes.push(...unsaved);
         skipped.push(item.label);
         attached.images.push(original);
         continue;
       }
       const note = toolImageNote(item, reduced, exec, toolUse);
-      if (note !== undefined) attached.notes.push(note);
-      attached.notes.push(`[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`);
-      attached.blocks.push(block);
+      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`];
+      attached.placed.push({ block, notes, ...(item.at === undefined ? {} : { at: item.at }) });
       inlinedBytes += bytes;
       attached.images.push({ ...original, data: block.source.data });
     } catch (error) {
       attached.failed = true;
       attached.images.push(original);
+      attached.notes.push(...unsaved);
       attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
     }
   }

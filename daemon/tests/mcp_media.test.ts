@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { interpretResult } from "../src/mcp/client.ts";
-import { carryToolMedia, toolMediaOf } from "../src/tools/media.ts";
+import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "../src/tools/media.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import type { ToolContext, ToolLimitsView } from "../src/tools/dispatch.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
@@ -37,6 +37,7 @@ async function runMcpTool(
   raw: Record<string, unknown>,
   limits: ToolLimitsView = LIMITS,
   notes: string[] = [],
+  place: (payload: ToolResultPayload) => ToolResultPayload = (payload) => payload,
 ): Promise<{ block: ContentBlock; frames: ServerMessage[]; saved: string[] }> {
   const cacheDir = await mkdtemp(join(tmpdir(), "shore-mcp-media-"));
   const frames: ServerMessage[] = [];
@@ -49,7 +50,7 @@ async function runMcpTool(
   historyDbPath: "/tmp/history.db",
   characterName: "ada",
     configDir: "",
-    mcpCall: () => Promise.resolve(carryToolMedia({ ...interpretResult(raw), notes })),
+    mcpCall: () => Promise.resolve(carryToolMedia(place({ ...interpretResult(raw), notes }))),
   };
   const exec: ToolExecution = {
     sendDirect: (m) => frames.push(m),
@@ -201,6 +202,37 @@ describe("mcp media reaches the model", () => {
 
     expect(textOf(block)).toContain("tool_result truncated");
     expect(textOf(block)).toEndWith("[kept note]");
+  });
+
+  test("an image placed in the text follows its line, its own note beside it", async () => {
+    const lines = "line one\nline two\nline three";
+    const { block } = await runMcpTool(
+      { content: [{ type: "text", text: lines }, ...imageResult(2).content as object[]] },
+      LIMITS,
+      ["[general note]"],
+      (payload) => ({ ...payload, media: payload.media.map((item, index) => index === 0 ? { ...item, at: "line one\n".length } : item) }),
+    );
+
+    const blocks = blocksOf(block).map((b) => b.type === "text" ? b.text : b.type);
+    expect(blocks).toHaveLength(4);
+    expect(blocks[0]).toMatch(/^line one\n\[image\/png, 70 bytes attached, saved to [^\n]+\]$/);
+    expect(blocks[1]).toBe("image");
+    expect(blocks[2]).toMatch(/^line two\nline three\n\[general note\]\n\[image\/png, 70 bytes attached, saved to [^\n]+\]$/);
+    expect(blocks[3]).toBe("image");
+  });
+
+  test("a truncated result keeps placed images at the end", async () => {
+    const { block } = await runMcpTool(
+      { content: [{ type: "text", text: "short\n" + "x".repeat(2000) }, ...imageResult(1).content as object[]] },
+      { ...LIMITS, max_result_chars: 100 },
+      [],
+      (payload) => ({ ...payload, media: payload.media.map((item) => ({ ...item, at: "short\n".length })) }),
+    );
+
+    const blocks = blocksOf(block);
+    expect(blocks.map((b) => b.type)).toEqual(["text", "image"]);
+    expect(textOf(block)).toStartWith("short\nxxx");
+    expect(textOf(block)).toContain("tool_result truncated");
   });
 
   test("an oversized invalid image returns an explicit preparation error", async () => {
