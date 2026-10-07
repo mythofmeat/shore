@@ -49,7 +49,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
     <div className="segmented" role="radiogroup" aria-label="Search">
       {([["full", "Everything"], ["shortcuts", "Shortcuts"], ["config", "Settings keys"]] as const).map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={scope === id} onClick={() => { setScope(id); setActive(0); }}>{label}</button>)}
     </div>
-    <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" autoFocus aria-label="Search commands" placeholder="Type a command, character or setting" value={query}
+    <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" data-autofocus aria-label="Search commands" placeholder="Type a command, character or setting" value={query}
       onChange={(event) => { setQuery(event.target.value); setActive(0); }}
       onKeyDown={(event) => {
         if (event.key === "ArrowDown") { event.preventDefault(); setActive(Math.min(current + 1, visible.length - 1)); }

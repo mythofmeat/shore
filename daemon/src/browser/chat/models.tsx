@@ -100,7 +100,7 @@ export function ModelPicker({ state, close, target: initial = { kind: "thread" }
     </div> : null}
     <p className="form-text">Currently using <span className="mono">{active ?? "the configured default"}</span>.</p>
     <div className="picker-tools">
-      <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" autoFocus aria-label="Search models" placeholder="Search models" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" data-autofocus aria-label="Search models" placeholder="Search models" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={favorites} onChange={(event) => setFavorites(event.target.checked)} />Favorites</label>
       <label className="check"><input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />Show hidden</label>
     </div>

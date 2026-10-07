@@ -50,15 +50,22 @@ export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "
   </div>;
 }
 
+function isSearchBox(target: EventTarget): boolean {
+  return target instanceof HTMLInputElement && target.type === "search";
+}
+
 export function Dialog({ title, close, children, footer, wide = false, describedBy }: { title: string; close: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; describedBy?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
-    if (dialog !== null && !dialog.open) dialog.showModal();
+    if (dialog === null || dialog.open) return;
+    dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
   }, []);
   return <dialog ref={ref} className={`dialog ${wide ? "wide" : ""}`} aria-labelledby={titleId} aria-describedby={describedBy} onCancel={(event) => { event.preventDefault(); close(); }}
-    onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+    onClick={(event) => { if (event.target === event.currentTarget) close(); }}
+    onKeyDown={(event) => { if (event.key === "Escape" && isSearchBox(event.target)) { event.preventDefault(); close(); } }}>
     <div className="dialog-body">
       <header className="dialog-header"><h2 id={titleId}>{title}</h2><IconButton icon="close" label="Close" onClick={close} /></header>
       {children}
