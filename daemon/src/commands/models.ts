@@ -336,10 +336,10 @@ function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
   return { role: "sub-agents", model: chat.model, source: `inherits chat${suffix}` };
 }
 
-function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRole {
-  const name = ctx.config.app.defaults[key as "embedding" | "image_generation"];
-  if (name === undefined || name === "") return { role, model: null, source: null };
-  return { role, model: qualify(ctx, name), source: key === "embedding" ? "embedding.model" : "image.model" };
+function imagesRole(ctx: ModelsContext): ModelRole {
+  const name = ctx.config.app.defaults.image_generation;
+  if (name === undefined || name === "") return { role: "images", model: null, source: null };
+  return { role: "images", model: qualify(ctx, name), source: "image.model" };
 }
 
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
@@ -350,8 +350,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
     chat,
     ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, inherits)),
     subagentRole(ctx, inherited),
-    configuredRole(ctx, "embedding", "embedding"),
-    configuredRole(ctx, "images", "image_generation"),
+    imagesRole(ctx),
   ];
 }
 

@@ -1,5 +1,4 @@
 import { characterMediaDir } from "../storage/media.ts";
-import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
@@ -13,10 +12,8 @@ import {
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
-import { resolveEmbedder, resolveMinSimilarity } from "../memory/retrieval.ts";
-import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
-import { resolveDisplayName, type RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
+import { resolveDisplayName } from "../config/app.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
@@ -38,7 +35,6 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
-  fetchImpl?: typeof fetch;
 }
 
 export async function buildToolContext(
@@ -68,27 +64,6 @@ export async function buildToolContext(
   const configDir = config.dirs.config;
   const workspaceDir = characterWorkspaceDir(configDir, charName, config.dirs.workspace);
 
-  let embedder: ToolContext["embedder"];
-  let minSimilarity: number | undefined;
-  try {
-    const embeddingTarget = {
-      ...(config.app.defaults.embedding === undefined
-        ? {}
-        : { defaultRef: config.app.defaults.embedding }),
-      embedding: Object.fromEntries(config.models.embedding),
-    };
-    embedder = resolveEmbedder({
-      ...embeddingTarget,
-      providers,
-      ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
-    });
-    minSimilarity = resolveMinSimilarity(embeddingTarget);
-  } catch (e) {
-    shoreLog.warn(
-      `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,
-    );
-  }
-
   const mcp = deps.mcpRegistry;
   const activityStats = deps.activityStats;
   const scheduleNextWake = deps.scheduleNextWake;
@@ -108,9 +83,6 @@ export async function buildToolContext(
     historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),
     characterName: charName,
     configDir,
-    retrievalConfig: retrievalView(config.app.memory.retrieval),
-    retrievalMode: config.app.memory.retrieval.mode,
-    memoryIndexPath: indexPath(config.dirs.cache, charName),
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     userName: resolveDisplayName(config.app.defaults),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
@@ -120,8 +92,6 @@ export async function buildToolContext(
     ...(scheduleNextWake === undefined
       ? {}
       : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
-    ...(embedder === undefined ? {} : { embedder }),
-    ...(minSimilarity === undefined ? {} : { minSimilarity }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(mcp === undefined
       ? {}
@@ -137,7 +107,7 @@ export async function buildToolContext(
   return ctx;
 }
 
-export function providerRecord(
+function providerRecord(
   config: LoadedConfig,
 ): Record<string, { entry?: ProviderEntry; baseUrl?: string }> {
   const out: Record<string, { entry?: ProviderEntry; baseUrl?: string }> = {};
@@ -159,15 +129,5 @@ export function credentialEntry(entry: RegistryEntry): ProviderEntry {
       enabled: k.enabled,
       warn_on_fallback: k.warnOnFallback,
     })),
-  };
-}
-
-export function retrievalView(cfg: ConfiguredRetrieval): RetrievalConfig {
-  return {
-    maxFileBytes: cfg.max_file_bytes,
-    maxIndexedFiles: cfg.max_indexed_files,
-    maxTotalIndexedBytes: cfg.max_total_indexed_bytes,
-    maxEmbedCharsPerFile: cfg.max_embed_chars_per_file,
-    binary: cfg.binary,
   };
 }

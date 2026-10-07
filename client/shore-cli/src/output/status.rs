@@ -31,22 +31,6 @@ fn session_line(data: &Value) -> String {
     }
 }
 
-fn embedding_models(data: &Value) -> String {
-    let mut models: Vec<&str> = data
-        .pointer("/index/models")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if let Some(model) = data.pointer("/history_index/model").and_then(Value::as_str)
-        && !models.contains(&model)
-    {
-        models.push(model);
-    }
-    models.join(", ")
-}
-
 pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str) {
     let name = if character.is_empty() {
         text(data, "character")
@@ -70,10 +54,6 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
             Tone::Plain
         },
     );
-    let embeddings = embedding_models(data);
-    if !embeddings.is_empty() {
-        rows.add("embedding", &embeddings);
-    }
     rows.add("session", &session_line(data));
     if let Some(autonomy) = data.get("autonomy").filter(|value| !value.is_null()) {
         super::autonomy::add_autonomy_rows(&mut rows, autonomy);
@@ -150,17 +130,9 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
         super::autonomy::write_autonomy_events(out, autonomy);
     }
 
-    if data.get("index").is_some_and(|value| !value.is_null())
-        || data
-            .get("history_index")
-            .is_some_and(|value| !value.is_null())
-    {
+    if let Some(index) = data.get("history_index").filter(|value| !value.is_null()) {
         blank(out);
-        super::workspace::write_compact_index_section(
-            out,
-            data.get("index"),
-            data.get("history_index"),
-        );
+        super::history::write_history_section(out, index);
     }
 }
 
@@ -188,7 +160,6 @@ fn not_started(name: &str) -> &'static str {
     match name {
         "autonomy" => "not started \u{00b7} the heartbeat is scheduled on your first message",
         "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
-        "index" => "no workspace configured for this character",
         "history_index" => "no history index for this character",
         "mcp" => "no MCP servers configured",
         _ => "not started",
@@ -254,10 +225,6 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "autonomy" {
         super::autonomy::write_autonomy_section(out, value, super::term_width());
-        return true;
-    }
-    if name == "index" {
-        super::workspace::write_compact_index_section(out, Some(value), data.get("history_index"));
         return true;
     }
     if name == "history_index" {
@@ -677,19 +644,11 @@ mod tests {
                     {"timestamp": "2026-08-20T07:11:00+00:00", "kind": "message_sent", "detail": "Autonomous message sent"}
                 ]
             },
-            "index": {
-                "embedded": 1702,
-                "pending": 0,
-                "models": ["qwen/qwen3-embedding-8b"],
-                "bytes": 29_779_558,
-                "last_indexed_at": "2026-08-20T07:11:00+00:00"
-            },
             "history_index": {
                 "messages": 36_684,
-                "pending": 0,
-                "model": "qwen/qwen3-embedding-8b"
+                "background": {"failures": 0}
             },
-            "sections": ["tokens", "autonomy", "activity", "index", "history_index"]
+            "sections": ["tokens", "autonomy", "activity", "history_index"]
         });
         let out = render(&data);
         for wanted in [
@@ -698,20 +657,11 @@ mod tests {
             "next heartbeat",
             "2/3 remaining",
             "Autonomous message sent",
-            "1702 files \u{00b7} 36684 messages",
-            "(up to date)",
-            "qwen/qwen3-embedding-8b",
+            "36684",
         ] {
             assert!(out.contains(wanted), "missing {wanted:?}: {out}");
         }
-        for unwanted in [
-            "/config",
-            "1.5M",
-            "Tool: edit",
-            "files seen",
-            "vectors",
-            "engagement",
-        ] {
+        for unwanted in ["/config", "1.5M", "Tool: edit", "embedding", "engagement"] {
             assert!(!out.contains(unwanted), "unexpected {unwanted:?}: {out}");
         }
         assert!(

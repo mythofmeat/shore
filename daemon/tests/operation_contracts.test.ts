@@ -231,7 +231,7 @@ describe("executable operation contracts", () => {
   });
 
   test("diagnostic result variants require complete metadata while retaining captured and future fields", () => {
-    const status = { character: "ada", keepalive_halts: [], message_count: 0, turn_count: 0, active_model: null, config_dir: "/config", data_dir: "/data", cache_dir: "/cache", pending_deferred_edit_count: 0, pending_deferred_edits: [], tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, autonomy: null, activity: null, index: null, history_index: null, sections: ["future_section"], future_section: { visible: true } };
+    const status = { character: "ada", keepalive_halts: [], message_count: 0, turn_count: 0, active_model: null, config_dir: "/config", data_dir: "/data", cache_dir: "/cache", pending_deferred_edit_count: 0, pending_deferred_edits: [], tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, autonomy: null, activity: null, history_index: null, sections: ["future_section"], future_section: { visible: true } };
     const summary = { id: 1, call_id: "call-1", ts: "now", call_type: null, character: null, model: null, provider: null, finish_reason: null, duration_ms: null, error: null, usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 }, request_bytes: 0, response_bytes: 0 };
     for (const [name, result] of [
       ["status", status], ["call_log", { enabled: false, entries: [] }],

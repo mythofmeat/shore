@@ -19,14 +19,6 @@ import type { ImageGenerateResult } from "../src/tools/images.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
-const RETRIEVAL_CONFIG = {
-  maxFileBytes: 0,
-  maxIndexedFiles: 0,
-  maxTotalIndexedBytes: 0,
-  maxEmbedCharsPerFile: 0,
-  binary: "skip" as const,
-};
-
 const MINTED_ID = "m_00000000-0000-4000-8000-000000000000";
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
 
@@ -141,8 +133,6 @@ function scriptedContext(name: string, scripted: Scripted): ToolContext {
   historyDbPath: "/tmp/history.db",
   characterName: "",
     configDir: "",
-    retrievalConfig: RETRIEVAL_CONFIG,
-    retrievalMode: "auto",
   };
   if (!name.startsWith("ask_")) return base;
   return {
@@ -246,8 +236,6 @@ describe("generate_image", () => {
   historyDbPath: "/tmp/history.db",
   characterName: "",
           configDir: "",
-          retrievalConfig: RETRIEVAL_CONFIG,
-          retrievalMode: "auto",
           imageGenConfig: {
             provider: "openrouter",
             model_id: "test/image",

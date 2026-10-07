@@ -185,7 +185,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -455,7 +455,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -584,7 +584,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -727,7 +727,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -924,7 +924,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1217,7 +1217,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1231,7 +1231,6 @@
               "bash",
               "generate_image",
               "activity_heatmap",
-              "search",
               "search_chat_logs",
               "read_chat_logs",
               "model_history",
@@ -1454,7 +1453,7 @@
               },
               {
                 "label": "tools_guidance",
-                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `search` for semantic workspace retrieval, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
+                "text": "# TOOLS\n\nUse the tools available in this conversation when they help.\n\n- `read` returns bounded text or image input; `edit` replaces exact text; `apply_patch` applies contextual Codex patches. `bash` supports general command-line work, including equivalent file operations. Choose and combine the available tools as useful.\n- Use `rg` through `bash` to search the workspace, `search_chat_logs` to find archived conversations by their words, and `read_chat_logs` to read them in order. Read the relevant sources before treating a search excerpt as the full story.\n- Check memory before guessing facts about the user or past events. If a search misses, try other wording or follow related files before concluding there is no record.\n- Preserve Git history. Record corrections in new commits; do not force-push, rewrite existing commits, or discard uncommitted work.\n- Report tool failures that prevent the task from being completed. Do not claim a file was saved, a commit made, or a push completed without checking the result.\n- Prefer concise, direct tool use over busywork.\n"
               },
               {
                 "label": "character",
@@ -1486,8 +1485,6 @@
         "tools_enabled": null,
         "subagent": null,
         "image_generation": null,
-        "embedding": null,
-        "embedding_key_set": false,
         "conversation_len": 0
       },
       "output": {
@@ -1495,20 +1492,10 @@
         "character_data_dir": "<root>/data/ada",
         "character_name": "ada",
         "config_dir": "<root>/config",
-        "embedder": false,
         "image_dir": "<root>/data/media/ada",
         "image_gen_config": null,
         "markdown_store": true,
         "mcp_registry": true,
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "memory_retrieval_config": {
-          "binary": "skip",
-          "max_embed_chars_per_file": 4000,
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "mode": "auto"
-        },
         "subagent_conversation_len": null,
         "subagent_runtime": false,
         "workspace_dir": "<root>/config/characters/ada/workspace"
@@ -1521,8 +1508,6 @@
         "tools_enabled": null,
         "subagent": null,
         "image_generation": null,
-        "embedding": null,
-        "embedding_key_set": false,
         "conversation_len": 1
       },
       "output": {
@@ -1530,20 +1515,10 @@
         "character_data_dir": "<root>/data/ada",
         "character_name": "ada",
         "config_dir": "<root>/config",
-        "embedder": false,
         "image_dir": "<root>/data/media/ada",
         "image_gen_config": null,
         "markdown_store": true,
         "mcp_registry": true,
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "memory_retrieval_config": {
-          "binary": "skip",
-          "max_embed_chars_per_file": 4000,
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "mode": "auto"
-        },
         "subagent_conversation_len": null,
         "subagent_runtime": false,
         "workspace_dir": "<root>/config/characters/ada/workspace"
@@ -1556,8 +1531,6 @@
         "tools_enabled": null,
         "subagent": "researcher",
         "image_generation": null,
-        "embedding": null,
-        "embedding_key_set": false,
         "conversation_len": 2
       },
       "output": {
@@ -1566,91 +1539,11 @@
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",
         "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
         "markdown_store": true,
-        "embedder": false,
         "mcp_registry": true,
         "subagent_runtime": true,
         "subagent_conversation_len": 2,
         "image_gen_config": null,
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
-        "autonomy_manager_present": true
-      }
-    },
-    {
-      "name": "an unconfigured embedding provider disables the embedder",
-      "note": "the error is swallowed into a warning: semantic retrieval degrades to lexical rather than failing the turn",
-      "input": {
-        "tools_enabled": null,
-        "subagent": null,
-        "image_generation": null,
-        "embedding": "openai:text-embedding-3-large",
-        "embedding_key_set": false,
-        "conversation_len": 0
-      },
-      "output": {
-        "autonomy_manager_present": true,
-        "character_data_dir": "<root>/data/ada",
-        "character_name": "ada",
-        "config_dir": "<root>/config",
-        "embedder": false,
-        "image_dir": "<root>/data/media/ada",
-        "image_gen_config": null,
-        "markdown_store": true,
-        "mcp_registry": true,
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "memory_retrieval_config": {
-          "binary": "skip",
-          "max_embed_chars_per_file": 4000,
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "mode": "auto"
-        },
-        "subagent_conversation_len": null,
-        "subagent_runtime": false,
-        "workspace_dir": "<root>/config/characters/ada/workspace"
-      }
-    },
-    {
-      "name": "a configured embedding provider with a key resolves one",
-      "note": "the same call, on the other side of the branch",
-      "input": {
-        "tools_enabled": null,
-        "subagent": null,
-        "image_generation": null,
-        "embedding": "openai:text-embedding-3-large",
-        "embedding_key_set": true,
-        "conversation_len": 0
-      },
-      "output": {
-        "image_dir": "<root>/data/media/ada",
-        "workspace_dir": "<root>/config/characters/ada/workspace",
-        "character_data_dir": "<root>/data/ada",
-        "config_dir": "<root>/config",
-        "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "markdown_store": true,
-        "embedder": true,
-        "mcp_registry": true,
-        "subagent_runtime": false,
-        "subagent_conversation_len": null,
-        "image_gen_config": null,
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
         "autonomy_manager_present": true
       }
     },
@@ -1661,8 +1554,6 @@
         "tools_enabled": null,
         "subagent": null,
         "image_generation": "openai:gpt-image-1",
-        "embedding": null,
-        "embedding_key_set": false,
         "conversation_len": 0
       },
       "output": {
@@ -1671,9 +1562,7 @@
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",
         "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
         "markdown_store": true,
-        "embedder": false,
         "mcp_registry": true,
         "subagent_runtime": false,
         "subagent_conversation_len": null,
@@ -1686,14 +1575,6 @@
           "quality": null,
           "aspect_ratio": null,
           "image_size": null
-        },
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
         },
         "autonomy_manager_present": true
       }

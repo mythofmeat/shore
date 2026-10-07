@@ -465,12 +465,12 @@ describe("subagentToolSubset", () => {
   });
 
   test("tool names match exactly, never by prefix", () => {
-    expect(subagentToolSubset(["search"], registry, vars, renderTemplate).map((d) => d.name)).toEqual([
-      "search",
+    expect(subagentToolSubset(["read"], registry, vars, renderTemplate).map((d) => d.name)).toEqual([
+      "read",
     ]);
     expect(
-      subagentToolSubset(["search_chat_logs"], registry, vars, renderTemplate).map((d) => d.name),
-    ).toEqual(["search_chat_logs"]);
+      subagentToolSubset(["read_chat_logs"], registry, vars, renderTemplate).map((d) => d.name),
+    ).toEqual(["read_chat_logs"]);
 
     for (const partial of ["web", "gen", "sear", "model"]) {
       expect(subagentToolSubset([partial], registry, vars, renderTemplate)).toEqual([]);

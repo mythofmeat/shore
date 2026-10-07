@@ -120,7 +120,6 @@ describe("configSchema", () => {
   test("model valued keys point at the catalog", () => {
     expect(byKey.get("chat.model")?.source).toBe("chat_models");
     expect(byKey.get("heartbeat.model")?.source).toBe("chat_models");
-    expect(byKey.get("embedding.model")?.source).toBe("embedding_models");
     expect(byKey.get("tools.enabled")?.source).toBe("tools");
     expect(byKey.get("subagents.enabled")?.source).toBe("subagents");
   });
@@ -144,7 +143,7 @@ describe("configSchema", () => {
     expect(byKey.get("compaction")?.settable).toBe(false);
     expect(byKey.get("mcp")?.settable).toBe(false);
     expect(byKey.get("budgets")?.settable).toBe(false);
-    for (const section of ["chat", "embedding", "image", "providers"]) {
+    for (const section of ["chat", "image", "providers"]) {
       expect(byKey.get(section)?.settable, `${section} must not be settable`).toBe(false);
     }
   });

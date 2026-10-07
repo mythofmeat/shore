@@ -22,7 +22,6 @@ import type { RunToolContext } from "./run_tool.ts";
 import type { ThreadRegistry } from "./threads.ts";
 import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
-import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ArchiveContext } from "./archive.ts";
@@ -55,7 +54,6 @@ export interface CommandDeps {
   keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
   activate?: Pick<SessionActivateContext, "register">;
   runTool?: Pick<RunToolContext, "tools" | "mcpTools">;
-  workspaceIndex?: WorkspaceIndexSource;
   historyIndex?: HistoryIndexSource;
   mcpStatus?: () => readonly McpServerStatus[];
   running?: () => RunningStatusReport;

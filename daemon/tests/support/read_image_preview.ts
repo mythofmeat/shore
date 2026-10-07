@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runToolUse, type ToolExecution } from "../../src/tools/execute.ts";
-import { DEFAULT_RETRIEVAL_CONFIG } from "../../src/tools/workspace.ts";
 import type { ServerMessage } from "../../src/protocol/ServerMessage.ts";
 
 export const READ_IMAGE_PREVIEW_CAPTURE = "tests/handler_captures/read_image_preview.json";
@@ -24,7 +23,6 @@ export async function readImagePreview(markdown: boolean): Promise<unknown> {
       ctx: {
         workspaceDir: root, characterName: "Ada", characterDataDir: root, imageDir: "",
         conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-        retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
       },
       sendDirect: (frame) => { live.push(frame); },
       limits: { max_result_chars: 50_000, timeout_ms: 5000 },

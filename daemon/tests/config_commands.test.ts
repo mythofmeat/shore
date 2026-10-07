@@ -161,7 +161,7 @@ async function check(r: Row, w: World, run: () => unknown): Promise<void> {
   if (!recording) expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
 }
 
-const FURNISHED = "[chat]\nmodel = \"anthropic:claude-primary\"\n\n[providers.anthropic]\napi_key_env = \"SHORE_FIXTURE_KEY_SET\"\n[chat.\"anthropic:claude-primary\"]\n\n[providers.anthropic_secondary]\nsdk = \"anthropic\"\napi_key_env = \"SHORE_FIXTURE_KEY_MISSING\"\n[chat.\"anthropic_secondary:claude-secondary\"]\n\n[subagents]\nenabled = [\"researcher\", \"ghost\"]\n\n[subagents.researcher]\ndescription = \"Looks things up\"\nprompt = \"You look things up.\"\ntools = [\"search\", \"also_not_real\"]\nmodel = \"anthropic:claude-primary\"\n\n[subagents.idle]\ndescription = \"Never enabled\"\nprompt = \"You are idle.\"\ntools = [\"bash\", \"idle_not_real\"]\n\n[tools]\nenabled = [\"search\", \"not_a_real_tool\"]\nmcp = [\"ghost_server\"]\n\n[heartbeat]\nenabled = true\n";
+const FURNISHED = "[chat]\nmodel = \"anthropic:claude-primary\"\n\n[providers.anthropic]\napi_key_env = \"SHORE_FIXTURE_KEY_SET\"\n[chat.\"anthropic:claude-primary\"]\n\n[providers.anthropic_secondary]\nsdk = \"anthropic\"\napi_key_env = \"SHORE_FIXTURE_KEY_MISSING\"\n[chat.\"anthropic_secondary:claude-secondary\"]\n\n[subagents]\nenabled = [\"researcher\", \"ghost\"]\n\n[subagents.researcher]\ndescription = \"Looks things up\"\nprompt = \"You look things up.\"\ntools = [\"read\", \"also_not_real\"]\nmodel = \"anthropic:claude-primary\"\n\n[subagents.idle]\ndescription = \"Never enabled\"\nprompt = \"You are idle.\"\ntools = [\"bash\", \"idle_not_real\"]\n\n[tools]\nenabled = [\"read\", \"not_a_real_tool\"]\nmcp = [\"ghost_server\"]\n\n[heartbeat]\nenabled = true\n";
 
 const BARE = "";
 
@@ -325,7 +325,7 @@ describe("config read walks dots", () => {
     ["chat.model", "anthropic:claude-primary"],
         ["heartbeat.enabled", true],
     ["daemon.listen_addr", "127.0.0.1:7320"],
-    ["tools.enabled", ["search", "not_a_real_tool"]],
+    ["tools.enabled", ["read", "not_a_real_tool"]],
     ["tools.mcp", ["ghost_server"]],
   ];
   for (const [key, value] of cases) {

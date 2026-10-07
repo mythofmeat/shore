@@ -38,17 +38,12 @@ export function historyIndexSection(
   return {
     path: progress.indexPath,
     messages,
-    chunks: messages,
-    embedded: messages,
-    pending: 0,
-    model: null,
     background: backgroundView(progress, now),
   };
 }
 
 function backgroundView(progress: HistoryIndexProgress, now: number): IndexBackgroundStatus {
   return {
-    registered: true,
     failures: progress.failures,
     ...(progress.lastError === undefined ? {} : { last_error: progress.lastError }),
     ...(progress.retryAt > now

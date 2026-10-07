@@ -141,7 +141,6 @@ function readUint(name: "usize" | "u32" | "u64"): Reader<number> {
 
 const readUsize = readUint("usize");
 const readU32 = readUint("u32");
-const readU64 = readUint("u64");
 
 const readF64: Reader<number> = typed(
   (v) => (typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") }),
@@ -192,7 +191,6 @@ function suggests<T>(inner: Reader<T>, source: ConfigValueSource): Reader<T> {
 }
 
 const readChatModelName = suggests(readString, "chat_models");
-const readEmbeddingModelName = suggests(readString, "embedding_models");
 const readImageModelName = suggests(readString, "image_models");
 const readToolNameSeq = readSeq(suggests(readString, "tools"));
 const readSubagentNameSeq = readSeq(suggests(readString, "subagents"));
@@ -300,7 +298,6 @@ const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
 export interface DefaultsConfig {
   model: string | undefined;
   background: BackgroundDefaultsConfig;
-  embedding: string | undefined;
   image_generation: string | undefined;
   subagent_model: string | undefined;
   display_name: string | undefined;
@@ -310,7 +307,6 @@ export interface DefaultsConfig {
 const defaultDefaultsConfig = (): DefaultsConfig => ({
   model: undefined,
   background: defaultBackgroundDefaults(),
-  embedding: undefined,
   image_generation: undefined,
   subagent_model: undefined,
   display_name: undefined,
@@ -323,7 +319,6 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
   fields: {
     model: optional(readChatModelName),
     background: struct(BACKGROUND),
-    embedding: optional(readEmbeddingModelName),
     image_generation: optional(readImageModelName),
     subagent_model: optional(readChatModelName),
     display_name: optional(readString),
@@ -776,54 +771,15 @@ const THINKING: StructSpec<ThinkingConfig> = {
   fields: { replay_prior_thinking: readThinkingReplay },
 };
 
-export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
-type RetrievalBinaryMode = "skip" | "metadata" | "try_embed";
-
-const RETRIEVAL_MODES: readonly RetrievalMode[] = ["auto", "lexical", "hybrid", "vector"];
-const BINARY_MODES: readonly RetrievalBinaryMode[] = ["skip", "metadata", "try_embed"];
-
-export interface RetrievalConfig {
-  mode: RetrievalMode;
-  max_file_bytes: number;
-  max_indexed_files: number;
-  max_total_indexed_bytes: number;
-  max_embed_chars_per_file: number;
-  binary: RetrievalBinaryMode;
-}
-
-const defaultRetrievalConfig = (): RetrievalConfig => ({
-  mode: "auto",
-  max_file_bytes: 2 * 1024 * 1024,
-  max_indexed_files: 50_000,
-  max_total_indexed_bytes: 1024 * 1024 * 1024,
-  max_embed_chars_per_file: 4_000,
-  binary: "skip",
-});
-
-const RETRIEVAL: StructSpec<RetrievalConfig> = {
-  name: "RetrievalConfig",
-  make: defaultRetrievalConfig,
-  fields: {
-    mode: readEnum(RETRIEVAL_MODES),
-    max_file_bytes: readU64,
-    max_indexed_files: readUsize,
-    max_total_indexed_bytes: readU64,
-    max_embed_chars_per_file: readUsize,
-    binary: readEnum(BINARY_MODES),
-  },
-};
-
 export interface MemoryConfig {
   compaction: CompactionConfig;
   thinking: ThinkingConfig;
-  retrieval: RetrievalConfig;
   git_push: boolean;
 }
 
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
   thinking: defaultThinkingConfig(),
-  retrieval: defaultRetrievalConfig(),
   git_push: false,
 });
 
@@ -833,7 +789,6 @@ const MEMORY: StructSpec<MemoryConfig> = {
   fields: {
     compaction: struct(COMPACTION),
     thinking: struct(THINKING),
-    retrieval: struct(RETRIEVAL),
     git_push: readBool,
   },
 };
@@ -1270,7 +1225,7 @@ export const defaultAppConfig = (): AppConfig => ({
   mcp: new Map(),
 });
 
-export const CATALOG_SECTIONS = ["chat", "embedding", "image_generation", "providers"] as const;
+export const CATALOG_SECTIONS = ["chat", "image_generation", "providers"] as const;
 
 const APP: StructSpec<AppConfig> = {
   name: "AppConfig",

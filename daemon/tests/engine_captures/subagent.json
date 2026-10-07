@@ -2016,24 +2016,24 @@
       "allowed": [
         "bash",
         "not_a_real_tool",
-        "search"
+        "read"
       ],
       "mcp": false,
       "names": [
         "bash",
-        "search"
+        "read"
       ]
     },
     {
       "allowed": [
         "bash",
         "not_a_real_tool",
-        "search"
+        "read"
       ],
       "mcp": true,
       "names": [
         "bash",
-        "search"
+        "read"
       ]
     },
     {
@@ -2058,23 +2058,23 @@
     },
     {
       "allowed": [
-        "search",
+        "read",
         "bash"
       ],
       "mcp": false,
       "names": [
-        "search",
+        "read",
         "bash"
       ]
     },
     {
       "allowed": [
-        "search",
+        "read",
         "bash"
       ],
       "mcp": true,
       "names": [
-        "search",
+        "read",
         "bash"
       ]
     },

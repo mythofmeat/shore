@@ -3785,16 +3785,6 @@
               }
             ]
           },
-          "index": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/WorkspaceIndexResult"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "history_index": {
             "anyOf": [
               {
@@ -3856,7 +3846,6 @@
           "tokens",
           "autonomy",
           "activity",
-          "index",
           "history_index",
           "sections"
         ]
@@ -4095,13 +4084,13 @@
           "normal"
         ]
       },
-      "WorkspaceIndexResult": {
+      "HistoryIndexResult": {
         "anyOf": [
           {
             "$ref": "#/$defs/DiagnosticIndexError"
           },
           {
-            "$ref": "#/$defs/WorkspaceIndexStatus"
+            "$ref": "#/$defs/HistoryIndexStatus"
           }
         ]
       },
@@ -4116,67 +4105,16 @@
           "error"
         ]
       },
-      "WorkspaceIndexStatus": {
+      "HistoryIndexStatus": {
         "type": "object",
         "properties": {
           "path": {
             "type": "string"
           },
-          "unusable": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "files": {
+          "messages": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
-          },
-          "embedded": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "pending": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "skip_reasons": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0
-            }
-          },
-          "vectors": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
-          "last_indexed_at": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "background": {
             "$ref": "#/$defs/IndexBackgroundStatus"
@@ -4184,41 +4122,15 @@
         },
         "required": [
           "path",
-          "files",
-          "embedded",
-          "pending",
-          "skipped",
-          "skip_reasons",
-          "vectors",
-          "models",
-          "bytes",
-          "last_indexed_at",
+          "messages",
           "background"
         ]
       },
       "IndexBackgroundStatus": {
         "type": "object",
         "properties": {
-          "registered": {
-            "type": "boolean"
-          },
-          "swept": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "embedder_error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "failures": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": "integer",
             "format": "uint32",
             "minimum": 0
           },
@@ -4238,63 +4150,7 @@
           }
         },
         "required": [
-          "registered"
-        ]
-      },
-      "HistoryIndexResult": {
-        "anyOf": [
-          {
-            "$ref": "#/$defs/DiagnosticIndexError"
-          },
-          {
-            "$ref": "#/$defs/HistoryIndexStatus"
-          }
-        ]
-      },
-      "HistoryIndexStatus": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "messages": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "chunks": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "embedded": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "pending": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "model": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "background": {
-            "$ref": "#/$defs/IndexBackgroundStatus"
-          }
-        },
-        "required": [
-          "path",
-          "messages",
-          "chunks",
-          "embedded",
-          "pending",
-          "model",
-          "background"
+          "failures"
         ]
       },
       "McpStatusReport": {
@@ -7426,7 +7282,6 @@
         "type": "string",
         "enum": [
           "chat_models",
-          "embedding_models",
           "image_models",
           "tools",
           "subagents",
@@ -7438,12 +7293,6 @@
         "type": "object",
         "properties": {
           "chat_models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "embedding_models": {
             "type": "array",
             "items": {
               "type": "string"
@@ -7482,7 +7331,6 @@
         },
         "required": [
           "chat_models",
-          "embedding_models",
           "image_models",
           "tools",
           "subagents",
@@ -12134,16 +11982,6 @@
               }
             ]
           },
-          "index": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/WorkspaceIndexResult"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "history_index": {
             "anyOf": [
               {
@@ -12205,7 +12043,6 @@
           "tokens",
           "autonomy",
           "activity",
-          "index",
           "history_index",
           "sections"
         ]
@@ -12444,13 +12281,13 @@
           "normal"
         ]
       },
-      "WorkspaceIndexResult": {
+      "HistoryIndexResult": {
         "anyOf": [
           {
             "$ref": "#/$defs/DiagnosticIndexError"
           },
           {
-            "$ref": "#/$defs/WorkspaceIndexStatus"
+            "$ref": "#/$defs/HistoryIndexStatus"
           }
         ]
       },
@@ -12465,67 +12302,16 @@
           "error"
         ]
       },
-      "WorkspaceIndexStatus": {
+      "HistoryIndexStatus": {
         "type": "object",
         "properties": {
           "path": {
             "type": "string"
           },
-          "unusable": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "files": {
+          "messages": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
-          },
-          "embedded": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "pending": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "skip_reasons": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0
-            }
-          },
-          "vectors": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
-          "last_indexed_at": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "background": {
             "$ref": "#/$defs/IndexBackgroundStatus"
@@ -12533,41 +12319,15 @@
         },
         "required": [
           "path",
-          "files",
-          "embedded",
-          "pending",
-          "skipped",
-          "skip_reasons",
-          "vectors",
-          "models",
-          "bytes",
-          "last_indexed_at",
+          "messages",
           "background"
         ]
       },
       "IndexBackgroundStatus": {
         "type": "object",
         "properties": {
-          "registered": {
-            "type": "boolean"
-          },
-          "swept": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "embedder_error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "failures": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": "integer",
             "format": "uint32",
             "minimum": 0
           },
@@ -12587,63 +12347,7 @@
           }
         },
         "required": [
-          "registered"
-        ]
-      },
-      "HistoryIndexResult": {
-        "anyOf": [
-          {
-            "$ref": "#/$defs/DiagnosticIndexError"
-          },
-          {
-            "$ref": "#/$defs/HistoryIndexStatus"
-          }
-        ]
-      },
-      "HistoryIndexStatus": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "messages": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "chunks": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "embedded": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "pending": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "model": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "background": {
-            "$ref": "#/$defs/IndexBackgroundStatus"
-          }
-        },
-        "required": [
-          "path",
-          "messages",
-          "chunks",
-          "embedded",
-          "pending",
-          "model",
-          "background"
+          "failures"
         ]
       },
       "McpStatusReport": {
@@ -15775,7 +15479,6 @@
         "type": "string",
         "enum": [
           "chat_models",
-          "embedding_models",
           "image_models",
           "tools",
           "subagents",
@@ -15787,12 +15490,6 @@
         "type": "object",
         "properties": {
           "chat_models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "embedding_models": {
             "type": "array",
             "items": {
               "type": "string"
@@ -15831,7 +15528,6 @@
         },
         "required": [
           "chat_models",
-          "embedding_models",
           "image_models",
           "tools",
           "subagents",

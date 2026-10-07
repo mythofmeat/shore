@@ -45,7 +45,7 @@ function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
 const SECTION_FIELDS: Record<string, readonly (keyof StatusReport)[]> = {
   conversation: ["message_count", "turn_count", "context_tokens", "active_model", "tokens"],
   folders: ["config_dir", "data_dir", "cache_dir"],
-  autonomy: ["autonomy"], activity: ["activity"], index: ["index", "history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
+  autonomy: ["autonomy"], activity: ["activity"], history_index: ["history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
 };
 
 function StatusView({ report }: { report: StatusReport }) {

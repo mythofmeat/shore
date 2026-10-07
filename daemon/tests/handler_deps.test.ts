@@ -907,19 +907,7 @@ describe("the handler, whole", () => {
     }
   });
 
-  test("with no embedding model configured the indexer says so instead of waiting", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-noembed-", () => {}, ["ada"]);
-    try {
-      const progress = runtime.workspaceIndex.progress("ada");
-      expect(progress?.sweptAt).toBeUndefined();
-      expect(progress?.embedderError).toContain("no embedding model configured");
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("a chat turn holds the workspace indexer off, not just the history one", async () => {
+  test("a chat turn holds the history indexer off", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-foreground-");
     try {
       const held: string[] = [];
@@ -931,15 +919,14 @@ describe("the handler, whole", () => {
         };
       };
       watch("history", runtime.historyIndex);
-      watch("workspace", runtime.workspaceIndex);
 
       const deps = buildMessageHandlerDeps(handlerAssembly(runtime));
       await deps
         .dispatchCommand({ name: "status" } as never, {} as never, new AbortController().signal)
         .catch(() => undefined);
 
-      expect(held).toEqual(["history", "workspace"]);
-      expect(released).toEqual(["history", "workspace"]);
+      expect(held).toEqual(["history"]);
+      expect(released).toEqual(["history"]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

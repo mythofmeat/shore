@@ -227,7 +227,6 @@
           "context_tokens",
           "data_dir",
           "history_index",
-          "index",
           "keepalive_halts",
           "message_count",
           "pending_deferred_edit_count",
@@ -250,10 +249,9 @@
           "tokens": "object",
           "autonomy": "object",
           "activity": "object",
-          "index": "null",
           "history_index": "null",
           "compaction": "object",
-          "sections": "array[6]"
+          "sections": "array[5]"
         }
       }
     },
@@ -277,7 +275,7 @@
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",
-          "roles": "array[6]",
+          "roles": "array[5]",
           "favorites_only": "bool",
           "favorite_count": "number:0"
         }
@@ -472,7 +470,7 @@
           "warnings"
         ],
         "data_shape": {
-          "tools": "array[11]",
+          "tools": "array[10]",
           "subagents": "array[0]",
           "warnings": "array[0]"
         }
@@ -800,7 +798,7 @@
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",
-          "roles": "array[6]",
+          "roles": "array[5]",
           "favorites_only": "bool",
           "favorite_count": "number:0"
         }

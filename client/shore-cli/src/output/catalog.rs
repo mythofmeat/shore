@@ -609,7 +609,7 @@ mod tests {
                  "source": "inherits chat"},
                 {"role": "compaction", "model": "anthropic:claude-opus-5",
                  "source": "defaults.background.compaction"},
-                {"role": "embedding", "model": null, "source": null}
+                {"role": "images", "model": null, "source": null}
             ],
             "include_hidden": false,
             "hidden_count": 440
@@ -651,7 +651,7 @@ mod tests {
         let out = render(|b| write_model_list(b, &models()));
         let row = out
             .lines()
-            .find(|l| l.contains("embedding"))
+            .find(|l| l.contains("images"))
             .unwrap_or_default();
         assert!(
             row.contains("(not set)"),
@@ -810,8 +810,6 @@ mod tests {
                  "source": "inherits chat"},
                 {"role": "sub-agents", "model": "opencode-go:glm-5.2",
                  "source": "defaults.subagent_model"},
-                {"role": "embedding", "model": "openrouter:qwen/qwen3-embedding-8b",
-                 "source": "defaults.embedding"},
                 {"role": "images", "model": null, "source": null}
             ],
             "include_hidden": false,

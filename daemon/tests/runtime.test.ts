@@ -297,6 +297,26 @@ describe("what assembly wires together", () => {
     }
   });
 
+  test("startup deletes the workspace index a character's cache still holds", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-workspace-index-");
+    try {
+      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "SOUL.md"), "# ada");
+      const cache = join(config.dirs.cache, "characters", "ada");
+      await mkdir(cache, { recursive: true });
+      const leftovers = ["workspace_index.db", "workspace_index.db-wal", "workspace_index.db-shm"].map((name) => join(cache, name));
+      for (const path of leftovers) await writeFile(path, "");
+
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      for (const path of leftovers) expect(existsSync(path), path).toBe(false);
+
+      await runtime.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("history registrations and tool contexts stay anchored to main when heartbeat home moves", async () => {
     const { root, config } = await dirsUnder("shore-runtime-history-home-");
     try {

@@ -360,7 +360,7 @@ describe("the chat log index service", () => {
     await service.runOnce();
     expect(indexed()).toBe("4");
     expect(historyIndexSection({ progressFor: (name) => service.progress(name) }, "ada")).toMatchObject({
-      messages: 4, chunks: 4, embedded: 4, pending: 0, model: null, background: { registered: true, failures: 0 },
+      messages: 4, background: { failures: 0 },
     });
   });
 

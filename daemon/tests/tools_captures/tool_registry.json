@@ -7,26 +7,26 @@
     },
     "subset": {
       "enabled_tools": [
-        "search",
+        "read",
         "search_chat_logs",
         "bash"
       ],
       "offered": [
+        "read",
         "bash",
-        "search",
         "search_chat_logs"
       ],
       "any_enabled": true
     },
     "order_is_registry_not_config": {
       "enabled_tools": [
-        "search",
+        "search_chat_logs",
         "bash",
         "bash"
       ],
       "offered": [
         "bash",
-        "search"
+        "search_chat_logs"
       ],
       "any_enabled": true
     },
@@ -42,11 +42,11 @@
     },
     "glob_matches_prefix": {
       "enabled_tools": [
-        "search*"
+        "read*"
       ],
       "offered": [
-        "search",
-        "search_chat_logs"
+        "read",
+        "read_chat_logs"
       ],
       "any_enabled": true
     },
@@ -61,7 +61,6 @@
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "read_chat_logs",
         "model_history",
@@ -97,17 +96,17 @@
         "bash",
         "bash",
         "bash",
-        "search",
+        "read",
         "bash",
         "bash",
         "search_chat_logs",
         "model_history"
       ],
       "offered": [
+        "read",
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "model_history"
       ],
@@ -122,7 +121,6 @@
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "model_history"
       ]
@@ -134,7 +132,6 @@
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "model_history"
       ]
@@ -146,7 +143,6 @@
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "model_history"
       ]
@@ -158,7 +154,6 @@
         "bash",
         "generate_image",
         "activity_heatmap",
-        "search",
         "search_chat_logs",
         "model_history"
       ]
@@ -722,7 +717,6 @@
     "bash",
     "generate_image",
     "activity_heatmap",
-    "search",
     "search_chat_logs",
     "read_chat_logs",
     "model_history",

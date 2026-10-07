@@ -205,7 +205,7 @@ describe("resolveGenerationModel", () => {
       const defaultModel = some(c.input.default_model);
       if (defaultModel !== undefined) app.defaults.model = defaultModel;
       const models = c.input.with_catalog
-        ? catalogFromSections(CATALOG_TOML, undefined, undefined, undefined)
+        ? catalogFromSections(CATALOG_TOML, undefined, undefined)
         : emptyCatalog();
 
       let providers = ProviderRegistry.empty();

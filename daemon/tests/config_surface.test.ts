@@ -92,17 +92,17 @@ describe("flat configuration", () => {
     try {
       mkdirSync(join(root, "characters", "alex"), { recursive: true });
       mkdirSync(join(root, "characters", "blair"), { recursive: true });
-      writeFileSync(join(root, "config.toml"), '[tools]\nenabled = ["bash", "search"]\n[mcp.tavily]\nurl = "https://mcp.example.invalid/mcp"');
+      writeFileSync(join(root, "config.toml"), '[tools]\nenabled = ["bash", "read"]\n[mcp.tavily]\nurl = "https://mcp.example.invalid/mcp"');
       writeFileSync(join(root, "characters", "alex", "config.toml"), '[tools]\nmcp = ["tavily"]');
       writeFileSync(join(root, "characters", "blair", "config.toml"), '[chat]\nmodel = "gemini:m"');
       const global = loadConfig(join(root, "config.toml"), { onWarn: () => {} });
       const alex = loadCharacterConfig(global, "alex", () => {});
       const blair = loadCharacterConfig(global, "blair", () => {});
-      expect(alex?.app.tools.enabled_tools).toEqual(["bash", "search"]);
+      expect(alex?.app.tools.enabled_tools).toEqual(["bash", "read"]);
       expect(alex?.app.tools.enabled_mcp).toEqual(["tavily"]);
-      expect(toolGrants(required(alex).app.tools)).toEqual(["bash", "search", "mcp__tavily__*"]);
-      expect(toolGrants(required(blair).app.tools)).toEqual(["bash", "search"]);
-      expect(toolGrants(global.app.tools)).toEqual(["bash", "search"]);
+      expect(toolGrants(required(alex).app.tools)).toEqual(["bash", "read", "mcp__tavily__*"]);
+      expect(toolGrants(required(blair).app.tools)).toEqual(["bash", "read"]);
+      expect(toolGrants(global.app.tools)).toEqual(["bash", "read"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -113,8 +113,6 @@ describe("flat configuration", () => {
 [chat]
 display_name = "Alex"
 user_timestamps = "always"
-[embedding]
-model = "local:embed"
 [image]
 model = "openrouter:image"
 [heartbeat]
@@ -170,7 +168,7 @@ base_url = "http://localhost:1/v1"
 [mcp.search]
 url = "https://search.invalid/mcp"
 `);
-    expect(cfg.app.defaults).toMatchObject({ display_name: "Alex", embedding: "local:embed", image_generation: "openrouter:image" });
+    expect(cfg.app.defaults).toMatchObject({ display_name: "Alex", image_generation: "openrouter:image" });
     expect(cfg.app.behavior.autonomy.enabled).toBe(true);
     expect(cfg.app.behavior.autonomy.heartbeat.default_interval.toString()).toBe("6h");
     expect(cfg.app.behavior.autonomy.heartbeat.min_interval.toString()).toBe("4h");

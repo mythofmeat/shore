@@ -19,7 +19,6 @@ import { carryToolMedia } from "../src/tools/media.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { handleRead } from "../src/tools/read.ts";
 import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
-import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { required } from "../src/util/required.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { noisePng, withTextChunk } from "./support/test_images.ts";
@@ -49,7 +48,7 @@ async function world(config: ImagesConfig = defaultImagesConfig()) {
   const ctx: ToolContext = {
     workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-    retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto", images: config,
+    images: config,
   };
   const exec: ToolExecution = {
     ctx, sendDirect: () => {}, schemas: BUILTIN_TOOL_SCHEMAS,

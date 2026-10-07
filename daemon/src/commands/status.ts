@@ -9,7 +9,6 @@ import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import { invalidRequest } from "./errors.ts";
 import { historyIndexSection, type HistoryIndexSource } from "./history_index.ts";
-import { workspaceIndexSection, type WorkspaceIndexSource } from "./workspace_index.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { AutonomyStatusReport } from "../protocol/AutonomyStatusReport.ts";
 import type { McpStatusReport } from "../protocol/McpStatusReport.ts";
@@ -41,7 +40,6 @@ export interface StatusContext {
   diagnostics: Diagnostics;
   now: () => number;
   localNow: () => number;
-  workspaceIndex?: WorkspaceIndexSource | undefined;
   historyIndex?: HistoryIndexSource | undefined;
   mcpServers?: readonly McpServerStatus[] | undefined;
   running?: RunningStatusReport | undefined;
@@ -143,7 +141,6 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
     },
     autonomy: state === undefined ? null : autonomyWire(state, now),
     activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
-    index: await workspaceIndexSection(ctx.workspaceIndex, ctx.characterName),
     history_index: historyIndexSection(ctx.historyIndex, ctx.characterName),
     ...(mcp === undefined ? {} : { mcp }),
     compaction: await compactionSection(ctx),

@@ -11,7 +11,6 @@ import type { HeartbeatClockConfig } from "../src/autonomy/heartbeat.ts";
 import { STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
-import { WorkspaceIndexStore } from "../src/memory/workspace_store.ts";
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
@@ -628,36 +627,5 @@ describe("a halted keepalive reaches the status envelope", () => {
     const ctx = await build("restored");
     const result = (await status(ctx)) as Record<string, unknown>;
     expect(Object.keys(result)).not.toContain("memory_mode");
-  });
-
-  test("a wired workspace index is a section of status, not a command of its own", async () => {
-    const ctx = await build("fresh");
-    const indexPath = join(root, "workspace.db");
-    const store = WorkspaceIndexStore.open(indexPath);
-    store.putFiles([
-      {
-        display_path: "notes.md",
-        size: 10,
-        modified_at_secs: 1000,
-        document_hash: "h",
-        embed_chars: 40,
-        embedded: true,
-        reason: undefined,
-      },
-    ]);
-    store.putEmbeddings("qwen3", [{ hash: "h", vectors: [[1, 0]] }]);
-    store.close();
-
-    const result = (await status({
-      ...ctx,
-      workspaceIndex: { indexPathFor: () => indexPath, progressFor: () => undefined },
-    })) as Record<string, unknown>;
-
-    expect(result["sections"]).toContain("index");
-    const index = result["index"] as Record<string, unknown>;
-    expect(index["files"]).toBe(1);
-    expect(index["embedded"]).toBe(1);
-    expect(index["vectors"]).toBe(1);
-    expect(index["background"]).toEqual({ registered: false });
   });
 });

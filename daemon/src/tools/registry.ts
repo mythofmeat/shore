@@ -12,7 +12,6 @@ import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with
 import readChatLogsDesc from "../../prompts/tools/history/read_chat_logs.md" with { type: "text" };
 import searchChatLogsDesc from "../../prompts/tools/history/search_chat_logs.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
-import searchDesc from "../../prompts/tools/workspace/search.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
 export interface ToolDef {
@@ -131,47 +130,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           default: 30,
         },
       },
-    },
-  },
-  {
-    name: "search",
-    description: stripOneTrailingNewline(searchDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "What to search for: a keyword, phrase, or natural-language description. Must not be empty.",
-        },
-        mode: {
-          type: "string",
-          enum: ["hybrid", "lexical", "vector"],
-          description:
-            "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring matching only, ordered by file recency. `vector` is semantic similarity only. Semantic modes fall back to lexical when embeddings are not configured, and the response says so.",
-        },
-        match: {
-          type: "string",
-          enum: ["ranked", "nearest"],
-          description: "`ranked` (default) returns close matches only, and says so when nothing is close. `nearest` also returns the weaker semantic matches `ranked` leaves out, marked weak. `lexical` mode returns literal matches only either way.",
-        },
-        path: {
-          type: "string",
-          description:
-            "Restrict the search to this directory, relative to the workspace. Applies in every mode; semantic results are filtered to the subtree after ranking against the workspace-wide index. Omit to search the whole workspace.",
-        },
-        max_results: {
-          type: "integer",
-          description: "Maximum number of hits to return. Default 20; values above 100 are capped at 100.",
-        },
-        context: {
-          type: "integer",
-          minimum: 0,
-          maximum: 10000,
-          default: 500,
-          description: "Characters of context on each side of a match. Default 500, range 0-10000. May be reduced automatically to keep the response near 12000 characters; every result and the full match are kept.",
-        },
-      },
-      required: ["query"],
     },
   },
   {

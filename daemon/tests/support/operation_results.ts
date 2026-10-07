@@ -91,13 +91,11 @@ const status = {
   },
   "autonomy": null,
   "activity": null,
-  "index": null,
   "history_index": null,
   "sections": [
     "tokens",
     "autonomy",
     "activity",
-    "index",
     "history_index",
     "daemon"
   ]

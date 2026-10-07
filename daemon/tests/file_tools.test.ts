@@ -8,7 +8,6 @@ import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
 import { renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
-import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { toolResultImages, toolResultText } from "../src/llm/types.ts";
 import { defaultToolsConfig } from "../src/config/app.ts";
 import { oversizedImage, wideImage } from "./support/oversized_image.ts";
@@ -28,7 +27,6 @@ async function world() {
   const ctx: ToolContext = {
     workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
-    retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
   };
   const exec: ToolExecution = {
     ctx, sendDirect: () => {}, schemas: BUILTIN_TOOL_SCHEMAS,

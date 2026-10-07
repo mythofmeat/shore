@@ -1,70 +1,28 @@
 use std::io::Write;
 
-use super::vocab::{Tone, empty, note, section, warning, write_row, write_row_colored};
+use super::vocab::{Tone, empty, section, warning, write_row, write_row_colored};
 
 pub(crate) fn write_history_section(out: &mut impl Write, index: &serde_json::Value) {
-    section(out, "history", None);
+    section(out, "chat logs", None);
 
     if let Some(error) = index["error"].as_str() {
         warning(
             out,
-            &format!("the history index could not be read: {error}"),
+            &format!("the chat log index could not be read: {error}"),
         );
         return;
     }
 
-    let chunks = index["chunks"].as_u64().unwrap_or(0);
-    let embedded = index["embedded"].as_u64().unwrap_or(0);
-    let pending = index["pending"].as_u64().unwrap_or(0);
-
-    if chunks == 0 {
-        empty(out, "no conversation history indexed yet");
-        return;
+    let messages = index["messages"].as_u64().unwrap_or(0);
+    if messages == 0 {
+        empty(out, "no messages indexed yet");
+    } else {
+        write_row(out, "messages", &messages.to_string());
     }
 
-    write_row(
-        out,
-        "messages",
-        &index["messages"].as_u64().unwrap_or(0).to_string(),
-    );
-    write_row(out, "chunks", &chunks.to_string());
-    write_row_colored(
-        out,
-        "embedded",
-        &format!("{embedded} of {chunks}"),
-        if pending == 0 {
-            Tone::Good
-        } else {
-            Tone::Active
-        },
-    );
-    if pending > 0 {
-        write_row_colored(out, "pending", &pending.to_string(), Tone::Active);
-    }
-    if let Some(model) = index["model"].as_str() {
-        write_row(out, "model", model);
-    }
-    if embedded == 0 {
-        warning(
-            out,
-            "nothing is embedded — history search is running on keywords alone",
-        );
-    }
-
-    write_background(out, &index["background"], pending);
-}
-
-fn write_background(out: &mut impl Write, background: &serde_json::Value, pending: u64) {
-    if background["registered"].as_bool() != Some(true) {
-        note(
-            out,
-            "no embedding model configured — nothing will ever be embedded",
-        );
-        return;
-    }
-
+    let background = &index["background"];
     if let Some(error) = background["last_error"].as_str() {
-        write_row_colored(out, "background", "failing", Tone::Bad);
+        write_row_colored(out, "indexing", "failing", Tone::Bad);
         write_row(out, "last error", error);
         write_row(
             out,
@@ -74,19 +32,7 @@ fn write_background(out: &mut impl Write, background: &serde_json::Value, pendin
         if let Some(secs) = background["retry_in_secs"].as_u64() {
             write_row(out, "retrying in", &format!("{secs}s"));
         }
-        return;
     }
-
-    if pending > 0 {
-        write_row_colored(out, "background", "working", Tone::Active);
-        note(
-            out,
-            "(it embeds a batch at a time once the daemon has been idle)",
-        );
-        return;
-    }
-
-    write_row_colored(out, "background", "up to date", Tone::Good);
 }
 
 #[cfg(test)]
@@ -100,56 +46,42 @@ mod tests {
     }
 
     #[test]
-    fn reports_a_stalled_index_rather_than_looking_healthy() {
+    fn a_healthy_index_is_its_message_count() {
         let out = render(&serde_json::json!({
-            "messages": 33476,
-            "chunks": 47525,
-            "embedded": 0,
-            "pending": 47525,
-            "model": "qwen/qwen3-embedding-8b",
-            "background": { "registered": true, "failures": 0 },
+            "messages": 36_684,
+            "background": { "failures": 0 },
         }));
-        assert!(out.contains("0 of 47525"));
-        assert!(out.contains("keywords alone"));
-    }
-
-    #[test]
-    fn reports_a_complete_index() {
-        let out = render(&serde_json::json!({
-            "messages": 12,
-            "chunks": 20,
-            "embedded": 20,
-            "pending": 0,
-            "model": "qwen/qwen3-embedding-8b",
-            "background": { "registered": true, "failures": 0 },
-        }));
-        assert!(out.contains("20 of 20"));
-        assert!(out.contains("up to date"));
-        assert!(!out.contains("keywords alone"));
-    }
-
-    #[test]
-    fn calls_out_a_missing_embedder() {
-        let out = render(&serde_json::json!({
-            "messages": 5,
-            "chunks": 9,
-            "embedded": 0,
-            "pending": 9,
-            "model": serde_json::Value::Null,
-            "background": { "registered": false, "failures": 0 },
-        }));
-        assert!(out.contains("nothing will ever be embedded"));
+        assert!(out.contains("36684"), "{out}");
+        assert!(
+            !out.contains("failing"),
+            "healthy indexing is not status: {out}"
+        );
     }
 
     #[test]
     fn empty_index_says_so() {
         let out = render(&serde_json::json!({
             "messages": 0,
-            "chunks": 0,
-            "embedded": 0,
-            "pending": 0,
-            "background": { "registered": true, "failures": 0 },
+            "background": { "failures": 0 },
         }));
-        assert!(out.contains("no conversation history indexed yet"));
+        assert!(out.contains("no messages indexed yet"), "{out}");
+    }
+
+    #[test]
+    fn a_failing_rebuild_keeps_the_actionable_error() {
+        let out = render(&serde_json::json!({
+            "messages": 12,
+            "background": { "failures": 3, "last_error": "database is locked", "retry_in_secs": 8 },
+        }));
+        assert!(out.contains("failing"), "{out}");
+        assert!(out.contains("database is locked"), "{out}");
+        assert!(out.contains("8s"), "{out}");
+    }
+
+    #[test]
+    fn an_unreadable_index_reports_the_problem_without_fake_zeroes() {
+        let out = render(&serde_json::json!({"error": "history lock failed"}));
+        assert!(out.contains("history lock failed"), "{out}");
+        assert!(!out.contains("no messages indexed yet"), "{out}");
     }
 }

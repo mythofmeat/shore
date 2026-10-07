@@ -90,14 +90,11 @@ interface FromPartsRow {
 interface CatalogRow {
   name: string;
   chat_toml: string;
-  embedding_toml: string;
   image_generation_toml: string;
   providers_toml: string;
   catalog?: {
     chat: Record<string, Record<string, unknown>>;
     chat_order: string[];
-    embedding: Record<string, Record<string, unknown>>;
-    embedding_order: string[];
     image_generation: Record<string, Record<string, unknown>>;
     image_generation_order: string[];
   };
@@ -430,7 +427,6 @@ describe("catalogFromSections", () => {
       const build = () =>
         catalogFromSections(
           parseToml(row.chat_toml),
-          parseToml(row.embedding_toml),
           parseToml(row.image_generation_toml),
           registryFromToml(row.providers_toml),
         );
@@ -451,12 +447,6 @@ describe("catalogFromSections", () => {
           expected.chat[key] as Record<string, unknown>,
           `${row.name}: ${key}`,
         );
-      }
-
-      expect([...catalog.embedding.keys()]).toEqual(expected.embedding_order);
-      for (const [key, settings] of catalog.embedding) {
-        const want = expected.embedding[key] as Record<string, unknown>;
-        expect<Record<string, unknown>>({ dimensions: settings.dimensions ?? null }).toEqual(want);
       }
 
       expect([...catalog.imageGeneration.keys()]).toEqual(expected.image_generation_order);
@@ -506,7 +496,7 @@ describe("catalogFromSections", () => {
       '[custom]\nsdk = "openai"\nbase_url = "https://custom.example/v1"\n' +
         "[custom.defaults]\nmax_output_tokens = 4096\ntemperature = 0.7\n",
     );
-    const catalog = catalogFromSections(chat, undefined, undefined, registry);
+    const catalog = catalogFromSections(chat, undefined, registry);
     const model = catalog.chat.get("custom:m") as ResolvedModel;
 
     expect(model.maxOutputTokens).toBe(111);
@@ -528,7 +518,6 @@ describe("catalogFromSections", () => {
     };
     const catalog = catalogFromSections(
       Bun.TOML.parse("[\"custom:m\"]\n") as Record<string, unknown>,
-      undefined,
       undefined,
       registry,
     );

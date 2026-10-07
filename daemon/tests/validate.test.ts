@@ -19,7 +19,6 @@ const DIRS: ShoreDirs = {
 
 interface Digest {
   chat: string[];
-  embedding: string[];
   image_generation: string[];
   providers: { key: string; enabled: boolean }[];
   raw_table_keys: string[];
@@ -33,7 +32,6 @@ interface Digest {
 function digestOf(loaded: LoadedConfig): Digest {
   return {
     chat: [...loaded.models.chat.keys()],
-    embedding: [...loaded.models.embedding.keys()],
     image_generation: [...loaded.models.imageGeneration.keys()],
     providers: loaded.providers.entries().map(([key, entry]) => ({ key, enabled: entry.enabled })),
     raw_table_keys: Object.keys(loaded.rawTable ?? {}).sort(compareByCodePoint),
@@ -70,24 +68,22 @@ function warningsOf(src: string): string[] {
 }
 
 describe("auxiliary provider defaults", () => {
-  for (const field of ["embedding", "image"]) {
-    test.each(["openai", "openrouter"])(`${field} accepts built-in %s transport without a provider section`, (provider) => {
-      expect(warningsOf(`[${field}]\nmodel = "${provider}:model"`)).toEqual([]);
-    });
+  test.each(["openai", "openrouter"])("image accepts built-in %s transport without a provider section", (provider) => {
+    expect(warningsOf(`[image]\nmodel = "${provider}:model"`)).toEqual([]);
+  });
 
-    test(`${field} identifies missing transport for an unknown provider`, () => {
-      const warnings = warningsOf(`[${field}]\nmodel = "custom:model"`);
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain(field === "embedding" ? "embedding.model" : "image.model");
-      expect(warnings[0]).toContain("[providers.custom]");
-      expect(warnings[0]).toContain("no built-in endpoint");
-      expect(warnings[0]).toContain("base_url");
-    });
+  test("image identifies missing transport for an unknown provider", () => {
+    const warnings = warningsOf(`[image]\nmodel = "custom:model"`);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("image.model");
+    expect(warnings[0]).toContain("[providers.custom]");
+    expect(warnings[0]).toContain("no built-in endpoint");
+    expect(warnings[0]).toContain("base_url");
+  });
 
-    test(`${field} still rejects an explicitly disabled built-in provider`, () => {
-      expect(refused(`[${field}]\nmodel = "openrouter:model"\n[providers.openrouter]\nenabled = false`)).toContain("disabled");
-    });
-  }
+  test("image still rejects an explicitly disabled built-in provider", () => {
+    expect(refused(`[image]\nmodel = "openrouter:model"\n[providers.openrouter]\nenabled = false`)).toContain("disabled");
+  });
 });
 
 describe("a config that shore can act on", () => {
@@ -130,9 +126,8 @@ describe("a config that shore can act on", () => {
     expect(accepted("")).toBeDefined();
   });
   test("model sections are extracted, not unknown fields", () => {
-    const digest = accepted("[chat]\n\n[chat.\"anthropic:claude-opus-4-6\"]\n\n[embedding]\n\n[embedding.\"openai:text-embedding-3-large\"]\ndimensions = 1024\n\n[image]\n\n[image.\"gemini:gemini-3.1-flash-image-preview\"]\nsize = \"1024x1024\"\n");
+    const digest = accepted("[chat]\n\n[chat.\"anthropic:claude-opus-4-6\"]\n\n[image]\n\n[image.\"gemini:gemini-3.1-flash-image-preview\"]\nsize = \"1024x1024\"\n");
     expect(digest.chat).toEqual(["anthropic:claude-opus-4-6"]);
-    expect(digest.embedding).toEqual(["openai:text-embedding-3-large"]);
     expect(digest.image_generation).toEqual(["gemini:gemini-3.1-flash-image-preview"]);
   });
   test("providers section is extracted too", () => {
@@ -158,8 +153,8 @@ describe("a config that shore can act on", () => {
   test("non-table providers is rejected", () => {
     expect(refused("providers = 1")).toContain("must be a table");
   });
-  test("non-table embedding is rejected", () => {
-    expect(refused("embedding = []")).toContain("must be a table");
+  test("an embedding section is an unknown field", () => {
+    expect(refused("[embedding]\nmodel = \"openai:text-embedding-3-large\"\n")).toContain("unknown field `embedding`");
   });
   test("array-of-tables providers is rejected", () => {
     expect(refused("\n[[providers]]\napi_key_env = \"OPENAI_API_KEY\"\n")).toContain("must be a table");
@@ -322,18 +317,9 @@ describe("a config that shore can act on", () => {
   test("a top-level key named like an Object method is an unknown field", () => {
     expect(refused("constructor = 1\n")).toContain("unknown field `constructor`");
   });
-  test("provider:model_id embedding default passes", () => {
-    const digest = accepted("[providers]\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[embedding]\nmodel = \"openai:text-embedding-3-large\"\n");
-    expect(digest.providers).toEqual([{"key": "openai", "enabled": true}]);
-  });
-  test("embedding default on built-in OpenAI needs no provider section", () => {
-    expect(accepted("[embedding]\nmodel = \"openai:text-embedding-3-large\"\n")).toBeDefined();
-    expect(warningsOf("[embedding]\nmodel = \"openai:text-embedding-3-large\"\n")).toEqual([]);
-  });
   test("all valid defaults", () => {
-    const digest = accepted("[chat]\nmodel = \"anthropic:claude-opus-4-6\"\n\n[chat.\"anthropic:claude-opus-4-6\"]\n\n[providers]\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[providers.gemini]\napi_key_env = \"GEMINI_API_KEY\"\n\n[embedding]\nmodel = \"openai:text-embedding-3-large\"\n\n[embedding.\"openai:text-embedding-3-large\"]\ndimensions = 1024\n\n[image]\nmodel = \"gemini:gemini-3.1-flash-image-preview\"\n\n[image.\"gemini:gemini-3.1-flash-image-preview\"]\nsize = \"1024x1024\"\n\n[heartbeat]\nmodel = \"anthropic:claude-opus-4-6\"\n");
+    const digest = accepted("[chat]\nmodel = \"anthropic:claude-opus-4-6\"\n\n[chat.\"anthropic:claude-opus-4-6\"]\n\n[providers]\n\n[providers.openai]\napi_key_env = \"OPENAI_API_KEY\"\n\n[providers.gemini]\napi_key_env = \"GEMINI_API_KEY\"\n\n[image]\nmodel = \"gemini:gemini-3.1-flash-image-preview\"\n\n[image.\"gemini:gemini-3.1-flash-image-preview\"]\nsize = \"1024x1024\"\n\n[heartbeat]\nmodel = \"anthropic:claude-opus-4-6\"\n");
     expect(digest.chat).toEqual(["anthropic:claude-opus-4-6"]);
-    expect(digest.embedding).toEqual(["openai:text-embedding-3-large"]);
     expect(digest.image_generation).toEqual(["gemini:gemini-3.1-flash-image-preview"]);
     expect(digest.providers).toEqual([{"key": "gemini", "enabled": true}, {"key": "openai", "enabled": true}]);
   });
@@ -374,10 +360,6 @@ describe("a config that shore can act on", () => {
   test("a chat section parses", () => {
     const digest = accepted("[chat]\n\n[chat.\"anthropic:claude-sonnet-4-6\"]\n");
     expect(digest.chat).toEqual(["anthropic:claude-sonnet-4-6"]);
-  });
-  test("an embedding section parses", () => {
-    const digest = accepted("\n[embedding.\"openai:text-embedding-3-small\"]\n");
-    expect(digest.embedding).toEqual(["openai:text-embedding-3-small"]);
   });
   test("an image generation section parses", () => {
     const digest = accepted("[image]\n\n[image.\"openai:dall-e-3\"]\n");
@@ -454,21 +436,6 @@ describe("a config shore refuses, and what it says", () => {
   test("transport rejection precedes the grant sweep", () => {
     expect(refused("[mcp]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[tools]\nenabled = [\"mcp__ghost__search\"]\n")).toContain("mcp.hue sets both `command` and `url`; set exactly one trans");
   });
-  test("bare alias embedding default is rejected", () => {
-    expect(refused("[embedding]\nmodel = \"missing-profile\"\n")).toContain("embedding.model \"missing-profile\" must be a `provider:mod");
-  });
-  test("bundled local embedding id is rejected", () => {
-    expect(refused("[embedding]\nmodel = \"bge-large-en-v1.5\"\n")).toContain("embedding.model \"bge-large-en-v1.5\" must be a `provider:m");
-  });
-  test("embedding default on a disabled provider is rejected", () => {
-    expect(refused("[providers]\n\n[providers.openai]\nenabled = false\napi_key_env = \"OPENAI_API_KEY\"\n\n[embedding]\nmodel = \"openai:text-embedding-3-large\"\n")).toContain("embedding.model references provider \"openai\" which is dis");
-  });
-  test("embedding default with an empty provider half", () => {
-    expect(refused("[embedding]\nmodel = \":text-embedding-3-large\"\n")).toContain("embedding.model \":text-embedding-3-large\" is not a valid ");
-  });
-  test("embedding default with an empty model half", () => {
-    expect(refused("[embedding]\nmodel = \"openai:\"\n")).toContain("embedding.model \"openai:\" is not a valid `provider:model_");
-  });
   test("bare alias image_generation default is rejected", () => {
     expect(refused("[image]\nmodel = \"missing-profile\"\n")).toContain("image.model \"missing-profile\" must be a `provi");
   });
@@ -477,9 +444,6 @@ describe("a config shore refuses, and what it says", () => {
   });
   test("image_generation default with an empty model half", () => {
     expect(refused("[image]\nmodel = \"gemini:\"\n")).toContain("image.model \"gemini:\" is not a valid `provider");
-  });
-  test("both aux defaults bad reports embedding", () => {
-    expect(refused("[embedding]\nmodel = \"bad-a\"\n\n[image]\nmodel = \"bad-b\"\n")).toContain("embedding.model \"bad-a\" must be a `provider:model_id` ide");
   });
   test("usage timezone is case sensitive", () => {
     expect(refused("\n[usage]\ntimezone = \"UTC\"\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"UTC\"");
@@ -574,13 +538,13 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("[usage]\ntimezone = \"nope\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");
   });
   test("every check fails at once", () => {
-    expect(refused("[usage]\ntimezone = \"nope\"\n\n[subagents]\nenabled = [\"researcher\"]\n\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\nmodel = \"ghost-model\"\n\n[mcp]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[chat]\nmodel = \"ghost\"\n\n[embedding]\nmodel = \"bad-embed\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("subagents.researcher resolves to model \"ghost-model\", which ");
+    expect(refused("[usage]\ntimezone = \"nope\"\n\n[subagents]\nenabled = [\"researcher\"]\n\n[subagents.researcher]\ndescription = \"R\"\nprompt = \"r\"\nmodel = \"ghost-model\"\n\n[mcp]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[chat]\nmodel = \"ghost\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("subagents.researcher resolves to model \"ghost-model\", which ");
   });
   test("mcp is next after subagents", () => {
-    expect(refused("[usage]\ntimezone = \"nope\"\n\n[mcp]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[embedding]\nmodel = \"bad-embed\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("mcp.hue sets both `command` and `url`; set exactly one trans");
+    expect(refused("[usage]\ntimezone = \"nope\"\n\n[mcp]\n\n[mcp.hue]\ncommand = \"node\"\nurl = \"http://x\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("mcp.hue sets both `command` and `url`; set exactly one trans");
   });
-  test("embedding is next after mcp", () => {
-    expect(refused("[usage]\ntimezone = \"nope\"\n\n[embedding]\nmodel = \"bad-embed\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("embedding.model \"bad-embed\" must be a `provider:model_id`");
+  test("image is next after mcp", () => {
+    expect(refused("[usage]\ntimezone = \"nope\"\n\n[image]\nmodel = \"bad-image\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("image.model \"bad-image\" must be a `provider:model_id`");
   });
   test("usage is next after the aux defaults", () => {
     expect(refused("[usage]\ntimezone = \"nope\"\n\n[compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");
