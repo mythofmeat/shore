@@ -10,6 +10,7 @@ export interface ContextActions {
   copyText(text: string): void;
   copyImage(): void;
   saveImage(url: string): void;
+  quote(): void;
 }
 
 export interface MenuActions {
@@ -25,7 +26,7 @@ function closeToTrayItem(closeToTray: boolean, actions: MenuActions): MenuItemCo
   return { label: "Close to Tray", type: "checkbox", checked: closeToTray, click: (item) => { actions.setCloseToTray(item.checked); } };
 }
 
-export function contextMenuTemplate(params: ContextParams, actions: ContextActions): MenuItemConstructorOptions[] {
+export function contextMenuTemplate(params: ContextParams, actions: ContextActions, quotable = false): MenuItemConstructorOptions[] {
   const groups: MenuItemConstructorOptions[][] = [];
   if (params.misspelledWord !== "") {
     groups.push([
@@ -54,7 +55,7 @@ export function contextMenuTemplate(params: ContextParams, actions: ContextActio
       [{ role: "selectAll", enabled: flags.canSelectAll }],
     );
   } else if (params.selectionText.trim() !== "") {
-    groups.push([{ role: "copy" }]);
+    groups.push([{ role: "copy" }, ...(quotable ? [{ label: "Quote", click: () => { actions.quote(); } }] : [])]);
   }
   return groups.flatMap((group, index) => index === 0 ? group : [{ type: "separator" }, ...group]);
 }

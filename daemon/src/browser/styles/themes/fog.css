@@ -44,7 +44,7 @@
   --avatar-5-bg: #2e3b3e;
   --avatar-5-fg: #d0e1e4;
   --font-body: "Newsreader", Georgia, serif;
-  --body-size: 17.5px;
+  --body-size: calc(17.5px * var(--font-scale));
   --body-line: 1.6;
   --placeholder-style: italic;
   --wordmark-font: "Newsreader", Georgia, serif;
@@ -101,7 +101,7 @@
 [data-theme="fog"] .divider,
 [data-theme="fog"] .swipe-count {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
 }
 
 [data-theme="fog"] .divider {
@@ -118,7 +118,7 @@
   border: 0;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }

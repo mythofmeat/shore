@@ -341,6 +341,28 @@ test("the Sodium fog theme applies before first paint after a reload", async ({ 
   await check();
 });
 
+test("the text size scales message text and the interface, and applies before first paint after a reload", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "nova");
+  await send(page, "Hello there");
+  const sizes = async () => await page.evaluate("[getComputedStyle(document.querySelector('.message-body .prose')).fontSize, getComputedStyle(document.body).fontSize]");
+  expect(await sizes()).toEqual(["15px", "14px"]);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  await page.getByRole("radiogroup", { name: "Text size" }).getByRole("radio", { name: "Larger" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-font-size", "larger");
+  const early: string[] = [];
+  page.on("domcontentloaded", () => { void page.evaluate("document.documentElement.dataset.fontSize ?? ''").then((value) => early.push(String(value))); });
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Larger" })).toHaveAttribute("aria-checked", "true");
+  expect(early).toEqual(["larger"]);
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await expect(page.locator(".message-body").first()).toBeVisible();
+  expect(await sizes()).toEqual(["18.75px", "17.5px"]);
+  await check();
+});
+
 test("while the tab is unfocused a reply shows a desktop notification and an unread count in the title", async ({ page }) => {
   const check = await watchPage(page);
   await page.addInitScript("window.shoreNotifications = []; window.Notification = class { static permission = 'default'; static requestPermission() { window.Notification.permission = 'granted'; return Promise.resolve('granted'); } constructor(title, options) { this.onclick = null; window.shoreNotifications.push({ title, body: options.body, tag: options.tag }); } close() {} };");

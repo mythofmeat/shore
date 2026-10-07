@@ -48,7 +48,7 @@
   --font-ui: "Geist", system-ui, sans-serif;
   --font-body: "Geist", system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --body-size: 15px;
+  --body-size: calc(15px * var(--font-scale));
   --body-line: 1.65;
   --body-style: normal;
   --placeholder-style: normal;

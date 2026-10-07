@@ -8,6 +8,7 @@ W = "src/browser/workspace.ts"
 M = "src/browser/markdown.tsx"
 R = "src/browser/chat/Message.tsx"
 H = "src/browser/theme.ts"
+Z = "src/browser/font_size.ts"
 S = "src/browser/app/shortcuts.ts"
 F = "src/browser/settings/format.ts"
 P = "scripts/browser_parity.ts"
@@ -87,6 +88,10 @@ MUTANTS = [
     ("unknown stored theme accepted", H, 'return isThemeId(value) ? value : DEFAULT_THEME;', 'return (value ?? DEFAULT_THEME) as ThemeId;'),
     ("failed theme save reported as saved", H, 'error = "This browser couldn\'t save the theme, so it will reset on reload.";', 'error = "";'),
     ("theme changes from other tabs ignored", H, 'if (theme !== this.#theme) this.#set(theme, "");', ''),
+    ("unknown stored text size accepted", Z, 'return isFontSizeId(value) ? value : DEFAULT_FONT_SIZE;', 'return (value ?? DEFAULT_FONT_SIZE) as FontSizeId;'),
+    ("failed text size save reported as saved", Z, 'error = "This browser couldn\'t save the text size, so it will reset on reload.";', 'error = "";'),
+    ("text size changes from other tabs ignored", Z, 'if (size !== this.#size) this.#set(size, "");', ''),
+    ("text size not applied to the document", Z, 'root.dataset["fontSize"] = size;', ''),
     ("help shortcut fires while typing", S, 'if (!typing && !mod && !event.altKey && event.key === "?") return "help";', 'if (!mod && !event.altKey && event.key === "?") return "help";'),
     ("palette ignores the modifier", S, 'if (mod && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") return "palette";', 'if (event.key.toLowerCase() === "k") return "palette";'),
     ("palette matches any word instead of every word", S, 'return words.every((word) => text.includes(word)) ? [index] : [];', 'return words.length === 0 || words.some((word) => text.includes(word)) ? [index] : [];'),

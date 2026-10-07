@@ -34,6 +34,20 @@ test("component styles and markup use theme tokens, never raw colors", async () 
   expect(rawColors("html, body, #root { height: 100%; }\n.x { color: var(--text); }\n.y { border-left: 2px solid var(--line-3); }")).toEqual([]);
 });
 
+function unscaledSizes(css: string): string[] {
+  return css.split("\n").flatMap((line, index) => {
+    const value = /(?:^|[{;\s])(?:font-size|--body-size|--text-[\w-]+)\s*:([^;]*)/.exec(line)?.[1] ?? "";
+    return /\d+(?:\.\d+)?px/.test(value) && !value.includes("var(--font-scale)") && !value.includes("var(--wordmark-size)") ? [`${String(index + 1)}: ${line.trim()}`] : [];
+  });
+}
+
+test("every text size follows the text size setting, except the wordmark", async () => {
+  const offenders = (await files(STYLES, "**/*.css")).flatMap((file) => unscaledSizes(file.text).map((line) => `${file.path}:${line}`));
+  expect(offenders).toEqual([]);
+  expect(unscaledSizes(".a { font-size: 13px; }\n:root {\n  --text-sm: 12.5px;\n  --body-size: 15px;\n}")).toHaveLength(3);
+  expect(unscaledSizes(".a { color: red; }\n.b {\n  font-size: calc(13px * var(--font-scale));\n  font-size: var(--text-md);\n  font-size: 0.88em;\n  --text-body: #dcdce0;\n}")).toEqual([]);
+});
+
 test("every token a stylesheet reads is defined, and themes only override known tokens", async () => {
   const tokens = await readFile(join(STYLES, "tokens.css"), "utf8");
   const themes = await files(join(STYLES, "themes"), "*.css");

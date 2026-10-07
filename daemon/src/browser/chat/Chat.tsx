@@ -13,6 +13,7 @@ import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
 import { ConversationDialogs, type ConversationDialog } from "./dialogs.tsx";
 import { ModelPicker, shortModel, useModelListing } from "./models.tsx";
+import { QuoteButton } from "./QuoteButton.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 function SidebarToggle({ open, mobile, toggle }: { open: boolean; mobile: boolean; toggle: () => void }) {
@@ -77,6 +78,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Wor
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} state={state} character={state.character} mobile={mobile} />
       <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />
+      <QuoteButton />
     </>}
   </>;
 }

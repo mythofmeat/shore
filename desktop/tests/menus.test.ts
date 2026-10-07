@@ -16,6 +16,7 @@ function recorder(): { calls: string[]; actions: ContextActions } {
       copyText: (text) => { calls.push(`copy ${text}`); },
       copyImage: () => { calls.push("copy image"); },
       saveImage: (url) => { calls.push(`save ${url}`); },
+      quote: () => { calls.push("quote"); },
     },
   };
 }
@@ -40,6 +41,16 @@ describe("contextMenuTemplate", () => {
   test("selected text can be copied", () => {
     expect(shape(contextMenuTemplate({ ...PLAIN, selectionText: "hello" }, recorder().actions))).toEqual(["copy"]);
     expect(contextMenuTemplate({ ...PLAIN, selectionText: "  \n" }, recorder().actions)).toEqual([]);
+  });
+
+  test("selected text can be quoted into the message box once the page says it can take quotes", () => {
+    const { calls, actions } = recorder();
+    const items = contextMenuTemplate({ ...PLAIN, selectionText: "hello" }, actions, true);
+    expect(shape(items)).toEqual(["copy", "Quote"]);
+    press(find(items, "Quote"));
+    expect(calls).toEqual(["quote"]);
+    expect(shape(contextMenuTemplate({ ...PLAIN, isEditable: true, selectionText: "hi" }, actions, true))).not.toContain("Quote");
+    expect(contextMenuTemplate({ ...PLAIN, selectionText: " " }, actions, true)).toEqual([]);
   });
 
   test("text fields get the edit commands, enabled as Chromium reports", () => {

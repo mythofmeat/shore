@@ -9,6 +9,7 @@ const ICONS = {
   close: stroke(<path d="M6 6l12 12M18 6L6 18" />),
   more: { children: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>, width: 0, fill: true },
   copy: stroke(<><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" /></>),
+  quote: stroke(<path d="M5 5v14M10 7h9M10 12h9M10 17h6" />),
   edit: stroke(<><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></>),
   regenerate: stroke(<><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></>),
   branch: stroke(<><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="7" r="2" /><path d="M6 7v10M18 9v1a4 4 0 0 1-4 4H6" /></>),
