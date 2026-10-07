@@ -207,7 +207,7 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "[tools]\nmax_result_chars = 1\n\n[retrieval]\nmax_files = 2\n"
+          "content": "[tools]\nmax_result_chars = 1\n\n[heartbeat]\nmax_idle_turns = 2\n"
         }
       ],
       "config_path": null,
@@ -216,9 +216,11 @@
           "tools": {
             "max_result_chars": 1
           },
-          "memory": {
-            "retrieval": {
-              "max_indexed_files": 2
+          "behavior": {
+            "autonomy": {
+              "heartbeat": {
+                "dormant_after_heartbeat_turns": 2
+              }
             }
           }
         },
@@ -485,21 +487,23 @@
       "files": [
         {
           "path": "config.toml",
-          "content": "[retrieval]\nmax_file_bytes = 1\nmax_files = 2\n"
+          "content": "[heartbeat]\nmax_idle_turns = 1\nmax_wrap_up_rounds = 2\n"
         },
         {
           "path": "conf.d/z.toml",
-          "content": "[retrieval]\nmax_files = 9\nmax_total_bytes = 3\n"
+          "content": "[heartbeat]\nmax_wrap_up_rounds = 9\nmin_interval = \"3h\"\n"
         }
       ],
       "config_path": null,
       "ok": {
         "table": {
-          "memory": {
-            "retrieval": {
-              "max_file_bytes": 1,
-              "max_indexed_files": 9,
-              "max_total_indexed_bytes": 3
+          "behavior": {
+            "autonomy": {
+              "heartbeat": {
+                "dormant_after_heartbeat_turns": 1,
+                "wrap_up_grace_rounds": 9,
+                "min_interval": "3h"
+              }
             }
           }
         },

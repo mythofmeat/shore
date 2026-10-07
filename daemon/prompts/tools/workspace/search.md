@@ -1,7 +1,0 @@
-Search workspace file contents. Ranking is hybrid (semantic plus lexical) by default, so paraphrased and conceptual queries can match. `lexical` mode uses case-insensitive substring matching; `vector` mode uses semantic similarity. Does not list directories or search archived conversations (`search_chat_logs` does).
-
-Only close matches come back: files that contain the query or all of its distinctive words, or whose semantic similarity reaches the embedding model's minimum. When nothing is close, the result says so and gives the best similarity it found, instead of listing the nearest unrelated files. Two or three distinctive words search best.
-
-Only the current files are searched. The workspace is a git repository, so earlier versions and deleted files are in its history; use `bash` with `git log -p -S'<text>'` to find the commits that added or removed some text. Treat what history shows as past versions: a file may have been changed or deleted because it stopped being true.
-
-Returns paths, line numbers, and excerpts, plus a notice when more hits exist beyond `max_results`. Excerpts are windows centered on the match, with ellipses where context is omitted, and may leave out context that changes a match’s meaning. Semantic hits without a literal match show a best-effort term or opening snippet. Context shrinks across all hits to target about 12000 characters per response, but results and full matches are never removed, so a response can exceed that.

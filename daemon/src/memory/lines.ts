@@ -7,22 +7,16 @@ export function rustLines(text: string): string[] {
 const WHITESPACE_START = /^\p{White_Space}+/u;
 const WHITESPACE_END = /\p{White_Space}+$/u;
 
-export function rustTrimStart(text: string): string {
+function rustTrimStart(text: string): string {
   return text.replace(WHITESPACE_START, "");
 }
 
-export function rustTrimEnd(text: string): string {
+function rustTrimEnd(text: string): string {
   return text.replace(WHITESPACE_END, "");
 }
 
 export function rustTrim(text: string): string {
   return rustTrimEnd(rustTrimStart(text));
-}
-
-export function tokenizeQuery(query: string): string[] {
-  return query
-    .split(/[^\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_-]/u)
-    .filter((term) => Buffer.byteLength(term, "utf8") >= 2);
 }
 
 export function compareRustStrings(a: string, b: string): number {

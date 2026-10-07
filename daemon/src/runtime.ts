@@ -7,7 +7,7 @@ import { moveImagesToCache } from "./storage/image_migration.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
 import { shoreLog } from "./log.ts";
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 
 import { InProcessAutonomyExecutor } from "./autonomy/in_process.ts";
 import { localWallClock } from "./autonomy/activity.ts";
@@ -17,7 +17,7 @@ import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
 import {
-  characterWorkspaceDir,
+  characterCacheDir,
   pluginsDir,
   rustJoin,
   threadDataDir,
@@ -30,7 +30,6 @@ import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
-import { providerRecord, retrievalView } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
@@ -56,11 +55,8 @@ import {
   type McpServerConfigView,
 } from "./tools/mcp_registry.ts";
 import { McpHolder } from "./tools/mcp_holder.ts";
-import { resolveEmbedder } from "./memory/retrieval.ts";
 import { historyIndexPath } from "./memory/history_index.ts";
 import { HistoryIndexService } from "./memory/history_index_service.ts";
-import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
-import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
 import { SnapshotGate } from "./snapshot_gate.ts";
 import { cachePath, readCacheSync } from "./llm/discovery.ts";
 import {
@@ -96,7 +92,6 @@ export interface ShoreRuntime {
   readonly keepalive: KeepaliveService;
   readonly autonomy: AutonomyService;
   readonly historyIndex: HistoryIndexService;
-  readonly workspaceIndex: WorkspaceIndexService;
   readonly snapshotGate: SnapshotGate;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
@@ -125,7 +120,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const uninstallWireCapture = installCallStoreWireCapture(callStore);
 
   let historyIndex: HistoryIndexService | undefined;
-  let workspaceIndex: WorkspaceIndexService | undefined;
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -140,33 +134,17 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   );
 
   applySubscriptionProviders(registry);
+  for (const character of registry.availableCharacters()) removeWorkspaceIndex(config.dirs.cache, character);
   configureClaudePlanLimits({ cacheDir: config.dirs.cache, ...claudePlanFetcher(options.providers.claude_agent) });
 
   historyIndex = new HistoryIndexService();
-  workspaceIndex = new WorkspaceIndexService();
   const refreshHistoryIndexes = async () => {
     const available = new Set(registry.availableCharacters());
     for (const character of historyIndex?.registeredCharacters() ?? []) {
       if (!available.has(character)) historyIndex?.unregister(character);
     }
-    for (const character of workspaceIndex?.registeredCharacters() ?? []) {
-      if (!available.has(character)) workspaceIndex?.unregister(character);
-    }
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
-      let embedder;
-      let embedderError;
-      try {
-        embedder = resolveEmbedder({
-          ...(effective.app.defaults.embedding === undefined
-            ? {}
-            : { defaultRef: effective.app.defaults.embedding }),
-          embedding: Object.fromEntries(effective.models.embedding),
-          providers: providerRecord(effective),
-        });
-      } catch (e) {
-        embedderError = e instanceof Error ? e.message : String(e);
-      }
       historyIndex?.register({
         character,
         conversationDir: threadDataDir(
@@ -177,23 +155,10 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         dbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
         indexPath: historyIndexPath(effective.dirs.cache, character),
       });
-      workspaceIndex?.register({
-        character,
-        workspaceDir: characterWorkspaceDir(
-          effective.dirs.config,
-          character,
-          effective.dirs.workspace,
-        ),
-        indexPath: workspaceIndexPath(effective.dirs.cache, character),
-        retrievalConfig: retrievalView(effective.app.memory.retrieval),
-        ...(embedder === undefined ? {} : { embedder }),
-        ...(embedderError === undefined ? {} : { embedderError }),
-      });
     }
   };
   await refreshHistoryIndexes();
   await historyIndex.start();
-  await workspaceIndex.start();
 
   const keepalive = new KeepaliveService(
     (req) => {
@@ -249,14 +214,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       ...(options.env === undefined ? {} : { env: options.env }),
       notifyAutonomousMessage: autonomousMessageNotifier(notifier),
       notifyCompactionComplete: compactionCompleteNotifier(notifier),
-      beginForeground: () => {
-        const endHistory = historyIndex.beginForeground();
-        const endWorkspace = workspaceIndex.beginForeground();
-        return () => {
-          endHistory();
-          endWorkspace();
-        };
-      },
+      beginForeground: () => historyIndex.beginForeground(),
       runActivity: async (run) => await snapshotGate.withActivity(run),
     }),
   );
@@ -275,13 +233,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     keepalive,
     autonomy,
     historyIndex,
-    workspaceIndex,
     snapshotGate,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
-      await workspaceIndex.shutdown();
       await mcp.current.shutdown();
       closeStorageConnections();
       uninstallWireCapture();
@@ -349,6 +305,12 @@ function createRuntimeDirs(config: LoadedConfig): void {
     config.dirs.runtime,
   ]) {
     mkdirSync(dir, { recursive: true });
+  }
+}
+
+function removeWorkspaceIndex(cacheDir: string, character: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    rmSync(rustJoin(characterCacheDir(cacheDir, character), `workspace_index.db${suffix}`), { force: true });
   }
 }
 

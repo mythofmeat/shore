@@ -302,11 +302,6 @@ function warnIgnoredFields(
   }
 }
 
-interface EmbeddingSettings {
-  dimensions?: number;
-  minSimilarity?: number;
-}
-
 interface ImageGenSettings {
   size?: string;
   quality?: string;
@@ -316,12 +311,11 @@ interface ImageGenSettings {
 
 export interface ModelCatalog {
   chat: Map<string, ResolvedModel>;
-  embedding: Map<string, EmbeddingSettings>;
   imageGeneration: Map<string, ImageGenSettings>;
 }
 
 export function emptyCatalog(): ModelCatalog {
-  return { chat: new Map(), embedding: new Map(), imageGeneration: new Map() };
+  return { chat: new Map(), imageGeneration: new Map() };
 }
 
 export type CatalogErrorKind =
@@ -392,7 +386,6 @@ export interface ProviderRegistryEntry {
 
 export function catalogFromSections(
   chat: Record<string, unknown> | undefined,
-  embedding: Record<string, unknown> | undefined,
   imageGeneration: Record<string, unknown> | undefined,
   providers?: ProviderRegistryView,
 ): ModelCatalog {
@@ -401,16 +394,12 @@ export function catalogFromSections(
       ? new Map<string, ResolvedModel>()
       : parseCategory("chat", chat, providers);
 
-  const embeddingProfiles =
-    embedding === undefined
-      ? new Map<string, EmbeddingSettings>()
-      : parseAuxSection("embedding", embedding, "text-embedding-3-large", readEmbeddingSettings);
   const imageGenProfiles =
     imageGeneration === undefined
       ? new Map<string, ImageGenSettings>()
       : parseAuxSection("image_generation", imageGeneration, "dall-e-3", readImageGenSettings);
 
-  return { chat: chatModels, embedding: embeddingProfiles, imageGeneration: imageGenProfiles };
+  return { chat: chatModels, imageGeneration: imageGenProfiles };
 }
 
 export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
@@ -773,24 +762,6 @@ function expectedList(known: readonly string[]): string {
   if (known.length === 1) return `\`${known[0]}\``;
   const head = known.slice(0, -1).map((k) => `\`${k}\``).join(", ");
   return `one of ${head}, \`${known[known.length - 1]}\``;
-}
-
-const EMBEDDING_KEYS = ["dimensions", "min_similarity"];
-
-function readEmbeddingSettings(table: Record<string, unknown>): ParseResult<EmbeddingSettings> {
-  const unknown = denyUnknown(table, EMBEDDING_KEYS);
-  if (unknown !== undefined) return { err: unknown };
-  const dimensions = readU32(table, "dimensions");
-  if ("err" in dimensions) return dimensions;
-  const minSimilarity = readF64(table, "min_similarity");
-  if ("err" in minSimilarity) return minSimilarity;
-  if (minSimilarity.ok !== undefined && !(minSimilarity.ok >= 0 && minSimilarity.ok <= 1)) {
-    return { err: `min_similarity is ${String(minSimilarity.ok)}; it must be from 0 to 1, where 0 keeps every semantic match` };
-  }
-  const out: EmbeddingSettings = {};
-  if (dimensions.ok !== undefined) out.dimensions = dimensions.ok;
-  if (minSimilarity.ok !== undefined) out.minSimilarity = minSimilarity.ok;
-  return { ok: out };
 }
 
 const IMAGE_GEN_KEYS = ["size", "quality", "aspect_ratio", "image_size"];

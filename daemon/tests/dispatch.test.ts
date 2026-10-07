@@ -6,7 +6,6 @@ import fixture from "./tools_captures/dispatch.json" with { type: "json" };
 import {
   DEFAULT_SUBAGENT_TIMEOUT_MS,
   annotateDeferredEdit,
-  applyDefaultSearchMode,
   deferEditTo,
   dispatchTool,
   dispatchWithinDeadline,
@@ -15,20 +14,11 @@ import {
   toolLimitsFrom,
   truncateToolResult,
   windowToolResult,
-  type RetrievalMode,
   type ToolContext,
   type ToolLimitsView,
 } from "../src/tools/dispatch.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import { defaultToolsConfig, type SubagentConfig } from "../src/config/app.ts";
-import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
-import type { Embedder } from "../src/llm/embed.ts";
-
-const STUB_EMBEDDER: Embedder = {
-  embed: async () => [],
-  modelId: "stub",
-  dimensions: undefined,
-};
 
 function bareContext(over: Partial<ToolContext> = {}): ToolContext {
   return {
@@ -39,8 +29,6 @@ function bareContext(over: Partial<ToolContext> = {}): ToolContext {
   historyDbPath: "/tmp/history.db",
     characterName: "",
     configDir: "",
-    retrievalConfig: DEFAULT_RETRIEVAL_CONFIG,
-    retrievalMode: "auto",
     ...over,
   };
 }
@@ -198,95 +186,6 @@ describe("routing, wired", () => {
       err: "io: set_next_wake blocked: dry-run tools cannot change files or external state",
     });
     expect(asked).toEqual([]);
-  });
-});
-
-describe("search mode defaulting", () => {
-  type ModeRow = {
-    mode?: string;
-    embedder?: boolean;
-    index_path?: boolean;
-    preset?: unknown;
-    applied: unknown;
-  };
-
-  for (const [i, row] of (fixture.search_mode as ModeRow[]).entries()) {
-    test(`case ${i}: ${JSON.stringify(row.mode ?? row.preset)}`, () => {
-      const input = structuredClone("preset" in row ? row.preset : {});
-      const mode = (row.mode?.toLowerCase() ?? "auto") as RetrievalMode;
-      applyDefaultSearchMode(input, mode, row.embedder ?? false, row.index_path ?? false);
-      expect(input).toEqual(row.applied);
-    });
-  }
-
-  test("an explicit null mode is kept, not treated as absent", () => {
-    const input: Record<string, unknown> = { mode: null };
-    applyDefaultSearchMode(input, "hybrid", true, true);
-    expect(input["mode"]).toBeNull();
-  });
-
-  test("an embedder without an index path stays lexical under auto", () => {
-    const input: Record<string, unknown> = {};
-    applyDefaultSearchMode(input, "auto", true, false);
-    expect(input["mode"]).toBe("lexical");
-  });
-
-  test("an index path without an embedder stays lexical under auto", () => {
-    const input: Record<string, unknown> = {};
-    applyDefaultSearchMode(input, "auto", false, true);
-    expect(input["mode"]).toBe("lexical");
-  });
-});
-
-describe("search semantics bundling", () => {
-  async function workspace(): Promise<string> {
-    const dir = `${tmpdir()}/dispatch-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    await Bun.write(`${dir}/notes.md`, "the quick brown fox\n");
-    return dir;
-  }
-
-  test("an embedder with no index path is not semantics", async () => {
-    const ctx = bareContext({
-      workspaceDir: await workspace(),
-      embedder: STUB_EMBEDDER,
-      retrievalMode: "hybrid",
-    });
-    const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
-    expect(result["mode"]).toBe("lexical");
-    expect(result["semantic_unavailable"]).toBe("embedder not configured");
-  });
-
-  test("an index path with no embedder is not semantics either", async () => {
-    const ctx = bareContext({
-      workspaceDir: await workspace(),
-      memoryIndexPath: "/nonexistent/index.json",
-      retrievalMode: "hybrid",
-    });
-    const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
-    expect(result["semantic_unavailable"]).toBe("embedder not configured");
-  });
-
-  test("an unconfigured workspace fails the same way the fixture recorded", async () => {
-    expect(await route("search", {})).toEqual(
-      (fixture.routing as Record<string, unknown>)["search"],
-    );
-  });
-
-  test("the configured retrieval mode reaches the request", async () => {
-    const ctx = bareContext({ workspaceDir: await workspace(), retrievalMode: "lexical" });
-    const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
-    expect("semantic_unavailable" in result).toBe(false);
-  });
-
-  test("the context's retrieval config reaches the scan, not the module default", async () => {
-    const ctx = bareContext({
-      workspaceDir: await workspace(),
-      retrievalMode: "lexical",
-      retrievalConfig: { ...DEFAULT_RETRIEVAL_CONFIG, maxFileBytes: 4 },
-    });
-    const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
-    expect(result["count"]).toBe(0);
-    expect(result["skipped_binary_or_large"]).toBe(1);
   });
 });
 

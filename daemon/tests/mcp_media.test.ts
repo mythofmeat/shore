@@ -49,14 +49,6 @@ async function runMcpTool(
   historyDbPath: "/tmp/history.db",
   characterName: "ada",
     configDir: "",
-    retrievalConfig: {
-      maxFileBytes: 0,
-      maxIndexedFiles: 0,
-      maxTotalIndexedBytes: 0,
-      maxEmbedCharsPerFile: 0,
-      binary: "skip",
-    },
-    retrievalMode: "auto",
     mcpCall: () => Promise.resolve(carryToolMedia({ ...interpretResult(raw), notes })),
   };
   const exec: ToolExecution = {
@@ -232,14 +224,6 @@ describe("mcp media reaches the model", () => {
   historyDbPath: "/tmp/history.db",
   characterName: "",
       configDir: "",
-      retrievalConfig: {
-        maxFileBytes: 0,
-        maxIndexedFiles: 0,
-        maxTotalIndexedBytes: 0,
-        maxEmbedCharsPerFile: 0,
-        binary: "skip",
-      },
-      retrievalMode: "auto",
       mcpCall: () => Promise.resolve(carryToolMedia(interpretResult(imageResult(1)))),
     };
     const run = await runToolUse(

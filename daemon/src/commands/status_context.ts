@@ -32,10 +32,6 @@ export function statusContext(
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,
     localNow: deps.localNow ?? (() => localWallClock(Date.now())),
-    workspaceIndex:
-      deps.workspaceIndex === undefined
-        ? undefined
-        : { ...deps.workspaceIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
     historyIndex:
       deps.historyIndex === undefined
         ? undefined

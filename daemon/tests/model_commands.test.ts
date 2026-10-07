@@ -555,18 +555,13 @@ async function rolesFor(defaults: string) {
 test("every model role reports where it came from", async () => {
   const roles = await rolesFor(
     "[subagents]\nmodel = \"anthropic:beta-id\"\n" +
-      '[embedding]\nmodel = "some:embedder"\n[image]\nmodel = "some:painter"\n',
+      '[image]\nmodel = "some:painter"\n',
   );
 
   expect(roles.get("sub-agents")).toEqual({
     role: "sub-agents",
     model: "anthropic:beta-id",
     source: "subagents.model",
-  });
-  expect(roles.get("embedding")).toEqual({
-    role: "embedding",
-    model: "some:embedder",
-    source: "embedding.model",
   });
   expect(roles.get("images")).toEqual({
     role: "images",
@@ -577,9 +572,7 @@ test("every model role reports where it came from", async () => {
 
 test("a role nobody configured reports nothing rather than guessing", async () => {
   const roles = await rolesFor("");
-  for (const role of ["embedding", "images"]) {
-    expect(roles.get(role), role).toEqual({ role, model: null, source: null });
-  }
+  expect(roles.get("images")).toEqual({ role: "images", model: null, source: null });
 });
 
 test("background tasks name the chat model they inherit", async () => {

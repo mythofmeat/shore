@@ -399,7 +399,6 @@ const BACKGROUND = [
         "heartbeat": null,
         "compaction": null
       },
-      "embedding": null,
       "image_generation": null,
       "subagent_model": null,
       "display_name": null
@@ -415,7 +414,6 @@ const BACKGROUND = [
         "heartbeat": null,
         "compaction": null
       },
-      "embedding": null,
       "image_generation": null,
       "subagent_model": null,
       "display_name": null
@@ -431,7 +429,6 @@ const BACKGROUND = [
         "heartbeat": null,
         "compaction": "c"
       },
-      "embedding": null,
       "image_generation": null,
       "subagent_model": null,
       "display_name": null
@@ -753,7 +750,6 @@ describe("the shipped defaults", () => {
   test("leave every model unset, so nothing is silently chosen for you", () => {
     const d = defaultAppConfig().defaults;
     expect(d.model).toBeUndefined();
-    expect(d.embedding).toBeUndefined();
     expect(d.subagent_model).toBeUndefined();
     expect(d.background.heartbeat).toBeUndefined();
     expect(d.background.compaction).toBeUndefined();
@@ -818,7 +814,7 @@ describe("what a rejected value is told it should have been", () => {
   test("an unknown key names every field of the table, in the order the table declares them", () => {
     expect(rejected("bogus = 1\n")).toBe(
       "unknown field `bogus`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `images`, `memory`, " +
-        "`cache`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, " +
+        "`cache`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, " +
         "`image_generation`, `providers`",
     );
   });
@@ -833,11 +829,11 @@ describe("what a rejected value is told it should have been", () => {
   });
 
   test("an enum given a number says it wants a string", () => {
-    expect(rejected("[memory.retrieval]\nmode = 1\n")).toBe("invalid type: unit variant, expected string only");
+    expect(rejected("[behavior]\nuser_message_timestamps = 1\n")).toBe("invalid type: unit variant, expected string only");
   });
 
   test("a negative count is an invalid value, not an invalid type", () => {
-    expect(rejected("[memory.retrieval]\nmax_file_bytes = -1\n")).toBe("invalid value: integer `-1`, expected u64");
+    expect(rejected("[daemon]\nimage_cache_bytes = -1\n")).toBe("invalid value: integer `-1`, expected usize");
   });
 
   test("a list or a table where a scalar belongs is named by its kind alone", () => {
@@ -862,16 +858,6 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(Object.keys(at(parsed("[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n"), "subagents") as object)).toEqual(["zed", "ﬀute", "🎵drum"]);
     const cfg = parsed("[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n");
     expect(at(cfg, "subagents"), "subagents").toMatchObject({"zed":{"description":"z","prompt":"p","tools":[],"model":null,"max_iterations":null},"ﬀute":{"description":"f","prompt":"p","tools":[],"model":null,"max_iterations":null},"🎵drum":{"description":"d","prompt":"p","tools":[],"model":null,"max_iterations":null}});
-  });
-
-  test("memory.retrieval", () => {
-    const cfg = parsed("[memory.retrieval]\nmode = \"hybrid\"\nmax_file_bytes = 12345\nmax_indexed_files = 999\nmax_total_indexed_bytes = 777777\nmax_embed_chars_per_file = 222\nbinary = \"metadata\"\n");
-    expect(at(cfg, "memory.retrieval.mode"), "memory.retrieval.mode").toEqual("hybrid");
-    expect(at(cfg, "memory.retrieval.max_file_bytes"), "memory.retrieval.max_file_bytes").toEqual(12345);
-    expect(at(cfg, "memory.retrieval.max_indexed_files"), "memory.retrieval.max_indexed_files").toEqual(999);
-    expect(at(cfg, "memory.retrieval.max_total_indexed_bytes"), "memory.retrieval.max_total_indexed_bytes").toEqual(777777);
-    expect(at(cfg, "memory.retrieval.max_embed_chars_per_file"), "memory.retrieval.max_embed_chars_per_file").toEqual(222);
-    expect(at(cfg, "memory.retrieval.binary"), "memory.retrieval.binary").toEqual("metadata");
   });
 
 
@@ -1070,15 +1056,6 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
 
   test("an unknown key is reported before a missing one", () => {
     expect(rejected("[subagents.music]\nzzz = 1\n")).toContain("zzz");
-  });
-
-  test("an unknown retrieval mode does not parse", () => {
-    expect(rejected("[memory.retrieval]\nmode = \"semantic\"\n")).toContain("semantic");
-  });
-
-
-  test("an unknown binary mode does not parse", () => {
-    expect(rejected("[memory.retrieval]\nbinary = \"embed\"\n")).toContain("embed");
   });
 
   test("a budget without cost_usd does not parse", () => {
@@ -1296,7 +1273,7 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
   });
 
   test("a non-string where an enum is expected", () => {
-    expect(rejected("[memory.retrieval]\nmode = 1\n")).not.toBe("");
+    expect(rejected("[behavior]\nuser_message_timestamps = 1\n")).not.toBe("");
   });
 
   test("a non-string where the notification backend is expected", () => {
@@ -1447,7 +1424,6 @@ describe("tool_pattern_matches", () => {
 function defaultsFromJson(json: {
   model: string | null;
   background: { heartbeat: string | null; compaction: string | null };
-  embedding: string | null;
   image_generation: string | null;
   subagent_model: string | null;
   display_name: string | null;
@@ -1460,7 +1436,6 @@ function defaultsFromJson(json: {
       heartbeat: or(json.background.heartbeat),
       compaction: or(json.background.compaction),
     },
-    embedding: or(json.embedding),
     image_generation: or(json.image_generation),
     subagent_model: or(json.subagent_model),
     display_name: or(json.display_name),

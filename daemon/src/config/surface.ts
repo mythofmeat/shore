@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "embedding", "image", "images", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "retrieval", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "heartbeat", "compaction", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -19,7 +19,6 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("defaults.model", "chat.model"),
   field("defaults.display_name", "chat.display_name"),
   field("defaults.system_prompt", "chat.system_prompt"),
-  field("defaults.embedding", "embedding.model"),
   field("defaults.image_generation", "image.model"),
   field("defaults.subagent_model", "subagents.model"),
   field("defaults.background.heartbeat", "heartbeat.model"),
@@ -43,10 +42,6 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("tools.enabled_mcp", "tools.mcp"),
   field("tools.config.*", "tools.*"),
   field("subagents.*.max_iterations", "subagents.*.max_tool_rounds"),
-  ...Object.entries({
-    mode: "mode", max_file_bytes: "max_file_bytes", max_indexed_files: "max_files",
-    max_total_indexed_bytes: "max_total_bytes", max_embed_chars_per_file: "max_embedding_chars_per_file", binary: "binary",
-  }).map(([old, key]) => field(`memory.retrieval.${old}`, `retrieval.${key}`)),
   ...Object.entries({
     enabled: "enabled", user_id: "user_id", room_id: "room_id", homeserver: "homeserver_url", mirror_all: "mirror_user_messages",
   }).map(([old, key]) => field(`connections.matrix.${old}`, `matrix.${key}`)),
@@ -233,7 +228,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
       delete normalized[key];
     }
   }
-  for (const section of ["chat", "embedding", "image_generation"]) {
+  for (const section of ["chat", "image_generation"]) {
     const entries = table[section];
     if (entries === undefined) continue;
     if (!isConfigTable(entries)) throw new Error(`${source}: ${section} must be a table`);
@@ -244,13 +239,13 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["heartbeat", "compaction", "retrieval", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["heartbeat", "compaction", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 
 export function canonicalConfigPath(path: ConfigPath): string[] {
   const sections: Record<string, string[]> = {
-    "memory.compaction": ["compaction"], "memory.retrieval": ["retrieval"], "connections.matrix": ["matrix"],
+    "memory.compaction": ["compaction"], "connections.matrix": ["matrix"],
     "tools.config": ["tools"],
   };
   const section = sections[path.join(".")];
@@ -300,7 +295,7 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     if (isConfigTable(provider.defaults)) { Object.assign(provider, provider.defaults); delete provider.defaults; }
     providers[name] = publicSettings(provider);
   }
-  for (const section of ["chat", "embedding", "image"]) {
+  for (const section of ["chat", "image"]) {
     const profiles = out[section];
     if (!isConfigTable(profiles)) continue;
     for (const [name, value] of Object.entries(profiles)) if (isConfigTable(value) && name.includes(":")) profiles[name] = publicSettings(value);

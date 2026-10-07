@@ -13,8 +13,10 @@
         "tools": [
           {
             "tool": "read",
-            "main": false,
-            "subagents": []
+            "main": true,
+            "subagents": [
+              "researcher"
+            ]
           },
           {
             "tool": "edit",
@@ -40,13 +42,6 @@
             "tool": "activity_heatmap",
             "main": false,
             "subagents": []
-          },
-          {
-            "tool": "search",
-            "main": true,
-            "subagents": [
-              "researcher"
-            ]
           },
           {
             "tool": "search_chat_logs",
@@ -83,7 +78,7 @@
             "name": "researcher",
             "enabled": true,
             "tools": [
-              "search",
+              "read",
               "also_not_real"
             ],
             "model": "anthropic:claude-primary"
@@ -137,11 +132,6 @@
           },
           {
             "tool": "activity_heatmap",
-            "main": false,
-            "subagents": []
-          },
-          {
-            "tool": "search",
             "main": false,
             "subagents": []
           },

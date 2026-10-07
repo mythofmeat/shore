@@ -253,7 +253,6 @@ function valueSources(ctx: ConfigContext): ConfigSources {
   const sorted = (names: Iterable<string>): string[] => [...names].sort();
   return {
     chat_models: sorted(ctx.config.models.chat.keys()),
-    embedding_models: sorted(ctx.config.models.embedding.keys()),
     image_models: sorted(ctx.config.models.imageGeneration.keys()),
     tools: sorted(ALL_TOOLS.map((t) => t.name)),
     subagents: sorted(ctx.config.app.subagents.keys()),

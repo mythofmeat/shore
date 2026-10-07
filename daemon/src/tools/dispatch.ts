@@ -11,18 +11,11 @@ import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from ".
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import type { FetchLike } from "./web.ts";
-import {
-  handleSearch,
-  type ToolInput,
-} from "./workspace.ts";
+import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { Message } from "../engine/types.ts";
-import type { Embedder } from "../llm/embed.ts";
-import type { RetrievalConfig } from "../memory/workspace_index.ts";
-
-export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface ToolContext {
   thread?: string;
@@ -39,17 +32,12 @@ export interface ToolContext {
   characterName: string;
   historyDbPath: string;
   configDir: string;
-  retrievalConfig: RetrievalConfig;
-  retrievalMode: RetrievalMode;
 
   imageGenConfig?: ImageGenConfigView;
   imageGenerator?: ImageGenerator;
   modelHistoryQuery?: ModelHistoryQuery;
   activityStats?: ActivityStatsLookup;
 
-  embedder?: Embedder;
-  minSimilarity?: number;
-  memoryIndexPath?: string;
   historyIndexPath?: string;
   userName?: string;
 
@@ -73,38 +61,6 @@ export interface ToolContext {
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
   lookupImpl?: (hostname: string) => Promise<string[]>;
-}
-
-function defaultSearchMode(
-  mode: RetrievalMode,
-  embedderAvailable: boolean,
-  indexPathAvailable: boolean,
-): "lexical" | "hybrid" | "vector" {
-  switch (mode) {
-    case "lexical":
-      return "lexical";
-    case "hybrid":
-      return "hybrid";
-    case "vector":
-      return "vector";
-    case "auto":
-      return embedderAvailable && indexPathAvailable ? "hybrid" : "lexical";
-  }
-}
-
-export function applyDefaultSearchMode(
-  input: unknown,
-  mode: RetrievalMode,
-  embedderAvailable: boolean,
-  indexPathAvailable: boolean,
-): void {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return;
-  if ("mode" in input) return;
-  (input as Record<string, unknown>)["mode"] = defaultSearchMode(
-    mode,
-    embedderAvailable,
-    indexPathAvailable,
-  );
 }
 
 export async function annotateDeferredEdit(
@@ -198,24 +154,6 @@ export async function dispatchTool(
       const write = () => handleBash(args, ctx.workspaceDir, ctx.characterName, ctx.signal, ctx.deferEdit);
       return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
-    }
-
-    case "search": {
-      applyDefaultSearchMode(
-        args,
-        ctx.retrievalMode,
-        ctx.embedder !== undefined,
-        ctx.memoryIndexPath !== undefined,
-      );
-      const semantics =
-        ctx.embedder !== undefined && ctx.memoryIndexPath !== undefined
-          ? {
-              embedder: ctx.embedder,
-              indexPath: ctx.memoryIndexPath,
-              ...(ctx.minSimilarity === undefined ? {} : { minSimilarity: ctx.minSimilarity }),
-            }
-          : undefined;
-      return await handleSearch(args, ctx.workspaceDir, ctx.retrievalConfig, semantics);
     }
 
     case "set_next_wake": {

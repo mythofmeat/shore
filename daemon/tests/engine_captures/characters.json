@@ -559,7 +559,7 @@
         {
           "op": "fs:write_character_config",
           "name": "Alice",
-          "toml": "[embedding]\nmodel = \"bare-alias\"\n"
+          "toml": "[image]\nmodel = \"bare-alias\"\n"
         },
         {
           "op": "reload_runtime_state"

@@ -716,14 +716,11 @@
     {
       "name": "empty",
       "chat_toml": "",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
         "chat": {},
         "chat_order": [],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -731,7 +728,6 @@
     {
       "name": "single_anthropic_model",
       "chat_toml": "\n[\"anthropic:claude-opus-4-6\"]\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -752,8 +748,6 @@
         "chat_order": [
           "anthropic:claude-opus-4-6"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -761,7 +755,6 @@
     {
       "name": "provider_defaults_cascade_from_registry",
       "chat_toml": "\n[\"custom:some-model\"]\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "\n        [custom]\n        sdk = \"openai\"\n        base_url = \"https://custom.example/v1\"\n        [custom.defaults]\n        max_output_tokens = 4096\n        temperature = 0.7\n        ",
       "catalog": {
@@ -781,8 +774,6 @@
         "chat_order": [
           "custom:some-model"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -790,7 +781,6 @@
     {
       "name": "per_model_overrides_registry_defaults",
       "chat_toml": "\n[\"custom:some-model\"]\n\n        max_output_tokens = 111\n        temperature = 0.1\n        ",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "\n        [custom]\n        sdk = \"openai\"\n        [custom.defaults]\n        max_output_tokens = 4096\n        temperature = 0.7\n        ",
       "catalog": {
@@ -809,8 +799,6 @@
         "chat_order": [
           "custom:some-model"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -818,7 +806,6 @@
     {
       "name": "anthropic_slug_autopromotion",
       "chat_toml": "\n[\"openrouter:anthropic/claude-opus-4-6\"]\n[\"openrouter:moonshotai/kimi-k2\"]\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -852,8 +839,6 @@
           "openrouter:anthropic/claude-opus-4-6",
           "openrouter:moonshotai/kimi-k2"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -861,7 +846,6 @@
     {
       "name": "explicit_sdk_beats_slug_autopromotion",
       "chat_toml": "\n[\"openrouter:anthropic/claude-opus-4-6\"]\n\n        sdk = \"openrouter\"\n        ",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -882,8 +866,6 @@
         "chat_order": [
           "openrouter:anthropic/claude-opus-4-6"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -891,7 +873,6 @@
     {
       "name": "sampler_stripped_on_claude_47",
       "chat_toml": "\n[\"anthropic:claude-opus-4-7\"]\n[\"anthropic:claude-opus-4-6\"]\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -925,8 +906,6 @@
           "anthropic:claude-opus-4-6",
           "anthropic:claude-opus-4-7"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -934,7 +913,6 @@
     {
       "name": "explicit_samplers_survive_when_nothing_reports_a_rejection",
       "chat_toml": "\n[\"anthropic:claude-sonnet-4-7\"]\n\n        temperature = 0.3\n        top_p = 0.9\n        budget_tokens = 4096\n        ",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -958,8 +936,6 @@
         "chat_order": [
           "anthropic:claude-sonnet-4-7"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -967,7 +943,6 @@
     {
       "name": "cache_keepalive_is_not_a_catalog_field",
       "chat_toml": "[\"anthropic:claude-opus-4-6\"]\n\"cache_keepalive\" = \"off\"\n\n[\"anthropic:claude-sonnet-4-6\"]\n\"cache_keepalive\" = \"10m\"\n\n[\"anthropic:claude-haiku-4-5\"]\n\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "err": "failed to parse model entry [chat.anthropic.claude-opus-4-6]: unknown field `cache_keepalive`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `system_prompt`, `sdk`, `api_key_env`, `base_url`"
@@ -975,7 +950,6 @@
     {
       "name": "cache_ttl_empty_string_disables",
       "chat_toml": "\n[\"anthropic:claude-opus-4-6\"]\n\n        cache_ttl = \"\"\n        ",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -996,8 +970,6 @@
         "chat_order": [
           "anthropic:claude-opus-4-6"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -1005,7 +977,6 @@
     {
       "name": "unknown_provider_gets_no_base_defaults",
       "chat_toml": "\n[\"whoknows:x\"]\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -1022,8 +993,6 @@
         "chat_order": [
           "whoknows:x"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -1031,7 +1000,6 @@
     {
       "name": "btreemap_order_is_code_point_order",
       "chat_toml": "[\"🎵drum:a\"]\n\n\n[\"ﬀute:b\"]\n\n\n[\"zzz:c\"]\n\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -1066,8 +1034,6 @@
           "ﬀute:b",
           "🎵drum:a"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -1075,24 +1041,11 @@
     {
       "name": "aux_sections",
       "chat_toml": "",
-      "embedding_toml": "\n        [\"openai:text-embedding-3-large\"]\n        dimensions = 3072\n\n        [\"gemini:gemini-embedding-001\"]\n        ",
       "image_generation_toml": "\n        [\"openai:dall-e-3\"]\n        size = \"1024x1024\"\n        quality = \"hd\"\n\n        [\"openrouter:some-image-model\"]\n        aspect_ratio = \"16:9\"\n        image_size = \"2K\"\n        ",
       "providers_toml": "",
       "catalog": {
         "chat": {},
         "chat_order": [],
-        "embedding": {
-          "gemini:gemini-embedding-001": {
-            "dimensions": null
-          },
-          "openai:text-embedding-3-large": {
-            "dimensions": 3072
-          }
-        },
-        "embedding_order": [
-          "gemini:gemini-embedding-001",
-          "openai:text-embedding-3-large"
-        ],
         "image_generation": {
           "openai:dall-e-3": {
             "size": "1024x1024",
@@ -1116,7 +1069,6 @@
     {
       "name": "qualified_name_order_differs_from_provider_order",
       "chat_toml": "[\"a:x\"]\n\n\n[\"a-b:y\"]\n\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "catalog": {
@@ -1142,8 +1094,6 @@
           "a-b:y",
           "a:x"
         ],
-        "embedding": {},
-        "embedding_order": [],
         "image_generation": {},
         "image_generation_order": []
       }
@@ -1151,7 +1101,6 @@
     {
       "name": "parse_entry_wrong_type",
       "chat_toml": "[anthropic.opus]\nmodel_id = 5\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "err": "failed to parse model entry [chat.anthropic.]: expected a provider:model_id settings table"
@@ -1159,7 +1108,6 @@
     {
       "name": "parse_entry_u32_out_of_range",
       "chat_toml": "[\"anthropic:x\"]\n\nmax_output_tokens = -1\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "err": "failed to parse model entry [chat.anthropic.x]: invalid value: integer `-1`, expected u32"
@@ -1167,7 +1115,6 @@
     {
       "name": "parse_entry_unknown_sdk",
       "chat_toml": "[\"anthropic:x\"]\n\nsdk = \"nope\"\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "err": "failed to parse model entry [chat.anthropic.x]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`, `claude_agent`, `nanogpt`"
@@ -1175,7 +1122,6 @@
     {
       "name": "cache_keepalive_for_is_not_a_catalog_field",
       "chat_toml": "[\"anthropic:x\"]\n\ncache_keepalive_for = \"12h\"\n",
-      "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
       "err": "failed to parse model entry [chat.anthropic.x]: unknown field `cache_keepalive_for`, expected one of `max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `cache_ttl`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`, `system_prompt`, `sdk`, `api_key_env`, `base_url`"
@@ -1183,55 +1129,41 @@
     {
       "name": "aux_bare_alias_key",
       "chat_toml": "",
-      "embedding_toml": "[small]\ndimensions = 1\n",
-      "image_generation_toml": "",
+      "image_generation_toml": "[small]\ndimensions = 1\n",
       "providers_toml": "",
-      "err": "[embedding.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[image_generation.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_empty_provider_half",
       "chat_toml": "",
-      "embedding_toml": "[\":m\"]\n",
-      "image_generation_toml": "",
+      "image_generation_toml": "[\":m\"]\n",
       "providers_toml": "",
-      "err": "[embedding.\":m\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[image_generation.\":m\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_empty_model_half",
       "chat_toml": "",
-      "embedding_toml": "[\"p:\"]\n",
-      "image_generation_toml": "",
+      "image_generation_toml": "[\"p:\"]\n",
       "providers_toml": "",
-      "err": "[embedding.\"p:\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[image_generation.\"p:\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_value_not_table",
       "chat_toml": "",
-      "embedding_toml": "small = 1\n",
-      "image_generation_toml": "",
+      "image_generation_toml": "small = 1\n",
       "providers_toml": "",
-      "err": "[embedding.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[image_generation.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_valid_key_non_table_value",
       "chat_toml": "",
-      "embedding_toml": "\"openai:m\" = 1\n",
-      "image_generation_toml": "",
+      "image_generation_toml": "\"openai:m\" = 1\n",
       "providers_toml": "",
-      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: the value must be a settings table. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
-    },
-    {
-      "name": "aux_unknown_field",
-      "chat_toml": "",
-      "embedding_toml": "[\"openai:m\"]\nmodel_id = \"m\"\n",
-      "image_generation_toml": "",
-      "providers_toml": "",
-      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `model_id`, expected one of `dimensions`, `min_similarity`. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+      "err": "[image_generation.\"openai:m\"] is not a valid `provider:model_id` settings table: the value must be a settings table. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
     },
     {
       "name": "aux_image_unknown_field",
       "chat_toml": "",
-      "embedding_toml": "",
       "image_generation_toml": "[\"openai:m\"]\nsdk = \"openai\"\n",
       "providers_toml": "",
       "err": "[image_generation.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `sdk`, expected one of `size`, `quality`, `aspect_ratio`, `image_size`. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"

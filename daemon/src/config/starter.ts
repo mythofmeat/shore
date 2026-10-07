@@ -62,7 +62,7 @@ api_key_env = "ANTHROPIC_API_KEY"
 model = "anthropic:claude-opus-4-8"
 
 [tools]
-enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs", "read_chat_logs"]
+enabled = ["bash", "read", "edit", "apply_patch", "search_chat_logs", "read_chat_logs"]
 
 # An image costs one token per 28×28-pixel patch. A 4:3 photo costs 1,036 tokens
 # at 1024×768, 2,352 at 1568×1176 and 3,888 at 2000×1500 (the default size);

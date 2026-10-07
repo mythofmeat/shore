@@ -287,7 +287,7 @@ function buildConfig(
   defaultModel?: string,
 ): LoadedConfigView {
   const registry = ProviderRegistry.fromSection(parseToml(providers));
-  const catalog = catalogFromSections(parseToml(chat), undefined, undefined, registry);
+  const catalog = catalogFromSections(parseToml(chat), undefined, registry);
   const app: LoadedConfigView["app"] = {
     defaults: { backgroundModelName: backgroundModel ?? (() => undefined) },
   };

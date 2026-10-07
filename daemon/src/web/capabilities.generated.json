@@ -3553,8 +3553,8 @@
     "ConfigSchemaEntry": "{ key: string, kind: ConfigKind, item_kind?: ConfigKind, width?: ConfigWidth, type: string, settable: boolean, optional: boolean, restart_required: boolean, secret: boolean, values: Array<string>, source?: ConfigSource, key_source?: ConfigSource, }",
     "ConfigSchemaResult": "{ schema: Array<ConfigSchemaEntry>, sources: ConfigSources, }",
     "ConfigSetResult": "{ set: string, value: unknown, previous: unknown, file: string, action: string, restart_required: Array<string>, masked_by_preference: string | null, invalidated?: ConfigInvalidated, }",
-    "ConfigSource": "\"chat_models\" | \"embedding_models\" | \"image_models\" | \"tools\" | \"subagents\" | \"characters\" | \"providers\"",
-    "ConfigSources": "{ chat_models: Array<string>, embedding_models: Array<string>, image_models: Array<string>, tools: Array<string>, subagents: Array<string>, characters: Array<string>, providers: Array<string>, }",
+    "ConfigSource": "\"chat_models\" | \"image_models\" | \"tools\" | \"subagents\" | \"characters\" | \"providers\"",
+    "ConfigSources": "{ chat_models: Array<string>, image_models: Array<string>, tools: Array<string>, subagents: Array<string>, characters: Array<string>, providers: Array<string>, }",
     "ConfigView": "{ key?: string, config: unknown, defaults: unknown, }",
     "ConfigWarning": "{ rid?: string | null, path: string, character?: string | null, message: string, }",
     "ConfigWidth": "\"usize\" | \"u32\" | \"u64\"",
@@ -3594,7 +3594,7 @@
     "History": "{ delta?: HistoryDelta | null, rid?: string | null, messages: Array<Message>, previous_segment?: SegmentSummary | null, config: unknown, selected_character?: string | null, selected_thread?: string | null, revision: number, }",
     "HistoryDelta": "{ base_revision: number, after: string | null, }",
     "HistoryIndexResult": "DiagnosticIndexError | HistoryIndexStatus",
-    "HistoryIndexStatus": "{ path: string, messages: number, chunks: number, embedded: number, pending: number, model: string | null, background: IndexBackgroundStatus, }",
+    "HistoryIndexStatus": "{ path: string, messages: number, background: IndexBackgroundStatus, }",
     "HistoryPageArgs": "{ turns?: number | null, count?: number | null, role?: Role, segment?: number | null, before?: number | null, }",
     "HttpExchange": "{ id: number, call_id: string, seq: number, ts: string, character: string | null, call_type: string | null, rid: string | null, method: string, url: string, status: number | null, status_text: string | null, duration_ms: number | null, error: string | null, request_bytes: number, response_bytes: number, request_headers?: Array<[string, string]>, response_headers?: Array<[string, string]>, request_body?: unknown, response_body?: unknown, }",
     "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
@@ -3602,7 +3602,7 @@
     "ImageUpload": "{ filename: string, data: string, mime_type?: string | null, }",
     "ImportCharacterArgs": "{ archive: string, }",
     "ImportCharacterResult": "{ character: string, archive: string, imported: boolean, external_memory: string, }",
-    "IndexBackgroundStatus": "{ registered: boolean, swept?: boolean, embedder_error?: string, failures?: number, last_error?: string, retry_in_secs?: number, }",
+    "IndexBackgroundStatus": "{ failures: number, last_error?: string, retry_in_secs?: number, }",
     "InjectSystemArgs": "{ text: string, }",
     "KeepaliveActivation": "{ \"status\": \"unavailable\" } & KeepaliveActivationDetail | { \"status\": \"off\" } | { \"status\": \"resumed\" } & ScheduledKeepalivePing | { \"status\": \"primed\" } & PrimedKeepalivePing | { \"status\": \"skipped\" } & KeepaliveActivationDetail | { \"status\": \"failed\" } & KeepaliveActivationDetail",
     "KeepaliveActivationDetail": "{ detail: string, }",
@@ -3724,7 +3724,7 @@
     "Shutdown": "Record<symbol, never>",
     "ShutdownWindow": "{ requested_at: string, deadline: string, }",
     "StaticModelSource": "\"static\"",
-    "StatusReport": "{ character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, index: WorkspaceIndexResult | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, running?: RunningStatusReport, sections: Array<string>, }",
+    "StatusReport": "{ character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, running?: RunningStatusReport, sections: Array<string>, }",
     "StoredSubagentTrace": "{ ts: string, subagent: string, parent_tool_use_id: string, rid?: string, model: string, messages: Array<Message>, messages_expired?: boolean, result?: string, error?: string, }",
     "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
@@ -3798,8 +3798,6 @@
     "WebRequestInfo": "{ id: string, rid: string, operation: string, label: string, character: string | null, thread: string | null, started_at: number, expires_at: number, phase: WebRequestPhase, accepted?: boolean, result?: OperationResponse, result_omitted: boolean, error?: Error, }",
     "WebRequestList": "{ requests: Array<WebRequestInfo>, max_records: number, max_result_bytes: number, }",
     "WebRequestPhase": "\"running\" | \"uncertain\" | \"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
-    "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }",
-    "WorkspaceIndexResult": "DiagnosticIndexError | WorkspaceIndexStatus",
-    "WorkspaceIndexStatus": "{ path: string, unusable?: string, files: number, embedded: number, pending: number, skipped: number, skip_reasons: { [key in string]: number }, vectors: number, models: Array<string>, bytes: number, last_indexed_at: string | null, background: IndexBackgroundStatus, }"
+    "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }"
   }
 }

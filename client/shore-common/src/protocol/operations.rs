@@ -163,7 +163,7 @@ wire_types! {
     pub enum ConfigKind { Boolean, String, Integer, Float, Duration, Enum, List, Map, Table, Unknown }
 
     #[serde(rename_all = "snake_case")]
-    pub enum ConfigSource { ChatModels, EmbeddingModels, ImageModels, Tools, Subagents, Characters, Providers }
+    pub enum ConfigSource { ChatModels, ImageModels, Tools, Subagents, Characters, Providers }
 
     #[serde(rename_all = "lowercase")]
     pub enum ConfigWidth { Usize, U32, U64 }
@@ -1039,16 +1039,7 @@ wire_types! {
     }
 
     pub struct IndexBackgroundStatus {
-        pub registered: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub swept: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub embedder_error: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub failures: Option<u32>,
+        pub failures: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub last_error: Option<String>,
@@ -1058,38 +1049,11 @@ wire_types! {
         pub retry_in_secs: Option<u64>,
     }
 
-    pub struct WorkspaceIndexStatus {
-        pub path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub unusable: Option<String>,
-        pub files: usize,
-        pub embedded: usize,
-        pub pending: usize,
-        pub skipped: usize,
-        pub skip_reasons: std::collections::BTreeMap<String, usize>,
-        pub vectors: usize,
-        pub models: Vec<String>,
-        #[ts(type = "number")]
-        pub bytes: u64,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub last_indexed_at: Option<String>,
-        pub background: IndexBackgroundStatus,
-    }
-
     pub struct HistoryIndexStatus {
         pub path: String,
         pub messages: usize,
-        pub chunks: usize,
-        pub embedded: usize,
-        pub pending: usize,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub model: Option<String>,
         pub background: IndexBackgroundStatus,
     }
-
-    #[serde(untagged)]
-    pub enum WorkspaceIndexResult { Error(DiagnosticIndexError), Status(Box<WorkspaceIndexStatus>) }
 
     #[serde(untagged)]
     pub enum HistoryIndexResult { Error(DiagnosticIndexError), Status(HistoryIndexStatus) }
@@ -1158,8 +1122,6 @@ wire_types! {
         pub autonomy: Option<AutonomyStatusReport>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub activity: Option<ActivityStatusReport>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub index: Option<WorkspaceIndexResult>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub history_index: Option<HistoryIndexResult>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1828,7 +1790,7 @@ wire_types! {
     pub enum ModelSettingsResult { Overview(ModelSettingsOverview), Detail(Box<ModelSettingsDetail>) }
 
     pub struct ConfigSources {
-        pub chat_models: Vec<String>, pub embedding_models: Vec<String>, pub image_models: Vec<String>,
+        pub chat_models: Vec<String>, pub image_models: Vec<String>,
         pub tools: Vec<String>, pub subagents: Vec<String>, pub characters: Vec<String>, pub providers: Vec<String>,
     }
 

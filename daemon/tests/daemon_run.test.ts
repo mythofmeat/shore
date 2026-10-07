@@ -1347,7 +1347,6 @@ describe("optional browser transport", () => {
       browser.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
       expect(await browser.frame("command_output", "create")).toMatchObject({ data: { character: "nova", created_files: ["SOUL.md", "USER.md", "TOOLS.md"] } });
       expect(daemon.runtime.historyIndex.registeredCharacters()).toContain("nova");
-      expect(daemon.runtime.workspaceIndex.registeredCharacters()).toContain("nova");
       expect(daemon.runtime.autonomy.status("nova")).toBeDefined();
       expect(await readFile(join(place.root, "config", "characters", "nova", "workspace", "SOUL.md"), "utf8")).toBe("You are nova.\n");
       browser.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });

@@ -591,7 +591,7 @@ mod tests {
                     { "key": "cache.ttl", "type": "duration", "kind": "duration", "settable": true, "optional": false, "restart_required": false, "secret": false, "values": ["1h"] },
                     { "key": "daemon.addr", "type": "string", "kind": "string", "settable": true, "optional": false, "restart_required": true, "secret": false, "values": [] }
                 ],
-                "sources": {"chat_models":[],"embedding_models":[],"image_models":[],"tools":[],"subagents":[],"characters":[],"providers":[]}
+                "sources": {"chat_models":[],"image_models":[],"tools":[],"subagents":[],"characters":[],"providers":[]}
             }),
             "ada",
         )

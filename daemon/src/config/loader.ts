@@ -312,7 +312,7 @@ function normalizeSource(
     const table = normalized;
     if (table.providers !== undefined && !isTable(table.providers)) throw new Error(`${source}: providers must be a table`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
-    catalogFromSections(undefined, sectionTable(table.embedding), sectionTable(table.image_generation));
+    catalogFromSections(undefined, sectionTable(table.image_generation));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
       if (!isTable(entries)) continue;
       const parsed = readModelConfigFields(entries);
@@ -341,7 +341,6 @@ export function parseConfigTable(
 
   const remainder = { ...table };
   const chatSection = sectionTable(remainder.chat);
-  const embeddingSection = sectionTable(remainder.embedding);
   const imageGenerationSection = sectionTable(remainder.image_generation);
   const providersSection = sectionTable(remainder.providers);
   const parsed = parseAppConfig(remainder);
@@ -361,7 +360,6 @@ export function parseConfigTable(
   try {
     models = catalogFromSections(
       chatSection,
-      embeddingSection,
       imageGenerationSection,
       providers,
     );
@@ -486,7 +484,6 @@ function validateConfig(
   }
 
   validateMcpServers(app, onWarn);
-  validateDefaultEmbedding(providers, app.defaults.embedding, onWarn);
   validateDefaultImageGeneration(providers, app.defaults.image_generation, onWarn);
   validateUsageConfig(app.usage);
   if (app.daemon.web.enabled) {
@@ -695,29 +692,6 @@ function validateAuxProvider(
         `credentials, so ${field} cannot resolve. Enable the provider or change ${field}.`,
     );
   }
-}
-
-function validateDefaultEmbedding(
-  providers: ProviderRegistry,
-  name: string | undefined,
-  onWarn: ConfigWarn,
-): void {
-  if (name === undefined) return;
-  const split = splitOnce(name, ":");
-  if (split === undefined) {
-    throw validationError(
-      `embedding.model "${name}" must be a \`provider:model_id\` identity ` +
-        "(transport lives on [providers.<provider>]); Shore ships only a hosted " +
-        "OpenAI-compatible embedder, so bundled local ids are not served",
-    );
-  }
-  const [providerKey, modelId] = split;
-  if (providerKey === "" || modelId === "") {
-    throw validationError(
-      `embedding.model "${name}" is not a valid \`provider:model_id\` identity`,
-    );
-  }
-  validateAuxProvider(providers, "embedding.model", providerKey, onWarn);
 }
 
 function validateDefaultImageGeneration(

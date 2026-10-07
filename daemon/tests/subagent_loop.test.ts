@@ -84,7 +84,6 @@ async function configWith(
 }
 
 function contextIn(root: string): ToolContext {
-  const app = defaultAppConfig();
   return {
     imageDir: join(root, "images"),
     workspaceDir: join(root, "config", "characters", "ada", "workspace"),
@@ -93,8 +92,6 @@ function contextIn(root: string): ToolContext {
   historyDbPath: "/tmp/history.db",
   characterName: "ada",
     configDir: join(root, "config"),
-    retrievalConfig: { top_k: 5, min_score: 0, max_chars: 1000 } as never,
-    retrievalMode: app.memory.retrieval.mode,
     runSubagent: () => Promise.resolve("the parent's"),
   };
 }
@@ -315,13 +312,13 @@ describe("the request", () => {
   test("only registered tools are offered, and `ask_*` can never be", async () => {
     const seen: SidecarRequest[] = [];
     const { config, root } = await configWith({
-      researcher: spec({ tools: ["search", "ask_researcher", "no_such_tool"] }),
+      researcher: spec({ tools: ["read", "ask_researcher", "no_such_tool"] }),
     });
 
     await run(config, root, "researcher", scriptedProvider("done", seen));
 
     const offered = (seen[0]?.tools ?? []).map((t) => t.name);
-    expect(offered).toEqual(["search"]);
+    expect(offered).toEqual(["read"]);
   });
 
   test("the sub-agent's own iteration cap reaches the request", async () => {

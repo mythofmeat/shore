@@ -36,7 +36,6 @@ import { moveImagesToCache } from "../src/storage/image_migration.ts";
 import { closeStorageConnections, databasePath, readState } from "../src/storage/store.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { carryToolMedia } from "../src/tools/media.ts";
-import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import { required } from "../src/util/required.ts";
 import { setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -323,7 +322,6 @@ describe("the image cache", () => {
       ctx: {
         workspaceDir: cache, characterName: "ada", characterDataDir: cache, imageDir: "", cacheDir: cache,
         conversationDir: cache, historyDbPath: join(cache, "history.db"), configDir: cache,
-        retrievalConfig: DEFAULT_RETRIEVAL_CONFIG, retrievalMode: "auto",
         mcpCall: () => Promise.resolve(carryToolMedia({ value: "a screenshot", media: [{ mime_type: "image/png", data: PNG, label: "screenshot" }], extra: [] })),
       },
       sendDirect: () => {},

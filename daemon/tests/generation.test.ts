@@ -18,7 +18,6 @@ import {
   defaultAppConfig,
   defaultPlanLimitsConfig,
   type AppConfig,
-  type RetrievalMode,
 } from "../src/config/app.ts";
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -112,8 +111,6 @@ interface Knobs {
   tools_enabled?: string[] | null;
   subagent?: string | null;
   image_generation?: string | null;
-  embedding?: string | null;
-  embedding_key_set?: boolean;
   max_retries?: number | null;
   with_model?: boolean;
 }
@@ -122,7 +119,6 @@ interface BuildToolContextOutput {
   character_data_dir: string;
   character_name: string;
   config_dir: string;
-  embedder: boolean;
   image_dir: string;
   image_gen_config: null | {
     api_key_present: boolean;
@@ -131,8 +127,6 @@ interface BuildToolContextOutput {
     size: string;
   };
   mcp_registry: boolean;
-  memory_index_path: string;
-  memory_retrieval_config: { max_file_bytes: number; mode: RetrievalMode };
   subagent_runtime: boolean;
   workspace_dir: string;
 }
@@ -188,7 +182,6 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
     });
   }
   if (present(knobs.image_generation)) app.defaults.image_generation = knobs.image_generation;
-  if (present(knobs.embedding)) app.defaults.embedding = knobs.embedding;
   if (present(knobs.max_retries)) app.advanced.max_retries = knobs.max_retries;
 
   const models = emptyCatalog();
@@ -201,11 +194,10 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   }
 
   let providers = ProviderRegistry.empty();
-  if (present(knobs.image_generation) || knobs.embedding_key_set === true) {
-    const env = present(knobs.image_generation) ? IMAGE_KEY_ENV : EMBED_KEY_ENV;
-    setTestEnv(env, "fixture-key");
+  if (present(knobs.image_generation)) {
+    setTestEnv(IMAGE_KEY_ENV, "fixture-key");
     providers = ProviderRegistry.fromSection({
-      openai: { keys: [{ name: "default", env }] },
+      openai: { keys: [{ name: "default", env: IMAGE_KEY_ENV }] },
     });
   }
 
@@ -213,7 +205,6 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
 }
 
 const IMAGE_KEY_ENV = "SHORE_FIXTURE_IMAGE_KEY";
-const EMBED_KEY_ENV = "SHORE_FIXTURE_EMBED_KEY";
 const MODEL_KEY_ENV = "SHORE_FIXTURE_API_KEY";
 
 function model(): ResolvedModel {
@@ -327,10 +318,6 @@ describe("buildToolContext", () => {
       expect(stripRoot(ctx.characterDataDir, root)).toBe(out["character_data_dir"]);
       expect(stripRoot(ctx.configDir, root)).toBe(out["config_dir"]);
       expect(ctx.characterName).toBe(out["character_name"]);
-      expect(stripRoot(ctx.memoryIndexPath ?? "", root)).toBe(
-        out.memory_index_path.replace(/workspace_index\.json$/, "workspace_index.db"),
-      );
-      expect(ctx.embedder !== undefined).toBe(out["embedder"]);
       expect(ctx.mcpCall !== undefined).toBe(out["mcp_registry"]);
       expect(ctx.runSubagent !== undefined).toBe(out["subagent_runtime"]);
 
@@ -343,11 +330,6 @@ describe("buildToolContext", () => {
         expect((ctx.imageGenConfig?.api_key ?? "") !== "").toBe(cfg.api_key_present);
         expect(ctx.imageGenConfig?.size).toBe(cfg.size);
       }
-
-      expect(ctx.retrievalConfig.maxFileBytes).toBe(
-        out["memory_retrieval_config"]["max_file_bytes"],
-      );
-      expect(ctx.retrievalMode).toBe(out["memory_retrieval_config"]["mode"]);
 
       expect(existsSync(join(config.dirs.data, "ada", "active_prompt"))).toBe(false);
     });

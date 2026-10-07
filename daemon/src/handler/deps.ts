@@ -60,7 +60,6 @@ import type {
   MessageHandlerDeps,
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
-import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -236,19 +235,10 @@ const EXCLUSIVE_COMMANDS = new Set([
   "fork_thread",
 ]);
 
-function beginIndexForeground(a: HandlerAssembly): () => void {
-  const endHistory = a.runtime.historyIndex.beginForeground();
-  const endWorkspace = a.runtime.workspaceIndex.beginForeground();
-  return () => {
-    endHistory();
-    endWorkspace();
-  };
-}
-
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
   async function runGenerationInForeground(params: GenerationParams): Promise<void> {
     await a.runtime.snapshotGate.withActivity(async () => {
-      const endForeground = beginIndexForeground(a);
+      const endForeground = a.runtime.historyIndex.beginForeground();
       const endAutonomyForeground = a.runtime.autonomy.beginForeground(params.charName);
       try {
         await runGeneration(params);
@@ -269,7 +259,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
         signal.throwIfAborted();
-        const endForeground = beginIndexForeground(a);
+        const endForeground = a.runtime.historyIndex.beginForeground();
         try {
           return await dispatchCommand(command, meta, signal);
         } finally {
@@ -653,13 +643,6 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     mcpStatus: () => runtime.mcp.current.serverStatus(),
     ...(a.running === undefined ? {} : { running: a.running }),
-    workspaceIndex: {
-      indexPathFor: (character) => {
-        if (!runtime.registry.hasCharacter(character)) return undefined;
-        return workspaceIndexPath(runtime.registry.effectiveConfig(character).dirs.cache, character);
-      },
-      progressFor: (character) => runtime.workspaceIndex.progress(character),
-    },
     historyIndex: {
       progressFor: (character) => runtime.historyIndex.progress(character),
       noteMutation: (character) => {
