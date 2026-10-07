@@ -11,9 +11,8 @@ import { clear, segments } from "../src/commands/segments.ts";
 import { MAIN_THREAD } from "../src/config/dirs.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
-import type { Embedder } from "../src/llm/embed.ts";
-import { HISTORY_SEARCH_DB_FILE, HistorySearchIndex } from "../src/memory/history_index.ts";
-import { handleSearchHistory } from "../src/tools/history.ts";
+import { HISTORY_INDEX_FILE } from "../src/memory/history_index.ts";
+import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 
 function message(id: string, text: string, minute: number): Message {
@@ -69,29 +68,16 @@ describe("segment management", () => {
     });
   });
 
-  test("exclude removes a whole segment and its false adjacency, then include reuses vectors", async () => {
+  test("exclude removes a whole segment and its false adjacency, then include brings it back", async () => {
     const root = testTmp(`segments-search-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
     await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     put(characterDir, 0, [message("a0", "first needle", 0)]);
     put(characterDir, 1, [message("u1", "disowned orchard", 1)]);
     put(characterDir, 2, [message("a2", "unrelated tail", 2)]);
-
-    const path = join(characterDir, HISTORY_SEARCH_DB_FILE);
-    const embedder: Embedder = {
-      modelId: "fake",
-      dimensions: 2,
-      embed: async (inputs) => inputs.map(() => [1, 0]),
-    };
-    let index = HistorySearchIndex.open({
-      conversationDir: characterDir,
-      character: "ada",
-      dbPath: join(root, "shore.db"),
-      path,
-    });
-    await index.reconcile();
-    await index.embedPending(embedder);
-    index.close();
+    const options = { character: "ada", dbPath: join(root, "shore.db"), indexPath: join(characterDir, HISTORY_INDEX_FILE), timeZone: "UTC" };
+    const search = async (query: string) => await handleSearchChatLogs({ query, all_time: true }, characterDir, options);
+    expect(await search("disowned")).toContain("disowned: 1 match");
 
     let mutations = 0;
     const excluded = await segments(root, "ada", MAIN_THREAD, { action: "exclude", index: 1 }, {
@@ -99,34 +85,13 @@ describe("segment management", () => {
     });
     expect(excluded).toMatchObject({ action: "exclude", segment: { index: 1, excluded: true } });
     expect(mutations).toBe(1);
-    expect((await handleSearchHistory({ query: "disowned", mode: "lexical" }, characterDir, {
-      character: "ada",
-      dbPath: join(root, "shore.db"),
-      indexPath: path,
-    })).count).toBe(0);
-    const first = await handleSearchHistory({ query: "needle", mode: "lexical" }, characterDir, {
-      character: "ada",
-      dbPath: join(root, "shore.db"),
-      indexPath: path,
-    });
-    expect(first.searched_messages).toBe(2);
-    expect(first.results[0]?.after).toEqual([]);
+    expect(await search("disowned")).toContain("disowned: 0 matches");
+    expect(await search("absent")).toContain("Searched 2 archived messages");
+    expect(await handleReadChatLogs({ around: "a0" }, characterDir, options)).toContain("a0 in main: 0 before, 0 after");
 
     await segments(root, "ada", MAIN_THREAD, { action: "include", index: 1 });
-    index = HistorySearchIndex.open({
-      conversationDir: characterDir,
-      character: "ada",
-      dbPath: join(root, "shore.db"),
-      path,
-    });
-    await index.reconcile();
-    expect(await index.embedPending(embedder)).toBe(0);
-    index.close();
-    expect((await handleSearchHistory({ query: "disowned", mode: "lexical" }, characterDir, {
-      character: "ada",
-      dbPath: join(root, "shore.db"),
-      indexPath: path,
-    })).count).toBe(1);
+    expect(await search("disowned")).toContain("disowned: 1 match");
+    expect(await handleReadChatLogs({ around: "a0" }, characterDir, options)).toContain("a0 in main: 0 before, 2 after");
   });
 
 
@@ -260,10 +225,10 @@ describe("segment management", () => {
     expect(existsSync(join(characterDir, "active_prompt"))).toBe(false);
     expect(existsSync(join(characterDir, "deferred_edits.jsonl"))).toBe(false);
     expect({ reloads, repoints, completed }).toEqual({ reloads: 1, repoints: 1, completed: 1 });
-    expect((await handleSearchHistory({ query: "risky", mode: "lexical" }, characterDir, {
+    expect(await handleSearchChatLogs({ query: "risky", all_time: true }, characterDir, {
       character: "ada",
       dbPath: join(root, "shore.db"),
-    })).count).toBe(0);
+    })).toContain("risky: 0 matches");
   });
 
   test("clearing a side thread reports that thread's new segment, not home's", async () => {

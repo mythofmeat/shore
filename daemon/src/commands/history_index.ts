@@ -1,4 +1,6 @@
-import { HistorySearchIndex, withHistoryIndexLock } from "../memory/history_index.ts";
+import { existsSync } from "node:fs";
+
+import { HistoryIndex } from "../memory/history_index.ts";
 import type { HistoryIndexProgress } from "../memory/history_index_service.ts";
 import type { HistoryIndexResult } from "../protocol/HistoryIndexResult.ts";
 import type { IndexBackgroundStatus } from "../protocol/IndexBackgroundStatus.ts";
@@ -9,52 +11,44 @@ export interface HistoryIndexSource {
   now?: () => number;
 }
 
-export async function historyIndexSection(
+export function historyIndexSection(
   source: HistoryIndexSource | undefined,
   character: string,
-): Promise<HistoryIndexResult | null> {
+): HistoryIndexResult | null {
   if (source === undefined) return null;
 
   const progress = source.progressFor(character);
   if (progress === undefined) return null;
 
-  let view;
-  try {
-    view = await withHistoryIndexLock(progress.indexPath, async () => {
-      const index = HistorySearchIndex.open({
-        conversationDir: progress.conversationDir,
-        character: progress.character,
-        dbPath: progress.dbPath,
-        path: progress.indexPath,
-      });
+  let messages = 0;
+  if (existsSync(progress.indexPath)) {
+    try {
+      const index = HistoryIndex.open(progress.indexPath);
       try {
-        return {
-          diagnostics: index.diagnostics(progress.embedder),
-          messages: index.selectedMessageCount(),
-        };
+        messages = Number(index.metadata("messages") ?? 0);
       } finally {
         index.close();
       }
-    });
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   const now = (source.now ?? (() => Date.now()))();
   return {
     path: progress.indexPath,
-    messages: view.messages,
-    chunks: view.diagnostics.total_chunks,
-    embedded: view.diagnostics.indexed_chunks,
-    pending: view.diagnostics.pending_chunks,
-    model: progress.embedder?.modelId ?? null,
+    messages,
+    chunks: messages,
+    embedded: messages,
+    pending: 0,
+    model: null,
     background: backgroundView(progress, now),
   };
 }
 
 function backgroundView(progress: HistoryIndexProgress, now: number): IndexBackgroundStatus {
   return {
-    registered: progress.embedder !== undefined,
+    registered: true,
     failures: progress.failures,
     ...(progress.lastError === undefined ? {} : { last_error: progress.lastError }),
     ...(progress.retryAt > now

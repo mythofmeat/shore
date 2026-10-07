@@ -8,7 +8,7 @@ New starter configurations enable all three tools. Existing configurations retai
 
 ```toml
 [tools]
-enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs"]
+enabled = ["bash", "read", "edit", "apply_patch", "search", "search_chat_logs", "read_chat_logs"]
 
 [tools.read]
 max_result_chars = 50000

@@ -1,9 +1,20 @@
 import type { BashResult } from "./bash.ts";
-import { historyText, whyNotClose } from "./history_output.ts";
-import type { HistoryCloseness, SearchHistoryResult } from "./history.ts";
 import type { HeatmapResult } from "./activity.ts";
 import type { ModelHistoryResult } from "./model_history.ts";
 import { payloadText } from "./media.ts";
+
+export interface SearchCloseness {
+  min_similarity: number | null;
+  best_similarity: number | null;
+  words: string[];
+  weaker_left_out: boolean;
+}
+
+function whyNotClose(closeness: SearchCloseness, noun: string): string {
+  const words = `no ${noun} contains all of: ${closeness.words.join(", ")}`;
+  if (closeness.best_similarity === null || closeness.min_similarity === null) return words;
+  return `${words}, and the best similarity is ${closeness.best_similarity.toFixed(2)} (close needs ${closeness.min_similarity.toFixed(2)})`;
+}
 
 interface SearchHit {
   path: string;
@@ -17,7 +28,7 @@ interface SearchOutput {
   query: string;
   mode?: string;
   match?: string;
-  closeness?: HistoryCloseness;
+  closeness?: SearchCloseness;
   results: SearchHit[];
   has_more?: boolean;
   semantic_unavailable?: string;
@@ -105,8 +116,6 @@ export function formatToolOutput(name: string, value: unknown): string {
       }
       return lines.join("\n");
     }
-    case "search_chat_logs":
-      return historyText(value as SearchHistoryResult);
     case "search":
       return searchText(value as SearchOutput);
     case "activity_heatmap":

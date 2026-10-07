@@ -1,27 +1,33 @@
 import { join } from "node:path";
 
-import { required } from "../util/required.ts";
-
-import type { Embedder } from "../llm/embed.ts";
+import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import {
-  HistorySearchIndex,
-  loadCanonicalTexts,
+  HISTORY_INDEX_FILE,
+  HistoryIndex,
+  refreshHistoryIndex,
   withHistoryIndexLock,
-  type IndexedMessage,
+  type ChatLogFilter,
+  type ChatLogHit,
+  type ChatLogMatch,
+  type ChatLogMessage,
+  type ChatLogSort,
+  type Speaker,
 } from "../memory/history_index.ts";
-import { hostZone, normalizeToZone, toZonedRfc3339 } from "../ledger/zoned.ts";
-import { containsEveryTerm, distinctiveTerms, meetsSimilarity } from "../memory/closeness.ts";
+import { required } from "../util/required.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
 
-const DEFAULT_MAX_RESULTS = 3;
-const MAX_RESULTS = 50;
-const EXCERPT_CHARS = 240;
-const MIN_EXCERPT_CHARS = 80;
-const MAX_EXCERPT_CHARS = 2000;
-
-const TERM_HIT = 10;
-const FULL_COVERAGE_BONUS = 15;
-const PHRASE_BONUS = 25;
+const GAP_MS = 90 * 60_000;
+const DAY_MS = 86_400_000;
+const BUDGET_CHARS = 12_000;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+const DEFAULT_CONTEXT = 3;
+const MAX_CONTEXT = 50;
+const WINDOW_MONTHS = 6;
+const FIRST_LINE_CHARS = 70;
+const SUBSTRING_CONTEXT = 60;
+const RANGE_BATCH = 100;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function optionalTrimmedString(
   input: Record<string, unknown>,
@@ -81,683 +87,506 @@ function echoFraction(fraction: string | undefined): string {
   return `.${digits.padEnd(width, "0")}`;
 }
 
-function parseRfc3339(value: string): number | undefined {
-  return parseRfc3339Full(value)?.ms;
-}
-
-export interface TimeRange {
-  start?: TimeBound;
-  end?: TimeBound;
-}
-
-export function rangeIsEmpty(range: TimeRange): boolean {
-  return range.start === undefined && range.end === undefined;
-}
-
-function rangeContains(range: TimeRange, timestamp: number): boolean {
-  if (range.start !== undefined && timestamp < range.start.ms) return false;
-  if (range.end !== undefined && timestamp > range.end.ms) return false;
-  return true;
-}
-
-export function filtersFrom(input: Record<string, unknown>): {
-  query: string | undefined;
-  range: TimeRange;
-} {
-  const query = optionalTrimmedString(input, "query");
-  const start = parseTimeBound(input, "start_time");
-  const end = parseTimeBound(input, "end_time");
-
-  if (start !== undefined && end !== undefined && start.ms > end.ms) {
-    throw new InvalidArgs("start_time must be before or equal to end_time");
-  }
-
-  return {
-    query,
-    range: {
-      ...(start !== undefined ? { start } : {}),
-      ...(end !== undefined ? { end } : {}),
-    },
-  };
-}
-
-function unsignedArg(
-  input: Record<string, unknown>,
-  field: string,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const raw = input[field];
-  const n =
-    typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : fallback;
-  return Math.min(Math.max(n, min), max);
-}
-
-export function maxResultsFrom(input: Record<string, unknown>): number {
-  return unsignedArg(input, "max_results", DEFAULT_MAX_RESULTS, 1, MAX_RESULTS);
-}
-
-export function excerptCharsFrom(input: Record<string, unknown>): number {
-  return unsignedArg(input, "excerpt_chars", EXCERPT_CHARS, MIN_EXCERPT_CHARS, MAX_EXCERPT_CHARS);
-}
-
-export function normalizeModel(id: string): string {
-  return id.toLowerCase().replaceAll(".", "-");
-}
-
-export function modelMatches(
-  model: string | undefined,
-  filter: string | undefined,
-): boolean {
-  if (filter === undefined) return true;
-  if (model === undefined) return false;
-  return normalizeModel(model).includes(filter);
-}
-
-function modelFilterFrom(input: Record<string, unknown>): string | undefined {
-  const raw = optionalTrimmedString(input, "model");
-  return raw === undefined ? undefined : normalizeModel(raw);
-}
-
-export class QueryMatcher {
-  readonly rawLower: string;
-  readonly terms: string[];
-  readonly words: string[];
-
-  constructor(query: string, readonly exactPhrase = false) {
-    this.rawLower = query.toLowerCase();
-    this.terms = tokenize(this.rawLower);
-    this.words = distinctiveTerms(this.terms);
-  }
-
-  isClose(content: string): boolean {
-    const contentLower = content.toLowerCase();
-    if (this.phraseIndex(contentLower) !== undefined) return true;
-    if (this.exactPhrase) return false;
-    return this.terms.length === 0
-      ? contentLower.includes(this.rawLower)
-      : containsEveryTerm(contentLower, this.words);
-  }
-
-  score(content: string): number | undefined {
-    const contentLower = content.toLowerCase();
-    if (this.exactPhrase) return this.phraseIndex(contentLower) === undefined ? undefined : PHRASE_BONUS;
-
-    if (this.terms.length === 0) {
-      return contentLower.includes(this.rawLower) ? PHRASE_BONUS : undefined;
-    }
-
-    const hits = this.terms.filter((t) => contentLower.includes(t)).length;
-    if (hits === 0) return undefined;
-
-    let score = hits * TERM_HIT;
-    if (hits === this.terms.length) score += FULL_COVERAGE_BONUS;
-    if (this.terms.length > 1 && contentLower.includes(this.rawLower)) score += PHRASE_BONUS;
-    return score;
-  }
-
-  coverage(content: string): number {
-    const contentLower = content.toLowerCase();
-    if (this.terms.length === 0) return contentLower.includes(this.rawLower) ? 1 : 0;
-    return new Set(this.terms.filter((term) => contentLower.includes(term))).size;
-  }
-
-  phraseIndex(contentLower: string): number | undefined {
-    let start = 0;
-    while (start <= contentLower.length) {
-      const index = contentLower.indexOf(this.rawLower, start);
-      if (index < 0) return undefined;
-      const before = Array.from(contentLower.slice(0, index)).at(-1);
-      const after = Array.from(contentLower.slice(index + this.rawLower.length))[0];
-      if ((before === undefined || !/[\p{Alphabetic}\p{Number}\p{Mark}_]/u.test(before)) && (after === undefined || !/[\p{Alphabetic}\p{Number}\p{Mark}_]/u.test(after))) return index;
-      start = index + 1;
-    }
-    return undefined;
-  }
-
-  earliestIndex(contentLower: string): number | undefined {
-    if (this.exactPhrase) return this.phraseIndex(contentLower);
-    let best = indexOrUndefined(contentLower, this.rawLower);
-    for (const term of this.terms) {
-      const idx = contentLower.indexOf(term);
-      if (idx !== -1) best = best === undefined ? idx : Math.min(best, idx);
-    }
-    return best;
-  }
-}
-
-function indexOrUndefined(haystack: string, needle: string): number | undefined {
-  const i = haystack.indexOf(needle);
-  return i === -1 ? undefined : i;
-}
-
-function tokenize(rawLower: string): string[] {
-  const out: string[] = [];
-  let current = "";
-  for (const ch of rawLower) {
-    if (isTermChar(ch)) {
-      current += ch;
-    } else {
-      if (Buffer.byteLength(current, "utf8") >= 2) out.push(current);
-      current = "";
-    }
-  }
-  if (Buffer.byteLength(current, "utf8") >= 2) out.push(current);
-  return out;
-}
-
-const TERM_CHAR = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}\p{Mn}\p{Mc}_-]/u;
-
-function isTermChar(ch: string): boolean {
-  return TERM_CHAR.test(ch);
-}
-
-export function excerptFor(
-  content: string,
-  matcher: QueryMatcher | undefined,
-  excerptChars: number,
-): string {
-  const chars = Array.from(content);
-
-  if (matcher === undefined) {
-    const excerpt = chars.slice(0, excerptChars).join("");
-    return chars.length > excerptChars ? `${excerpt}...` : excerpt;
-  }
-
-  const contentLower = content.toLowerCase();
-  const idx = matcher.earliestIndex(contentLower);
-  if (idx === undefined) {
-    return chars.slice(0, excerptChars).join("");
-  }
-
-  const leading = Math.min(Math.floor(excerptChars / 4), 80);
-  const startChar = Math.max(Array.from(contentLower.slice(0, idx)).length - leading, 0);
-
-  let excerpt = chars.slice(startChar, startChar + excerptChars).join("");
-  if (startChar > 0) excerpt = `...${excerpt}`;
-  if (chars.length > startChar + excerptChars) excerpt += "...";
-  return excerpt;
-}
-
-export function matchesTimeRange(
-  timestamp: string,
-  range: TimeRange,
-  stats: { skipped: number },
-): boolean {
-  if (rangeIsEmpty(range)) return true;
-  const parsed = parseRfc3339(timestamp);
-  if (parsed === undefined) {
-    stats.skipped += 1;
-    return false;
-  }
-  return rangeContains(range, parsed);
-}
-
-function compareOptionalTs(a: number | undefined, b: number | undefined): number {
-  if (a === undefined && b === undefined) return 0;
-  if (a === undefined) return -1;
-  if (b === undefined) return 1;
-  return a === b ? 0 : a < b ? -1 : 1;
-}
-
-type HistorySearchMode = "auto" | "lexical" | "hybrid" | "vector";
-
-export interface HistorySearchOptions {
+export interface ChatLogOptions {
   character: string;
   dbPath: string;
   indexPath?: string;
-  embedder?: Embedder;
-  minSimilarity?: number;
-  defaultMode?: HistorySearchMode;
+  userName?: string;
   timeZone?: string;
   now?: () => number;
 }
 
-interface RankedHistoryCandidate {
-  row: IndexedMessage;
-  text: string;
-  lexicalRank?: number;
-  vectorRank?: number;
-  lexicalScore: number;
-  coverage: number;
-  phrase: boolean;
-  timestampMs: number | undefined;
-  similarity?: number;
+interface View {
+  zone: string;
+  user: string;
+  character: string;
+  width: number;
 }
 
-export interface HistoryMessage extends HistoryLocation {
-  msg_id: string;
-  role: string;
-  timestamp: string;
-  model: string | null;
-  text: string;
-}
-
-export interface HistoryHit extends HistoryMessage {
-  locations: HistoryLocation[];
-  before: HistoryMessage[];
-  after: HistoryMessage[];
-  similarity?: number;
-  weak?: true;
-}
-
-export interface HistoryCloseness {
-  min_similarity: number | null;
-  best_similarity: number | null;
-  words: string[];
-  weaker_left_out: boolean;
-}
-
-export interface SearchHistoryResult {
-  mode: Exclude<HistorySearchMode, "auto">;
-  match?: "phrase" | "nearest";
-  closeness?: HistoryCloseness;
-  compact?: boolean;
-  semantic_index: {
-    indexed_chunks: number;
-    total_chunks: number;
-    pending_chunks: number;
+function viewOf(options: ChatLogOptions): View {
+  const user = options.userName ?? "user";
+  return {
+    zone: options.timeZone ?? hostZone(),
+    user,
+    character: options.character,
+    width: Math.max(user.length, options.character.length),
   };
-  semantic_unavailable?: string;
-  query: string | null;
-  time_zone: string;
-  now: string;
-  archive_boundary: { oldest: string | null; newest: string | null };
-  time_range: { start_time: string | null; end_time: string | null; inclusive: true };
-  model_filter: string | null;
-  results: Record<string, unknown>[];
-  has_more?: boolean;
-  count: number;
-  searched_message_occurrences: number;
-  searched_messages: number;
-  skipped_invalid_timestamps: number;
 }
 
-export async function handleSearchHistory(
-  input: Record<string, unknown>,
-  conversationDir: string,
-  options: HistorySearchOptions,
-): Promise<SearchHistoryResult> {
-  const path = options.indexPath ?? join(conversationDir, "history_search.db");
-  return await withHistoryIndexLock(path, async () =>
-    await handleSearchHistoryUnlocked(input, conversationDir, options),
-  );
-}
-
-async function handleSearchHistoryUnlocked(
-  input: Record<string, unknown>,
-  conversationDir: string,
-  options: HistorySearchOptions,
-): Promise<SearchHistoryResult> {
+function checkConfigured(conversationDir: string): void {
   if (conversationDir === "") throw new InvalidArgs("conversation history is not configured");
-  const timeZone = options.timeZone ?? hostZone();
-  const { query, range } = filtersFrom(input);
-  const modelFilter = modelFilterFrom(input);
-  if (query === undefined && rangeIsEmpty(range) && modelFilter === undefined) {
-    throw new InvalidArgs("provide query, start_time, end_time, model, or a combination");
-  }
-  const match = input.match ?? "ranked";
-  if (match !== "ranked" && match !== "nearest" && match !== "phrase") {
-    throw new InvalidArgs("match must be ranked, nearest, or phrase");
-  }
-  if (match === "phrase" && query === undefined) throw new InvalidArgs("phrase matching requires query");
-  const compact = input.compact === true;
-  const requested = match === "phrase" ? "lexical" : searchModeFrom(input, options.defaultMode ?? "auto");
-  let mode: Exclude<HistorySearchMode, "auto"> = requested === "auto"
-    ? options.embedder === undefined ? "lexical" : "hybrid"
-    : requested;
-  if (query === undefined) mode = "lexical";
-  let semanticUnavailable: string | undefined;
-  if ((mode === "hybrid" || mode === "vector") && options.embedder === undefined) {
-    semanticUnavailable = "embedder_not_configured";
-    mode = "lexical";
-  }
+}
 
-  const index = await openAndReconcile(conversationDir, options, options.indexPath);
+async function withIndex<T>(conversationDir: string, options: ChatLogOptions, run: (index: HistoryIndex) => T): Promise<T> {
+  const path = options.indexPath ?? join(conversationDir, HISTORY_INDEX_FILE);
+  const ref = { mainConversationDir: conversationDir, dbPath: options.dbPath, character: options.character };
+  const refreshed = async (force: boolean): Promise<HistoryIndex> => {
+    await withHistoryIndexLock(path, async () => { await refreshHistoryIndex(ref, path, force); });
+    return HistoryIndex.open(path);
+  };
+  let index: HistoryIndex;
   try {
-    const diagnostics = index.diagnostics(options.embedder);
-    const stats = { skipped: 0 };
-    const matcher = query === undefined ? undefined : new QueryMatcher(query, match === "phrase");
-    let lexical: RankedHistoryCandidate[] = [];
-    if (mode !== "vector") {
-      lexical = await lexicalCandidates(index, conversationDir, matcher, range, modelFilter, stats);
+    index = await refreshed(false);
+  } catch {
+    try {
+      index = await refreshed(true);
+    } catch (error) {
+      throw new ToolIoError(describe(error));
     }
-
-    let vector: RankedHistoryCandidate[] = [];
-    if ((mode === "hybrid" || mode === "vector") && query !== undefined && options.embedder !== undefined) {
-      try {
-        const vectors = await options.embedder.embed([query]);
-        const queryVector = vectors[0];
-        if (queryVector === undefined) throw new Error("embedding response did not include query vector");
-        vector = await vectorCandidates(
-          index,
-          conversationDir,
-          queryVector,
-          options.embedder,
-          range,
-          modelFilter,
-          { skipped: 0 },
-        );
-      } catch (error) {
-        semanticUnavailable = `query_embedding_failed: ${describeFailure(error)}`;
-        mode = "lexical";
-        if (lexical.length === 0) {
-          lexical = await lexicalCandidates(index, conversationDir, matcher, range, modelFilter, stats);
-        }
-      }
-    }
-    if (requested === "vector" && diagnostics.pending_chunks > 0 && semanticUnavailable === undefined) {
-      semanticUnavailable = "incomplete_vector_coverage";
-    }
-
-    const ranked = mode === "hybrid"
-      ? fuseCandidates(lexical, vector)
-      : mode === "vector" ? vector : lexical;
-    const judge = matcher === undefined || match === "phrase"
-      ? undefined
-      : (candidate: RankedHistoryCandidate) =>
-          matcher.isClose(candidate.text) ||
-          meetsSimilarity(candidate.similarity, options.minSimilarity) ||
-          (options.minSimilarity === undefined && candidate.similarity !== undefined);
-    const grouped = groupMessages(ranked).map((hit) => ({ ...hit, close: judge?.(hit.candidate) ?? true }));
-    const eligible = match === "nearest" ? grouped : grouped.filter((hit) => hit.close);
-    const chosen = eligible.slice(0, maxResultsFrom(input));
-    const neighborRows: IndexedMessage[] = [];
-    for (const hit of chosen) {
-      const before = compact ? undefined : index.neighbor(hit.candidate.row, -1);
-      const after = compact ? undefined : index.neighbor(hit.candidate.row, 1);
-      if (before !== undefined) neighborRows.push(before);
-      if (after !== undefined) neighborRows.push(after);
-    }
-    const neighborTexts = await loadCanonicalTexts(index.ref, neighborRows);
-    const results = chosen.map((hit) => {
-      const row = hit.candidate.row;
-      const before = compact ? undefined : index.neighbor(row, -1);
-      const after = compact ? undefined : index.neighbor(row, 1);
-      return {
-        ...presentMessage(row, compact ? excerptFor(hit.candidate.text, matcher, 600) : hit.candidate.text, timeZone),
-        locations: hit.locations,
-        before: before === undefined
-          ? []
-          : [presentMessage(before, neighborTexts.get(before.id) ?? "", timeZone)],
-        after: after === undefined
-          ? []
-          : [presentMessage(after, neighborTexts.get(after.id) ?? "", timeZone)],
-        ...(hit.candidate.similarity === undefined ? {} : { similarity: roundSimilarity(hit.candidate.similarity) }),
-        ...(hit.close ? {} : { weak: true as const }),
-      };
-    });
-    const bounds = index.timestampBounds();
-    const best = vector.reduce<number | undefined>(
-      (top, candidate) => candidate.similarity === undefined || (top !== undefined && top >= candidate.similarity)
-        ? top
-        : candidate.similarity,
-      undefined,
-    );
-
-    return {
-      mode,
-      ...(match === "ranked" ? {} : { match }),
-      ...(judge === undefined || matcher === undefined ? {} : {
-        closeness: {
-          min_similarity: options.minSimilarity ?? null,
-          best_similarity: best === undefined ? null : roundSimilarity(best),
-          words: matcher.words,
-          weaker_left_out: match === "ranked" && grouped.some((hit) => !hit.close),
-        },
-      }),
-      ...(compact ? { compact: true } : {}),
-      semantic_index: diagnostics,
-      ...(semanticUnavailable === undefined ? {} : { semantic_unavailable: semanticUnavailable }),
-      query: query ?? null,
-      time_zone: timeZone,
-      now: toZonedRfc3339((options.now ?? Date.now)(), timeZone),
-      archive_boundary: {
-        oldest: bounds === undefined ? null : toZonedRfc3339(bounds.oldestMs, timeZone),
-        newest: bounds === undefined ? null : toZonedRfc3339(bounds.newestMs, timeZone),
-      },
-      time_range: {
-        start_time: range.start === undefined ? null : toZonedRfc3339(range.start.ms, timeZone),
-        end_time: range.end === undefined ? null : toZonedRfc3339(range.end.ms, timeZone),
-        inclusive: true,
-      },
-      model_filter: modelFilter ?? null,
-      results,
-      ...(eligible.length > chosen.length ? { has_more: true } : {}),
-      count: results.length,
-      searched_message_occurrences: index.selectedMessageCount(),
-      searched_messages: index.distinctMessageCount(),
-      skipped_invalid_timestamps: stats.skipped,
-    };
+  }
+  try {
+    return run(index);
   } finally {
     index.close();
   }
 }
 
-async function openAndReconcile(
-  conversationDir: string,
-  identity: { character: string; dbPath: string },
-  path: string | undefined,
-): Promise<HistorySearchIndex> {
-  const open = () => HistorySearchIndex.open({
-    conversationDir,
-    character: identity.character,
-    dbPath: identity.dbPath,
-    ...(path === undefined ? {} : { path }),
-  });
-  let index = open();
-  try {
-    await index.reconcile();
-    return index;
-  } catch (error) {
-    index.close();
-    try {
-      const fs = await import("node:fs/promises");
-      await fs.unlink(path ?? join(conversationDir, "history_search.db"));
-    } catch {}
-    index = open();
-    try {
-      await index.reconcile(true);
-      return index;
-    } catch (retryError) {
-      index.close();
-      throw new ToolIoError(describeFailure(retryError ?? error));
-    }
-  }
-}
-
-function searchModeFrom(input: Record<string, unknown>, fallback: HistorySearchMode): HistorySearchMode {
-  const raw = input["mode"];
-  if (raw === undefined) return fallback;
-  if (raw === "auto" || raw === "lexical" || raw === "hybrid" || raw === "vector") return raw;
-  throw new InvalidArgs("mode must be auto, lexical, hybrid, or vector");
-}
-
-async function lexicalCandidates(
-  index: HistorySearchIndex,
-  conversationDir: string,
-  matcher: QueryMatcher | undefined,
-  range: TimeRange,
-  modelFilter: string | undefined,
-  stats: { skipped: number },
-): Promise<RankedHistoryCandidate[]> {
-  const indexed = matcher === undefined
-    ? index.allRows().map((row, i) => ({ row, rank: i + 1 }))
-    : index.lexicalRows(matcher.rawLower);
-  const source = matcher !== undefined && indexed.length === 0
-    ? index.allRows().map((row, i) => ({ row, rank: i + 1 }))
-    : indexed;
-  const eligible = source.filter(({ row }) =>
-    modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
-  );
-  const texts = await loadCanonicalTexts(index.ref, eligible.map(({ row }) => row));
-  const candidates: RankedHistoryCandidate[] = [];
-  for (const { row, rank } of eligible) {
-    const text = texts.get(row.id);
-    if (text === undefined) continue;
-    const matchedScore = matcher?.score(text);
-    if (matcher !== undefined && matchedScore === undefined) continue;
-    const lexicalScore = matchedScore ?? 0;
-    candidates.push({
-      row,
-      text,
-      lexicalRank: rank,
-      lexicalScore,
-      coverage: matcher?.coverage(text) ?? 0,
-      phrase: matcher === undefined ? false : text.toLocaleLowerCase().includes(matcher.rawLower),
-      timestampMs: parseRfc3339(row.timestamp),
-    });
-  }
-  if (matcher === undefined) {
-    candidates.sort((a, b) => compareOptionalTs(a.timestampMs, b.timestampMs) || compareIndexed(a.row, b.row));
-  } else {
-    candidates.sort((a, b) =>
-      Number(b.phrase) - Number(a.phrase) ||
-      b.coverage - a.coverage ||
-      b.lexicalScore - a.lexicalScore ||
-      (a.lexicalRank ?? 0) - (b.lexicalRank ?? 0) ||
-      compareOptionalTs(b.timestampMs, a.timestampMs) ||
-      compareIndexed(a.row, b.row),
-    );
-  }
-  candidates.forEach((candidate, i) => { candidate.lexicalRank = i + 1; });
-  return candidates;
-}
-
-async function vectorCandidates(
-  index: HistorySearchIndex,
-  conversationDir: string,
-  queryVector: readonly number[],
-  embedder: Embedder,
-  range: TimeRange,
-  modelFilter: string | undefined,
-  stats: { skipped: number },
-): Promise<RankedHistoryCandidate[]> {
-  const raw = index.vectorRows(queryVector, embedder).filter(({ row }) =>
-    modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
-  );
-  const texts = await loadCanonicalTexts(index.ref, raw.map(({ row }) => row));
-  return raw.flatMap(({ row, rank, score }) => {
-    const text = texts.get(row.id);
-    return text === undefined ? [] : [{
-      row, text, vectorRank: rank, lexicalScore: 0, coverage: 0, phrase: false,
-      timestampMs: parseRfc3339(row.timestamp), similarity: score,
-    }];
-  });
-}
-
-function fuseCandidates(
-  lexical: readonly RankedHistoryCandidate[],
-  vector: readonly RankedHistoryCandidate[],
-): RankedHistoryCandidate[] {
-  const byId = new Map<number, RankedHistoryCandidate & { fused: number }>();
-  const add = (candidate: RankedHistoryCandidate, rank: number, kind: "lexical" | "vector") => {
-    const current = byId.get(candidate.row.id) ?? { ...candidate, fused: 0 };
-    current.fused += 1 / (60 + rank);
-    if (kind === "lexical") current.lexicalRank = rank;
-    else {
-      current.vectorRank = rank;
-      if (candidate.similarity !== undefined) current.similarity = candidate.similarity;
-    }
-    byId.set(candidate.row.id, current);
-  };
-  lexical.forEach((candidate, i) => add(candidate, i + 1, "lexical"));
-  vector.forEach((candidate, i) => add(candidate, i + 1, "vector"));
-  return [...byId.values()].sort((a, b) =>
-    b.fused - a.fused ||
-    Number(b.phrase) - Number(a.phrase) ||
-    b.coverage - a.coverage ||
-    compareOptionalTs(b.timestampMs, a.timestampMs) ||
-    compareIndexed(a.row, b.row),
-  );
-}
-
-export interface HistoryLocation {
-  thread: string;
-  segment: number;
-  ordinal: number;
-}
-
-interface GroupedHistoryCandidate {
-  candidate: RankedHistoryCandidate;
-  locations: HistoryLocation[];
-}
-
-function locatorKey(row: IndexedMessage): string {
-  return JSON.stringify([row.archive_key, row.segment, row.ordinal]);
-}
-
-function identityKey(row: IndexedMessage): string {
-  return row.version === null ? `at:${locatorKey(row)}` : `version:${row.version}`;
-}
-
-function locationOf(row: IndexedMessage): HistoryLocation {
-  return { thread: threadOf(row.archive_key), segment: row.segment, ordinal: row.ordinal };
-}
-
-function betterRepresentative(a: IndexedMessage, b: IndexedMessage): IndexedMessage {
-  return compareIndexed(a, b) <= 0 ? a : b;
-}
-
-function groupMessages(
-  candidates: readonly RankedHistoryCandidate[],
-): GroupedHistoryCandidate[] {
-  const seen = new Set<string>();
-  const groups = new Map<string, GroupedHistoryCandidate>();
-  const order: string[] = [];
-  for (const candidate of candidates) {
-    const locator = locatorKey(candidate.row);
-    if (seen.has(locator)) continue;
-    seen.add(locator);
-    const key = identityKey(candidate.row);
-    const existing = groups.get(key);
-    if (existing === undefined) {
-      groups.set(key, { candidate, locations: [locationOf(candidate.row)] });
-      order.push(key);
-      continue;
-    }
-    existing.locations.push(locationOf(candidate.row));
-    const representative = betterRepresentative(existing.candidate.row, candidate.row);
-    if (representative !== existing.candidate.row) {
-      existing.candidate = { ...candidate, row: representative };
-    }
-  }
-  for (const group of groups.values()) {
-    group.locations.sort(
-      (a, b) => a.thread.localeCompare(b.thread) || a.segment - b.segment || a.ordinal - b.ordinal,
-    );
-  }
-  return order.map((key) => required(groups.get(key)));
-}
-
-function roundSimilarity(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
-function threadOf(archiveKey: string): string {
-  return archiveKey.includes("/") ? archiveKey.slice(archiveKey.indexOf("/") + 1) : "main";
-}
-
-function presentMessage(
-  row: IndexedMessage,
-  text: string,
-  timeZone: string,
-): HistoryMessage {
-  return {
-    ...locationOf(row),
-    msg_id: row.msg_id,
-    role: row.role,
-    timestamp: normalizeToZone(row.timestamp, timeZone),
-    model: row.model,
-    text,
-  };
-}
-
-function compareIndexed(a: IndexedMessage, b: IndexedMessage): number {
-  return a.archive_key.localeCompare(b.archive_key) || a.segment - b.segment || a.ordinal - b.ordinal;
-}
-
-function describeFailure(error: unknown): string {
+function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const pad = (value: number, width = 2): string => String(value).padStart(width, "0");
+const count = (value: number): string => value.toLocaleString("en-US");
+
+function wall(ms: number, zone: string): Date {
+  return new Date(naiveInZone(ms, zone));
+}
+
+function dayOf(ms: number, zone: string): string {
+  const d = wall(ms, zone);
+  return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+function clockOf(ms: number, zone: string): string {
+  const d = wall(ms, zone);
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+function weekdayOf(ms: number, zone: string): string {
+  return WEEKDAYS[wall(ms, zone).getUTCDay()] ?? "";
+}
+
+function stamp(ms: number, zone: string): string {
+  return `${dayOf(ms, zone)} ${weekdayOf(ms, zone)} ${clockOf(ms, zone)}`;
+}
+
+function localInstant(parts: number[], zone: string): number | undefined {
+  const [year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0] = parts;
+  const naive = Date.UTC(year, month - 1, day, hour, minute, second);
+  const check = new Date(naive);
+  if (
+    check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day ||
+    check.getUTCHours() !== hour || check.getUTCMinutes() !== minute || check.getUTCSeconds() !== second
+  ) {
+    return undefined;
+  }
+  return resolveInZone(asNaive(naive), zone);
+}
+
+function nextMidnight(year: number, month: number, day: number, zone: string): number {
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  return localInstant([next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()], zone) ?? Date.UTC(year, month - 1, day + 1);
+}
+
+const LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2}))?$/;
+
+function boundFrom(input: Record<string, unknown>, field: string, zone: string, end: boolean): number | undefined {
+  const raw = optionalTrimmedString(input, field);
+  if (raw === undefined) return undefined;
+  const invalid = new InvalidArgs(`${field} must be a date like 2026-03-01, a local time like 2026-03-01T21:30, or an RFC3339 timestamp`);
+  const date = LOCAL_DATE.exec(raw);
+  if (date !== null) {
+    const parts = date.slice(1).map(Number);
+    const start = localInstant(parts, zone);
+    if (start === undefined) throw invalid;
+    const [year = 0, month = 1, day = 1] = parts;
+    return end ? nextMidnight(year, month, day, zone) - 1 : start;
+  }
+  const time = LOCAL_TIME.exec(raw);
+  if (time !== null) {
+    const parts = time.slice(1, 7).map((part) => Number(part ?? 0));
+    const instant = localInstant(parts, zone);
+    if (instant === undefined) throw invalid;
+    return end ? instant + (time[6] === undefined ? 59_999 : 999) : instant;
+  }
+  const rfc = parseRfc3339Full(raw);
+  if (rfc === undefined) throw invalid;
+  return rfc.ms;
+}
+
+function monthsBefore(now: number, months: number, zone: string): number {
+  const d = wall(now, zone);
+  const back = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - months, d.getUTCDate()));
+  return resolveInZone(asNaive(back.getTime()), zone);
+}
+
+function orList(values: readonly string[]): string {
+  return values.length <= 1 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1] ?? ""}`;
+}
+
+function enumArg<T extends string>(input: Record<string, unknown>, field: string, allowed: readonly T[], fallback: T): T {
+  const value = input[field];
+  if (value === undefined) return fallback;
+  if (typeof value === "string" && (allowed as readonly string[]).includes(value)) return value as T;
+  throw new InvalidArgs(`${field} must be ${orList(allowed)}`);
+}
+
+function countArg(input: Record<string, unknown>, field: string, fallback: number, max: number): number {
+  const value = input[field];
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new InvalidArgs(`${field} must be a whole number, 0 or more`);
+  }
+  return Math.min(value, max);
+}
+
+function speakerFrom(input: Record<string, unknown>, view: View): Speaker | undefined {
+  const raw = optionalTrimmedString(input, "speaker");
+  if (raw === undefined) return undefined;
+  const value = raw.toLowerCase();
+  if (value === "user" || value === view.user.toLowerCase()) return "user";
+  if (value === "character" || value === view.character.toLowerCase()) return "character";
+  throw new InvalidArgs(`speaker must be ${orList(["user", "character", view.user, view.character])}`);
+}
+
+function labelOf(speaker: Speaker, view: View): string {
+  return speaker === "user" ? view.user : speaker === "character" ? view.character : "system";
+}
+
+function checkThread(index: HistoryIndex, thread: string | undefined): void {
+  if (thread === undefined) return;
+  const threads = index.threads();
+  if (!threads.includes(thread)) {
+    throw new InvalidArgs(`no archived thread is named ${JSON.stringify(thread)}; archived threads: ${threads.join(", ") || "none"}`);
+  }
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function truncate(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
+}
+
+function cutAt(text: string, index: number): number {
+  const code = text.charCodeAt(index);
+  return code >= 0xdc00 && code <= 0xdfff ? index - 1 : index;
+}
+
+function substringSnippet(text: string, needle: string): string {
+  const at = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (at < 0) return truncate(text, SUBSTRING_CONTEXT * 2);
+  const end = at + needle.length;
+  const from = cutAt(text, Math.max(0, at - SUBSTRING_CONTEXT));
+  const to = cutAt(text, Math.min(text.length, end + SUBSTRING_CONTEXT));
+  return `${from > 0 ? "…" : ""}${text.slice(from, at)}[${text.slice(at, end)}]${text.slice(end, to)}${to < text.length ? "…" : ""}`;
+}
+
+function alsoIn(row: ChatLogMessage): string[] {
+  return row.also_in === null ? [] : (JSON.parse(row.also_in) as string[]);
+}
+
+function archiveSpan(index: HistoryIndex, zone: string): { text: string; messages: number } | undefined {
+  const span = index.span();
+  return span === undefined ? undefined : { text: `${dayOf(span.oldest, zone)} → ${stamp(span.newest, zone)}`, messages: span.messages };
+}
+
+function emptyArchiveNote(index: HistoryIndex, zone: string): string {
+  const span = archiveSpan(index, zone);
+  return span === undefined
+    ? "The archive is empty; messages still in your context aren't archived yet."
+    : `The archive runs ${span.text}; newer messages are still in your context.`;
+}
+
+function quoteWords(query: string): string {
+  return query.split(/\s+/).filter((word) => word !== "").map((word) => `"${word.replaceAll('"', '""')}"`).join(" ");
+}
+
+function scopeText(view: View, filter: ChatLogFilter, rawStart: string | undefined, rawEnd: string | undefined): string {
+  const parts: string[] = [];
+  if (filter.speaker !== undefined) parts.push(`from ${labelOf(filter.speaker, view)}`);
+  if (filter.thread !== undefined) parts.push(`in thread ${filter.thread}`);
+  if (rawStart !== undefined && rawEnd !== undefined) parts.push(`between ${rawStart} and ${rawEnd}`);
+  else if (rawStart !== undefined) parts.push(`since ${rawStart}`);
+  else if (rawEnd !== undefined) parts.push(`until ${rawEnd}`);
+  return parts.length === 0 ? "" : ` ${parts.join(" ")}`;
+}
+
+function sortText(sort: ChatLogSort, match: ChatLogMatch): string {
+  if (sort === "oldest") return "oldest first";
+  return sort === "best" && match === "words" ? "best match first" : "newest first";
+}
+
+function hitLine(hit: ChatLogHit, view: View, query: string): string {
+  const thread = hit.thread === "main" ? "" : `[${hit.thread}] `;
+  const heartbeat = hit.heartbeat === 1 ? "(heartbeat) " : "";
+  const snippet = oneLine(hit.snippet ?? substringSnippet(hit.text, query));
+  const copies = alsoIn(hit);
+  const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
+  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${heartbeat}${snippet}  ${hit.msg_id}${also}`;
+}
+
+export async function handleSearchChatLogs(
+  input: Record<string, unknown>,
+  conversationDir: string,
+  options: ChatLogOptions,
+): Promise<string> {
+  checkConfigured(conversationDir);
+  const query = optionalTrimmedString(input, "query");
+  if (query === undefined) throw new InvalidArgs("query is required");
+  const view = viewOf(options);
+  const match = enumArg(input, "match", ["words", "substring"] as const, "words");
+  const sort = enumArg(input, "sort", ["best", "oldest", "newest"] as const, "best");
+  const speaker = speakerFrom(input, view);
+  const thread = optionalTrimmedString(input, "thread");
+  const start = boundFrom(input, "start", view.zone, false);
+  const end = boundFrom(input, "end", view.zone, true);
+  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs("start must not be after end");
+  const limit = Math.max(1, countArg(input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
+  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  const windowStart = input["all_time"] === true || start !== undefined || end !== undefined
+    ? undefined
+    : monthsBefore((options.now ?? Date.now)(), WINDOW_MONTHS, view.zone);
+  const filter: ChatLogFilter = {
+    ...(speaker === undefined ? {} : { speaker }),
+    ...(thread === undefined ? {} : { thread }),
+    ...(start === undefined ? {} : { start }),
+    ...(end === undefined ? {} : { end }),
+  };
+  const scoped = windowStart === undefined ? filter : { ...filter, start: windowStart };
+
+  return await withIndex(conversationDir, options, (index) => {
+    checkThread(index, thread);
+    const lines: string[] = [];
+    let expression = query;
+    let total: number;
+    try {
+      total = index.count(match, expression, scoped);
+    } catch (error) {
+      if (match !== "words") throw new ToolIoError(describe(error));
+      expression = quoteWords(query);
+      lines.push(`Not valid FTS5 syntax (${describe(error)}), so each word was searched as written: ${expression}`);
+      try {
+        total = index.count(match, expression, scoped);
+      } catch {
+        throw new InvalidArgs(`query ${JSON.stringify(query)} has no words to search for; match="substring" searches for it as text`);
+      }
+    }
+    const older = windowStart === undefined ? 0 : index.count(match, expression, { ...filter, end: windowStart - 1 });
+    const label = match === "substring" ? `${query} (substring)` : query;
+    const scope = scopeText(view, filter, optionalTrimmedString(input, "start"), optionalTrimmedString(input, "end"));
+    const windowed = older > 0 ? ` in the last ${String(WINDOW_MONTHS)} months (${count(older)} older)` : "";
+    if (total === 0) {
+      lines.push(`${label}: 0 matches${scope}${windowed}.`);
+      if (older === 0) {
+        const span = archiveSpan(index, view.zone);
+        lines.push(span === undefined
+          ? "The archive is empty; messages still in your context aren't archived yet."
+          : `Searched ${count(span.messages)} archived messages, ${span.text}. Newer messages are still in your context and aren't searched.`);
+        if (match === "words") lines.push(`For partial words, typos or CJK, try match="substring".`);
+      }
+      return lines.join("\n");
+    }
+    const hits = index.search(match, expression, scoped, sort, limit, offset);
+    const shown = hits.length === 0 ? "none on this page" : `showing ${count(offset + 1)}–${count(offset + hits.length)}`;
+    lines.push(`${label}: ${count(total)} ${total === 1 ? "match" : "matches"}${scope}${windowed}, ${shown}, ${sortText(sort, match)}`, "");
+    for (const hit of hits) lines.push(hitLine(hit, view, query));
+    if (offset + hits.length < total) lines.push("", `Next page: offset=${String(offset + hits.length)}`);
+    return lines.join("\n");
+  });
+}
+
+function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
+  const heartbeat = row.heartbeat === 1 ? "  (heartbeat)" : "";
+  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${heartbeat}  ${row.msg_id}`;
+}
+
+function entrySize(row: ChatLogMessage, view: View): number {
+  return entryHead(row, view, false).length + row.text.length + 3;
+}
+
+function gapText(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes >= 2 * 24 * 60) return `${String(Math.round(minutes / (24 * 60)))} days`;
+  if (minutes < 60) return `${String(minutes)} min`;
+  const rest = minutes % 60;
+  return rest === 0 ? `${String(Math.floor(minutes / 60))} h` : `${String(Math.floor(minutes / 60))} h ${String(rest)} min`;
+}
+
+function transcript(rows: readonly ChatLogMessage[], view: View, markId?: number): string[] {
+  const lines: string[] = [];
+  let previous: ChatLogMessage | undefined;
+  for (const row of rows) {
+    if (previous !== undefined && row.ts - previous.ts >= GAP_MS) lines.push(`· · · ${gapText(row.ts - previous.ts)} later · · ·`, "");
+    lines.push(entryHead(row, view, row.id === markId), row.text, "");
+    previous = row;
+  }
+  return lines;
+}
+
+function leftOut(earlier: number, later: number): string {
+  const parts = [
+    ...(earlier > 0 ? [`${String(earlier)} earlier`] : []),
+    ...(later > 0 ? [`${String(later)} later`] : []),
+  ];
+  return `${parts.join(" and ")} ${earlier + later === 1 ? "message" : "messages"}`;
+}
+
+function readAround(index: HistoryIndex, view: View, msgId: string, thread: string | undefined, before: number, after: number): string {
+  checkThread(index, thread);
+  const target = index.find(msgId, thread);
+  if (target === undefined) {
+    return `No archived message has id ${msgId}${thread === undefined ? "" : ` in thread ${thread}`}. Messages still in your context aren't archived yet.`;
+  }
+  const earlier = index.neighbors(target, -1, before);
+  const later = index.neighbors(target, 1, after);
+  const keptEarlier: ChatLogMessage[] = [];
+  const keptLater: ChatLogMessage[] = [];
+  let used = entrySize(target, view);
+  let full = false;
+  for (let distance = 0; distance < Math.max(earlier.length, later.length) && !full; distance += 1) {
+    for (const [side, kept] of [[earlier, keptEarlier], [later, keptLater]] as const) {
+      const row = side[distance];
+      if (row === undefined || full) continue;
+      const size = entrySize(row, view);
+      if (used + size > BUDGET_CHARS) {
+        full = true;
+        continue;
+      }
+      used += size;
+      kept.push(row);
+    }
+  }
+  const copies = alsoIn(target);
+  const lines = [
+    `${msgId} in ${target.thread}: ${String(keptEarlier.length)} before, ${String(keptLater.length)} after (${view.zone})`,
+    ...(copies.length === 0 ? [] : [`Also in thread ${copies.join(", ")}.`]),
+    "",
+    ...transcript([...keptEarlier.reverse(), target, ...keptLater], view, target.id),
+  ];
+  const missing = { earlier: earlier.length - keptEarlier.length, later: later.length - keptLater.length };
+  if (missing.earlier + missing.later > 0) {
+    lines.push(`Stopped at about ${count(BUDGET_CHARS)} characters; ${leftOut(missing.earlier, missing.later)} not shown.`);
+  }
+  return lines.join("\n").trimEnd();
+}
+
+function readRange(
+  index: HistoryIndex,
+  view: View,
+  thread: string,
+  bounds: { start: number | undefined; end: number | undefined; rawStart: string | undefined; rawEnd: string | undefined },
+  offset: number,
+): string {
+  const low = bounds.start ?? Number.MIN_SAFE_INTEGER;
+  const high = bounds.end ?? Number.MAX_SAFE_INTEGER;
+  const rangeText = bounds.rawStart !== undefined && bounds.rawEnd !== undefined
+    ? `${bounds.rawStart} → ${bounds.rawEnd}`
+    : bounds.rawStart !== undefined ? `from ${bounds.rawStart}` : `until ${bounds.rawEnd ?? ""}`;
+  const total = index.countRange(thread, low, high);
+  if (total === 0) return `${thread}, ${rangeText}: no archived messages. ${emptyArchiveNote(index, view.zone)}`;
+  if (offset >= total) return `${thread}, ${rangeText}: ${count(total)} messages, so offset ${String(offset)} is past the end.`;
+  const rows: ChatLogMessage[] = [];
+  let used = 0;
+  let full = false;
+  for (let page = offset; !full && page < total; page += RANGE_BATCH) {
+    const batch = index.range(thread, low, high, page, RANGE_BATCH);
+    if (batch.length === 0) break;
+    for (const row of batch) {
+      const size = entrySize(row, view);
+      if (rows.length > 0 && used + size > BUDGET_CHARS) {
+        full = true;
+        break;
+      }
+      used += size;
+      rows.push(row);
+    }
+  }
+  const lines = [
+    `${thread}, ${rangeText}: messages ${count(offset + 1)}–${count(offset + rows.length)} of ${count(total)} (${view.zone})`,
+    "",
+    ...transcript(rows, view),
+  ];
+  if (offset + rows.length < total) lines.push(`Next page: offset=${String(offset + rows.length)}`);
+  return lines.join("\n").trimEnd();
+}
+
+function conversationsOf(rows: readonly ChatLogMessage[]): ChatLogMessage[][] {
+  const conversations: ChatLogMessage[][] = [];
+  for (const row of rows) {
+    const current = conversations.at(-1);
+    const last = current?.at(-1);
+    if (current === undefined || last === undefined || last.thread !== row.thread || row.ts - last.ts >= GAP_MS) conversations.push([row]);
+    else current.push(row);
+  }
+  return conversations;
+}
+
+function dayOverview(index: HistoryIndex, view: View, date: string): string {
+  const parts = LOCAL_DATE.exec(date)?.slice(1).map(Number);
+  const dayStart = parts === undefined ? undefined : localInstant(parts, view.zone);
+  if (parts === undefined || dayStart === undefined) throw new InvalidArgs("overview must be a date like 2026-03-01");
+  const [year = 0, month = 1, day = 1] = parts;
+  const dayEnd = nextMidnight(year, month, day, view.zone) - 1;
+  const inDay = (row: ChatLogMessage) => row.ts >= dayStart && row.ts <= dayEnd;
+  const conversations = conversationsOf(index.between(dayStart - DAY_MS, dayEnd + DAY_MS)).filter((c) => c.some(inDay));
+  if (conversations.length === 0) return `${date}: no archived messages on this day. ${emptyArchiveNote(index, view.zone)}`;
+  const onDay = conversations.reduce((sum, c) => sum + c.filter(inDay).length, 0);
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? "";
+  const rows = conversations.map((c) => {
+    const first = required(c[0]);
+    const last = required(c[c.length - 1]);
+    const at = (row: ChatLogMessage) => dayOf(row.ts, view.zone) === date ? clockOf(row.ts, view.zone) : `${weekdayOf(row.ts, view.zone)} ${clockOf(row.ts, view.zone)}`;
+    const opener = c.find((row) => row.speaker === "user");
+    const heartbeats = c.filter((row) => row.heartbeat === 1).length;
+    const rest = opener !== undefined
+      ? `first: ${truncate(oneLine(opener.text), FIRST_LINE_CHARS)}`
+      : heartbeats === c.length
+        ? `${heartbeats === 1 ? "a heartbeat" : `${String(heartbeats)} heartbeats`} from ${view.character}, no reply from ${view.user}`
+        : `${String(c.length)} from ${view.character}, none from ${view.user}`;
+    return {
+      range: `${at(first)} → ${at(last)}`,
+      size: c.length === 1 ? "1 msg " : `${String(c.length)} msgs`,
+      rest: `${first.thread === "main" ? "" : `[${first.thread}] `}${rest}`,
+    };
+  });
+  const rangeWidth = Math.max(...rows.map((row) => row.range.length));
+  const sizeWidth = Math.max(...rows.map((row) => row.size.length));
+  return [
+    `${date} ${weekday}: ${String(conversations.length)} ${conversations.length === 1 ? "conversation" : "conversations"}, ${count(onDay)} messages that day (split at gaps of 90+ min, ${view.zone})`,
+    "",
+    ...rows.map((row) => `${row.range.padEnd(rangeWidth)}  ${row.size.padStart(sizeWidth)}  ${row.rest}`),
+  ].join("\n");
+}
+
+export async function handleReadChatLogs(
+  input: Record<string, unknown>,
+  conversationDir: string,
+  options: ChatLogOptions,
+): Promise<string> {
+  checkConfigured(conversationDir);
+  const view = viewOf(options);
+  const around = optionalTrimmedString(input, "around");
+  const overview = optionalTrimmedString(input, "overview");
+  const start = boundFrom(input, "start", view.zone, false);
+  const end = boundFrom(input, "end", view.zone, true);
+  const modes = Number(around !== undefined) + Number(overview !== undefined) + Number(start !== undefined || end !== undefined);
+  if (modes !== 1) throw new InvalidArgs("give exactly one of around, overview, or start and end");
+  const thread = optionalTrimmedString(input, "thread");
+  if (around !== undefined) {
+    const before = countArg(input, "before", DEFAULT_CONTEXT, MAX_CONTEXT);
+    const after = countArg(input, "after", DEFAULT_CONTEXT, MAX_CONTEXT);
+    return await withIndex(conversationDir, options, (index) => readAround(index, view, around, thread, before, after));
+  }
+  if (overview !== undefined) return await withIndex(conversationDir, options, (index) => dayOverview(index, view, overview));
+  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs("start must not be after end");
+  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  const bounds = { start, end, rawStart: optionalTrimmedString(input, "start"), rawEnd: optionalTrimmedString(input, "end") };
+  return await withIndex(conversationDir, options, (index) => {
+    checkThread(index, thread);
+    return readRange(index, view, thread ?? "main", bounds, offset);
+  });
 }

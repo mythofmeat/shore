@@ -1,0 +1,5 @@
+Find archived conversations with {{user}} by the words that were said: your messages, {{user}}'s, and your heartbeat messages, never thinking or tool calls. Messages still in your context aren't archived yet and aren't searched.
+
+`query` is SQLite FTS5 syntax: words that must all appear (`lemon tart`), `"an exact phrase"`, `OR`, `NOT`, a prefix (`bake*` finds bake, baked, baking) and `NEAR(lemon tart, 10)`. If it isn't valid FTS5, each word is searched as written and the result says so. `match: "substring"` finds the text anywhere, inside words too, for partial words, typos and writing without spaces.
+
+Without `start` or `end`, only the last 6 months are searched, and the count says how many older matches there are; `all_time: true` searches everything. The result gives the total count and one line per hit: local time, speaker, thread when it isn't main, a snippet with the match in [brackets], and the message id. Pass the id to `read_chat_logs` as `around` to read the conversation there.

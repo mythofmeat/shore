@@ -63,6 +63,7 @@
         "activity_heatmap",
         "search",
         "search_chat_logs",
+        "read_chat_logs",
         "model_history",
         "set_next_wake"
       ],
@@ -723,6 +724,7 @@
     "activity_heatmap",
     "search",
     "search_chat_logs",
+    "read_chat_logs",
     "model_history",
     "set_next_wake"
   ]

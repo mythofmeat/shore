@@ -144,7 +144,7 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
     autonomy: state === undefined ? null : autonomyWire(state, now),
     activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
     index: await workspaceIndexSection(ctx.workspaceIndex, ctx.characterName),
-    history_index: await historyIndexSection(ctx.historyIndex, ctx.characterName),
+    history_index: historyIndexSection(ctx.historyIndex, ctx.characterName),
     ...(mcp === undefined ? {} : { mcp }),
     compaction: await compactionSection(ctx),
     ...(ctx.running === undefined ? {} : { running: ctx.running }),
