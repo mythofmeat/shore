@@ -43,6 +43,7 @@ import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_too
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 import { nativeHistoryStore, seedNativeHistory, throwawayHistoryStore } from "./claude_agent_history.ts";
 import { contextFilterEnvironment } from "./claude_agent_injections.ts";
+import { currentWireScope } from "../wire_capture.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
@@ -331,7 +332,7 @@ function buildOptions(
   abort: AbortController,
   surface?: AgentToolSurface,
 ): Options {
-  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url) };
+  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url, currentWireScope()) };
   if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
 
   const system = systemToText(req.system);

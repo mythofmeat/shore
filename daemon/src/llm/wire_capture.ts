@@ -52,6 +52,14 @@ export function newWireScope(
   };
 }
 
+export function currentWireScope(): WireScope | undefined {
+  return scopes.getStore();
+}
+
+export function outsideWireScope<T>(fn: () => T): T {
+  return scopes.exit(fn);
+}
+
 export function withWireScope<T>(scope: WireScope, fn: () => T): T {
   return scopes.run(scope, fn);
 }

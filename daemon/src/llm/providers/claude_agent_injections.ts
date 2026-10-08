@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { shoreLog } from "../../log.ts";
+import { outsideWireScope, withWireScope, type WireScope } from "../wire_capture.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
+const SCOPE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SCOPE_TTL_MS = 24 * 60 * 60 * 1000;
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
 
 type Block = Record<string, unknown>;
@@ -99,9 +102,10 @@ class ContextFilter {
   #server: Server<undefined> | undefined;
   readonly #upstreams = new Map<string, string>();
   readonly #keys = new Map<string, string>();
+  readonly #scopes = new Map<string, { scope: WireScope; at: number }>();
 
-  baseUrl(upstream: string): string {
-    const server = this.#server ??= this.#start();
+  baseUrl(upstream: string, scope?: WireScope): string {
+    const server = this.#server ??= outsideWireScope(() => this.#start());
     const origin = upstream.replace(/\/+$/, "");
     let key = this.#keys.get(origin);
     if (key === undefined) {
@@ -109,7 +113,13 @@ class ContextFilter {
       this.#keys.set(origin, key);
       this.#upstreams.set(key, origin);
     }
-    return `http://127.0.0.1:${String(server.port)}/${key}`;
+    const base = `http://127.0.0.1:${String(server.port)}/${key}`;
+    if (scope === undefined) return base;
+    const now = Date.now();
+    for (const [scopeKey, entry] of this.#scopes) if (now - entry.at > SCOPE_TTL_MS) this.#scopes.delete(scopeKey);
+    const scopeKey = randomUUID();
+    this.#scopes.set(scopeKey, { scope, at: now });
+    return `${base}/${scopeKey}`;
   }
 
   #start(): Server<undefined> {
@@ -122,7 +132,10 @@ class ContextFilter {
         const [, key = "", ...rest] = url.pathname.split("/");
         const upstream = this.#upstreams.get(key);
         if (upstream === undefined) return new Response(null, { status: 404 });
-        return forward(request, new URL(`${upstream}/${rest.join("/")}${url.search}`));
+        const scopeKey = SCOPE_KEY.test(rest[0] ?? "") ? rest.shift() : undefined;
+        const scope = scopeKey === undefined ? undefined : this.#scopes.get(scopeKey)?.scope;
+        const target = new URL(`${upstream}/${rest.join("/")}${url.search}`);
+        return scope === undefined ? forward(request, target) : withWireScope(scope, () => forward(request, target));
       },
     });
     server.unref();
@@ -132,11 +145,11 @@ class ContextFilter {
 
 const filter = new ContextFilter();
 
-export function contextFilterEnvironment(baseUrl: string | undefined): Record<string, string> {
+export function contextFilterEnvironment(baseUrl: string | undefined, scope?: WireScope): Record<string, string> {
   const upstream = baseUrl ?? ANTHROPIC_API;
   const firstParty = URL.parse(upstream)?.host === new URL(ANTHROPIC_API).host;
   return {
-    ANTHROPIC_BASE_URL: filter.baseUrl(upstream),
+    ANTHROPIC_BASE_URL: filter.baseUrl(upstream, scope),
     NO_PROXY: "127.0.0.1",
     ...(firstParty ? { _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL: "1" } : {}),
   };
