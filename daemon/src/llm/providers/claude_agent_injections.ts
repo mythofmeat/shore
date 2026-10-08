@@ -5,11 +5,6 @@ import { shoreLog } from "../../log.ts";
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
-const CLI_SYSTEM_LINES = new Set([
-  "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
-  "You are Claude Code, Anthropic's official CLI for Claude.",
-  "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.",
-]);
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
@@ -28,14 +23,12 @@ function canHoldCacheControl(block: Block): boolean {
   return block.type !== "thinking" && block.type !== "redacted_thinking";
 }
 
-function isCliSystemBlock(block: Block): boolean {
-  if (block.type !== "text" || typeof block.text !== "string") return false;
-  const text = block.text.trim();
-  return CLI_SYSTEM_LINES.has(text) || text.startsWith("x-anthropic-billing-header:");
+function isBillingHeader(block: Block): boolean {
+  return block.type === "text" && typeof block.text === "string" && block.text.trim().startsWith("x-anthropic-billing-header:");
 }
 
 export function withoutInjectedContext(body: Record<string, unknown>): Record<string, unknown> {
-  const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter(block => !isCliSystemBlock(block)) } : {};
+  const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter(block => !isBillingHeader(block)) } : {};
   if (!Array.isArray(body.messages)) return { ...body, ...system };
   const kept: Message[] = [];
   let anchor: Block | undefined;
