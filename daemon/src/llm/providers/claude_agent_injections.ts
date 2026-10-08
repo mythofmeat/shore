@@ -10,14 +10,18 @@ const CLI_SYSTEM_LINES = new Set([
   "You are Claude Code, Anthropic's official CLI for Claude.",
   "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.",
 ]);
+const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
+const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
 
 type Block = Record<string, unknown>;
 type Message = { role?: unknown; content?: unknown };
 
-function isInjected(block: Block): boolean {
+function isInjected(role: unknown, block: Block): boolean {
   if (block.type !== "text" || typeof block.text !== "string") return false;
-  return block.text.trimStart().startsWith(REMINDER) || IMAGE_SOURCE.test(block.text.trim());
+  if (role === "assistant") return CLI_PLACEHOLDERS.has(block.text.trim());
+  const text = block.text.trim();
+  return role === "user" && (text.startsWith(REMINDER) || IMAGE_SOURCE.test(text) || CLI_INTERRUPTIONS.has(text));
 }
 
 function canHoldCacheControl(block: Block): boolean {
@@ -58,7 +62,7 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
     }
     const blocks: Block[] = [];
     for (const block of content as Block[]) {
-      if (message.role === "user" && isInjected(block)) {
+      if (isInjected(message.role, block)) {
         drop(block);
         continue;
       }

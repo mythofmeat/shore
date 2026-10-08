@@ -134,6 +134,9 @@ test("withoutInjectedContext drops injected blocks and keeps their cache breakpo
       { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } },
         { type: "text", text: "[Image: source: /tmp/claude/images/1.png]", cache_control: ttl }] },
       { role: "user", content: "<system-reminder>context</system-reminder>" },
+      { role: "assistant", content: [{ type: "text", text: "No response requested." }] },
+      { role: "user", content: [{ type: "text", text: "[Request interrupted by user for tool use]" }] },
+      { role: "user", content: [{ type: "text", text: "continue" }] },
       { role: "system", content: [{ type: "text", text: "# Environment", cache_control: ttl }], output_config: { effort: "high" } },
     ],
   };
@@ -144,6 +147,7 @@ test("withoutInjectedContext drops injected blocks and keeps their cache breakpo
       { role: "user", content: [{ type: "text", text: "hello" }] },
       { role: "assistant", content: [{ type: "thinking", thinking: "hm", signature: "s" }, { type: "text", text: "hi" }] },
       { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" }, cache_control: ttl }] },
+      { role: "user", content: [{ type: "text", text: "continue", cache_control: ttl }] },
     ],
   });
 });
