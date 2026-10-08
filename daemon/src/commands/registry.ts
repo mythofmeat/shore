@@ -23,6 +23,7 @@ import { characterInfo, createCharacter, listCharacters, switchCharacter } from 
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
+import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
 
@@ -37,6 +38,10 @@ const LEDGER_UNAVAILABLE = "provider error: usage reports need a ledger on disk;
 function engineOf(context: CommandOperationContext): ConversationEngine {
   if (context.engine === undefined) throw invalidRequest("This operation requires a character");
   return context.engine;
+}
+
+function workspaceTurnsOf(context: CommandOperationContext): WorkspaceTurns {
+  return workspaceTurnsFor(context.session.config.dirs, engineOf(context).characterName);
 }
 
 function archiveContext({ session, deps }: CommandOperationContext): ArchiveContext {
@@ -258,17 +263,17 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   get: register("get", { ...conversationPresentation, label: "Inspect message", fields: { ref: messageRef, role: historyFields.role } },
     (context, args) => get(engineOf(context), args)),
   edit: register("edit", { ...conversationPresentation, label: "Edit message", effects: ["history_write"], fields: { ref: messageRef, content: { label: "Message text", multiline: true } } },
-    (context, args) => edit(engineOf(context), args)),
-  delete: register("delete", { ...conversationPresentation, label: "Delete messages", effects: ["history_write"], confirmation: "delete", fields: { refs: { label: "Message references", hint: "One reference or a collection; each selected turn includes its tool loop" } } },
-    (context, args) => deleteMessages(engineOf(context), args)),
+    (context, args) => edit(engineOf(context), args, workspaceTurnsOf(context))),
+  delete: register("delete", { ...conversationPresentation, label: "Delete messages", effects: ["history_write", "workspace_write"], confirmation: "delete", fields: { refs: { label: "Message references", hint: "One reference or a collection; each selected turn includes its tool loop" } } },
+    (context, args) => deleteMessages(engineOf(context), args, workspaceTurnsOf(context))),
   list_alternatives: register("list_alternatives", { ...conversationPresentation, label: "Browse alternative responses", fields: { ref: { ...messageRef, hint: "Omit for the latest assistant message" } } },
     (context, args) => listAlternatives(engineOf(context), args)),
-  alt: register("alt", { ...conversationPresentation, label: "Select alternative response", effects: ["history_write"], fields: {
+  alt: register("alt", { ...conversationPresentation, label: "Select alternative response", effects: ["history_write", "workspace_write"], fields: {
     ref: { ...messageRef, hint: "Omit for the latest assistant message" },
     index: { label: "Zero-based index", hint: "Takes precedence over position and direction" },
     position: { label: "One-based position", hint: "Used when index is omitted" },
     direction: { label: "Direction", hint: "Defaults to next; used when index and position are omitted" },
-  } }, (context, args) => alt(engineOf(context), args)),
+  } }, (context, args) => alt(engineOf(context), args, workspaceTurnsOf(context))),
   inject_system: register("inject_system", { ...conversationPresentation, label: "Add system instruction", effects: ["history_write"], fields: { text: { label: "Instruction", multiline: true } } },
     (context, args) => injectSystem(engineOf(context), args)),
   list_characters: register("list_characters", {

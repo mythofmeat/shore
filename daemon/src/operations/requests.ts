@@ -28,7 +28,7 @@ export const coreRequests = {
     rid: request.rid ?? null, text: request.text, stream: request.stream, images: request.images ?? [], image_data: request.image_data ?? [],
     ...(request.absence_seconds === undefined ? {} : { absence_seconds: request.absence_seconds }),
   } })),
-  regen: register("regen", { label: "Regenerate response", scope: "character", effects: ["history_write", "provider_call"], fields: {
+  regen: register("regen", { label: "Regenerate response", scope: "character", effects: ["history_write", "workspace_write", "provider_call"], fields: {
     stream, guidance: { label: "Guidance", multiline: true, hint: "Optional instructions for the alternative response." },
   } }, (request) => ({ kind: "generation", regen: true, body: {
     rid: request.rid ?? null, text: "", stream: request.stream, images: [], image_data: [],

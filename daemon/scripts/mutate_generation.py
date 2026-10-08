@@ -23,11 +23,11 @@ MUTANTS = [
      ""),
     ("order: the compaction gate runs before the stream",
      GEN,
-     "  const { result, intermediate } = await streamTurn(deps, {",
-     "  await maybeCompact(turnCtx, engine, charName, config, deps.dataDir,\n"
-     "    { usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0,\n"
-     "      cache_creation_tokens: 0 } } as never, undefined, deps.compaction);\n"
-     "  const { result, intermediate } = await streamTurn(deps, {"),
+     "    const streamed = await streamTurn(deps, {",
+     "    await maybeCompact(turnCtx, engine, charName, config, deps.dataDir,\n"
+     "      { usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0,\n"
+     "        cache_creation_tokens: 0 } } as never, undefined, deps.compaction);\n"
+     "    const streamed = await streamTurn(deps, {"),
     ("order: the request is assembled before the user turn is recorded",
      GEN,
      "  const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, \"upload\"));",
@@ -60,8 +60,8 @@ MUTANTS = [
      '    threadModelOf(deps.registry.listThreads(charName), "main"),'),
     ("inputs: a regen sends the whole history, the replaced turn included",
      GEN,
-     "    regen,\n    mcpRegistry: deps.mcpRegistry,",
-     "    regen: false,\n    mcpRegistry: deps.mcpRegistry,"),
+     "      regen,\n      mcpRegistry: deps.mcpRegistry,",
+     "      regen: false,\n      mcpRegistry: deps.mcpRegistry,"),
     ("inputs: the rid is not put on the call labels",
      GEN,
      "    ...(rid === null ? {} : { rid }),\n"

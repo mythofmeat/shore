@@ -4,7 +4,7 @@ import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import rawFixture from "./handler_captures/generation.json" with { type: "json" };
@@ -44,6 +44,7 @@ import type { TurnAutonomy } from "../src/handler/turn.ts";
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { testTmp } from "./support/tmp.ts";
+import { recordedTurns, recordTurn, snapshotTree, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { recordedValue } from "./support/rerecord.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
@@ -369,7 +370,12 @@ async function* scriptedLoop(
   yield* events;
 }
 
-async function replayTurn(c: GenerationCase): Promise<Run> {
+interface ReplayHooks {
+  seed?: (turns: WorkspaceTurns) => Promise<void>;
+  during?: (turns: WorkspaceTurns) => Promise<void>;
+}
+
+async function replayTurn(c: GenerationCase, hooks: ReplayHooks = {}): Promise<Run> {
   const turnInput = c.input;
   const root = await tempRoot("run");
   const config = await loadedConfig(root, {
@@ -386,6 +392,8 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "ada system prompt");
   const charDir = join(config.dirs.data, "ada");
   await mkdir(join(charDir, "threads", "main"), { recursive: true });
+  const turns = workspaceTurnsFor(config.dirs, "ada");
+  await hooks.seed?.(turns);
 
   const history = turnInput.history;
   seededTimestamps = new Set(history.map((m) => m.timestamp));
@@ -412,6 +420,7 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   const provider: SidecarProvider = {
     async *stream(req) {
       requests.push(req);
+      await hooks.during?.(turns);
       yield* events;
     },
     generate: () => {
@@ -834,6 +843,89 @@ test("a fresh message's stream_start lists nothing to replace", async () => {
   expect(run.error).toBeUndefined();
   expect(run.direct.find((frame) => frame.type === "stream_start")).toEqual({
     type: "stream_start", subagent: null, rid: "r-fresh", regen: false,
+  });
+});
+
+describe("workspace turns", () => {
+  const question: Message = {
+    msg_id: "m_question", role: "user", content: "Leave me a note", images: [],
+    content_blocks: [{ type: "text", text: "Leave me a note" }], timestamp: "2026-01-01T10:00:00-05:00",
+  };
+  const answer: Message = {
+    msg_id: "m_answer", role: "assistant", content: "Done.", images: [],
+    content_blocks: [{ type: "text", text: "Done." }], timestamp: "2026-01-01T10:00:01-05:00", version: "mv_old",
+  };
+  const reply = (text: string): StreamEvent[] => [
+    { type: "start", model: "claude-fixture" },
+    { type: "text", text },
+    {
+      type: "done", content: text, finish_reason: "end_turn",
+      usage: { input_tokens: 10, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 },
+      timing: { total_ms: 10, time_to_first_token_ms: 2 },
+    },
+  ];
+  const turn = (regen: boolean, history: Message[]): GenerationCase => ({
+    input: {
+      history, body: { text: regen ? "" : "Leave me a note" }, regen, rid: null, max_retries: 0,
+      subagent: null, tools_enabled: null, tool_steps: [], events: reply("Here you go."),
+    },
+    output: {},
+  });
+  const seedOldNote = async (turns: WorkspaceTurns): Promise<void> => {
+    const before = await snapshotTree(turns);
+    await writeFile(join(turns.workspace, "note.md"), "from the old reply\n");
+    await recordTurn(turns, "main", "mv_old", before);
+  };
+  const newestVersion = async (dataDir: string): Promise<string> =>
+    String((await readBack(dataDir)).filter((message) => message.role === "assistant").at(-1)?.version);
+
+  test("a turn records the files it changed under its reply", async () => {
+    let workspace = "";
+    const run = await replayTurn(turn(false, []), {
+      during: async (turns) => {
+        workspace = turns.workspace;
+        await writeFile(join(turns.workspace, "note.md"), "hello\n");
+      },
+    });
+    expect(run.error).toBeUndefined();
+    const turns = workspaceTurnsFor({ config: join(run.dataDir, "..", "config"), cache: join(run.dataDir, "..", "cache") }, "ada");
+    expect(turns.workspace).toBe(workspace);
+    const version = await newestVersion(run.dataDir);
+    expect(await recordedTurns(turns, "main", [version])).toEqual([version]);
+  });
+
+  test("a regenerate undoes the old reply's files before the new reply runs", async () => {
+    let sawOldNote: boolean | undefined;
+    let workspace = "";
+    const run = await replayTurn(turn(true, [question, answer]), {
+      seed: seedOldNote,
+      during: async (turns) => {
+        workspace = turns.workspace;
+        sawOldNote = existsSync(join(turns.workspace, "note.md"));
+        await writeFile(join(turns.workspace, "other.md"), "from the new reply\n");
+      },
+    });
+    expect(run.error).toBeUndefined();
+    expect(sawOldNote).toBe(false);
+    expect(existsSync(join(workspace, "note.md"))).toBe(false);
+    expect(existsSync(join(workspace, "other.md"))).toBe(true);
+    const turns = workspaceTurnsFor({ config: join(run.dataDir, "..", "config"), cache: join(run.dataDir, "..", "cache") }, "ada");
+    const version = await newestVersion(run.dataDir);
+    expect(await recordedTurns(turns, "main", ["mv_old", version])).toEqual(["mv_old", version]);
+  });
+
+  test("a regenerate that fails puts the old reply's files back", async () => {
+    let workspace = "";
+    const run = await replayTurn(turn(true, [question, answer]), {
+      seed: seedOldNote,
+      during: async (turns) => {
+        workspace = turns.workspace;
+        throw new Error("provider down");
+      },
+    });
+    expect(run.error).toContain("provider down");
+    expect(readFileSync(join(workspace, "note.md"), "utf8")).toBe("from the old reply\n");
+    expect((await readBack(run.dataDir)).map((message) => message.msg_id)).toEqual(["m_question", "m_answer"]);
   });
 });
 

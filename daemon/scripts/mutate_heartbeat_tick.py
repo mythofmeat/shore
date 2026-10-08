@@ -12,6 +12,7 @@ ENGINE_BLOCK = (
     "    try {\n"
     "      const engine = await deps.engine(character);\n"
     "      await engine.appendMessage(msg);\n"
+    "      persisted = msg;\n"
     "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");\n"
     "    } catch (e) {\n"
     "      shoreLog.error(\n"
@@ -34,7 +35,7 @@ MUTANTS = [
      T,
      "  } else if (loop.sendMessageText === undefined && loop.images.length === 0) {\n"
      "    note(\"message_skipped\", \"Tick completed — no message sent\");\n"
-     "    return;\n"
+     "    return undefined;\n"
      "  }",
      "  }"),
     ("failed: a failed round is reported as an ordinary quiet tick",
@@ -75,6 +76,7 @@ MUTANTS = [
      "      const engine = await deps.engine(character);\n"
      "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");\n"
      "      await engine.appendMessage(msg);\n"
+     "      persisted = msg;\n"
      "    } catch (e) {\n"
      "      shoreLog.error(`shore: heartbeat could not persist for ${character}: ${String(e)}`);\n"
      "    }"),
@@ -82,6 +84,7 @@ MUTANTS = [
      T, ENGINE_BLOCK,
      "    const engine = await deps.engine(character);\n"
      "    await engine.appendMessage(msg);\n"
+     "    persisted = msg;\n"
      "    deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");"),
     ("deliver: the notification only fires when the append succeeded",
      T,
@@ -125,8 +128,8 @@ MUTANTS = [
      "    maxToolIterations: undefined,"),
     ("tick: delivery reads a request the loop never ran against",
      T,
-     "  await persistHeartbeatMessage(character, prepared.request, loop, deps, note);",
-     "  await persistHeartbeatMessage(character, { model: \"\", messages: [] } as never, loop, deps, note);"),
+     "= await persistHeartbeatMessage(character, prepared.request, loop, deps, note);",
+     "= await persistHeartbeatMessage(character, { model: \"\", messages: [] } as never, loop, deps, note);"),
 ]
 
 

@@ -2128,7 +2128,23 @@ wire_types! {
         pub edited: bool,
     }
 
-    pub struct MessagesDeleted { pub deleted: Vec<String> }
+    #[serde(rename_all = "snake_case")]
+    pub enum WorkspaceKept { LaterTurns }
+
+    pub struct WorkspaceRewind {
+        pub restored: Vec<String>,
+        pub skipped: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub kept: Option<WorkspaceKept>,
+    }
+
+    pub struct MessagesDeleted {
+        pub deleted: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub workspace: Option<WorkspaceRewind>,
+    }
 
     pub struct AlternativeView {
         pub index: usize,
@@ -2155,6 +2171,9 @@ wire_types! {
         pub position: usize,
         pub alt_count: usize,
         pub content: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub workspace: Option<WorkspaceRewind>,
     }
 
     pub struct SystemInjected { pub injected: bool }

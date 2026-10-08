@@ -14,6 +14,8 @@ import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
+import { newMessageVersion } from "../engine/versions.ts";
+import { recordTurn, snapshotTree, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { budgetStopIn, describeError } from "../llm/errors.ts";
 import { truncateSummary } from "../notifications.ts";
@@ -82,13 +84,13 @@ export async function persistHeartbeatMessage(
   loop: HeartbeatLoopResult,
   deps: Pick<HeartbeatTickDeps, "engine" | "emit" | "notify" | "newId" | "nowIso">,
   note: (kind: HeartbeatEventKind, detail: string) => void,
-): Promise<void> {
+): Promise<Message | undefined> {
   if (loop.failedRound !== undefined) {
     noteTickFailure(character, loop, note);
-    if (loop.sendMessageText === undefined && loop.images.length === 0) return;
+    if (loop.sendMessageText === undefined && loop.images.length === 0) return undefined;
   } else if (loop.sendMessageText === undefined && loop.images.length === 0) {
     note("message_skipped", "Tick completed — no message sent");
-    return;
+    return undefined;
   }
 
   const text = loop.sendMessageText ?? "";
@@ -118,14 +120,17 @@ export async function persistHeartbeatMessage(
     ...(shape.providerKey === undefined ? {} : { provider_key: shape.providerKey }),
     ...(shape.model === undefined ? {} : { model: shape.model }),
     timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
+    version: newMessageVersion(),
   };
 
+  let persisted: Message | undefined;
   if (deps.engine === undefined) {
     shoreLog.error(`shore: heartbeat for ${character} has no engine, message not persisted`);
   } else {
     try {
       const engine = await deps.engine(character);
       await engine.appendMessage(msg);
+      persisted = msg;
       deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? "main");
     } catch (e) {
       shoreLog.error(
@@ -137,6 +142,7 @@ export async function persistHeartbeatMessage(
   deps.notify?.(`Shore - ${character}`, msg.content);
 
   note("message_sent", `Autonomous message sent: ${shortPreview(msg.content)}`);
+  return persisted;
 }
 
 export async function runHeartbeatTick(
@@ -173,6 +179,8 @@ export async function runHeartbeatTick(
       return { events };
     }
 
+    const workspaceTurns = workspaceTurnsFor(config.dirs, character);
+    const before = await snapshotTree(workspaceTurns);
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, prepared),
@@ -184,7 +192,8 @@ export async function runHeartbeatTick(
     });
 
     signal.throwIfAborted();
-    await persistHeartbeatMessage(character, prepared.request, loop, deps, note);
+    const sent = await persistHeartbeatMessage(character, prepared.request, loop, deps, note);
+    if (sent?.version !== undefined) await recordTurn(workspaceTurns, thread, sent.version, before);
 
     return { events };
   });

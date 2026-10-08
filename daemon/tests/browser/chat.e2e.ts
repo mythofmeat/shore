@@ -91,6 +91,38 @@ test("sending clears the message box at once and regenerating replaces the reply
   await check();
 });
 
+test("regenerating, swiping and deleting take the reply's workspace changes with them", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "quill");
+  const box = page.getByLabel("Message", { exact: true });
+  const settled = page.locator("article.message.assistant:not(.streaming)");
+  await box.fill("Run the workspace note fixture");
+  await box.press("Enter");
+  await expect(settled.last()).toContainText(/Before note-\d+ the notes were \[\]/);
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+
+  await settled.last().hover();
+  await settled.last().getByRole("button", { name: "Generate another response" }).click();
+  const current = page.locator("article.message.assistant").last();
+  await expect(current.getByRole("button", { name: /Response 2 of 2/ })).toBeVisible();
+  await expect(current).toContainText(/Before note-\d+ the notes were \[\]/);
+  await current.getByRole("button", { name: "Previous response" }).click();
+  await expect(page.getByText("Restored 2 workspace files")).toBeVisible();
+
+  await box.fill("Run the workspace note fixture again");
+  await box.press("Enter");
+  await expect(page.locator("article.message.user")).toHaveCount(2);
+  await expect(settled.last()).toContainText(/the notes were \[reply-\d+\.md\]/);
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  const newest = settled.last();
+  await newest.hover();
+  await newest.getByRole("button", { name: "Delete", exact: true }).click();
+  await newest.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByText("Restored 1 workspace file")).toBeVisible();
+  await check();
+});
+
 test("a tool loop streams as one reply and its steps collapse into one summary", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);

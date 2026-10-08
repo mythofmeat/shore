@@ -16,6 +16,9 @@ import type { ImageRef, Message, Role } from "../engine/types.ts";
 import { embedImageData, embedMessagesImageData } from "../engine/wire_images.ts";
 import { localRfc3339 } from "../util/time.ts";
 import { engineError, invalidRequest, notFound } from "./errors.ts";
+import { versionOf } from "../engine/versions.ts";
+import type { WorkspaceRewind } from "../protocol/WorkspaceRewind.ts";
+import { aliasTurn, recordedTurns, redoTurns, undoTurns, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 
 const DEFAULT_LOG_TURNS = 64;
 
@@ -188,7 +191,7 @@ export function historyPage(engine: ConversationEngine, args: Args): OperationRe
   return readHistoryPage(engine, args, resolveHistoryBefore(args));
 }
 
-export async function edit(engine: ConversationEngine, args: Args): Promise<OperationResult<"edit">> {
+export async function edit(engine: ConversationEngine, args: Args, turns?: WorkspaceTurns): Promise<OperationResult<"edit">> {
   const rawRef = asStr(args["ref"]);
   if (rawRef === undefined) throw invalidRequest("Missing required argument: ref");
   const content = asStr(args["content"]);
@@ -196,16 +199,21 @@ export async function edit(engine: ConversationEngine, args: Args): Promise<Oper
 
   const merged = mergeToolLoopMessages([...engine.messages()]);
   const msgId = resolveRef(merged, rawRef);
+  const previous = replyVersion(engine.messages(), msgId);
   try {
     await engine.editMessage(msgId, content);
   } catch (e) {
     throw engineError(e);
   }
+  const next = replyVersion(engine.messages(), msgId);
+  if (turns !== undefined && previous !== undefined && next !== undefined && previous !== next) {
+    await aliasTurn(turns, engine.thread, previous, next);
+  }
 
   return { ref: msgId, edited: true };
 }
 
-export async function deleteMessages(engine: ConversationEngine, args: Args): Promise<OperationResult<"delete">> {
+export async function deleteMessages(engine: ConversationEngine, args: Args, workspaceTurns?: WorkspaceTurns): Promise<OperationResult<"delete">> {
   const refs = args["refs"];
   let rawRefs: string[];
   if (Array.isArray(refs)) {
@@ -245,7 +253,35 @@ export async function deleteMessages(engine: ConversationEngine, args: Args): Pr
     deleted.push(...pending);
   }
 
-  return { deleted };
+  const workspace = workspaceTurns === undefined ? undefined : await rewindDeleted(engine, workspaceTurns, raw, gone);
+  return workspace === undefined ? { deleted } : { deleted, workspace };
+}
+
+async function rewindDeleted(
+  engine: ConversationEngine,
+  turns: WorkspaceTurns,
+  before: readonly Message[],
+  gone: ReadonlySet<string>,
+): Promise<WorkspaceRewind | undefined> {
+  const replies = mergeToolLoopMessages([...before]).filter((m) => m.role === "assistant");
+  const first = replies.findIndex((m) => gone.has(m.msg_id));
+  if (first === -1) return undefined;
+  const doomed = replies.filter((m) => gone.has(m.msg_id));
+  const versions = doomed.flatMap((m) => versionOf(m) ?? []);
+  if (!replies.slice(first).every((m) => gone.has(m.msg_id))) {
+    const recorded = await recordedTurns(turns, engine.thread, versions);
+    return recorded.length === 0 ? undefined : { restored: [], skipped: [], kept: "later_turns" };
+  }
+  return reported(await undoTurns(turns, engine.thread, [...versions].reverse()));
+}
+
+function reported(rewind: WorkspaceRewind): WorkspaceRewind | undefined {
+  return rewind.restored.length === 0 && rewind.skipped.length === 0 ? undefined : rewind;
+}
+
+function replyVersion(messages: readonly Message[], msgId: string): string | undefined {
+  const reply = mergeToolLoopMessages([...messages]).find((m) => m.msg_id === msgId);
+  return reply?.role === "assistant" ? versionOf(reply) : undefined;
 }
 
 export function listAlternatives(engine: ConversationEngine, args: Args): OperationResult<"list_alternatives"> {
@@ -279,7 +315,7 @@ export function listAlternatives(engine: ConversationEngine, args: Args): Operat
   };
 }
 
-export async function alt(engine: ConversationEngine, args: Args): Promise<OperationResult<"alt">> {
+export async function alt(engine: ConversationEngine, args: Args, turns?: WorkspaceTurns): Promise<OperationResult<"alt">> {
   const merged = mergeToolLoopMessages([...engine.messages()]);
   const msgId = resolveAssistantRef(merged, asStr(args["ref"]));
   const msg = merged.find((m) => m.msg_id === msgId);
@@ -289,6 +325,8 @@ export async function alt(engine: ConversationEngine, args: Args): Promise<Opera
   if (altCount === 0) throw invalidRequest(`message ${msgId} has no alternate responses`);
   const current = Math.min(msg.alt_index ?? 0, altCount - 1);
   const target = resolveAltTarget(args, current, altCount);
+  const newest = merged.filter((m) => m.role === "assistant").at(-1)?.msg_id === msgId;
+  const previous = versionOf(msg);
 
   let selection;
   try {
@@ -297,12 +335,27 @@ export async function alt(engine: ConversationEngine, args: Args): Promise<Opera
     throw engineError(e);
   }
 
+  let workspace: WorkspaceRewind | undefined;
+  if (turns !== undefined && newest) {
+    const next = replyVersion(engine.messages(), selection.msg_id);
+    if (next !== previous) {
+      const undone = previous === undefined ? { restored: [], skipped: [] } : await undoTurns(turns, engine.thread, [previous]);
+      const redone = next === undefined ? { restored: [], skipped: [] } : await redoTurns(turns, engine.thread, [next]);
+      const skipped = new Set([...undone.skipped, ...redone.skipped]);
+      workspace = reported({
+        restored: [...new Set([...undone.restored, ...redone.restored])].filter((path) => !skipped.has(path)),
+        skipped: [...skipped],
+      });
+    }
+  }
+
   return {
     ref: selection.msg_id,
     alt_index: selection.alt_index,
     position: selection.alt_index + 1,
     alt_count: selection.alt_count,
     content: selection.content,
+    ...(workspace === undefined ? {} : { workspace }),
   };
 }
 

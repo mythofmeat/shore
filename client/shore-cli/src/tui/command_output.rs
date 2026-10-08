@@ -528,10 +528,53 @@ pub(crate) fn render(
             .get("warning")
             .and_then(serde_json::Value::as_str)
             .map(|warning| format!("Warning: {warning}.")),
+        "delete" | "alt" => data.get("workspace").and_then(workspace_note),
         "log" | "list_characters" | "switch_character" | "switch_model" | "reset_model"
-        | "delete" | "list_alternatives" | "alt" => None,
+        | "list_alternatives" => None,
         _ => Some(json(data)),
     }
+}
+
+fn workspace_note(rewind: &serde_json::Value) -> Option<String> {
+    if rewind.get("kept").and_then(serde_json::Value::as_str) == Some("later_turns") {
+        return Some("Workspace files kept: later turns build on this one.".to_owned());
+    }
+    let paths = |key: &str| -> Vec<String> {
+        rewind
+            .get(key)
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let files = |count: usize| {
+        format!(
+            "{count} workspace file{}",
+            if count == 1 { "" } else { "s" }
+        )
+    };
+    let restored = paths("restored");
+    let skipped = paths("skipped");
+    let restored_note =
+        (!restored.is_empty()).then(|| format!("Restored {}", files(restored.len())));
+    if skipped.is_empty() {
+        return restored_note.map(|note| format!("{note}."));
+    }
+    let left = format!(
+        "{} changed since and {} left as is: {}",
+        files(skipped.len()),
+        if skipped.len() == 1 { "was" } else { "were" },
+        skipped.join(", ")
+    );
+    Some(match restored_note {
+        Some(note) => format!("{note}; {left}."),
+        None => format!("{left}."),
+    })
 }
 
 #[cfg(test)]
@@ -560,6 +603,46 @@ mod provider_contract_tests {
 mod tests {
     use super::*;
     use crate::tui::ansi;
+
+    #[test]
+    fn delete_and_alt_say_what_happened_to_the_workspace() {
+        let deleted = |workspace: serde_json::Value| {
+            render(
+                "msg delete last",
+                "delete",
+                &serde_json::json!({"deleted": ["m_1"], "workspace": workspace}),
+                "ada",
+            )
+        };
+        assert_eq!(
+            render(
+                "msg delete last",
+                "delete",
+                &serde_json::json!({"deleted": ["m_1"]}),
+                "ada"
+            ),
+            None
+        );
+        assert_eq!(
+            deleted(serde_json::json!({"restored": [], "skipped": [], "kept": "later_turns"}))
+                .as_deref(),
+            Some("Workspace files kept: later turns build on this one.")
+        );
+        assert_eq!(
+            deleted(serde_json::json!({"restored": ["a.md", "b.md"], "skipped": ["c.md"]}))
+                .as_deref(),
+            Some(
+                "Restored 2 workspace files; 1 workspace file changed since and was left as is: c.md."
+            )
+        );
+        let swapped = render(
+            "msg alt prev",
+            "alt",
+            &serde_json::json!({"ref": "m_1", "alt_index": 0, "position": 1, "alt_count": 2, "content": "hi", "workspace": {"restored": ["a.md"], "skipped": []}}),
+            "ada",
+        );
+        assert_eq!(swapped.as_deref(), Some("Restored 1 workspace file."));
+    }
 
     #[test]
     fn status_section_is_selected_in_the_tui_renderer() {

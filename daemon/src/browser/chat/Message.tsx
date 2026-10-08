@@ -14,7 +14,7 @@ import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { activityHeadline, blockViews, bodyItems, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
-import { swipe as swipeTo } from "./actions.ts";
+import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
 export type OpenImage = (source: string, caption: string) => void;
 
@@ -140,7 +140,7 @@ function DeleteConfirm({ message, done }: { message: Message; done: () => void }
   useEffect(() => { confirm.current?.focus(); }, []);
   const remove = async () => {
     setBusy(true);
-    try { await workspace.actions.run("delete", { refs: message.msg_id }); }
+    try { showWorkspaceNote((await workspace.actions.run("delete", { refs: message.msg_id })).workspace); }
     catch (error) { toasts.show(errorText(error), "error"); setBusy(false); done(); }
   };
   return <div className="confirm-bar" role="group" aria-label="Confirm deletion">
@@ -161,7 +161,7 @@ function AlternativesDialog({ message, close }: { message: Message; close: () =>
   }, [message.msg_id]);
   const choose = async (position: number) => {
     setBusy(true);
-    try { await workspace.actions.run("alt", { ref: message.msg_id, position }); close(); }
+    try { showWorkspaceNote((await workspace.actions.run("alt", { ref: message.msg_id, position })).workspace); close(); }
     catch (failure) { setError(errorText(failure)); } finally { setBusy(false); }
   };
   return <Dialog title="Responses" close={close} wide>
