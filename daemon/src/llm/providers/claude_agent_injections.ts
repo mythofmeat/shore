@@ -1,0 +1,146 @@
+import { randomUUID } from "node:crypto";
+import type { Server } from "bun";
+import { shoreLog } from "../../log.ts";
+
+const ANTHROPIC_API = "https://api.anthropic.com";
+const REMINDER = "<system-reminder>";
+const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
+const CLI_SYSTEM_LINES = new Set([
+  "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+  "You are Claude Code, Anthropic's official CLI for Claude.",
+  "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.",
+]);
+const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
+
+type Block = Record<string, unknown>;
+type Message = { role?: unknown; content?: unknown };
+
+function isInjected(block: Block): boolean {
+  if (block.type !== "text" || typeof block.text !== "string") return false;
+  return block.text.trimStart().startsWith(REMINDER) || IMAGE_SOURCE.test(block.text.trim());
+}
+
+function canHoldCacheControl(block: Block): boolean {
+  return block.type !== "thinking" && block.type !== "redacted_thinking";
+}
+
+function isCliSystemBlock(block: Block): boolean {
+  if (block.type !== "text" || typeof block.text !== "string") return false;
+  const text = block.text.trim();
+  return CLI_SYSTEM_LINES.has(text) || text.startsWith("x-anthropic-billing-header:");
+}
+
+export function withoutInjectedContext(body: Record<string, unknown>): Record<string, unknown> {
+  const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter(block => !isCliSystemBlock(block)) } : {};
+  if (!Array.isArray(body.messages)) return { ...body, ...system };
+  const kept: Message[] = [];
+  let anchor: Block | undefined;
+  const drop = (block: unknown) => {
+    const cacheControl = typeof block === "object" && block !== null ? (block as Block).cache_control : undefined;
+    if (cacheControl !== undefined && anchor !== undefined && anchor.cache_control === undefined) {
+      anchor.cache_control = cacheControl;
+    }
+  };
+  for (const message of body.messages as Message[]) {
+    const content = message.content;
+    if (message.role === "system") {
+      if (Array.isArray(content)) content.forEach(drop);
+      continue;
+    }
+    if (typeof content === "string") {
+      if (message.role === "user" && content.trimStart().startsWith(REMINDER)) continue;
+      kept.push(message);
+      continue;
+    }
+    if (!Array.isArray(content)) {
+      kept.push(message);
+      continue;
+    }
+    const blocks: Block[] = [];
+    for (const block of content as Block[]) {
+      if (message.role === "user" && isInjected(block)) {
+        drop(block);
+        continue;
+      }
+      blocks.push(block);
+      if (canHoldCacheControl(block)) anchor = block;
+    }
+    if (blocks.length > 0) kept.push({ ...message, content: blocks });
+  }
+  return { ...body, ...system, messages: kept };
+}
+
+function filteredBody(raw: ArrayBuffer): ArrayBuffer | string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(raw));
+  } catch {
+    return raw;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return raw;
+  return JSON.stringify(withoutInjectedContext(parsed as Record<string, unknown>));
+}
+
+async function forward(request: Request, target: URL): Promise<Response> {
+  const headers = new Headers(request.headers);
+  for (const name of ["host", "accept-encoding", "content-length"]) headers.delete(name);
+  const raw = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
+  const body = raw !== undefined && request.method === "POST" && FILTERED_PATH.test(target.pathname) ? filteredBody(raw) : raw;
+  try {
+    const response = await fetch(target, { method: request.method, headers, body, redirect: "manual", signal: request.signal });
+    const returned = new Headers(response.headers);
+    for (const name of ["content-encoding", "content-length", "transfer-encoding"]) returned.delete(name);
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: returned });
+  } catch (error) {
+    if (request.signal.aborted) throw error;
+    shoreLog.warn(`claude_agent: context filter could not reach ${target.origin}: ${String(error)}`);
+    return Response.json({ type: "error", error: { type: "api_error", message: `Shore could not reach ${target.origin}` } }, { status: 502 });
+  }
+}
+
+class ContextFilter {
+  #server: Server<undefined> | undefined;
+  readonly #upstreams = new Map<string, string>();
+  readonly #keys = new Map<string, string>();
+
+  baseUrl(upstream: string): string {
+    const server = this.#server ??= this.#start();
+    const origin = upstream.replace(/\/+$/, "");
+    let key = this.#keys.get(origin);
+    if (key === undefined) {
+      key = randomUUID();
+      this.#keys.set(origin, key);
+      this.#upstreams.set(key, origin);
+    }
+    return `http://127.0.0.1:${String(server.port)}/${key}`;
+  }
+
+  #start(): Server<undefined> {
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      idleTimeout: 0,
+      fetch: (request) => {
+        const url = new URL(request.url);
+        const [, key = "", ...rest] = url.pathname.split("/");
+        const upstream = this.#upstreams.get(key);
+        if (upstream === undefined) return new Response(null, { status: 404 });
+        return forward(request, new URL(`${upstream}/${rest.join("/")}${url.search}`));
+      },
+    });
+    server.unref();
+    return server;
+  }
+}
+
+const filter = new ContextFilter();
+
+export function contextFilterEnvironment(baseUrl: string | undefined): Record<string, string> {
+  const upstream = baseUrl ?? ANTHROPIC_API;
+  const firstParty = URL.parse(upstream)?.host === new URL(ANTHROPIC_API).host;
+  return {
+    ANTHROPIC_BASE_URL: filter.baseUrl(upstream),
+    NO_PROXY: "127.0.0.1",
+    ...(firstParty ? { _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL: "1" } : {}),
+  };
+}

@@ -47,7 +47,7 @@ test("a retry after a cancelled reply resumes from the last reply Shore kept", a
     const leaf = required(record.pendingAssistantUuids?.at(-1));
     const retried = randomUUID();
     const cancelled = randomUUID();
-    await nativeHistoryStore(book, key, true).append({ projectKey: "", sessionId: record.sessionId }, [
+    await nativeHistoryStore(book, key).append({ projectKey: "", sessionId: record.sessionId }, [
       { type: "user", uuid: retried, parentUuid: leaf, sessionId: record.sessionId, isSidechain: false,
         userType: "external", cwd: dir, timestamp: new Date().toISOString(),
         message: { role: "user", content: [{ type: "text", text: "second" }] } },

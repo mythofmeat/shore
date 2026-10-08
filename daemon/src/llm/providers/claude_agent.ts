@@ -42,6 +42,7 @@ import { compareByCodePoint } from "../../util/sort.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 import { nativeHistoryStore, seedNativeHistory, throwawayHistoryStore } from "./claude_agent_history.ts";
+import { contextFilterEnvironment } from "./claude_agent_injections.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
@@ -194,10 +195,10 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
       ...plan,
       ...(kept === undefined ? {} : { resumeSessionAt: kept }),
       content: current.content,
-      sessionStore: nativeHistoryStore(path, key, record?.model === req.model),
+      sessionStore: nativeHistoryStore(path, key),
     };
   }
-  const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key, record?.model === req.model));
+  const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key));
   shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
   return {
     content: seeded.promptContent,
@@ -309,6 +310,10 @@ export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<st
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     CLAUDE_CODE_TOTAL_TOKENS_REMINDER: "off",
     CLAUDE_CODE_THINKING_DISPLAY_UPDATES: "0",
+    CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+    CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+    CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1",
     CLAUDE_SECURESTORAGE_CONFIG_DIR:
       process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
   };
@@ -326,7 +331,7 @@ function buildOptions(
   abort: AbortController,
   surface?: AgentToolSurface,
 ): Options {
-  const env = claudeAgentEnvironment(req.base_url, req.api_key);
+  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url) };
   if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
 
   const system = systemToText(req.system);
@@ -686,7 +691,7 @@ const KEEPALIVE_REFUSAL = "a keepalive ping runs no tools";
 export async function keepalivePlan(req: SidecarRequest, record: SessionRecord | undefined, path: string, key: string): Promise<NativeTurnPlan> {
   if (record?.version !== SESSION_BOOK_VERSION || record.storedTranscript !== true) return await unstoredKeepalivePlan(req);
   const kept = record.pendingAssistantUuids?.at(-1);
-  const store = nativeHistoryStore(path, key, record.model === req.model);
+  const store = nativeHistoryStore(path, key);
   return {
     resume: record.sessionId,
     ...(kept === undefined ? {} : { resumeSessionAt: kept }),
