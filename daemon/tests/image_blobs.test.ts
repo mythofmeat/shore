@@ -103,7 +103,7 @@ function entryWith(content: ContentBlock[], uuid = "u1"): SessionStoreEntry {
 }
 
 function transcriptStore(data: string) {
-  return nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", databasePath(data), "main"), true);
+  return nativeHistoryStore(join(data, "sessions.json"), sessionKey("ada", databasePath(data), "main"));
 }
 
 const SESSION = { projectKey: "", sessionId: "s1" };

@@ -278,6 +278,7 @@ test.each(["legacy replay", "legacy prompt context", "unmirrored session", "edit
     const messages = required(mock.requests.at(-1)).body.messages as WireMessage[];
     if (scenario === "omitted reply") {
       expect(JSON.stringify(messages)).not.toContain("native reply");
+      expect(JSON.stringify(messages)).not.toContain("No response requested.");
       expect(JSON.stringify(messages)).toContain("question");
       expect(JSON.stringify(messages)).toContain("continue");
     } else {

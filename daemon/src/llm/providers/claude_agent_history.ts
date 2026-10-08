@@ -11,32 +11,7 @@ import { sessionKeyOwner } from "./agent_sessions.ts";
 import { limitImageBlocks } from "../prepare_images.ts";
 import { MANY_IMAGES_MAX_EDGE } from "../image_settings.ts";
 
-function isModelIdentity(entry: SessionStoreEntry): boolean {
-  const record = entry as { type?: unknown; attachment?: { type?: unknown } };
-  return record.type === "attachment" && record.attachment?.type === "model";
-}
-
-export function withoutStaleModelIdentity(entries: SessionStoreEntry[], keepLatest: boolean): SessionStoreEntry[] {
-  const latest = entries.findLastIndex(isModelIdentity);
-  const stale = (entry: SessionStoreEntry, index: number) =>
-    isModelIdentity(entry) && (index !== latest || !keepLatest);
-  if (!entries.some(stale)) return entries;
-  const parents = new Map<string, string | null>();
-  const kept: SessionStoreEntry[] = [];
-  for (const [index, entry] of entries.entries()) {
-    const record = entry as { uuid?: string; parentUuid?: string | null };
-    const parent = record.parentUuid ?? null;
-    const resolved = parent === null ? null : parents.get(parent) ?? parent;
-    if (stale(entry, index)) {
-      if (record.uuid !== undefined) parents.set(record.uuid, resolved);
-      continue;
-    }
-    kept.push(resolved === parent ? entry : { ...entry, parentUuid: resolved });
-  }
-  return kept;
-}
-
-export function nativeHistoryStore(book: string, conversation: string, sameModel: boolean): SessionStore {
+export function nativeHistoryStore(book: string, conversation: string): SessionStore {
   const data = dirname(book);
   const character = sessionKeyOwner(conversation) ?? "";
   const prefix = `sdk_transcripts/${basename(book)}/${Buffer.from(character).toString("base64url")}/`;
@@ -50,7 +25,7 @@ export function nativeHistoryStore(book: string, conversation: string, sameModel
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
       const entries = JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
-      return withoutStaleModelIdentity(withImageData(entries, blobs), sameModel);
+      return withImageData(entries, blobs);
     })())),
     append: (key, added) => {
       const stored = blobs === undefined ? added : added.map((entry) => withImageReferences(entry, blobs));

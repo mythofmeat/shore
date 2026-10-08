@@ -27,7 +27,7 @@ function fixture() {
   const book = bookPathIn(data);
   const key = sessionKey("ada", "", "main");
   const local = (id: string) => join(project, `${id}.jsonl`);
-  const mirror = nativeHistoryStore(book, key, true);
+  const mirror = nativeHistoryStore(book, key);
   const add = async (id: string) => {
     writeFileSync(local(id), "diagnostic transcript");
     mkdirSync(join(project, id, "subagents"), { recursive: true });

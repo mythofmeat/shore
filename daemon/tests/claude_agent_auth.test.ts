@@ -37,7 +37,7 @@ test.each([false, true])("continued and regenerated turns refresh expired OAuth 
   });
   let provider = makeProvider("sessions.json");
   const request: SidecarRequest = {
-    sdk: "claude_agent", model: "claude-opus-4-8", api_key: "",
+    sdk: "claude_agent", model: "claude-opus-4-8", api_key: "", base_url: mock.url,
     system: [{ label: "character", text: "Reply briefly." }],
     messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
     context: { character: "test", workspace_dir: dir, thinking_enabled: false, call_type: "message" },

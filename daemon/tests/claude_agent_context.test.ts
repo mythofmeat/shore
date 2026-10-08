@@ -89,8 +89,9 @@ test.each([false, true])("the SDK receives the character context and unwrapped u
         expect(JSON.stringify(call.body.system)).toContain(`Character instructions for turn ${index}.`);
         expect(JSON.stringify(call.body.system)).not.toContain("Temporary turn instruction");
         expect(JSON.stringify(call.body.messages)).toContain(`Temporary turn instruction ${index}.`);
-        expect(JSON.stringify(call.body.messages)).toContain(`Primary working directory: ${workspace}`);
-        expect(JSON.stringify(call.body.messages)).toContain(`Today's date is ${dateIn(hostZone())}.`);
+        expect(JSON.stringify(call.body.messages)).not.toContain(workspace);
+        expect(JSON.stringify(call.body.messages)).not.toContain(`Today's date is ${dateIn(hostZone())}.`);
+        expect(JSON.stringify(call.body.messages)).not.toContain("[Image: source:");
       }
       messages.push({ role: "assistant", content: [{ type: "text", text: "reply" }] });
     }
