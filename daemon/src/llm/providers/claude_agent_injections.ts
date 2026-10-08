@@ -8,6 +8,22 @@ const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
+const SAFETY_STOP = "Your response above was stopped by a safety classifier \u2014 this is not a tool or API error. " +
+  "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";
+const CLI_NUDGES = new Set([
+  "The previous response failed to produce a valid tool call. Please retry the tool call now.",
+  "Your tool call was malformed and could not be parsed. Please retry.",
+  "[Your previous response had no visible output. Please continue and produce a user-visible response.]",
+  "The PermissionDenied hook indicated you may retry this tool call.",
+  SAFETY_STOP,
+  `${SAFETY_STOP} Exception: a tool call whose result reads "Interrupted" was already running when the response was stopped; it may have partially or fully completed.`,
+  "Output token limit hit. Resume directly \u2014 no apology, no recap of what you were doing. " +
+    "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+  "Your response above was cut off mid-stream. Resume directly from where it stops \u2014 no apology, no recap. " +
+    "If none of it survived, answer the request from the start.",
+  "Your response above was cut off mid-stream and only your next message is delivered. " +
+    "Write the complete response again from the start \u2014 no apology, no mention of the cut-off.",
+]);
 const SCOPE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SCOPE_TTL_MS = 24 * 60 * 60 * 1000;
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
@@ -19,7 +35,7 @@ function isInjected(role: unknown, block: Block): boolean {
   if (block.type !== "text" || typeof block.text !== "string") return false;
   if (role === "assistant") return CLI_PLACEHOLDERS.has(block.text.trim());
   const text = block.text.trim();
-  return role === "user" && (text.startsWith(REMINDER) || IMAGE_SOURCE.test(text) || CLI_INTERRUPTIONS.has(text));
+  return role === "user" && (text.startsWith(REMINDER) || IMAGE_SOURCE.test(text) || CLI_INTERRUPTIONS.has(text) || CLI_NUDGES.has(text));
 }
 
 function canHoldCacheControl(block: Block): boolean {
