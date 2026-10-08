@@ -17,6 +17,7 @@ import type { WireMessage } from "../src/llm/types.ts";
 import { noisePng } from "./support/test_images.ts";
 
 const EMAIL = "someone.private@example.com";
+const SDK_IDENTITY = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
 const SOUL = "# YOU ARE HEIDI\nYou are a companion, not a coding agent.";
 
 function blocksOf(message: unknown): unknown {
@@ -31,7 +32,7 @@ function keepsCachedPrefix(earlier: AnthropicRequestRecord, later: AnthropicRequ
   return before.every((message, index) => message === after[index]);
 }
 
-test("the model sees only what Shore sent, across tool loops, follow-ups, model switches and images", async () => {
+test("the model sees only what Shore sent, plus the SDK identity line subscription logins require, across tool loops, follow-ups, model switches and images", async () => {
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-injected-"));
   const workspace = join(dir, "heidi");
   await mkdir(workspace);
@@ -93,10 +94,10 @@ test("the model sees only what Shore sent, across tool loops, follow-ups, model 
     for (const sent of mock.requests) {
       const wire = JSON.stringify(sent.body);
       for (const leak of [EMAIL, "<system-reminder>", "PROJECT INSTRUCTIONS MARKER", "AUTO MEMORY MARKER",
-        workspace, "x-anthropic-billing-header", "Claude Agent SDK", "The exact model ID is", "Today's date is", "[Image: source:"]) {
+        workspace, "x-anthropic-billing-header", "The exact model ID is", "Today's date is", "[Image: source:"]) {
         expect(wire).not.toContain(leak);
       }
-      expect((sent.body.system as { text: string }[]).map(block => block.text)).toEqual([SOUL]);
+      expect((sent.body.system as { text: string }[]).map(block => block.text)).toEqual([SDK_IDENTITY, SOUL]);
       for (const message of sent.body.messages as WireMessage[]) {
         expect(["user", "assistant"]).toContain(message.role);
         for (const block of message.content) {
@@ -142,7 +143,10 @@ test("withoutInjectedContext drops injected blocks and keeps their cache breakpo
   };
   expect(withoutInjectedContext(body)).toEqual({
     model: "claude-opus-5",
-    system: [{ type: "text", text: "You are Heidi.", cache_control: ttl }],
+    system: [
+      { type: "text", text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", cache_control: ttl },
+      { type: "text", text: "You are Heidi.", cache_control: ttl },
+    ],
     messages: [
       { role: "user", content: [{ type: "text", text: "hello" }] },
       { role: "assistant", content: [{ type: "thinking", thinking: "hm", signature: "s" }, { type: "text", text: "hi" }] },
