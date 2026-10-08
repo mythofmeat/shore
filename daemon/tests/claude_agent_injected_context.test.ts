@@ -164,3 +164,62 @@ test("withoutInjectedContext leaves Shore's own text, tool results and assistant
   ] };
   expect(withoutInjectedContext(body)).toEqual(body);
 });
+
+test("a refused reply ends the turn with the refusal instead of a hidden retry, nudge or model switch", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-agent-refusal-"));
+  const mock = await startMockAnthropic({
+    script: [{ text: "Partial reply before the stop", stopReason: "refusal" }],
+    fallback: { text: "A retried answer." },
+  });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => join(dir, "sessions.json"),
+    runQuery: params => query({ ...params, options: { ...params.options, env: {
+      ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: dir,
+      CLAUDE_SECURESTORAGE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: "test-oauth-token",
+    } } }),
+  });
+  try {
+    const turn = runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "opus",
+      system: [{ label: "soul", text: SOUL }],
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+      context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
+      max_tokens: 1024, replay_prior_thinking: "all",
+    }, { providerKey: "claude-code" }, {
+      config: {
+        app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+        dirs: { config: dir, data: dir, cache: dir, runtime: dir },
+      },
+      providers: { claude_agent: provider }, retry: { maxRetries: 0, backoffBaseMs: 0 },
+    }, { signal: AbortSignal.timeout(30_000), sink: () => {} });
+    expect(await turn.then(() => "", (error: unknown) => (error as { message?: string }).message ?? String(error))).toContain("safeguards flagged this message");
+    expect(mock.requests).toHaveLength(1);
+    expect(JSON.stringify(mock.requests[0]?.body)).not.toContain("safety classifier");
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("withoutInjectedContext drops the CLI's retry nudges, keeping the tool results beside them", () => {
+  const ttl = { type: "ephemeral", ttl: "1h" };
+  const safetyStop = "Your response above was stopped by a safety classifier — this is not a tool or API error. " +
+    "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";
+  const body = { messages: [
+    { role: "user", content: [{ type: "text", text: "Look around." }] },
+    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "ls" } }] },
+    { role: "user", content: [
+      { type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "Not run: the response that made this tool call was stopped by a safety classifier." }] },
+      { type: "text", text: safetyStop, cache_control: ttl },
+    ] },
+    { role: "user", content: [{ type: "text", text: "[Your previous response had no visible output. Please continue and produce a user-visible response.]" }] },
+    { role: "user", content: [{ type: "text", text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces." }] },
+  ] };
+  expect(withoutInjectedContext(body)).toEqual({ messages: [
+    { role: "user", content: [{ type: "text", text: "Look around." }] },
+    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "ls" } }] },
+    { role: "user", content: [
+      { type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "Not run: the response that made this tool call was stopped by a safety classifier." }], cache_control: ttl },
+    ] },
+  ] });
+});
