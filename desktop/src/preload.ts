@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge } from "./bridge.ts";
 
 declare const location: { readonly protocol: string };
+declare function dispatchEvent(event: Event): boolean;
 
 if (location.protocol === "file:") {
   const bridge: DesktopBridge = {
@@ -19,4 +20,6 @@ if (location.protocol === "file:") {
     },
     args: [() => { ipcRenderer.send("page:focus"); }],
   });
+  addEventListener("shore:quote-ready", () => { ipcRenderer.send("page:quote-ready"); });
+  ipcRenderer.on("page:quote", () => { dispatchEvent(new Event("shore:quote-selection")); });
 }

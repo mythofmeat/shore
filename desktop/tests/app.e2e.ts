@@ -46,6 +46,31 @@ test("chats through the app, and the window title follows the conversation", asy
   await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle())).toBe("Nova · Shore");
 });
 
+test("right-clicking selected reply text offers Quote, which puts it in the message box", async ({ daemon, launch }) => {
+  const { app, page } = await launch({ address: daemon.origin });
+  await signIn(page);
+  await page.getByRole("button", { name: "New character", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New character" });
+  await dialog.getByLabel("Name").fill("Quill");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const box = page.getByLabel("Message", { exact: true });
+  await box.fill("quote me please");
+  await box.press("Enter");
+  const reply = page.locator("article.message.assistant .prose p").last();
+  await expect(reply).toContainText("quote me please");
+  await app.evaluate(({ Menu }) => {
+    Menu.prototype.popup = function (this: Electron.Menu) { (globalThis as { shown?: Electron.Menu }).shown = this; };
+  });
+  const shown = () => app.evaluate(() => (globalThis as { shown?: Electron.Menu }).shown?.items.map((item) => item.label || item.role) ?? []);
+  await reply.click({ clickCount: 3 });
+  await reply.click({ button: "right" });
+  await expect.poll(shown).toEqual(["Copy", "Quote"]);
+  await app.evaluate(() => { (globalThis as { shown?: Electron.Menu }).shown?.items.find((item) => item.label === "Quote")?.click(); });
+  await expect(box).toHaveValue(/^> Answer \d+: quote me please\n\n$/);
+  await expect(box).toBeFocused();
+});
+
 test("plain HTTP to another host still gets a secure context and notifications", async ({ daemon, launch }) => {
   const { page } = await launch({ address: `http://shore.test:${String(daemon.port)}` });
   await expect(page.getByLabel("Access token")).toBeVisible();

@@ -1,9 +1,10 @@
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { VIEW_CONTROLS, type ViewKey } from "../preferences.ts";
 import type { NotifyPermission } from "../notifications.ts";
+import { FONT_SIZES } from "../font_size.ts";
 import { THEMES } from "../theme.ts";
 import { Switch } from "../ui/controls.tsx";
-import { display, notifier, perform, STREAM_KEY, themes, useDisplay, useNotifications, useTheme } from "../app/state.ts";
+import { display, fontSizes, notifier, perform, STREAM_KEY, themes, useDisplay, useFontSize, useNotifications, useTheme } from "../app/state.ts";
 import { useStoredFlag } from "../ui/hooks.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
 
@@ -26,6 +27,7 @@ const NOTIFY_UNDECIDED = "The browser hasn’t allowed desktop notifications for
 
 export function AppearancePage(_: { state: WorkspaceSnapshot }) {
   const theme = useTheme();
+  const fontSize = useFontSize();
   const values = useDisplay();
   const store = themes;
   const [stream, setStream] = useStoredFlag(STREAM_KEY, true);
@@ -41,6 +43,12 @@ export function AppearancePage(_: { state: WorkspaceSnapshot }) {
         </button>)}
       </div>
       {store.error === "" ? null : <p className="form-error" role="alert">{store.error}</p>}
+    </SettingsSection>
+    <SettingsSection title="Text size" description="Saved in this browser.">
+      <div className="segmented" role="radiogroup" aria-label="Text size">
+        {FONT_SIZES.map((item) => <button key={item.id} type="button" role="radio" aria-checked={fontSize === item.id} onClick={() => fontSizes.select(item.id)}>{item.label}</button>)}
+      </div>
+      {fontSizes.error === "" ? null : <p className="form-error" role="alert">{fontSizes.error}</p>}
     </SettingsSection>
     <SettingsSection title="Conversation display" description="Saved in this browser.">
       <div className="rows">

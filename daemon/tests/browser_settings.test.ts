@@ -3,7 +3,7 @@ import type { WebArchiveInfo } from "../src/protocol/WebArchiveInfo.ts";
 import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
 import type { CompactionReport } from "../src/protocol/CompactionReport.ts";
 import { archiveStatus, parsePairs, requestStatus, sourceLabel } from "../src/browser/settings/format.ts";
-import { adjacent, globalAction, paletteMatches, type KeyInput } from "../src/browser/app/shortcuts.ts";
+import { adjacent, globalAction, paletteMatches, SHORTCUTS, shortcutsFor, type KeyInput } from "../src/browser/app/shortcuts.ts";
 import { compactionPhase, compactionSummary } from "../src/browser/chat/transcript.ts";
 import { fieldLabel } from "../src/browser/ui/labels.ts";
 import { deviceOrigin, loginCodeIn, loginLink, loopbackOrigin } from "../src/browser/login_link.ts";
@@ -50,6 +50,14 @@ test("global shortcuts respect the platform modifier and never fire help while t
   expect(adjacent(["a", "b", "c"], "c", 1)).toBe("a");
   expect(adjacent(["a", "b", "c"], "a", -1)).toBe("c");
   expect(adjacent([], "a", 1)).toBeUndefined();
+});
+
+test("the shortcut list shows Mod+Enter as the send key when Enter adds a new line", () => {
+  expect(shortcutsFor(true)).toBe(SHORTCUTS);
+  const off = shortcutsFor(false);
+  expect(off).toHaveLength(SHORTCUTS.length);
+  expect(off.filter((item) => item.where === "Message box")[0]).toEqual({ keys: ["Mod", "Enter"], description: "Send (Enter for a new line)", where: "Message box" });
+  expect(off.some((item) => item.keys.length === 1 && item.keys[0] === "Enter")).toBe(false);
 });
 
 test("palette search needs every word to match somewhere in the label or detail", () => {

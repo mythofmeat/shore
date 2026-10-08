@@ -14,6 +14,8 @@ import { Markdown, markdownBlocks, safeHref, type SettledMarkdown } from "../src
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
 import { DEFAULT_THEME, THEME_STORAGE_KEY, ThemeStore, isThemeId, storedTheme } from "../src/browser/theme.ts";
+import { DEFAULT_FONT_SIZE, FONT_SIZE_STORAGE_KEY, FontSizeStore, isFontSizeId, storedFontSize } from "../src/browser/font_size.ts";
+import { quoteText, withQuote } from "../src/browser/chat/quote.ts";
 
 const message = (id: string, role: Message["role"], timestamp: string, extra: Partial<Message> = {}): Message => ({ msg_id: id, role, content: id, images: [], content_blocks: [], timestamp, ...extra });
 
@@ -329,4 +331,37 @@ test("workspace notes say what a delete or swipe did to the files", () => {
   expect(workspaceNote({ restored: ["a.md"], skipped: [] })).toBe("Restored 1 workspace file");
   expect(workspaceNote({ restored: ["a.md", "b.md"], skipped: ["c.md"] })).toBe("Restored 2 workspace files; 1 workspace file changed since and was left as is: c.md");
   expect(workspaceNote({ restored: [], skipped: ["a", "b", "c", "d"] })).toBe("4 workspace files changed since and were left as is: a, b, c, …");
+});
+
+test("text size choice persists, applies to the document, survives storage failures and follows other tabs", () => {
+  const data = new Map<string, string>();
+  let fail = false;
+  const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { if (fail) throw new Error("quota"); data.set(key, value); } };
+  const root: { dataset: Record<string, string | undefined> } = { dataset: {} };
+  const store = new FontSizeStore(storage, root);
+  expect(store.size).toBe(DEFAULT_FONT_SIZE);
+  expect(root.dataset["fontSize"]).toBe("default");
+  store.select("larger");
+  expect(data.get(FONT_SIZE_STORAGE_KEY)).toBe("larger");
+  expect(root.dataset["fontSize"]).toBe("larger");
+  fail = true;
+  store.select("small");
+  expect(store.size).toBe("small");
+  expect(store.error).toContain("couldn't save");
+  data.set(FONT_SIZE_STORAGE_KEY, "large");
+  store.reload();
+  expect(store.size).toBe("large");
+  expect(storedFontSize({ getItem: () => "huge" })).toBe(DEFAULT_FONT_SIZE);
+  expect(storedFontSize({ getItem: () => { throw new Error("blocked"); } })).toBe(DEFAULT_FONT_SIZE);
+  expect(isFontSizeId("small")).toBe(true);
+});
+
+test("quoting marks every line and leaves a blank line on each side of the quote", () => {
+  expect(quoteText("one line")).toBe("> one line");
+  expect(quoteText("\n\nfirst\r\n\r\nsecond  \nthird\n\n")).toBe("> first\n>\n> second\n> third");
+  expect(quoteText("  \n ")).toBe("");
+  expect(withQuote("", "hello")).toBe("> hello\n\n");
+  expect(withQuote("my reply", "hello")).toBe("my reply\n\n> hello\n\n");
+  expect(withQuote("> hello\n\n", "again")).toBe("> hello\n\n> again\n\n");
+  expect(withQuote("draft  \n", "\n")).toBe("draft  \n");
 });

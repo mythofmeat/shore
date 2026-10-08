@@ -6,6 +6,7 @@ import { UnsentMessages } from "../chat/unsent.ts";
 import { Notifier, type NotifySnapshot } from "../notifications.ts";
 import { DisplayPreferences, type ViewValues } from "../preferences.ts";
 import { listRequests } from "../request_history.ts";
+import { FontSizeStore, type FontSizeId } from "../font_size.ts";
 import { ThemeStore, type ThemeId } from "../theme.ts";
 import { toasts } from "../ui/toast.tsx";
 import { Workspace, type WorkspaceSnapshot } from "../workspace.ts";
@@ -33,10 +34,11 @@ export const unsent = new UnsentMessages(workspace.connection, listRequests, (me
   toasts.show(`Your earlier message${character === undefined ? "" : ` to ${character}`} wasn’t saved, so it’s back in its message box.${droppedNotice(dropped)}`, "error");
 });
 export const themes = new ThemeStore();
+export const fontSizes = new FontSizeStore();
 export const display = new DisplayPreferences(browserStorage());
 export const notifier = new Notifier({ storage: browserStorage() });
 workspace.connection.subscribe((update) => { notifier.observe(update, workspace.getSnapshot()); });
-addEventListener("storage", () => { themes.reload(); display.reload(); notifier.reload(); });
+addEventListener("storage", () => { themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); });
 addEventListener("focus", () => { notifier.markRead(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
@@ -45,6 +47,10 @@ export function useWorkspace(): WorkspaceSnapshot {
 
 export function useTheme(): ThemeId {
   return useSyncExternalStore(themes.subscribe, themes.getSnapshot);
+}
+
+export function useFontSize(): FontSizeId {
+  return useSyncExternalStore(fontSizes.subscribe, fontSizes.getSnapshot);
 }
 
 export function useNotifications(): NotifySnapshot {
@@ -67,6 +73,12 @@ export const STREAM_KEY = "shore.stream";
 
 export function streamReplies(): boolean {
   try { return localStorage.getItem(STREAM_KEY) !== "false"; } catch { return true; }
+}
+
+export const ENTER_SENDS_KEY = "shore.enter-sends";
+
+export function enterSends(): boolean {
+  try { return localStorage.getItem(ENTER_SENDS_KEY) !== "false"; } catch { return true; }
 }
 
 export function errorText(error: unknown): string {

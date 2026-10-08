@@ -25,7 +25,7 @@ export function NewCharacterDialog({ close }: { close: () => void }) {
   };
   return <Dialog title="New character" close={close}>
     <form className="form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <label className="field"><span>Name</span><input className="input" autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label className="field"><span>Name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
       <p className="form-hint">You can set up the character’s prompt and model afterwards in Settings.</p>
       {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
       <div className="form-actions"><button type="button" className="button" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy || name.trim() === ""}>{busy ? "Creating…" : "Create"}</button></div>
@@ -53,7 +53,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
   };
   return <Dialog title={`New conversation with ${character}`} close={close}>
     <form className="form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <label className="field"><span>Name</span><input className="input" autoFocus placeholder="e.g. lighthouse" value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label className="field"><span>Name</span><input className="input" data-autofocus placeholder="e.g. lighthouse" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field"><span>Label <span className="muted">(optional)</span></span><input className="input" placeholder="Shown in the sidebar" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
       <details className="disclosure"><summary>More options</summary>
         <div className="form">

@@ -610,7 +610,7 @@ kbd {
 
 .login-code-link {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   color: var(--text-body);
   overflow-wrap: anywhere;
   user-select: all;
