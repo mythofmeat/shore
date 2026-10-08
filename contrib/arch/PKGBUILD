@@ -2,7 +2,7 @@
 
 pkgbase=shore
 pkgname=('shore-cli' 'shore-desktop')
-pkgver=4.26.0
+pkgver=4.26.1
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
