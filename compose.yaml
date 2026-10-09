@@ -17,15 +17,20 @@
 # characters' files. For a character named ada:
 #
 #   1. Add ada:2001 to SHORE_CHARACTER_USERS in .env (space-separated
-#      name:uid pairs) and rebuild. The image creates the user.
+#      name:uid pairs) and rebuild. The image creates the user and a group
+#      ada with the same number, which the daemon's user joins.
 #   2. Put tools.user = "ada" in config/characters/ada/config.toml, or in
 #      config/config.toml to give every character that one user.
 #   3. Give ada a home that survives the container: a volume at /home/ada,
 #      as for home below.
-#   4. On the host, give workspace/ada to that uid and the daemon's group,
-#      which may read it but not write it:
+#   4. On the host, give workspace/ada to that uid and gid:
 #        mkdir -p workspace/ada
-#        sudo chown -R 2001:1000 workspace/ada && sudo chmod 2750 workspace/ada
+#        sudo chown -R 2001:2001 workspace/ada && sudo chmod 2770 workspace/ada
+#      To read and write it as yourself too, join a group with that gid
+#      and keep new files writable by the group:
+#        sudo groupadd -g 2001 ada && sudo usermod -aG ada "$USER"
+#        sudo chmod -R g+rwX workspace/ada
+#        sudo setfacl -R -d -m u::rwX,g::rwX,o::- workspace/ada
 #
 # Setting tools.pass_env = ["NAME"] passes the daemon's NAME variable to
 # characters with their own user; they get no other variable of the daemon's.
