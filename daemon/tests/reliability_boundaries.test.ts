@@ -12,6 +12,7 @@ import { setTestEnv, restoreTestEnv } from "./support/env.ts";
 import { applySubscriptionProviders } from "../src/runtime.ts";
 import { ProviderRegistry, DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
 import { Ledger, setSubscriptionProviders } from "../src/ledger/store.ts";
+import { setNanoGptSubscriptionCacheDir } from "../src/ledger/record.ts";
 import type { CharacterRegistry } from "../src/characters.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { eventMatchesSession } from "../src/swp/routing.ts";
@@ -96,7 +97,11 @@ test("subscription accounting follows each character regardless of enumeration o
       { character: "paid", cost_source: "provider_reported", total_cost: 1 },
       { character: "sub", cost_source: "subscription", total_cost: 0 },
     ]);
-  } finally { ledger.close(); setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS); }
+  } finally {
+    ledger.close();
+    setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
+    setNanoGptSubscriptionCacheDir(undefined);
+  }
 });
 
 test("new messages from a side thread cannot enter the main thread's event stream", async () => {
