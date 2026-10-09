@@ -55,6 +55,8 @@ jobs:
       - run: bun run browser:check
       - run: bun run build:daemon
       - run: bun test
+      - name: tools run as each character's own user
+        run: scripts/isolation_tests.sh
       - run: bunx playwright install --with-deps --only-shell chromium
       - run: bunx playwright test
       - if: failure()
