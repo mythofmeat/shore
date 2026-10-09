@@ -29,7 +29,7 @@ const SCOPE_TTL_MS = 24 * 60 * 60 * 1000;
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
 
 type Block = Record<string, unknown>;
-type Message = { role?: unknown; content?: unknown };
+type Message = { role?: unknown; content?: unknown; output_config?: unknown };
 
 function isInjected(role: unknown, block: Block): boolean {
   if (block.type !== "text" || typeof block.text !== "string") return false;
@@ -60,7 +60,11 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
   for (const message of body.messages as Message[]) {
     const content = message.content;
     if (message.role === "system") {
-      if (Array.isArray(content)) content.forEach(drop);
+      const controls = Array.isArray(content) ? (content as Block[]).filter(block => block.type !== "text") : [];
+      if (Array.isArray(content)) (content as Block[]).filter(block => block.type === "text").forEach(drop);
+      if (controls.length > 0 || message.output_config !== undefined) {
+        kept.push({ ...message, content: controls });
+      }
       continue;
     }
     if (typeof content === "string") {
