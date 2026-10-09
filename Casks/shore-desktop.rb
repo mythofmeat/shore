@@ -5,8 +5,8 @@
 #   brew tap mythofmeat/shore https://github.com/mythofmeat/shore.git
 #   brew install --cask mythofmeat/shore/shore-desktop
 cask "shore-desktop" do
-  version "4.28.1"
-  sha256 "057d928c878c6615a6da43357322b8f6c878a513cfc14b14c637f7467c6ace3b"
+  version "4.28.2"
+  sha256 "a5a04cf60aa83ed864862eea197da3fea1774cb214aaf55c26ab707e1dc50113"
 
   url "https://github.com/mythofmeat/shore/releases/download/v#{version}/Shore-#{version}-arm64.zip"
   name "Shore"
