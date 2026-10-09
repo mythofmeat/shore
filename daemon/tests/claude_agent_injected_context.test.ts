@@ -76,6 +76,7 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
         type: "object", properties: { command: { type: "string" } }, required: ["command"],
       } }],
       context: { character: "heidi", workspace_dir: workspace, thinking_enabled: false, call_type: "message" },
+      provider_options: { reasoning_effort: "max" },
       max_tokens: 1024, replay_prior_thinking: "all", messages: [...history],
     }, { providerKey: "claude-code" }, deps, {
       signal: AbortSignal.timeout(30_000), sink: () => {},
@@ -90,6 +91,9 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
     await turn("sonnet", [{ type: "text", text: "Look at this." }, image]);
 
     expect(mock.requests).toHaveLength(4);
+    for (const sent of mock.requests) {
+      expect(sent.body.messages).toContainEqual({ role: "system", content: [], output_config: { effort: "max" } });
+    }
     const authored = new Set(["What is in your room?", "Tell me more.", "Look at this.", "First answer.", "Second answer."]);
     for (const sent of mock.requests) {
       const wire = JSON.stringify(sent.body);
@@ -99,6 +103,10 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
       }
       expect((sent.body.system as { text: string }[]).map(block => block.text)).toEqual([SDK_IDENTITY, SOUL]);
       for (const message of sent.body.messages as WireMessage[]) {
+        if ((message.role as string) === "system") {
+          expect(message.content.filter(block => block.type === "text")).toEqual([]);
+          continue;
+        }
         expect(["user", "assistant"]).toContain(message.role);
         for (const block of message.content) {
           if (block.type === "text") expect(authored).toContain(block.text);
@@ -117,7 +125,7 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
   }
 }, 90_000);
 
-test("withoutInjectedContext drops injected blocks and keeps their cache breakpoint on the block before", () => {
+test("withoutInjectedContext drops injected blocks, keeps their cache breakpoint on the block before, and keeps the CLI's effort and tool controls", () => {
   const ttl = { type: "ephemeral", ttl: "1h" };
   const body = {
     model: "claude-opus-5",
@@ -139,6 +147,10 @@ test("withoutInjectedContext drops injected blocks and keeps their cache breakpo
       { role: "user", content: [{ type: "text", text: "[Request interrupted by user for tool use]" }] },
       { role: "user", content: [{ type: "text", text: "continue" }] },
       { role: "system", content: [{ type: "text", text: "# Environment", cache_control: ttl }], output_config: { effort: "high" } },
+      { role: "assistant", content: [{ type: "text", text: "sure" }] },
+      { role: "system", content: [{ type: "text", text: "<system-reminder>later</system-reminder>" },
+        { type: "tool_addition", tool: { type: "tool_definition", definition: { name: "look" } } }] },
+      { role: "system", content: "<system-reminder>folded</system-reminder>", clear_at: "next_user_message" },
     ],
   };
   expect(withoutInjectedContext(body)).toEqual({
@@ -152,6 +164,9 @@ test("withoutInjectedContext drops injected blocks and keeps their cache breakpo
       { role: "assistant", content: [{ type: "thinking", thinking: "hm", signature: "s" }, { type: "text", text: "hi" }] },
       { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" }, cache_control: ttl }] },
       { role: "user", content: [{ type: "text", text: "continue", cache_control: ttl }] },
+      { role: "system", content: [], output_config: { effort: "high" } },
+      { role: "assistant", content: [{ type: "text", text: "sure" }] },
+      { role: "system", content: [{ type: "tool_addition", tool: { type: "tool_definition", definition: { name: "look" } } }] },
     ],
   });
 });
