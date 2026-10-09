@@ -1,4 +1,4 @@
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { CharacterWorkspace } from "../tools/character_workspace.ts";
 
 class MarkdownStoreError extends Error {
   readonly kind = "io";
@@ -9,15 +9,6 @@ class MarkdownStoreError extends Error {
   }
 }
 
-async function exists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export class MarkdownMemoryStore {
   readonly #baseDir: string;
 
@@ -25,10 +16,10 @@ export class MarkdownMemoryStore {
     this.#baseDir = baseDir;
   }
 
-  static async open(baseDir: string): Promise<MarkdownMemoryStore> {
+  static async open(baseDir: string, workspace: CharacterWorkspace = new CharacterWorkspace(baseDir)): Promise<MarkdownMemoryStore> {
     try {
-      if (!(await exists(baseDir))) await mkdir(baseDir, { recursive: true });
-      return new MarkdownMemoryStore(await realpath(baseDir));
+      await workspace.call("mkdir", { path: baseDir });
+      return new MarkdownMemoryStore(await workspace.call("realpath", { path: baseDir }));
     } catch (e) {
       throw new MarkdownStoreError((e as Error).message);
     }

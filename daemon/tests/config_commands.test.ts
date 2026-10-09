@@ -25,6 +25,8 @@ import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
 import { modelInfo, modelRoles, resetModel, switchModel } from "../src/commands/models.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { characterWorkspaceDir } from "../src/config/dirs.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 interface Row {
   name: string;
@@ -514,8 +516,7 @@ describe("configReload", () => {
     expect(
       await changedPromptFiles(
         join(w.ctx.config.dirs.data, "mid"),
-        w.ctx.config.dirs.config,
-        "mid",
+        new CharacterWorkspace(characterWorkspaceDir(w.ctx.config.dirs.config, "mid")),
       ),
     ).toEqual(r.changed_after as string[]);
 
@@ -536,8 +537,7 @@ describe("configReload", () => {
     expect(
       await changedPromptFiles(
         join(w.ctx.config.dirs.data, "mid"),
-        w.ctx.config.dirs.config,
-        "mid",
+        new CharacterWorkspace(characterWorkspaceDir(w.ctx.config.dirs.config, "mid")),
       ),
     ).toEqual(r.changed_after as string[]);
     expect(w.calls).not.toContain("notifyPromptSnapshotRefreshed:mid");

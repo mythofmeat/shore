@@ -66,6 +66,7 @@ import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import { pruneTurns, recordTurn, redoTurns, replyVersions, snapshotTree, undoTurns, workspaceTurnsFor } from "../tools/workspace_turns.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {
   readonly thread: string;
@@ -257,7 +258,7 @@ async function runGenerationCore(
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }
 
-  const workspaceTurns = workspaceTurnsFor(config.dirs, charName);
+  const workspaceTurns = workspaceTurnsFor(config.dirs, charName, characterWorkspace(config, charName));
   const replaced = regen ? replyVersions(engine.messagesAfterLastUserTurn()) : [];
   if (replaced.length > 0) await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
   const known = new Set(replyVersions(engine.messages()));

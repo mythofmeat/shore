@@ -1,16 +1,18 @@
-import { mkdir, rm, rmdir, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { characterCacheDir, characterWorkspaceDir, type ShoreDirs } from "../config/dirs.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
 import type { Message } from "../engine/types.ts";
 import { alternativeVersionOf, versionOf } from "../engine/versions.ts";
 import { shoreLog } from "../log.ts";
-import { envWithoutInheritedGitRepo, GIT_SAFETY_FLAGS, runProcess } from "./workspace.ts";
+import { CharacterWorkspace } from "./character_workspace.ts";
+import { GIT_SAFETY_FLAGS } from "./workspace.ts";
 
 export interface WorkspaceTurns {
   readonly workspace: string;
   readonly repo: string;
+  readonly character?: CharacterWorkspace;
+  readonly name?: string;
 }
 
 export interface WorkspaceRewind {
@@ -33,11 +35,31 @@ const REPO_DIR = "workspace-turns.git";
 const ABSENT = "000000";
 const GITLINK = "160000";
 
-export function workspaceTurnsFor(dirs: Pick<ShoreDirs, "config" | "cache" | "workspace">, character: string): WorkspaceTurns {
+export function workspaceTurnsFor(
+  dirs: Pick<ShoreDirs, "config" | "cache" | "workspace">,
+  character: string,
+  runAs?: CharacterWorkspace,
+): WorkspaceTurns {
+  const workspace = characterWorkspaceDir(dirs.config, character, dirs.workspace);
   return {
-    workspace: characterWorkspaceDir(dirs.config, character, dirs.workspace),
+    workspace,
     repo: join(characterCacheDir(dirs.cache, character), REPO_DIR),
+    ...(runAs?.isolated === true ? { character: runAs.at(workspace), name: character } : {}),
   };
+}
+
+function accessOf(turns: WorkspaceTurns): CharacterWorkspace {
+  return turns.character ?? new CharacterWorkspace(turns.workspace);
+}
+
+export async function isolatedTurnsRepo(workspace: CharacterWorkspace, character: string): Promise<string> {
+  const user = await workspace.user();
+  if (user?.home === undefined) throw new Error(`${workspace.tools.user ?? "the character's user"} has no home directory to keep workspace history in`);
+  return join(user.home, ".cache", "shore", "workspace-turns", `${character}.git`);
+}
+
+async function repoOf(turns: WorkspaceTurns): Promise<string> {
+  return turns.character === undefined ? turns.repo : await isolatedTurnsRepo(turns.character, turns.name ?? "workspace");
 }
 
 export function replyVersions(messages: readonly Message[]): string[] {
@@ -153,30 +175,21 @@ async function move(turns: WorkspaceTurns, from: string, to: string): Promise<Wo
     else if (change.toMode === ABSENT) removals.push(change.path);
     else writes.push(change.path);
   }
+  const access = accessOf(turns);
   for (const path of removals) {
-    await rm(join(turns.workspace, path), { force: true });
-    await pruneEmptyParents(turns.workspace, path);
+    await access.call("remove", { root: turns.workspace, path });
   }
   if (writes.length > 0) {
-    const index = join(turns.repo, "index.rewind");
+    const repo = await repoOf(turns);
+    const index = join(repo, "index.rewind");
     try {
       await git(turns, ["read-tree", to], { index });
       await git(turns, ["checkout-index", "--force", "-z", "--stdin"], { index, stdin: writes.map((path) => `${path}\0`).join("") });
     } finally {
-      await rm(index, { force: true });
+      await access.call("remove", { root: repo, path: "index.rewind" });
     }
   }
   return { restored: [...removals, ...writes], skipped };
-}
-
-async function pruneEmptyParents(root: string, path: string): Promise<void> {
-  for (let parent = dirname(path); parent !== "." && parent !== "/" && parent !== ""; parent = dirname(parent)) {
-    try {
-      await rmdir(join(root, parent));
-    } catch {
-      return;
-    }
-  }
 }
 
 function parseRaw(output: string): Change[] {
@@ -194,7 +207,7 @@ function parseRaw(output: string): Change[] {
 
 async function readRecords(turns: WorkspaceTurns, thread: string): Promise<Map<string, TurnRecord>> {
   const records = new Map<string, TurnRecord>();
-  if (!(await exists(join(turns.repo, "HEAD")))) return records;
+  if (!(await exists(turns, join(await repoOf(turns), "HEAD")))) return records;
   const base = refBase(thread);
   const output = await git(turns, ["for-each-ref", "--format=%(refname) %(objectname)", base]);
   for (const line of output.split("\n")) {
@@ -220,24 +233,28 @@ async function snapshot(turns: WorkspaceTurns): Promise<string> {
 }
 
 async function ensureRepo(turns: WorkspaceTurns): Promise<void> {
-  if (await exists(join(turns.repo, "HEAD"))) return;
-  await mkdir(turns.repo, { recursive: true });
-  const init = await runProcess("git", [...GIT_SAFETY_FLAGS, "init", "--quiet", "--bare", turns.repo], { env: envWithoutInheritedGitRepo() });
+  const repo = await repoOf(turns);
+  if (await exists(turns, join(repo, "HEAD"))) return;
+  const access = accessOf(turns);
+  await access.call("mkdir", { path: repo });
+  const init = await access.run("git", [...GIT_SAFETY_FLAGS, "init", "--quiet", "--bare", repo]);
   if (init.code !== 0) throw new Error(`git init failed: ${init.stderr.trim()}`);
 }
 
 async function git(turns: WorkspaceTurns, args: string[], options: { stdin?: string; index?: string } = {}): Promise<string> {
-  const env = envWithoutInheritedGitRepo();
-  if (options.index !== undefined) env["GIT_INDEX_FILE"] = options.index;
-  const output = await runProcess("git", [
+  const output = await accessOf(turns).run("git", [
     ...GIT_SAFETY_FLAGS,
     "-c", "safe.directory=*",
     "-c", "core.autocrlf=false",
     "-c", "core.symlinks=true",
-    `--git-dir=${turns.repo}`,
+    `--git-dir=${await repoOf(turns)}`,
     `--work-tree=${turns.workspace}`,
     ...args,
-  ], { cwd: turns.workspace, env, ...(options.stdin === undefined ? {} : { stdin: options.stdin }) });
+  ], {
+    cwd: turns.workspace,
+    ...(options.index === undefined ? {} : { env: { GIT_INDEX_FILE: options.index } }),
+    ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
+  });
   if (output.code !== 0) throw new Error(`git ${args[0] ?? ""} failed: ${output.stderr.trim()}`);
   return output.stdout;
 }
@@ -245,7 +262,7 @@ async function git(turns: WorkspaceTurns, args: string[], options: { stdin?: str
 const queues = new Map<string, Promise<void>>();
 
 async function bestEffort<T>(turns: WorkspaceTurns, fallback: T, run: () => Promise<T>): Promise<T> {
-  if (!(await exists(turns.workspace))) return fallback;
+  if (!(await exists(turns, turns.workspace).catch(() => false))) return fallback;
   const prior = queues.get(turns.repo) ?? Promise.resolve();
   const next = prior.then(run);
   const settled = next.then(() => undefined, () => undefined);
@@ -261,11 +278,7 @@ async function bestEffort<T>(turns: WorkspaceTurns, fallback: T, run: () => Prom
   }
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
+async function exists(turns: WorkspaceTurns, path: string): Promise<boolean> {
+  const [found = false] = await accessOf(turns).call("exists", { paths: [path] });
+  return found;
 }

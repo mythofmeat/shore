@@ -115,6 +115,7 @@ export async function runSubagent(
     thread: deps.ctx.thread ?? MAIN_THREAD,
     characterDataDir: deps.ctx.characterDataDir,
     workspaceDir: deps.ctx.workspaceDir,
+    ...(deps.ctx.workspace === undefined ? {} : { workspace: deps.ctx.workspace }),
     history: (deps.conversation ?? deps.ctx.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),
     charName,
     userName: displayName,

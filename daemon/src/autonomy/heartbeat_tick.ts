@@ -16,6 +16,7 @@ import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
 import { recordTurn, snapshotTree, workspaceTurnsFor } from "../tools/workspace_turns.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { budgetStopIn, describeError } from "../llm/errors.ts";
 import { truncateSummary } from "../notifications.ts";
@@ -179,7 +180,7 @@ export async function runHeartbeatTick(
       return { events };
     }
 
-    const workspaceTurns = workspaceTurnsFor(config.dirs, character);
+    const workspaceTurns = workspaceTurnsFor(config.dirs, character, characterWorkspace(config, character));
     const before = await snapshotTree(workspaceTurns);
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,

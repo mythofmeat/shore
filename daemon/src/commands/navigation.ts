@@ -21,6 +21,7 @@ import type { CharacterDetails } from "../protocol/CharacterDetails.ts";
 import type { CharacterListing } from "../protocol/CharacterListing.ts";
 import type { CharacterSelection } from "../protocol/CharacterSelection.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
+import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { invalidRequest, notFound } from "./errors.ts";
 
 export type Args = Record<string, unknown>;
@@ -133,16 +134,21 @@ const scaffoldedFiles = (
   [TOOLS_FILE, ""],
 ];
 
-export function createCharacter(
-  configDir: string,
-  args: Args,
-  workspaceRoot?: string,
-): CharacterCreated {
+function requestedCharacterName(args: Args): string {
   const name = asStr(args["name"]);
   if (name === undefined || name === "") {
     throw invalidRequest("Missing required argument: name");
   }
   requireUsableCharacterName(name);
+  return name;
+}
+
+export function createCharacter(
+  configDir: string,
+  args: Args,
+  workspaceRoot?: string,
+): CharacterCreated {
+  const name = requestedCharacterName(args);
 
   const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
   if (pathExists(rustJoin(workspaceDir, SOUL_FILE))) {
@@ -161,6 +167,38 @@ export function createCharacter(
   return {
     character: name,
     workspace_dir: workspaceDir,
+    config_dir: characterConfigDir(configDir, name),
+    created_files: created,
+  };
+}
+
+export async function createCharacterAs(
+  configDir: string,
+  args: Args,
+  workspaceRoot: string | undefined,
+  workspaceFor: (name: string) => CharacterWorkspace,
+): Promise<CharacterCreated> {
+  const name = requestedCharacterName(args);
+  const workspace = workspaceFor(name);
+  if (!workspace.isolated) return createCharacter(configDir, args, workspaceRoot);
+  const [soul = false] = await workspace.call("exists", { paths: [rustJoin(workspace.dir, SOUL_FILE)] });
+  if (soul) throw invalidRequest(`Character '${name}' already exists at ${workspace.dir}`);
+  try {
+    await workspace.call("mkdir", { path: workspace.dir });
+  } catch (error) {
+    throw invalidRequest(
+      `${name}'s tools run as ${workspace.tools.user ?? "another user"}, who cannot create ${workspace.dir} ` +
+        `(${error instanceof Error ? error.message : String(error)}): create that folder owned by them first`,
+    );
+  }
+  const created: string[] = [];
+  for (const [file, content] of scaffoldedFiles(name)) {
+    const data = Buffer.from(content, "utf8").toString("base64");
+    if (await workspace.call("createFile", { path: rustJoin(workspace.dir, file), data })) created.push(file);
+  }
+  return {
+    character: name,
+    workspace_dir: workspace.dir,
     config_dir: characterConfigDir(configDir, name),
     created_files: created,
   };

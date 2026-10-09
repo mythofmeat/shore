@@ -6,9 +6,12 @@ import { imageBlobDir } from "../storage/image_blobs.ts";
 import { activeImagePaths, copyAttachment, insideDir, legacyAttachmentsDir, moveCharacterImagesToCache, repointActiveImages } from "../storage/image_migration.ts";
 import { modelCopies } from "../llm/images.ts";
 import { Database } from "bun:sqlite";
-import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { once } from "node:events";
+import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
 import { create, extract, type Unpack } from "tar";
 
 import type { ShoreDirs } from "../config/dirs.ts";
@@ -20,7 +23,9 @@ import {
   characterWorkspaceDir,
   isUsableCharacterName,
 } from "../config/dirs.ts";
-import { invalidRequest, notFound } from "./errors.ts";
+import type { CharacterWorkspace } from "../tools/character_workspace.ts";
+import { isolatedTurnsRepo } from "../tools/workspace_turns.ts";
+import { CommandError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import type { ExportCharacterResult } from "../protocol/ExportCharacterResult.ts";
 import type { ImportCharacterResult } from "../protocol/ImportCharacterResult.ts";
@@ -38,6 +43,12 @@ export interface ArchiveContext {
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
   refreshDiscovery(): Promise<void>;
   releaseCharacter(name: string): Promise<void>;
+  workspace?(name: string): CharacterWorkspace;
+}
+
+function isolatedWorkspace(ctx: ArchiveContext, character: string): CharacterWorkspace | undefined {
+  const workspace = ctx.workspace?.(character);
+  return workspace?.isolated === true ? workspace : undefined;
 }
 
 export interface ArchiveLimits { readonly bytes: number; readonly entries: number; readonly temporaryDirectory?: string }
@@ -73,7 +84,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
   );
   try {
     await ctx.withSnapshot(async () => {
-      await stageCharacter(ctx.dirs, character, stage, ctx.limits);
+      await stageCharacter(ctx.dirs, character, stage, ctx.limits, isolatedWorkspace(ctx, character));
     });
     await create(
       {
@@ -155,9 +166,21 @@ export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<
   }
 
   const historyPath = databasePath(ctx.dirs.data);
+  const workspace = isolatedWorkspace(ctx, character);
   await ctx.withSnapshot(async () => {
     await ctx.releaseCharacter(character);
-    for (const path of present) await rm(path, { recursive: true, force: true });
+    for (const path of present) {
+      if (workspace === undefined || path !== workspace.dir) {
+        await rm(path, { recursive: true, force: true });
+        continue;
+      }
+      await workspace.call("clear", { path });
+      await rmdir(path).catch(() => {});
+    }
+    if (workspace !== undefined) {
+      const repo = await isolatedTurnsRepo(workspace, character).catch(() => undefined);
+      if (repo !== undefined) await workspace.call("remove", { root: dirname(repo), path: basename(repo) });
+    }
     if (await exists(historyPath)) removeStoredCharacter(historyPath, character);
     await ctx.refreshDiscovery();
   });
@@ -189,16 +212,26 @@ function contains(parent: string, child: string): boolean {
   return child.startsWith(`${parent}/`);
 }
 
-async function stageCharacter(dirs: ShoreDirs, character: string, stage: string, limits?: ArchiveLimits): Promise<void> {
+async function stageCharacter(
+  dirs: ShoreDirs,
+  character: string,
+  stage: string,
+  limits?: ArchiveLimits,
+  workspace?: CharacterWorkspace,
+): Promise<void> {
   let bytes = 0;
   let entries = 0;
+  const count = (kind: "file" | "directory" | "other", size: number): void => {
+    if (limits === undefined) return;
+    if (kind === "other") throw invalidRequest("Browser archives support regular files and directories only");
+    bytes += kind === "file" ? size : 0;
+    entries += 1;
+    if (bytes > limits.bytes || entries > limits.entries) throw invalidRequest("Character exceeds browser archive processing limits");
+  };
   const admit = async (path: string): Promise<boolean> => {
     if (limits === undefined) return true;
     const entry = await lstat(path);
-    if (!entry.isFile() && !entry.isDirectory()) throw invalidRequest("Browser archives support regular files and directories only");
-    bytes += entry.isFile() ? entry.size : 0;
-    entries += 1;
-    if (bytes > limits.bytes || entries > limits.entries) throw invalidRequest("Character exceeds browser archive processing limits");
+    count(entry.isFile() ? "file" : entry.isDirectory() ? "directory" : "other", entry.size);
     return true;
   };
   const configSource = characterConfigDir(dirs.config, character);
@@ -206,7 +239,10 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string,
   const dataSource = characterDataDir(dirs.data, character);
   const workspaceInConfig = dirs.workspace === undefined;
 
-  if (!await exists(join(workspaceSource, SOUL_FILE))) {
+  const [soul = false] = workspace === undefined
+    ? [await exists(join(workspaceSource, SOUL_FILE))]
+    : await workspace.call("exists", { paths: [join(workspaceSource, SOUL_FILE)] });
+  if (!soul) {
     throw invalidRequest(`Character definition disappeared during export: ${workspaceSource}`);
   }
   if (await exists(configSource)) {
@@ -220,12 +256,16 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string,
   } else {
     await mkdir(join(stage, "config"));
   }
-  await cp(workspaceSource, join(stage, "workspace"), {
-    filter: admit,
-    recursive: true,
-    preserveTimestamps: true,
-    verbatimSymlinks: true,
-  });
+  if (workspace === undefined) {
+    await cp(workspaceSource, join(stage, "workspace"), {
+      filter: admit,
+      recursive: true,
+      preserveTimestamps: true,
+      verbatimSymlinks: true,
+    });
+  } else {
+    await copyWorkspaceOut(workspace, join(stage, "workspace"), count);
+  }
   if (await exists(dataSource)) {
     await cp(dataSource, join(stage, "data"), {
       filter: admit,
@@ -343,8 +383,8 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
   const configTarget = characterConfigDir(ctx.dirs.config, character);
   const workspaceTarget = characterWorkspaceDir(ctx.dirs.config, character, ctx.dirs.workspace);
   const dataTarget = characterDataDir(ctx.dirs.data, character);
-  const occupied = [configTarget, workspaceTarget, dataTarget, characterMediaDir(ctx.dirs.data, character)].filter((path, index, all) =>
-    all.indexOf(path) === index,
+  const occupied = [configTarget, dataTarget, characterMediaDir(ctx.dirs.data, character)].filter((path, index, all) =>
+    all.indexOf(path) === index && path !== workspaceTarget,
   );
   if (ctx.hasCharacter(character) || (await Promise.all(occupied.map(exists))).some(Boolean)) {
     throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
@@ -352,6 +392,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
 
   const historyPath = databasePath(ctx.dirs.data);
   const created: string[] = [];
+  let filled: CharacterWorkspace | undefined;
   let imported = false;
   try {
     await mkdir(dirname(configTarget), { recursive: true });
@@ -362,9 +403,21 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
       await mkdir(configTarget);
       created.push(configTarget);
     }
-    await mkdir(dirname(workspaceTarget), { recursive: true });
-    await cp(join(stage, "workspace"), workspaceTarget, copyOptions());
-    if (!created.includes(workspaceTarget)) created.push(workspaceTarget);
+    const workspace = isolatedWorkspace(ctx, character);
+    if (workspace === undefined) {
+      if (await exists(workspaceTarget)) throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
+      await mkdir(dirname(workspaceTarget), { recursive: true });
+      await cp(join(stage, "workspace"), workspaceTarget, copyOptions());
+      if (!created.includes(workspaceTarget)) created.push(workspaceTarget);
+    } else {
+      const present = await workspace.call("entries", { path: workspaceTarget });
+      if (present === null) {
+        throw invalidRequest(`${workspaceTarget} does not exist, and ${character}'s tools run as ${workspace.tools.user ?? "another user"}: create that folder owned by them, then import again`);
+      }
+      if (present.length > 0) throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
+      filled = workspace;
+      await copyWorkspaceIn(workspace, join(stage, "workspace"));
+    }
     await mkdir(dirname(dataTarget), { recursive: true });
     await cp(join(stage, "data"), dataTarget, copyOptions());
     created.push(dataTarget);
@@ -389,6 +442,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
       } catch {}
     }
     for (const path of [...created].reverse()) await rm(path, { recursive: true, force: true });
+    if (filled !== undefined) await filled.call("clear", { path: filled.dir }).catch(() => {});
     throw error;
   }
 }
@@ -424,6 +478,50 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function finished(child: ChildProcessWithoutNullStreams, transfer: Promise<void>, what: string): Promise<void> {
+  let stderr = "";
+  child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-4000); });
+  const exited = once(child, "close") as Promise<[number | null]>;
+  exited.catch(() => {});
+  const moved = await transfer.then(() => undefined, (error: unknown) => error);
+  const [code] = await exited;
+  if (moved instanceof CommandError) throw moved;
+  if (code !== 0) throw new Error(`${what}: tar exited with ${String(code)}${stderr.trim() === "" ? "" : `: ${stderr.trim()}`}`);
+  if (moved !== undefined) throw moved;
+}
+
+async function copyWorkspaceOut(
+  workspace: CharacterWorkspace,
+  target: string,
+  count: (kind: "file" | "directory" | "other", size: number) => void,
+): Promise<void> {
+  await mkdir(target);
+  const child = await workspace.spawn("tar", ["--create", "--file=-", `--directory=${workspace.dir}`, "."]);
+  child.stdin.end();
+  const unpack = extract({
+    cwd: target,
+    strict: true,
+    preservePaths: false,
+    filter: function (this: Unpack, _path, entry) {
+      try {
+        const type = "type" in entry ? entry.type : "";
+        count(["File", "OldFile"].includes(type) ? "file" : type === "Directory" ? "directory" : "other", entry.size);
+        return true;
+      } catch (error) {
+        this.abort(error as Error);
+        return false;
+      }
+    },
+  });
+  await finished(child, pipeline(child.stdout, unpack), `could not read ${workspace.dir} as ${workspace.tools.user ?? "the character"}`);
+}
+
+async function copyWorkspaceIn(workspace: CharacterWorkspace, source: string): Promise<void> {
+  const child = await workspace.spawn("tar", ["--extract", "--file=-", `--directory=${workspace.dir}`, "--no-same-owner"]);
+  child.stdout.resume();
+  await finished(child, pipeline(create({ cwd: source, portable: true }, ["."]), child.stdin), `could not write ${workspace.dir} as ${workspace.tools.user ?? "the character"}`);
 }
 
 async function hasEntries(path: string): Promise<boolean> {

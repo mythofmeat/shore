@@ -1,3 +1,4 @@
+import type { CharacterWorkspace } from "../../tools/character_workspace.ts";
 import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
 import type { FrameSink } from "../../llm/stream";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types";
@@ -201,6 +202,8 @@ type CompactionWriteTracker = (
 
 export interface CompactionTools {
   readonly workspaceDir: string;
+
+  readonly workspace?: CharacterWorkspace;
 
   dispatch(name: string, input: unknown, trackNestedWrite?: CompactionWriteTracker): Promise<ToolOutput>;
 

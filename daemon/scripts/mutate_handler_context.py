@@ -213,14 +213,14 @@ MUTANTS = [
      "    return await readFile(path, \"utf8\");\n  } catch (e) {\n    if (e !== null) return undefined;\n"),
     ("context: the memory index is not loaded", CONTEXT,
      "  const memoryIndex = await loadMemoryIndex(\n"
-     "    characterDataDir,\n    config.dirs.config,\n    character,\n    config.dirs.workspace,\n    params.thread,\n  );",
+     "    characterDataDir,\n    workspace,\n    params.thread,\n  );",
      "  const memoryIndex = undefined as string | undefined;"),
-    ("context: the memory index reads the data dir as its config dir", CONTEXT,
-     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    config.dirs.config,",
-     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    characterDataDir,"),
+    ("context: the memory index is read from the data dir instead of the workspace", CONTEXT,
+     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    workspace,",
+     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    workspace.at(characterDataDir),"),
     ("context: the snapshot is never ensured", CONTEXT,
      "      await ensureActivePromptSnapshot(\n"
-     "        characterDataDir,\n        config.dirs.config,\n        character,\n        config.dirs.workspace,\n        params.thread,\n      );",
+     "        characterDataDir,\n        workspace,\n        params.thread,\n      );",
      "      void ensureActivePromptSnapshot;"),
     ("context: a failed snapshot is fatal", CONTEXT,
      "    } catch (e) {\n"

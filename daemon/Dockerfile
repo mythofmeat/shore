@@ -58,12 +58,20 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -s /usr/local/bin/bun /usr/local/bin/node
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# The default user owns the mount points, so named volumes start out writable.
-# Any other UID works too (docker run --user, or user: in compose) as long as
-# it can write the mounted directories and $HOME.
+# The daemon runs as USERNAME, which owns the mount points, so named volumes
+# start out writable, and only it can open /config, /data and /cache.
+#
+# CHARACTER_USERS ("name" or "name:uid", separated by spaces) creates a user
+# for each character, with a private home under /home and a workspace under
+# /workspace that it owns and the daemon's group can read. Set tools.user to
+# that name in the character's config.toml and its tools run as that user.
+# The daemon switches to it when started as root with cap_add SETUID, SETGID
+# and KILL, as in compose.yaml. Started as any other UID (docker run --user,
+# or user: in compose), it runs every tool as that UID.
 ARG USERNAME=app
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG CHARACTER_USERS=
 RUN groupadd -g "$USER_GID" "$USERNAME" \
     && useradd \
     -m \
@@ -72,7 +80,20 @@ RUN groupadd -g "$USER_GID" "$USERNAME" \
     -d "/home/$USERNAME" \
     -s /bin/sh \
     "$USERNAME" \
-    && install -d -o "$USER_UID" -g "$USER_GID" /config /data /cache /workspace
+    && chmod 700 "/home/$USERNAME" \
+    && install -d -o "$USER_UID" -g "$USER_GID" -m 700 /config /data /cache \
+    && install -d -o "$USER_UID" -g "$USER_GID" /workspace \
+    && mkdir -p /opt/shore \
+    && echo "$USERNAME" > /opt/shore/daemon-user \
+    && : > /opt/shore/character-users \
+    && for entry in $CHARACTER_USERS; do \
+    name="${entry%%:*}"; uid="${entry#"$name"}"; uid="${uid#:}"; \
+    useradd -m -U ${uid:+-u "$uid"} -d "/home/$name" -s /bin/bash "$name" \
+    && chmod 700 "/home/$name" \
+    && install -d -o "$name" -g "$USER_GID" -m 2750 "/workspace/$name" \
+    && echo "$name" >> /opt/shore/character-users \
+    || exit 1; \
+    done
 
 # TZ at run time sets the clock programs report, but the character also reads
 # /etc/localtime and /etc/timezone to find the zone, so build them to match.
@@ -84,12 +105,12 @@ ENV TZ=${TZ}
 
 # Root-owned and outside every mount, so nothing the character runs can change
 # the daemon. shore-daemon finds shore-apply-patch and shore-claude beside it.
+COPY daemon/entrypoint.sh /opt/shore/entrypoint
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /opt/shore/
 COPY --from=daemon-builder /build/daemon/dist/shore-daemon /build/daemon/dist/shore-claude /opt/shore/
 COPY --from=patch-builder /build/daemon/dist/codex-apply-patch.LICENSE /build/daemon/dist/codex-apply-patch.NOTICE /usr/local/share/licenses/shore/
 COPY --from=daemon-builder /build/daemon/dist/claude-code.LICENSE.md /usr/local/share/licenses/shore/
 
-USER ${USERNAME}
 WORKDIR /workspace
 
 # Listen on every interface inside the container; publish the port to choose
@@ -104,13 +125,16 @@ ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 # The character installs software as its own user (see prompts/tools/bash.md).
 # pip may install into the user site although Debian marks the system Python
-# as externally managed, and what the installers put in $HOME is on PATH.
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
+# as externally managed. What the installers put in $HOME is on PATH: below
+# for tools that run as the daemon's user, and added by the daemon for a
+# character with a user of its own.
+RUN printf '[global]\nbreak-system-packages = true\n' > /etc/pip.conf
 ENV PATH=/home/${USERNAME}/.local/bin:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.cargo/bin:${PATH}
 EXPOSE 7320
 EXPOSE 7340
 
 # tini reaps the processes the bash tool leaves behind and forwards stop
-# signals. -s keeps that working under docker run --init too.
-ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
+# signals. -s keeps that working under docker run --init too. The entrypoint
+# drops root before starting the daemon.
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/opt/shore/entrypoint"]
 CMD ["/opt/shore/shore-daemon"]

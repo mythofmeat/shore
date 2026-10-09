@@ -27,6 +27,7 @@ import {
 } from "../config/toml_edit.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
@@ -458,9 +459,7 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
   const characterDataDir = character === undefined ? undefined : join(ctx.config.dirs.data, character);
   const changed = characterDataDir === undefined || character === undefined ? [] : await changedPromptFiles(
     characterDataDir,
-    fresh.dirs.config,
-    character,
-    fresh.dirs.workspace,
+    characterWorkspace(fresh, character),
     ctx.thread,
   );
 
@@ -480,9 +479,7 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
     try {
       await applyDeferredEdits(
         characterDataDir,
-        fresh.dirs.config,
-        character,
-        fresh.dirs.workspace,
+        characterWorkspace(fresh, character),
         ctx.thread,
       );
     } catch (e) {

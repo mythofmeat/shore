@@ -3,6 +3,7 @@ import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duratio
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
+import { parseToolsUser } from "../tools/character_user.ts";
 import {
   API_MAX_IMAGE_EDGE,
   DEFAULT_IMAGE_SETTINGS,
@@ -168,6 +169,25 @@ function readSeq<T>(inner: Reader<T>): Reader<T[]> {
 }
 
 const readStringSeq = readSeq(readString);
+
+const readToolsUser: Reader<string> = typed(
+  (v) => {
+    if (typeof v !== "string") return { err: invalidType(v, "a string") };
+    const parsed = parseToolsUser(v);
+    return "err" in parsed ? { err: parsed.err } : { ok: v };
+  },
+  { kind: "string" },
+);
+
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const readEnvNameSeq = readSeq(typed(
+  (v) => {
+    if (typeof v !== "string") return { err: invalidType(v, "a string") };
+    return ENV_NAME.test(v) ? { ok: v } : { err: `\`${v}\` is not an environment variable name` };
+  },
+  { kind: "string" },
+));
 const readF64Seq = readSeq(readF64);
 
 function readMap<V>(inner: Reader<V>): Reader<Map<string, V>> {
@@ -473,6 +493,8 @@ export interface ToolsConfig {
   max_result_chars: number;
   max_inline_image_bytes: number;
   timeout: ConfigDuration;
+  user: string | undefined;
+  pass_env: string[];
   config: Map<string, ToolOverride>;
 }
 
@@ -483,6 +505,8 @@ export const defaultToolsConfig = (): ToolsConfig => ({
   max_result_chars: 50_000,
   max_inline_image_bytes: DEFAULT_MAX_INLINE_IMAGE_BYTES,
   timeout: ConfigDuration.fromSecs(300),
+  user: undefined,
+  pass_env: [],
   config: new Map(),
 });
 
@@ -496,6 +520,8 @@ const TOOLS: StructSpec<ToolsConfig> = {
     max_result_chars: readUsize,
     max_inline_image_bytes: readUsize,
     timeout: readDuration,
+    user: optional(readToolsUser),
+    pass_env: readEnvNameSeq,
     config: readMap(struct(TOOL_OVERRIDE)),
   },
 };
@@ -1158,6 +1184,7 @@ export interface McpServerConfig {
   args: string[];
   env: Map<string, string>;
   cwd: string | undefined;
+  user?: string | undefined;
   url: string | undefined;
   headers: Map<string, string>;
   bearer_token_env: string | undefined;
@@ -1170,6 +1197,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     args: [],
     env: new Map(),
     cwd: undefined,
+    user: undefined,
     url: undefined,
     headers: new Map(),
     bearer_token_env: undefined,
@@ -1179,6 +1207,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     args: readStringSeq,
     env: readMap(readString),
     cwd: optional(readString),
+    user: optional(readToolsUser),
     url: optional(readString),
     headers: readMap(readString),
     bearer_token_env: optional(readString),

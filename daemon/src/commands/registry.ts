@@ -19,11 +19,12 @@ import { assertContractBindings } from "../operations/contracts.ts";
 import { defineOperation, discoverOperations, type OperationPresentation, type OperationRegistry } from "../operations/registry.ts";
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
-import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
+import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
 
@@ -41,7 +42,8 @@ function engineOf(context: CommandOperationContext): ConversationEngine {
 }
 
 function workspaceTurnsOf(context: CommandOperationContext): WorkspaceTurns {
-  return workspaceTurnsFor(context.session.config.dirs, engineOf(context).characterName);
+  const character = engineOf(context).characterName;
+  return workspaceTurnsFor(context.session.config.dirs, character, characterWorkspace(context.session.config, character));
 }
 
 function archiveContext({ session, deps }: CommandOperationContext): ArchiveContext {
@@ -283,10 +285,14 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...characterPresentation, label: "Create character", effects: ["workspace_write"],
     fields: { name: { label: "Character name" } },
   }, ({ session, deps }, args) => {
-    const result = createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
+    const creating = createCharacterAs(session.config.dirs.config, args, session.config.dirs.workspace,
+      (name) => characterWorkspace(session.config, name, { fresh: true }));
     return deps.onCharacterCreated === undefined
-      ? result
-      : deps.onCharacterCreated(result.character).then(() => result);
+      ? creating
+      : creating.then(async (result) => {
+        await deps.onCharacterCreated?.(result.character);
+        return result;
+      });
   }),
   switch_character: register("switch_character", {
     ...characterPresentation, label: "Select character", scope: "selection", effects: ["selection"],

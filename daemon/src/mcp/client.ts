@@ -12,6 +12,15 @@ import {
   type ToolResultPayload,
 } from "../tools/media.ts";
 import { base64Bytes } from "../util/base64.ts";
+import {
+  CharacterUserError,
+  characterPath,
+  characterUser,
+  hasAmbientCapabilities,
+  setprivArgs,
+  setprivFor,
+  switchUserProblem,
+} from "../tools/character_user.ts";
 
 export type Transport =
   | {
@@ -20,6 +29,7 @@ export type Transport =
       args: string[];
       env: Record<string, string>;
       cwd?: string;
+      user?: string;
     }
   | {
       kind: "http";
@@ -65,6 +75,40 @@ export function childEnvironment(
   return { ...env, ...configured };
 }
 
+interface StdioLaunch {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string;
+}
+
+export async function stdioLaunch(
+  transport: Extract<Transport, { kind: "stdio" }>,
+  parent: Record<string, string | undefined> = process.env,
+): Promise<StdioLaunch> {
+  const { command, args, env, cwd, user: spec } = transport;
+  if (spec === undefined) {
+    const plain = { env: childEnvironment(env, parent), ...(cwd === undefined ? {} : { cwd }) };
+    return hasAmbientCapabilities()
+      ? { command: setprivFor(plain.env["PATH"]), args: [...setprivArgs(undefined), "--", command, ...args], ...plain }
+      : { command, args, ...plain };
+  }
+  const user = await characterUser(spec);
+  const problem = switchUserProblem(user);
+  if (problem !== undefined) throw new CharacterUserError(problem.replace("tools.user", "the server's user"));
+  const path = characterPath(user, parent["PATH"]);
+  return {
+    command: setprivFor(path),
+    args: [...setprivArgs(user), "--", "env", `--chdir=${cwd ?? user.home ?? "/"}`, "--", command, ...args],
+    env: {
+      ...(path === undefined ? {} : { PATH: path }),
+      ...(user.home === undefined ? {} : { HOME: user.home }),
+      ...env,
+    },
+    cwd: "/",
+  };
+}
+
 export class McpClient {
   private readonly serverName: string;
   private readonly client: Client;
@@ -84,11 +128,11 @@ export class McpClient {
     let diagnostics = "";
     try {
       if (spec.transport.kind === "stdio") {
-        const { command, args, env, cwd } = spec.transport;
+        const { command, args, env, cwd } = await stdioLaunch(spec.transport);
         transport = new StdioClientTransport({
             command,
             args,
-            env: childEnvironment(env),
+            env,
             stderr: "pipe",
             ...(cwd === undefined ? {} : { cwd }),
           });

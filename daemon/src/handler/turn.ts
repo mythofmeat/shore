@@ -11,6 +11,7 @@ import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
+import { characterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
@@ -196,9 +197,7 @@ export interface CompactionRunner {
   run(charName: string, config: LoadedConfig, thread?: string): Promise<CompactionCompletion>;
   applyDeferredEdits(
     characterDataDir: string,
-    configDir: string,
-    charName: string,
-    workspaceRoot?: string,
+    workspace: CharacterWorkspace,
     thread?: string,
   ): Promise<void>;
   repoint?(charName: string, config: LoadedConfig, thread?: string): Promise<void>;
@@ -271,9 +270,7 @@ async function runInlineCompaction(
     try {
       await runner.applyDeferredEdits(
         characterDataDir(dataDir, charName),
-        config.dirs.config,
-        charName,
-        config.dirs.workspace,
+        characterWorkspace(config, charName),
         engine.thread,
       );
     } catch (e) {

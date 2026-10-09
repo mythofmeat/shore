@@ -226,10 +226,17 @@ function describeImageOption(path: readonly string[]): string | undefined {
   return section === undefined || leaf === "tell_model" || leaf === "allow_original" ? description : `${description} Overrides images.${leaf} for ${section}.`;
 }
 
+const USER_DESCRIPTIONS: Record<string, string> = {
+  tools: "Unix user the character's tools run as: a name, uid or uid:gid. bash, apply_patch, read, edit and the daemon's work in the workspace then have that user's permissions, not the daemon's. The daemon needs CAP_SETUID, CAP_SETGID and CAP_KILL. Unset runs them as the daemon's user.",
+  mcp: "Unix user this stdio server runs as: a name, uid or uid:gid. Unset runs it as the daemon's user. The daemon needs CAP_SETUID and CAP_SETGID.",
+};
+
 function describeOption(path: readonly string[]): string {
   const leaf = path.at(-1) ?? "configuration";
   const plan = path[0] === "plan_limits" ? PLAN_LIMIT_DESCRIPTIONS[leaf] : undefined;
   if (plan !== undefined) return plan;
+  const user = leaf === "user" ? USER_DESCRIPTIONS[path[0] ?? ""] : undefined;
+  if (user !== undefined) return user;
   const image = path[0] === "images" ? describeImageOption(path) : undefined;
   if (image !== undefined) return image;
   const descriptions: Record<string, string> = {
@@ -247,6 +254,7 @@ function describeOption(path: readonly string[]): string {
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
     system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",
     max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
+    pass_env: "Environment variables of the daemon's that a character with its own tools.user gets. It gets no others besides its locale and time zone.",
     image_cache_bytes: "Most bytes the image cache keeps for every character together: images users send, their reduced copies and images tools return. Past it the least recently used go first; an image a model request read in the last hour stays. Defaults to 512 MiB.",
     shutdown_grace: "How long a stopping daemon waits for replies, heartbeats and compactions already running before it stops anyway. New messages are refused meanwhile, and a second stop signal stops at once. Defaults to 29m, which covers 90% of heartbeat turns and leaves a minute of a 30m Docker stop_grace_period for the exit itself.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",

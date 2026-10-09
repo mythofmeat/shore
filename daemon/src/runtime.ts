@@ -343,6 +343,7 @@ export function mcpConfigView(
       args: server.args,
       env: Object.fromEntries(server.env),
       ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
+      ...(server.user === undefined ? {} : { user: server.user }),
       ...(server.url === undefined ? {} : { url: server.url }),
       headers: mcpHeaders(name, server, env),
     };

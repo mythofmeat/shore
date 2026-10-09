@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { LoadedConfig } from "../config/loader.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
 
@@ -37,9 +38,7 @@ export async function reloadAndApplyDeferred(
     try {
       await applyDeferredEdits(
         join(deps.config.dirs.data, character),
-        deps.config.dirs.config,
-        character,
-        deps.config.dirs.workspace,
+        characterWorkspace(deps.config, character),
       );
     } catch (e) {
       shoreLog.warn(

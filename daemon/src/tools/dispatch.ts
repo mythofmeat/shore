@@ -1,11 +1,11 @@
 import { shoreLog } from "../log.ts";
 
 import { handleActivityHeatmap, type ActivityStatsLookup } from "./activity.ts";
-import { handleEdit } from "./edit.ts";
 import { handleApplyPatch } from "./apply_patch.ts";
 import { handleBash, withPromptChanges } from "./bash.ts";
-import { handleRead } from "./read.ts";
+import { CharacterWorkspace } from "./character_workspace.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
+import { decodeToolValue } from "./workspace_ops.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
@@ -27,6 +27,7 @@ export interface ToolContext {
   imageDir: string;
   cacheDir?: string;
   workspaceDir: string;
+  workspace?: CharacterWorkspace;
   characterDataDir: string;
   conversationDir: string;
   characterName: string;
@@ -115,14 +116,21 @@ export async function dispatchTool(
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
+  const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
 
   switch (name) {
     case "read":
-      return await handleRead(args, ctx.workspaceDir, ctx.signal, ctx.maxResultChars, ctx.maxInlineImageBytes, ctx.images);
+      return decodeToolValue(await workspace.call("read", {
+        input: args,
+        workspaceDir: ctx.workspaceDir,
+        ...(ctx.maxResultChars === undefined ? {} : { maxChars: ctx.maxResultChars }),
+        ...(ctx.maxInlineImageBytes === undefined ? {} : { maxImageBytes: ctx.maxInlineImageBytes }),
+        ...(ctx.images === undefined ? {} : { images: ctx.images }),
+      }, ctx.signal));
     case "edit":
     case "apply_patch": {
-      const write = () => withPromptChanges(ctx.workspaceDir,
-        () => name === "edit" ? handleEdit(args, ctx.workspaceDir, ctx.signal) : handleApplyPatch(args, ctx.workspaceDir, ctx.signal), ctx.deferEdit);
+      const write = () => withPromptChanges(workspace,
+        () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "search_chat_logs":
@@ -151,7 +159,7 @@ export async function dispatchTool(
       return handleActivityHeatmap(args, ctx.activityStats);
 
     case "bash": {
-      const write = () => handleBash(args, ctx.workspaceDir, ctx.characterName, ctx.signal, ctx.deferEdit);
+      const write = () => handleBash(args, workspace, ctx.characterName, ctx.signal, ctx.deferEdit);
       return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
     }

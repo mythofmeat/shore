@@ -721,7 +721,7 @@ describe("the native patch helper", () => {
 
   test.skipIf(process.platform === "win32")("cancelling a native patch stops the helper and reports earlier changes", async () => {
     const { run, ctx } = await world();
-    const { runProcess } = await import("../src/tools/workspace.ts");
+    const { runProcess } = await import("../src/tools/process.ts");
     await runProcess("mkfifo", ["blocked"], { cwd: ctx.workspaceDir });
     const abort = new AbortController();
     ctx.signal = abort.signal;

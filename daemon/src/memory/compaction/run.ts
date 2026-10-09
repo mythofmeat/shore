@@ -36,6 +36,7 @@ import {
   gitPushWorkspaceBestEffort,
 } from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
+import { CharacterWorkspace, characterWorkspace } from "../../tools/character_workspace.ts";
 import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
@@ -304,7 +305,7 @@ async function passUnderGuard(
     );
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
-      await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
+      await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
     });
 
     return outcome;
@@ -450,6 +451,7 @@ async function resolveDeps(
   try {
     markdownStore = await MarkdownMemoryStore.open(
       characterMemoryDir(configDir, character, effective.dirs.workspace),
+      characterWorkspace(effective, character),
     );
   } catch (e) {
     shoreLog.warn(`shore: markdown memory store unavailable for ${character}: ${String(e)}`);
@@ -497,8 +499,10 @@ function compactionTools(
     newMessageId: () => `m_${crypto.randomUUID()}`,
     schemas: schemasFrom(tools),
   };
+  const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
   return {
     workspaceDir: ctx.workspaceDir,
+    workspace,
     dispatch: async (name, input, trackNestedWrite) => {
       if (trackNestedWrite !== undefined) {
         ctx.trackWorkspaceWrite = async (nestedName, nestedInput, write) => {
@@ -524,11 +528,11 @@ function compactionTools(
     },
     deferEdit: async (path) => await queueDeferredEdit(ctx.characterDataDir, path, ctx.thread),
     ensureWorkspaceGitRepo: async (workspaceDir) => {
-      await ensureWorkspaceGitRepoBestEffort(workspaceDir);
+      await ensureWorkspaceGitRepoBestEffort(workspace.at(workspaceDir));
     },
-    gitHead: async (workspaceDir) => await gitHead(workspaceDir),
+    gitHead: async (workspaceDir) => await gitHead(workspace.at(workspaceDir)),
     gitCommitAll: async (workspaceDir, charName, message) =>
-      await gitCommitAll(workspaceDir, charName, message),
+      await gitCommitAll(workspace.at(workspaceDir), charName, message),
   };
 }
 
@@ -589,8 +593,8 @@ export function compactionRunner(
         config,
       }, "turn", thread === undefined ? {} : { thread });
     },
-    applyDeferredEdits: (charDataDir, configDir, charName, workspaceRoot, thread) =>
-      applyDeferredEdits(charDataDir, configDir, charName, workspaceRoot, thread),
+    applyDeferredEdits: (charDataDir, workspace, thread) =>
+      applyDeferredEdits(charDataDir, workspace, thread),
     ...(deps.cache === undefined
       ? {}
       : {

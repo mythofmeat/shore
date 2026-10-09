@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import { runCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import {
   CompactionError,
@@ -295,9 +296,7 @@ async function completeCompaction(
   try {
     await applyDeferredEdits(
       join(ctx.config.dirs.data, character),
-      ctx.config.dirs.config,
-      character,
-      ctx.config.dirs.workspace,
+      characterWorkspace(ctx.config, character),
       engine.thread,
     );
   } catch (e) {

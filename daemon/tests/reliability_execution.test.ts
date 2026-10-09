@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { McpClient } from "../src/mcp/client.ts";
 import { handleBash } from "../src/tools/bash.ts";
-import { runProcess } from "../src/tools/workspace.ts";
+import { runProcess } from "../src/tools/process.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const TOOL = "mcp__audit__optional";

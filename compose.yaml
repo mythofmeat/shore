@@ -11,6 +11,25 @@
 # provider keys in config/.env (ANTHROPIC_API_KEY=...) and each character's
 # SOUL.md in workspace/<name>/.
 #
+# A character's tools (bash, read, edit, apply_patch) run as the daemon's
+# user unless the character has a user of its own. Then they cannot open
+# config/, the data and cache volumes, Claude Code's login or other
+# characters' files. For a character named ada:
+#
+#   1. Add ada:2001 to SHORE_CHARACTER_USERS in .env (space-separated
+#      name:uid pairs) and rebuild. The image creates the user.
+#   2. Put tools.user = "ada" in config/characters/ada/config.toml, or in
+#      config/config.toml to give every character that one user.
+#   3. Give ada a home that survives the container: a volume at /home/ada,
+#      as for home below.
+#   4. On the host, give workspace/ada to that uid and the daemon's group,
+#      which may read it but not write it:
+#        mkdir -p workspace/ada
+#        sudo chown -R 2001:1000 workspace/ada && sudo chmod 2750 workspace/ada
+#
+# Setting tools.pass_env = ["NAME"] passes the daemon's NAME variable to
+# characters with their own user; they get no other variable of the daemon's.
+#
 # To keep the deployment outside the checkout, copy this file somewhere else
 # and build from git instead, with context: https://github.com/mythofmeat/shore.git#main
 #
@@ -21,6 +40,8 @@
 #     -p 127.0.0.1:7320:7320 -p 127.0.0.1:7340:7340 \
 #     -v "$PWD/config:/config" -v "$PWD/workspace:/workspace" \
 #     -v shore-data:/data -v shore-cache:/cache -v shore-home:/home/app \
+#     --read-only --tmpfs /tmp:exec --security-opt no-new-privileges \
+#     --cap-drop ALL --cap-add SETUID --cap-add SETGID --cap-add KILL \
 #     shore-daemon
 
 services:
@@ -33,6 +54,8 @@ services:
         # GID is not 1000, set SHORE_UID and SHORE_GID in .env.
         USER_UID: ${SHORE_UID:-1000}
         USER_GID: ${SHORE_GID:-1000}
+        # Users for characters' tools, as described at the top.
+        CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
         # Sets /etc/localtime in the image. Keep it the same as TZ below.
         TZ: ${TZ:-UTC}
     restart: unless-stopped
@@ -52,19 +75,27 @@ services:
       - ./workspace:/workspace
       - data:/data
       - cache:/cache
-      # The character's home directory: tool caches, what it installs with
-      # pip --user or uv, and Claude Code's login unless CLAUDE_CONFIG_DIR
-      # points elsewhere.
+      # The daemon's home: Claude Code's login unless CLAUDE_CONFIG_DIR
+      # points elsewhere, and, for characters without a user of their own,
+      # tool caches and what they install with pip --user or uv.
       - home:/home/app
+      # A character with its own user keeps those in its own home:
+      # - ada-home:/home/ada
     # The bash tool runs whatever the model asks for inside this container.
-    # These keep it from gaining privileges or writing anywhere but the
-    # volumes and /tmp. They do not hide config/ from it: see #238.
+    # The container starts as root only to hand the daemon these three
+    # capabilities: SETUID and SETGID to run each character's tools as its
+    # user, KILL to stop them. Those tools get none, and nothing in the
+    # container can gain privileges or write anywhere but the volumes and /tmp.
     read_only: true
     tmpfs:
       # exec: installers such as cargo and pip build and run programs here.
       - /tmp:exec
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - KILL
     security_opt:
       - no-new-privileges:true
 
@@ -88,3 +119,4 @@ volumes:
   data:
   cache:
   home:
+  # ada-home:

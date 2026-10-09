@@ -152,6 +152,19 @@ printf 'diagnostic' >&2`);
     expect(queued).toEqual(["SOUL.md"]);
   });
 
+  test.skipIf(process.getuid?.() === 0)("a prompt file the shell cannot read counts as absent instead of stopping every call", async () => {
+    const { run, ctx } = await world();
+    const queued: string[] = [];
+    ctx.deferEdit = (path) => { queued.push(path); };
+    const locked = await run("printf secret > ../locked && chmod 000 ../locked && ln -s ../locked USER.md");
+    expect(locked.isError).toBe(false);
+    expect(queued).toEqual([]);
+    const replaced = await run("rm USER.md && printf 'Call me Ash.' > USER.md");
+    expect(replaced.isError).toBe(false);
+    expect(queued).toEqual(["USER.md"]);
+    expect(await readFile(join(ctx.workspaceDir, "USER.md"), "utf8")).toBe("Call me Ash.");
+  });
+
   test("dry-run blocks Bash before creating any files", async () => {
     const { ctx } = await world();
     ctx.dryRun = true;

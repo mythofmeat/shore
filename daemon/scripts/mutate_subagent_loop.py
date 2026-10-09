@@ -13,6 +13,7 @@ MACRO_INPUT = (
     "    thread: deps.ctx.thread ?? MAIN_THREAD,\n"
     "    characterDataDir: deps.ctx.characterDataDir,\n"
     "    workspaceDir: deps.ctx.workspaceDir,\n"
+    "    ...(deps.ctx.workspace === undefined ? {} : { workspace: deps.ctx.workspace }),\n"
     "    history: (deps.conversation ?? deps.ctx.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),\n"
     "    charName,\n"
     "    userName: displayName,\n"

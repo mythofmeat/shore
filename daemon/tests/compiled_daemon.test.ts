@@ -15,7 +15,7 @@ beforeAll(async () => {
   bin = testTmp("compiled-daemon-bin");
   await mkdir(bin, { recursive: true });
   for (const argv of [
-    [process.execPath, "build", "src/daemon/run.ts", "--compile", "--outfile", join(bin, "shore-daemon")],
+    [process.execPath, "build", "src/daemon/main.ts", "--compile", "--outfile", join(bin, "shore-daemon")],
     [process.execPath, "run", "scripts/build_claude.ts", bin],
   ]) {
     const build = Bun.spawn(argv, { cwd: DAEMON_DIR, stdin: "ignore", stdout: "ignore", stderr: "inherit" });
