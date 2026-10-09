@@ -1,8 +1,9 @@
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { CharacterUserError } from "./character_user.ts";
+import { asCharacterWorkspace, type CharacterWorkspace } from "./character_workspace.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
-import { runProcess } from "./workspace.ts";
 
 async function patchExecutable(): Promise<string> {
   const override = process.env.SHORE_APPLY_PATCH_PATH;
@@ -18,15 +19,22 @@ async function patchExecutable(): Promise<string> {
   throw new ToolIoError("Codex patch helper is unavailable. Run bun run build:patch in daemon/ or set SHORE_APPLY_PATCH_PATH to its absolute executable path. No files changed.");
 }
 
-export async function handleApplyPatch(input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal): Promise<unknown> {
+export async function handleApplyPatch(input: Record<string, unknown>, target: string | CharacterWorkspace, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted();
   const patch = input.patch;
   if (typeof patch !== "string" || patch.trim() === "" || patch.includes("\0")) throw new InvalidArgs("patch must be a non-empty string without NUL bytes");
-  if (workspaceDir === "") throw new InvalidArgs("workspace not configured");
+  const workspace = asCharacterWorkspace(target);
+  if (workspace.dir === "") throw new InvalidArgs("workspace not configured");
   const helper = await patchExecutable();
-  const workdir = resolve(workspaceDir);
+  const workdir = resolve(workspace.dir);
   try {
-    const result = await runProcess(helper, [], { cwd: workdir, stdin: patch, signal });
+    await workspace.user();
+  } catch (error) {
+    if (error instanceof CharacterUserError) throw new ToolIoError(`${error.message} No files changed.`);
+    throw error;
+  }
+  try {
+    const result = await workspace.run(helper, [], { cwd: workdir, stdin: patch, signal });
     return {
       workdir, exit_code: result.code, stdout: result.stdout, stderr: result.stderr,
       ...(result.code === 0 ? {} : { warning: "Patch failed. Native patch application is sequential: earlier changes may remain. Inspect affected files before retrying." }),

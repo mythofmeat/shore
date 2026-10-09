@@ -8,11 +8,11 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 import {
   ensureWorkspaceGitRepo,
-  envWithoutInheritedGitRepo,
   gitCommitAll,
   gitPushWorkspace,
   gitPushWorkspaceBestEffort,
 } from "../src/tools/workspace.ts";
+import { envWithoutInheritedGitRepo } from "../src/tools/process.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];

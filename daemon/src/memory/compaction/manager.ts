@@ -1,4 +1,5 @@
-import { restoreWorkspaceEntry, sameWorkspaceEntry, snapshotWorkspace, workspaceEntry } from "../../tools/workspace_snapshot.ts";
+import { sameWorkspaceEntry, type WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
+import { CharacterWorkspace } from "../../tools/character_workspace.ts";
 import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
@@ -7,7 +8,7 @@ import { shoreLog } from "../../log.ts";
 import { dirname, join } from "node:path";
 
 import { characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
-import { lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, readFile, readlink, realpath } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types";
@@ -154,6 +155,14 @@ function extractMemoryWriteIntent(
     : { path: obj.path };
 }
 
+function workspaceOf(tools: CompactionTools, workspaceDir: string): CharacterWorkspace {
+  return (tools.workspace ?? new CharacterWorkspace(tools.workspaceDir)).at(workspaceDir);
+}
+
+async function snapshotOf(workspace: CharacterWorkspace): Promise<Map<string, WorkspaceEntry>> {
+  return new Map(await workspace.call("snapshot", { root: workspace.dir }));
+}
+
 async function dispatchCompactionTool(
   name: string,
   input: unknown,
@@ -163,11 +172,12 @@ async function dispatchCompactionTool(
 ): Promise<import("./types.ts").ToolOutput> {
   if (["bash", "edit", "apply_patch"].includes(name)) {
     if (state.dryRun) return { output: `${name} blocked: dry-run compaction does not modify files`, isError: true };
-    const before = await snapshotWorkspace(workspaceDir);
+    const workspace = workspaceOf(tools, workspaceDir);
+    const before = await snapshotOf(workspace);
     try {
       return await tools.dispatch(name, input);
     } finally {
-      const after = await snapshotWorkspace(workspaceDir);
+      const after = await snapshotOf(workspace);
       for (const path of new Set([...before.keys(), ...after.keys()])) {
         const previousState = before.get(path) ?? null;
         const resultingState = after.get(path) ?? null;
@@ -414,22 +424,21 @@ function deliverPendingNote(request: SidecarRequest, state: ToolLoopState): void
   else request.messages.push({ role: "user", content: [{ type: "text", text: note }] });
 }
 
-async function writeWorkspaceFile(path: string, content: string | Uint8Array): Promise<void> {
+async function writeWorkspaceFile(workspace: CharacterWorkspace, path: string, content: string | Uint8Array): Promise<void> {
   try {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content, "utf8");
+    await workspace.call("writeFile", { path, data: Buffer.from(content).toString("base64") });
   } catch (e) {
     throw CompactionError.markdownStore((e as Error).message);
   }
 }
 
-async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<void> {
+async function rollbackCompaction(writes: AppliedCompactionWrite[], workspace: CharacterWorkspace): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
     const write = required(writes[i]);
     if (write.superseded === true) continue;
     if (write.previousState !== undefined) {
       try {
-        await restoreWorkspaceEntry(write.resolvedPath, write.previousState);
+        await workspace.call("restore", { path: write.resolvedPath, entry: write.previousState });
       } catch (error) {
         shoreLog.warn(`shore: rollback failed to restore ${write.resolvedPath}: ${String(error)}`);
       }
@@ -437,8 +446,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
     }
     if (write.previousSymlink !== undefined) {
       try {
-        await mkdir(dirname(write.resolvedPath), { recursive: true });
-        await symlink(write.previousSymlink, write.resolvedPath);
+        await workspace.call("restore", { path: write.resolvedPath, entry: { kind: "symlink", target: write.previousSymlink } });
       } catch (e) {
         shoreLog.warn(`shore: rollback failed to restore compaction symlink at ${write.resolvedPath}: ${String(e)}`);
       }
@@ -448,7 +456,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
       try {
         const content = write.previousEncoding === "base64"
           ? Buffer.from(write.previousContent, "base64") : write.previousContent;
-        await writeWorkspaceFile(write.resolvedPath, content);
+        await writeWorkspaceFile(workspace, write.resolvedPath, content);
       } catch (e) {
         shoreLog.warn(
           `shore: rollback failed to restore compaction write at ${write.resolvedPath} ` +
@@ -458,7 +466,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
       continue;
     }
     try {
-      await rm(write.resolvedPath);
+      await workspace.call("deleteFile", { path: write.resolvedPath });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
       shoreLog.warn(
@@ -580,7 +588,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
   if (checkpointSourceIsCompatible(checkpoint, plan.sourceContent)) {
-    await adoptOutsideEdits(opts, checkpoint);
+    await adoptOutsideEdits(opts, checkpoint, workspaceOf(tools, workspaceDir));
   } else {
     shoreLog.warn(
       `shore: discarding compaction checkpoint ${checkpoint.id} for ${opts.charName}: the active ` +
@@ -762,7 +770,7 @@ async function archiveCompactPrefix(
       ...(coverageClaim === undefined ? {} : { coverageClaim }),
     });
   } catch (e) {
-    await rollbackCompaction(writesApplied);
+    await rollbackCompaction(writesApplied, workspaceOf(tools, workspaceDir));
     try {
       if (
         await tools.gitCommitAll(
@@ -895,17 +903,17 @@ async function discardCheckpoint(opts: CompactOptions): Promise<string | undefin
   return abandoned?.memoryBefore;
 }
 
-async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionCheckpoint): Promise<void> {
+async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionCheckpoint, workspace: CharacterWorkspace): Promise<void> {
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
   const changed: string[] = [];
   for (const write of latest.values()) {
-    if (await stillAsWritten(write)) continue;
+    if (await stillAsWritten(write, workspace)) continue;
     changed.push(write.displayPath);
     for (const earlier of checkpoint.loop.writesApplied) {
       if (earlier.resolvedPath === write.resolvedPath) earlier.superseded = true;
     }
-    write.resultingState = await workspaceEntry(write.resolvedPath);
+    write.resultingState = await workspace.call("entry", { path: write.resolvedPath });
   }
   if (changed.length === 0) return;
   shoreLog.info(
@@ -919,24 +927,20 @@ async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionChe
   checkpoint.loop.pendingNote = earlier === undefined ? note : `${earlier}\n${note}`;
 }
 
-async function stillAsWritten(write: AppliedCompactionWrite): Promise<boolean> {
+async function stillAsWritten(write: AppliedCompactionWrite, workspace: CharacterWorkspace): Promise<boolean> {
   if (write.resultingState !== undefined) {
-    return sameWorkspaceEntry(await workspaceEntry(write.resolvedPath), write.resultingState);
+    return sameWorkspaceEntry(await workspace.call("entry", { path: write.resolvedPath }), write.resultingState);
   }
   if (write.deleted === true) {
     try {
-      await lstat(write.resolvedPath);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return true;
+      return await workspace.call("entry", { path: write.resolvedPath }) === null;
+    } catch {
+      return false;
     }
-    return false;
   }
   if (write.resultingContent === undefined) return true;
-  try {
-    return (await readFile(write.resolvedPath, "utf8")) === write.resultingContent;
-  } catch {
-    return false;
-  }
+  const [read] = await workspace.call("readFiles", { paths: [write.resolvedPath] });
+  return read !== undefined && "data" in read && Buffer.from(read.data, "base64").toString("utf8") === write.resultingContent;
 }
 
 function pausedOutcome(

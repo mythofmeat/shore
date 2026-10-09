@@ -1,24 +1,17 @@
 import { readDurable } from "../storage/files.ts";
 import { readCharacterState, writeCharacterState, deleteCharacterState, characterScope, withStorage } from "../storage/store.ts";
-import { constants } from "node:fs";
-import {
-  access,
-  mkdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   MAIN_THREAD,
   activeJsonlIn,
   threadDirIn,
-  characterMemoryDir,
   characterWorkspaceDir,
-  characterWorkspaceFile,
 } from "../config/dirs.ts";
 import { homeThreadIn } from "../engine/threads.ts";
 
+import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import {
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
@@ -29,6 +22,8 @@ const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
 
 const MEMORY_INDEX_FILE = "MEMORY.md";
 
+const MEMORY_DIR = "memory";
+
 const QUEUE_FILE = "deferred_edits.jsonl";
 const stateFile = (thread: string, file: string): string => thread === MAIN_THREAD ? file : `threads/${thread}/${file}`;
 export const memoryIndexPath = (
@@ -37,56 +32,43 @@ export const memoryIndexPath = (
   workspaceRoot?: string,
 ) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
 
-async function exists(p: string): Promise<boolean> {
-  try {
-    await access(p, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
+async function workspaceFile(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
+  const [read] = await workspace.call("readFiles", { paths: [join(workspace.dir, name)] });
+  if (read === undefined) return undefined;
+  if ("data" in read) return Buffer.from(read.data, "base64").toString("utf8");
+  if (["ENOENT", "ENOTDIR", "EACCES", "ELOOP"].includes(read.error.code ?? "")) return undefined;
+  throw Object.assign(new Error(read.error.message), read.error.code === undefined ? {} : { code: read.error.code });
 }
 
-async function effectiveContent(p: string): Promise<string | undefined> {
-  try {
-    const content = await readFile(p, "utf8");
-    return content.trim() === "" ? undefined : content;
-  } catch {
-    return undefined;
-  }
+async function effectiveContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
+  const [read] = await workspace.call("readFiles", { paths: [join(workspace.dir, name)] });
+  if (read === undefined || !("data" in read)) return undefined;
+  const content = Buffer.from(read.data, "base64").toString("utf8");
+  return content.trim() === "" ? undefined : content;
 }
-
-const canonicalFile = (
-  configDir: string,
-  charName: string,
-  path: string,
-  workspaceRoot: string | undefined,
-) => characterWorkspaceFile(configDir, charName, path, workspaceRoot);
 
 export const loadActivePromptFile = async (characterDataDir: string, name: string, thread = MAIN_THREAD) =>
   activeContent(characterDataDir, name, thread);
 
 export async function loadPromptFile(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
+  workspace: CharacterWorkspace,
   name: string,
-  workspaceRoot?: string,
   thread = MAIN_THREAD,
 ): Promise<string | undefined> {
-  return await loadPromptFileFromWorkspace(characterDataDir,
-    characterWorkspaceDir(configDir, charName, workspaceRoot), name, thread);
+  return await loadPromptFileFromWorkspace(characterDataDir, workspace, name, thread);
 }
 
 export async function loadPromptFileFromWorkspace(
   characterDataDir: string,
-  workspaceDir: string,
+  target: string | CharacterWorkspace,
   name: string,
   thread = MAIN_THREAD,
 ): Promise<string | undefined> {
   if (await activePromptSnapshotExists(characterDataDir, thread)) {
     return activeContent(characterDataDir, name, thread);
   }
-  return effectiveContent(join(workspaceDir, name));
+  return effectiveContent(asCharacterWorkspace(target), name);
 }
 
 function activeContent(characterDir: string, name: string, thread: string): string | undefined {
@@ -98,20 +80,15 @@ async function activePromptSnapshotExists(characterDir: string, thread: string):
   return readCharacterState(characterDir, stateFile(thread, "active_prompt/.snapshot")) !== undefined;
 }
 
-export const loadCanonicalMemoryIndex = (
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
-) => effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
+export const loadCanonicalMemoryIndex = (workspace: CharacterWorkspace) =>
+  effectiveContent(workspace, MEMORY_INDEX_FILE);
 
 export async function loadMemoryIndex(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
+  workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<string | undefined> {
-  return await loadPromptFile(characterDataDir, configDir, charName, MEMORY_INDEX_FILE, workspaceRoot, thread);
+  return await loadPromptFile(characterDataDir, workspace, MEMORY_INDEX_FILE, thread);
 }
 
 export async function pendingDeferredEditPaths(
@@ -164,17 +141,13 @@ export const noteMemoryIndexDeferred = (characterDataDir: string, thread = MAIN_
 
 export async function changedPromptFiles(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
+  workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<string[]> {
   if (!(await activePromptSnapshotExists(characterDataDir, thread))) return [];
   const changed: string[] = [];
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
-    const canonical = await effectiveContent(
-      canonicalFile(configDir, charName, path, workspaceRoot),
-    );
+    const canonical = await effectiveContent(workspace, path);
     const active = activeContent(characterDataDir, path, thread);
     if (canonical !== active) changed.push(path);
   }
@@ -183,49 +156,33 @@ export async function changedPromptFiles(
 
 async function copyPromptVisibleFile(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
+  workspace: CharacterWorkspace,
   path: string,
   seedOnly: boolean,
-  workspaceRoot: string | undefined,
   thread: string,
 ): Promise<void> {
   const key = stateFile(thread, `active_prompt/${path}`);
   if (seedOnly && readCharacterState(characterDataDir, key) !== undefined) return;
-  const src = canonicalFile(configDir, charName, path, workspaceRoot);
-  if (await exists(src)) writeCharacterState(characterDataDir, key, await readFile(src, "utf8"));
+  const content = await workspaceFile(workspace, path);
+  if (content !== undefined) writeCharacterState(characterDataDir, key, content);
   else deleteCharacterState(characterDataDir, key);
 }
 
-export async function ensureCharacterWorkspace(
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
-): Promise<void> {
-  const workspaceDir = characterWorkspaceDir(configDir, charName, workspaceRoot);
-  const memoryDir = characterMemoryDir(configDir, charName, workspaceRoot);
-
-  await mkdir(workspaceDir, { recursive: true });
-  await mkdir(memoryDir, { recursive: true });
-
-  if (!(await exists(join(workspaceDir, "TOOLS.md")))) {
-    await writeFile(join(workspaceDir, "TOOLS.md"), defaultToolsGuidance, "utf8");
-  }
-
-
+export async function ensureCharacterWorkspace(workspace: CharacterWorkspace): Promise<void> {
+  await workspace.call("mkdir", { path: workspace.dir });
+  await workspace.call("mkdir", { path: join(workspace.dir, MEMORY_DIR) });
+  await workspace.call("createFile", { path: join(workspace.dir, "TOOLS.md"), data: Buffer.from(defaultToolsGuidance, "utf8").toString("base64") });
 }
 
 export async function ensureActivePromptSnapshot(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
+  workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  await ensureCharacterWorkspace(configDir, charName, workspaceRoot);
+  await ensureCharacterWorkspace(workspace);
 
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
-    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, true, workspaceRoot, thread);
+    await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread);
   }
 
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
@@ -233,15 +190,13 @@ export async function ensureActivePromptSnapshot(
 
 export async function refreshActivePromptSnapshot(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
+  workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  await ensureCharacterWorkspace(configDir, charName, workspaceRoot);
+  await ensureCharacterWorkspace(workspace);
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
-    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, false, workspaceRoot, thread);
+    await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread);
   }
 }
 
@@ -297,13 +252,11 @@ export async function resetActivePromptSnapshotIfEmpty(
 
 export async function applyDeferredEdits(
   characterDataDir: string,
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
+  workspace: CharacterWorkspace,
   thread?: string,
 ): Promise<void> {
   const selected = thread ?? await homeThreadIn(characterDataDir);
   if (await resetActivePromptSnapshotIfEmpty(characterDataDir, threadDirIn(characterDataDir, selected), selected)) return;
-  await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot, selected);
+  await refreshActivePromptSnapshot(characterDataDir, workspace, selected);
   deleteCharacterState(characterDataDir, stateFile(selected, QUEUE_FILE));
 }

@@ -4,7 +4,6 @@ import type { LoadedConfig } from "../config/loader.ts";
 import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
 import {
   characterDataDir,
-  characterWorkspaceDir,
   rustJoin,
   threadDataDir,
   MAIN_THREAD,
@@ -14,6 +13,7 @@ import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
 import { resolveDisplayName } from "../config/app.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
@@ -62,7 +62,7 @@ export async function buildToolContext(
 
   const charDataDir = characterDataDir(dataDir, charName);
   const configDir = config.dirs.config;
-  const workspaceDir = characterWorkspaceDir(configDir, charName, config.dirs.workspace);
+  const workspace = characterWorkspace(config, charName);
 
   const mcp = deps.mcpRegistry;
   const activityStats = deps.activityStats;
@@ -77,7 +77,8 @@ export async function buildToolContext(
     images: config.app.images,
     imageDir: characterMediaDir(dataDir, charName),
     cacheDir: config.dirs.cache,
-    workspaceDir,
+    workspaceDir: workspace.dir,
+    workspace,
     characterDataDir: charDataDir,
     conversationDir: threadDataDir(dataDir, charName, deps.thread ?? MAIN_THREAD),
     historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),

@@ -8,6 +8,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TURNS = ROOT / "src/tools/workspace_turns.ts"
+OPS = ROOT / "src/tools/workspace_ops.ts"
 GEN = ROOT / "src/handler/generation.ts"
 CONV = ROOT / "src/commands/conversation.ts"
 TICK = ROOT / "src/autonomy/heartbeat_tick.ts"
@@ -30,8 +31,8 @@ MUTANTS = [
      "      if (alt !== undefined) live.add(alt);",
      ""),
     ("move: folders emptied by an undo are left behind",
-     TURNS,
-     "    await pruneEmptyParents(turns.workspace, path);\n",
+     OPS,
+     "    await pruneEmptyParents(root, path);\n",
      ""),
     ("threads: every thread shares one set of records",
      TURNS,

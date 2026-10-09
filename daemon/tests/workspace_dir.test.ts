@@ -23,6 +23,7 @@ import {
   memoryIndexPath,
 } from "../src/memory/deferred_edits.ts";
 import { characterInfo, listCharacters, switchCharacter } from "../src/commands/navigation.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 const roots: string[] = [];
 
@@ -150,7 +151,7 @@ describe("workspace preparation", () => {
     const config = scratch();
     const ws = scratch();
 
-    await ensureCharacterWorkspace(config, "ada", ws);
+    await ensureCharacterWorkspace(new CharacterWorkspace(characterWorkspaceDir(config, "ada", ws)));
 
     expect(readFileSync(join(ws, "ada", "TOOLS.md"), "utf8")).toContain("`read` returns bounded text or image input");
     expect(discoverCharacters(config, ws)).toEqual([]);
@@ -166,14 +167,14 @@ describe("workspace preparation", () => {
     write(ws, "ada/MEMORY.md", "the index under the root\n");
     write(config, "characters/ada/workspace/MEMORY.md", "the index under the config tree\n");
 
-    expect(await loadMemoryIndex(join(data, "ada"), config, "ada", ws)).toBe(
+    expect(await loadMemoryIndex(join(data, "ada"), new CharacterWorkspace(characterWorkspaceDir(config, "ada", ws)))).toBe(
       "the index under the root\n",
     );
-    expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toEqual([]);
+    expect(await changedPromptFiles(join(data, "ada"), new CharacterWorkspace(characterWorkspaceDir(config, "ada", ws)))).toEqual([]);
 
     writePromptSnapshotFile(join(data, "ada/active_prompt/MEMORY.md"), "the index under the config tree\n");
 
-    expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toContain(
+    expect(await changedPromptFiles(join(data, "ada"), new CharacterWorkspace(characterWorkspaceDir(config, "ada", ws)))).toContain(
       "MEMORY.md",
     );
   });

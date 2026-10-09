@@ -60,6 +60,7 @@ import type {
   MessageHandlerDeps,
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -606,6 +607,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         await applyReloadedConfig(a, runtime.registry.globalConfig());
       },
       releaseCharacter: async (character) => await releaseCharacter(a, character),
+      workspace: (character) => characterWorkspace(runtime.registry.globalConfig(), character, { fresh: true }),
     },
     compaction: {
       run: {

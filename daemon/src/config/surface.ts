@@ -77,7 +77,7 @@ export const MODEL_FIELDS = [
   "system_prompt",
 ] as const;
 
-export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "mcp", "timeout", "max_result_chars", "max_inline_image_bytes"];
+export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "mcp", "timeout", "max_result_chars", "max_inline_image_bytes", "user", "pass_env"];
 
 export const NOTIFICATION_EVENTS = ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"] as const;
 

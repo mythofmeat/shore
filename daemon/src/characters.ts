@@ -37,6 +37,7 @@ import {
   ensureCharacterWorkspace,
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
+import { characterWorkspace } from "./tools/character_workspace.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -151,11 +152,7 @@ export class CharacterRegistry {
         const index = await this.#withThreadIndex(name, async () =>
           this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),
         );
-        await ensureCharacterWorkspace(
-          this.#configDir,
-          name,
-          this.#workspaceRoot(),
-        );
+        await ensureCharacterWorkspace(characterWorkspace(this.#globalConfig, name));
         await resetActivePromptSnapshotIfEmpty(
           characterDataDir(this.#dataDir, name),
           threadDataDir(this.#dataDir, name, homeThread(index)),

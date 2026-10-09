@@ -453,7 +453,7 @@ async function runDaemon(options: DaemonOptions): Promise<void> {
   }
 }
 
-if (import.meta.main) {
+export async function main(): Promise<void> {
   try {
     await runDaemon({
       argv: process.argv.slice(2),
@@ -470,6 +470,8 @@ if (import.meta.main) {
     process.exit(1);
   }
 }
+
+if (import.meta.main) await main();
 
 function format(level: string, msg: string, fields?: Record<string, unknown>): string {
   const pairs = Object.entries(fields ?? {}).map(([k, v]) => ` ${k}=${String(v)}`);

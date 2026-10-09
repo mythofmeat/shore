@@ -25,6 +25,7 @@ import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.
 import { imageTierForModel } from "../llm/image_tokens.ts";
 import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
 import { toCredentialsEntry } from "../config/providers.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
@@ -72,14 +73,13 @@ export async function prepareChatContext(
   const { character, characterDataDir, config, resolved, messages, mcpToolDefs } = params;
   const displayName = resolveDisplayName(config.app.defaults);
 
+  const workspace = characterWorkspace(config, character);
   const activeConversation = params.activeConversation ?? messages.length > 0;
   if (activeConversation) {
     try {
       await ensureActivePromptSnapshot(
         characterDataDir,
-        config.dirs.config,
-        character,
-        config.dirs.workspace,
+        workspace,
         params.thread,
       );
     } catch (e) {
@@ -88,11 +88,7 @@ export async function prepareChatContext(
   } else {
     try {
       await resetActivePromptSnapshot(characterDataDir, params.thread);
-      await ensureCharacterWorkspace(
-        config.dirs.config,
-        character,
-        config.dirs.workspace,
-      );
+      await ensureCharacterWorkspace(workspace);
     } catch (e) {
       shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
     }
@@ -101,10 +97,8 @@ export async function prepareChatContext(
   const promptFile = (name: string) =>
     loadPromptFile(
       characterDataDir,
-      config.dirs.config,
-      character,
+      workspace,
       name,
-      config.dirs.workspace,
       params.thread,
     );
   const characterDefinition = await promptFile(SOUL_FILE);
@@ -113,9 +107,7 @@ export async function prepareChatContext(
   const toolsGuidance = await promptFile(TOOLS_FILE);
   const memoryIndex = await loadMemoryIndex(
     characterDataDir,
-    config.dirs.config,
-    character,
-    config.dirs.workspace,
+    workspace,
     params.thread,
   );
 

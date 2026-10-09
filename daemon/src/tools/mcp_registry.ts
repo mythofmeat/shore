@@ -22,6 +22,7 @@ export interface McpServerConfigView {
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+  user?: string;
   url?: string;
   headers?: Record<string, string>;
 }
@@ -63,6 +64,7 @@ export function toSpec(
         args: cfg.args ?? [],
         env: cfg.env ?? {},
         ...(cwd === undefined ? {} : { cwd }),
+        ...(cfg.user === undefined ? {} : { user: cfg.user }),
       },
     };
   }
@@ -718,6 +720,7 @@ function normalizeSource(
       args: c.args ?? [],
       env: Object.fromEntries(Object.entries(c.env ?? {}).sort(([a], [b]) => compareByCodePoint(a, b))),
       cwd: c.cwd ?? null,
+      user: c.user ?? null,
       url: c.url ?? null,
       headers: Object.fromEntries(
         Object.entries(c.headers ?? {}).sort(([a], [b]) => compareByCodePoint(a, b)),

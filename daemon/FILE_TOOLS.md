@@ -1,6 +1,6 @@
 # File tools
 
-Shore exposes `read`, `edit`, and `apply_patch` alongside `bash`. The model chooses which tools to use. There is no read-before-edit requirement. Paths may be absolute or relative to the character's workspace; symlinks and access outside the workspace follow the daemon user's host permissions, as with Bash.
+Shore exposes `read`, `edit`, and `apply_patch` alongside `bash`. The model chooses which tools to use. There is no read-before-edit requirement. Paths may be absolute or relative to the character's workspace; symlinks and access outside the workspace follow the host permissions of the user the character's tools run as, as with Bash: the daemon's user, or the character's own (see below).
 
 ## Configuration
 
@@ -21,6 +21,27 @@ timeout = "1m"
 The same allowlist works for every provider. Subagents use their own configured tool lists. A model call to a tool absent from its advertised tool set is rejected before dispatch. Explicit `shore debug tool` invocations can still run disabled tools. Dry-run contexts reject edits, patches and shell commands.
 
 Model settings accept `supports_images = false` for text-only models or endpoints. Shore also uses discovered image capability and its existing learned rejection cache. On each model continuation, unavailable images become explicit error notices and a provider warning; the original structured results remain in history. An HTTP image-support rejection before output retries that individual request once with notices, without repeating tool execution. Other provider errors propagate normally. Claude Agent uses its native SDK session; Shore does not replay a native session after a provider failure.
+
+## Running tools as the character's own user
+
+By default the tools run as the daemon's user, so a character can read and change whatever the daemon can: `config.toml`, `.env`, the token, `shore.db`, other characters' data and Claude Code's login. A Unix user of the character's own separates them:
+
+```toml
+# characters/ada/config.toml, or config.toml to give every character one user
+[tools]
+user = "ada"                    # a user name, a uid, or uid:gid
+pass_env = ["TODOIST_API_KEY"]  # daemon variables the character keeps
+```
+
+`bash` and `apply_patch` then start through `setpriv` as that user, with its groups, every capability cleared and no way to gain new privileges. `read`, `edit`, Markdown image reads and wikilink lookups run in a helper process started the same way (`shore-daemon --workspace-helper`). What a character can read and write is then whatever its user can, set with ordinary ownership, modes and groups; Shore adds no path rules of its own.
+
+The daemon's own work in the workspace happens as the character too: reading SOUL.md, USER.md, TOOLS.md and MEMORY.md for the prompt, creating TOOLS.md and `memory/`, compaction's snapshots and rollbacks, the workspace's git repository, undoing a reply's file changes, and exporting, importing and deleting the character. A prompt file the user cannot read, such as a link to the daemon's `.env`, counts as absent. The history behind undoing a reply's file changes lives in the user's `~/.cache/shore/workspace-turns/`.
+
+The character's environment is its user's: HOME, USER, LOGNAME and SHELL from the passwd entry, the user's `~/.local/bin`, `~/.bun/bin` and `~/.cargo/bin` ahead of the daemon's PATH, the daemon's locale and TZ, and the variables named in `tools.pass_env`. No other daemon variable reaches it, so provider keys from `.env` and SHORE_TOKEN stay with the daemon.
+
+The daemon needs CAP_SETUID and CAP_SETGID to switch users and CAP_KILL to stop the character's commands on a timeout or cancellation; without the first two the tools fail instead of running as the daemon. It also needs to list and read the character's workspace folder: give it to the character, with the daemon's group and mode 2750. Keep the daemon's own folders closed to the character's user, which should not be in the daemon's group. The Docker image does both; compose.yaml at the repository root shows how. On other hosts, start the daemon with the three capabilities, for example from a systemd service with `AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_KILL` and `NoNewPrivileges=yes`.
+
+Without `tools.user` the tools run as the daemon's user, as before, but without any capabilities the daemon holds. A stdio MCP server runs as the daemon's user too, unless its own `user` is set: `[mcp.<name>] user = "ada"`. The character cannot change its own config.toml; that stays with the operator.
 
 ## Reading
 

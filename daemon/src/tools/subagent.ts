@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { MAIN_THREAD } from "../config/dirs.ts";
 import { loadPromptFileFromWorkspace } from "../memory/deferred_edits.ts";
+import { CharacterWorkspace } from "./character_workspace.ts";
 import { normalizePromptVisiblePath, resolvePath } from "./workspace_path";
 import { wallClockMarker } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -14,6 +14,7 @@ export interface MacroContext {
   thread?: string;
   characterDataDir: string;
   workspaceDir: string;
+  workspace?: CharacterWorkspace;
   history: readonly Message[];
   charName: string;
   userName: string;
@@ -95,27 +96,20 @@ async function readPromptFile(path: string, ctx: MacroContext): Promise<string> 
     return "";
   }
 
+  const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
   const visible = normalizePromptVisiblePath(path);
   if (visible !== undefined) {
     const thread = ctx.thread ?? MAIN_THREAD;
-    return (await loadPromptFileFromWorkspace(ctx.characterDataDir, ctx.workspaceDir, visible, thread)) ?? "";
+    return (await loadPromptFileFromWorkspace(ctx.characterDataDir, workspace, visible, thread)) ?? "";
   }
 
   const target = resolvePath(ctx.workspaceDir, path);
-  const content = defaultReadFile(target);
-  if (content === undefined) {
+  const [read] = await workspace.call("readFiles", { paths: [target] });
+  if (read === undefined || !("data" in read)) {
     warn(path, "file unreadable");
     return "";
   }
-  return content;
-}
-
-function defaultReadFile(path: string): string | undefined {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
+  return Buffer.from(read.data, "base64").toString("utf8");
 }
 
 export function renderHistorySlice(

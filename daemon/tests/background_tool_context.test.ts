@@ -26,6 +26,8 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 import { NO_MCP } from "./support/rebuild.ts";
+import { characterWorkspaceDir } from "../src/config/dirs.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 beforeEach(() => {
   setTestEnv(KEY, "fixture-key");
@@ -122,13 +124,13 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
   const characterDir = join(config.dirs.data, "ada");
   const main = await runtime.registry.getOrCreate("ada", "main");
   for (const message of messages("MAIN_CONVERSATION")) await main.appendMessage(message);
-  await ensureActivePromptSnapshot(characterDir, config.dirs.config, "ada", undefined, "main");
+  await ensureActivePromptSnapshot(characterDir, new CharacterWorkspace(characterWorkspaceDir(config.dirs.config, "ada")), "main");
   await runtime.registry.createThread("ada", "diary");
   await runtime.registry.setHomeThread("ada", "diary");
   const diary = await runtime.registry.getOrCreate("ada", "diary");
   for (const message of messages("DIARY_CONVERSATION")) await diary.appendMessage(message);
   await writePrompt("DIARY SNAPSHOT");
-  await ensureActivePromptSnapshot(characterDir, config.dirs.config, "ada", undefined, "diary");
+  await ensureActivePromptSnapshot(characterDir, new CharacterWorkspace(characterWorkspaceDir(config.dirs.config, "ada")), "diary");
   await writePrompt("LIVE WORKSPACE");
   const bridge = new TurnAutonomyBridge(runtime.autonomy);
   await runtime.autonomy.register(registrationFor("ada", config));
@@ -258,7 +260,7 @@ test("file macros use workspace fallback only when the selected thread has no pr
     expect(await expand("fresh")).toBe("LIVE WORKSPACE MEMORY.md");
     await w.runtime.registry.createThread("ada", "empty");
     await rm(join(w.workspace, "MEMORY.md"));
-    await ensureActivePromptSnapshot(w.characterDir, w.config.dirs.config, "ada", undefined, "empty");
+    await ensureActivePromptSnapshot(w.characterDir, new CharacterWorkspace(characterWorkspaceDir(w.config.dirs.config, "ada")), "empty");
     await writeFile(join(w.workspace, "MEMORY.md"), "DEFERRED NEW MEMORY");
     expect(await loadPromptFileFromWorkspace(w.characterDir, w.workspace, "MEMORY.md", "empty")).toBeUndefined();
     expect(await expand("empty")).toBe("");

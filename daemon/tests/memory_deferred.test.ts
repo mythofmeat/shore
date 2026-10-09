@@ -24,6 +24,8 @@ import {
   queueDeferredEdit,
   refreshActivePromptSnapshot,
 } from "../src/memory/deferred_edits";
+import { characterWorkspaceDir } from "../src/config/dirs.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 interface Case {
   name: string;
@@ -106,6 +108,7 @@ describe("applying a deferred edit", () => {
         const configDir = join(root, "config");
         await mkdir(dataDir, { recursive: true });
         await mkdir(configDir, { recursive: true });
+        const workspace = new CharacterWorkspace(characterWorkspaceDir(configDir, CHAR));
 
         for (const [rel, content] of Object.entries(c.before)) {
           const p = join(root, rel);
@@ -132,28 +135,28 @@ describe("applying a deferred edit", () => {
             returned = await pendingDeferredEditPaths(dataDir);
             break;
           case "changed_prompt_files":
-            returned = await changedPromptFiles(dataDir, configDir, CHAR);
+            returned = await changedPromptFiles(dataDir, workspace);
             break;
           case "apply_deferred_edits":
-            await applyDeferredEdits(dataDir, configDir, CHAR);
+            await applyDeferredEdits(dataDir, workspace);
             break;
           case "ensure_active_prompt_snapshot":
-            await ensureActivePromptSnapshot(dataDir, configDir, CHAR);
+            await ensureActivePromptSnapshot(dataDir, workspace);
             break;
           case "refresh_active_prompt_snapshot":
-            await refreshActivePromptSnapshot(dataDir, configDir, CHAR);
+            await refreshActivePromptSnapshot(dataDir, workspace);
             break;
           case "ensure_character_workspace":
-            await ensureCharacterWorkspace(configDir, CHAR);
+            await ensureCharacterWorkspace(workspace);
             break;
           case "load_memory_index":
-            returned = (await loadMemoryIndex(dataDir, configDir, CHAR)) ?? null;
+            returned = (await loadMemoryIndex(dataDir, workspace)) ?? null;
             break;
           case "load_active_prompt_file":
             returned = (await loadActivePromptFile(dataDir, required(c.op.name))) ?? null;
             break;
           case "load_canonical_memory_index":
-            returned = (await loadCanonicalMemoryIndex(configDir, CHAR)) ?? null;
+            returned = (await loadCanonicalMemoryIndex(workspace)) ?? null;
             break;
           default:
             throw new Error(`unhandled op ${c.op.fn}`);

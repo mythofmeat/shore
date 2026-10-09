@@ -1,7 +1,8 @@
-import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { CharacterUserError } from "./character_user.ts";
+import { asCharacterWorkspace, type CharacterWorkspace } from "./character_workspace.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
-import { characterGitIdentity, envWithoutInheritedGitRepo, runProcess, type ToolInput } from "./workspace.ts";
+import { characterGitIdentity, type ToolInput } from "./workspace.ts";
 
 export interface BashResult {
   workdir: string;
@@ -13,20 +14,36 @@ export interface BashResult {
 
 const PROMPT_FILES = ["SOUL.md", "USER.md", "TOOLS.md", "MEMORY.md"];
 
-async function promptContents(workspaceDir: string): Promise<(Buffer | undefined)[]> {
-  return await Promise.all(PROMPT_FILES.map(async (path) => {
-    try {
-      return await readFile(join(workspaceDir, path));
-    } catch (error) {
-      if (["ENOENT", "EISDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return undefined;
-      throw error;
-    }
-  }));
+const UNREADABLE = new Set(["ENOENT", "EISDIR", "ENOTDIR", "EACCES", "ELOOP"]);
+
+async function promptContents(workspace: CharacterWorkspace, root: string): Promise<(string | undefined)[]> {
+  const reads = await workspace.call("readFiles", { paths: PROMPT_FILES.map((path) => join(root, path)) });
+  return reads.map((read) => {
+    if ("data" in read) return read.data;
+    if (UNREADABLE.has(read.error.code ?? "")) return undefined;
+    throw Object.assign(new Error(read.error.message), read.error.code === undefined ? {} : { code: read.error.code });
+  });
+}
+
+async function changedPromptFiles(
+  workspace: CharacterWorkspace,
+  root: string,
+  before: readonly (string | undefined)[],
+  deferEdit?: (path: string) => Promise<void> | void,
+): Promise<string[]> {
+  const after = await promptContents(workspace, root);
+  const changed: string[] = [];
+  for (const [index, path] of PROMPT_FILES.entries()) {
+    if (before[index] === after[index]) continue;
+    changed.push(path);
+    await deferEdit?.(path);
+  }
+  return changed;
 }
 
 export async function handleBash(
   input: ToolInput,
-  workspaceDir: string,
+  target: string | CharacterWorkspace,
   character: string,
   signal?: AbortSignal,
   deferEdit?: (path: string) => Promise<void> | void,
@@ -40,21 +57,26 @@ export async function handleBash(
   if (requestedDir !== undefined && (typeof requestedDir !== "string" || requestedDir.includes("\0"))) {
     throw new InvalidArgs("workdir must be a string without NUL bytes");
   }
-  if (workspaceDir === "") throw new InvalidArgs("workspace not configured");
-  const root = resolve(workspaceDir);
+  const workspace = asCharacterWorkspace(target);
+  if (workspace.dir === "") throw new InvalidArgs("workspace not configured");
+  const root = resolve(workspace.dir);
   const workdir = resolve(root, requestedDir ?? ".");
-  await mkdir(root, { recursive: true });
-  const before = await promptContents(root);
-  const changed: string[] = [];
+  try {
+    await workspace.user();
+  } catch (error) {
+    if (error instanceof CharacterUserError) throw new ToolIoError(error.message);
+    throw error;
+  }
+  await workspace.call("mkdir", { path: root });
+  const before = await promptContents(workspace, root);
+  let changed: string[] = [];
   const [name, email] = characterGitIdentity(character);
-  const env = envWithoutInheritedGitRepo();
-  delete env["BASH_ENV"];
   const execute = async () => {
     try {
-      return await runProcess("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", command], {
+      return await workspace.run("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", command], {
         cwd: workdir,
         env: {
-          ...env, PWD: workdir, SHORE_WORKSPACE_DIR: root,
+          BASH_ENV: undefined, PWD: workdir, SHORE_WORKSPACE_DIR: root,
           GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
           GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
         },
@@ -69,29 +91,21 @@ export async function handleBash(
   try {
     output = await execute();
   } finally {
-    const after = await promptContents(root);
-    for (const [index, path] of PROMPT_FILES.entries()) {
-      const old = before[index];
-      const current = after[index];
-      if (old === undefined ? current === undefined : current !== undefined && old.equals(current)) continue;
-      changed.push(path);
-      await deferEdit?.(path);
-    }
+    changed = await changedPromptFiles(workspace, root, before, deferEdit);
   }
   return { workdir, exit_code: output.code, stdout: output.stdout, stderr: output.stderr, prompt_files_changed: changed };
 }
 
-export async function withPromptChanges<T>(workspaceDir: string, write: () => Promise<T>, deferEdit?: (path: string) => Promise<void> | void): Promise<T> {
-  const root = resolve(workspaceDir);
-  const before = await promptContents(root);
+export async function withPromptChanges<T>(
+  target: string | CharacterWorkspace,
+  write: () => Promise<T>,
+  deferEdit?: (path: string) => Promise<void> | void,
+): Promise<T> {
+  const workspace = asCharacterWorkspace(target);
+  const root = resolve(workspace.dir);
+  const before = await promptContents(workspace, root);
   try { return await write(); }
   finally {
-    const after = await promptContents(root);
-    for (const [index, path] of PROMPT_FILES.entries()) {
-      const old = before[index];
-      const current = after[index];
-      if (old === undefined ? current === undefined : current !== undefined && old.equals(current)) continue;
-      await deferEdit?.(path);
-    }
+    await changedPromptFiles(workspace, root, before, deferEdit);
   }
 }

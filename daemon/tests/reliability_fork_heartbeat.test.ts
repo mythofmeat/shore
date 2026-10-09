@@ -15,6 +15,7 @@ import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { NO_MCP } from "./support/rebuild.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 afterAll(restoreTestEnv);
 
@@ -89,7 +90,7 @@ for (const source of ["main", "side"]) {
     await h.run();
     expect(JSON.stringify(requests.at(-1)?.system)).toBe(original);
     expect(await pendingDeferredEditPaths(charDir, "child")).toEqual(["MEMORY.md", "SOUL.md"]);
-    await applyDeferredEdits(charDir, h.config.dirs.config, "ada", h.config.dirs.workspace, "child");
+    await applyDeferredEdits(charDir, new CharacterWorkspace(characterWorkspaceDir(h.config.dirs.config, "ada", h.config.dirs.workspace)), "child");
     await h.run();
     expect(JSON.stringify(requests.at(-1)?.system)).toContain("Deferred SOUL.md");
     expect(await pendingDeferredEditPaths(charDir, "child")).toEqual([]);
@@ -112,7 +113,7 @@ for (const stage of ["context", "provenance", "publish"] as const) {
     const snapshot = readState(h.config.dirs.data, "ada/threads/child/active_prompt/.snapshot");
     expect(snapshot).toBe(stage === "publish" ? "1" : undefined);
     expect(await pendingDeferredEditPaths(charDir, "child")).toEqual(stage === "publish" ? ["SOUL.md"] : []);
-    expect(await loadPromptFile(charDir, h.config.dirs.config, "ada", "SOUL.md")).toBe("Ada");
+    expect(await loadPromptFile(charDir, new CharacterWorkspace(characterWorkspaceDir(h.config.dirs.config, "ada")), "SOUL.md")).toBe("Ada");
     expect(await pendingDeferredEditPaths(charDir)).toEqual(["SOUL.md"]);
   });
 }
