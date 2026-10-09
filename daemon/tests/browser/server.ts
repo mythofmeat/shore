@@ -44,6 +44,9 @@ tools = ["bash"]
 [providers.anthropic]
 api_key_env = "SHORE_BROWSER_KEY"
 discover = false
+[providers.openrouter]
+api_key_env = "SHORE_BROWSER_UNSET_KEY"
+discover = false
 [providers.fixture]
 sdk = "openai"
 base_url = "${discovery.url.href}v1"

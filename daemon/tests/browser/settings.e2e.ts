@@ -86,7 +86,7 @@ test("configuration checks, searches and edits a setting; the palette jumps to i
   await page.getByRole("button", { name: "Check configuration" }).click();
   const result = page.locator(".notice-box");
   await expect(result).toContainText("Config folder");
-  await expect(result).toContainText("ANTHROPIC_API_KEY not set");
+  await expect(result).toContainText("$SHORE_BROWSER_UNSET_KEY not set (needed by model openrouter:vendor-fixture)");
   await check();
 });
 
