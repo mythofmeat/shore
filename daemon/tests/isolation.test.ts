@@ -232,7 +232,8 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const target = await dirsUnder(root);
     const workspace = new CharacterWorkspace(join(root, name), { user: USER, passEnv: [] });
     await deleteCharacter(isolated(source), { character: name, confirm: name });
-    expect(await workspace.call("entries", { path: workspace.dir })).toEqual([]);
+    expect(await workspace.call("entries", { path: workspace.dir })).toBeNull();
+    await workspace.call("mkdir", { path: workspace.dir });
     await importCharacter({ ...isolated(target), hasCharacter: () => false }, { archive });
     expect(await workspace.call("entries", { path: workspace.dir })).toEqual(["SOUL.md", "private"]);
     expect(await ownerOf(workspace, join(workspace.dir, "private", "kept.txt"))).toBe(user.uid);

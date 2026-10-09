@@ -62,9 +62,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # start out writable, and only it can open /config, /data and /cache.
 #
 # CHARACTER_USERS ("name" or "name:uid", separated by spaces) creates a user
-# for each character, with a private home under /home and a workspace under
-# /workspace that it owns and the daemon's group can read. Set tools.user to
-# that name in the character's config.toml and its tools run as that user.
+# for each character, with a group of the same name and number, a private
+# home under /home and a workspace under /workspace that belongs to both.
+# The daemon's user joins each of those groups so it can read the workspace;
+# join one with the same gid on the host to read and write it yourself. Set
+# tools.user to that name in the character's config.toml and its tools run
+# as that user.
 # The daemon switches to it when started as root with cap_add SETUID, SETGID
 # and KILL, as in compose.yaml. Started as any other UID (docker run --user,
 # or user: in compose), it runs every tool as that UID.
@@ -88,9 +91,11 @@ RUN groupadd -g "$USER_GID" "$USERNAME" \
     && : > /opt/shore/character-users \
     && for entry in $CHARACTER_USERS; do \
     name="${entry%%:*}"; uid="${entry#"$name"}"; uid="${uid#:}"; \
-    useradd -m -U ${uid:+-u "$uid"} -d "/home/$name" -s /bin/bash "$name" \
+    groupadd ${uid:+-g "$uid"} "$name" \
+    && useradd -m ${uid:+-u "$uid"} -g "$name" -d "/home/$name" -s /bin/bash "$name" \
+    && usermod -aG "$name" "$USERNAME" \
     && chmod 700 "/home/$name" \
-    && install -d -o "$name" -g "$USER_GID" -m 2750 "/workspace/$name" \
+    && install -d -o "$name" -g "$name" -m 2770 "/workspace/$name" \
     && echo "$name" >> /opt/shore/character-users \
     || exit 1; \
     done

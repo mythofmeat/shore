@@ -66,13 +66,14 @@ while read -r name; do
 	elif [ "$(stat -c %u "$home")" != "$uid" ]; then
 		say "$home belongs to uid $(stat -c %u "$home"), not to $name (uid $uid)"
 	fi
+	gid=$(id -g "$name")
 	workspace="${SHORE_WORKSPACE_DIR:-/workspace}/$name"
 	if [ ! -d "$workspace" ]; then
-		say "$name has no workspace at $workspace; create it owned by $name with group $daemon_gid and mode 2750"
+		say "$name has no workspace at $workspace; create it owned by $uid:$gid with mode 2770"
 	elif [ "$(stat -c %u "$workspace")" != "$uid" ]; then
 		say "$workspace belongs to uid $(stat -c %u "$workspace"), not to $name (uid $uid); $name's tools cannot write it"
 	elif ! as_daemon test -r "$workspace" -a -x "$workspace"; then
-		say "$daemon_user cannot read $workspace; give it group $daemon_gid and mode 2750"
+		say "$daemon_user cannot read $workspace; give it group $gid, which $daemon_user is in, and mode 2770"
 	fi
 done </opt/shore/character-users
 
