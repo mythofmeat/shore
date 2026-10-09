@@ -41,6 +41,7 @@ RUN apt-get update \
     git \
     git-lfs \
     jq \
+    openssh-client \
     python3 \
     python3-pip \
     ripgrep \

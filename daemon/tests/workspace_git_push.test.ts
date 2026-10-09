@@ -1,7 +1,8 @@
 import { required } from "../src/util/required.ts";
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -29,6 +30,15 @@ afterEach(() => {
 
 async function gitAvailable(): Promise<boolean> {
   const proc = Bun.spawn(["git", "--version"], { stdout: "ignore", stderr: "ignore" });
+  try {
+    return (await proc.exited) === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function gitLfsAvailable(): Promise<boolean> {
+  const proc = Bun.spawn(["git", "lfs", "version"], { stdout: "ignore", stderr: "ignore" });
   try {
     return (await proc.exited) === 0;
   } catch {
@@ -137,7 +147,7 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     expect(await gitLogSubjects(workspace)).toContain("memory: compaction");
   });
 
-  test("the best-effort wrapper swallows a push that fails", async () => {
+  test("the best-effort wrapper logs a push that fails instead of throwing", async () => {
     const { workspace, remote } = await workspaceWithRemote();
     rmSync(remote, { recursive: true, force: true });
 
@@ -145,7 +155,34 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     await gitCommitAll(workspace, "Ada", "memory: compaction");
 
     expect(await outcomeOf(gitPushWorkspace(workspace))).toThrow();
-    expect(await gitPushWorkspaceBestEffort(workspace)).toBeUndefined();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await gitPushWorkspaceBestEffort(workspace)).toBeUndefined();
+      const warnings = warn.mock.calls.map((call) => String(call[0]));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(`could not push the workspace at ${workspace}`);
+      expect(warnings[0]).toContain("git push failed");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe.if((await gitAvailable()) && (await gitLfsAvailable()))("gitPushWorkspace with Git LFS", () => {
+  test("uploads the LFS objects of the commits it pushes, although hooks are off", async () => {
+    const { workspace, remote } = await workspaceWithRemote();
+    await git(workspace, "lfs", "install", "--local");
+    writeFileSync(join(workspace, ".gitattributes"), "*.png filter=lfs diff=lfs merge=lfs -text\n");
+    const image = Buffer.from("not really a png, but stored like one\n");
+    writeFileSync(join(workspace, "moodboard.png"), image);
+    expect(await gitCommitAll(workspace, "Ada", "moodboard")).toBe(true);
+    expect(await gitOutput(workspace, "lfs", "ls-files", "--name-only")).toBe("moodboard.png");
+
+    expect(await gitPushWorkspace(workspace)).toBe(true);
+
+    expect(await gitRevParse(remote, "HEAD")).toBe(await gitRevParse(workspace, "HEAD"));
+    const oid = createHash("sha256").update(image).digest("hex");
+    expect(existsSync(join(remote, "lfs", "objects", oid.slice(0, 2), oid.slice(2, 4), oid))).toBe(true);
   });
 });
 
