@@ -55,6 +55,14 @@ jobs:
       - run: bun run browser:check
       - run: bun run build:daemon
       - run: bun test
+      - run: bunx playwright install --with-deps --only-shell chromium
+      - run: bunx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright
+          path: out/issue-214/playwright
+          if-no-files-found: ignore
       - run: bun run mutate --stale
       - run: bun run rerecord:check
 
