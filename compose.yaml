@@ -35,6 +35,17 @@
 # Setting tools.pass_env = ["NAME"] passes the daemon's NAME variable to
 # characters with their own user; they get no other variable of the daemon's.
 #
+# Pushing a workspace, whether the character runs git push or Shore pushes
+# after compaction (compaction.git_push = true), runs as the user the
+# character's tools run as. For an SSH remote, give that user a key and the
+# remote's host key, then add the printed public key to the remote with write
+# access. As app, the daemon's user, or ada for a character with its own:
+#
+#   docker compose exec -u app shore-daemon sh -c 'mkdir -p -m 700 ~/.ssh \
+#     && ssh-keygen -q -t ed25519 -N "" -f ~/.ssh/id_ed25519 \
+#     && ssh-keyscan git.example.com >> ~/.ssh/known_hosts \
+#     && cat ~/.ssh/id_ed25519.pub'
+#
 # To keep the deployment outside the checkout, copy this file somewhere else
 # and build from git instead, with context: https://github.com/mythofmeat/shore.git#main
 #

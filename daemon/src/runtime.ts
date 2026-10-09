@@ -243,6 +243,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       uninstallWireCapture();
       callStore?.close();
       closeLedgers();
+      setNanoGptSubscriptionCacheDir(undefined);
     },
   };
 }

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { shoreLog } from "../log.ts";
 import { rustTrim } from "../memory/lines";
 import { asCharacterWorkspace, type CharacterWorkspace } from "./character_workspace.ts";
 import type { ProcessOutput } from "./process.ts";
@@ -82,16 +83,34 @@ export async function gitPushWorkspace(target: string | CharacterWorkspace): Pro
   const remotes = await runGit(workspace, ["remote"]);
   if (remotes.code !== 0 || rustTrim(remotes.stdout) === "") return false;
 
+  await pushLfsObjects(workspace);
   const push = await runGit(workspace, ["push"]);
   if (push.code !== 0) throw gitOutputError("git push failed", push);
   return true;
 }
 
 export async function gitPushWorkspaceBestEffort(target: string | CharacterWorkspace): Promise<void> {
+  const workspace = asCharacterWorkspace(target);
   try {
-    await gitPushWorkspace(target);
-  } catch {
+    await gitPushWorkspace(workspace);
+  } catch (e) {
+    shoreLog.warn(`shore: could not push the workspace at ${workspace.dir}: ${String(e)}`);
   }
+}
+
+async function pushLfsObjects(workspace: CharacterWorkspace): Promise<void> {
+  const lfs = await runGit(workspace, ["lfs", "version"]);
+  if (lfs.code !== 0) return;
+
+  const branch = await runGit(workspace, ["symbolic-ref", "--quiet", "HEAD"]);
+  if (branch.code !== 0) return;
+  const ref = rustTrim(branch.stdout);
+  const pushRemote = await runGit(workspace, ["for-each-ref", "--format=%(push:remotename)", ref]);
+  const remote = rustTrim(pushRemote.stdout);
+  if (pushRemote.code !== 0 || remote === "") return;
+
+  const push = await runGit(workspace, ["lfs", "push", remote, ref]);
+  if (push.code !== 0) throw gitOutputError("git lfs push failed", push);
 }
 
 async function hasGitDir(workspace: CharacterWorkspace): Promise<boolean> {
