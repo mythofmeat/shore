@@ -63,12 +63,14 @@ jobs:
       - run: |
           rustup-init -y --profile minimal
           echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      # rpmbuild files each package under an architecture directory, which the release would attach as a directory.
       - run: |
           version=$(sed -n 's/^Version: *//p' contrib/fedora/shore.spec)
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git archive --prefix="shore-$version/" -o "shore-$version.tar.gz" HEAD
-          rpmbuild -bb contrib/fedora/shore.spec --define "_sourcedir $PWD" --define "_rpmdir $PWD/rpms"
+          rpmbuild -bb contrib/fedora/shore.spec --define "_sourcedir $PWD" --define "_rpmdir $PWD/rpms" \
+            --define "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm"
       - uses: actions/upload-artifact@v7
         with:
           name: fedora
-          path: rpms/*/*.rpm
+          path: rpms/*.rpm
