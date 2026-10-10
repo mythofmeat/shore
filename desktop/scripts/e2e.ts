@@ -5,11 +5,6 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const PLAYWRIGHT = join(ROOT, "node_modules", ".bin", "playwright");
 
-if (process.platform === "darwin") {
-  const playwright = Bun.spawn([PLAYWRIGHT, "test", ...process.argv.slice(2)], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
-  process.exit(await playwright.exited);
-}
-
 for (const tool of ["kwin_wayland", "dbus-run-session"]) {
   if (Bun.which(tool) !== null) continue;
   console.error(`The desktop journeys run in a private, invisible KWin session and need ${tool}.`);

@@ -1,35 +1,5 @@
 use std::path::PathBuf;
 
-#[cfg(target_os = "macos")]
-fn platform_config_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".config"))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn platform_config_dir() -> Option<PathBuf> {
-    dirs::config_dir()
-}
-
-#[cfg(target_os = "macos")]
-fn platform_data_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".local/share"))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn platform_data_dir() -> Option<PathBuf> {
-    dirs::data_dir()
-}
-
-#[cfg(target_os = "macos")]
-fn platform_cache_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".cache"))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn platform_cache_dir() -> Option<PathBuf> {
-    dirs::cache_dir()
-}
-
 #[derive(Debug, Clone)]
 pub struct ShoreDirs {
     pub config: PathBuf,
@@ -92,14 +62,14 @@ impl ShoreDirs {
                 env,
                 "SHORE_CONFIG_DIR",
                 "XDG_CONFIG_HOME",
-                platform_config_dir,
+                dirs::config_dir,
                 LastResort::Refuse,
             ),
             data: resolve_xdg_dir(
                 env,
                 "SHORE_DATA_DIR",
                 "XDG_DATA_HOME",
-                platform_data_dir,
+                dirs::data_dir,
                 LastResort::Refuse,
             ),
             runtime: resolve_xdg_dir(
@@ -113,7 +83,7 @@ impl ShoreDirs {
                 env,
                 "SHORE_CACHE_DIR",
                 "XDG_CACHE_HOME",
-                platform_cache_dir,
+                dirs::cache_dir,
                 LastResort::Refuse,
             ),
             workspace: workspace_root_from(env),

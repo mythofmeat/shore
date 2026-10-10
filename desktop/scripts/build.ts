@@ -23,6 +23,6 @@ await mkdir(join(OUT, "shell", "fonts"), { recursive: true });
 await Promise.all([
   cp(join(ROOT, "src", "shell", "shell.html"), join(OUT, "shell", "shell.html")),
   cp(join(ROOT, "src", "shell", "shell.css"), join(OUT, "shell", "shell.css")),
-  cp(join(ROOT, "assets"), join(OUT, "assets"), { recursive: true, filter: (source) => !source.endsWith(".icns") && (!source.endsWith(".svg") || source.endsWith("shore.svg")) }),
+  cp(join(ROOT, "assets"), join(OUT, "assets"), { recursive: true, filter: (source) => !source.endsWith(".svg") || source.endsWith("shore.svg") }),
   ...SHELL_FONTS.map((file) => cp(join(FONTS, file), join(OUT, "shell", "fonts", file))),
 ]);

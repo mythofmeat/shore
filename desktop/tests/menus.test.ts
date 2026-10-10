@@ -107,32 +107,16 @@ function menuRecorder(): { calls: string[]; actions: MenuActions } {
   };
 }
 
-function submenus(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
-  return items.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : [item]);
-}
-
 describe("applicationMenuTemplate", () => {
   test("reload, quit and zoom have the usual shortcuts", () => {
     const { calls, actions } = menuRecorder();
-    const menu = applicationMenuTemplate(false, actions, false);
-    const items = submenus(menu);
+    const menu = applicationMenuTemplate(false, actions);
+    const items = menu.flatMap((entry) => Array.isArray(entry.submenu) ? entry.submenu : []);
     expect(find(items, "Reload")?.accelerator).toBe("CmdOrCtrl+R");
     expect(find(items, "Quit")?.accelerator).toBe("CmdOrCtrl+Q");
     for (const label of ["Change Daemon Address…", "Reload", "Quit", "Zoom In", "Zoom Out", "Actual Size"]) press(find(items, label));
     expect(calls).toEqual(["address", "reload", "quit", "zoom 1", "zoom -1", "zoom 0"]);
     expect(menu.some((entry) => entry.role === "editMenu")).toBe(true);
-  });
-
-  test("macOS gets its standard menus, with Shore's commands in them", () => {
-    const { calls, actions } = menuRecorder();
-    const menu = applicationMenuTemplate(true, actions, true);
-    expect(shape(menu)).toEqual(["appMenu", "fileMenu", "editMenu", "View", "windowMenu"]);
-    expect(shape(submenus(menu.slice(0, 1)))).toEqual(["about", "---", "Change Daemon Address…", "---", "services", "---", "hide", "hideOthers", "unhide", "---", "quit"]);
-    const view = submenus(menu.slice(3, 4));
-    expect(shape(view)).toEqual(["Reload", "---", "Actual Size", "Zoom In", "Zoom Out", "---", "togglefullscreen", "toggleDevTools"]);
-    expect(find(view, "Reload")?.accelerator).toBe("CmdOrCtrl+R");
-    for (const label of ["Change Daemon Address…", "Reload", "Zoom In", "Zoom Out", "Actual Size"]) press(find(submenus(menu), label));
-    expect(calls).toEqual(["address", "reload", "zoom 1", "zoom -1", "zoom 0"]);
   });
 });
 
@@ -140,29 +124,21 @@ describe("Close to Tray", () => {
   test("both menus show the setting and change it", () => {
     for (const template of [applicationMenuTemplate, trayMenuTemplate]) {
       const { calls, actions } = menuRecorder();
-      expect(find(submenus(template(true, actions, false)), "Close to Tray")?.checked).toBe(true);
-      const item = find(submenus(template(false, actions, false)), "Close to Tray");
+      const flatten = (items: MenuItemConstructorOptions[]) => items.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : [item]);
+      expect(find(flatten(template(true, actions)), "Close to Tray")?.checked).toBe(true);
+      const item = find(flatten(template(false, actions)), "Close to Tray");
       expect(item?.checked).toBe(false);
       press(item, true);
       expect(calls).toEqual(["close to tray true"]);
     }
   });
 
-  test("macOS has no setting to offer, since closing always keeps Shore in the Dock", () => {
-    for (const template of [applicationMenuTemplate, trayMenuTemplate]) {
-      expect(find(submenus(template(true, menuRecorder().actions, true)), "Close to Tray")).toBeUndefined();
-    }
-  });
-
   test("the tray menu can bring the window back and quit", () => {
-    for (const mac of [false, true]) {
-      const { calls, actions } = menuRecorder();
-      const items = trayMenuTemplate(true, actions, mac);
-      press(find(items, "Show Shore"));
-      press(find(items, "Change Daemon Address…"));
-      press(find(items, "Quit Shore"));
-      expect(calls).toEqual(["show", "address", "quit"]);
-    }
-    expect(shape(trayMenuTemplate(true, menuRecorder().actions, true))).toEqual(["Show Shore", "Change Daemon Address…", "---", "Quit Shore"]);
+    const { calls, actions } = menuRecorder();
+    const items = trayMenuTemplate(true, actions);
+    press(find(items, "Show Shore"));
+    press(find(items, "Change Daemon Address…"));
+    press(find(items, "Quit Shore"));
+    expect(calls).toEqual(["show", "address", "quit"]);
   });
 });
