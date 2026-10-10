@@ -1,9 +1,11 @@
 import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainEvent, type IpcMainInvokeEvent, type NativeImage } from "electron";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { externalUrl, needsSecureOverride, parseAddress, sameOrigin } from "./address.ts";
 import { describeHttpFailure, describeLoadFailure, retryDelay, type Failure } from "./failure.ts";
 import { applicationMenuTemplate, contextMenuTemplate, trayMenuTemplate, type MenuActions } from "./menus.ts";
+import { dockBadge, notificationArgs, OSASCRIPT } from "./notify.ts";
 import { readSettings, writeSettings, ZOOM_LIMIT, type Settings } from "./settings.ts";
 import { unreadCount } from "./title.ts";
 
@@ -59,6 +61,7 @@ class Desktop {
     ipcMain.on("shell:edit", (event) => { if (this.#fromShell(event)) this.#showConnect(); });
     ipcMain.on("page:focus", (event) => { if (this.#onDaemon(event.senderFrame?.url ?? "")) this.#show(); });
     ipcMain.on("page:quote-ready", (event) => { if (this.#onDaemon(event.senderFrame?.url ?? "")) this.#quotable = true; });
+    ipcMain.on("page:notify", (event, title: unknown, body: unknown) => { if (this.#onDaemon(event.senderFrame?.url ?? "")) this.#notify(title, body); });
     void app.whenReady().then(() => { this.#ready(); });
   }
 
@@ -121,7 +124,7 @@ class Desktop {
       if (details.reason !== "clean-exit") this.#showFailure({ title: "The page stopped unexpectedly", detail: `Chromium reported: ${details.reason}` });
     });
     contents.on("zoom-changed", (_event, direction) => { this.#zoom(direction === "in" ? 1 : -1); });
-    contents.on("page-title-updated", (_event, title) => { this.#updateTray(title); });
+    contents.on("page-title-updated", (_event, title) => { this.#updateUnread(title); });
     contents.on("context-menu", (_event, params) => {
       const template = contextMenuTemplate(params, {
         replaceMisspelling: (word) => { contents.replaceMisspelling(word); },
@@ -162,14 +165,22 @@ class Desktop {
     }
   }
 
-  #updateTray(title: string): void {
+  #updateUnread(title: string): void {
+    const count = unreadCount(title);
+    if (MAC) app.dock?.setBadge(dockBadge(count));
     const tray = this.#tray;
     if (tray === null) return;
     tray.setToolTip(title);
-    const unread = unreadCount(title) > 0;
+    const unread = count > 0;
     if (unread === this.#unread) return;
     this.#unread = unread;
     tray.setImage(trayImage(unread));
+  }
+
+  #notify(title: unknown, body: unknown): void {
+    if (!MAC || typeof title !== "string" || typeof body !== "string") return;
+    execFile(OSASCRIPT, notificationArgs(title, body), (error) => { if (error !== null) console.error("shore-desktop: couldn't post a notification", error); });
+    if (this.#window?.isFocused() !== true) app.dock?.bounce("informational");
   }
 
   #show(): void {
