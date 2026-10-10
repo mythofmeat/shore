@@ -179,4 +179,12 @@ describe("images in the history", () => {
       HIGH_RESOLUTION_IMAGE_TIER.maxTokens,
     );
   });
+
+  test("a picture a message embedded costs nothing, since the model is never sent it", async () => {
+    const dir = testTmp("token-estimate");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "sent.png");
+    writeFileSync(path, await sizedImage(400, 300));
+    expect(estimateHistoryTokens(holding([], [{ path, embed: "![[sent]]", name: "sent.png" }]))).toBe(0);
+  });
 });

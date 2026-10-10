@@ -28,6 +28,7 @@ pub(crate) fn tool_result_parts(
                 ),
                 caption: Some(format!("{tool_name} image")),
                 data: Some(data.clone()),
+                ..ImageRef::default()
             });
         } else {
             text_blocks.push(block.clone());

@@ -3,7 +3,7 @@ import { writeDurable } from "../src/storage/files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { afterAll, afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -26,6 +26,7 @@ import type { BudgetBlock } from "../src/ledger/budget.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 import { NO_MCP } from "./support/rebuild.ts";
+import { sizedImage } from "./support/sized_image.ts";
 
 beforeEach(() => {
   setTestEnv(KEY_ENV, "secret");
@@ -459,6 +460,36 @@ describe("running a tick", () => {
     ]);
     expect(result.turnCount).toBeUndefined();
     expect(result.failed).toBeUndefined();
+  });
+
+  test("a tick's picture is checked, fixed by the model and sent before anyone sees the message", async () => {
+    const config = await world();
+    const art = join(config.dirs.config, "characters", "ada", "workspace", "art");
+    await mkdir(art, { recursive: true });
+    await writeFile(join(art, "lighthouse.png"), await sizedImage(32, 32));
+    const appended: Message[] = [];
+    const notified: { body: string; picture: unknown }[] = [];
+    const replies = ["<sendMessage>drew this ![[lighthose]]</sendMessage>", "<sendMessage>drew this ![[lighthouse]]</sendMessage>"];
+    let call = 0;
+
+    const result = await runHeartbeatTick(
+      "ada",
+      config,
+      tickDeps({
+        generate: async () => response([{ type: "text", text: replies[call++] ?? "HEARTBEAT_OK" }]),
+        engine: async () => recordingEngine(appended),
+        notify: (_title, body, picture) => notified.push({ body, picture }),
+      }),
+    );
+
+    expect(call).toBe(2);
+    expect(appended[0]?.content).toBe("drew this ![[lighthouse]]");
+    const [picture] = appended[0]?.images ?? [];
+    expect(picture?.embed).toBe("![[lighthouse]]");
+    expect(picture?.name).toBe("lighthouse.png");
+    expect(picture?.path.startsWith(join(config.dirs.data, "media", "ada", "sent"))).toBe(true);
+    expect(notified).toEqual([{ body: "drew this [picture: lighthouse.png]", picture: { path: picture?.path, name: "lighthouse.png" } }]);
+    expect(result.events.map((event) => event.kind)).toEqual(["tool_use", "message_sent"]);
   });
 
   test("a budget-paused tick is a logged skip, and spends nothing", async () => {

@@ -480,6 +480,7 @@ mod tests {
                 path: "/img/a.png".into(),
                 caption: Some("photo".into()),
                 data: None,
+                ..ImageRef::default()
             }],
             content_blocks: vec![],
             alt_index: Some(0),

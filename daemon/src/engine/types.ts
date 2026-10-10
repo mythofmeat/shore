@@ -6,6 +6,9 @@ export interface ImageRef {
   path: string;
   caption?: string;
   data?: string;
+  embed?: string;
+  name?: string;
+  problem?: string;
 }
 
 export type ContentBlock =

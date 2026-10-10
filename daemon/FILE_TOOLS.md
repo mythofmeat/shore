@@ -61,6 +61,14 @@ Markdown reads expand unique local image references fully visible on the returne
 
 PDF and notebook rendering are not implemented. Images consume model context and the API may impose additional limits.
 
+## Pictures in messages
+
+A character shows the user a picture from its workspace by embedding it in a message, the way notes do: `![[name]]`, `![[folder/name.png|caption]]` or `![caption](path)`. Wikilinks find the picture by name with the rules above; a path is relative to the workspace and must stay inside it, and a path that does not exist is tried as a name. The lookup runs as the character's own user, so a character can send only pictures it can read. An embed that names a note stays text, and embeds in code are ignored. At most 10 pictures are sent per message.
+
+When a reply is saved, and before a heartbeat's message goes out, each embedded picture is copied to `media/<character>/sent/` in the data dir, named by a hash of its contents, with a smaller copy (1600 pixels on the long edge, WebP) for the chat when the original is large. A message keeps the picture as it was when it was sent: later edits to the file, and the workspace rewind on regenerate, swipe or delete, leave it alone. The web UI shows each picture where it was embedded, opens the original from `/api/pictures/<file>` for signed-in pages, and can download it under its original name. Notifications name pictures as `[picture: name]` and attach the first one: ntfy as an attachment (falling back to a plain notification when the server refuses it), `notify-send` as its icon, the browser as the notification's image.
+
+The model never gets the picture back: its message stays exactly as written, and the chat log tools show `[picture: name]` where it was. An embed that matches no picture or several sends nothing; the user sees its name instead of a picture. A heartbeat checks its message first and gives the model one chance to fix the names before anyone sees it. For a reply, which the user has already watched arrive, the problem is told to the model at the start of the next user turn.
+
 ## Exact replacement
 
 ```json

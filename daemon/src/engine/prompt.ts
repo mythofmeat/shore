@@ -5,6 +5,7 @@ import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
+import { unsentNotice } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import { findModelCopy } from "../llm/images.ts";
@@ -212,7 +213,7 @@ export function estimateMessageTokens(
 ): number {
   return msg.content_blocks.reduce(
     (total, block) => total + estimateBlockTokens(block, tier),
-    msg.images.reduce((total, image) => total + attachedImageTokens(image, tier), 0),
+    msg.images.reduce((total, image) => image.embed === undefined ? total + attachedImageTokens(image, tier) : total, 0),
   );
 }
 
@@ -356,12 +357,22 @@ function trimMessages(
   let prevMs: number | undefined;
   let lastMarkerMs: number | undefined;
   let firstUserPending = true;
+  let unsent: ImageRef[] = [];
   const result: PromptMessage[] = [];
+  const noticed = (pm: PromptMessage): PromptMessage => {
+    const notice = unsentNotice(unsent);
+    unsent = [];
+    if (notice === undefined) return pm;
+    pm.content = `${notice}\n\n${pm.content}`;
+    pm.content_blocks = [{ type: "text", text: notice }, ...pm.content_blocks];
+    return pm;
+  };
 
   for (const { pm, ts, heartbeat } of selected) {
     const currentMs = parseRfc3339(ts);
 
-    if (heartbeat) result.push(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone)));
+    if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
+    if (pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks)) noticed(pm);
 
     if (pm.role === "user" && currentMs !== undefined) {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
@@ -395,6 +406,7 @@ function trimMessages(
     }
 
     if (currentMs !== undefined) prevMs = currentMs;
+    if (pm.role === "assistant") unsent.push(...pm.images);
     result.push(pm);
   }
 

@@ -50,6 +50,21 @@ const picnic = [
   message("m3", "user", "Only lemon here.", "2026-08-02T09:00:00Z"),
 ];
 
+describe("pictures in chat logs", () => {
+  test("a picture a message sent is named where it was embedded, and one that was not sent says so", async () => {
+    const dir = await history([
+      message("m1", "assistant", "drew you ![[lighthouse]] and ![[gone]] and ![[Some Note]]", "2026-08-01T10:00:00Z", {
+        images: [
+          { path: "/data/media/ada/sent/a.png", embed: "![[lighthouse]]", name: "2026-01-01-lighthouse.png" },
+          { path: "", embed: "![[gone]]", problem: "no picture matches" },
+        ],
+      }),
+    ]);
+    expect(await read(dir, { around: "m1" })).toContain("drew you [picture: 2026-01-01-lighthouse.png] and [picture not sent: gone] and ![[Some Note]]");
+    expect(await search(dir, { query: "lighthouse" })).toContain("2026-01-01-[lighthouse].png]");
+  });
+});
+
 describe("search_chat_logs", () => {
   test("prints the total and one line per hit", async () => {
     const dir = await history(picnic);

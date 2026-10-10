@@ -2,6 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ContentBlock, Message, MessageOrigin, Role } from "../engine/types.ts";
+import { pictureText } from "../engine/embeds.ts";
 import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.ts";
 import type { PendingAlt } from "../engine/message_store.ts";
 import { embedImageData } from "../engine/wire_images.ts";
@@ -14,6 +15,7 @@ import type { WireMessage } from "../llm/types.ts";
 import type { KeepaliveArming } from "../cache/last_request.ts";
 import { cachedPrefixTokens } from "../cache/keepalive.ts";
 import type { NotificationService } from "../notifications.ts";
+import { firstSentPicture, sendPictures, textsOf, type PictureSender } from "./pictures.ts";
 
 export interface CompletedResponseMessage {
   role: Role;
@@ -63,6 +65,7 @@ export interface PersistParams {
   replaceGeneratedTail?: boolean;
   wallClockMs: number;
   regenAlt?: PendingAlt;
+  pictures?: PictureSender;
 }
 
 export async function persistAndNotify(
@@ -79,8 +82,6 @@ export async function persistAndNotify(
     pings: params.keepalivePings,
     cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),
   }, engine.thread);
-  const notifyContent = notifyContentFromResponseMessages(completedMessages);
-
   const mintingProvider = request.provider_key ?? resolvedProviderKey;
   const mintingModel = result.model === "" ? request.model : result.model;
 
@@ -97,6 +98,9 @@ export async function persistAndNotify(
     ),
     ...responseMessages,
   ];
+  if (params.pictures !== undefined) await attachSentPictures(generatedMessages, params.pictures);
+  const sentImages = generatedMessages.flatMap((message) => message.images);
+  const notifyContent = pictureText(notifyContentFromResponseMessages(completedMessages), sentImages);
   const displayMessages = new Map(mergeToolLoopMessages(generatedMessages).map((message) => [message.msg_id, message]));
   for (const message of responseMessages) {
     message.images = displayMessages.get(message.msg_id)?.images ?? message.images;
@@ -114,9 +118,18 @@ export async function persistAndNotify(
     `Shore - ${charName}`,
     notifyContent,
     params.wallClockMs,
+    firstSentPicture(sentImages),
   );
   await emitUsageBudgetWarnings(ctx, charName, request.rid);
   if (params.onClaudePlan === true) await emitPlanLimitWarnings(ctx, charName, request.rid);
+}
+
+async function attachSentPictures(messages: Message[], sender: PictureSender): Promise<void> {
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const sent = await sendPictures(textsOf(message.content_blocks), sender);
+    if (sent.length > 0) message.images = [...message.images, ...sent];
+  }
 }
 
 export function lastRequestWithResponse(

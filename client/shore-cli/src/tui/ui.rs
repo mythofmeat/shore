@@ -903,7 +903,7 @@ fn render_turn(
             }
             render_blocks(
                 lines,
-                &turn.blocks,
+                &with_picture_names(&turn.blocks, &turn.images),
                 app.show_thinking,
                 app.show_tools,
                 app.show_subagent,
@@ -1236,6 +1236,59 @@ fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
     images::fixup_placeholder_cells(frame.buffer_mut(), img_area);
 }
 
+fn embed_name(embed: &str) -> &str {
+    let inner = embed
+        .strip_prefix("![[")
+        .and_then(|rest| rest.strip_suffix("]]"))
+        .or_else(|| {
+            embed
+                .rsplit_once("](")
+                .and_then(|(_, rest)| rest.strip_suffix(')'))
+        })
+        .unwrap_or(embed);
+    let target = inner.split(['|', '#']).next().unwrap_or(inner).trim();
+    target
+        .rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(target)
+}
+
+fn with_picture_names<'blocks>(
+    blocks: &'blocks [TurnBlock],
+    images: &[shore_common::protocol::types::ImageRef],
+) -> std::borrow::Cow<'blocks, [TurnBlock]> {
+    let names: Vec<(&str, String)> = images
+        .iter()
+        .filter_map(|image| {
+            let embed = image.embed.as_deref()?;
+            Some((
+                embed,
+                match (&image.problem, &image.name) {
+                    (None, Some(name)) => format!("[picture: {name}]"),
+                    _ => format!("[picture not sent: {}]", embed_name(embed)),
+                },
+            ))
+        })
+        .collect();
+    if names.is_empty() {
+        return std::borrow::Cow::Borrowed(blocks);
+    }
+    std::borrow::Cow::Owned(
+        blocks
+            .iter()
+            .map(|block| {
+                if let TurnBlock::Text(text) = block {
+                    TurnBlock::Text(names.iter().fold(text.clone(), |shown, (embed, name)| {
+                        shown.replace(embed, name)
+                    }))
+                } else {
+                    block.clone()
+                }
+            })
+            .collect(),
+    )
+}
+
 fn render_images(
     lines: &mut Vec<Line<'static>>,
     img_refs: &[shore_common::protocol::types::ImageRef],
@@ -1243,19 +1296,27 @@ fn render_images(
     show_inline: bool,
     index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
-    if img_refs.is_empty() {
+    let shown: Vec<_> = img_refs
+        .iter()
+        .filter(|img| img.problem.is_none() && !img.path.is_empty())
+        .collect();
+    if shown.is_empty() {
         return;
     }
 
     lines.push(Line::from(""));
 
-    for img in img_refs {
-        let display = img.caption.as_deref().unwrap_or_else(|| {
-            std::path::Path::new(&img.path)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&img.path)
-        });
+    for img in shown {
+        let display = img
+            .caption
+            .as_deref()
+            .or(img.name.as_deref())
+            .unwrap_or_else(|| {
+                std::path::Path::new(&img.path)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&img.path)
+            });
 
         if show_inline && let Some(transmitted) = cache.get(&img.path) {
             lines.push(Line::from(Span::styled(
@@ -3818,6 +3879,47 @@ pub(crate) mod scenario_tests {
         assert!(
             visible.contains(&expected),
             "formatted timestamp should render when enabled; expected {expected:?}; frame:\n{visible}"
+        );
+    }
+
+    #[test]
+    fn scenario_sent_pictures_are_named_and_unsent_ones_skipped() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.show_images = false;
+        h.app.entries.push(ConversationEntry::assistant(
+            Some("m1".into()),
+            "drew this ![[lighthouse]] and ![[gone]]".into(),
+            vec![
+                shore_common::protocol::types::ImageRef {
+                    path: "/data/media/ada/sent/a.png".into(),
+                    embed: Some("![[lighthouse]]".into()),
+                    name: Some("lighthouse.png".into()),
+                    ..shore_common::protocol::types::ImageRef::default()
+                },
+                shore_common::protocol::types::ImageRef {
+                    embed: Some("![[gone]]".into()),
+                    problem: Some("no picture matches".into()),
+                    ..shore_common::protocol::types::ImageRef::default()
+                },
+            ],
+            "2026-01-15T10:30:00Z".into(),
+            None,
+        ));
+
+        let frame = h.render("a reply that sent one picture of two");
+        assert!(
+            frame.contains("drew this [picture: lighthouse.png] and [picture not sent: gone]"),
+            "the sent picture should be named in the text; frame:\n{frame}"
+        );
+        assert!(
+            frame.contains("[image: lighthouse.png]"),
+            "the sent picture should be listed by name; frame:\n{frame}"
+        );
+        assert_eq!(
+            frame.matches("[image:").count(),
+            1,
+            "the unsent embed has no picture to list; frame:\n{frame}"
         );
     }
 

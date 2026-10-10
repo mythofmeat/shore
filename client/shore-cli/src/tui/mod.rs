@@ -5557,6 +5557,7 @@ mod redraw_tests {
                 path: "/tmp/image.png".into(),
                 caption: None,
                 data: None,
+                ..shore_common::protocol::types::ImageRef::default()
             }],
             String::new(),
         ));

@@ -631,6 +631,24 @@
                   "string",
                   "null"
                 ]
+              },
+              "embed": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "problem": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -2168,6 +2186,24 @@
                   "string",
                   "null"
                 ]
+              },
+              "embed": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "problem": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -3597,7 +3633,7 @@
     "HistoryIndexStatus": "{ path: string, messages: number, background: IndexBackgroundStatus, }",
     "HistoryPageArgs": "{ turns?: number | null, count?: number | null, role?: Role, segment?: number | null, before?: number | null, }",
     "HttpExchange": "{ id: number, call_id: string, seq: number, ts: string, character: string | null, call_type: string | null, rid: string | null, method: string, url: string, status: number | null, status_text: string | null, duration_ms: number | null, error: string | null, request_bytes: number, response_bytes: number, request_headers?: Array<[string, string]>, response_headers?: Array<[string, string]>, request_body?: unknown, response_body?: unknown, }",
-    "ImageRef": "{ path: string, caption?: string | null, data?: string | null, }",
+    "ImageRef": "{ path: string, caption?: string | null, data?: string | null, embed?: string | null, name?: string | null, problem?: string | null, }",
     "ImageSource": "{ \"type\": \"base64\", media_type: string, data: string, }",
     "ImageUpload": "{ filename: string, data: string, mime_type?: string | null, }",
     "ImportCharacterArgs": "{ archive: string, }",

@@ -46,6 +46,7 @@ export interface HeartbeatLoopDeps {
   maxToolIterations: number | undefined;
   deadlineMs?: number;
   monotonicMs?: () => number;
+  checkPictures?: (text: string) => Promise<string[]>;
 }
 
 export interface HeartbeatLoopResult {
@@ -54,6 +55,12 @@ export interface HeartbeatLoopResult {
   thinking?: ContentBlock[];
   failedRound?: number | undefined;
   failure?: unknown;
+}
+
+export function pictureRetryText(problems: readonly string[]): string {
+  return `[Your message has not been sent yet. These pictures in it could not be sent:\n${problems.map((problem) => `- ${problem}`).join("\n")}\n` +
+    "Send the message again the same way, with the names fixed. If you do not send it again, it will be delivered " +
+    "as it is, with only the names of those pictures shown.]";
 }
 
 function thinkingOf(blocks: readonly ContentBlock[]): ContentBlock[] {
@@ -100,6 +107,33 @@ export async function dispatchHeartbeatTools(
   }
 
   return { results, captured, images };
+}
+
+async function retryPictures(
+  request: SidecarRequest,
+  result: HeartbeatLoopResult,
+  deps: HeartbeatLoopDeps,
+  run: () => Promise<GenerateResponse | undefined>,
+  inTime: () => boolean,
+): Promise<void> {
+  const sent = result.sendMessageText;
+  if (sent === undefined || deps.checkPictures === undefined || !inTime()) return;
+  let problems: string[];
+  try {
+    problems = await deps.checkPictures(sent);
+  } catch (error) {
+    deps.note(`Pictures could not be checked before sending: ${truncateSummary(String(error), 120)}`);
+    return;
+  }
+  if (problems.length === 0) return;
+  deps.note(`Pictures not found, asked to fix them before sending: ${truncateSummary(problems.join("; "), 160)}`);
+  request.messages.push({ role: "user", content: [{ type: "text", text: pictureRetryText(problems) }] });
+  try {
+    const retried = await run();
+    if (retried === undefined || retried.finish_reason.startsWith("error")) deps.note("The retry to fix pictures failed; sending the message as it was");
+  } catch (error) {
+    deps.note(`The retry to fix pictures failed; sending the message as it was: ${truncateSummary(String(error), 120)}`);
+  }
 }
 
 export async function runHeartbeatToolLoop(
@@ -168,11 +202,13 @@ export async function runHeartbeatToolLoop(
   };
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
+  const run = async () => await deps.generate({
+    ...request,
+    ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations + deps.wrapUpGrace }),
+  }, phase, abort.signal);
   try {
-    const response = await deps.generate({
-      ...request,
-      ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations + deps.wrapUpGrace }),
-    }, phase, abort.signal);
+    const response = await run();
+    if (response !== undefined && !response.finish_reason.startsWith("error")) await retryPictures(request, result, deps, run, () => clock() < deadline);
     if (response === undefined) {
       result.failedRound = iteration;
     } else if (response.finish_reason.startsWith("error")) {

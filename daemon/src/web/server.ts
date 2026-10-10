@@ -26,6 +26,7 @@ export interface WebServerOptions {
   readonly drainTimeoutMs?: number;
   readonly archiveLimits?: Partial<ArchiveTransferLimits>;
   readonly recovery?: WebRecoveryOptions;
+  readonly picture?: (file: string) => string | undefined;
 }
 
 export interface RunningWebServer {
@@ -83,6 +84,17 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           if (url.pathname.startsWith("/assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
           return new Response(request.method === "HEAD" ? null : asset.body, { headers });
         }
+      }
+      const picture = /^\/api\/pictures\/([^/]+)$/.exec(url.pathname)?.[1];
+      if (picture !== undefined && (request.method === "GET" || request.method === "HEAD")) {
+        if (["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "")) return problem(403, "forbidden", "Another site’s page can’t use this daemon");
+        if ((sessions.read(request, true) ?? sessions.read(request, false)) === undefined) return problem(401, "unauthorized", "Sign in to see pictures");
+        const path = options.picture?.(picture);
+        if (path === undefined) return problem(404, "not_found", "No such picture");
+        const headers = securityHeaders();
+        headers.set("cache-control", "private, max-age=31536000, immutable");
+        headers.set("content-type", Bun.file(path).type);
+        return new Response(request.method === "HEAD" ? null : Bun.file(path), { headers });
       }
       const page = pageOrigin(request, config.public_origin);
       if ("refused" in page) return problem(403, "forbidden", page.refused);

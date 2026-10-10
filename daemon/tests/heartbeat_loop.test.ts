@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   dispatchHeartbeatTools,
+  pictureRetryText,
   runHeartbeatToolLoop,
   type HeartbeatLoopDeps,
   type HeartbeatToolResult,
@@ -663,4 +664,65 @@ test("an absent generation result is reported as a failed heartbeat", async () =
   const result = await runHeartbeatToolLoop(request(), w.deps);
   expect(result.failedRound).toBe(0);
   expect(result.sendMessageText).toBeUndefined();
+});
+
+describe("pictures in a tick's message", () => {
+  const unfound = (sent: string) => Promise.resolve(sent.includes("![[lighthose]]") ? ["![[lighthose]]: no picture matches; did you mean ![[lighthouse.png]]?"] : []);
+
+  test("a message whose pictures cannot be found goes back to the model once before anyone sees it", async () => {
+    const sent: SidecarRequest[] = [];
+    const rounds = [
+      response([text("<sendMessage>for you ![[lighthose]]</sendMessage>")]),
+      response([text("<sendMessage>for you ![[lighthouse]]</sendMessage>")]),
+    ];
+    let round = 0;
+    const w = world([], {
+      checkPictures: unfound,
+      generate: async (call) => {
+        sent.push(structuredClone(call));
+        return rounds[round++];
+      },
+    });
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.sendMessageText).toBe("for you ![[lighthouse]]");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.messages.at(-2)?.role).toBe("assistant");
+    expect(sent[1]?.messages.at(-1)).toEqual({ role: "user", content: [{ type: "text", text: pictureRetryText(["![[lighthose]]: no picture matches; did you mean ![[lighthouse.png]]?"]) }] });
+    expect(w.notes.some((note) => note.startsWith("Pictures not found, asked to fix them before sending"))).toBe(true);
+  });
+
+  test("a model that sends nothing on the retry still delivers what it first wrote", async () => {
+    const w = world([
+      response([thinking("first"), text("<sendMessage>for you ![[lighthose]]</sendMessage>")]),
+      response([thinking("second"), text("HEARTBEAT_OK")]),
+    ], { checkPictures: unfound });
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.sendMessageText).toBe("for you ![[lighthose]]");
+    expect(result.thinking).toEqual([thinking("first")]);
+  });
+
+  test("only one retry is made, and pictures that cannot be checked send the message as it is", async () => {
+    const twice = world([
+      response([text("<sendMessage>![[lighthose]]</sendMessage>")]),
+      response([text("<sendMessage>still ![[lighthose]]</sendMessage>")]),
+      response([text("<sendMessage>never asked for</sendMessage>")]),
+    ], { checkPictures: unfound });
+    expect((await runHeartbeatToolLoop(request(), twice.deps)).sendMessageText).toBe("still ![[lighthose]]");
+
+    let calls = 0;
+    const broken = world([response([text("<sendMessage>![[lighthose]]</sendMessage>")])], {
+      checkPictures: () => Promise.reject(new Error("helper gone")),
+      generate: async () => {
+        calls += 1;
+        return response([text("<sendMessage>![[lighthose]]</sendMessage>")]);
+      },
+    });
+    expect((await runHeartbeatToolLoop(request(), broken.deps)).sendMessageText).toBe("![[lighthose]]");
+    expect(calls).toBe(1);
+    expect(broken.notes).toContain("Pictures could not be checked before sending: Error: helper gone");
+  });
 });

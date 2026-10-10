@@ -115,10 +115,7 @@ function normalizeAlternative(alt: MessageAlternative): MessageAlternative {
 }
 
 const stripImageData = (images: ImageRef[] | undefined): ImageRef[] | undefined =>
-  images?.map(({ path, caption }) => ({
-    path,
-    ...(caption !== undefined ? { caption } : {}),
-  }));
+  images?.map(({ data: _data, ...image }) => image);
 
 function serializeForStorage(msg: Message): string {
   const ordered: [string, unknown][] = [

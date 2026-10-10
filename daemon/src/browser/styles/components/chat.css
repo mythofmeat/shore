@@ -530,12 +530,75 @@ button.chip:hover {
   object-fit: cover;
 }
 
+.picture {
+  display: block;
+  max-width: 100%;
+  margin: 10px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: zoom-in;
+}
+
+.picture img {
+  display: block;
+  max-width: 100%;
+  max-height: min(70dvh, 640px);
+  height: auto;
+}
+
+.picture-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 1px 8px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  vertical-align: middle;
+}
+
+.picture-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lightbox-frame {
+  max-height: 70dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.lightbox-zoom {
+  display: block;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.lightbox-frame.actual .lightbox-zoom {
+  cursor: zoom-out;
+}
+
 .lightbox-image {
   display: block;
   max-width: 100%;
   max-height: 70dvh;
   margin: 0 auto;
   border-radius: var(--radius);
+}
+
+.lightbox-frame.actual .lightbox-image {
+  max-width: none;
+  max-height: none;
 }
 
 .swipe {

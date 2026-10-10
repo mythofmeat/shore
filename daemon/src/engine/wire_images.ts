@@ -3,10 +3,12 @@ import { shoreLog } from "../log.ts";
 import { readFileSync } from "node:fs";
 
 import type { ImageRef, Message } from "./types";
+import { isSentPicture, shownPicturePath } from "../storage/sent_pictures.ts";
 
 export function imageDataForPath(path: string): string | undefined {
+  if (path === "") return undefined;
   try {
-    return readFileSync(path).toString("base64");
+    return readFileSync(isSentPicture(path) ? shownPicturePath(path) : path).toString("base64");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") shoreLog.debug(`shore: no image file to embed at ${path}`);
     else shoreLog.warn(`shore: failed to read image for wire embedding at ${path}: ${String(e)}`);
