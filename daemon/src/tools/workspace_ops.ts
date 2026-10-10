@@ -7,6 +7,7 @@ import { handleEdit } from "./edit.ts";
 import { InvalidArgs, NotImplemented, ToolIoError } from "./errors.ts";
 import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "./media.ts";
 import { handleRead } from "./read.ts";
+import { lookUpPictures, type PictureLookup, type PictureTarget } from "./message_pictures.ts";
 import { restoreWorkspaceEntry, snapshotWorkspace, workspaceEntry, type WorkspaceEntry } from "./workspace_snapshot.ts";
 
 export type FileRead = { data: string } | { error: { code?: string; message: string } };
@@ -16,6 +17,7 @@ export type EncodedToolValue = { value: unknown } | { media: ToolResultPayload }
 export interface WorkspaceOpTable {
   read: (args: { input: Record<string, unknown>; workspaceDir: string; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
   edit: (args: { input: Record<string, unknown>; workspaceDir: string }, signal?: AbortSignal) => Promise<string>;
+  pictures: (args: { workspaceDir: string; targets: PictureTarget[] }, signal?: AbortSignal) => Promise<PictureLookup[]>;
   readFiles: (args: { paths: string[] }) => Promise<FileRead[]>;
   exists: (args: { paths: string[] }) => Promise<boolean[]>;
   mkdir: (args: { path: string }) => Promise<void>;
@@ -60,6 +62,7 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
   read: async ({ input, workspaceDir, maxChars, maxImageBytes, images }, signal) =>
     encodeToolValue(await handleRead(input, workspaceDir, signal, maxChars, maxImageBytes, images)),
   edit: async ({ input, workspaceDir }, signal) => await handleEdit(input, workspaceDir, signal),
+  pictures: async (args, signal) => await lookUpPictures(args, signal),
   readFiles: async ({ paths }) => await Promise.all(paths.map(async (path): Promise<FileRead> => {
     try {
       return { data: (await readFile(path)).toString("base64") };

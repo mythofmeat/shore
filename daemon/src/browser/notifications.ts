@@ -1,4 +1,6 @@
 import type { ConnectionUpdate } from "./connection.ts";
+import { pictureText } from "../engine/embeds.ts";
+import { mediaSource } from "./media.ts";
 
 export const NOTIFY_KEY = "shore.notify";
 export const NOTIFY_BODY_LIMIT = 200;
@@ -13,7 +15,7 @@ export interface NotificationApi {
   requestPermission(): Promise<GrantState>;
   new (title: string, options: NotifyOptions): ShownNotification;
 }
-interface NotifyOptions { body: string; tag: string; renotify: boolean }
+interface NotifyOptions { body: string; tag: string; renotify: boolean; icon?: string; image?: string }
 type NotifyStorage = Pick<Storage, "getItem" | "setItem">;
 export interface NotifierOptions {
   storage?: NotifyStorage | null;
@@ -112,14 +114,15 @@ export class Notifier {
     const message = update.message;
     if (message.type === "new_message") {
       if (message.role !== "assistant" || message.origin === "user_input" || message.content.trim() === "") return;
-      this.#alert(message.character ?? selection.character, message.thread ?? selection.thread, message.content);
+      const picture = message.images.find((image) => typeof image.embed === "string" && (image.problem === undefined || image.problem === null) && image.path !== "");
+      this.#alert(message.character ?? selection.character, message.thread ?? selection.thread, pictureText(message.content, message.images), mediaSource(picture?.data));
     } else if (message.type === "error") this.#alert(selection.character, selection.thread, message.message);
   }
-  #alert(character: string | null, thread: string | null, body: string): void {
+  #alert(character: string | null, thread: string | null, body: string, picture?: string): void {
     if (!this.#snapshot.enabled || this.#focused()) return;
     this.#set({ unread: this.#snapshot.unread + 1 });
     const tag = `shore:${character ?? ""}/${thread ?? "main"}`;
-    const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag, renotify: true });
+    const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag, renotify: true, ...(picture === undefined ? {} : { icon: picture, image: picture }) });
     if (shown === undefined) return;
     this.#shown.set(tag, shown);
     shown.onclick = () => { this.#focusWindow(); shown.close(); if (this.#shown.get(tag) === shown) this.#shown.delete(tag); };

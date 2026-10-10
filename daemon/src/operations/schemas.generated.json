@@ -1475,6 +1475,24 @@
                 "string",
                 "null"
               ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -3045,6 +3063,24 @@
               ]
             },
             "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
               "type": [
                 "string",
                 "null"
@@ -5797,6 +5833,24 @@
               ]
             },
             "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
               "type": [
                 "string",
                 "null"
@@ -9587,6 +9641,24 @@
                 "string",
                 "null"
               ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10118,6 +10190,24 @@
                 "string",
                 "null"
               ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10548,6 +10638,24 @@
               ]
             },
             "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
               "type": [
                 "string",
                 "null"
@@ -11024,6 +11132,24 @@
               ]
             },
             "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "embed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "problem": {
               "type": [
                 "string",
                 "null"

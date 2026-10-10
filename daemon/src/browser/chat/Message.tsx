@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CharacterAvatar } from "../../protocol/CharacterAvatar.ts";
 import type { AlternativeListing } from "../../protocol/AlternativeListing.ts";
 import type { Message } from "../../protocol/Message.ts";
@@ -8,6 +8,7 @@ import { copyText } from "../clipboard.ts";
 import { mediaSource } from "../media.ts";
 import { metadataLabel } from "../metadata.ts";
 import { Markdown } from "../markdown.tsx";
+import { Pictures, SentPicture, unplacedPictures } from "../pictures.tsx";
 import { Avatar, UserAvatar } from "../ui/avatar.tsx";
 import { Dialog, IconButton, Menu, Spinner, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -76,15 +77,18 @@ function Activity({ steps, live, openImage, expanded = false }: { steps: StepVie
   </div>;
 }
 
-export function MessageBody({ message, display, openImage, live = false, expanded = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean; expanded?: boolean }) {
+export function MessageBody({ message, display, openImage, live = false, expanded = false, embeds = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean; expanded?: boolean; embeds?: boolean }) {
   const views = message.content_blocks.length === 0 ? [{ kind: "text" as const, key: "content", text: message.content }] : blockViews(message.content_blocks);
   const shown = views.filter((view) => view.kind === "thinking" ? display.thinking !== "off" : view.kind === "tool" ? display.tools !== "off" : view.kind !== "image" || display.images !== "off");
   const items = bodyItems(shown);
+  const sent = useMemo(() => embeds ? message.images.filter((image) => typeof image.embed === "string") : [], [embeds, message.images]);
   const images = display.images === "off" ? [] : message.images.flatMap((image) => {
-    const source = mediaSource(image.data);
+    const source = typeof image.embed === "string" && embeds ? undefined : mediaSource(image.data);
     return source === undefined ? [] : [{ source, caption: image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Image" }];
   });
-  return <>
+  const unplaced = display.images === "off" ? [] : unplacedPictures(sent, views.flatMap((view) => view.kind === "text" ? [view.text] : []));
+  const pictures = useMemo(() => ({ images: sent, open: openImage, live, shown: display.images !== "off" }), [sent, openImage, live, display.images]);
+  const body = <>
     {items.map((item, index): ReactNode => {
       const latest = live && index === items.length - 1;
       switch (item.kind) {
@@ -94,7 +98,9 @@ export function MessageBody({ message, display, openImage, live = false, expande
       }
     })}
     {images.length === 0 ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}
+    {unplaced.map((image) => <SentPicture key={image.embed ?? image.path} image={image} open={openImage} />)}
   </>;
+  return embeds ? <Pictures.Provider value={pictures}>{body}</Pictures.Provider> : body;
 }
 
 function EditBox({ message, done }: { message: Message; done: () => void }) {
@@ -229,7 +235,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
         {time === "" ? null : <time dateTime={message.timestamp}>{time}</time>}
         {mobile && mode === "view" ? <span className="message-menu"><Menu label="Message actions" items={actions} /></span> : null}
       </div>
-      {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body"><MessageBody message={message} display={display} openImage={openImage} /></div>}
+      {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body"><MessageBody message={message} display={display} openImage={openImage} embeds={assistant} /></div>}
       {meta === "" ? null : <div className="message-metadata">{meta}</div>}
       {assistant && mode === "view" && !readOnly ? <Swipe message={message} last={last} busy={busy} /> : null}
       {mode === "delete" ? <DeleteConfirm message={message} done={() => setMode("view")} /> : null}

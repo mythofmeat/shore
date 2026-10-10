@@ -460,3 +460,36 @@ test("a cleared context becomes a segment you open, read without editing, and le
   await expect(page.locator("article.message.assistant").last()).toContainText("Sent from a segment view");
   await check();
 });
+
+test("a picture the character embeds appears where it was written, opens at full size and downloads under its name", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "nova");
+  const box = page.getByLabel("Message", { exact: true });
+  await box.fill("send picture fixture");
+  await box.press("Enter");
+  const reply = page.locator("article.message.assistant").last();
+  const picture = reply.getByRole("button", { name: "Open lighthouse.png" });
+  await expect(picture.locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(reply.locator(".picture-name")).toHaveText("missing-one");
+  await expect(reply.locator(".message-body")).not.toContainText("![[");
+  const top = async (target: ReturnType<typeof reply.locator>) => (await target.boundingBox())?.y ?? Number.NaN;
+  const before = await top(reply.getByText("I drew this while you slept"));
+  const shown = await top(picture);
+  const after = await top(reply.getByText(/and this one/));
+  expect(before).toBeLessThan(shown);
+  expect(shown).toBeLessThan(after);
+
+  await picture.click();
+  const dialog = page.getByRole("dialog", { name: "lighthouse.png" });
+  const full = dialog.locator("img.lightbox-image");
+  await expect(full).toHaveAttribute("src", /^\/api\/pictures\/[0-9a-f]{64}\.png$/);
+  await expect.poll(async (): Promise<unknown> => await (await (await full.elementHandle())?.getProperty("naturalWidth"))?.jsonValue()).toBe(48);
+  await dialog.getByRole("button", { name: "Show the picture at full size" }).click();
+  await expect(dialog.getByRole("button", { name: "Fit the picture to the window" })).toHaveAttribute("aria-pressed", "true");
+  const download = dialog.getByRole("link", { name: "Download" });
+  await expect(download).toHaveAttribute("download", "lighthouse.png");
+  const [saved] = await Promise.all([page.waitForEvent("download"), download.click()]);
+  expect(saved.suggestedFilename()).toBe("lighthouse.png");
+  await check();
+});

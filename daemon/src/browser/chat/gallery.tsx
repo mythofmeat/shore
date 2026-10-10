@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { conversationImages, imageFilename, mediaSource } from "../media.ts";
+import { FullPicture } from "../pictures.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
 import { perform, workspace } from "../app/state.ts";
 import { segmentName } from "./transcript.ts";
@@ -21,11 +22,11 @@ export function GalleryDialog({ state, close }: { state: WorkspaceSnapshot; clos
       </div>}
       {view?.hasEarlier === true ? <div className="form-actions">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button" onClick={() => { setLoading(true); perform(async () => { try { await workspace.loadEarlierInSegment(); } finally { setLoading(false); } }); }}>Load images from earlier in this segment</button>}</div> : null}
     </> : <>
-      <img className="lightbox-image" src={selected.source} alt={selected.caption} />
+      <FullPicture key={selected.id} source={selected.full ?? selected.source} caption={selected.caption} />
       <div className="dialog-footer">
         <button type="button" className="button" disabled={open === 0} onClick={() => setOpen((open ?? 1) - 1)}>Previous</button>
         <button type="button" className="button" disabled={open === images.length - 1} onClick={() => setOpen((open ?? 0) + 1)}>Next</button>
-        <a className="button" href={selected.source} download={imageFilename(selected.caption, selected.source)}>Download</a>
+        <a className="button" href={selected.full ?? selected.source} download={imageFilename(selected.caption, selected.full ?? selected.source)}>Download</a>
         <button type="button" className="button" onClick={() => setOpen(undefined)}>All images</button>
       </div>
     </>}

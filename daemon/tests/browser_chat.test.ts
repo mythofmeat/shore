@@ -11,6 +11,7 @@ import { workspaceNote } from "../src/browser/chat/workspace_note.ts";
 import { MAX_ATTACHMENTS } from "../src/swp/limits.ts";
 import { activityHeadline, blockViews, bodyItems, dayLabel, formatToolInput, lastAssistantIndex, optimisticRegenReplaces, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, swipeState, toolSummary, transcriptItems, visibleStreams, type LiveReply } from "../src/browser/chat/transcript.ts";
 import { Markdown, markdownBlocks, safeHref, type SettledMarkdown } from "../src/browser/markdown.tsx";
+import { Pictures, unplacedPictures, type SentPictures } from "../src/browser/pictures.tsx";
 import { avatarTone, initial } from "../src/browser/ui/avatar.tsx";
 import { parseRoute } from "../src/browser/app/routing.ts";
 import { DEFAULT_THEME, THEME_STORAGE_KEY, ThemeStore, isThemeId, storedTheme } from "../src/browser/theme.ts";
@@ -364,4 +365,29 @@ test("quoting marks every line and leaves a blank line on each side of the quote
   expect(withQuote("my reply", "hello")).toBe("my reply\n\n> hello\n\n");
   expect(withQuote("> hello\n\n", "again")).toBe("> hello\n\n> again\n\n");
   expect(withQuote("draft  \n", "\n")).toBe("draft  \n");
+});
+
+test("a reply's pictures appear where they were embedded, and embeds that sent nothing show their names", () => {
+  const images = [
+    { path: "/data/media/qifei/sent/abc.png", embed: "![[lighthouse]]", name: "2026-01-01-lighthouse.png", data: "iVBORw0KGgo=" },
+    { path: "/data/media/qifei/sent/def.png", embed: "![the gull](art/gull.png)", name: "gull.png", caption: "the gull", data: "/9j/4AAQ" },
+    { path: "", embed: "![[gone]]", problem: "no picture matches" },
+  ];
+  const text = "before\n\n![[lighthouse]]\n\nbetween ![the gull](art/gull.png) and ![[gone]] and `![[lighthouse]]` and ![[streaming]]";
+  const render = (value: SentPictures | null) => renderToStaticMarkup(createElement(Pictures.Provider, { value }, createElement(Markdown, { text })));
+  const html = render({ images, open: () => {}, live: false, shown: true });
+  expect(html.indexOf("before")).toBeLessThan(html.indexOf('src="data:image/png;base64,iVBORw0KGgo="'));
+  expect(html.indexOf('src="data:image/png;base64,iVBORw0KGgo="')).toBeLessThan(html.indexOf("between"));
+  expect(html).toContain('<button type="button" class="picture" aria-label="Open 2026-01-01-lighthouse.png"><img src="data:image/png;base64,iVBORw0KGgo=" alt="2026-01-01-lighthouse.png" loading="lazy"/></button>');
+  expect(html).toContain('alt="the gull"');
+  expect(html).toContain('<span class="picture-name" title="no picture matches">');
+  expect(html).toContain("<span>gone</span>");
+  expect(html).toContain('<span class="picture-name" title="This picture was not sent">');
+  expect(html).toContain("<code>![[lighthouse]]</code>");
+  expect(render({ images: [], open: () => {}, live: true, shown: true })).toContain('title="Sending…"');
+  expect(render({ images, open: () => {}, live: false, shown: false })).not.toContain("<img");
+  const plain = render(null);
+  expect(plain).not.toContain("picture");
+  expect(plain).toContain("![[lighthouse]]");
+  expect(unplacedPictures(images, ["only ![[lighthouse]]"]).map((image) => image.name)).toEqual(["gull.png"]);
 });

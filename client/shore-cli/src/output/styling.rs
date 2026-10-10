@@ -324,8 +324,15 @@ pub(crate) fn print_send_image(img: &SendImage) {
 }
 
 pub(crate) fn print_image_refs(refs: &[ImageRef]) {
-    for img in refs {
-        terminal_images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
+    for img in refs
+        .iter()
+        .filter(|img| img.problem.is_none() && !img.path.is_empty())
+    {
+        terminal_images::render_image(
+            &img.path,
+            img.caption.as_deref().or(img.name.as_deref()),
+            img.data.as_deref(),
+        );
     }
 }
 

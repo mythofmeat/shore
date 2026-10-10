@@ -1,6 +1,7 @@
 import type { ContentBlock } from "../../protocol/ContentBlock";
 import type { ImageRef } from "../../protocol/ImageRef";
 import type { ServerMessage } from "../../protocol/ServerMessage";
+import { pictureText } from "../../engine/embeds.ts";
 
 export interface PendingImage {
   readonly path: string;
@@ -42,7 +43,7 @@ export function routeMirror(msg: ServerMessage): MirrorAction {
         replacesLast: msg.origin === "assistant_reply" && altCount >= 2,
         autonomous: msg.origin === "autonomous",
         thinking: extractThinking(msg.content_blocks),
-        text: msg.content,
+        text: pictureText(msg.content, msg.images),
         images: pendingImages(msg.images),
       };
     }
@@ -101,9 +102,9 @@ export function extractThinking(blocks: readonly ContentBlock[]): string | undef
 }
 
 function pendingImages(images: readonly ImageRef[]): PendingImage[] {
-  return images.map((image) => ({
+  return images.filter((image) => image.path !== "").map((image) => ({
     path: image.path,
-    caption: image.caption ?? undefined,
+    caption: image.caption ?? image.name ?? undefined,
     data: image.data ?? undefined,
   }));
 }

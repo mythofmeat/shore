@@ -7,6 +7,7 @@ import { Avatar } from "../ui/avatar.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
+import { FullPicture } from "../pictures.tsx";
 import { conversation, perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
@@ -14,7 +15,7 @@ import { compactionPhase, regenReplaces, replyBlocks, savedPart, segmentDetail, 
 
 function Lightbox({ image, close }: { image: { source: string; caption: string }; close: () => void }) {
   return <Dialog title={image.caption} close={close} wide>
-    <img className="lightbox-image" src={image.source} alt={image.caption} />
+    <FullPicture source={image.source} caption={image.caption} />
     <div className="dialog-footer"><a className="button" href={image.source} download={image.caption}>Download</a></div>
   </Dialog>;
 }
@@ -49,7 +50,7 @@ function StreamingMessage({ stream, saved, character, state, openImage, mobile }
     <div className="message-main">
       <div className="message-meta"><span className="message-name">{character}</span><span className="responding">{stream.final ? "finishing…" : "responding…"}</span></div>
       <div className="message-body">
-        {blocks.length === 0 ? <div className="typing" aria-label="Waiting for the response"><span /><span /><span /></div> : <MessageBody message={{ content: "", images: [], content_blocks: blocks }} display={display} openImage={openImage} live={!stream.final} />}
+        {blocks.length === 0 ? <div className="typing" aria-label="Waiting for the response"><span /><span /><span /></div> : <MessageBody message={{ content: "", images: [], content_blocks: blocks }} display={display} openImage={openImage} live={!stream.final} embeds />}
         {images.length === 0 || display.images === "off" ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}
         {subagents.map((item) => <SubagentChip key={item.key} stream={item} openImage={openImage} />)}
         {stream.previewLimited === true ? <p className="notice-inline">Showing the most recent part of a long response.</p> : null}

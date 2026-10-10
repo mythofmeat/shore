@@ -187,3 +187,29 @@ test("a browser that refuses to construct notifications still counts unread", ()
   notifier.observe(reply("Hello"), selection);
   expect(notifier.getSnapshot().unread).toBe(1);
 });
+
+test("a reply's pictures are named in its notification, and the first one sent is shown with it", () => {
+  const seen: { body: string; icon?: string; image?: string }[] = [];
+  class PictureNotification {
+    static permission: Grant = "granted";
+    static requestPermission(): Promise<Grant> { return Promise.resolve("granted"); }
+    onclick: (() => void) | null = null;
+    constructor(_title: string, options: { body: string; tag: string; renotify: boolean; icon?: string; image?: string }) { seen.push({ body: options.body, ...(options.icon === undefined ? {} : { icon: options.icon }), ...(options.image === undefined ? {} : { image: options.image }) }); }
+    close(): void {}
+  }
+  const store = storage();
+  store.data.set(NOTIFY_KEY, "true");
+  const notifier = new Notifier({ storage: store, api: PictureNotification satisfies NotificationApi, focused: () => false });
+  const update = reply("look ![[gone]] ![[lighthouse]]");
+  if (update.kind !== "frame" || update.message.type !== "new_message") throw new Error("expected a new message");
+  update.message.images = [
+    { path: "", embed: "![[gone]]", problem: "no picture matches" },
+    { path: "/data/media/nova/sent/a.png", embed: "![[lighthouse]]", name: "lighthouse.png", data: "iVBORw0KGgo=" },
+  ];
+  notifier.observe(update, selection);
+  notifier.observe(reply("no pictures"), selection);
+  expect(seen).toEqual([
+    { body: "look [picture not sent: gone] [picture: lighthouse.png]", icon: "data:image/png;base64,iVBORw0KGgo=", image: "data:image/png;base64,iVBORw0KGgo=" },
+    { body: "no pictures" },
+  ]);
+});

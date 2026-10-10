@@ -1359,6 +1359,7 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
                     path: path.clone(),
                     caption: None,
                     data: Some(upload.data.clone()),
+                    ..shore_common::protocol::types::ImageRef::default()
                 };
                 (image_ref, upload)
             })

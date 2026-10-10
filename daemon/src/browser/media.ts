@@ -6,10 +6,14 @@ import { MAX_LIVE_MEDIA_CHARS, recentItems } from "./live_limits.ts";
 
 export const MAX_LIVE_IMAGES = 128;
 export interface LiveImage extends SendImage { manual?: boolean; toolId?: string; previewData?: string | null | undefined; messageId?: string }
-export interface GalleryImage { id: string; caption: string; data: string | null | undefined; mime: string | undefined }
+export interface GalleryImage { id: string; caption: string; data: string | null | undefined; mime: string | undefined; full?: string }
 
 export function retainLiveImages(images: readonly LiveImage[]): { items: LiveImage[]; limited: boolean } {
   return recentItems(images, MAX_LIVE_IMAGES, MAX_LIVE_MEDIA_CHARS, (image) => Object.values(image).reduce<number>((size, value) => size + (typeof value === "string" ? value.length : 0), 256));
+}
+
+export function pictureUrl(path: string): string {
+  return `/api/pictures/${encodeURIComponent(path.split(/[\\/]/).at(-1) ?? "")}`;
 }
 
 export function mediaSource(data: string | null | undefined, mime?: string): string | undefined {
@@ -69,7 +73,7 @@ export function conversationImages(messages: readonly Message[], streams: readon
   const inline = (blocks: readonly ContentBlock[], prefix: string) => blockImages(blocks, prefix).filter((image) => image.data === undefined || image.data === null || !namedData.has(image.data));
   return [
     ...messages.flatMap((message) => [
-      ...message.images.map((image, index) => ({ id: `message:${message.msg_id}:image:${String(index)}`, caption: image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Attached image", data: image.data, mime: undefined })),
+      ...message.images.flatMap((image, index) => image.path === "" ? [] : [{ id: `message:${message.msg_id}:image:${String(index)}`, caption: image.caption ?? image.name ?? image.path.split(/[\\/]/).at(-1) ?? "Attached image", data: image.data, mime: undefined, ...(typeof image.embed === "string" ? { full: pictureUrl(image.path) } : {}) }]),
       ...inline(message.content_blocks, `message:${message.msg_id}:block`),
     ]),
     ...streams.filter((stream) => !(stream.final && messages.some((message) => message.msg_id === stream.msgId))).flatMap((stream) => inline(stream.blocks, `stream:${stream.key}`)),

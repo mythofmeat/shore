@@ -19,7 +19,10 @@ import { recordTurn, snapshotTree, workspaceTurnsFor } from "../tools/workspace_
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { budgetStopIn, describeError } from "../llm/errors.ts";
-import { truncateSummary } from "../notifications.ts";
+import { truncateSummary, type NotificationPicture } from "../notifications.ts";
+import { pictureText } from "../engine/embeds.ts";
+import { firstSentPicture, pictureProblems, sendPictures, type PictureSender } from "../handler/pictures.ts";
+import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import type { CallBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
@@ -40,7 +43,7 @@ export interface HeartbeatTickDeps
   dispatch: (...args: [...Parameters<HeartbeatLoopDeps["dispatch"]>, ToolConversation]) => ReturnType<HeartbeatLoopDeps["dispatch"]>;
   engine?: (character: string, thread?: string) => Promise<HeartbeatEngine>;
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
-  notify?: (title: string, body: string) => void;
+  notify?: (title: string, body: string, picture?: NotificationPicture) => void;
   newId?: () => string;
   nowIso?: () => string;
   budgetBlockFor?: (request: SidecarRequest) => CallBlock | undefined;
@@ -85,6 +88,7 @@ export async function persistHeartbeatMessage(
   loop: HeartbeatLoopResult,
   deps: Pick<HeartbeatTickDeps, "engine" | "emit" | "notify" | "newId" | "nowIso">,
   note: (kind: HeartbeatEventKind, detail: string) => void,
+  pictures?: PictureSender,
 ): Promise<Message | undefined> {
   if (loop.failedRound !== undefined) {
     noteTickFailure(character, loop, note);
@@ -124,6 +128,8 @@ export async function persistHeartbeatMessage(
     version: newMessageVersion(),
   };
 
+  if (pictures !== undefined) msg.images.push(...await sendPictures([text], pictures));
+
   let persisted: Message | undefined;
   if (deps.engine === undefined) {
     shoreLog.error(`shore: heartbeat for ${character} has no engine, message not persisted`);
@@ -140,9 +146,10 @@ export async function persistHeartbeatMessage(
     }
   }
 
-  deps.notify?.(`Shore - ${character}`, msg.content);
+  const shown = pictureText(msg.content, msg.images);
+  deps.notify?.(`Shore - ${character}`, shown, firstSentPicture(msg.images));
 
-  note("message_sent", `Autonomous message sent: ${shortPreview(msg.content)}`);
+  note("message_sent", `Autonomous message sent: ${shortPreview(shown)}`);
   return persisted;
 }
 
@@ -180,7 +187,8 @@ export async function runHeartbeatTick(
       return { events };
     }
 
-    const workspaceTurns = workspaceTurnsFor(config.dirs, character, characterWorkspace(config, character));
+    const workspace = characterWorkspace(config, character);
+    const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const before = await snapshotTree(workspaceTurns);
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
@@ -190,10 +198,11 @@ export async function runHeartbeatTick(
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
       note: (detail) => note("tool_use", detail),
+      checkPictures: async (text) => await pictureProblems([text], workspace, signal),
     });
 
     signal.throwIfAborted();
-    const sent = await persistHeartbeatMessage(character, prepared.request, loop, deps, note);
+    const sent = await persistHeartbeatMessage(character, prepared.request, loop, deps, note, { workspace, dir: sentPicturesDir(config.dirs.data, character) });
     if (sent?.version !== undefined) await recordTurn(workspaceTurns, thread, sent.version, before);
 
     return { events };

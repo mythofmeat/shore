@@ -8,6 +8,7 @@ import { restoreTestEnv, setTestEnv } from "../support/env.ts";
 import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
 import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
+import { sizedImage } from "../support/sized_image.ts";
 
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
@@ -66,6 +67,7 @@ bind_addr = ${JSON.stringify(process.env["SHORE_BROWSER_WEB_BIND"] ?? "127.0.0.1
 ${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""}
 ${process.env["SHORE_BROWSER_CALM_BUDGET"] === "true" ? '[[budgets]]\nname = "Quiet"\nperiod = "month"\ncost_usd = 10\nwarn_fractions = [0.5]\ncharacter = "quiet"\n' : ""}
 `);
+const PICTURE = (await sizedImage(48, 32)).toString("base64");
 let generation = 0;
 const answered = new Set<string>();
 const cleanup = new AbortController();
@@ -135,6 +137,19 @@ const provider: SidecarProvider = {
       }
       const output = typeof result.content === "string" ? result.content : result.content.map((block) => block.type === "text" ? block.text : "").join("");
       const text = `Before ${result.tool_use_id} the notes were [${(/SEEN\[([^\]]*)\]/.exec(output)?.[1] ?? "?").trim()}]`;
+      yield { type: "text", text };
+      yield { type: "done", content: text, finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      return;
+    }
+    const drawn = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "draw-picture") === true;
+    if (question.includes("send picture fixture") || drawn) {
+      const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      if (!drawn) {
+        yield { type: "tool_use", id: "draw-picture", name: "bash", input: { command: `mkdir -p art && echo ${PICTURE} | base64 -d > art/lighthouse.png` } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+        return;
+      }
+      const text = "I drew this while you slept\n\n![[lighthouse]]\n\nand this one ![[missing-one]] went astray";
       yield { type: "text", text };
       yield { type: "done", content: text, finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
       return;

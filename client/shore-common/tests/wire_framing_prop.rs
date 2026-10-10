@@ -83,6 +83,7 @@ fn arb_image_ref() -> impl Strategy<Value = ImageRef> {
             path,
             caption,
             data,
+            ..ImageRef::default()
         })
 }
 

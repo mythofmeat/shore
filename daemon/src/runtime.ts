@@ -48,7 +48,7 @@ import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { installWireCapture } from "./llm/wire_capture.ts";
 import { prefixFingerprint } from "./cache/keepalive.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
-import { NotificationService } from "./notifications.ts";
+import { NotificationService, type NotificationPicture } from "./notifications.ts";
 import {
   McpRegistry,
   type McpRegistryOptions,
@@ -288,8 +288,8 @@ export function startRuntimeClocks(
 
 export function autonomousMessageNotifier(
   notifier: Pick<NotificationService, "notify">,
-): (title: string, body: string) => void {
-  return (title, body) => notifier.notify("autonomous_message", title, body);
+): (title: string, body: string, picture?: NotificationPicture) => void {
+  return (title, body, picture) => notifier.notify("autonomous_message", title, body, picture);
 }
 
 export function compactionCompleteNotifier(

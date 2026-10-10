@@ -88,8 +88,8 @@ MUTANTS = [
      "    deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");"),
     ("deliver: the notification only fires when the append succeeded",
      T,
-     "  deps.notify?.(`Shore - ${character}`, msg.content);",
-     "  if (deps.engine !== undefined) deps.notify?.(`Shore - ${character}`, msg.content);"),
+     "  deps.notify?.(`Shore - ${character}`, shown, firstSentPicture(msg.images));",
+     "  if (deps.engine !== undefined) deps.notify?.(`Shore - ${character}`, shown, firstSentPicture(msg.images));"),
     ("deliver: nothing is pushed, so connected clients never see the message",
      T,
      "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");",
@@ -100,7 +100,7 @@ MUTANTS = [
      "      void msg;"),
     ("deliver: the log line is written for a message that was never sent",
      T,
-     "  note(\"message_sent\", `Autonomous message sent: ${shortPreview(msg.content)}`);",
+     "  note(\"message_sent\", `Autonomous message sent: ${shortPreview(shown)}`);",
      "  void msg;"),
 
     # --- the tick -------------------------------------------------------------
@@ -128,8 +128,8 @@ MUTANTS = [
      "    maxToolIterations: undefined,"),
     ("tick: delivery reads a request the loop never ran against",
      T,
-     "= await persistHeartbeatMessage(character, prepared.request, loop, deps, note);",
-     "= await persistHeartbeatMessage(character, { model: \"\", messages: [] } as never, loop, deps, note);"),
+     "= await persistHeartbeatMessage(character, prepared.request, loop, deps, note, {",
+     "= await persistHeartbeatMessage(character, { model: \"\", messages: [] } as never, loop, deps, note, {"),
 ]
 
 

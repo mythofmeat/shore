@@ -6,12 +6,13 @@ import { basename, dirname, join } from "node:path";
 import { characterCacheDir } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
+import { pictureText } from "../engine/embeds.ts";
 import type { Message } from "../engine/types.ts";
 import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = "2";
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -143,7 +144,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
         continue;
       }
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
-        const text = deriveContentFromBlocks(message.content_blocks, false);
+        const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
         if (text === "") continue;
         const key = versionOf(message) ?? `${message.msg_id}\0${createHash("sha256").update(text).digest("hex")}`;
         if (seenInThread.has(`${thread}\0${key}`)) continue;

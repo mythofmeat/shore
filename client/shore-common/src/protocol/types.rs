@@ -9,7 +9,7 @@ pub enum Role {
     System,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageRef {
     pub path: String,
@@ -17,11 +17,21 @@ pub struct ImageRef {
     pub caption: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
 }
 
 impl PartialEq for ImageRef {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && self.caption == other.caption
+        self.path == other.path
+            && self.caption == other.caption
+            && self.embed == other.embed
+            && self.name == other.name
+            && self.problem == other.problem
     }
 }
 
@@ -355,6 +365,7 @@ pub fn append_inline_images(images: &mut Vec<ImageRef>, scope: &str, blocks: &[C
             path: format!("embedded/{scope}/{:x}", identity.finish()),
             caption: Some(format!("Embedded {} image", media_type)),
             data: Some(data.clone()),
+            ..ImageRef::default()
         });
     }
 }

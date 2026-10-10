@@ -41,15 +41,40 @@ const HTTP_TIMEOUT_MS = 10_000;
 
 const SUMMARY_MAX_BYTES = 200;
 
+export interface NotificationPicture {
+  path: string;
+  name: string;
+}
+
 export interface NotificationSink {
-  notifySend(title: string, body: string): Promise<void>;
-  ntfy(config: NtfyDelivery, title: string, body: string): Promise<void>;
+  notifySend(title: string, body: string, picture?: NotificationPicture): Promise<void>;
+  ntfy(config: NtfyDelivery, title: string, body: string, picture?: NotificationPicture): Promise<void>;
   command(argv: readonly string[], title: string, body: string): Promise<void>;
 }
 
+export function headerText(text: string): string {
+  return /^[\x20-\x7E]*$/.test(text) ? text : `=?UTF-8?B?${Buffer.from(text).toString("base64")}?=`;
+}
+
+async function ntfyAttachment(config: NtfyDelivery, headers: Record<string, string>, body: string, picture: NotificationPicture): Promise<boolean> {
+  try {
+    const resp = await fetch(ntfyUrl(config), {
+      method: "PUT",
+      headers: { ...headers, Message: headerText(body), Filename: headerText(picture.name) },
+      body: Bun.file(picture.path),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (resp.ok) return true;
+    shoreLog.warn(`shore: ntfy refused the picture (${String(resp.status)}); sending the notification without it`);
+  } catch (e) {
+    shoreLog.warn(`shore: ntfy could not take the picture; sending the notification without it: ${String(e)}`);
+  }
+  return false;
+}
+
 export const realSink: NotificationSink = {
-  async notifySend(title, body) {
-    const proc = Bun.spawn(["notify-send", "--app-name=shore", title, body], {
+  async notifySend(title, body, picture) {
+    const proc = Bun.spawn(["notify-send", "--app-name=shore", ...(picture === undefined ? [] : [`--icon=${picture.path}`]), title, body], {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
@@ -57,10 +82,11 @@ export const realSink: NotificationSink = {
     await proc.exited;
   },
 
-  async ntfy(config, title, body) {
+  async ntfy(config, title, body, picture) {
     if (config.topic === "") throw new Error("ntfy topic is not configured");
-    const headers: Record<string, string> = { Title: title };
+    const headers: Record<string, string> = { Title: headerText(title) };
     if (config.token !== "") headers["Authorization"] = `Bearer ${config.token}`;
+    if (picture !== undefined && await ntfyAttachment(config, headers, body, picture)) return;
     const resp = await fetch(ntfyUrl(config), {
       method: "POST",
       headers,
@@ -100,17 +126,17 @@ export class NotificationService {
     return this.#config.enabled && this.isEventEnabled(event);
   }
 
-  notify(event: NotificationEvent, title: string, body: string): void {
+  notify(event: NotificationEvent, title: string, body: string, picture?: NotificationPicture): void {
     if (!this.shouldNotify(event)) return;
     const summary = truncateSummary(body, SUMMARY_MAX_BYTES);
-    void this.#dispatch(title, summary).catch((e: unknown) => {
+    void this.#dispatch(title, summary, picture).catch((e: unknown) => {
       shoreLog.warn(`shore: notification dispatch failed: ${String(e)}`);
     });
   }
 
-  notifyMessageComplete(title: string, body: string, totalMs: number): void {
+  notifyMessageComplete(title: string, body: string, totalMs: number, picture?: NotificationPicture): void {
     if (!this.meetsGenerationThreshold(totalMs)) return;
-    this.notify("message_complete", title, body);
+    this.notify("message_complete", title, body, picture);
   }
 
   meetsGenerationThreshold(totalMs: number): boolean {
@@ -118,15 +144,15 @@ export class NotificationService {
     return thresholdMs === 0n || BigInt(totalMs) >= thresholdMs;
   }
 
-  async #dispatch(title: string, body: string): Promise<void> {
+  async #dispatch(title: string, body: string, picture: NotificationPicture | undefined): Promise<void> {
     switch (this.#config.backend) {
       case "notify_send":
-        return this.#sink.notifySend(title, body);
+        return this.#sink.notifySend(title, body, picture);
       case "ntfy":
         return this.#sink.ntfy({
           ...this.#config.ntfy,
           token: this.#config.token_env === undefined ? "" : process.env[this.#config.token_env] ?? "",
-        }, title, body);
+        }, title, body, picture);
       case "command":
         return this.#sink.command(this.#config.command, title, body);
     }

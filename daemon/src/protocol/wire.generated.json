@@ -706,6 +706,24 @@
               "string",
               "null"
             ]
+          },
+          "embed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "problem": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

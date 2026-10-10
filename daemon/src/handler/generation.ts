@@ -67,6 +67,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import { pruneTurns, recordTurn, redoTurns, replyVersions, snapshotTree, undoTurns, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
+import { sentPicturesDir } from "../storage/sent_pictures.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {
   readonly thread: string;
@@ -258,7 +259,8 @@ async function runGenerationCore(
     throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
   }
 
-  const workspaceTurns = workspaceTurnsFor(config.dirs, charName, characterWorkspace(config, charName));
+  const workspace = characterWorkspace(config, charName);
+  const workspaceTurns = workspaceTurnsFor(config.dirs, charName, workspace);
   const replaced = regen ? replyVersions(engine.messagesAfterLastUserTurn()) : [];
   if (replaced.length > 0) await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
   const known = new Set(replyVersions(engine.messages()));
@@ -379,6 +381,7 @@ async function runGenerationCore(
       replaceGeneratedTail: intermediatePersisted,
       wallClockMs: clock() - startedAt,
       ...(regenAlt === undefined ? {} : { regenAlt }),
+      pictures: { workspace, dir: sentPicturesDir(deps.dataDir, charName) },
     });
 
     emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);

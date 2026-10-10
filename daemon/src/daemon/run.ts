@@ -33,6 +33,7 @@ import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
 import { describeWork, runningReport, type ShutdownWindowState } from "./running.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
+import { findSentPicture } from "../storage/sent_pictures.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -178,6 +179,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         server,
         authenticate: (presented) => tokenMatches(startup.token.token, presented),
         recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },
+        picture: (file) => findSentPicture(dataLease.dataDir, file),
       });
     }
   } catch (error) {

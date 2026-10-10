@@ -81,9 +81,10 @@ async function renderMessageContent(
   m: PromptMessage,
   mode: AssistantImageMode,
 ): Promise<{ content: ContentBlock[]; owedToolResults: ContentBlock[] } | undefined> {
-  const reroute = m.role === "assistant" && m.images.length > 0;
-  const imageRender = reroute ? await renderAssistantImages(m.images, mode) : undefined;
-  const turnImages = reroute ? [] : m.images;
+  const images = m.images.filter((image) => image.embed === undefined);
+  const reroute = m.role === "assistant" && images.length > 0;
+  const imageRender = reroute ? await renderAssistantImages(images, mode) : undefined;
+  const turnImages = reroute ? [] : images;
 
   let content: ContentBlock[] = [];
   for (const img of turnImages) {
