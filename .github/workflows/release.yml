@@ -39,6 +39,7 @@ jobs:
             sed -n '/^name = "shore-\(cli\|common\)"$/{n;s/^version = "\(.*\)"$/\1/p}' client/Cargo.lock
             sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
+            sed -n 's/^Version: *//p' contrib/fedora/shore.spec
           }
           current=$(versions | sort -u)
           if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
@@ -59,6 +60,7 @@ jobs:
           sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
+          sed -i -e "s/^\(Version: *\).*/\1$version/" -e "s/^\(Release: *\)[0-9]*/\11/" contrib/fedora/shore.spec
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
             exit 1
@@ -116,32 +118,14 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$merged" >/dev/null
           echo "tag=v$VERSION" >>"$GITHUB_OUTPUT"
 
-  arch:
+  packages:
     needs: merge
-    runs-on: ubuntu-24.04
-    container: archlinux:base-devel
-    steps:
-      - run: pacman -Syu --noconfirm git
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.merge.outputs.tag }}
-      # makepkg refuses to run as root, and makepkg --syncdeps installs the build dependencies with sudo.
-      - run: |
-          useradd --create-home builder
-          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
-      - run: |
-          mkdir /build
-          cp contrib/arch/PKGBUILD /build/
-          chown -R builder /build
-          cd /build
-          sudo -u builder makepkg --syncdeps --noconfirm
-      - uses: actions/upload-artifact@v7
-        with:
-          name: arch
-          path: /build/*.pkg.tar.zst
+    uses: ./.github/workflows/package.yml
+    with:
+      ref: ${{ needs.merge.outputs.tag }}
 
   release:
-    needs: [merge, arch]
+    needs: [merge, packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
