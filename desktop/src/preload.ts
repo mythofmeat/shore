@@ -20,7 +20,6 @@ if (location.protocol === "file:") {
     },
     args: [() => { ipcRenderer.send("page:focus"); }],
   });
-  // Chromium's notifications never reach the screen on macOS (see notify.ts), so the page's go to the main process.
   if (process.platform === "darwin") {
     contextBridge.executeInMainWorld({
       func: (notify: (title: string, body: string) => void) => {

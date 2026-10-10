@@ -113,6 +113,8 @@ jobs:
             echo "::error::macOS would ask to approve Shore.app: the cask left the quarantine flag on it."
             exit 1
           fi
+      - run: bun install --frozen-lockfile
+        working-directory: daemon
       - run: bun run test:e2e
         working-directory: desktop
         env:
