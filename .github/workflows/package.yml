@@ -32,6 +32,10 @@ jobs:
       - run: |
           useradd --create-home builder
           echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      # makepkg clones the release tag from GitHub, which needs the job's token while the repository is private.
+      - env:
+          TOKEN: ${{ github.token }}
+        run: sudo -u builder git config --global url."https://x-access-token:$TOKEN@github.com/".insteadOf https://github.com/
       - run: |
           mkdir /build
           cp contrib/arch/PKGBUILD /build/
