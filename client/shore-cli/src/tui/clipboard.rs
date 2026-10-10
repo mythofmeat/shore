@@ -110,70 +110,26 @@ pub(crate) async fn read_image_to_temp() -> Result<PathBuf, ClipboardError> {
 }
 
 fn read_image() -> Result<Vec<u8>, ClipboardError> {
-    #[cfg(target_os = "macos")]
-    {
-        let file = tempfile::Builder::new()
-            .prefix("shore_clipboard_")
-            .suffix(".png")
-            .tempfile()
-            .map_err(ClipboardError::WriteFailed)?;
-        let path = file.path();
-        let script = r#"on run argv
-set outputFile to POSIX file (item 1 of argv)
-try
-    set imageData to the clipboard as «class PNGf»
-on error
-    error "clipboard has no PNG image"
-end try
-set fileRef to open for access outputFile with write permission
-try
-    set eof fileRef to 0
-    write imageData to fileRef
-    close access fileRef
-on error errorMessage
-    try
-        close access fileRef
-    end try
-    error errorMessage
-end try
-end run"#;
-        let status = Command::new("osascript")
-            .args(["-e", script, "--"])
-            .arg(path)
-            .status()
-            .map_err(|e| ClipboardError::ClipboardUnavailable(format!("osascript failed: {e}")))?;
-        if !status.success() {
-            return Err(ClipboardError::NoImage);
-        }
-        if std::fs::metadata(path).map_or(true, |metadata| metadata.len() == 0) {
-            return Err(ClipboardError::NoImage);
-        }
-        std::fs::read(path).map_err(ClipboardError::WriteFailed)
+    if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+        return Err(ClipboardError::ClipboardUnavailable(
+            "not a Wayland session".into(),
+        ));
     }
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        if std::env::var_os("WAYLAND_DISPLAY").is_none() {
-            return Err(ClipboardError::ClipboardUnavailable(
-                "not a Wayland session".into(),
-            ));
-        }
+    let output = Command::new("wl-paste")
+        .args(["--type", "image/png", "--no-newline"])
+        .output()
+        .map_err(|e| {
+            ClipboardError::ClipboardUnavailable(format!(
+                "wl-paste failed: {e} (install wl-clipboard)"
+            ))
+        })?;
 
-        let output = Command::new("wl-paste")
-            .args(["--type", "image/png", "--no-newline"])
-            .output()
-            .map_err(|e| {
-                ClipboardError::ClipboardUnavailable(format!(
-                    "wl-paste failed: {e} (install wl-clipboard)"
-                ))
-            })?;
-
-        if !output.status.success() || output.stdout.is_empty() {
-            return Err(ClipboardError::NoImage);
-        }
-
-        Ok(output.stdout)
+    if !output.status.success() || output.stdout.is_empty() {
+        return Err(ClipboardError::NoImage);
     }
+
+    Ok(output.stdout)
 }
 
 #[cfg(test)]

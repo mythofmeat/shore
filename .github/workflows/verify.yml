@@ -84,40 +84,6 @@ jobs:
       - run: bun test
       - run: bun run build
 
-  desktop-macos:
-    runs-on: macos-15
-    timeout-minutes: 30
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: daemon/.bun-version
-      - run: bun install --frozen-lockfile
-        working-directory: desktop
-      - run: bun run app:macos
-        working-directory: desktop
-      # The cask installs the zip a release attaches, so here it installs the one just built. Homebrew
-      # quarantines that download like any other, and the cask has to take the flag off again.
-      - run: |
-          zip="$GITHUB_WORKSPACE/out/desktop/Shore-$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/shore-desktop.rb)-arm64.zip"
-          sed -i '' -e "s|^  sha256 \".*\"$|  sha256 \"$(shasum -a 256 "$zip" | cut -d' ' -f1)\"|" -e "s|^  url \".*\"$|  url \"file://$zip\"|" Casks/shore-desktop.rb
-          mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
-          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
-      - run: brew install --cask mythofmeat/shore/shore-desktop
-      - name: Shore.app isn't quarantined
-        run: |
-          attributes=$(xattr -lr /Applications/Shore.app)
-          if grep -q com.apple.quarantine <<<"$attributes"; then
-            echo "::error::macOS would ask to approve Shore.app: the cask left the quarantine flag on it."
-            exit 1
-          fi
-      - run: bun run test:e2e
-        working-directory: desktop
-        env:
-          SHORE_DESKTOP_ELECTRON: /Applications/Shore.app/Contents/MacOS/Shore
-
   client:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -141,18 +107,3 @@ jobs:
           fi
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
-
-  homebrew:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
-      # brew style and audit only apply the formula rules to a tapped formula, so the checkout is linked in as the mythofmeat/shore tap.
-      - run: |
-          mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
-          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
-      - run: brew style mythofmeat/shore/shore mythofmeat/shore/shore-desktop
-      - run: brew audit --strict mythofmeat/shore/shore mythofmeat/shore/shore-desktop

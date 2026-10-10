@@ -1,0 +1,76 @@
+name: package
+
+# The release workflow builds its packages here. Pull requests that change the packaging build them too, since
+# nothing else would catch a broken recipe before a release.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/package.yml
+      - contrib/**
+      - desktop/scripts/linux-app.ts
+  workflow_call:
+    inputs:
+      ref:
+        description: Tag to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  arch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container: archlinux:base-devel
+    steps:
+      - run: pacman -Syu --noconfirm git
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      # makepkg refuses to run as root, and makepkg --syncdeps installs the build dependencies with sudo.
+      - run: |
+          useradd --create-home builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      # makepkg clones the release tag from GitHub, which needs the job's token while the repository is private.
+      - env:
+          TOKEN: ${{ github.token }}
+        run: sudo -u builder git config --global url."https://x-access-token:$TOKEN@github.com/".insteadOf https://github.com/
+      - run: |
+          mkdir /build
+          cp contrib/arch/PKGBUILD /build/
+          chown -R builder /build
+          cd /build
+          sudo -u builder makepkg --syncdeps --noconfirm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: arch
+          path: /build/*.pkg.tar.zst
+
+  # The Fedora packages are for the Asahi MacBook. Fedora 43 builds ones that install on 43 and anything newer.
+  fedora:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    container: fedora:43
+    steps:
+      - run: dnf install -y --setopt=install_weak_deps=False git rpm-build gcc unzip rustup
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: |
+          rustup-init -y --profile minimal
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      # rpmbuild files each package under an architecture directory, which the release would attach as a directory.
+      - run: |
+          version=$(sed -n 's/^Version: *//p' contrib/fedora/shore.spec)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git archive --prefix="shore-$version/" -o "shore-$version.tar.gz" HEAD
+          rpmbuild -bb contrib/fedora/shore.spec --define "_sourcedir $PWD" --define "_rpmdir $PWD/rpms" \
+            --define "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fedora
+          path: rpms/*.rpm
