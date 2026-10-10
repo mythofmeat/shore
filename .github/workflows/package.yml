@@ -18,8 +18,11 @@ on:
 permissions:
   contents: read
 
+# A release's version-bump pull request changes the packaging too, but its tag only exists once it merges, and the
+# release builds both packages from that tag straight after.
 jobs:
   arch:
+    if: ${{ !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     container: archlinux:base-devel
@@ -49,6 +52,7 @@ jobs:
 
   # The Fedora packages are for the Asahi MacBook. Fedora 43 builds ones that install on 43 and anything newer.
   fedora:
+    if: ${{ !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     container: fedora:43
