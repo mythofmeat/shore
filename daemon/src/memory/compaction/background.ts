@@ -114,6 +114,6 @@ export async function pushAfterCompaction(
   outcome: CompactionOutcome,
   push: () => Promise<void>,
 ): Promise<void> {
-  if (!gitPushEnabled || outcome.kind !== "compacted") return;
+  if (!gitPushEnabled || (outcome.kind !== "compacted" && outcome.kind !== "segment")) return;
   await push();
 }

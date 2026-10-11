@@ -809,6 +809,46 @@ describe("findEffectiveModel", () => {
     expect(model.cacheTtl).toBeUndefined();
   });
 
+  test("Claude models through the Agent SDK get their real context window", () => {
+    const root = tempRoot();
+    const cacheDir = join(root, "cache");
+    const providerDir = join(cacheDir, "providers", "claude_agent");
+    mkdirSync(providerDir, { recursive: true });
+    writeFileSync(join(providerDir, "models.json"), JSON.stringify({
+      version: 2,
+      provider_key: "claude_agent",
+      fetched_at: "2026-10-09T00:00:00Z",
+      models: [
+        { provider_key: "claude_agent", model_id: "opus", sdk: "claude_agent", raw_provider_metadata: { value: "opus", resolvedModel: "claude-opus-5-5" }, discovered_at: "2026-10-09T00:00:00Z" },
+        { provider_key: "claude_agent", model_id: "haiku", sdk: "claude_agent", raw_provider_metadata: { value: "haiku", resolvedModel: "claude-haiku-4-5-20251001" }, discovered_at: "2026-10-09T00:00:00Z" },
+      ],
+    }));
+    const config = buildConfig(
+      "[\"claude_agent:claude-opus-5-5\"]\n[\"claude_agent:claude-fable-5-1[1m]\"]",
+      "[claude_agent]\n[claude_agent.discovery]\nenabled = true\n",
+      root,
+    );
+
+    const window = (name: string) => findEffectiveModel(config, cacheDir, name, false).maxContextTokens;
+    expect(window("claude_agent:claude-opus-5-5")).toBe(1_000_000);
+    expect(window("claude_agent:claude-fable-5-1[1m]")).toBe(1_000_000);
+    expect(window("claude_agent:opus")).toBe(1_000_000);
+    expect(window("claude_agent:haiku")).toBe(200_000);
+    expect(window("claude_agent:claude-sonnet-5-5")).toBe(1_000_000);
+    expect(window("claude_agent:something-else")).toBeUndefined();
+  });
+
+  test("a provider's own max_context_tokens still wins over the known window", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = buildConfig(
+      "[\"claude_agent:claude-opus-5-5\"]",
+      "[claude_agent]\n[claude_agent.defaults]\nmax_context_tokens = 300000\n",
+      root,
+    );
+    expect(findEffectiveModel(config, join(root, "cache"), "claude_agent:claude-opus-5-5", false).maxContextTokens).toBe(300_000);
+  });
+
   test("a disabled provider hides its static entries too", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });

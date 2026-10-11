@@ -436,6 +436,47 @@ describe("maybeCompact measures the context, not the turn's billed total", () =>
   });
 });
 
+describe("maybeCompact after a refused compaction", () => {
+  test("leaves the held pass alone instead of starting one every turn", async () => {
+    const root = await tempRoot();
+    try {
+      writeDurable(join(root, "ada", "threads", "main", "compaction-checkpoint.json"), JSON.stringify({
+        version: 1, id: "held", character: "ada", createdAt: MINTED_TS, updatedAt: MINTED_TS,
+        state: "paused", pauseReason: "refusal", sourceContent: "", sourceHash: "", splitAt: 2, compactedTurns: 1,
+        request: { messages: [] }, loop: { toolRounds: 0 },
+      }));
+      let asked = false;
+      const ctx = {
+        sendDirect: () => {},
+        autonomy: {
+          shouldCompactNow: () => {
+            asked = true;
+            return true;
+          },
+        },
+      } as unknown as TurnContext;
+      const runner = {
+        run: () => {
+          throw new Error("compaction must not run while it is held");
+        },
+        applyDeferredEdits: async () => {},
+      };
+      const result: StreamResult = {
+        content: "answer", model: "test-model", finish_reason: "end_turn",
+        timing: { total_ms: 1, time_to_first_token_ms: 1 }, tool_uses: [], content_blocks: [],
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+      };
+
+      const ran = await maybeCompact(ctx, { turnCount: () => 50, thread: "main" } as unknown as TurnEngine, "ada", {} as unknown as LoadedConfig, root, result, undefined, runner, true);
+
+      expect(ran).toBe(false);
+      expect(asked).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("emitPostPersistStreamEnd", () => {
   for (const c of fixture.emit_post_persist_stream_end) {
     test(c.name, async () => {

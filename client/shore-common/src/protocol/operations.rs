@@ -647,6 +647,10 @@ wire_types! {
         #[ts(type = "number | null")]
         #[schemars(range(max = 9007199254740991_u64))]
         pub keep_turns: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        #[schemars(range(max = 9007199254740991_u64))]
+        pub segment: Option<u64>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -785,6 +789,17 @@ wire_types! {
             tools_called: Vec<String>,
             truncated_turns: usize,
             partial_writes: Vec<String>,
+        },
+        Segment {
+            character: String,
+            #[ts(type = "number")]
+            segment: u64,
+            message_count: usize,
+            turn_count: usize,
+            compacted_turns: usize,
+            memory_files_written: Vec<String>,
+            tool_rounds: usize,
+            tools_called: Vec<String>,
         },
         Paused {
             character: String,

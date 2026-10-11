@@ -237,5 +237,6 @@ export function compactionSummary(report: CompactionReport): string {
     case "dry_run": return `Compaction would summarize ${String(report.compacted_turns)} turns and write ${String(report.would_write_files)} memory files.`;
     case "truncated": return `Compaction stopped early after summarizing ${String(report.compacted_turns)} turns; ${String(report.truncated_turns)} turns were left as they were.`;
     case "paused": return `Compaction paused: ${report.detail ?? report.reason}.${report.resume_at === null ? "" : ` It resumes at ${new Date(report.resume_at).toLocaleTimeString()}.`}`;
+    case "segment": return `Wrote memory from archived segment ${String(report.segment)} (${String(report.compacted_turns)} turns, ${String(report.memory_files_written.length)} files).`;
   }
 }

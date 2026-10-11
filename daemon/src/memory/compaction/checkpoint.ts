@@ -8,6 +8,7 @@ export type CompactionPauseReason =
   | "budget"
   | "cancelled"
   | "provider"
+  | "refusal"
   | "iteration_limit"
   | "source_conflict"
   | "workspace_conflict";
@@ -139,6 +140,21 @@ export async function removeCompactionCheckpoint(
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
+}
+
+export function heldAfterRefusal(
+  checkpoint: CompactionCheckpoint | undefined,
+): checkpoint is CompactionCheckpoint {
+  return checkpoint?.state === "paused" && checkpoint.pauseReason === "refusal";
+}
+
+export async function compactionHeld(
+  dataDir: string,
+  character: string,
+  thread: string,
+): Promise<CompactionCheckpoint | undefined> {
+  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
+  return heldAfterRefusal(checkpoint) ? checkpoint : undefined;
 }
 
 export function checkpointSourceIsCompatible(

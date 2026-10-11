@@ -15,8 +15,8 @@ import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 import type { ToolUseEvent } from "../../engine/tool_loop";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
-import { budgetStopIn } from "../../llm/errors.ts";
-import type { ContentBlock } from "../../engine/types";
+import { budgetStopIn, describeError } from "../../llm/errors.ts";
+import type { ContentBlock, Message } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
@@ -26,6 +26,7 @@ import type { FrameSink } from "../../llm/stream.ts";
 import {
   COMPACTION_SUBAGENT,
   CompactionError,
+  CompactionRefused,
   type CompactionCoverage,
   type AppliedCompactionWrite,
   type CompactionLlm,
@@ -44,6 +45,7 @@ import {
   type CompactionCheckpoint,
 } from "./checkpoint.ts";
 import {
+  conversationView,
   countTurns,
   openArchivalCommit,
   retainedTurnCount,
@@ -51,6 +53,8 @@ import {
 } from "./plan.ts";
 
 export { archiveSplitIndex, countTurns, findTurnSplit, trailingAutonomousLen } from "./plan.ts";
+
+const REFUSAL = "refusal";
 
 const inFlight = new Set<string>();
 const waiting = new Map<string, (() => void)[]>();
@@ -270,6 +274,7 @@ async function dispatchCompactionTool(
 
 class CompactionDriver {
   readonly state: ToolLoopState;
+  refused = false;
 
   constructor(
     private readonly request: SidecarRequest,
@@ -306,6 +311,10 @@ class CompactionDriver {
   }
 
   async onTurn(resp: GenerateResponse): Promise<void> {
+    if (resp.finish_reason === REFUSAL) {
+      this.refused = true;
+      return;
+    }
     if (hitTokenCeiling(resp.finish_reason)) {
       this.state.truncatedTurns = (this.state.truncatedTurns ?? 0) + 1;
     }
@@ -375,6 +384,7 @@ async function runCompactionToolLoop(
 ): Promise<ToolLoopState> {
   const driver = new CompactionDriver(request, tools, workspaceDir, dryRun, restored, persist, emit);
   const startedRounds = driver.state.toolRounds;
+  if (driver.state.pendingTurn?.finish_reason === REFUSAL) forgetRefusedTurn(request, driver.state);
   const pending = driver.state.pendingTurn;
   if (pending !== undefined) {
     const uses = driver.toolUses(pending);
@@ -402,17 +412,44 @@ async function runCompactionToolLoop(
       if (role === "user") await driver.finishTools();
     },
   };
-  const response = await llm.run({
-    ...request,
-    messages: [...request.messages],
-    ...(maxToolIterations === undefined ? {} : { max_tool_iterations: maxToolIterations - spent }),
-  }, phase, { capBehavior: "stop_after_dispatch" });
+  let response: GenerateResponse;
+  try {
+    response = await llm.run({
+      ...request,
+      messages: [...request.messages],
+      ...(maxToolIterations === undefined ? {} : { max_tool_iterations: maxToolIterations - spent }),
+    }, phase, { capBehavior: "stop_after_dispatch" });
+  } catch (e) {
+    if (driver.refused) throw refusedIn(driver.state, e);
+    throw e;
+  }
+  if (driver.refused || response.finish_reason === REFUSAL) throw refusedIn(driver.state);
   if (response.finish_reason.startsWith("error")) {
     throw CompactionError.llm(`Model run ended with ${response.finish_reason}`);
   }
   driver.state.maxRoundsHit = response.finish_reason === "tool_use" &&
     maxToolIterations !== undefined && driver.state.toolRounds - startedRounds >= maxToolIterations;
   return driver.state;
+}
+
+function refusedIn(state: ToolLoopState, cause?: unknown): CompactionRefused {
+  const round = `the model refused round ${String(state.toolRounds + 1)}`;
+  if (cause === undefined) return new CompactionRefused(round);
+  const reported = cause instanceof CompactionError && cause.cause !== undefined ? cause.cause : cause;
+  return new CompactionRefused(`${round}: ${describeError(reported).replace(/\s*\n\s*/g, " ")}`, { cause });
+}
+
+function forgetRefusedTurn(request: SidecarRequest, state: ToolLoopState): void {
+  const turn = required(state.pendingTurn);
+  const pushed = turn.content_blocks.length > 0 ? turn.content_blocks
+    : turn.content.trim() === "" ? undefined : [{ type: "text", text: turn.content }];
+  const last = request.messages.at(-1);
+  if (pushed !== undefined && last?.role === "assistant" && JSON.stringify(last.content) === JSON.stringify(pushed)) {
+    request.messages.pop();
+  }
+  delete state.pendingTurn;
+  state.pendingResults = [];
+  state.pendingUseCount = 0;
 }
 
 function deliverPendingNote(request: SidecarRequest, state: ToolLoopState): void {
@@ -695,20 +732,26 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const memoryAfter = await tools.gitHead?.(workspaceDir);
   if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);
 
-  const newConversationId = await archiveCompactPrefix(
-    opts.conversationMgr,
-    opts.conversationId,
-    retained,
-    commit.liveContent,
-    state.writesApplied,
-    workspaceDir,
-    opts.charName,
-    tools,
-    checkpoint.id,
-    checkpoint.memoryBefore,
-    memoryAfter,
-    opts.coverage?.claim,
-  );
+  let newConversationId: string;
+  try {
+    newConversationId = await archiveCompactPrefix(
+      opts.conversationMgr,
+      opts.conversationId,
+      retained,
+      commit.liveContent,
+      state.writesApplied,
+      workspaceDir,
+      opts.charName,
+      tools,
+      checkpoint.id,
+      checkpoint.memoryBefore,
+      memoryAfter,
+      opts.coverage?.claim,
+    );
+  } catch (e) {
+    await clearCheckpoint(opts);
+    throw e;
+  }
   await clearCheckpoint(opts);
 
   const markdownPaths = changedFilePaths(state.writesApplied);
@@ -726,6 +769,61 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     toolRounds: state.toolRounds,
     toolsCalled: state.toolsCalled,
   };
+}
+
+export interface SegmentCompactOptions {
+  segment: number;
+  messages: readonly Message[];
+  promptTemplate: string;
+  charName: string;
+  userName: string;
+  llm: CompactionLlm;
+  markdownStore?: MarkdownMemoryStore;
+  chatRequest: SidecarRequest;
+  tools: CompactionTools;
+  maxToolIterations?: number;
+  emit?: FrameSink;
+  signal?: AbortSignal;
+}
+
+export async function compactSegment(opts: SegmentCompactOptions): Promise<CompactionOutcome> {
+  if (opts.markdownStore === undefined) throw CompactionError.markdownStore("markdown memory store not available");
+  const prompt = buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) +
+    segmentNotice(opts.segment, opts.messages);
+  const request = opts.llm.buildInitialRequest(prompt, opts.chatRequest);
+  const workspaceDir = await preparePassWorkspace(opts.markdownStore, opts.tools, opts.charName, false);
+  opts.signal?.throwIfAborted();
+  const state = await runCompactionToolLoop(
+    opts.llm, request, opts.tools, workspaceDir, opts.maxToolIterations, false, undefined, async () => {}, opts.emit,
+  );
+  opts.signal?.throwIfAborted();
+  const written = changedFilePaths(state.writesApplied);
+  const kept = written.length === 0 ? "nothing was written" : `what it wrote stays: ${written.join(", ")}`;
+  if (state.maxRoundsHit) {
+    throw CompactionError.llm(`the pass hit its tool-round ceiling after ${String(state.toolRounds)} rounds; ${kept}`);
+  }
+  if ((state.truncatedTurns ?? 0) > 0) throw CompactionError.llm(`the pass was cut off at the token ceiling; ${kept}`);
+  return {
+    kind: "segment",
+    segment: opts.segment,
+    messageCount: opts.messages.length,
+    compactedTurns: countTurns(conversationView(opts.messages)),
+    memoryFilesWritten: written,
+    toolRounds: state.toolRounds,
+    toolsCalled: state.toolsCalled,
+  };
+}
+
+function segmentNotice(segment: number, messages: readonly Message[]): string {
+  const first = messages[0]?.timestamp;
+  const last = messages.at(-1)?.timestamp;
+  const span = first === undefined || last === undefined ? "" : `, from ${first} to ${last}`;
+  return (
+    `\n\nThis conversation is archived segment ${String(segment)}${span}. It left your active context ` +
+    `some time ago, and its memory is being written again. Conversations since then may already be ` +
+    `recorded, so MEMORY.md and your memory files can be ahead of it. Record what is missing and still ` +
+    `true; do not replace newer information with what this conversation said.`
+  );
 }
 
 export function backgroundCoverageNotice(coverage: CompactionCoverage): string | undefined {
@@ -965,10 +1063,12 @@ async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheck
   if (opts.resumable !== true) throw error;
   const stop = budgetStopIn(error);
   const cancelled = opts.signal?.aborted === true;
+  const refused = !cancelled && error instanceof CompactionRefused;
   checkpoint.state = "paused";
-  checkpoint.pauseReason = cancelled ? "cancelled" : stop === undefined ? "provider" : "budget";
+  checkpoint.pauseReason = cancelled ? "cancelled" : refused ? "refusal" : stop === undefined ? "provider" : "budget";
   checkpoint.pauseDetail = cancelled
     ? describeAbort(opts.signal?.reason)
+    : refused ? error.message
     : stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));
   if (stop?.resetAt === undefined) delete checkpoint.resumeAt;
   else checkpoint.resumeAt = stop.resetAt;

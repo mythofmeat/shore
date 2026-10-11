@@ -346,6 +346,12 @@ pub(crate) enum CliCommand {
         #[arg(long, conflicts_with_all = ["watch", "cancel"])]
         restart: bool,
 
+        /// Write memory from an archived segment (see `shore segments`) as if it
+        /// were being compacted now. The archive and the conversation are left
+        /// as they are. Use it to redo a segment whose pass wrote nothing.
+        #[arg(long, value_name = "INDEX", conflicts_with_all = ["keep_turns", "restart", "watch", "cancel"])]
+        segment: Option<u64>,
+
         /// Follow the compaction already running, whoever started it, from what
         /// it has done so far to how it ends. With none running, show how the
         /// last pass ended.
@@ -2723,6 +2729,7 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     let CliCommand::Compact {
         keep_turns,
         restart,
+        segment,
         watch,
         cancel,
         ..
@@ -2740,6 +2747,7 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
         dry_run: None,
         keep_turns: keep_turns.map(u64::from),
         restart: restart.then_some(true),
+        segment: *segment,
     })
 }
 
@@ -3364,6 +3372,10 @@ mod tests {
             (
                 &["compact", "0", "--restart"],
                 Some(("compact", json!({"keep_turns": 0, "restart": true}))),
+            ),
+            (
+                &["compact", "--segment", "860"],
+                Some(("compact", json!({"segment": 860}))),
             ),
             (
                 &["-c", "ada", "usage"],
@@ -4895,6 +4907,7 @@ mod tests {
         let cmd = CliCommand::Compact {
             keep_turns: Some(0),
             restart: false,
+            segment: None,
             watch: false,
             cancel: false,
             json: false,
@@ -4909,6 +4922,7 @@ mod tests {
         let cmd = CliCommand::Compact {
             keep_turns: Some(0),
             restart: true,
+            segment: None,
             watch: false,
             cancel: false,
             json: false,
@@ -4932,6 +4946,9 @@ mod tests {
             &["compact", "--watch", "--cancel"][..],
             &["compact", "--watch", "3"],
             &["compact", "--cancel", "--restart"],
+            &["compact", "--segment", "3", "--restart"],
+            &["compact", "--segment", "3", "2"],
+            &["compact", "--segment", "3", "--watch"],
         ] {
             assert!(try_parse(args).is_err(), "{args:?}");
         }
@@ -5119,6 +5136,7 @@ mod tests {
             CliCommand::Compact {
                 keep_turns: None,
                 restart: false,
+                segment: None,
                 watch: false,
                 cancel: false,
                 json: false,
