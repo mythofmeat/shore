@@ -731,20 +731,26 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const memoryAfter = await tools.gitHead?.(workspaceDir);
   if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);
 
-  const newConversationId = await archiveCompactPrefix(
-    opts.conversationMgr,
-    opts.conversationId,
-    retained,
-    commit.liveContent,
-    state.writesApplied,
-    workspaceDir,
-    opts.charName,
-    tools,
-    checkpoint.id,
-    checkpoint.memoryBefore,
-    memoryAfter,
-    opts.coverage?.claim,
-  );
+  let newConversationId: string;
+  try {
+    newConversationId = await archiveCompactPrefix(
+      opts.conversationMgr,
+      opts.conversationId,
+      retained,
+      commit.liveContent,
+      state.writesApplied,
+      workspaceDir,
+      opts.charName,
+      tools,
+      checkpoint.id,
+      checkpoint.memoryBefore,
+      memoryAfter,
+      opts.coverage?.claim,
+    );
+  } catch (e) {
+    await clearCheckpoint(opts);
+    throw e;
+  }
   await clearCheckpoint(opts);
 
   const markdownPaths = changedFilePaths(state.writesApplied);

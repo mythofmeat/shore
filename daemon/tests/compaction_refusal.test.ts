@@ -14,6 +14,8 @@ import { runIdleCompaction, type IdleCompactionDeps } from "../src/autonomy/idle
 import { runCompaction, runCompactionPass, type CompactionRunDeps } from "../src/memory/compaction/run.ts";
 import { CompactionPaused } from "../src/memory/compaction/types.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { withConversation } from "../src/engine/lifecycle.ts";
+import { threadDataDir } from "../src/config/dirs.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -218,5 +220,29 @@ describe("a refused compaction", () => {
     expect(outcome).toMatchObject({ kind: "paused", reason: "refusal" });
     expect(outcome?.kind === "paused" ? outcome.detail : "").toContain("Request ID: req_1");
     expect(segments(dataDir)).toBe(0);
+  });
+});
+
+describe("a pass that runs after a chat turn", () => {
+  test("stops with the turn and keeps its rounds instead of finishing and rolling back", async () => {
+    const { config, dataDir, characterDir } = await world();
+    const chatTurn = new AbortController();
+    let round = 0;
+    const generate: Generate = async () => {
+      round += 1;
+      if (round === 1) return WRITE_BOATS;
+      chatTurn.abort();
+      return DONE;
+    };
+
+    const outcome = await withKey(() =>
+      withConversation(threadDataDir(dataDir, "ada", "main"), "turn", () =>
+        runCompactionPass("ada", runDeps(config, generate), { trigger: "turn" }), chatTurn.signal));
+
+    expect(outcome).toMatchObject({ kind: "paused", reason: "cancelled", detail: "the chat turn it ran after was cancelled" });
+    expect(segments(dataDir)).toBe(0);
+    expect(existsSync(join(characterWorkspace(config, "ada").dir, "memory", "boats.md"))).toBe(true);
+    expect((await loadCompactionCheckpoint(dataDir, "ada", "main"))?.loop.toolRounds).toBe(1);
+    expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toContain("tell me about boats");
   });
 });

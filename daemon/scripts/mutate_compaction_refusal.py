@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Mutation pass over what compaction does when the model refuses: the pause,
-the hold on automatic passes, and the retry that resends the refused request.
+"""Mutation pass over what compaction does when the model refuses, when the
+chat turn it runs after is cancelled, and when its archive step fails.
 """
 import sys
 
@@ -53,6 +53,14 @@ MUTANTS = [
     ("hold: every chat turn asks for a pass while one is held", T,
      "  if (await compactionHeld(dataDir, charName, engine.thread ?? await homeThreadOf(dataDir, charName))) return false;\n",
      ""),
+
+    # --- the chat turn and the archive -----------------------------------------
+    ("cancel: the pass ignores the chat turn it runs after", R,
+     "deps.emit, stoppedWith(deps.signal, scope));",
+     "deps.emit, deps.signal);"),
+    ("archive: a failed archive keeps a checkpoint whose writes were rolled back", M,
+     "  } catch (e) {\n    await clearCheckpoint(opts);\n    throw e;\n  }",
+     "  } catch (e) {\n    throw e;\n  }"),
 
 ]
 

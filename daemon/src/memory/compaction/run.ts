@@ -182,7 +182,7 @@ export async function runCompactionPass(
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
 
-  return await withConversation(threadDataDir(dataDir, character, thread), "update", async () => {
+  return await withConversation(threadDataDir(dataDir, character, thread), "update", async (scope) => {
     deps.signal?.throwIfAborted();
     const guard = tryBeginCompaction(dataDir, character);
     if (guard === undefined) throw CompactionError.busy(character);
@@ -195,7 +195,7 @@ export async function runCompactionPass(
         return heldOutcome(character, held);
       }
     }
-    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
+    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, stoppedWith(deps.signal, scope));
     try {
       const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
       pass.finish(outcome);
@@ -205,6 +205,14 @@ export async function runCompactionPass(
       throw e;
     }
   });
+}
+
+function stoppedWith(signal: AbortSignal | undefined, scope: AbortSignal): AbortSignal {
+  const turn = new AbortController();
+  const stop = () => turn.abort(new DOMException("the chat turn it ran after was cancelled", "AbortError"));
+  if (scope.aborted) stop();
+  else scope.addEventListener("abort", stop, { once: true });
+  return signal === undefined ? turn.signal : AbortSignal.any([signal, turn.signal]);
 }
 
 function heldOutcome(character: string, checkpoint: CompactionCheckpoint): CompactionOutcome {

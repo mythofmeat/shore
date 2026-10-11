@@ -86,6 +86,7 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   expect(await readlink(join(workspace, "assets/link.bin"))).toBe("data.bin");
   expect(await outcomeOf(readFile(join(workspace, "projects/new.md")))).toThrow();
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
+  expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
 test("a checkpoint left holding a refused turn resends the request instead of archiving", async () => {
