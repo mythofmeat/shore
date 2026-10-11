@@ -2,6 +2,7 @@ import {
   defaultSdk,
   findModel,
   hardcodedProviderDefaults,
+  knownContextWindow,
   mergeFrom,
   resolvedModelFromParts,
   sdkFromWire,
@@ -239,7 +240,9 @@ function buildResolvedFromProvider(
     defaultSdk(providerKey);
 
   const baseUrl = entry.baseUrl ?? disc?.base_url ?? providerDefaults.baseUrl;
-  const maxContextTokens = asU32(disc?.context_length) ?? providerDefaults.maxContextTokens;
+  const maxContextTokens = asU32(disc?.context_length) ??
+    knownContextWindow(sdk, upstreamModelId(modelId, disc)) ??
+    providerDefaults.maxContextTokens;
   const maxOutputTokens = asU32(disc?.max_output_tokens) ?? providerDefaults.maxOutputTokens;
 
   const fields: ModelConfigFields = { sdk };
@@ -266,6 +269,13 @@ function buildResolvedFromProvider(
     disc?.support,
     disc?.supports_images,
   );
+}
+
+function upstreamModelId(modelId: string, disc: DiscoveredModel | undefined): string {
+  const metadata = disc?.raw_provider_metadata;
+  if (typeof metadata !== "object" || metadata === null) return modelId;
+  const resolved = (metadata as { resolvedModel?: unknown }).resolvedModel;
+  return typeof resolved === "string" && resolved !== "" ? resolved : modelId;
 }
 
 function asU32(value: number | undefined | null): number | undefined {

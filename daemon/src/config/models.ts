@@ -445,11 +445,11 @@ function parseCategory(
       if ("err" in parsed) throw CatalogError.parseEntry(category, provider, modelId, parsed.err);
       const defaults = hardcodedProviderDefaults(provider).fields;
       const entry = providers?.get(provider);
-      if (entry !== undefined) {
-        if (entry.sdk !== undefined) defaults.sdk = entry.sdk;
-        if (entry.baseUrl !== undefined) defaults.baseUrl = entry.baseUrl;
-        mergeFrom(defaults, entry.defaults);
-      }
+      if (entry?.sdk !== undefined) defaults.sdk = entry.sdk;
+      if (entry?.baseUrl !== undefined) defaults.baseUrl = entry.baseUrl;
+      const window = knownContextWindow(defaults.sdk ?? defaultSdk(provider), modelId);
+      if (window !== undefined) defaults.maxContextTokens = window;
+      if (entry !== undefined) mergeFrom(defaults, entry.defaults);
       models.push([providerKey, resolvedModelFromParts(modelId, providerKey, category, provider, modelId, defaultSdk(provider), orFallback(parsed.ok, defaults))]);
       continue;
     }
@@ -506,6 +506,15 @@ function parseAuxSection<T>(
 
 function baseProviderDefaults(): ModelConfigFields {
   return { maxOutputTokens: 32768, maxContextTokens: 200_000 };
+}
+
+const MILLION_TOKEN_CLAUDE =
+  /^claude-(?:fable-5(?:-1)?|mythos-5(?:-1)?|opus-(?:5(?:-5)?|4-[678])|sonnet-(?:5(?:-5)?|4-6)|haiku-5-5)(?:-\d{8})?$/;
+
+export function knownContextWindow(sdk: Sdk | undefined, modelId: string): number | undefined {
+  if (sdk !== "claude_agent" && sdk !== "anthropic") return undefined;
+  if (modelId.endsWith("[1m]") || MILLION_TOKEN_CLAUDE.test(modelId)) return 1_000_000;
+  return modelId.startsWith("claude-") ? 200_000 : undefined;
 }
 
 export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
