@@ -90,6 +90,9 @@ fn paused_line(paused: &Value) -> String {
         "{rounds} round{} kept",
         if rounds == 1 { "" } else { "s" }
     ));
+    if text(paused, "reason") == Some("refusal") {
+        parts.push("on hold until `shore compact`".to_owned());
+    }
     parts.join(" \u{00b7} ")
 }
 
@@ -129,6 +132,13 @@ pub(crate) fn write_status_section<W: Write>(
     }
     if let Some(paused) = held {
         rows.add_toned("paused", &pause_reason_text(paused), Tone::Warn);
+        if text(paused, "reason") == Some("refusal") {
+            rows.add_toned(
+                "hold",
+                "automatic compaction waits for `shore compact`",
+                Tone::Warn,
+            );
+        }
         if let Some(resume) = text(paused, "resume_at") {
             rows.add("retry after", &format_local_timestamp(resume));
         }
@@ -242,6 +252,30 @@ mod tests {
         assert!(line.starts_with("paused: blocked by a usage limit (Claude 5-hour limit is at 100%) \u{00b7} retry after "), "{line}");
         assert!(line.ends_with("8 rounds kept"), "{line}");
         assert_eq!(tone, Tone::Warn);
+    }
+
+    #[test]
+    fn a_refused_pass_shows_the_refusal_and_that_compaction_is_on_hold() {
+        let compaction = serde_json::json!({
+            "running": null,
+            "paused": {
+                "thread": "main", "checkpoint_id": "c1", "reason": "refusal",
+                "detail": "the model refused round 2: API Error: Details: `[cyber]` Request ID: req_1",
+                "resume_at": null, "tool_rounds": 1, "compacted_turns": 28, "updated_at": at(5),
+            },
+            "last": null,
+        });
+        let (line, tone) = status_row(&compaction, now()).unwrap();
+        assert_eq!(
+            line,
+            "paused: the model refused round 2: API Error: Details: `[cyber]` Request ID: req_1 \u{00b7} 1 round kept \u{00b7} on hold until `shore compact`"
+        );
+        assert_eq!(tone, Tone::Warn);
+        let section = rendered(|out| write_status_section(out, &compaction, now()));
+        assert!(
+            section.contains("automatic compaction waits for `shore compact`"),
+            "{section}"
+        );
     }
 
     #[test]

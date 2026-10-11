@@ -48,8 +48,8 @@ MUTANTS = [
      '  if (outcome === undefined) throw internalError("No messages to compact");'),
     ("guards: the slot is never given back",
      R,
-     '      guard.release();',
-     '      void guard;'),
+     '    } finally {\n      guard.release();',
+     '    } finally {\n      void guard;'),
 
     ("prefix: the rebuilt prefix ignores the thread's pinned model",
      R,

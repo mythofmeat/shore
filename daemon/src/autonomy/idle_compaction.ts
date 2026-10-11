@@ -8,6 +8,7 @@ import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
+import { compactionHeld } from "../memory/compaction/checkpoint.ts";
 
 export interface IdleCompactionDeps extends PostArchiveDeps {
   run?: Omit<CompactionRunDeps, "config">;
@@ -21,6 +22,9 @@ export async function runIdleCompaction(
   return await withConversation(threadDataDir(deps.config.dirs.data, character, selected), "update", async () => {
     if (deps.run === undefined) {
       return { events: [], failed: "idle compaction has no compaction dependencies" };
+    }
+    if (await compactionHeld(deps.config.dirs.data, character, selected)) {
+      return { events: [], failed: "compaction is on hold since the model refused it; `shore compact` retries it" };
     }
 
     shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);

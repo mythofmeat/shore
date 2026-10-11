@@ -80,6 +80,7 @@ interface PausedCompactionResult {
   reason: string;
   detail?: string;
   resumeAt?: string;
+  held?: boolean;
 }
 
 interface RotatedResult {
@@ -143,6 +144,13 @@ export class CompactionError extends Error {
 
   static busy(character: string): CompactionError {
     return new CompactionError("busy", `Compaction already running for ${character}`);
+  }
+}
+
+export class CompactionRefused extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "CompactionRefused";
   }
 }
 

@@ -88,6 +88,51 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
 });
 
+test("a checkpoint left holding a refused turn resends the request instead of archiving", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-refused-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+
+  const first = await compact(
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools,
+      scripted([new Error("provider unavailable")])),
+    { keepRecentTurns: 1 },
+  );
+  expect(first.kind).toBe("paused");
+
+  const checkpointPath = join(characterDir, "threads", "main", "compaction-checkpoint.json");
+  const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8")) as {
+    request: SidecarRequest;
+    loop: { pendingTurn?: GenerateResponse };
+  };
+  const refused = response("refusal", [{ type: "text", text: "I can't continue with this." }]);
+  checkpoint.loop.pendingTurn = refused;
+  checkpoint.request.messages.push({ role: "assistant", content: refused.content_blocks });
+  writeDurable(checkpointPath, JSON.stringify(checkpoint));
+
+  const retry = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  const second = await compact(
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, retry),
+    { keepRecentTurns: 1 },
+  );
+
+  expect(second.kind).toBe("compacted");
+  expect(retry.calls).toBe(1);
+  expect(JSON.stringify(retry.requests[0]?.messages)).not.toContain("I can't continue");
+});
+
 test("compaction resumes without repeating writes and commits only after archive", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));

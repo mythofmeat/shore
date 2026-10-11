@@ -61,7 +61,12 @@ import {
   coverageIsRedundant,
   withCoverageStore,
 } from "../coverage.ts";
-import { loadCompactionCheckpoint, removeCompactionCheckpoint } from "./checkpoint.ts";
+import {
+  compactionHeld,
+  loadCompactionCheckpoint,
+  removeCompactionCheckpoint,
+  type CompactionCheckpoint,
+} from "./checkpoint.ts";
 import {
   openArchivalCommit,
   readLiveSource,
@@ -100,10 +105,16 @@ export async function runCompaction(
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
   if (outcome.kind === "paused") {
     const why = outcome.detail ?? outcome.reason;
-    deps.notify?.(`Shore - ${character}`, `Compaction paused after ${outcome.toolRounds} rounds (${why}); conversation kept`);
+    if (outcome.held !== true) deps.notify?.(`Shore - ${character}`, pauseNotice(outcome.toolRounds, outcome.reason, why));
     throw new CompactionPaused(outcome.checkpointId, why, outcome.resumeAt);
   }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
+}
+
+function pauseNotice(rounds: number, reason: string, why: string): string {
+  if (reason !== "refusal") return `Compaction paused after ${rounds} rounds (${why}); conversation kept`;
+  return `The model refused to go on with compaction after ${rounds} rounds; conversation kept. ` +
+    "Automatic compaction is on hold: see why with `shore status`, retry with `shore compact`";
 }
 
 export async function rotateWithoutMemoryWrite(
@@ -177,6 +188,13 @@ export async function runCompactionPass(
     if (guard === undefined) throw CompactionError.busy(character);
 
     const trigger = options.trigger ?? "manual";
+    if (trigger !== "manual") {
+      const held = await compactionHeld(dataDir, character, thread);
+      if (held !== undefined) {
+        guard.release();
+        return heldOutcome(character, held);
+      }
+    }
     const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
     try {
       const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
@@ -187,6 +205,21 @@ export async function runCompactionPass(
       throw e;
     }
   });
+}
+
+function heldOutcome(character: string, checkpoint: CompactionCheckpoint): CompactionOutcome {
+  return {
+    kind: "paused",
+    conversationId: character,
+    checkpointId: checkpoint.id,
+    messageCount: checkpoint.splitAt,
+    compactedTurns: checkpoint.compactedTurns,
+    toolRounds: checkpoint.loop.toolRounds,
+    toolsCalled: checkpoint.loop.toolsCalled,
+    reason: "refusal",
+    ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
+    held: true,
+  };
 }
 
 async function passUnderGuard(
