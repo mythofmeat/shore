@@ -1529,6 +1529,15 @@
           "format": "uint64",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "segment": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false
@@ -1800,6 +1809,66 @@
             "tools_called",
             "truncated_turns",
             "partial_writes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "message_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "turn_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "compacted_turns": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "memory_files_written": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tool_rounds": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "tools_called": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "const": "segment"
+            }
+          },
+          "required": [
+            "status",
+            "character",
+            "segment",
+            "message_count",
+            "turn_count",
+            "compacted_turns",
+            "memory_files_written",
+            "tool_rounds",
+            "tools_called"
           ]
         },
         {
@@ -2252,6 +2321,66 @@
                 "character": {
                   "type": "string"
                 },
+                "segment": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "turn_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "compacted_turns": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "memory_files_written": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tool_rounds": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "tools_called": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                }
+              },
+              "required": [
+                "status",
+                "character",
+                "segment",
+                "message_count",
+                "turn_count",
+                "compacted_turns",
+                "memory_files_written",
+                "tool_rounds",
+                "tools_called"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "character": {
+                  "type": "string"
+                },
                 "message_count": {
                   "type": "integer",
                   "format": "uint",
@@ -2688,6 +2817,66 @@
                 "tools_called",
                 "truncated_turns",
                 "partial_writes"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "character": {
+                  "type": "string"
+                },
+                "segment": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "turn_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "compacted_turns": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "memory_files_written": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tool_rounds": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "tools_called": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                }
+              },
+              "required": [
+                "status",
+                "character",
+                "segment",
+                "message_count",
+                "turn_count",
+                "compacted_turns",
+                "memory_files_written",
+                "tool_rounds",
+                "tools_called"
               ]
             },
             {
@@ -4468,6 +4657,66 @@
                 "tools_called",
                 "truncated_turns",
                 "partial_writes"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "character": {
+                  "type": "string"
+                },
+                "segment": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "turn_count": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "compacted_turns": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "memory_files_written": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tool_rounds": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "tools_called": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                }
+              },
+              "required": [
+                "status",
+                "character",
+                "segment",
+                "message_count",
+                "turn_count",
+                "compacted_turns",
+                "memory_files_written",
+                "tool_rounds",
+                "tools_called"
               ]
             },
             {

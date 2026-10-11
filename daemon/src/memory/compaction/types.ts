@@ -93,6 +93,15 @@ interface RotatedResult {
   retainedTurns: number;
 }
 
+interface SegmentCompactionResult {
+  segment: number;
+  messageCount: number;
+  compactedTurns: number;
+  memoryFilesWritten: string[];
+  toolRounds: number;
+  toolsCalled: string[];
+}
+
 interface TruncatedCompactionResult {
   conversationId: string;
   messageCount: number;
@@ -108,13 +117,15 @@ export type CompactionOutcome =
   | ({ kind: "dry_run" } & DryRunResult)
   | ({ kind: "rotated" } & RotatedResult)
   | ({ kind: "truncated" } & TruncatedCompactionResult)
-  | ({ kind: "paused" } & PausedCompactionResult);
+  | ({ kind: "paused" } & PausedCompactionResult)
+  | ({ kind: "segment" } & SegmentCompactionResult);
 
 export type CompactionErrorKind =
   | "llm"
   | "insufficient_messages"
   | "conversation"
   | "markdown_store"
+  | "not_found"
   | "busy";
 
 export class CompactionError extends Error {

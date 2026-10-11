@@ -1,4 +1,4 @@
-import { writeDurable } from "../src/storage/files.ts";
+import { readDurable, writeDurable } from "../src/storage/files.ts";
 import { listDurableFiles } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
@@ -694,5 +694,76 @@ describe("write_memory = false", () => {
     const got = (await compact(w.engine, w.ctx, { keep_turns: 1 })) as Record<string, unknown>;
 
     expect(got["status"]).toBe("rotated");
+  });
+});
+
+describe("compact --segment", () => {
+  async function archivedWorld(): Promise<{ w: World; requests: SidecarRequest[] }> {
+    const w = await world(SEEDED.map((message) => ({ ...message, version: newMessageVersion() })));
+    w.config.providers = ProviderRegistry.fromSection({ claude_agent: { sdk: "claude_agent" } });
+    w.config.app.memory.git_push = false;
+    await setThreadModel(w.config.dirs.data, "ada", "main", "claude_agent:claude-opus-4-8", "2026-09-15T00:00:00Z");
+    const requests: SidecarRequest[] = [];
+    w.ctx.run.generate = async (request) => {
+      requests.push(structuredClone(request));
+      return {
+        content: "Summary complete", content_blocks: [{ type: "text", text: "Summary complete" }],
+        finish_reason: "end_turn", model: request.model,
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    };
+    expect(await compact(w.engine, w.ctx, { keep_turns: 0 })).toMatchObject({ status: "compacted" });
+    writeDurable(join(w.conversationDir, "active.jsonl"), JSON.stringify({ ...SEEDED[0], msg_id: "m_3", content: "a newer question", content_blocks: [{ type: "text", text: "a newer question" }] }) + "\n");
+    await w.engine.reload();
+    requests.length = 0;
+    return { w, requests };
+  }
+
+  function segmentIndexes(dataDir: string): number[] {
+    const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+    try {
+      return store.entries("ada").map((entry) => entry.idx);
+    } finally {
+      store.close();
+    }
+  }
+
+  test("writes memory from the archived turns and leaves the archive and the conversation alone", async () => {
+    const { w, requests } = await archivedWorld();
+    const [index] = segmentIndexes(w.config.dirs.data);
+    const active = readDurable(join(w.conversationDir, "active.jsonl"));
+
+    const got = await compact(w.engine, w.ctx, { segment: index ?? -1 });
+
+    expect(got).toMatchObject({ status: "segment", segment: index, message_count: 2, compacted_turns: 1, tool_rounds: 0 });
+    expect(requests).toHaveLength(1);
+    const sent = JSON.stringify(requests[0]?.messages);
+    expect(sent).toContain("first question");
+    expect(sent).not.toContain("a newer question");
+    expect(JSON.stringify(requests[0]?.messages.at(-1)?.content)).toContain(`archived segment ${String(index)}`);
+    expect(segmentIndexes(w.config.dirs.data)).toEqual([index ?? -1]);
+    expect(readDurable(join(w.conversationDir, "active.jsonl"))).toBe(active);
+    expect(w.completed).toEqual([["ada", 0]]);
+  });
+
+  test("an unknown segment is not found, and mixing it with other options is refused", async () => {
+    const { w, requests } = await archivedWorld();
+
+    expect(await refusal(async () => await compact(w.engine, w.ctx, { segment: 99 }))).toMatchObject({ kind: "err", code: "not_found" });
+    expect(await refusal(async () => await compact(w.engine, w.ctx, { segment: 0, keep_turns: 1 }))).toMatchObject({ kind: "err", code: "invalid_request" });
+    expect(await refusal(async () => await compact(w.engine, w.ctx, { segment: 0, restart: true }))).toMatchObject({ kind: "err", code: "invalid_request" });
+    expect(requests).toHaveLength(0);
+  });
+
+  test("another pass holding the slot makes it busy", async () => {
+    const { w, requests } = await archivedWorld();
+    const held = tryBeginCompaction(w.config.dirs.data, "ada");
+
+    const got = await refusal(async () => await compact(w.engine, w.ctx, { segment: 0 }));
+    held?.release();
+
+    expect(got).toMatchObject({ kind: "err", code: "busy" });
+    expect(requests).toHaveLength(0);
   });
 });

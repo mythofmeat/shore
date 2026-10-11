@@ -7,11 +7,11 @@ import { shoreLog } from "../../log.ts";
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
-import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
-import { archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
+import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
 import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
 import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
@@ -42,7 +42,7 @@ import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
-import { compact, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
+import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
 import { startPass } from "./activity.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
 import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
@@ -298,7 +298,7 @@ async function passUnderGuard(
       );
     }
 
-    const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
+    const chatRequest = await resolveChatRequest(character, thread, loaded.store.messages(), effective,
       deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
     const resolved = await resolveDeps(character, deps, effective, thread,
       [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
@@ -364,6 +364,86 @@ async function passUnderGuard(
       guard.release();
     }
   }
+}
+
+export async function runSegmentCompactionPass(
+  character: string,
+  deps: CompactionRunDeps,
+  options: { segment: number; thread?: string },
+): Promise<CompactionOutcome> {
+  deps.signal?.throwIfAborted();
+  const dataDir = deps.config.dirs.data;
+  const thread = options.thread ?? (await homeThreadOf(dataDir, character));
+  const archived = readArchivedSegment(dataDir, character, thread, options.segment);
+  const guard = tryBeginCompaction(dataDir, character);
+  if (guard === undefined) throw CompactionError.busy(character);
+  const pass = startPass(dataDir, { character, thread, trigger: "manual", startedAt: Date.now() }, deps.emit, deps.signal);
+  try {
+    const outcome = await segmentPass(character, { ...deps, emit: pass.emit, signal: pass.signal }, thread, options.segment, archived);
+    pass.finish(outcome);
+    return outcome;
+  } catch (e) {
+    pass.fail(e);
+    throw e;
+  } finally {
+    guard.release();
+  }
+}
+
+function readArchivedSegment(
+  dataDir: string,
+  character: string,
+  thread: string,
+  segment: number,
+): { messages: Message[]; priorContext: boolean } {
+  const key = archiveKey(character, thread);
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  try {
+    const entries = store.entries(key);
+    if (!entries.some((entry) => entry.idx === segment)) {
+      const where = thread === MAIN_THREAD ? character : `${character} thread ${thread}`;
+      throw new CompactionError("not_found", `segment ${String(segment)} not found for ${where}`);
+    }
+    const messages = store.readSegment(key, segment);
+    if (messages.length === 0) throw CompactionError.insufficientMessages();
+    return { messages, priorContext: entries.some((entry) => entry.idx < segment) };
+  } finally {
+    store.close();
+  }
+}
+
+async function segmentPass(
+  character: string,
+  deps: CompactionRunDeps,
+  thread: string,
+  segment: number,
+  archived: { messages: Message[]; priorContext: boolean },
+): Promise<CompactionOutcome> {
+  const effective = effectiveConfig(character, deps.config);
+  if (!effective.app.memory.compaction.write_memory) {
+    throw CompactionError.llm("memory writes are turned off (compaction.write_memory = false)");
+  }
+  const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
+    deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, archived.priorContext);
+  const resolved = await resolveDeps(character, deps, effective, thread, archived.messages, chatRequest.tools, false);
+  const outcome = await compactSegment({
+    segment,
+    messages: archived.messages,
+    promptTemplate: resolved.promptTemplate,
+    charName: character,
+    userName: resolved.displayName,
+    llm: resolved.llm,
+    ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
+    chatRequest,
+    tools: resolved.tools,
+    ...(resolved.maxToolIterations === undefined ? {} : { maxToolIterations: resolved.maxToolIterations }),
+    ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
+    ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+  });
+  await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
+    await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
+  });
+  return outcome;
 }
 
 interface ResolvedDeps {
@@ -591,10 +671,11 @@ export async function renderToolOutcome(
 async function resolveChatRequest(
   character: string,
   thread: string,
-  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  messages: readonly Message[],
   effective: LoadedConfig,
   mcpToolDefs: readonly ToolDefinition[],
   env: NodeJS.ProcessEnv | undefined,
+  priorContext?: boolean,
 ): Promise<SidecarRequest> {
   const chatModel = resolveChatModelForCharacter(
     configView(effective),
@@ -606,14 +687,14 @@ async function resolveChatRequest(
     throw CompactionError.llm("No chat model configured for compaction prefix rebuild");
   }
 
-  const hasPriorContext =
+  const hasPriorContext = priorContext ??
     (await segmentCount(conversationRef(effective.dirs.data, character, thread, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
     characterDataDir(effective.dirs.data, character),
     effective,
     chatModel,
-    [...loaded.store.messages()],
+    [...messages],
     hasPriorContext,
     { thread, mcpToolDefs, ...(env === undefined ? {} : { env }) },
   );

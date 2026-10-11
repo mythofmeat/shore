@@ -142,6 +142,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     dry_run: { label: "Preview only", hint: "Uses the provider to preview memory writes without archiving the conversation" },
     restart: { label: "Restart paused work", hint: "Discard the paused checkpoint and summarize again; already written memory files remain" },
     keep_turns: { label: "Retain recent turns", hint: "Zero retains no recent user turns; omit for configured retention" },
+    segment: { label: "Archived segment", hint: "Write memory from this archived segment again; the archive and the conversation stay as they are" },
   }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read", "provider_call"], confirmation: "none" }] }, (context, args) => {
     const engine = engineOf(context);
     const compaction = context.deps.compaction;

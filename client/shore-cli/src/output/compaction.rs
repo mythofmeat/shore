@@ -43,6 +43,10 @@ fn report_summary(report: &Value) -> String {
         "truncated" => "cut off at the token ceiling".to_owned(),
         "paused" => format!("paused: {}", pause_reason_text(report)),
         "dry_run" => "dry run".to_owned(),
+        "segment" => format!(
+            "wrote memory from segment {}",
+            report["segment"].as_u64().unwrap_or(0)
+        ),
         other => other.to_owned(),
     }
 }
@@ -55,7 +59,7 @@ fn pass_summary(pass: &Value) -> (String, Tone) {
         Some(report) => (
             report_summary(report),
             match report["status"].as_str() {
-                Some("compacted" | "rotated" | "dry_run") => Tone::Plain,
+                Some("compacted" | "rotated" | "dry_run" | "segment") => Tone::Plain,
                 _ => Tone::Warn,
             },
         ),
@@ -276,6 +280,23 @@ mod tests {
             section.contains("automatic compaction waits for `shore compact`"),
             "{section}"
         );
+    }
+
+    #[test]
+    fn a_segment_pass_is_reported_as_memory_written_from_that_segment() {
+        let compaction = serde_json::json!({
+            "running": null, "paused": null,
+            "last": { "thread": "main", "trigger": "manual", "started_at": at(12), "ended_at": at(10), "error": null, "report": {
+                "status": "segment", "character": "ada", "segment": 860, "message_count": 158, "turn_count": 28,
+                "compacted_turns": 28, "memory_files_written": ["MEMORY.md"], "tool_rounds": 9, "tools_called": ["bash"],
+            } },
+        });
+        let (line, tone) = status_row(&compaction, now()).unwrap();
+        assert_eq!(
+            line,
+            "last pass wrote memory from segment 860 \u{00b7} 10m ago"
+        );
+        assert_eq!(tone, Tone::Plain);
     }
 
     #[test]

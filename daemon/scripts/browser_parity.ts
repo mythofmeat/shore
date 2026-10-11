@@ -27,7 +27,7 @@ export const TERMINAL_ROUTES: Record<string, Route> = {
   "shore msg delete": route("inline", "delete", { msg_refs: "delete.refs" }),
   "shore log": route("advanced", "log get history_page", { msg_ref: "get.ref", count: "log.turns", segment: "history_page.segment", role: "log.role", follow: "@follow", content: "@content", reasoning: "@thinking", tools: "@tools", subagent_tools: "@subagents" },
     { segment: "inline", follow: "inline", content: "inline", reasoning: "inline", tools: "inline", subagent_tools: "inline" }),
-  "shore compact": route("inline", "compact compact_watch compact_cancel", { keep_turns: "compact.keep_turns", restart: "compact.restart", watch: "@compaction_watch", cancel: "@compaction_cancel" }),
+  "shore compact": route("inline", "compact compact_watch compact_cancel", { keep_turns: "compact.keep_turns", restart: "compact.restart", segment: "compact.segment", watch: "@compaction_watch", cancel: "@compaction_cancel" }),
   "shore segments": route("advanced", "segments"),
   "shore segments show": route("advanced", "segments", { index: "segments.index" }),
   "shore segments exclude": route("advanced", "segments", { index: "segments.index" }),

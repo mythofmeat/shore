@@ -76,8 +76,8 @@ MUTANTS = [
      '    const trigger = "manual";'),
     # --- the commands ---------------------------------------------------------
     ("compact: a second compact starts its own pass instead of following the running one", C,
-     "  if (live !== undefined) {",
-     "  if (false) {"),
+     "  if (live !== undefined) {\n    if (dryRun || restart || keepTurnsOverride !== undefined) {",
+     "  if (false) {\n    if (dryRun || restart || keepTurnsOverride !== undefined) {"),
     ("compact: arguments for a new pass are dropped to follow the running one", C,
      "    if (dryRun || restart || keepTurnsOverride !== undefined) {",
      "    if (false) {"),

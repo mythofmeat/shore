@@ -107,7 +107,7 @@ function messagesFromJsonl(content: string): Message[] {
   return messages;
 }
 
-function conversationView(messages: readonly Message[]): ConversationMessage[] {
+export function conversationView(messages: readonly Message[]): ConversationMessage[] {
   return messages.map((message) => ({
     role: message.role,
     content: message.content,

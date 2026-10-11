@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Mutation pass over what compaction does when the model refuses, when the
-chat turn it runs after is cancelled, and when its archive step fails.
+chat turn it runs after is cancelled, when its archive step fails, and when it
+writes memory from an archived segment.
 """
 import sys
 
 M = "src/memory/compaction/manager.ts"
 R = "src/memory/compaction/run.ts"
+C = "src/commands/compact.ts"
 T = "src/handler/turn.ts"
 I = "src/autonomy/idle_compaction.ts"
 
@@ -62,6 +64,19 @@ MUTANTS = [
      "  } catch (e) {\n    await clearCheckpoint(opts);\n    throw e;\n  }",
      "  } catch (e) {\n    throw e;\n  }"),
 
+    # --- an archived segment ----------------------------------------------------
+    ("segment: the pass is not told the conversation is an old one", M,
+     "    segmentNotice(opts.segment, opts.messages);",
+     '    "";'),
+    ("segment: the pass reads the active conversation instead", R,
+     "  const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,",
+     "  const chatRequest = await resolveChatRequest(character, thread, (await loadMessagesForCompaction(deps.config.dirs.data, character, thread)).store.messages(), effective,"),
+    ("segment: an unknown segment is an internal error", C,
+     '    if (e.kind === "not_found") return notFound(e.message);\n',
+     ""),
+    ("segment: other options are silently ignored", C,
+     "  if (mixed) throw invalidRequest(",
+     "  if (false as boolean) throw invalidRequest("),
 ]
 
 

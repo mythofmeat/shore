@@ -16,7 +16,7 @@ import type { ToolUseEvent } from "../../engine/tool_loop";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
 import { budgetStopIn, describeError } from "../../llm/errors.ts";
-import type { ContentBlock } from "../../engine/types";
+import type { ContentBlock, Message } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
@@ -45,6 +45,7 @@ import {
   type CompactionCheckpoint,
 } from "./checkpoint.ts";
 import {
+  conversationView,
   countTurns,
   openArchivalCommit,
   retainedTurnCount,
@@ -768,6 +769,61 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     toolRounds: state.toolRounds,
     toolsCalled: state.toolsCalled,
   };
+}
+
+export interface SegmentCompactOptions {
+  segment: number;
+  messages: readonly Message[];
+  promptTemplate: string;
+  charName: string;
+  userName: string;
+  llm: CompactionLlm;
+  markdownStore?: MarkdownMemoryStore;
+  chatRequest: SidecarRequest;
+  tools: CompactionTools;
+  maxToolIterations?: number;
+  emit?: FrameSink;
+  signal?: AbortSignal;
+}
+
+export async function compactSegment(opts: SegmentCompactOptions): Promise<CompactionOutcome> {
+  if (opts.markdownStore === undefined) throw CompactionError.markdownStore("markdown memory store not available");
+  const prompt = buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) +
+    segmentNotice(opts.segment, opts.messages);
+  const request = opts.llm.buildInitialRequest(prompt, opts.chatRequest);
+  const workspaceDir = await preparePassWorkspace(opts.markdownStore, opts.tools, opts.charName, false);
+  opts.signal?.throwIfAborted();
+  const state = await runCompactionToolLoop(
+    opts.llm, request, opts.tools, workspaceDir, opts.maxToolIterations, false, undefined, async () => {}, opts.emit,
+  );
+  opts.signal?.throwIfAborted();
+  const written = changedFilePaths(state.writesApplied);
+  const kept = written.length === 0 ? "nothing was written" : `what it wrote stays: ${written.join(", ")}`;
+  if (state.maxRoundsHit) {
+    throw CompactionError.llm(`the pass hit its tool-round ceiling after ${String(state.toolRounds)} rounds; ${kept}`);
+  }
+  if ((state.truncatedTurns ?? 0) > 0) throw CompactionError.llm(`the pass was cut off at the token ceiling; ${kept}`);
+  return {
+    kind: "segment",
+    segment: opts.segment,
+    messageCount: opts.messages.length,
+    compactedTurns: countTurns(conversationView(opts.messages)),
+    memoryFilesWritten: written,
+    toolRounds: state.toolRounds,
+    toolsCalled: state.toolsCalled,
+  };
+}
+
+function segmentNotice(segment: number, messages: readonly Message[]): string {
+  const first = messages[0]?.timestamp;
+  const last = messages.at(-1)?.timestamp;
+  const span = first === undefined || last === undefined ? "" : `, from ${first} to ${last}`;
+  return (
+    `\n\nThis conversation is archived segment ${String(segment)}${span}. It left your active context ` +
+    `some time ago, and its memory is being written again. Conversations since then may already be ` +
+    `recorded, so MEMORY.md and your memory files can be ahead of it. Record what is missing and still ` +
+    `true; do not replace newer information with what this conversation said.`
+  );
 }
 
 export function backgroundCoverageNotice(coverage: CompactionCoverage): string | undefined {

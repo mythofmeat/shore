@@ -2560,6 +2560,7 @@ mod tests {
         let cli = test_cli(CliCommand::Compact {
             keep_turns: None,
             restart: false,
+            segment: None,
             watch: false,
             cancel: false,
             json: false,
