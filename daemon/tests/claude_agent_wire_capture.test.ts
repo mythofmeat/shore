@@ -68,7 +68,7 @@ test("each claude_agent turn's HTTP exchanges are captured under its own call id
     const callIds = store.queryCalls({ limit: 10 }).map(call => call.call_id).sort();
     expect(callIds).toHaveLength(2);
     const messagesCalls = (callId: string) =>
-      store.httpCallsFor(callId).filter(row => new URL(row.url).pathname === "/v1/messages");
+      store.httpCallsFor(callId).filter(row => row.method === "POST" && new URL(row.url).pathname === "/v1/messages");
     const settled = () => callIds.every(id => messagesCalls(id).every(row => row.response_body !== null));
     await until(() => messagesCalls(required(callIds[0])).length === 2 && messagesCalls(required(callIds[1])).length === 1 && settled(),
       "every captured exchange under its own call");
@@ -87,6 +87,14 @@ test("each claude_agent turn's HTTP exchanges are captured under its own call id
     expect(required(captured[2]).request_body).toContain("Does the crab have a name?");
     expect(required(captured[0]).response_body).toContain("mcp__shore__bash");
     expect(required(captured[1]).response_body).toContain(`"stop_reason":"end_turn"`);
+
+    for (const row of captured) {
+      const note = store.httpCallsFor(row.call_id).find(other => other.seq === row.seq - 1);
+      expect(note).toMatchObject({ method: "FILTER", url: row.url, status: null, response_body: null });
+      const { removed } = JSON.parse(required(note?.request_body)) as { removed: { kind: string; text: string }[] };
+      expect(removed.some(item => item.kind === "system reminder" && item.text.includes(email))).toBe(true);
+      expect(removed.some(item => item.kind === "system message" && item.text.startsWith("# Environment"))).toBe(true);
+    }
   } finally {
     uninstall();
     store.close();

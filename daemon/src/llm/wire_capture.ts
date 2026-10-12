@@ -34,6 +34,7 @@ export type WireSink = (exchange: WireExchange) => void;
 const scopes = new AsyncLocalStorage<WireScope>();
 const MAX_CAPTURED_BODY_BYTES = 33_554_432;
 const INSTALLED = Symbol.for("shore.wireCapture.installed");
+let installedSink: WireSink | undefined;
 
 export function newWireScope(
   call_id: string,
@@ -85,6 +86,7 @@ export function installWireCapture(sink: WireSink, now: () => number = Date.now)
   if (target[INSTALLED] === true) return () => {};
   const upstream = globalThis.fetch;
   target[INSTALLED] = true;
+  installedSink = sink;
 
   globalThis.fetch = (async (
     input: Parameters<typeof fetch>[0],
@@ -162,7 +164,32 @@ export function installWireCapture(sink: WireSink, now: () => number = Date.now)
   return () => {
     globalThis.fetch = upstream;
     delete target[INSTALLED];
+    installedSink = undefined;
   };
+}
+
+export function recordWireNote(note: { method: string; url: string; summary: string; body: unknown }): boolean {
+  const scope = scopes.getStore();
+  if (scope === undefined || installedSink === undefined) return false;
+  emit(installedSink, {
+    call_id: scope.call_id,
+    character: scope.character,
+    call_type: scope.call_type,
+    rid: scope.rid,
+    seq: scope.seq++,
+    ts: new Date(),
+    method: note.method,
+    url: note.url,
+    request_headers: [],
+    request_body: new TextEncoder().encode(JSON.stringify(note.body)),
+    status: null,
+    status_text: note.summary,
+    response_headers: null,
+    response_body: null,
+    duration_ms: 0,
+    error: null,
+  });
+  return true;
 }
 
 function emit(sink: WireSink, exchange: WireExchange): void {
