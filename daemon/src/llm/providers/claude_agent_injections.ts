@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { shoreLog } from "../../log.ts";
-import { outsideWireScope, withWireScope, type WireScope } from "../wire_capture.ts";
+import { outsideWireScope, recordWireNote, withWireScope, type WireScope } from "../wire_capture.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
@@ -27,6 +27,12 @@ const CLI_NUDGES = new Set([
 const ROUTE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ROUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;
+const SYSTEM_REMINDER = "system reminder";
+const SYSTEM_MESSAGE = "system message";
+const ROUTINE_CLI_CONTEXT = [/^<system-reminder>\s*As you answer the user's questions, you can use the following context:/, /^# Environment\b/];
+const WARNED_LIMIT = 500;
+const PREVIEW_CHARS = 300;
+const warned = new Set<string>();
 const SYSTEM_MESSAGE_MODELS = new Set([
   "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-fable-5-1", "claude-fable-5",
   "claude-mythos-5-1", "claude-mythos-5", "claude-sonnet-5-5",
@@ -34,6 +40,13 @@ const SYSTEM_MESSAGE_MODELS = new Set([
 
 type Block = Record<string, unknown>;
 type Message = { role?: unknown; content?: unknown; output_config?: unknown };
+
+export interface RemovedContext {
+  at: string;
+  after: string;
+  kind: string;
+  text: string;
+}
 
 export interface SystemNote {
   anchor: string;
@@ -108,11 +121,22 @@ export function insertSystemNotes(body: Record<string, unknown>, notes: readonly
   return { ...body, messages: out };
 }
 
-function isInjected(role: unknown, block: Block): boolean {
-  if (block.type !== "text" || typeof block.text !== "string") return false;
-  if (role === "assistant") return CLI_PLACEHOLDERS.has(block.text.trim());
+function injectedKind(role: unknown, block: Block): string | undefined {
+  if (block.type !== "text" || typeof block.text !== "string") return undefined;
   const text = block.text.trim();
-  return role === "user" && (text.startsWith(REMINDER) || IMAGE_SOURCE.test(text) || CLI_INTERRUPTIONS.has(text) || CLI_NUDGES.has(text));
+  if (role === "assistant") return CLI_PLACEHOLDERS.has(text) ? "placeholder reply" : undefined;
+  if (role !== "user") return undefined;
+  if (text.startsWith(REMINDER)) return SYSTEM_REMINDER;
+  if (IMAGE_SOURCE.test(text)) return "image source note";
+  if (CLI_INTERRUPTIONS.has(text)) return "interruption note";
+  return CLI_NUDGES.has(text) ? "retry nudge" : undefined;
+}
+
+function describe(message: Message | undefined, blocksBefore?: number): string {
+  if (message === undefined) return "the start";
+  const blocks = Array.isArray(message.content) ? (message.content as Block[]).slice(0, blocksBefore) : [{ type: "text" }];
+  const last = blocks.at(-1);
+  return last === undefined ? `an empty ${String(message.role)} message` : `${String(message.role)} ${String(last.type)}`;
 }
 
 function textOf(block: Block): string {
@@ -127,9 +151,15 @@ function isBillingHeader(block: Block): boolean {
   return block.type === "text" && typeof block.text === "string" && block.text.trim().startsWith("x-anthropic-billing-header:");
 }
 
-export function withoutInjectedContext(body: Record<string, unknown>): Record<string, unknown> {
-  const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter(block => !isBillingHeader(block)) } : {};
-  if (!Array.isArray(body.messages)) return { ...body, ...system };
+export function filterInjectedContext(body: Record<string, unknown>): { body: Record<string, unknown>; removed: RemovedContext[] } {
+  const removed: RemovedContext[] = [];
+  const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter((block, index) => {
+    if (!isBillingHeader(block)) return true;
+    removed.push({ at: `system[${String(index)}]`, after: index === 0 ? "the start" : "system text", kind: "billing header", text: textOf(block) });
+    return false;
+  }) } : {};
+  if (!Array.isArray(body.messages)) return { body: { ...body, ...system }, removed };
+  const messages = body.messages as Message[];
   const kept: Message[] = [];
   let anchor: Block | undefined;
   const drop = (block: unknown) => {
@@ -138,18 +168,32 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
       anchor.cache_control = cacheControl;
     }
   };
-  for (const message of body.messages as Message[]) {
+  for (const [index, message] of messages.entries()) {
+    const at = `messages[${String(index)}]`;
+    const before = describe(messages[index - 1]);
     const content = message.content;
+    const removeBlock = (block: Block, blockIndex: number, kind: string) => {
+      drop(block);
+      removed.push({ at: `${at}.content[${String(blockIndex)}]`, after: blockIndex === 0 ? before : describe(message, blockIndex), kind, text: textOf(block) });
+    };
     if (message.role === "system") {
       const controls = Array.isArray(content) ? (content as Block[]).filter(block => block.type !== "text") : [];
-      if (Array.isArray(content)) (content as Block[]).filter(block => block.type === "text").forEach(drop);
+      if (typeof content === "string") removed.push({ at, after: before, kind: SYSTEM_MESSAGE, text: content });
+      if (Array.isArray(content)) {
+        for (const [blockIndex, block] of (content as Block[]).entries()) {
+          if (block.type === "text") removeBlock(block, blockIndex, SYSTEM_MESSAGE);
+        }
+      }
       if (controls.length > 0 || message.output_config !== undefined) {
         kept.push({ ...message, content: controls });
       }
       continue;
     }
     if (typeof content === "string") {
-      if (message.role === "user" && content.trimStart().startsWith(REMINDER)) continue;
+      if (message.role === "user" && content.trimStart().startsWith(REMINDER)) {
+        removed.push({ at, after: before, kind: SYSTEM_REMINDER, text: content });
+        continue;
+      }
       kept.push(message);
       continue;
     }
@@ -158,9 +202,10 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
       continue;
     }
     const blocks: Block[] = [];
-    for (const block of content as Block[]) {
-      if (isInjected(message.role, block)) {
-        drop(block);
+    for (const [blockIndex, block] of (content as Block[]).entries()) {
+      const kind = injectedKind(message.role, block);
+      if (kind !== undefined) {
+        removeBlock(block, blockIndex, kind);
         continue;
       }
       blocks.push(block);
@@ -168,25 +213,59 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
     }
     if (blocks.length > 0) kept.push({ ...message, content: blocks });
   }
-  return { ...body, ...system, messages: kept };
+  return { body: { ...body, ...system, messages: kept }, removed };
 }
 
-function filteredBody(raw: ArrayBuffer, notes: readonly SystemNote[]): ArrayBuffer | string {
+export function withoutInjectedContext(body: Record<string, unknown>): Record<string, unknown> {
+  return filterInjectedContext(body).body;
+}
+
+function filteredBody(raw: ArrayBuffer, notes: readonly SystemNote[]): { body: ArrayBuffer | string; removed: RemovedContext[] } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(raw));
   } catch {
-    return raw;
+    return { body: raw, removed: [] };
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return raw;
-  return JSON.stringify(insertSystemNotes(withoutInjectedContext(parsed as Record<string, unknown>), notes));
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { body: raw, removed: [] };
+  const filtered = filterInjectedContext(parsed as Record<string, unknown>);
+  return { body: JSON.stringify(insertSystemNotes(filtered.body, notes)), removed: filtered.removed };
+}
+
+function preview(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS)}…` : flat;
+}
+
+export function reportRemovedContext(target: URL, removed: readonly RemovedContext[]): void {
+  if (removed.length === 0) return;
+  const kinds = [...new Set(removed.map(item => item.kind))].join(", ");
+  const recorded = recordWireNote({
+    method: "FILTER",
+    url: target.href,
+    summary: `removed ${String(removed.length)} part${removed.length === 1 ? "" : "s"} the CLI added (${kinds})`,
+    body: { removed },
+  });
+  for (const item of removed) {
+    if (item.kind !== SYSTEM_REMINDER && item.kind !== SYSTEM_MESSAGE) continue;
+    const text = item.text.trim();
+    if (text === "" || ROUTINE_CLI_CONTEXT.some(pattern => pattern.test(text))) continue;
+    const key = `${item.kind}\n${text.replace(/\d+/g, "0")}`;
+    if (warned.has(key)) continue;
+    if (warned.size >= WARNED_LIMIT) warned.clear();
+    warned.add(key);
+    shoreLog.warn(`claude_agent: removed a ${item.kind} the CLI added after ${item.after} (${item.at})` +
+      `${recorded ? "; call_log --wire shows it in full" : ""}: ${JSON.stringify(preview(text))}`);
+  }
 }
 
 async function forward(request: Request, target: URL, notes: readonly SystemNote[]): Promise<Response> {
   const headers = new Headers(request.headers);
   for (const name of ["host", "accept-encoding", "content-length"]) headers.delete(name);
   const raw = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
-  const body = raw !== undefined && request.method === "POST" && FILTERED_PATH.test(target.pathname) ? filteredBody(raw, notes) : raw;
+  const filtered = raw !== undefined && request.method === "POST" && FILTERED_PATH.test(target.pathname) ? filteredBody(raw, notes) : undefined;
+  if (filtered !== undefined) reportRemovedContext(target, filtered.removed);
+  const body = filtered === undefined ? raw : filtered.body;
   try {
     const response = await fetch(target, { method: request.method, headers, body, redirect: "manual", signal: request.signal });
     const returned = new Headers(response.headers);
