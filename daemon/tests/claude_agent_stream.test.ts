@@ -593,7 +593,7 @@ test.each([false, true])("repeated regeneration of an eleven-message chat uses t
   }
 });
 
-test("temporary system instructions do not diverge the conversation on the next turn", async () => {
+test("temporary system instructions stay out of the user turn and do not diverge the conversation on the next turn", async () => {
   const path = join(await bookDir(), "sessions.json");
   const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] });
   const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
@@ -611,7 +611,8 @@ test("temporary system instructions do not diverge the conversation on the next 
     if (sent === undefined || typeof sent === "string") throw new Error("Expected structured turn content");
     const turns = [];
     for await (const turn of sent) turns.push(turn.message.content);
-    expect(JSON.stringify(turns)).toContain(instruction);
+    expect(JSON.stringify(turns)).not.toContain(instruction);
+    expect(JSON.stringify(turns)).not.toContain("Continue according to the system instructions.");
     history.push({ role: "assistant", content: [{ type: "text", text: "reply" }] });
     history.push({ role: "user", content: [{ type: "text", text: "continue" }] });
   }

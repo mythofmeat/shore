@@ -421,7 +421,7 @@ function syntheticUserTurn(text: string): PromptMessage {
   return { role: "user", content: text, images: [], content_blocks: [{ type: "text", text }] };
 }
 
-function heartbeatMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
+export function heartbeatMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
   return mode === "never" || instantMs === undefined
     ? "[heartbeat]"
     : `[heartbeat · ${formatWallClock(instantMs, timeZone)}]`;

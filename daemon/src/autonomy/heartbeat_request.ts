@@ -13,7 +13,7 @@ import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from 
 import { resolveDisplayName, type HeartbeatConfig } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
-import { formatWallClock } from "../engine/prompt.ts";
+import { formatWallClock, heartbeatMarker } from "../engine/prompt.ts";
 import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
@@ -178,16 +178,19 @@ export async function prepareHeartbeatRequest(
         )?.maxToolIterations;
 
   const nowMs = deps.now?.() ?? Date.now();
+  const timeZone = deps.timeZone ?? hostZone();
   const template =
     resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
     DEFAULT_HEARTBEAT_TEMPLATE;
   const prompt = renderHeartbeatPrompt(
     template,
-    formatWallClock(nowMs, deps.timeZone ?? hostZone()),
+    formatWallClock(nowMs, timeZone),
     resolveDisplayName(config.app.defaults, deps.env),
     fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
   );
 
+  const marker = heartbeatMarker(nowMs, config.app.behavior.user_message_timestamps, timeZone);
+  request.messages.push({ role: "user", content: [{ type: "text", text: marker }] });
   pushInlineSystem(request, prompt);
 
   return {

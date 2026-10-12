@@ -534,15 +534,38 @@ test("captured native tool streams finish when the consumer stops at done", asyn
   expect(records).toHaveLength(1);
 });
 
-test("native round hooks pass appended wrap-up instructions into the SDK tool result", async () => {
+test("native round hooks keep appended wrap-up instructions out of the SDK tool result", async () => {
   const tools = phase();
   let calls = 0;
-  tools.beforeTurn = (req) => {
+  tools.beforeTurn = (call) => {
     calls += 1;
-    if (calls === 2) req.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
+    if (calls === 2) call.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
   };
   const { agent } = await drive(ONE_CALL, tools);
-  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).toContain("Finish the heartbeat now.");
+  expect(calls).toBe(2);
+  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).not.toContain("Finish the heartbeat now.");
+});
+
+test("a turn whose round hook added text still lets the next turn resume its session", async () => {
+  const path = join(await mkdtemp(join(tmpdir(), "shore-agent-nudge-")), "sessions.json");
+  const agent = fakeAgent(ONE_CALL);
+  const history = request().messages;
+  for (let turn = 0; turn < 2; turn += 1) {
+    const tools = phase();
+    let calls = 0;
+    tools.beforeTurn = (call) => {
+      calls += 1;
+      if (calls === 2) call.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
+    };
+    const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+    const events: StreamEvent[] = [];
+    for await (const event of provider.streamWithTools(request({ messages: structuredClone(history) }), tools)) events.push(event);
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+    if (turn > 0) expect(agent.calls[turn]?.options.resume).toBe("session-fake");
+    history.push(...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks })));
+    history.push({ role: "assistant", content: (done(events).content_blocks ?? []) as ContentBlock[] });
+    history.push({ role: "user", content: [{ type: "text", text: "continue" }] });
+  }
 });
 
 test("compaction cap stops native generation before a further model checkpoint", async () => {
