@@ -534,15 +534,16 @@ test("captured native tool streams finish when the consumer stops at done", asyn
   expect(records).toHaveLength(1);
 });
 
-test("native round hooks pass appended wrap-up instructions into the SDK tool result", async () => {
+test("native round hooks keep appended wrap-up instructions out of the SDK tool result", async () => {
   const tools = phase();
   let calls = 0;
-  tools.beforeTurn = (req) => {
+  tools.beforeTurn = (call) => {
     calls += 1;
-    if (calls === 2) req.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
+    if (calls === 2) call.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
   };
   const { agent } = await drive(ONE_CALL, tools);
-  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).toContain("Finish the heartbeat now.");
+  expect(calls).toBe(2);
+  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).not.toContain("Finish the heartbeat now.");
 });
 
 test("compaction cap stops native generation before a further model checkpoint", async () => {

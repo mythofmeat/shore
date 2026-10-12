@@ -264,13 +264,16 @@ test.each(["legacy replay", "legacy prompt context", "unmirrored session", "edit
       expected = [user("question"), ...(scenario === "edited reply" ? [assistant("edited answer")] : []), user("continue")];
       await drive(expected);
     } else if (scenario === "heartbeat after reply") {
-      expected = [user("question"), assistant("answer"), user("Continue according to the system instructions.")];
-      const messages: WireMessage[] = [...expected.slice(0, -1), { role: "system", content: [{ type: "text", text: "Check outstanding reminders." }] }];
+      expected = [user("question"), assistant("answer"), user("[heartbeat · 9:00 AM]")];
+      const messages: WireMessage[] = [...expected, { role: "system", content: [{ type: "text", text: "Check outstanding reminders." }] }];
       await drive(messages, "heartbeat");
       await drive(messages, "heartbeat");
       expect(JSON.stringify(required(mock.requests.at(-1)).body.system)).not.toContain("Check outstanding reminders.");
-      expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).toContain("Check outstanding reminders.");
+      expect(required(mock.requests.at(-1)).body.messages.at(-1)).toMatchObject({ role: "user", content: [
+        { type: "text", text: "[heartbeat · 9:00 AM]" }, { type: "text", text: "Check outstanding reminders." },
+      ] });
       expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).not.toContain("native reply");
+      expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).not.toContain("Continue according to the system instructions.");
     } else {
       expected = [user("question"), assistant("answer"), user("run background task")];
       await drive(expected, scenario);

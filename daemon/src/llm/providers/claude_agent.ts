@@ -42,7 +42,7 @@ import { compareByCodePoint } from "../../util/sort.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 import { nativeHistoryStore, seedNativeHistory, throwawayHistoryStore } from "./claude_agent_history.ts";
-import { contextFilterEnvironment } from "./claude_agent_injections.ts";
+import { anchorKeys, contextFilterEnvironment, resultAnchor, type SystemNote } from "./claude_agent_injections.ts";
 import { currentWireScope } from "../wire_capture.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
@@ -175,6 +175,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
 interface NativeTurnPlan extends TurnPlan {
   content: ContentBlock[];
   sessionStore: SessionStore;
+  seeded?: true;
 }
 
 async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: string, key: string, record: SessionRecord | undefined): Promise<NativeTurnPlan> {
@@ -205,6 +206,7 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
     content: seeded.promptContent,
     sessionStore: seeded.sessionStore,
     resume: seeded.sessionId,
+    seeded: true,
     fork: false,
     keptEntries: req.messages.slice(0, -1).map((message, index) => {
       const uuid = seeded.assistantUuids.get(index);
@@ -214,16 +216,43 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
   };
 }
 
-function withSystemInstructions(req: SidecarRequest): { request: SidecarRequest; instructions: ContentBlock[] } {
-  const instructions: ContentBlock[] = req.messages
-    .filter((message) => message.role === "system")
-    .map((message) => ({ type: "text", text: message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n") }));
-  if (instructions.length === 0 && req.messages.at(-1)?.role !== "assistant") return { request: req, instructions };
+function splitSystemNotes(req: SidecarRequest): { request: SidecarRequest; notes: SystemNote[] } {
+  if (!req.messages.some((message) => message.role === "system")) return { request: req, notes: [] };
   const messages = req.messages.filter((message) => message.role !== "system");
-  if (messages.at(-1)?.role === "assistant") {
-    messages.push({ role: "user", content: [{ type: "text", text: "Continue according to the system instructions." }] });
+  const keys = anchorKeys(messages);
+  const notes: SystemNote[] = [];
+  let before = 0;
+  for (const message of req.messages) {
+    if (message.role !== "system") {
+      before += 1;
+      continue;
+    }
+    const text = message.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
+    if (text.trim() === "") continue;
+    let reply = before;
+    while (reply < messages.length && messages[reply]?.role !== "assistant") reply += 1;
+    const anchor = messages[reply - 1]?.role === "user" ? keys[reply - 1]?.[0] : undefined;
+    if (anchor === undefined) {
+      shoreLog.warn("claude_agent: left out a system message with no user turn before the reply it applies to");
+      continue;
+    }
+    notes.push({ anchor, text });
   }
-  return { request: { ...req, messages }, instructions };
+  return { request: { ...req, messages }, notes };
+}
+
+function turnNotes(record: SessionRecord | undefined, plan: NativeTurnPlan, messages: readonly WireMessage[], current: readonly SystemNote[]): SystemNote[] {
+  const prefix = new Set(plan.seeded === true ? [] : anchorKeys(messages.slice(0, plan.keptEntries.length)).flat());
+  const notes: SystemNote[] = (record?.systemNotes ?? []).flatMap(({ anchor, text }) => prefix.has(anchor) ? [{ anchor, text }] : []);
+  for (const note of current) {
+    if (!notes.some((kept) => kept.anchor === note.anchor && kept.text === note.text)) notes.push({ ...note });
+  }
+  return notes;
+}
+
+function deliveredNotes(notes: readonly SystemNote[]): Pick<SessionRecord, "systemNotes"> {
+  const sent = notes.flatMap((note) => note.delivered === true ? [{ anchor: note.anchor, text: note.text }] : []);
+  return sent.length === 0 ? {} : { systemNotes: sent };
 }
 
 export function nextEntries(
@@ -332,9 +361,10 @@ function buildOptions(
   req: SidecarRequest,
   plan: NativeTurnPlan,
   abort: AbortController,
-  surface?: AgentToolSurface,
+  surface: AgentToolSurface | undefined,
+  notes: readonly SystemNote[],
 ): Options {
-  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url, currentWireScope()) };
+  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url, currentWireScope(), notes) };
   if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
 
   const system = systemToText(req.system);
@@ -685,13 +715,14 @@ async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessa
   } as SDKUserMessage;
 }
 
-function agentPrompt(plan: NativeTurnPlan, instructions: ContentBlock[] = []): AgentPrompt {
-  return oneUserTurn([...plan.content, ...instructions]);
+function agentPrompt(plan: NativeTurnPlan): AgentPrompt {
+  return oneUserTurn(plan.content);
 }
 
 const KEEPALIVE_REFUSAL = "a keepalive ping runs no tools";
+const KEEPALIVE_PROMPT: ContentBlock[] = [{ type: "text", text: "." }];
 
-export async function keepalivePlan(req: SidecarRequest, record: SessionRecord | undefined, path: string, key: string): Promise<NativeTurnPlan> {
+export async function keepalivePlan(req: SidecarRequest, record: SessionRecord | undefined, path: string, key: string): Promise<NativeTurnPlan & { notes: SystemNote[] }> {
   if (record?.version !== SESSION_BOOK_VERSION || record.storedTranscript !== true) return await unstoredKeepalivePlan(req);
   const kept = record.pendingAssistantUuids?.at(-1);
   const store = nativeHistoryStore(path, key);
@@ -701,20 +732,25 @@ export async function keepalivePlan(req: SidecarRequest, record: SessionRecord |
     fork: true,
     keptEntries: [],
     delivered: [],
-    content: [{ type: "text", text: "." }],
+    content: KEEPALIVE_PROMPT,
     sessionStore: { ...store, append: () => Promise.resolve() },
+    notes: (record.systemNotes ?? []).map(({ anchor, text }) => ({ anchor, text })),
   };
 }
 
-async function unstoredKeepalivePlan(req: SidecarRequest): Promise<NativeTurnPlan> {
-  const { request } = withSystemInstructions(await limitRequestImages(req));
+async function unstoredKeepalivePlan(req: SidecarRequest): Promise<NativeTurnPlan & { notes: SystemNote[] }> {
+  const limited = await limitRequestImages(req);
+  const answered = limited.messages.filter((message) => message.role !== "system").at(-1)?.role === "assistant";
+  const { request, notes } = splitSystemNotes(answered
+    ? { ...limited, messages: [...limited.messages, { role: "user", content: KEEPALIVE_PROMPT }] }
+    : limited);
   const history = throwawayHistoryStore();
   const sessionStore = { ...history, append: () => Promise.resolve() };
   if (request.messages.length === 1) {
-    return { fork: false, keptEntries: [], delivered: [], content: request.messages[0]?.content ?? [], sessionStore };
+    return { fork: false, keptEntries: [], delivered: [], content: request.messages[0]?.content ?? [], sessionStore, notes };
   }
   const seeded = await seedNativeHistory(request, history);
-  return { resume: seeded.sessionId, fork: true, keptEntries: [], delivered: [], content: seeded.promptContent, sessionStore };
+  return { resume: seeded.sessionId, fork: true, keptEntries: [], delivered: [], content: seeded.promptContent, sessionStore, notes };
 }
 
 function keepaliveSurface(req: SidecarRequest): AgentToolSurface | undefined {
@@ -766,8 +802,9 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const prepared = withSystemInstructions(await limitRequestImages(req));
+    const prepared = splitSystemNotes(await limitRequestImages(req));
     req = prepared.request;
+    let notes: SystemNote[] = [];
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
@@ -795,8 +832,9 @@ export class ClaudeAgentProvider implements SidecarProvider {
       yield { type: "start", model: req.model };
       const native = await withNativeHistory(plan, req, path, key, record);
       plan = native;
+      notes = turnNotes(record, native, req.messages, prepared.notes);
 
-      const run = this.#runQuery({ prompt: agentPrompt(native, prepared.instructions), options: buildOptions(req, native, abort) });
+      const run = this.#runQuery({ prompt: agentPrompt(native), options: buildOptions(req, native, abort, undefined, notes) });
 
       for await (const event of anthropicContentEvents(rawEventsOf(run, seen, restartRound), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
@@ -812,6 +850,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
           entries: nextEntries(plan, record?.pendingAssistantUuids),
           storedTranscript: true,
           model: req.model,
+          ...deliveredNotes(notes),
           ...(seen.assistantUuids.length === 0
             ? {}
             : {
@@ -867,7 +906,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     try {
       const run = this.#runQuery({
         prompt: agentPrompt(plan),
-        options: buildOptions(req, plan, abort, keepaliveSurface(req)),
+        options: buildOptions(req, plan, abort, keepaliveSurface(req), plan.notes),
       });
       const usage = await keepaliveUsage(run);
       const total = Date.now() - startedAt;
@@ -934,6 +973,7 @@ function withBareName(event: StreamEvent, names: ToolNames): StreamEvent {
 class RoundLog {
   readonly #phase: ToolPhase;
   readonly #request: SidecarRequest;
+  readonly #notes: SystemNote[];
   #assembler = new BlockAssembler();
   #results: ContentBlock[] = [];
   #claimed = new Set<string>();
@@ -949,9 +989,10 @@ class RoundLog {
   iterations = 0;
   stopped = false;
 
-  constructor(phase: ToolPhase, request: SidecarRequest) {
+  constructor(phase: ToolPhase, request: SidecarRequest, notes: SystemNote[]) {
     this.#phase = phase;
     this.#request = request;
+    this.#notes = notes;
     this.#ready = new Promise((resolve) => { this.#resolveReady = resolve; });
   }
 
@@ -1046,11 +1087,11 @@ class RoundLog {
       .flatMap((message, index) => message.content.slice(before[index] ?? 0)
         .flatMap((block) => block.type === "text" ? [block.text] : []))
       .join("\n");
-    const last = this.#results.at(-1);
-    if (added !== "" && last?.type === "tool_result") {
-      last.content = typeof last.content === "string"
-        ? `${last.content}\n\n${added}`
-        : [...last.content, { type: "text", text: added }];
+    this.#request.messages.splice(before.length);
+    for (const [index, message] of this.#request.messages.entries()) message.content.splice(before[index] ?? message.content.length);
+    const result = results.find((block) => block.type === "tool_result");
+    if (added.trim() !== "" && result?.type === "tool_result") {
+      this.#notes.push({ anchor: resultAnchor(result.tool_use_id), text: added });
     }
   }
 
@@ -1126,7 +1167,8 @@ export async function* claudeAgentToolLoopEvents(
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
 
   const names = new ToolNames(defs);
-  const round = new RoundLog(tools, req);
+  const notes: SystemNote[] = [];
+  const round = new RoundLog(tools, req, notes);
   const cap = req.max_tool_iterations;
 
   let toolFailure: unknown;
@@ -1160,19 +1202,20 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
-    const prepared = withSystemInstructions(await limitRequestImages(req));
+    const prepared = splitSystemNotes(await limitRequestImages(req));
     Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
     const native = await withNativeHistory(plan, req, path, key, record);
     plan = native;
+    notes.push(...turnNotes(record, native, req.messages, prepared.notes));
     const run = (deps.runQuery ?? query)({
-      prompt: agentPrompt(native, prepared.instructions),
+      prompt: agentPrompt(native),
       options: buildOptions(req, native, abort, {
         instance,
         canUseTool,
         maxTurns: cap === undefined ? TURN_BACKSTOP : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
         timeoutMs: MCP_TOOL_TIMEOUT_MS,
-      }),
+      }, notes),
     });
 
     const events = anthropicContentEvents(
@@ -1206,6 +1249,7 @@ export async function* claudeAgentToolLoopEvents(
         ],
         storedTranscript: true,
         model: req.model,
+        ...deliveredNotes(notes),
         ...(pendingAssistantUuids.length === 0
           ? {}
           : {
