@@ -19,6 +19,7 @@ TESTS = [
     "tests/claude_agent_loop.test.ts",
     "tests/request.test.ts",
     "tests/claude_agent_keepalive.test.ts",
+    "tests/claude_agent_system_messages.test.ts",
 ]
 
 MUTANTS = [
@@ -192,11 +193,10 @@ MUTANTS = [
      AGENT,
      "  if (request.messages.length === 1) {\n",
      "  if (request.messages.length >= 1) {\n"),
-    ("keepalive: system notes stay in the seeded history, unlike the turn it warms "
-     "(EQUIVALENT — Claude Code leaves a seeded system entry out of the request it sends)",
+    ("keepalive: the ping leaves out the system notes the next turn sends, so it warms another prefix",
      AGENT,
-     "  const { request } = withSystemInstructions(await limitRequestImages(req));\n  const history",
-     "  const request = await limitRequestImages(req);\n  const history"),
+     "content: seeded.promptContent, sessionStore, notes };",
+     "content: seeded.promptContent, sessionStore, notes: [] };"),
     ("keepalive: a ping is an ordinary generation, written into the chat",
      AGENT,
      '    if (req.context?.call_type === "keepalive") return await this.#keepalive(req, signal);\n',
@@ -239,6 +239,29 @@ MUTANTS = [
      AGENT,
      "      const uuid = pending.shift();\n      if (uuid !== undefined) entry.uuid = uuid;",
      "      entry.uuid = pending.shift() as string;"),
+
+    # --- system messages the turn carries ------------------------------------
+    ("notes: a system message attaches to the reply instead of the user turn before it",
+     AGENT,
+     "    const anchor = messages[reply - 1]?.role === \"user\" ? keys[reply - 1]?.[0] : undefined;",
+     "    const anchor = messages[reply]?.role === \"user\" ? keys[reply]?.[0] : undefined;"),
+    ("notes: notes from earlier turns are forgotten, so the next turn edits the history the model saw",
+     AGENT,
+     "  return sent.length === 0 ? {} : { systemNotes: sent };",
+     "  return {};"),
+    ("notes: notes past the fork point are carried, so a second regenerate stacks the first's guidance",
+     AGENT,
+     "prefix.has(anchor) ? [{ anchor, text }] : []",
+     "[{ anchor, text }]"),
+    ("notes: a round hook's text is dropped instead of following the tool results",
+     AGENT,
+     "      this.#notes.push({ anchor: resultAnchor(result.tool_use_id), text: added });\n",
+     ""),
+    ("notes: a round hook's text stays in the request, so the next turn's hashes see it",
+     AGENT,
+     "    this.#request.messages.splice(before.length);\n"
+     "    for (const [index, message] of this.#request.messages.entries()) message.content.splice(before[index] ?? message.content.length);\n",
+     ""),
 
     # --- the two names every tool has ----------------------------------------
     ("names: tools are advertised bare, under names the CLI cannot route",

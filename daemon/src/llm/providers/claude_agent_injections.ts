@@ -290,7 +290,7 @@ class ContextFilter {
   readonly #keys = new Map<string, string>();
   readonly #routes = new Map<string, FilterRoute>();
 
-  baseUrl(upstream: string, scope?: WireScope, notes: readonly SystemNote[] = []): string {
+  baseUrl(upstream: string, scope?: WireScope, notes?: readonly SystemNote[]): string {
     const server = this.#server ??= outsideWireScope(() => this.#start());
     const origin = upstream.replace(/\/+$/, "");
     let key = this.#keys.get(origin);
@@ -300,11 +300,11 @@ class ContextFilter {
       this.#upstreams.set(key, origin);
     }
     const base = `http://127.0.0.1:${String(server.port)}/${key}`;
-    if (scope === undefined && notes.length === 0) return base;
+    if (scope === undefined && notes === undefined) return base;
     const now = Date.now();
     for (const [routeKey, route] of this.#routes) if (now - route.at > ROUTE_TTL_MS) this.#routes.delete(routeKey);
     const routeKey = randomUUID();
-    this.#routes.set(routeKey, { scope, notes, at: now });
+    this.#routes.set(routeKey, { scope, notes: notes ?? [], at: now });
     return `${base}/${routeKey}`;
   }
 
@@ -333,7 +333,7 @@ class ContextFilter {
 
 const filter = new ContextFilter();
 
-export function contextFilterEnvironment(baseUrl: string | undefined, scope?: WireScope, notes: readonly SystemNote[] = []): Record<string, string> {
+export function contextFilterEnvironment(baseUrl: string | undefined, scope?: WireScope, notes?: readonly SystemNote[]): Record<string, string> {
   const upstream = baseUrl ?? ANTHROPIC_API;
   const firstParty = URL.parse(upstream)?.host === new URL(ANTHROPIC_API).host;
   return {

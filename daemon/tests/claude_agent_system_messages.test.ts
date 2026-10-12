@@ -152,6 +152,23 @@ test("a heartbeat's instructions and its wrap-up nudge arrive as system messages
   }
 }, 60_000);
 
+test("text a round hook adds reaches the model even when the turn started with no system messages and no wire capture", async () => {
+  const { mock, turn, cleanup } = await harness([
+    { toolUses: [{ id: "toolu_look", name: "mcp__shore__bash", input: { command: "ls" } }] },
+    { text: "Three files." },
+  ]);
+  let rounds = 0;
+  try {
+    await turn([user("What is in the folder?")], { tools: { beforeTurn: (req) => {
+      rounds += 1;
+      if (rounds === 2) req.messages.at(-1)?.content.push({ type: "text", text: "WRAP UP NOW" });
+    } } });
+    expect(shape(sentMessages(mock, 1)).slice(-3)).toEqual(["assistant: <tool_use>", "user: <tool_result>", "system: WRAP UP NOW"]);
+  } finally {
+    await cleanup();
+  }
+}, 60_000);
+
 test("a /sys note between turns applies to the next reply, after the user message that asks for it", async () => {
   const { mock, turn, cleanup } = await harness([{ text: "First." }, { text: "Second." }]);
   try {
