@@ -852,6 +852,31 @@
           "env": null
         },
         {
+          "id": "segment",
+          "short": null,
+          "long": "segment",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Write memory from an archived segment (see `shore segments`) as if it were being compacted now. The archive and the conversation are left as they are. Use it to redo a segment whose pass wrote nothing",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [
+            "keep_turns",
+            "restart",
+            "watch",
+            "cancel"
+          ],
+          "env": null
+        },
+        {
           "id": "watch",
           "short": null,
           "long": "watch",

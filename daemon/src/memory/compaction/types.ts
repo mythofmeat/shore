@@ -29,7 +29,6 @@ export interface ConversationMessage {
   isToolResultOnly: boolean;
   isAutonomous: boolean;
   version?: string;
-  tokens?: number;
 }
 
 export interface CompactionCoverage {
@@ -80,6 +79,7 @@ interface PausedCompactionResult {
   reason: string;
   detail?: string;
   resumeAt?: string;
+  held?: boolean;
 }
 
 interface RotatedResult {
@@ -90,6 +90,15 @@ interface RotatedResult {
   compactedTurns: number;
   retainedCount: number;
   retainedTurns: number;
+}
+
+interface SegmentCompactionResult {
+  segment: number;
+  messageCount: number;
+  compactedTurns: number;
+  memoryFilesWritten: string[];
+  toolRounds: number;
+  toolsCalled: string[];
 }
 
 interface TruncatedCompactionResult {
@@ -107,13 +116,15 @@ export type CompactionOutcome =
   | ({ kind: "dry_run" } & DryRunResult)
   | ({ kind: "rotated" } & RotatedResult)
   | ({ kind: "truncated" } & TruncatedCompactionResult)
-  | ({ kind: "paused" } & PausedCompactionResult);
+  | ({ kind: "paused" } & PausedCompactionResult)
+  | ({ kind: "segment" } & SegmentCompactionResult);
 
 export type CompactionErrorKind =
   | "llm"
   | "insufficient_messages"
   | "conversation"
   | "markdown_store"
+  | "not_found"
   | "busy";
 
 export class CompactionError extends Error {
@@ -143,6 +154,13 @@ export class CompactionError extends Error {
 
   static busy(character: string): CompactionError {
     return new CompactionError("busy", `Compaction already running for ${character}`);
+  }
+}
+
+export class CompactionRefused extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "CompactionRefused";
   }
 }
 

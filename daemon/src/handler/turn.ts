@@ -10,6 +10,8 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
+import { compactionHeld } from "../memory/compaction/checkpoint.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
 import { characterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
@@ -216,6 +218,7 @@ export async function maybeCompact(
 ): Promise<boolean> {
   const turnCount = engine.turnCount();
   const contextTokens = contextTokensFor(result.context_usage ?? result.usage);
+  if (await compactionHeld(dataDir, charName, engine.thread ?? await homeThreadOf(dataDir, charName))) return false;
   if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return false;
 
   await runInlineCompaction(ctx, engine, charName, config, dataDir, rid, runner);

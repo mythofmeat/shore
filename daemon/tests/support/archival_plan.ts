@@ -13,14 +13,11 @@ export async function planFor(
   dataDir: string,
   character: string,
   thread: string,
-  settings: Partial<ArchivalPlanSettings> & { keepRecentTurns: number },
+  settings: ArchivalPlanSettings,
 ): Promise<ArchivalPlan> {
   const loaded = await loadMessagesForCompaction(dataDir, character, thread);
   return required(
-    await resolveArchivalPlan(dataDir, character, thread, loaded, {
-      maxContextTokens: 0,
-      ...settings,
-    }),
+    await resolveArchivalPlan(dataDir, character, thread, loaded, settings),
   );
 }
 
@@ -30,18 +27,18 @@ export function jsonlOf(messages: readonly Message[]): string {
 
 export function maybePlanOf(
   messages: readonly Message[],
-  settings: Partial<ArchivalPlanSettings> & { keepRecentTurns: number },
+  settings: ArchivalPlanSettings,
 ): ArchivalPlan | undefined {
   return buildArchivalPlan(
     archivalPlanInput(jsonlOf(messages)),
-    { maxContextTokens: 0, ...settings },
+    settings,
     undefined,
   );
 }
 
 export function planOf(
   messages: readonly Message[],
-  settings: Partial<ArchivalPlanSettings> & { keepRecentTurns: number },
+  settings: ArchivalPlanSettings,
 ): ArchivalPlan {
   return required(maybePlanOf(messages, settings));
 }

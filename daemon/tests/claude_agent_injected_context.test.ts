@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +8,8 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
-import { withoutInjectedContext } from "../src/llm/providers/claude_agent_injections.ts";
+import { filterInjectedContext, reportRemovedContext, withoutInjectedContext } from "../src/llm/providers/claude_agent_injections.ts";
+import { installWireCapture, newWireScope, withWireScope, type WireExchange } from "../src/llm/wire_capture.ts";
 import type { AnthropicRequestRecord } from "../src/testing/mock_anthropic.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
@@ -125,7 +126,7 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
   }
 }, 90_000);
 
-test("withoutInjectedContext drops injected blocks, keeps their cache breakpoint on the block before, and keeps the CLI's effort and tool controls", () => {
+test("the context filter drops injected blocks, reports each with where it sat, keeps their cache breakpoint on the block before, and keeps the CLI's effort and tool controls", () => {
   const ttl = { type: "ephemeral", ttl: "1h" };
   const body = {
     model: "claude-opus-5",
@@ -153,7 +154,8 @@ test("withoutInjectedContext drops injected blocks, keeps their cache breakpoint
       { role: "system", content: "<system-reminder>folded</system-reminder>", clear_at: "next_user_message" },
     ],
   };
-  expect(withoutInjectedContext(body)).toEqual({
+  const filtered = filterInjectedContext(body);
+  expect(filtered.body).toEqual({
     model: "claude-opus-5",
     system: [
       { type: "text", text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", cache_control: ttl },
@@ -169,6 +171,55 @@ test("withoutInjectedContext drops injected blocks, keeps their cache breakpoint
       { role: "system", content: [{ type: "tool_addition", tool: { type: "tool_definition", definition: { name: "look" } } }] },
     ],
   });
+  expect(filtered.removed).toEqual([
+    { at: "system[0]", after: "the start", kind: "billing header", text: "x-anthropic-billing-header: cc_version=1; cc_entrypoint=sdk-ts; cch=00000;" },
+    { at: "messages[0].content[0]", after: "the start", kind: "system reminder", text: "<system-reminder>\nThe user's email address is x.\n</system-reminder>\n" },
+    { at: "messages[2].content[1]", after: "user image", kind: "image source note", text: "[Image: source: /tmp/claude/images/1.png]" },
+    { at: "messages[3]", after: "user text", kind: "system reminder", text: "<system-reminder>context</system-reminder>" },
+    { at: "messages[4].content[0]", after: "user text", kind: "placeholder reply", text: "No response requested." },
+    { at: "messages[5].content[0]", after: "assistant text", kind: "interruption note", text: "[Request interrupted by user for tool use]" },
+    { at: "messages[7].content[0]", after: "user text", kind: "system message", text: "# Environment" },
+    { at: "messages[9].content[0]", after: "assistant text", kind: "system message", text: "<system-reminder>later</system-reminder>" },
+    { at: "messages[10]", after: "system tool_addition", kind: "system message", text: "<system-reminder>folded</system-reminder>" },
+  ]);
+});
+
+test("what the filter removes is kept in the wire capture, and a reminder or system message it has not seen before is logged once", () => {
+  const exchanges: WireExchange[] = [];
+  const uninstall = installWireCapture(exchange => exchanges.push(exchange));
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const target = new URL("https://api.anthropic.com/v1/messages?beta=true");
+  const sent = (text: string) => ({ messages: [
+    { role: "user", content: [
+      { type: "text", text: "<system-reminder>\nAs you answer the user's questions, you can use the following context:\n# userEmail\nx\n</system-reminder>" },
+      { type: "text", text: "Draw the next plate." },
+    ] },
+    { role: "system", content: "# Environment\nToday's date is 2026-10-12." },
+    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "python3 plate.py" } }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "plate.svg" }] },
+    { role: "system", content: text },
+  ] });
+  try {
+    withWireScope(newWireScope("call-1", { character: "heidi", call_type: "heartbeat" }), () => {
+      reportRemovedContext(target, filterInjectedContext(sent("Reminder 1 from the server.")).removed);
+      reportRemovedContext(target, filterInjectedContext(sent("Reminder 2 from the server.")).removed);
+    });
+    reportRemovedContext(target, filterInjectedContext(sent("Reminder 3 from the server.")).removed);
+
+    expect(exchanges.map(({ call_id, seq, call_type, method, url, status, status_text, response_body }) =>
+      ({ call_id, seq, call_type, method, url, status, status_text, response_body }))).toEqual([0, 1].map(seq => ({
+      call_id: "call-1", seq, call_type: "heartbeat", method: "FILTER", url: target.href, status: null,
+      status_text: "removed 3 parts the CLI added (system reminder, system message)", response_body: null,
+    })));
+    const removed = JSON.parse(new TextDecoder().decode(exchanges[0]?.request_body ?? new Uint8Array())) as { removed: unknown[] };
+    expect(removed.removed).toContainEqual({ at: "messages[4]", after: "user tool_result", kind: "system message", text: "Reminder 1 from the server." });
+    expect(warn.mock.calls.map(call => String(call[0]))).toEqual([
+      "claude_agent: removed a system message the CLI added after user tool_result (messages[4]); call_log --wire shows it in full: \"Reminder 1 from the server.\"",
+    ]);
+  } finally {
+    warn.mockRestore();
+    uninstall();
+  }
 });
 
 test("withoutInjectedContext leaves Shore's own text, tool results and assistant text alone", () => {

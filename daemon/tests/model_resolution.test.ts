@@ -16,6 +16,7 @@ import {
   firstChatModel,
   hardcodedProviderDefaults,
   keepaliveToString,
+  knownContextWindow,
   mergeFrom,
   orFallback,
   readModelConfigFields,
@@ -326,6 +327,24 @@ function expectOnlyWhatIsSet(
     expect(value, `${where}: ${field} is unset, because nothing set it`).toBeNull();
   }
 }
+
+describe("knownContextWindow", () => {
+  test.each([
+    ["claude_agent", "claude-opus-5-5", 1_000_000],
+    ["claude_agent", "claude-fable-5-1[1m]", 1_000_000],
+    ["anthropic", "claude-sonnet-5-5", 1_000_000],
+    ["anthropic", "claude-haiku-5-5", 1_000_000],
+    ["anthropic", "claude-opus-4-6", 1_000_000],
+    ["anthropic", "claude-mythos-5-1", 1_000_000],
+    ["anthropic", "claude-opus-4-8-20260101", 1_000_000],
+    ["anthropic", "claude-haiku-4-5-20251001", 200_000],
+    ["anthropic", "claude-opus-4-5", 200_000],
+    ["claude_agent", "opus", undefined],
+    ["openrouter", "claude-opus-5-5", undefined],
+  ] as const)("%s %s", (sdk, modelId, expected) => {
+    expect(knownContextWindow(sdk, modelId)).toBe(expected);
+  });
+});
 
 describe("resolvedModelFromParts", () => {
   for (const [i, row] of fx.from_parts.entries()) {

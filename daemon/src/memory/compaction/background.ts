@@ -5,7 +5,6 @@ import { shoreLog } from "../../log.ts";
 import { threadDataDir } from "../../config/dirs.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
-import { estimateMessageTokens } from "../../engine/prompt.ts";
 import type { Message } from "../../engine/types";
 import type { CompactionOutcome, ConversationMessage } from "./types";
 
@@ -25,7 +24,6 @@ function toConversationMessage(msg: Message): ConversationMessage {
     isToolResultOnly: isToolResultOnly(msg),
     isAutonomous: msg.origin === "autonomous",
     ...(msg.version === undefined ? {} : { version: msg.version }),
-    tokens: estimateMessageTokens(msg),
   };
 }
 
@@ -114,6 +112,6 @@ export async function pushAfterCompaction(
   outcome: CompactionOutcome,
   push: () => Promise<void>,
 ): Promise<void> {
-  if (!gitPushEnabled || outcome.kind !== "compacted") return;
+  if (!gitPushEnabled || (outcome.kind !== "compacted" && outcome.kind !== "segment")) return;
   await push();
 }

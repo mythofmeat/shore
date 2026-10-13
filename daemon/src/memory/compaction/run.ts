@@ -7,11 +7,11 @@ import { shoreLog } from "../../log.ts";
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
-import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
-import { archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
+import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
 import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
 import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
@@ -42,7 +42,7 @@ import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
-import { compact, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
+import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
 import { startPass } from "./activity.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
 import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
@@ -61,7 +61,12 @@ import {
   coverageIsRedundant,
   withCoverageStore,
 } from "../coverage.ts";
-import { loadCompactionCheckpoint, removeCompactionCheckpoint } from "./checkpoint.ts";
+import {
+  compactionHeld,
+  loadCompactionCheckpoint,
+  removeCompactionCheckpoint,
+  type CompactionCheckpoint,
+} from "./checkpoint.ts";
 import {
   openArchivalCommit,
   readLiveSource,
@@ -100,10 +105,16 @@ export async function runCompaction(
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
   if (outcome.kind === "paused") {
     const why = outcome.detail ?? outcome.reason;
-    deps.notify?.(`Shore - ${character}`, `Compaction paused after ${outcome.toolRounds} rounds (${why}); conversation kept`);
+    if (outcome.held !== true) deps.notify?.(`Shore - ${character}`, pauseNotice(outcome.toolRounds, outcome.reason, why));
     throw new CompactionPaused(outcome.checkpointId, why, outcome.resumeAt);
   }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
+}
+
+function pauseNotice(rounds: number, reason: string, why: string): string {
+  if (reason !== "refusal") return `Compaction paused after ${rounds} rounds (${why}); conversation kept`;
+  return `The model refused to go on with compaction after ${rounds} rounds; conversation kept. ` +
+    "Automatic compaction is on hold: see why with `shore status`, retry with `shore compact`";
 }
 
 export async function rotateWithoutMemoryWrite(
@@ -171,13 +182,20 @@ export async function runCompactionPass(
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
 
-  return await withConversation(threadDataDir(dataDir, character, thread), "update", async () => {
+  return await withConversation(threadDataDir(dataDir, character, thread), "update", async (scope) => {
     deps.signal?.throwIfAborted();
     const guard = tryBeginCompaction(dataDir, character);
     if (guard === undefined) throw CompactionError.busy(character);
 
     const trigger = options.trigger ?? "manual";
-    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
+    if (trigger !== "manual") {
+      const held = await compactionHeld(dataDir, character, thread);
+      if (held !== undefined) {
+        guard.release();
+        return heldOutcome(character, held);
+      }
+    }
+    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, stoppedWith(deps.signal, scope));
     try {
       const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
       pass.finish(outcome);
@@ -187,6 +205,29 @@ export async function runCompactionPass(
       throw e;
     }
   });
+}
+
+function stoppedWith(signal: AbortSignal | undefined, scope: AbortSignal): AbortSignal {
+  const turn = new AbortController();
+  const stop = () => turn.abort(new DOMException("the chat turn it ran after was cancelled", "AbortError"));
+  if (scope.aborted) stop();
+  else scope.addEventListener("abort", stop, { once: true });
+  return signal === undefined ? turn.signal : AbortSignal.any([signal, turn.signal]);
+}
+
+function heldOutcome(character: string, checkpoint: CompactionCheckpoint): CompactionOutcome {
+  return {
+    kind: "paused",
+    conversationId: character,
+    checkpointId: checkpoint.id,
+    messageCount: checkpoint.splitAt,
+    compactedTurns: checkpoint.compactedTurns,
+    toolRounds: checkpoint.loop.toolRounds,
+    toolsCalled: checkpoint.loop.toolsCalled,
+    reason: "refusal",
+    ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
+    held: true,
+  };
 }
 
 async function passUnderGuard(
@@ -206,7 +247,6 @@ async function passUnderGuard(
     const compaction = effective.app.memory.compaction;
     const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
       keepRecentTurns: compaction.keep_recent_turns,
-      maxContextTokens: compaction.max_context_tokens,
       ...(options.keepTurnsOverride === undefined
         ? {}
         : { keepTurnsOverride: options.keepTurnsOverride }),
@@ -257,7 +297,7 @@ async function passUnderGuard(
       );
     }
 
-    const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
+    const chatRequest = await resolveChatRequest(character, thread, loaded.store.messages(), effective,
       deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
     const resolved = await resolveDeps(character, deps, effective, thread,
       [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
@@ -298,10 +338,7 @@ async function passUnderGuard(
         ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
         ...(deps.signal === undefined ? {} : { signal: deps.signal }),
       },
-      {
-        keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
-        maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
-      },
+      { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
     );
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
@@ -323,6 +360,87 @@ async function passUnderGuard(
       guard.release();
     }
   }
+}
+
+export async function runSegmentCompactionPass(
+  character: string,
+  deps: CompactionRunDeps,
+  options: { segment: number; thread?: string },
+): Promise<CompactionOutcome> {
+  deps.signal?.throwIfAborted();
+  const dataDir = deps.config.dirs.data;
+  const thread = options.thread ?? (await homeThreadOf(dataDir, character));
+  const archived = readArchivedSegment(dataDir, character, thread, options.segment);
+  const guard = tryBeginCompaction(dataDir, character);
+  if (guard === undefined) throw CompactionError.busy(character);
+  const pass = startPass(dataDir, { character, thread, trigger: "manual", startedAt: Date.now() }, deps.emit, deps.signal);
+  try {
+    const outcome = await segmentPass(character, { ...deps, emit: pass.emit, signal: pass.signal }, thread, options.segment, archived);
+    pass.finish(outcome);
+    return outcome;
+  } catch (e) {
+    pass.fail(e);
+    throw e;
+  } finally {
+    guard.release();
+  }
+}
+
+function readArchivedSegment(
+  dataDir: string,
+  character: string,
+  thread: string,
+  segment: number,
+): { messages: Message[]; priorContext: boolean } {
+  const key = archiveKey(character, thread);
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  try {
+    const entries = store.entries(key);
+    if (!entries.some((entry) => entry.idx === segment)) {
+      const where = thread === MAIN_THREAD ? character : `${character} thread ${thread}`;
+      throw new CompactionError("not_found", `segment ${String(segment)} not found for ${where}`);
+    }
+    const messages = store.readSegment(key, segment);
+    if (messages.length === 0) throw CompactionError.insufficientMessages();
+    return { messages, priorContext: entries.some((entry) => entry.idx < segment) };
+  } finally {
+    store.close();
+  }
+}
+
+async function segmentPass(
+  character: string,
+  deps: CompactionRunDeps,
+  thread: string,
+  segment: number,
+  archived: { messages: Message[]; priorContext: boolean },
+): Promise<CompactionOutcome> {
+  const effective = effectiveConfig(character, deps.config);
+  if (!effective.app.memory.compaction.write_memory) {
+    throw CompactionError.llm("memory writes are turned off (compaction.write_memory = false)");
+  }
+  const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
+    deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, archived.priorContext);
+  const { scheduleNextWake: _unscheduled, ...tools } = deps.tools ?? {};
+  const resolved = await resolveDeps(character, { ...deps, tools }, effective, thread, archived.messages, chatRequest.tools, false);
+  const outcome = await compactSegment({
+    segment,
+    messages: archived.messages,
+    promptTemplate: resolved.promptTemplate,
+    charName: character,
+    userName: resolved.displayName,
+    llm: resolved.llm,
+    ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
+    chatRequest,
+    tools: resolved.tools,
+    ...(resolved.maxToolIterations === undefined ? {} : { maxToolIterations: resolved.maxToolIterations }),
+    ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
+    ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+  });
+  await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
+    await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
+  });
+  return outcome;
 }
 
 interface ResolvedDeps {
@@ -550,10 +668,11 @@ export async function renderToolOutcome(
 async function resolveChatRequest(
   character: string,
   thread: string,
-  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  messages: readonly Message[],
   effective: LoadedConfig,
   mcpToolDefs: readonly ToolDefinition[],
   env: NodeJS.ProcessEnv | undefined,
+  priorContext?: boolean,
 ): Promise<SidecarRequest> {
   const chatModel = resolveChatModelForCharacter(
     configView(effective),
@@ -565,14 +684,14 @@ async function resolveChatRequest(
     throw CompactionError.llm("No chat model configured for compaction prefix rebuild");
   }
 
-  const hasPriorContext =
+  const hasPriorContext = priorContext ??
     (await segmentCount(conversationRef(effective.dirs.data, character, thread, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
     characterDataDir(effective.dirs.data, character),
     effective,
     chatModel,
-    [...loaded.store.messages()],
+    [...messages],
     hasPriorContext,
     { thread, mcpToolDefs, ...(env === undefined ? {} : { env }) },
   );

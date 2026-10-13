@@ -31,7 +31,7 @@
       "api_key_env": "ANTHROPIC_API_KEY",
       "cache_ttl": "1h",
       "category": "chat",
-      "max_context_tokens": 200000,
+      "max_context_tokens": 1000000,
       "max_output_tokens": 32768,
       "model_id": "claude-opus-4-6",
       "name": "claude-opus-4-6",
@@ -1092,7 +1092,7 @@
         "sdk": "anthropic",
         "model_id": "claude-opus-4-6",
         "api_key_env": "ANTHROPIC_API_KEY",
-        "max_context_tokens": 200000,
+        "max_context_tokens": 1000000,
         "max_output_tokens": 32000,
         "cache_ttl": "1h"
       }

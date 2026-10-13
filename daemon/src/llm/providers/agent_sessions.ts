@@ -25,6 +25,7 @@ export interface SessionRecord {
   pendingAssistantHashes?: string[];
   storedTranscript?: true;
   model?: string;
+  systemNotes?: { anchor: string; text: string }[];
 }
 
 export type SessionBook = Record<string, SessionRecord>;

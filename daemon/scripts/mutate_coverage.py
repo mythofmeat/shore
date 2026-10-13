@@ -230,10 +230,10 @@ MUTANTS = [
      "  if (false as boolean) {"),
     ("manager: the archive is written from the plan's snapshot, not what is live",
      MANAGER,
-     "    commit.liveContent,\n"
-     "    state.writesApplied,",
-     "    plan.sourceContent,\n"
-     "    state.writesApplied,"),
+     "      commit.liveContent,\n"
+     "      state.writesApplied,",
+     "      plan.sourceContent,\n"
+     "      state.writesApplied,"),
     ("manager: the checkpoint is written from live content rather than the plan's source",
      MANAGER,
      "      plan.sourceContent,\n"

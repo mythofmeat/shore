@@ -1447,6 +1447,9 @@ pub(crate) fn pause_reason_text(data: &serde_json::Value) -> String {
     if reason == "cancelled" {
         return detail.unwrap_or("cancelled").to_owned();
     }
+    if reason == "refusal" {
+        return detail.unwrap_or("the model refused to go on").to_owned();
+    }
     let named = match reason {
         "source_conflict" => "the conversation changed since the pass started",
         "iteration_limit" => "hit its tool-round ceiling",
@@ -1498,6 +1501,7 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
         "rotated" => "archive-only",
         "paused" => "paused",
         "truncated" => "cut off",
+        "segment" => "segment",
         other => other,
     };
     write_section_header(out, "Compaction", suffix, width);
@@ -1558,9 +1562,28 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
                 ),
             );
         }
+        "segment" => {
+            let index = data["segment"].as_u64().unwrap_or(0);
+            let files = data["memory_files_written"].as_array().map_or(0, Vec::len);
+            write_row(
+                out,
+                "Segment",
+                &format!("{index}, {} turns read again", planned_turns(data)),
+            );
+            write_row(out, "Memory files", &format!("{files} written"));
+            write_row(out, "History", "unchanged: nothing archived or retained");
+        }
         "paused" => {
             write_row_colored(out, "Outcome", "nothing archived", Tone::Warn);
             write_row(out, "Reason", &pause_reason_text(data));
+            if data["reason"].as_str() == Some("refusal") {
+                write_row_colored(
+                    out,
+                    "Hold",
+                    "automatic compaction waits until you retry",
+                    Tone::Warn,
+                );
+            }
             let rounds = data["tool_rounds"].as_u64().unwrap_or(0);
             let id = data["checkpoint_id"].as_str().unwrap_or("?");
             write_row(out, "Checkpoint", &format!("{id} ({rounds} tool rounds)"));
@@ -2617,6 +2640,54 @@ mod tests {
             !rendered.contains("still in the conversation"),
             "a real compaction must not claim its turns were kept: {rendered}"
         );
+    }
+
+    #[test]
+    fn a_segment_pass_names_the_segment_and_leaves_history_alone() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "segment",
+            "character": "heidi",
+            "segment": 860,
+            "message_count": 158,
+            "turn_count": 28,
+            "compacted_turns": 28,
+            "memory_files_written": ["MEMORY.md", "memory/keepsakes.md"],
+            "tool_rounds": 9,
+            "tools_called": ["bash"],
+        }));
+
+        assert!(rendered.contains("860, 28 turns read again"), "{rendered}");
+        assert!(rendered.contains("2 written"), "{rendered}");
+        assert!(
+            rendered.contains("nothing archived or retained"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_refused_compaction_shows_why_and_that_automatic_compaction_waits() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "paused",
+            "character": "heidi",
+            "checkpoint_id": "c1",
+            "message_count": 158,
+            "compacted_turns": 28,
+            "tool_rounds": 0,
+            "tools_called": [],
+            "reason": "refusal",
+            "detail": "the model refused round 1: Request ID: req_1",
+            "resume_at": null,
+        }));
+
+        assert!(
+            rendered.contains("the model refused round 1: Request ID: req_1"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("automatic compaction waits until you retry"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("shore compact"), "{rendered}");
     }
 
     #[test]

@@ -42,6 +42,29 @@ def history_page(messages):
             "next_segment": None}
 
 
+def drain(master, seconds):
+    # Pausing without reading the pty lets a macOS TUI block on its small output buffer, and keys sent meanwhile
+    # arrive together: an Esc followed by ":" reads as Alt+:.
+    deadline = time.monotonic() + seconds
+    while (left := deadline - time.monotonic()) > 0:
+        if select.select([master], [], [], left)[0]:
+            os.read(master, 65536)
+
+
+def wait_draining(proc, master, timeout=None):
+    # macOS won't let a process attached to a pty finish exiting, even killed, until its output is read.
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while proc.poll() is None:
+        if deadline is not None and time.monotonic() > deadline:
+            raise subprocess.TimeoutExpired(proc.args, timeout)
+        if select.select([master], [], [], .02)[0]:
+            try:
+                os.read(master, 65536)
+            except OSError:
+                time.sleep(.02)
+    return proc.returncode
+
+
 def terminal_frame(rid, text):
     return {"type": "stream_end", "rid": rid, "content": text, "finish_reason": "end_turn", "is_final": True,
             "metadata": {"tokens": {"input": 0, "output": 1, "cache_read": 0, "cache_write": 0},
@@ -394,7 +417,7 @@ class ReliabilityFlows(unittest.TestCase):
                     if select.select([master], [], [], .01)[0]:
                         os.read(master, 65536)
                 os.write(master, b"\x1b")
-                time.sleep(.05)
+                drain(master, .05)
                 os.write(master, b":config reload\r")
                 deadline = time.monotonic() + 3
                 while time.monotonic() < deadline and not applied.is_set():
@@ -405,7 +428,7 @@ class ReliabilityFlows(unittest.TestCase):
                 self.assertEqual(seen[1]["args"], {"apply": True, "refresh_prompts": False})
                 self.assertNotEqual(seen[0]["rid"], seen[1]["rid"])
                 os.write(master, b"\x1b")
-                time.sleep(.05)
+                drain(master, .05)
                 os.write(master, b":model use fixture --background=heartbeat\r")
                 deadline = time.monotonic() + 3
                 while time.monotonic() < deadline and not model_changed.is_set():
@@ -415,7 +438,7 @@ class ReliabilityFlows(unittest.TestCase):
                 self.assertEqual(len(models), 1)
                 self.assertEqual(models[0]["args"], {"name": "fixture", "background_task": "heartbeat"})
                 os.write(master, b"\x1b")
-                time.sleep(.05)
+                drain(master, .05)
                 os.write(master, b":trace calls 2 --wire --diff --against=1 --json\r")
                 deadline = time.monotonic() + 3
                 while time.monotonic() < deadline:
@@ -436,7 +459,7 @@ class ReliabilityFlows(unittest.TestCase):
                     frame_offset = len(frames.read_text())
                     confirmed = False
                     os.write(master, b"\x1b")
-                    time.sleep(.05)
+                    drain(master, .05)
                     os.write(master, command)
                     deadline = time.monotonic() + 3
                     while time.monotonic() < deadline:
@@ -460,7 +483,7 @@ class ReliabilityFlows(unittest.TestCase):
                     frame_offset = len(frames.read_text())
                     confirmed = False
                     os.write(master, b"\x1b")
-                    time.sleep(.05)
+                    drain(master, .05)
                     os.write(master, command)
                     deadline = time.monotonic() + 3
                     while time.monotonic() < deadline:
@@ -490,7 +513,7 @@ class ReliabilityFlows(unittest.TestCase):
                     frame_offset = len(frames.read_text())
                     scrolled = False
                     os.write(master, b"\x1b")
-                    time.sleep(.05)
+                    drain(master, .05)
                     os.write(master, command)
                     deadline = time.monotonic() + 3
                     while time.monotonic() < deadline:
@@ -510,7 +533,7 @@ class ReliabilityFlows(unittest.TestCase):
                 ]):
                     frame_offset = len(frames.read_text())
                     os.write(master, b"\x1b")
-                    time.sleep(.05)
+                    drain(master, .05)
                     os.write(master, command)
                     deadline = time.monotonic() + 3
                     while time.monotonic() < deadline:
@@ -528,10 +551,10 @@ class ReliabilityFlows(unittest.TestCase):
                 if proc.poll() is None:
                     os.write(master, b"\x03")
                     try:
-                        proc.wait(timeout=2)
+                        wait_draining(proc, master, timeout=2)
                     except subprocess.TimeoutExpired:
                         proc.kill()
-                        proc.wait()
+                        wait_draining(proc, master)
                 os.close(master)
                 os.close(slave)
                 worker.join(timeout=2)
@@ -555,14 +578,14 @@ class ReliabilityFlows(unittest.TestCase):
             self.assertIsNone(proc.poll(), "draft failures must not abort the TUI")
             if keys:
                 os.write(master, keys)
-                time.sleep(.1)
+                drain(master, .1)
             os.write(master, b"\x03")
-            proc.wait(timeout=3)
+            wait_draining(proc, master, timeout=3)
             return frames.read_text()
         finally:
             if proc.poll() is None:
                 proc.kill()
-                proc.wait()
+                wait_draining(proc, master)
             os.close(slave)
             os.close(master)
 
@@ -678,6 +701,8 @@ class ReliabilityFlows(unittest.TestCase):
                 env["SHORE_TUI_FIXTURE"] = str(Path(root) / "missing.md")
                 result = subprocess.run([BINARY], env=env, stdin=slave, stdout=slave, stderr=subprocess.PIPE, timeout=5)
                 after = termios.tcgetattr(slave)
+                # BSD kernels set PENDIN themselves whenever a terminal switches back to canonical mode.
+                after[3] &= ~termios.PENDIN
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(after, before)
             finally:
@@ -701,12 +726,12 @@ class ReliabilityFlows(unittest.TestCase):
                     if select.select([master], [], [], .05)[0]:
                         output += os.read(master, 65536)
                 os.write(master, b"\x03")
-                proc.wait(timeout=3)
+                wait_draining(proc, master, timeout=3)
                 self.assertNotIn(b"a=q", output)
             finally:
                 if proc.poll() is None:
                     proc.kill()
-                    proc.wait()
+                    wait_draining(proc, master)
                 os.close(slave)
                 os.close(master)
 
