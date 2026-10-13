@@ -8,13 +8,16 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+fn undo_the_nonblocking_mode_macos_copies_from_the_listener(stream: &TcpStream) {
+    stream.set_nonblocking(false).unwrap();
+}
+
 fn send(stream: &mut TcpStream, message: Value) {
     writeln!(stream, "{message}").unwrap();
 }
 
 fn serve(stream: TcpStream, requested: &str, selected: &str, runs_command: bool) {
-    // macOS hands back accepted sockets non-blocking like the listener; Linux doesn't.
-    stream.set_nonblocking(false).unwrap();
+    undo_the_nonblocking_mode_macos_copies_from_the_listener(&stream);
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
