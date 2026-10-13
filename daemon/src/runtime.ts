@@ -197,6 +197,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       providers,
       tools: sharedToolDeps(config, mcp, {
         activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
+        heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
+        scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
       }, {
         providers,
         registry,
@@ -417,16 +419,20 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  activity: Pick<AutonomyService, "activityStats">,
+  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake">,
   subagent?: SubagentToolDeps,
 ): ToolContextDeps {
   return {
     activityStats: (character, days) => {
-      const report = activity.activityStats(character, localWallClock(Date.now()), days);
+      const report = autonomy.activityStats(character, localWallClock(Date.now()), days);
       return report === undefined
         ? undefined
         : { stats: report.stats, turnCount: report.messageCount };
     },
+    scheduleNextWake: (character, hours, reason) =>
+      autonomy.heartbeatsRunning(character)
+        ? autonomy.scheduleNextWake(character, hours, reason)
+        : undefined,
     ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
     ...(subagent?.turn === undefined ? {} : { conversation: subagent.turn.conversation }),
     ...(subagent?.turn?.thread === undefined ? {} : { thread: subagent.turn.thread }),

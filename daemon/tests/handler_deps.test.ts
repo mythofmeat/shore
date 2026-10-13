@@ -542,20 +542,31 @@ describe("the tool backends a character's turn gets", () => {
     }
   });
 
-  test("background work gets no heartbeat schedule of its own", async () => {
+  test("background work's set_next_wake moves that character's heartbeat like a chat turn's", async () => {
     const { root, config, runtime } = await runtimeUnder(
       "shore-deps-wake-background-",
       (app) => {
         app.behavior.autonomy.enabled = true;
       },
-      ["ada"],
+      ["ada", "nova"],
     );
     try {
+      const bridge = new TurnAutonomyBridge(runtime.autonomy);
+      for (const character of ["ada", "nova"]) {
+        bridge.ensureState(character, config);
+        await bridge.settled(character);
+      }
+      const novaBefore = runtime.autonomy.status("nova")?.next_wake_at;
       const background = sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy);
 
-      expect(await wakeFailure(config, background)).toBe(
-        "io: the heartbeat schedule is not available in this context",
+      const before = Date.now();
+      expect(await wakeFailure(config, background)).toBe("the wake was scheduled");
+
+      expect(runtime.autonomy.status("ada")?.next_wake_at).toBeGreaterThanOrEqual(before + 3 * 3_600_000);
+      expect(JSON.stringify(runtime.autonomy.status("ada")?.recent_events)).toContain(
+        "set_next_wake: 3.0h - after dinner",
       );
+      expect(runtime.autonomy.status("nova")?.next_wake_at).toBe(novaBefore);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
