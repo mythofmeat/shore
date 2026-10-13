@@ -6,6 +6,7 @@ import type { DiscoveredModelSupport } from "../llm/discovery.ts";
 import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
 import type { ParseResult } from "./duration.ts";
 import type { CacheKeepaliveSetting } from "./keepalive.ts";
+import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "./model_defaults.ts";
 export {
   keepaliveToString,
   parseCacheKeepalive,
@@ -505,7 +506,7 @@ function parseAuxSection<T>(
 }
 
 function baseProviderDefaults(): ModelConfigFields {
-  return { maxOutputTokens: 32768, maxContextTokens: 200_000 };
+  return { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS, maxContextTokens: DEFAULT_MAX_CONTEXT_TOKENS };
 }
 
 const MILLION_TOKEN_CLAUDE =
