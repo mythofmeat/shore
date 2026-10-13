@@ -34,3 +34,23 @@ test("closing keeps Shore in the Dock, which brings the window back, and quittin
   await app.evaluate(({ app }) => { setTimeout(() => { app.quit(); }, 0); });
   expect(await quit).toBe(0);
 });
+
+test("the page's notifications go to the main process, and the Dock badge follows the unread count", async ({ daemon, launch }) => {
+  const { app, page } = await launch({ address: daemon.origin });
+  await expect(page.getByLabel("Access token")).toBeVisible();
+  await app.evaluate(({ ipcMain }) => {
+    const posted: unknown[][] = [];
+    Object.assign(globalThis, { posted });
+    ipcMain.removeAllListeners("page:notify");
+    ipcMain.on("page:notify", (_event, ...args: unknown[]) => { posted.push(args); });
+  });
+  expect(await page.evaluate(async () => [Notification.permission, await Notification.requestPermission()])).toEqual(["granted", "granted"]);
+  await page.evaluate(() => { new Notification("Nova", { body: "hello" }).close(); });
+  await expect.poll(() => app.evaluate(() => (globalThis as unknown as { posted: unknown[][] }).posted)).toEqual([["Nova", "hello"]]);
+
+  const badge = () => app.evaluate(({ app }) => app.dock?.getBadge());
+  await page.evaluate(() => { document.title = "(3) Nova · Shore"; });
+  await expect.poll(badge).toBe("3");
+  await page.evaluate(() => { document.title = "Nova · Shore"; });
+  await expect.poll(badge).toBe("");
+});
