@@ -13,7 +13,7 @@ import type { Message } from "../src/engine/types.ts";
 import { buildCommandPathDeps, chatCompactionRunner, chatToolDeps } from "../src/handler/deps.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest, ToolDefinition } from "../src/llm/types.ts";
-import { runCompactionPass } from "../src/memory/compaction/run.ts";
+import { runCompactionPass, runSegmentCompactionPass } from "../src/memory/compaction/run.ts";
 import { loadCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { ensureActivePromptSnapshot, loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
 import { createRuntime, sharedToolDeps } from "../src/runtime.ts";
@@ -26,7 +26,8 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 import { NO_MCP } from "./support/rebuild.ts";
-import { characterWorkspaceDir } from "../src/config/dirs.ts";
+import { archiveKey, characterWorkspaceDir } from "../src/config/dirs.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 
 beforeEach(() => {
@@ -36,6 +37,7 @@ beforeEach(() => {
 afterAll(restoreTestEnv);
 const KEY = "SHORE_BACKGROUND_CONTEXT_KEY";
 const PROMPT_FILES = ["MEMORY.md", "SOUL.md", "USER.md", "TOOLS.md"];
+const HOUR = 3_600_000;
 const ARCHIVE_TOOL: ToolDefinition = {
   name: "mcp__archive__recall", description: "Recall the archive",
   input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
@@ -59,7 +61,7 @@ function results(request: SidecarRequest | undefined) {
     .filter((block) => block.type === "tool_result") ?? [];
 }
 
-async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pauseAfterTools?: boolean } = {}) {
+async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pauseAfterTools?: boolean; wake?: boolean } = {}) {
   const root = await mkdtemp(testTmp("shore-background-context-"));
   const workspace = join(root, "config", "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
@@ -72,7 +74,7 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
   app.advanced.max_retries = 0;
   app.memory.git_push = false;
   app.memory.compaction.keep_recent_turns = 0;
-  app.tools.enabled_tools = ["bash", ARCHIVE_TOOL.name];
+  app.tools.enabled_tools = ["bash", ARCHIVE_TOOL.name, ...(options.wake ? ["set_next_wake"] : [])];
   app.tools.enabled_subagents = ["research"];
   app.behavior.autonomy.enabled = true;
   app.subagents.set("research", {
@@ -96,6 +98,8 @@ async function world(options: { nestedWrite?: boolean; invalidMcp?: boolean; pau
     if (!child && completed && options.pauseAfterTools) throw new Error("fixture provider unavailable");
     const blocks: GenerateResponse["content_blocks"] = completed || (child && !options.nestedWrite)
       ? [{ type: "text", text: child ? "Research complete." : "HEARTBEAT_OK" }]
+      : options.wake
+      ? [{ type: "tool_use", id: "wake", name: "set_next_wake", input: { hours_from_now: 3, reason: "after the archive" } }]
       : child
       ? [{ type: "tool_use", id: "nested_edit", name: "bash", input: { command: "mkdir -p projects && printf 'delegated write' > projects/notes.md" } }]
       : [
@@ -207,6 +211,47 @@ test.each(["inline", "command", "idle"] as const)("%s compaction advertises and 
     expect(results(parent.at(-1)).map((result) => result.is_error)).toEqual([false, false]);
     expectDiarySubagent(w.seen);
     expect(await readFile(join(w.workspace, "projects/notes.md"), "utf8")).toBe("delegated write");
+  } finally { await w.close(); }
+});
+
+test.each(["inline", "command", "idle"] as const)("%s compaction's set_next_wake moves the character's heartbeat", async (flow) => {
+  const w = await world({ wake: true });
+  try {
+    const before = Date.now();
+    if (flow === "inline") await chatCompactionRunner(w.assembly).run("ada", w.config, "diary");
+    else if (flow === "command") {
+      await runCompactionPass("ada", { ...required(w.command.commands.compaction).run, config: w.config }, { thread: "diary" });
+    } else {
+      w.runtime.autonomy.onAssistantMessage("ada", w.config.app.memory.compaction.min_turns);
+      w.runtime.autonomy.onCompactionFailed("ada", Date.now());
+      await w.runtime.autonomy.tick();
+    }
+    expect(w.seen[0]?.context?.call_type).toBe("compaction");
+    expect(w.seen[0]?.tools?.map((tool) => tool.name)).toContain("set_next_wake");
+    expect(results(w.seen.at(-1))).toMatchObject([{ is_error: false, content: "Scheduled next moment in 3.0 hours." }]);
+    const status = required(w.runtime.autonomy.status("ada"));
+    expect(status.next_wake_at).toBeGreaterThanOrEqual(before + 3 * HOUR);
+    expect(status.next_wake_at).toBeLessThanOrEqual(Date.now() + 3 * HOUR);
+    expect(JSON.stringify(status.recent_events)).toContain("set_next_wake: 3.0h - after the archive");
+  } finally { await w.close(); }
+});
+
+test("a pass over an archived segment cannot move today's heartbeat", async () => {
+  const w = await world({ wake: true });
+  try {
+    const run = { ...required(w.command.commands.compaction).run, config: w.config };
+    await runCompactionPass("ada", run, { thread: "diary" });
+    const scheduled = w.runtime.autonomy.status("ada")?.next_wake_at;
+    const store = HistoryStore.open(join(w.config.dirs.data, HISTORY_DB_FILE));
+    const [segment] = store.entries(archiveKey("ada", "diary")).map((entry) => entry.idx);
+    store.close();
+    w.seen.length = 0;
+
+    expect(await runSegmentCompactionPass("ada", run, { thread: "diary", segment: required(segment) })).toMatchObject({ kind: "segment" });
+
+    expect(w.seen[0]?.tools?.map((tool) => tool.name)).toContain("set_next_wake");
+    expect(results(w.seen.at(-1))).toMatchObject([{ is_error: true, content: "io: the heartbeat schedule is not available in this context" }]);
+    expect(w.runtime.autonomy.status("ada")?.next_wake_at).toBe(scheduled);
   } finally { await w.close(); }
 });
 

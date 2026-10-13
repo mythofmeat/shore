@@ -425,7 +425,8 @@ async function segmentPass(
   }
   const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
     deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, archived.priorContext);
-  const resolved = await resolveDeps(character, deps, effective, thread, archived.messages, chatRequest.tools, false);
+  const { scheduleNextWake: _unscheduled, ...tools } = deps.tools ?? {};
+  const resolved = await resolveDeps(character, { ...deps, tools }, effective, thread, archived.messages, chatRequest.tools, false);
   const outcome = await compactSegment({
     segment,
     messages: archived.messages,

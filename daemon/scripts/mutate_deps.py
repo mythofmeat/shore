@@ -8,8 +8,13 @@ D = "src/handler/deps.ts"
 R = "src/runtime.ts"
 CTX = "src/handler/tool_context.ts"
 SVC = "src/autonomy/service.ts"
+RUN = "src/memory/compaction/run.ts"
 
-TESTS = ["tests/handler_deps.test.ts", "tests/runtime_activity.test.ts"]
+TESTS = [
+    "tests/handler_deps.test.ts",
+    "tests/runtime_activity.test.ts",
+    "tests/background_tool_context.test.ts",
+]
 
 MUTANTS = [
     # --- the per-character tool backends --------------------------------------
@@ -26,16 +31,16 @@ MUTANTS = [
      "      (dir, path) => queueDeferredEdit(dir, path, turn.thread),\n    ),",
      "    deferEdit: undefined,"),
     ("tools: the heatmap always reads the same character's tracker", R,
-     "      const report = activity.activityStats(character, localWallClock(Date.now()), days);",
-     '      const report = activity.activityStats("ada", localWallClock(Date.now()), days);'),
+     "      const report = autonomy.activityStats(character, localWallClock(Date.now()), days);",
+     '      const report = autonomy.activityStats("ada", localWallClock(Date.now()), days);'),
     ("tools: the heatmap discards its activity report, so every character reads as inactive", R,
      "      return report === undefined\n"
      "        ? undefined\n"
      "        : { stats: report.stats, turnCount: report.messageCount };",
      "      void report;\n      return undefined;"),
     ("tools: the heatmap ignores the window it was asked for", R,
-     "      const report = activity.activityStats(character, localWallClock(Date.now()), days);",
-     "      const report = activity.activityStats(character, localWallClock(Date.now()), undefined);"),
+     "      const report = autonomy.activityStats(character, localWallClock(Date.now()), days);",
+     "      const report = autonomy.activityStats(character, localWallClock(Date.now()), undefined);"),
     ("tools: the turn count is dropped on the rename, so the heatmap has no total",
      R,
      "        : { stats: report.stats, turnCount: report.messageCount };",
@@ -195,28 +200,40 @@ MUTANTS = [
      D,
      "        return { error: e instanceof CharacterError ? e.message : String(e) };",
      "        if (!(e instanceof CharacterError)) throw e;\n        return { error: e.message };"),
-    ("wake: a chat turn's set_next_wake reaches no clock",
-     D,
+    ("wake: set_next_wake reaches no clock, from a chat turn or from compaction",
+     R,
      "    scheduleNextWake: (character, hours, reason) =>\n"
-     "      runtime.autonomy.heartbeatsRunning(character)\n"
-     "        ? runtime.autonomy.scheduleNextWake(character, hours, reason)\n"
+     "      autonomy.heartbeatsRunning(character)\n"
+     "        ? autonomy.scheduleNextWake(character, hours, reason)\n"
      "        : undefined,\n",
      ""),
-    ("wake: a chat turn's set_next_wake moves another character's heartbeat",
-     D,
-     "runtime.autonomy.scheduleNextWake(character, hours, reason)",
-     'runtime.autonomy.scheduleNextWake("nova", hours, reason)'),
-    ("wake: a chat turn's set_next_wake reaches the clock without its reason",
-     D,
-     "runtime.autonomy.scheduleNextWake(character, hours, reason)",
-     'runtime.autonomy.scheduleNextWake(character, hours, "")'),
+    ("wake: set_next_wake moves another character's heartbeat",
+     R,
+     "        ? autonomy.scheduleNextWake(character, hours, reason)",
+     '        ? autonomy.scheduleNextWake("nova", hours, reason)'),
+    ("wake: set_next_wake reaches the clock without its reason",
+     R,
+     "        ? autonomy.scheduleNextWake(character, hours, reason)",
+     '        ? autonomy.scheduleNextWake(character, hours, "")'),
+    ("wake: idle compaction's set_next_wake reaches no clock",
+     R,
+     "        scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),",
+     "        scheduleNextWake: () => undefined,"),
+    ("wake: idle compaction reads heartbeats as off",
+     R,
+     "        heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),",
+     "        heartbeatsRunning: () => false,"),
+    ("wake: a pass over an archived segment moves today's heartbeat",
+     RUN,
+     "  const resolved = await resolveDeps(character, { ...deps, tools }, effective, thread, archived.messages,",
+     "  void tools;\n  const resolved = await resolveDeps(character, deps, effective, thread, archived.messages,"),
     ("wake: the tool context binds the wake to a fixed character",
      CTX,
      "scheduleNextWake(charName, hours, reason)",
      'scheduleNextWake("nova", hours, reason)'),
     ("wake: with heartbeats off, a wake is still scheduled and reported",
-     D,
-     "runtime.autonomy.heartbeatsRunning(character)\n        ? ",
+     R,
+     "autonomy.heartbeatsRunning(character)\n        ? ",
      "true\n        ? "),
     ("wake: a registered runner reads as ticking whether or not its heartbeat is on",
      SVC,
