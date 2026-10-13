@@ -9,10 +9,7 @@ import { unsentNotice } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import { findModelCopy } from "../llm/images.ts";
-
-const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
-
-const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
+import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
 
