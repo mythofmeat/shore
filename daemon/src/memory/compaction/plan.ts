@@ -3,7 +3,6 @@ import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { normalizeMessage } from "../../engine/message_store.ts";
-import { estimateMessageTokens } from "../../engine/prompt.ts";
 import type { Message } from "../../engine/types.ts";
 import { versionsIn } from "../coverage.ts";
 import { rustLines, rustTrim } from "../lines.ts";
@@ -12,7 +11,6 @@ import {
   loadCompactionCheckpoint,
   type CompactionCheckpoint,
 } from "./checkpoint.ts";
-import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ConversationMessage } from "./types.ts";
 
 const isRealUserTurn = (msg: ConversationMessage): boolean =>
@@ -58,10 +56,8 @@ export function archiveSplitIndex(
 export function canArchiveTurns(
   messages: readonly Message[],
   keepRecentTurns: number,
-  maxContextTokens: number,
 ): boolean {
-  const view = conversationView(messages);
-  return archiveSplitIndex(view, retentionForBudget(view, keepRecentTurns, maxContextTokens), false) > 0;
+  return archiveSplitIndex(conversationView(messages), keepRecentTurns, false) > 0;
 }
 
 export interface ArchivalPlanInput {
@@ -72,7 +68,6 @@ export interface ArchivalPlanInput {
 
 export interface ArchivalPlanSettings {
   keepRecentTurns: number;
-  maxContextTokens: number;
   keepTurnsOverride?: number;
   retainTrailingAutonomous?: boolean;
   restart?: boolean;
@@ -118,7 +113,6 @@ export function conversationView(messages: readonly Message[]): ConversationMess
       message.content_blocks.every((block) => block.type === "tool_result"),
     isAutonomous: message.origin === "autonomous",
     ...(message.version === undefined ? {} : { version: message.version }),
-    tokens: estimateMessageTokens(message),
   }));
 }
 
@@ -173,9 +167,7 @@ export function buildArchivalPlan(
   settings: ArchivalPlanSettings,
   checkpoint: CompactionCheckpoint | undefined,
 ): ArchivalPlan | undefined {
-  const keepTurns =
-    settings.keepTurnsOverride ??
-    retentionForBudget(input.messages, settings.keepRecentTurns, settings.maxContextTokens);
+  const keepTurns = settings.keepTurnsOverride ?? settings.keepRecentTurns;
   const liveSplitAt = archiveSplitIndex(
     [...input.messages],
     keepTurns,

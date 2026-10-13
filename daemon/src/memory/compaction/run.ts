@@ -247,7 +247,6 @@ async function passUnderGuard(
     const compaction = effective.app.memory.compaction;
     const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
       keepRecentTurns: compaction.keep_recent_turns,
-      maxContextTokens: compaction.max_context_tokens,
       ...(options.keepTurnsOverride === undefined
         ? {}
         : { keepTurnsOverride: options.keepTurnsOverride }),
@@ -339,10 +338,7 @@ async function passUnderGuard(
         ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
         ...(deps.signal === undefined ? {} : { signal: deps.signal }),
       },
-      {
-        keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
-        maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
-      },
+      { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
     );
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {

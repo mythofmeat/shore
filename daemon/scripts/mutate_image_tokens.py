@@ -205,20 +205,6 @@ MUTANTS = [
      "src/commands/status_context.ts",
      "      model === undefined ? undefined : imageTierForModel(model.modelId),",
      "      undefined,"),
-
-    # --- compaction ------------------------------------------------------------
-    ("retention: only a message's text counts toward the reserve",
-     "src/memory/compaction/retention.ts",
-     "    used += msg.tokens ?? estimateTokens(msg.content);",
-     "    used += estimateTokens(msg.content);"),
-    ("plan: the compaction view leaves a message's cost out",
-     "src/memory/compaction/plan.ts",
-     "    tokens: estimateMessageTokens(message),\n",
-     ""),
-    ("load: a loaded conversation leaves a message's cost out",
-     "src/memory/compaction/background.ts",
-     "    tokens: estimateMessageTokens(msg),\n",
-     ""),
 ]
 
 
@@ -233,7 +219,6 @@ def main() -> int:
         "tests/prompt.test.ts",
         "tests/context.test.ts",
         "tests/status_context.test.ts",
-        "tests/compaction_retention.test.ts",
         "tests/compaction.test.ts",
     ])
 
