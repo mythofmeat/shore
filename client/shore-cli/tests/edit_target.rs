@@ -23,8 +23,8 @@ fn terminal_pair() -> (File, File) {
             &mut master,
             &mut slave,
             std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
         )
     };
     assert_eq!(result, 0, "{}", std::io::Error::last_os_error());
@@ -92,6 +92,8 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
             Err(error) => panic!("accept failed: {error}"),
         }
     };
+    // macOS hands back accepted sockets non-blocking like the listener; Linux doesn't.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
@@ -134,7 +136,12 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
         }),
     );
     let mut line = String::new();
-    let _read = reader.read_line(&mut line).unwrap();
+    // A client that hangs up with the new arrival still unread resets the connection instead of closing it.
+    match reader.read_line(&mut line) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => line.clear(),
+        Err(error) => panic!("read failed: {error}"),
+    }
     let edit = if line.is_empty() {
         None
     } else {

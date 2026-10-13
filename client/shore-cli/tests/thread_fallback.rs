@@ -13,6 +13,8 @@ fn send(stream: &mut TcpStream, message: Value) {
 }
 
 fn serve(stream: TcpStream, requested: &str, selected: &str, runs_command: bool) {
+    // macOS hands back accepted sockets non-blocking like the listener; Linux doesn't.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
