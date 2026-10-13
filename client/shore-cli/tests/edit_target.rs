@@ -10,6 +10,21 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+fn undo_the_nonblocking_mode_macos_copies_from_the_listener(stream: &TcpStream) {
+    stream.set_nonblocking(false).unwrap();
+}
+
+fn read_line_treating_a_reset_as_hanging_up_with_messages_unread(
+    reader: &mut BufReader<TcpStream>,
+    line: &mut String,
+) {
+    match reader.read_line(line) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => line.clear(),
+        Err(error) => panic!("read failed: {error}"),
+    }
+}
+
 #[expect(
     unsafe_code,
     reason = "a pseudo-terminal exercises the real interactive editor path"
@@ -23,8 +38,8 @@ fn terminal_pair() -> (File, File) {
             &mut master,
             &mut slave,
             std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
         )
     };
     assert_eq!(result, 0, "{}", std::io::Error::last_os_error());
@@ -92,6 +107,7 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
             Err(error) => panic!("accept failed: {error}"),
         }
     };
+    undo_the_nonblocking_mode_macos_copies_from_the_listener(&stream);
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
@@ -134,7 +150,7 @@ fn edit_in_terminal(reference: &str, editor_body: &str) -> Option<Value> {
         }),
     );
     let mut line = String::new();
-    let _read = reader.read_line(&mut line).unwrap();
+    read_line_treating_a_reset_as_hanging_up_with_messages_unread(&mut reader, &mut line);
     let edit = if line.is_empty() {
         None
     } else {

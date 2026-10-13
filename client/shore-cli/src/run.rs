@@ -2773,7 +2773,7 @@ mod tests {
 
     #[test]
     fn the_editor_sees_the_old_text_and_its_save_becomes_the_replacement() {
-        let rewritten = super::edit_text_with("sed -i s/original/rewritten/", "the original")
+        let rewritten = super::edit_text_with("perl -pi -e s/original/rewritten/", "the original")
             .expect("the editor ran");
         assert_eq!(rewritten, "the rewritten");
     }

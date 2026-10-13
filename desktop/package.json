@@ -14,6 +14,7 @@
     "test": "bun test",
     "test:e2e": "bun run build && bun run scripts/e2e.ts",
     "app:linux": "bun run build && bun run scripts/linux-app.ts",
+    "app:macos": "bun run build && bun run scripts/macos-app.ts",
     "icons": "bun run scripts/icons.ts"
   },
   "devDependencies": {
