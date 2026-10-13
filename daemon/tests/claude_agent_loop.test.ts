@@ -255,6 +255,12 @@ describe("what the SDK is handed", () => {
     expect(agent.calls[0]?.options.maxTurns).toBeGreaterThan(3);
   });
 
+  test("with no cap, the SDK is given no turn limit either", async () => {
+    const tools = phase();
+    const { agent } = await drive(ONE_CALL, tools);
+    expect(agent.calls[0]?.options).not.toHaveProperty("maxTurns");
+  });
+
   test("a turn with no tools at all is left to the plain provider", async () => {
     const tools = phase();
     const { events, agent } = await drive(
