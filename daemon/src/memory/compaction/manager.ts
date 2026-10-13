@@ -516,7 +516,6 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[], workspace: C
 
 export interface CompactionSettings {
   keepRecentTurns: number;
-  maxContextTokens?: number;
 }
 
 function compactThread(opts: Pick<CompactOptions, "thread">): string {

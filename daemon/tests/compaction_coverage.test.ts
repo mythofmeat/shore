@@ -146,7 +146,6 @@ async function planWith(
   const compaction = w.config.app.memory.compaction;
   const archival = await resolveArchivalPlan(w.dataDir, "ada", "main", loaded, {
     keepRecentTurns: compaction.keep_recent_turns,
-    maxContextTokens: compaction.max_context_tokens,
     ...(options.keepTurnsOverride === undefined
       ? {}
       : { keepTurnsOverride: options.keepTurnsOverride }),
@@ -560,10 +559,7 @@ describe("one plan carried from resolution to archival", () => {
     options: { keepRecentTurns: number; restart?: boolean; keepTurnsOverride?: number },
   ) {
     const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
-    return await resolveArchivalPlan(w.dataDir, "ada", "main", loaded, {
-      maxContextTokens: 0,
-      ...options,
-    });
+    return await resolveArchivalPlan(w.dataDir, "ada", "main", loaded, options);
   }
 
   test("a resumed plan freezes the source, the split and the versions together", async () => {

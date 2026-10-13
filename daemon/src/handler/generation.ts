@@ -405,7 +405,7 @@ async function runGenerationCore(
     params.rid ?? undefined,
     deps.compaction,
     nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
-      canArchiveTurns(active, compaction.keep_recent_turns, compaction.max_context_tokens),
+      canArchiveTurns(active, compaction.keep_recent_turns),
   );
 }
 

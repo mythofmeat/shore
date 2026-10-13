@@ -328,7 +328,7 @@ export function conversationKey(req: SidecarRequest): string {
 interface AgentToolSurface {
   instance: McpServer;
   canUseTool: CanUseTool;
-  maxTurns: number;
+  maxTurns: number | undefined;
   timeoutMs: number;
 }
 
@@ -392,7 +392,7 @@ function buildOptions(
     ...(surface === undefined
       ? { maxTurns: 1 }
       : {
-          maxTurns: surface.maxTurns,
+          ...(surface.maxTurns === undefined ? {} : { maxTurns: surface.maxTurns }),
           canUseTool: surface.canUseTool,
           mcpServers: {
             [SHORE_MCP_SERVER]: {
@@ -959,8 +959,6 @@ export class ClaudeAgentProvider implements SidecarProvider {
 const MCP_TOOL_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const MCP_OUTPUT_CEILING_TOKENS = 1_000_000;
 
-const TURN_BACKSTOP = 64;
-
 const TOOL_BUDGET_SPENT =
   "You have used the tool budget for this turn. Answer with what you already have.";
 
@@ -1213,7 +1211,7 @@ export async function* claudeAgentToolLoopEvents(
       options: buildOptions(req, native, abort, {
         instance,
         canUseTool,
-        maxTurns: cap === undefined ? TURN_BACKSTOP : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
+        maxTurns: cap === undefined ? undefined : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
         timeoutMs: MCP_TOOL_TIMEOUT_MS,
       }, notes),
     });

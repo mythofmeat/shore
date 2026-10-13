@@ -22,8 +22,7 @@ import { rustTrim } from "../memory/lines";
 import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_config";
 import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "./providers/nanogpt_config";
 import { DEFAULT_KEEPALIVE_PINGS } from "../config/keepalive.ts";
-
-const DEFAULT_MAX_TOKENS = 32768;
+import { DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 
 export interface ResolvedModel {
   name: string;
@@ -153,7 +152,7 @@ export function buildRequestWithResolvedKey(
     messages: inputs.messages,
     ...(inputs.system !== undefined ? { system: inputs.system } : {}),
     ...(inputs.tools !== undefined ? { tools: inputs.tools } : {}),
-    max_tokens: model.max_output_tokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: model.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
     ...(model.temperature !== undefined ? { temperature: model.temperature } : {}),
     ...(model.top_p !== undefined ? { top_p: model.top_p } : {}),
     ...(() => {

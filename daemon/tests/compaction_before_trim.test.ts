@@ -84,16 +84,16 @@ describe("the prompt's message budget", () => {
 
 describe("whether compaction could archive anything", () => {
   test("not while every turn is one the planner keeps", () => {
-    expect(canArchiveTurns(conversation(4, 100), 4, 500_000)).toBe(false);
-    expect(canArchiveTurns(conversation(5, 100), 4, 500_000)).toBe(true);
+    expect(canArchiveTurns(conversation(4, 100), 4)).toBe(false);
+    expect(canArchiveTurns(conversation(5, 100), 4)).toBe(true);
   });
 
-  test("a token-heavy tail keeps fewer turns, so fewer turns are enough", () => {
-    expect(canArchiveTurns(conversation(3, 64_000), 4, 200_000)).toBe(true);
+  test("retention counts turns, however heavy they are", () => {
+    expect(canArchiveTurns(conversation(4, 64_000), 4)).toBe(false);
   });
 
   test("nothing to archive in an empty conversation", () => {
-    expect(canArchiveTurns([], 0, 200_000)).toBe(false);
+    expect(canArchiveTurns([], 0)).toBe(false);
   });
 });
 
