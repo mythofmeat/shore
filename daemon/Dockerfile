@@ -31,23 +31,23 @@ FROM debian:stable-slim
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    cargo \
-    coreutils \
-    curl \
-    file \
-    findutils \
-    git \
-    git-lfs \
-    jq \
-    openssh-client \
-    python3 \
-    python3-pip \
-    ripgrep \
-    sed \
-    tini \
-    tzdata \
+        bash \
+        ca-certificates \
+        cargo \
+        coreutils \
+        curl \
+        file \
+        findutils \
+        git \
+        git-lfs \
+        jq \
+        openssh-client \
+        python3 \
+        python3-pip \
+        ripgrep \
+        sed \
+        tini \
+        tzdata \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
@@ -106,7 +106,7 @@ RUN groupadd -g "$USER_GID" "$USERNAME" \
 ARG TZ=UTC
 RUN test -f "/usr/share/zoneinfo/$TZ" \
     && ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime \
-    && echo "$TZ" > /etc/timezone
+    && echo "$TZ" >/etc/timezone
 ENV TZ=${TZ}
 
 # Root-owned and outside every mount, so nothing the character runs can change
@@ -134,7 +134,7 @@ ENV SHORE_WORKSPACE_DIR=/workspace
 # as externally managed. What the installers put in $HOME is on PATH: below
 # for tools that run as the daemon's user, and added by the daemon for a
 # character with a user of its own.
-RUN printf '[global]\nbreak-system-packages = true\n' > /etc/pip.conf
+RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
 ENV PATH=/home/${USERNAME}/.local/bin:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.cargo/bin:${PATH}
 EXPOSE 7320
 EXPOSE 7340
