@@ -48,6 +48,7 @@ RUN apt-get update \
         sed \
         tini \
         tzdata \
+        gh \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
