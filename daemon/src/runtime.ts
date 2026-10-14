@@ -31,6 +31,7 @@ import type { Message } from "./engine/types.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
+import { closeWorkspaceHelpers } from "./tools/character_workspace.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
@@ -241,6 +242,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     async shutdown() {
       await historyIndex.shutdown();
       await mcp.current.shutdown();
+      closeWorkspaceHelpers();
       closeStorageConnections();
       uninstallWireCapture();
       callStore?.close();

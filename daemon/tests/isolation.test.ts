@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
@@ -274,6 +274,46 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect(await readdir(elsewhere)).toEqual([]);
     expect(existsSync(join(target.config, "characters", name))).toBe(false);
   });
+
+  test("a daemon whose character has a workspace helper running stops when told to", async () => {
+    const root = (await freshWorkspace()).dir;
+    const character = new CharacterWorkspace(join(root, "ada"), { user: USER, passEnv: [] });
+    await character.call("mkdir", { path: character.dir });
+    await character.call("createFile", { path: join(character.dir, "SOUL.md"), data: Buffer.from("You are Ada.\n").toString("base64") });
+    const base = await privateDir("isolation-daemon");
+    await mkdir(join(base, "config"));
+    await writeFile(join(base, "config", "config.toml"), `[tools]\nuser = ${JSON.stringify(USER)}\n`);
+    const daemon = Bun.spawn([process.execPath, join(import.meta.dir, "..", "src", "daemon", "main.ts")], {
+      env: {
+        ...process.env, SHORE_CONFIG_DIR: join(base, "config"), SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: join(base, "cache"),
+        SHORE_RUNTIME_DIR: join(base, "runtime"), SHORE_WORKSPACE_DIR: root, SHORE_ADDR: "127.0.0.1:0", SHORE_WEB_ADDR: "127.0.0.1:0",
+      },
+      stdin: "ignore", stdout: "ignore", stderr: "pipe",
+    });
+    let log = "";
+    const decoder = new TextDecoder();
+    const logged = (async () => {
+      for await (const chunk of daemon.stderr) log += decoder.decode(chunk, { stream: true });
+    })();
+    try {
+      for (const deadline = Date.now() + 30_000; !catchesSigterm(daemon.pid); await Bun.sleep(20)) {
+        if (Date.now() > deadline || daemon.exitCode !== null) throw new Error(`the daemon did not start:\n${log}`);
+      }
+      const helpers = childrenOf(daemon.pid).filter((pid) => commandOf(pid).includes("--workspace-helper"));
+      expect(helpers).toHaveLength(1);
+
+      daemon.kill("SIGTERM");
+      const code = await Promise.race([daemon.exited, Bun.sleep(8_000).then(() => "still running")]);
+      await Promise.race([logged, Bun.sleep(1_000)]);
+
+      expect(code, log).toBe(0);
+      expect(log).toContain("Daemon shut down cleanly");
+      expect(log).not.toContain("exiting anyway");
+      expect(helpers.filter(running)).toEqual([]);
+    } finally {
+      daemon.kill("SIGKILL");
+    }
+  }, 60_000);
 });
 
 describe.skipIf(!READY)("a character without a user of its own", () => {
@@ -308,4 +348,34 @@ async function seedCharacter(dirs: ShoreDirs, name: string): Promise<void> {
   const history = HistoryStore.open(join(dirs.data, "shore.db"));
   history.putSegment(name, 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" }, [message]);
   history.close();
+}
+
+function procFile(pid: number, file: string): string {
+  try {
+    return readFileSync(`/proc/${String(pid)}/${file}`, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function procState(pid: number): { state: string; parent: number } {
+  const [state = "", parent = "0"] = procFile(pid, "stat").replace(/^.*\) /s, "").split(" ");
+  return { state, parent: Number(parent) };
+}
+
+function childrenOf(parent: number): number[] {
+  return readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).map(Number).filter((pid) => procState(pid).parent === parent);
+}
+
+function commandOf(pid: number): string {
+  return procFile(pid, "cmdline").split("\0").join(" ");
+}
+
+function catchesSigterm(pid: number): boolean {
+  const caught = /^SigCgt:\s*([0-9a-f]+)$/m.exec(procFile(pid, "status"))?.[1];
+  return caught !== undefined && (BigInt(`0x${caught}`) >> 14n & 1n) === 1n;
+}
+
+function running(pid: number): boolean {
+  return !["", "Z", "X"].includes(procState(pid).state);
 }
