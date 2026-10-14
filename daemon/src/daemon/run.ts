@@ -455,22 +455,28 @@ async function runDaemon(options: DaemonOptions): Promise<void> {
   }
 }
 
+export function exitIfStillRunning(log: Logger | undefined, afterMs: number = SHUTDOWN_TIMEOUT_MS): void {
+  setTimeout(() => {
+    log?.warn?.("Still running after shutting down; exiting anyway", { after_ms: afterMs });
+    // eslint-disable-next-line unicorn/no-process-exit
+    process.exit(0);
+  }, afterMs).unref();
+}
+
 export async function main(): Promise<void> {
+  const log: Logger = {
+    info: (msg, fields) => shoreLog.error(format("INFO", msg, fields)),
+    warn: (msg, fields) => shoreLog.error(format("WARN", msg, fields)),
+    error: (msg, fields) => shoreLog.error(format("ERROR", msg, fields)),
+  };
   try {
-    await runDaemon({
-      argv: process.argv.slice(2),
-      providers: DEFAULT_PROVIDERS,
-      log: {
-        info: (msg, fields) => shoreLog.error(format("INFO", msg, fields)),
-        warn: (msg, fields) => shoreLog.error(format("WARN", msg, fields)),
-        error: (msg, fields) => shoreLog.error(format("ERROR", msg, fields)),
-      },
-    });
+    await runDaemon({ argv: process.argv.slice(2), providers: DEFAULT_PROVIDERS, log });
   } catch (e) {
     shoreLog.error(e instanceof StartupError ? e.message : String(e));
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   }
+  exitIfStillRunning(log);
 }
 
 if (import.meta.main) await main();

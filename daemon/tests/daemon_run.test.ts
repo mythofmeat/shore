@@ -1576,6 +1576,25 @@ describe("going down", () => {
     expect(warnings).toEqual(["Shutdown step timed out"]);
   });
 
+  test("a process still held open after shutting down exits anyway and says so, and one with nothing open does not wait", async () => {
+    const after = async (held: boolean): Promise<{ code: number; stderr: string; ms: number }> => {
+      const started = Date.now();
+      const child = Bun.spawn([process.execPath, "-e", [
+        `import { exitIfStillRunning } from ${JSON.stringify(join(import.meta.dir, "../src/daemon/run.ts"))};`,
+        held ? "setInterval(() => {}, 1000);" : "",
+        `exitIfStillRunning({ warn: (msg) => console.error(msg) }, ${held ? "100" : "60_000"});`,
+      ].join("\n")], { cwd: join(import.meta.dir, ".."), stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+      const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+      return { code, stderr, ms: Date.now() - started };
+    };
+
+    const [held, idle] = await Promise.all([after(true), after(false)]);
+
+    expect(held).toMatchObject({ code: 0, stderr: "Still running after shutting down; exiting anyway\n" });
+    expect(idle).toMatchObject({ code: 0, stderr: "" });
+    expect(idle.ms).toBeLessThan(30_000);
+  });
+
   test("a turn still in flight is waited for, not abandoned mid-flight", async () => {
     const place = await layout(MODEL_CONFIG);
     let release = () => {};
