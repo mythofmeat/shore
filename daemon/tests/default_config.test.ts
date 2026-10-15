@@ -1,29 +1,12 @@
-import { required } from "../src/util/required.ts";
-
-import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 
-const roots: string[] = [];
-
 function tempDir(): string {
-  const root = mkdtempSync(join(tmpdir(), "shore-default-config-"));
-  roots.push(root);
-  return root;
+  return mkdtempSync(join(tmpdir(), "shore-default-config-"));
 }
-
-afterEach(() => {
-  while (roots.length > 0) {
-    const root = required(roots.pop());
-    try {
-      chmodSync(root, 0o700);
-    } catch {
-    }
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 describe("loadConfig", () => {
 

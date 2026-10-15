@@ -3,8 +3,8 @@ import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdtemp, mkdir, readlink, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -24,14 +24,8 @@ import { handleBash } from "../src/tools/bash.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
-});
-
 test.each([false, true])("archive failure restores workspace edits, binary files, and deleted symlinks (delegated: %s)", async (delegated) => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-workspace-rollback-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
@@ -91,7 +85,6 @@ test.each([false, true])("archive failure restores workspace edits, binary files
 
 test("compaction resumes without repeating writes and commits only after archive", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
@@ -289,7 +282,6 @@ function scripted(
 
 test("a conversation rewritten after the plan was resolved pauses instead of archiving", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-rewritten-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
@@ -337,7 +329,6 @@ test("a conversation rewritten after the plan was resolved pauses instead of arc
 
 test("turns that arrive while a pass runs are kept, not archived with the planned range", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-grown-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");

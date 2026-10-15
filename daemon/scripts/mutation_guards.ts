@@ -12,7 +12,7 @@ export const GUARDS: readonly Guard[] = [
     functions: fns("config/token.ts", ["resolveDaemonToken", "tokenMatches"]),
   },
   {
-    tests: ["web_transport.test.ts", "web_recovery.test.ts", "web_archives.test.ts", "picture_delivery.test.ts"],
+    tests: ["web.test.ts"],
     functions: [
       ...fns("web/auth.ts", ["WebSessions.#presented", "WebSessions.read", "WebSessions.get", "WebSessions.create", "WebSessions.renew", "WebSessions.revoke", "LoginCodes.create", "LoginCodes.redeem"]),
       ...fns("web/policy.ts", ["webBinding", "originHost", "pageOrigin", "readSmallJson"]),
@@ -23,7 +23,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["swp.test.ts", "swp_transport.test.ts", "swp_local_peer.test.ts", "swp_admission.test.ts", "reliability_boundaries.test.ts"],
+    tests: ["swp.test.ts", "reliability.test.ts"],
     functions: [
       ...fns("swp/framing.ts", ["rustTrim", "WireReader.#fill", "WireReader.readMessage"]),
       ...fns("swp/connection.ts", ["performHandshake", "runMessageLoop"]),
@@ -40,7 +40,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["subagent.test.ts", "file_tools.test.ts", "bash.test.ts", "create_character.test.ts", "threads.test.ts", "images.test.ts", "browser_media.test.ts"],
+    tests: ["subagent.test.ts", "file_tools.test.ts", "bash.test.ts", "create_character.test.ts", "threads.test.ts", "images.test.ts", "browser.test.ts"],
     functions: [
       ...fns("tools/workspace_path.ts", ["resolveRoots", "resolvePath", "pathComponents", "isInside", "normalizeWorkspacePath", "normalizePromptVisiblePath"]),
       ...fns("tools/subagent.ts", ["expandPromptMacros", "readPromptFile", "subagentToolSubset"]),
@@ -51,7 +51,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["browser_chat.test.ts", "browser_wire.test.ts"],
+    tests: ["browser.test.ts"],
     functions: fns("browser/markdown.tsx", ["safeHref"]),
   },
   {
@@ -63,7 +63,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["bash.test.ts", "reliability_execution.test.ts", "workspace_git_push.test.ts"],
+    tests: ["bash.test.ts", "reliability.test.ts", "workspace_git_push.test.ts"],
     functions: [
       ...fns("tools/bash.ts", ["handleBash"]),
       ...fns("tools/process.ts", ["envWithoutInheritedGitRepo", "runProcess", "boundedProcessOutput"]),
@@ -87,7 +87,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["dotenv.test.ts", "reliability_boundaries.test.ts"],
+    tests: ["dotenv.test.ts", "reliability.test.ts"],
     functions: fns("config/dotenv.ts", ["parseDotenv", "prepareDotenv", "applyDotenv", "skipExport", "readSingleQuoted", "readDoubleQuoted", "readUnquoted", "readSubstitution", "unescape"]),
   },
   {
@@ -122,14 +122,14 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["keepalive_service.test.ts", "keepalive_rewrite.test.ts", "keepalive_wiring.test.ts", "keepalive_heartbeat.test.ts", "cache_keepalive.test.ts", "cache_scenarios.test.ts"],
+    tests: ["keepalive.test.ts", "keepalive_wiring.test.ts", "keepalive_heartbeat.test.ts", "cache_scenarios.test.ts"],
     functions: [
       ...fns("cache/keepalive.ts", ["prefixIsStale", "pingLandedCold", "pingRewrotePrefix", "buildKeepalivePing", "KeepaliveService.#haltModel", "KeepaliveService.arm", "KeepaliveService.disarm", "KeepaliveService.observe", "KeepaliveService.tick", "KeepaliveService.#ping", "KeepaliveService.#pingInner", "KeepaliveService.#skip", "readsFromMissedModel"]),
       ...fns("cache/schedule.ts", ["retryDelay", "CacheKeepalive.#deadline", "CacheKeepalive.setInterval", "CacheKeepalive.onCacheWarmed", "CacheKeepalive.onPingSucceeded", "CacheKeepalive.onCacheInvalidated", "CacheKeepalive.tick", "CacheKeepalive.onPingFailed"]),
     ],
   },
   {
-    tests: ["anthropic_adapter.test.ts", "chat_wire_contract.test.ts", "cache_scenarios.test.ts", "mock_anthropic.test.ts", "continuation_placement.test.ts", "anthropic_thinking_verification.test.ts"],
+    tests: ["anthropic_adapter.test.ts", "chat_wire_contract.test.ts", "cache_scenarios.test.ts", "continuation_placement.test.ts", "anthropic_thinking_verification.test.ts"],
     functions: [
       ...fns("llm/providers/anthropic.ts", ["anthropicContentEvents", "normalizeMessages", "placeBreakpoints", "clearCacheMarkers", "applyDefaultPlacement", "placeContinuationBreakpoints", "applyMessageBreakpoint", "dropUnverifiableThinking", "toContentBlockParam", "clampEnabledBudget", "buildThinkingParams"]),
       ...fns("llm/cache_placement.ts", ["assistantTurnStart", "frozenBoundaryBefore", "messageBreakpoints"]),
@@ -143,7 +143,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["gemini_adapter.test.ts", "zai_adapter.test.ts", "vercel_adapter.test.ts", "openai_stream.test.ts", "openrouter_conversion.test.ts", "image_blocks.test.ts", "tool_defs.test.ts", "nanogpt_prompt_caching.test.ts"],
+    tests: ["gemini_adapter.test.ts", "zai_adapter.test.ts", "vercel_adapter.test.ts", "openai.test.ts", "openrouter_conversion.test.ts", "image_blocks.test.ts", "tool_defs.test.ts"],
     functions: [
       ...fns("llm/providers/gemini.ts", ["geminiStreamEvents", "translateMessages", "translateParts", "mergeConsecutiveRoles"]),
       ...fns("llm/providers/zai.ts", ["buildZaiMessages", "turnToZai", "zaiStreamEvents"]),
@@ -170,7 +170,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["image_reduction.test.ts", "image_tokens.test.ts", "image_support.test.ts", "image_dimensions.test.ts"],
+    tests: ["image_limits.test.ts", "image_dimensions.test.ts"],
     functions: [
       ...fns("llm/prepare_images.ts", ["planReduction", "encodeWithin", "limitImageBlock", "limitRequestImages"]),
       ...fns("llm/image_tokens.ts", ["visualTokens", "sizeForTier", "fitLongEdge"]),
@@ -192,7 +192,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["data_directory_lease.test.ts"],
+    tests: ["data_directory.test.ts"],
     functions: fns("daemon/data_directory_lease.ts", ["acquireDataDirectoryLease", "takeDataDirectoryProcessLock", "ownerProcessState", "createLeaseFile", "leaseFor", "readSnapshot", "removeSnapshot", "parseOwner"]),
   },
   {
@@ -207,7 +207,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["storage_retention.test.ts", "agent_session_retention.test.ts"],
+    tests: ["retention.test.ts"],
     functions: [
       ...fns("storage/retention.ts", ["pruneDiagnostics"]),
       ...fns("llm/providers/agent_session_retention.ts", ["sessionReferences", "retireSession", "reconcileSessions", "removeLocalSession", "pruneSdkSessions"]),
@@ -221,7 +221,7 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
-    tests: ["thread_fork.test.ts", "registry_threads.test.ts"],
+    tests: ["threads.test.ts"],
     functions: [
       ...fns("engine/fork.ts", ["selectForkContext", "withForkLock", "forkThreadLocked", "loadForkSource", "recoverForks"]),
       ...fns("engine/threads.ts", ["writeThreadsIndex", "createThread"]),
@@ -241,7 +241,7 @@ export const GUARDS: readonly Guard[] = [
     functions: fns("autonomy/heartbeat.ts", ["HeartbeatClock.#isAbandoned", "HeartbeatClock.tick", "HeartbeatClock.#bounded", "HeartbeatClock.schedule", "HeartbeatClock.onUserMessage", "HeartbeatClock.boundWake"]),
   },
   {
-    tests: ["router.test.ts", "reliability_lifecycle.test.ts"],
+    tests: ["router.test.ts", "reliability.test.ts"],
     functions: [
       ...fns("handler/router.ts", ["cancelledStreamEnd", "MessageHandler.enqueueRouted", "MessageHandler.handleControl", "MessageHandler.#cancel", "MessageHandler.launchGeneration", "MessageHandler.cancelGeneration"]),
       ...fns("commands/segments.ts", ["clear"]),

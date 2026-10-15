@@ -1,7 +1,7 @@
 import { writeDurable } from "../src/storage/files.ts";
 import { Database } from "bun:sqlite";
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,12 +16,6 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { outcomeOf } from "./support/outcome.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true });
-});
 
 describe("deleting a character", () => {
   test("takes every path that would re-seed it, and its database rows", async () => {
@@ -121,7 +115,6 @@ describe("deleting a character", () => {
 
 async function root(name: string): Promise<ShoreDirs> {
   const base = await mkdtemp(join(tmpdir(), `shore-${name}-`));
-  roots.push(base);
   const dirs: ShoreDirs = {
     config: join(base, "config"),
     data: join(base, "data"),

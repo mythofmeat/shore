@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { ChatCompletionChunk } from "openai/resources/chat/completions";
 
 import { buildZaiMessages, zaiStreamEvents } from "../src/llm/providers/zai.ts";
-import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import type { SidecarRequest } from "../src/llm/types.ts";
 import { rejectionOf } from "./support/outcome.ts";
+import { collect, tickingClock } from "./support/stream.ts";
 
 function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
   return {
@@ -24,20 +25,6 @@ function asChunk(raw: unknown): ChatCompletionChunk {
 
 async function* fakeChunks(arr: unknown[]): AsyncIterable<ChatCompletionChunk> {
   for (const item of arr) yield asChunk(item);
-}
-
-function fakeClock(): () => number {
-  let t = 0;
-  return () => {
-    t += 10;
-    return t;
-  };
-}
-
-async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
-  const out: StreamEvent[] = [];
-  for await (const event of events) out.push(event);
-  return out;
 }
 
 describe("request construction", () => {
@@ -107,7 +94,7 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
     },
   ];
 
-  const events = await collect(zaiStreamEvents("glm-5.1", fakeChunks(chunks), fakeClock()));
+  const events = await collect(zaiStreamEvents("glm-5.1", fakeChunks(chunks), tickingClock()));
 
   expect(events[0]).toEqual({ type: "start", model: "glm-5.1-plus" });
   expect(events[1]).toEqual({ type: "thinking", text: "think" });
@@ -136,7 +123,7 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
 });
 
 test("rejects streams that end without terminal metadata", async () => {
-  expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([]), fakeClock()))))
+  expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([]), tickingClock()))))
     .toMatchObject({
       kind: "stream_errored",
       message: "Z.ai stream ended without a finish reason",
@@ -144,7 +131,7 @@ test("rejects streams that end without terminal metadata", async () => {
 
   expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
     choices: [{ index: 0, delta: { content: "partial" }, finish_reason: null }],
-  }]), fakeClock())))).toMatchObject({
+  }]), tickingClock())))).toMatchObject({
     kind: "stream_errored",
     message: "Z.ai stream ended without a finish reason",
   });

@@ -1,17 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
 
 async function failure(work: Promise<unknown>): Promise<string> {
   try { await work; } catch (error) { return String(error); }
@@ -20,7 +14,6 @@ async function failure(work: Promise<unknown>): Promise<string> {
 
 async function world() {
   const root = await mkdtemp(join(tmpdir(), "shore-bash-"));
-  roots.push(root);
   const workspaceDir = join(root, "workspace");
   const ctx: ToolContext = {
     workspaceDir, characterName: "Juniper Vale", characterDataDir: root,

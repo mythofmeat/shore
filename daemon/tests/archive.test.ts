@@ -1,10 +1,9 @@
-
 import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { afterEach, describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { access, mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Header } from "tar";
@@ -15,12 +14,6 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { outcomeOf } from "./support/outcome.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true });
-});
 
 describe("character archives", () => {
   test("browser archive snapshots and extraction remain inside the owned transfer directory", async () => {
@@ -136,7 +129,6 @@ describe("character archives", () => {
 
 async function root(name: string): Promise<ShoreDirs> {
   const base = await mkdtemp(join(tmpdir(), `shore-${name}-`));
-  roots.push(base);
   const dirs: ShoreDirs = {
     config: join(base, "config"),
     data: join(base, "data"),

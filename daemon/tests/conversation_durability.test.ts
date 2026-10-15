@@ -3,31 +3,18 @@ import { readdir } from "./support/stored_files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  BACKUP_THROTTLE_MS,
-  MAX_BACKUPS,
-  backupBeforeWrite,
-  backupDirFor,
-  resetBackupThrottle,
-} from "../src/engine/backup.ts";
+import { BACKUP_THROTTLE_MS, MAX_BACKUPS, backupBeforeWrite, backupDirFor } from "../src/engine/backup.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  resetBackupThrottle();
-  await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
-});
-
 async function workspace(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "shore-durability-"));
-  cleanups.push(() => rm(dir, { recursive: true, force: true }));
   await mkdir(join(dir, "threads", "main"), { recursive: true });
   return dir;
 }

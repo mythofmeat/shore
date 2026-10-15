@@ -1,6 +1,5 @@
-
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, readFile, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ToolContext } from "../src/tools/dispatch.ts";
@@ -10,13 +9,10 @@ import { renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { toolResultText } from "../src/llm/types.ts";
 
-const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 async function world() {
   const root = await mkdtemp(join(tmpdir(), "shore-files-"));
-  roots.push(root);
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir);
   const ctx: ToolContext = {

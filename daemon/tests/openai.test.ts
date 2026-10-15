@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test";
-import type { ChatCompletionChunk } from "openai/resources/chat/completions";
-
-import { openAIStreamEvents } from "../src/llm/providers/openai.ts";
-import type { StreamEvent } from "../src/llm/types.ts";
+import { expect, test, describe } from "bun:test";
+import { type ChatCompletionChunk, type ChatCompletionCreateParams } from "openai/resources/chat/completions";
+import { openAIStreamEvents, applyPromptCaching } from "../src/llm/providers/openai.ts";
+import { collect, tickingClock } from "./support/stream.ts";
+import { type Sdk, type SidecarRequest } from "../src/llm/types.ts";
 
 function asChunk(c: unknown): ChatCompletionChunk {
   return c as ChatCompletionChunk;
@@ -10,20 +10,6 @@ function asChunk(c: unknown): ChatCompletionChunk {
 
 async function* fakeChunks(arr: unknown[]): AsyncIterable<ChatCompletionChunk> {
   for (const c of arr) yield asChunk(c);
-}
-
-function fakeClock(): () => number {
-  let t = 0;
-  return () => {
-    t += 10;
-    return t;
-  };
-}
-
-async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
-  const out: StreamEvent[] = [];
-  for await (const e of events) out.push(e);
-  return out;
 }
 
 test("maps a reasoning + text + split tool_call stream to StreamEvents", async () => {
@@ -65,7 +51,7 @@ test("maps a reasoning + text + split tool_call stream to StreamEvents", async (
   ];
 
   const events = await collect(
-    openAIStreamEvents("deepseek/deepseek-v4-pro", fakeChunks(chunks), fakeClock()),
+    openAIStreamEvents("deepseek/deepseek-v4-pro", fakeChunks(chunks), tickingClock()),
   );
 
   expect(events[0]).toEqual({ type: "start", model: "deepseek/deepseek-v4-pro" });
@@ -106,7 +92,7 @@ test("text-only stream ends with end_turn and no tool_use events", async () => {
     { choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }] },
     { choices: [], usage: { prompt_tokens: 5, completion_tokens: 1 } },
   ];
-  const events = await collect(openAIStreamEvents("openai/gpt-5.5", fakeChunks(chunks), fakeClock()));
+  const events = await collect(openAIStreamEvents("openai/gpt-5.5", fakeChunks(chunks), tickingClock()));
   expect(events.map((e) => e.type)).toEqual(["start", "text", "done"]);
   const done = events[2];
   if (done?.type === "done") {
@@ -114,4 +100,38 @@ test("text-only stream ends with end_turn and no tool_use events", async () => {
     expect(done.content).toBe("hi");
     expect(done.usage.total_cost_usd).toBeUndefined();
   }
+});
+
+function request(sdk: Sdk, cacheTtl?: string): SidecarRequest {
+  return {
+    sdk,
+    provider_key: sdk === "nanogpt" ? "nanogpt" : "openai",
+    model: "anthropic/claude-sonnet-5",
+    api_key: "k",
+    max_tokens: 100,
+    messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    ...(cacheTtl === undefined ? {} : { provider_options: { cache_ttl: cacheTtl } }),
+  } as SidecarRequest;
+}
+
+function params(messageCount = 0): ChatCompletionCreateParams {
+  return {
+    model: "anthropic/claude-sonnet-5",
+    messages: Array.from({ length: messageCount }, () => ({
+      role: "user" as const,
+      content: "hi",
+    })),
+  };
+}
+
+const helperIn = (p: ChatCompletionCreateParams): unknown =>
+  (p as unknown as Record<string, unknown>)["prompt_caching"];
+
+describe("the prompt-cache helper nano-gpt reads", () => {
+
+  test("OpenAI's own endpoint never sees the field, which it would reject", () => {
+    const p = params();
+    applyPromptCaching(request("openai", "1h"), p);
+    expect(helperIn(p)).toBeUndefined();
+  });
 });

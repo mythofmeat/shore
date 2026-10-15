@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -10,11 +10,8 @@ import { databasePath, withStorage } from "../src/storage/store.ts";
 import { appendSubagentTrace, readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import { exportUnifiedDatabase, importUnifiedDatabase } from "../src/storage/archive.ts";
 
-const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function dirs() {
   const root = mkdtempSync(join(tmpdir(), "shore-storage-"));
-  roots.push(root);
   const data = join(root, "data");
   const cache = join(root, "cache");
   mkdirSync(data); mkdirSync(cache);

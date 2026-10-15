@@ -1,8 +1,8 @@
 import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -19,14 +19,8 @@ import type {
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
-});
-
 test("a compaction cut off at the token ceiling does not archive behind a half-written summary", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-truncated-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
@@ -65,7 +59,6 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
 
 test("a pass that ends cleanly still archives", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-clean-"));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");

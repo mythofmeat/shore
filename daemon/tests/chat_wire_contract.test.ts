@@ -14,129 +14,21 @@ import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.t
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
 import { consumeStream } from "../src/llm/stream.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import { startMockAnthropic, type MockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { setTestEnv } from "./support/env.ts";
 
-type Scripted =
-  | { kind: "thinking"; thinking: string; signature: string; text: string }
-  | { kind: "text"; text: string }
-  | { kind: "tool"; thinking?: { thinking: string; signature: string }; id: string; name: string; input: unknown };
+type Reply = NonNullable<NonNullable<Parameters<typeof startMockAnthropic>[0]>["script"]>;
 
 interface WireRequest {
   messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
   system?: Array<Record<string, unknown>>;
-  thinking?: Record<string, unknown>;
-  [k: string]: unknown;
 }
 
-function sse(turn: Scripted): string {
-  const frame = (event: string, data: unknown) =>
-    `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-
-  let out = frame("message_start", {
-    type: "message_start",
-    message: {
-      id: "msg_1",
-      type: "message",
-      role: "assistant",
-      model: "claude-fixture",
-      content: [],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: 10, output_tokens: 0, cache_read_input_tokens: 4 },
-    },
-  });
-
-  let index = 0;
-  const emitThinking = (thinking: string, signature: string) => {
-    out += frame("content_block_start", {
-      type: "content_block_start",
-      index,
-      content_block: { type: "thinking", thinking: "", signature: "" },
-    });
-    out += frame("content_block_delta", {
-      type: "content_block_delta",
-      index,
-      delta: { type: "thinking_delta", thinking },
-    });
-    out += frame("content_block_delta", {
-      type: "content_block_delta",
-      index,
-      delta: { type: "signature_delta", signature },
-    });
-    out += frame("content_block_stop", { type: "content_block_stop", index });
-    index += 1;
-  };
-
-  if (turn.kind === "thinking") emitThinking(turn.thinking, turn.signature);
-  if (turn.kind === "tool" && turn.thinking !== undefined) {
-    emitThinking(turn.thinking.thinking, turn.thinking.signature);
-  }
-
-  if (turn.kind === "tool") {
-    out += frame("content_block_start", {
-      type: "content_block_start",
-      index,
-      content_block: { type: "tool_use", id: turn.id, name: turn.name, input: {} },
-    });
-    out += frame("content_block_delta", {
-      type: "content_block_delta",
-      index,
-      delta: { type: "input_json_delta", partial_json: JSON.stringify(turn.input) },
-    });
-    out += frame("content_block_stop", { type: "content_block_stop", index });
-  } else {
-    out += frame("content_block_start", {
-      type: "content_block_start",
-      index,
-      content_block: { type: "text", text: "" },
-    });
-    out += frame("content_block_delta", {
-      type: "content_block_delta",
-      index,
-      delta: { type: "text_delta", text: turn.text },
-    });
-    out += frame("content_block_stop", { type: "content_block_stop", index });
-  }
-
-  out += frame("message_delta", {
-    type: "message_delta",
-    delta: { stop_reason: turn.kind === "tool" ? "tool_use" : "end_turn", stop_sequence: null },
-    usage: { output_tokens: 7 },
-  });
-  out += frame("message_stop", { type: "message_stop" });
-  return out;
-}
-
-interface Fake {
-  url: string;
-  seen: WireRequest[];
-  stop(): void;
-}
-
-function fakeAnthropic(script: Scripted[]): Fake {
-  const seen: WireRequest[] = [];
-  let next = 0;
-  const server = Bun.serve({
-    port: 0,
-    async fetch(request) {
-      seen.push((await request.json()) as WireRequest);
-      const turn = script[next++] ?? { kind: "text" as const, text: "(exhausted)" };
-      return new Response(sse(turn), { headers: { "content-type": "text/event-stream" } });
-    },
-  });
-  return { url: `http://localhost:${server.port}`, seen, stop: () => void server.stop(true) };
-}
-
-const teardown: Array<() => void> = [];
-afterEach(() => {
-  for (const undo of teardown.splice(0)) undo();
+let running: MockAnthropic | undefined;
+afterEach(async () => {
+  await running?.stop();
+  running = undefined;
 });
-
-function serving(script: Scripted[]): Fake {
-  const fake = fakeAnthropic(script);
-  teardown.push(() => fake.stop());
-  return fake;
-}
 
 const KEY_ENV = "SHORE_WIRE_CONTRACT_KEY";
 
@@ -220,17 +112,16 @@ function assistantFrom(blocks: ContentBlock[]): Message {
 }
 
 interface Harness {
-  store: MessageStore;
-  fake: Fake;
-  request(regen: boolean): Promise<SidecarRequest>;
+  seen(): WireRequest[];
   say(text: string): Promise<ContentBlock[]>;
 }
 
-async function harness(script: Scripted[]): Promise<Harness> {
+async function harness(script: Reply): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "shore-wire-"));
   const config = await loadedConfig(root);
-  const fake = serving(script);
-  const resolved = model(fake.url);
+  const mock = await startMockAnthropic({ script });
+  running = mock;
+  const resolved = model(mock.url);
   setTestEnv(KEY_ENV, "test-key");
   const store = MessageStore.create(join(root, "data", "frank", "threads", "main", "active.jsonl"));
 
@@ -244,7 +135,7 @@ async function harness(script: Scripted[]): Promise<Harness> {
       regen,
       mcpRegistry: NO_MCP,
     });
-    return { ...built.request, api_key: "test-key", base_url: fake.url };
+    return { ...built.request, api_key: "test-key", base_url: mock.url };
   };
 
   const say = async (text: string): Promise<ContentBlock[]> => {
@@ -255,7 +146,7 @@ async function harness(script: Scripted[]): Promise<Harness> {
     return blocks;
   };
 
-  return { store, fake, request, say };
+  return { seen: () => mock.requests.map((r) => r.body as unknown as WireRequest), say };
 }
 
 async function runToDone(events: AsyncIterable<StreamEvent>): Promise<ContentBlock[]> {
@@ -281,14 +172,14 @@ function breakpointCount(req: WireRequest): number {
 describe("what reaches the model", () => {
   test("thinking replays verbatim, with the signature the model minted", async () => {
     const h = await harness([
-      { kind: "thinking", thinking: "she asked twice", signature: "sig-AAA", text: "first" },
-      { kind: "text", text: "second" },
+      { thinking: "she asked twice", thinkingSignature: "sig-AAA", text: "first" },
+      { text: "second" },
     ]);
 
     await h.say("hello");
     await h.say("again");
 
-    const replayed = thinkingIn(required(assistantTurns(required(h.fake.seen[1]))[0]));
+    const replayed = thinkingIn(required(assistantTurns(required(h.seen()[1]))[0]));
     expect(replayed).toHaveLength(1);
     expect(required(replayed[0])["thinking"]).toBe("she asked twice");
     expect(required(replayed[0])["signature"]).toBe("sig-AAA");
@@ -296,16 +187,16 @@ describe("what reaches the model", () => {
 
   test("no request ever carries an unsendable turn", async () => {
     const h = await harness([
-      { kind: "thinking", thinking: "t1", signature: "sig-1", text: "a" },
-      { kind: "text", text: "b" },
-      { kind: "text", text: "c" },
+      { thinking: "t1", thinkingSignature: "sig-1", text: "a" },
+      { text: "b" },
+      { text: "c" },
     ]);
 
     await h.say("one");
     await h.say("two");
     await h.say("three");
 
-    for (const req of h.fake.seen) {
+    for (const req of h.seen()) {
       for (const m of req.messages) {
         expect(m.content.length).toBeGreaterThan(0);
         for (const block of m.content) {
@@ -325,10 +216,10 @@ describe("what reaches the model", () => {
 
   test("breakpoints stay within budget and always anchor the newest message", async () => {
     const h = await harness([
-      { kind: "thinking", thinking: "t1", signature: "sig-1", text: "a" },
-      { kind: "text", text: "b" },
-      { kind: "text", text: "c" },
-      { kind: "text", text: "d" },
+      { thinking: "t1", thinkingSignature: "sig-1", text: "a" },
+      { text: "b" },
+      { text: "c" },
+      { text: "d" },
     ]);
 
     await h.say("one");
@@ -336,7 +227,7 @@ describe("what reaches the model", () => {
     await h.say("three");
     await h.say("four");
 
-    for (const req of h.fake.seen) {
+    for (const req of h.seen()) {
       expect(breakpointCount(req)).toBeLessThanOrEqual(4);
       const last = required(req.messages.at(-1));
       expect(last.content.some((b) => b["cache_control"] !== undefined)).toBe(true);

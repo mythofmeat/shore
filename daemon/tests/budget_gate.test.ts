@@ -1,9 +1,6 @@
-
-
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rmSync } from "node:fs";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
@@ -132,7 +129,6 @@ async function generateOnce(
   usage: unknown,
 ): Promise<{ calls: number; error: string | undefined }> {
   const root = await mkdtemp(join(tmpdir(), "shore-budget-generate-"));
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const config = await chatConfig(root, false);
   const ledger = spentLedger();
   const counting = countingProvider();
@@ -262,7 +258,6 @@ async function chatTurn(
   sleeps: number;
 }> {
   const root = await mkdtemp(join(tmpdir(), "shore-budget-chat-"));
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const config = await chatConfig(root, spareKey);
   if (usage !== undefined) {
     config.app.usage = usage as unknown as typeof config.app.usage;

@@ -1,23 +1,14 @@
-
 import { writeDurable } from "../src/storage/files.ts";
-import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CharacterConfigError, CharacterRegistry } from "../src/characters.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
 
-const roots: string[] = [];
-
-afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-
 function makeRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "shore-characters-"));
-  roots.push(root);
-  return root;
+  return mkdtempSync(join(tmpdir(), "shore-characters-"));
 }
 
 function writeCharacter(configDir: string, name: string, soul: boolean): void {

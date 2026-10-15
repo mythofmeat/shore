@@ -1,8 +1,6 @@
-import { required } from "../src/util/required.ts";
-
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -10,17 +8,9 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitPushWorkspace } from "../src/tools/workspace.ts";
 import { envWithoutInheritedGitRepo } from "../src/tools/process.ts";
 
-const roots: string[] = [];
-
 function tempDir(): string {
-  const root = mkdtempSync(join(tmpdir(), "shore-git-push-"));
-  roots.push(root);
-  return root;
+  return mkdtempSync(join(tmpdir(), "shore-git-push-"));
 }
-
-afterEach(() => {
-  while (roots.length > 0) rmSync(required(roots.pop()), { recursive: true, force: true });
-});
 
 async function gitAvailable(): Promise<boolean> {
   const proc = Bun.spawn(["git", "--version"], { stdout: "ignore", stderr: "ignore" });
