@@ -2,7 +2,7 @@ import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -17,7 +17,7 @@ import type {
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
-import { outcomeOf } from "./support/outcome.ts";
+import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 
 test("a compaction cut off at the token ceiling does not archive behind a half-written summary", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-truncated-"));
@@ -88,12 +88,48 @@ test("a pass that ends cleanly still archives", async () => {
   expect(outcome.kind).toBe("compacted");
 });
 
+test("an archive that fails puts every memory file the pass touched back as it was", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-rollback-"));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const blob = Buffer.from([0xff, 0x00, 0xfe]);
+  await writeFile(join(workspace, "MEMORY.md"), "before\n");
+  await writeFile(join(workspace, "memory", "old.md"), "old\n");
+  await writeFile(join(workspace, "memory", "blob.bin"), blob);
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+
+  const base = options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools(workspace), scripted([
+    response("tool_use", [
+      { type: "tool_use", id: "w1", name: "edit", input: { path: "MEMORY.md", content: "after\n" } },
+      { type: "tool_use", id: "w2", name: "edit", input: { path: "memory/new.md", content: "new\n" } },
+      { type: "tool_use", id: "w3", name: "delete", input: { path: "memory/old.md" } },
+      { type: "tool_use", id: "w4", name: "delete", input: { path: "memory/blob.bin" } },
+    ]),
+    response("end_turn", [{ type: "text", text: "done" }]),
+  ]));
+  const failing = { ...base, conversationMgr: { ...base.conversationMgr, archiveAndRetain: async () => { throw new Error("disk full"); } } };
+
+  expect(String(await rejectionOf(compact(failing, { keepRecentTurns: 1 })))).toContain("disk full");
+  expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("before\n");
+  expect(await readFile(join(workspace, "memory", "old.md"), "utf8")).toBe("old\n");
+  expect(Buffer.from(await readFile(join(workspace, "memory", "blob.bin")))).toEqual(blob);
+  expect(await outcomeOf(readFile(join(workspace, "memory", "new.md"), "utf8"))).toThrow();
+});
+
 function tools(workspace: string, deferred?: string[]): CompactionTools {
   return {
     workspaceDir: workspace,
-    dispatch: async (_name, input) => {
+    dispatch: async (name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
+      if (name === "delete") {
+        await rm(path);
+        return { output: "deleted", isError: false };
+      }
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, edit.content, "utf8");
       return { output: "written", isError: false };

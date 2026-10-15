@@ -8,6 +8,7 @@ import {
 const HOUR = 3_600_000;
 const CONFIG_MIN = HOUR;
 const CONFIG_MAX = 48 * HOUR;
+const T0 = Date.UTC(2026, 9, 16);
 
 function config(overrides: Partial<HeartbeatClockConfig> = {}): HeartbeatClockConfig {
   return {
@@ -53,31 +54,31 @@ describe("the configured bounds apply to every wake, whoever set it", () => {
 describe("the abandonment guards trip at the threshold, not past it", () => {
   test("silence: exactly at the ceiling is already too silent", () => {
     const maxSilentMs = 2 * HOUR;
-    const clock = new HeartbeatClock(config({ maxSilentMs }), 0);
-    clock.onUserMessage(0);
-    clock.schedule(HOUR, 0);
+    const clock = new HeartbeatClock(config({ maxSilentMs }), T0);
+    clock.onUserMessage(T0);
+    clock.schedule(T0 + HOUR, T0);
 
-    expect(clock.tick(maxSilentMs)).toBe("none");
+    expect(clock.tick(T0 + maxSilentMs)).toBe("none");
     expect(clock.nextWakeAt, "tripping the guard clears the deadline").toBeUndefined();
   });
 
   test("silence: one millisecond short still fires", () => {
     const maxSilentMs = 2 * HOUR;
-    const clock = new HeartbeatClock(config({ maxSilentMs }), 0);
-    clock.onUserMessage(0);
-    clock.schedule(HOUR, 0);
+    const clock = new HeartbeatClock(config({ maxSilentMs }), T0);
+    clock.onUserMessage(T0);
+    clock.schedule(T0 + HOUR, T0);
 
-    expect(clock.tick(maxSilentMs - 1)).toBe("run_tick");
+    expect(clock.tick(T0 + maxSilentMs - 1)).toBe("run_tick");
   });
 
   test("silence: the label and the bootstrap branch agree at the threshold", () => {
     const maxSilentMs = 2 * HOUR;
-    const clock = new HeartbeatClock(config({ maxSilentMs }), 0);
-    clock.onUserMessage(0);
-    clock.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: 0 });
+    const clock = new HeartbeatClock(config({ maxSilentMs }), T0);
+    clock.onUserMessage(T0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: T0 });
 
-    expect(clock.stateAt(maxSilentMs)).toBe("Dormant");
-    expect(clock.tick(maxSilentMs)).toBe("none");
+    expect(clock.stateAt(T0 + maxSilentMs)).toBe("Dormant");
+    expect(clock.tick(T0 + maxSilentMs)).toBe("none");
     expect(clock.nextWakeAt, "an abandoned clock must not re-arm itself").toBeUndefined();
   });
 
@@ -100,6 +101,15 @@ describe("the abandonment guards trip at the threshold, not past it", () => {
 });
 
 describe("the clamp", () => {
+  test("nothing fires before its time, and the next default wake counts from the last one", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 2 * HOUR }), T0);
+    clock.schedule(T0 + HOUR, T0);
+    expect(clock.tick(T0 + HOUR - 1)).toBe("none");
+    expect(clock.tick(T0 + HOUR)).toBe("run_tick");
+    expect(clock.tick(T0 + HOUR + 1)).toBe("none");
+    expect(clock.nextWakeAt).toBe(T0 + 3 * HOUR);
+  });
+
   test("a wake sooner than the floor is pushed out to it", () => {
     const clock = new HeartbeatClock(config(), 0);
     clock.schedule(1_000, 0);
@@ -116,5 +126,43 @@ describe("the clamp", () => {
     const clock = new HeartbeatClock(config(), 10 * HOUR);
     clock.schedule(HOUR, 10 * HOUR);
     expect(clock.nextWakeAt).toBe(11 * HOUR);
+  });
+});
+
+describe("a character that has stopped waking stays stopped", () => {
+  test("a wake it set itself does not fire once it is past the tick ceiling", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 1 }), T0);
+    clock.schedule(T0 + HOUR, T0);
+    expect(clock.tick(T0 + HOUR)).toBe("run_tick");
+    clock.schedule(T0 + 2 * HOUR, T0 + HOUR);
+    expect(clock.tick(T0 + 2 * HOUR)).toBe("none");
+    expect(clock.nextWakeAt).toBeUndefined();
+  });
+
+  test("put to sleep, it stays asleep across a restart, even with a wake on the books", () => {
+    const idle = new HeartbeatClock(config(), T0);
+    idle.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: undefined, forced_dormant: true });
+    expect(idle.stateAt(T0)).toBe("Dormant");
+    expect(idle.tick(T0)).toBe("none");
+    expect(idle.nextWakeAt).toBeUndefined();
+
+    const booked = new HeartbeatClock(config(), T0);
+    booked.restore({ ticks_without_user: 0, next_wake_at: T0 + HOUR, last_user_at: undefined, forced_dormant: true });
+    expect(booked.tick(T0 + HOUR)).toBe("none");
+  });
+
+  test("a user message brings it back", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 1 }), T0);
+    clock.schedule(T0 + HOUR, T0);
+    expect(clock.tick(T0 + HOUR)).toBe("run_tick");
+    expect(clock.stateAt(T0 + HOUR)).toBe("Dormant");
+
+    clock.onUserMessage(T0 + 2 * HOUR);
+    expect(clock.stateAt(T0 + 2 * HOUR)).toBe("Active");
+    expect(clock.tick(T0 + 3 * HOUR)).toBe("run_tick");
+
+    clock.forceDormant();
+    clock.onUserMessage(T0 + 4 * HOUR);
+    expect(clock.tick(T0 + 5 * HOUR)).toBe("run_tick");
   });
 });

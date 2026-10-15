@@ -9,12 +9,12 @@ const fns = (file: string, names: readonly string[]): string[] => names.map((nam
 export const GUARDS: readonly Guard[] = [
   {
     tests: ["swp_auth.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: fns("config/token.ts", ["resolveDaemonToken", "tokenMatches"]),
   },
   {
     tests: ["web.test.ts", "sign_in.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: [
       ...fns("web/auth.ts", ["WebSessions.#presented", "WebSessions.read", "WebSessions.get", "WebSessions.create", "WebSessions.renew", "WebSessions.revoke", "LoginCodes.create", "LoginCodes.redeem"]),
       ...fns("web/policy.ts", ["originHost", "pageOrigin", "readSmallJson"]),
@@ -25,7 +25,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["swp.test.ts", "reliability.test.ts"],
-    floor: 0,
+    floor: 0.85,
     functions: [
       ...fns("swp/framing.ts", ["rustTrim", "WireReader.#fill", "WireReader.readMessage"]),
       ...fns("swp/admission.ts", ["admitCapabilities", "admitClientMessage", "uploadArray", "byteLimit"]),
@@ -34,7 +34,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["credential_redaction.test.ts", "fallback.test.ts", "config_commands.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: [
       ...fns("llm/redact.ts", ["isCredentialHeader", "redactHeaders", "redactRequest"]),
       ...fns("llm/fallback.ts", ["missingKeyReason"]),
@@ -43,7 +43,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["subagent.test.ts", "file_tools.test.ts", "bash.test.ts", "create_character.test.ts", "threads.test.ts", "images.test.ts", "browser.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: [
       ...fns("tools/workspace_path.ts", ["resolveRoots", "resolvePath", "pathComponents", "isInside"]),
       ...fns("tools/subagent.ts", ["expandPromptMacros", "readPromptFile", "subagentToolSubset"]),
@@ -55,26 +55,26 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["browser.test.ts"],
-    floor: 0,
+    floor: 0.95,
     functions: fns("browser/markdown.tsx", ["safeHref"]),
   },
   {
     tests: ["file_tools.test.ts"],
-    floor: 0,
+    floor: 0.6,
     functions: [
       ...fns("tools/edit.ts", ["handleEdit"]),
     ],
   },
   {
     tests: ["bash.test.ts", "reliability.test.ts", "workspace_git_push.test.ts"],
-    floor: 0,
+    floor: 0.55,
     functions: [
       ...fns("tools/process.ts", ["envWithoutInheritedGitRepo", "runProcess", "boundedProcessOutput"]),
     ],
   },
   {
     tests: ["tool_args_rejected.test.ts"],
-    floor: 0,
+    floor: 0.7,
     functions: [
       ...fns("llm/tool_args.ts", ["parseToolArgs"]),
       ...fns("tools/execute.ts", ["executeToolUse", "argumentRejection"]),
@@ -82,7 +82,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["mcp.test.ts", "mcp_connect.test.ts", "stream.test.ts"],
-    floor: 0,
+    floor: 0.85,
     functions: [
       ...fns("mcp/client.ts", ["childEnvironment"]),
       ...fns("notifications.ts", ["expandArgv"]),
@@ -90,12 +90,12 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["dotenv.test.ts", "reliability.test.ts"],
-    floor: 0,
+    floor: 0.75,
     functions: fns("config/dotenv.ts", ["parseDotenv", "applyDotenv"]),
   },
   {
     tests: ["config_schema.test.ts", "default_config.test.ts", "app.test.ts"],
-    floor: 0,
+    floor: 0.45,
     functions: [
       ...fns("config/toml_edit.ts", ["readQuoted", "readKeyPath", "advanceValue", "scanToml", "insertionPoint", "setTomlValue"]),
       ...fns("commands/config.ts", ["restoreConfigFile", "commitConfigKey", "setConfigKey"]),
@@ -103,12 +103,12 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["zoned.test.ts", "ledger_budget.test.ts"],
-    floor: 0,
+    floor: 0.7,
     functions: fns("ledger/zoned.ts", ["naiveInZone", "candidatesFor", "resolveInZone", "partsOf", "daysFromMonday", "atHour", "naiveFrom", "daysInMonth", "toRfc3339", "toZonedRfc3339", "normalizeToZone"]),
   },
   {
     tests: ["budget_gate.test.ts", "ledger_budget.test.ts", "llm_generate.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: [
       ...fns("ledger/gate.ts", ["budgetBlockFor", "costBudgetBlock", "projectedLoopCost"]),
       ...fns("ledger/budget.ts", ["periodWindow", "periodStartNaive", "periodEndNaive", "monthAnchorNaive", "budgetMatchesCall", "shouldBlock", "actionBlocks"]),
@@ -116,12 +116,12 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["pricing.test.ts"],
-    floor: 0,
+    floor: 0.95,
     functions: fns("ledger/pricing.ts", ["calculateCost"]),
   },
   {
     tests: ["tool_loop.test.ts", "subagent_loop.test.ts", "generic_loop.test.ts", "claude_agent_loop.test.ts"],
-    floor: 0,
+    floor: 0.85,
     functions: [
       ...fns("engine/tool_loop.ts", ["runToolLoop"]),
       ...fns("tools/subagent_loop.ts", ["nestedContext"]),
@@ -129,7 +129,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["keepalive.test.ts", "keepalive_wiring.test.ts", "keepalive_heartbeat.test.ts", "cache_scenarios.test.ts"],
-    floor: 0,
+    floor: 0.6,
     functions: [
       ...fns("cache/keepalive.ts", ["prefixIsStale", "pingLandedCold", "buildKeepalivePing", "KeepaliveService.#haltModel", "KeepaliveService.arm", "KeepaliveService.observe", "KeepaliveService.tick", "KeepaliveService.#ping", "KeepaliveService.#pingInner", "KeepaliveService.#skip"]),
       ...fns("cache/schedule.ts", ["retryDelay", "CacheKeepalive.#deadline", "CacheKeepalive.setInterval", "CacheKeepalive.onCacheWarmed", "CacheKeepalive.onPingSucceeded", "CacheKeepalive.onCacheInvalidated", "CacheKeepalive.tick", "CacheKeepalive.onPingFailed"]),
@@ -137,7 +137,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["anthropic_adapter.test.ts", "chat_wire_contract.test.ts", "cache_scenarios.test.ts", "continuation_placement.test.ts", "anthropic_thinking_verification.test.ts"],
-    floor: 0,
+    floor: 0.6,
     functions: [
       ...fns("llm/providers/anthropic.ts", ["anthropicContentEvents", "normalizeMessages", "placeBreakpoints", "clearCacheMarkers", "applyDefaultPlacement", "placeContinuationBreakpoints", "applyMessageBreakpoint", "dropUnverifiableThinking", "toContentBlockParam", "clampEnabledBudget", "buildThinkingParams"]),
       ...fns("llm/cache_placement.ts", ["assistantTurnStart", "frozenBoundaryBefore", "messageBreakpoints"]),
@@ -145,7 +145,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["replay.test.ts", "chat_wire_contract.test.ts", "sanitize.test.ts"],
-    floor: 0,
+    floor: 0.65,
     functions: [
       ...fns("llm/replay.ts", ["carriesOpaqueData", "hasForeignCarrier", "mintedByTheActiveModel", "replayableMessagesWithDrops"]),
       ...fns("llm/sanitize.ts", ["sanitizeToolPairs"]),
@@ -153,7 +153,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["gemini_adapter.test.ts", "zai_adapter.test.ts", "vercel_adapter.test.ts", "openai.test.ts", "openrouter_conversion.test.ts", "image_blocks.test.ts", "tool_defs.test.ts"],
-    floor: 0,
+    floor: 0.5,
     functions: [
       ...fns("llm/providers/gemini.ts", ["geminiStreamEvents", "translateMessages", "translateParts", "mergeConsecutiveRoles"]),
       ...fns("llm/providers/zai.ts", ["buildZaiMessages", "turnToZai", "zaiStreamEvents"]),
@@ -163,7 +163,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["claude_agent_injected_context.test.ts", "claude_agent_stream.test.ts", "claude_agent_tools.test.ts", "claude_agent_loop.test.ts"],
-    floor: 0,
+    floor: 0.65,
     functions: [
       ...fns("llm/providers/claude_agent_injections.ts", ["injectedKind", "canHoldCacheControl", "isBillingHeader", "filterInjectedContext"]),
       ...fns("llm/providers/claude_agent.ts", ["claudeAgentEnvironment", "buildOptions"]),
@@ -172,7 +172,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["abort_not_retried.test.ts", "llm_decisions.test.ts", "retry_after.test.ts", "request.test.ts"],
-    floor: 0,
+    floor: 0.55,
     functions: [
       ...fns("llm/abort.ts", ["isAbortError"]),
       ...fns("llm/retry.ts", ["shouldRetryError"]),
@@ -183,7 +183,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["image_limits.test.ts", "image_dimensions.test.ts"],
-    floor: 0,
+    floor: 0.6,
     functions: [
       ...fns("llm/prepare_images.ts", ["planReduction", "encodeWithin", "limitImageBlock", "limitRequestImages"]),
       ...fns("llm/image_tokens.ts", ["visualTokens", "sizeForTier", "fitLongEdge"]),
@@ -193,12 +193,12 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["embeds.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: fns("engine/embeds.ts", ["wikilink", "escaped", "localTarget", "splitText", "embedsIn", "unsentNotice", "pictureText"]),
   },
   {
     tests: ["message_store_transactions.test.ts", "conversation_durability.test.ts", "conversation.test.ts", "characters.test.ts", "turn.test.ts"],
-    floor: 0,
+    floor: 0.6,
     functions: [
       ...fns("engine/message_store.ts", ["withoutOrphanToolResults", "unansweredTailToolUseIds", "MessageStore.loadWithRaw", "MessageStore.recoverInterruptedToolLoop", "MessageStore.#mutate", "MessageStore.#enqueue", "MessageStore.#persist"]),
       ...fns("engine/backup.ts", ["backupBeforeWrite", "pruneBackups", "quarantineLines"]),
@@ -208,17 +208,17 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["data_directory.test.ts"],
-    floor: 0,
+    floor: 0.55,
     functions: fns("daemon/data_directory_lease.ts", ["acquireDataDirectoryLease", "takeDataDirectoryProcessLock", "ownerProcessState", "createLeaseFile", "leaseFor", "readSnapshot", "removeSnapshot", "parseOwner"]),
   },
   {
     tests: ["snapshot_gate.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: fns("snapshot_gate.ts", ["SnapshotGate.withActivity", "SnapshotGate.withSnapshot", "SnapshotGate.#acquire", "SnapshotGate.#drain"]),
   },
   {
     tests: ["archive.test.ts", "supported_baseline.test.ts", "delete_character.test.ts", "storage_archive.test.ts"],
-    floor: 0,
+    floor: 0.75,
     functions: [
       ...fns("commands/archive.ts", ["exportCharacter", "importCharacter", "deleteCharacter", "deletionTargets", "extractArchive", "readManifest", "installCharacter"]),
       ...fns("storage/archive.ts", ["exportUnifiedDatabase", "importUnifiedDatabase", "removeStoredCharacter"]),
@@ -226,7 +226,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["retention.test.ts"],
-    floor: 0,
+    floor: 0.45,
     functions: [
       ...fns("storage/retention.ts", ["pruneDiagnostics"]),
       ...fns("llm/providers/agent_session_retention.ts", ["sessionReferences", "retireSession", "reconcileSessions", "removeLocalSession", "pruneSdkSessions"]),
@@ -234,7 +234,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["workspace_turns.test.ts", "workspace_rewind_commands.test.ts", "generation.test.ts"],
-    floor: 0,
+    floor: 0.75,
     functions: [
       ...fns("tools/workspace_turns.ts", ["replyVersions", "recordTurn", "undoTurns", "redoTurns", "aliasTurn", "pruneTurns", "replay", "isComplete", "move"]),
       ...fns("commands/conversation.ts", ["rewindDeleted"]),
@@ -242,7 +242,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["threads.test.ts"],
-    floor: 0,
+    floor: 0.5,
     functions: [
       ...fns("engine/fork.ts", ["selectForkContext", "withForkLock", "forkThreadLocked", "loadForkSource", "recoverForks"]),
       ...fns("engine/threads.ts", ["writeThreadsIndex", "createThread"]),
@@ -251,7 +251,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["compaction_truncated.test.ts", "compaction_resume.test.ts", "archive_writer.test.ts", "history_store.test.ts"],
-    floor: 0,
+    floor: 0.65,
     functions: [
       ...fns("memory/compaction/manager.ts", ["rollbackCompaction", "archiveCompactPrefix", "recoverArchivedPass", "resolveCheckpoint"]),
       ...fns("memory/compaction/archive.ts", ["archiveAndRetain", "archiveToDatabase"]),
