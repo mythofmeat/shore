@@ -46,9 +46,42 @@
 #     && ssh-keyscan git.example.com >> ~/.ssh/known_hosts \
 #     && cat ~/.ssh/id_ed25519.pub'
 #
-# To keep the deployment outside the checkout, copy this file somewhere else
-# and build from git instead, with context: https://<user>:<token>@github.com/mythofmeat/shore.git#main
-# (the repository is private, so the token needs read access to it)
+# To keep the deployment outside the checkout, extend the daemon's service
+# from git rather than copying this file, and override what you change; a
+# list such as volumes or ports needs !override to replace the one here
+# rather than add to it. Give the volumes in any case, as ./config here would
+# be in Compose's copy of the repository. For programs the image lacks, build
+# an image of your own, image/Dockerfile, starting FROM shore: the stock
+# image, which a service that never starts builds.
+#
+#   x-shore: &shore
+#     file: https://github.com/mythofmeat/shore.git#main:compose.yaml
+#     service: shore-daemon
+#
+#   services:
+#     shore-stock:
+#       extends: *shore
+#       scale: 0
+#       volumes: !reset []
+#     shore-daemon:
+#       extends: *shore
+#       build: !override
+#         context: ./image
+#         additional_contexts:
+#           shore: service:shore-stock
+#       volumes: !override
+#         - ./config:/config
+#         - ./workspace:/workspace
+#         - data:/data
+#         - cache:/cache
+#         - home:/home/app
+#
+#   volumes:
+#     data:
+#     cache:
+#     home:
+#
+# The repository is private, so git needs credentials for it.
 #
 # The same daemon without compose:
 #
