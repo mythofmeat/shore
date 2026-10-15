@@ -36,7 +36,6 @@ function harness(
     meta: RequestMeta,
     signal: AbortSignal,
   ) => Promise<ServerMessage>,
-  commandChangesState?: (cmd: Command) => boolean,
 ) {
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
@@ -45,13 +44,11 @@ function harness(
   }
 
   const started: GenerationParams[] = [];
-  const notifications: Array<{ title: string; body: string }> = [];
-  const errors: Array<{ message: string; fields: Record<string, unknown> | undefined }> = [];
 
   const handler = new MessageHandler({
     router,
     registry: registryOf(characters),
-    notifier: { notify: (_e, title, body) => notifications.push({ title, body }) },
+    notifier: { notify: () => {} },
     dispatchCommand:
       dispatchCommand ??
       (() =>
@@ -63,11 +60,10 @@ function harness(
         params.signal.addEventListener("abort", () => resolve(), { once: true });
       });
     },
-    ...(commandChangesState === undefined ? {} : { commandChangesState }),
-    log: { error: (message, fields) => errors.push({ message, fields }) },
+    log: { error: () => {} },
   });
 
-  return { handler, router, frames, started, notifications, errors };
+  return { handler, router, frames, started };
 }
 
 function registerTestSession(
