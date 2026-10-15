@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { SegmentReader } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
+import { bookPathIn, readBook, sessionKey, SESSION_BOOK_VERSION, writeBook, type SessionRecord } from "../src/llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
 import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -82,6 +84,38 @@ test("pending compactions are hidden and recover from either side of the active-
   expect(store.segmentDisplayBounds("ada", committed)).toEqual({ start: 0, end: 1 });
   expect(store.segmentTurnCount("ada", committed)).toBe(1);
   store.close();
+});
+
+test("one compaction at a time, and a pending one matching neither side of its write is left alone", () => {
+  const store = HistoryStore.openInMemory();
+  const entry = { file: HISTORY_DB_FILE, message_count: 1, compacted_at: "2026-08-13T10:01:00+10:00" };
+  const messages = [message("u1", "hello")];
+
+  const pending = store.beginCompaction("ada", entry, messages, "before\n", "after\n");
+  expect(() => store.beginCompaction("ada", entry, messages, "before\n", "after\n")).toThrow("already pending");
+  expect(() => store.recoverPending("ada", "edited by hand\n")).toThrow("active history changed");
+  expect(store.pendingCompactionSegment("ada")).toBe(pending);
+  expect(store.beginCompaction("bo", entry, messages, "before\n", "after\n")).toBe(0);
+  store.close();
+});
+
+test("archiving a thread's history starts that thread's Agent SDK sessions afresh, and only that thread's", async () => {
+  const dataDir = testTmp(`history-sessions-${crypto.randomUUID()}`);
+  initializeDatabase(dataDir);
+  const threadDir = join(dataDir, "ada", "threads", "main");
+  await mkdir(threadDir, { recursive: true });
+  const record = (sessionId: string): SessionRecord => ({ version: SESSION_BOOK_VERSION, sessionId, entries: [] });
+  const book = bookPathIn(dataDir);
+  writeBook(book, {
+    [sessionKey("ada", "", "main")]: record("archived"),
+    [sessionKey("ada", "", "side")]: record("side"),
+    [sessionKey("bo", "", "main")]: record("bo"),
+  });
+  const active = [message("u1", "hello"), message("a1", "hi")].map((entry) => JSON.stringify(entry)).join("\n") + "\n";
+
+  await archiveAndRetain(threadDir, { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" }, 0, active);
+
+  expect(Object.values(readBook(book)).map((r) => r.sessionId).sort()).toEqual(["bo", "side"]);
 });
 
 test("a compaction remains readable after its JSONL recovery copy is removed", async () => {
