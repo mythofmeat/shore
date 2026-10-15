@@ -13,6 +13,7 @@
     "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",
     "lint:test-env": "bun run scripts/check_test_env.ts",
+    "mutate": "bun run scripts/mutate.ts",
     "build:patch": "bun run scripts/build_patch.ts",
     "inventory:generate": "bun run scripts/capability_inventory.ts --write",
     "browser:generate": "bun run scripts/browser_validators.ts --write",

@@ -43,3 +43,5 @@ sweep.timestamp
 nohup.out
 __pycache__/
 contrib/arch/shore-cli/
+mutants.out/
+mutants.out.old/
