@@ -1,6 +1,6 @@
 import * as ts from "typescript/unstable/ast";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { availableParallelism, tmpdir } from "node:os";
+import { closeSync, cpSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { availableParallelism, freemem, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { parseInventorySources } from "./capability_inventory.ts";
@@ -10,6 +10,9 @@ const ROOT = join(import.meta.dir, "..");
 const COPIED = ["src", "tests"];
 const LINKED = ["node_modules", "package.json", "bunfig.toml", "tsconfig.json", "prompts", "vendor", "dist", "scripts"];
 const MIN_TIMEOUT_MS = 15_000;
+const MEMORY_CAP_BYTES = 2 * 1024 ** 3;
+const capped = Bun.spawnSync(["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+const cap = capped ? ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${String(MEMORY_CAP_BYTES)}`, "-p", "MemorySwapMax=0"] : [];
 const TIMEOUT_FACTOR = 3;
 const running = new Set<number>();
 const scratch = new Set<string>();
@@ -185,12 +188,13 @@ function killGroup(pid: number): void {
   }
 }
 
-async function runTests(dir: string, tests: readonly string[], timeoutMs: number): Promise<{ outcome: Outcome; ms: number }> {
+async function runTests(dir: string, tests: readonly string[], timeoutMs: number, log?: string): Promise<{ outcome: Outcome; ms: number }> {
   const started = performance.now();
-  const proc = Bun.spawn(["setsid", "bun", "test", ...tests.map((t) => `./tests/${t}`)], {
+  const fd = log === undefined ? undefined : openSync(log, "w");
+  const proc = Bun.spawn(["setsid", ...cap, "bun", "test", ...tests.map((t) => `./tests/${t}`)], {
     cwd: dir,
-    stdout: "ignore",
-    stderr: "ignore",
+    stdout: fd ?? "ignore",
+    stderr: fd ?? "ignore",
   });
   running.add(proc.pid);
   let timedOut = false;
@@ -200,6 +204,7 @@ async function runTests(dir: string, tests: readonly string[], timeoutMs: number
   }, timeoutMs);
   const code = await proc.exited;
   clearTimeout(timer);
+  if (fd !== undefined) closeSync(fd);
   killGroup(proc.pid);
   running.delete(proc.pid);
   const ms = performance.now() - started;
@@ -230,7 +235,7 @@ interface Result {
   readonly ms: number;
 }
 
-async function runAll(jobs: readonly Job[], workers: number, timeouts: ReadonlyMap<Target, number>): Promise<Result[]> {
+async function runAll(jobs: readonly Job[], workers: number, timeouts: ReadonlyMap<Target, number>, logs?: string): Promise<Result[]> {
   const results: Result[] = [];
   let next = 0;
   let done = 0;
@@ -248,7 +253,8 @@ async function runAll(jobs: readonly Job[], workers: number, timeouts: ReadonlyM
             writeFileSync(path, pristine.slice(0, mutant.start) + mutant.replacement + pristine.slice(mutant.end));
           }
           try {
-            const run = await runTests(dir, job.target.guard.tests, timeouts.get(job.target) ?? MIN_TIMEOUT_MS * 8);
+            const log = logs === undefined ? undefined : join(logs, `${String(GUARDS.indexOf(job.target.guard))}.log`);
+            const run = await runTests(dir, job.target.guard.tests, timeouts.get(job.target) ?? MIN_TIMEOUT_MS * 8, log);
             results.push({ job, ...run });
           } finally {
             if (path !== undefined && pristine !== undefined) writeFileSync(path, pristine);
@@ -282,12 +288,24 @@ if (listOnly) {
   process.exit(problems.length > 0 ? 1 : 0);
 }
 
-const workers = Math.max(1, Math.floor(availableParallelism() / 2));
-const baseline = await runAll(targets.map((target) => ({ target, mutant: undefined })), workers, new Map());
+const requested = Number(args.find((a) => a.startsWith("--workers="))?.slice("--workers=".length));
+const workers = Number.isInteger(requested) && requested > 0
+  ? requested
+  : Math.max(1, Math.min(Math.floor(availableParallelism() / 2), capped ? Math.floor(freemem() / (MEMORY_CAP_BYTES * 1.25)) : Infinity));
+if (!capped) console.error("systemd-run --user is unavailable, so test runs have no memory cap");
+const logs = mkdtempSync(join(tmpdir(), "shore-mutate-logs-"));
+const baseline = await runAll(targets.map((target) => ({ target, mutant: undefined })), workers, new Map(), logs);
 const timeouts = new Map<Target, number>();
 for (const r of baseline) {
-  if (r.outcome !== "survived") problems.push(`${r.job.target.guard.tests.join(", ")} fails before any mutation (${r.outcome})`);
+  const log = join(logs, `${String(GUARDS.indexOf(r.job.target.guard))}.log`);
+  if (r.outcome !== "survived") problems.push(`${r.job.target.guard.tests.join(", ")} fails before any mutation (${r.outcome}); its output is in ${log}`);
+  else rmSync(log, { force: true });
   timeouts.set(r.job.target, Math.max(MIN_TIMEOUT_MS, Math.ceil(r.ms * TIMEOUT_FACTOR)));
+}
+if (args.includes("--baseline")) {
+  for (const p of problems) console.log(`problem: ${p}`);
+  if (problems.length === 0) rmSync(logs, { recursive: true, force: true });
+  process.exit(problems.length > 0 ? 1 : 0);
 }
 const healthy = targets.filter((t) => baseline.some((r) => r.job.target === t && r.outcome === "survived"));
 const jobs = healthy.flatMap((target) => target.mutants.map((mutant) => ({ target, mutant })));
