@@ -260,24 +260,45 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["heartbeat.test.ts"],
-    floor: 0,
+    floor: 0.75,
     functions: fns("autonomy/heartbeat.ts", ["HeartbeatClock.#isAbandoned", "HeartbeatClock.tick", "HeartbeatClock.#bounded", "HeartbeatClock.schedule", "HeartbeatClock.onUserMessage"]),
   },
   {
     tests: ["router.test.ts", "reliability.test.ts"],
-    floor: 0,
+    floor: 0.2,
     functions: [
       ...fns("handler/router.ts", ["cancelledStreamEnd"]),
     ],
   },
   {
     tests: ["daemon_run.test.ts"],
-    floor: 0,
+    floor: 0.95,
     functions: fns("daemon/run.ts", ["exitIfStillRunning"]),
   },
   {
     tests: ["operation_contracts.test.ts"],
-    floor: 0,
+    floor: 0.8,
     functions: fns("operations/contracts.ts", ["check", "parseOperationInput", "parseOperationResult", "assertContractBindings"]),
   },
 ];
+
+export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
+  "shore-cli/src/cli.rs": 0.75,
+  "shore-cli/src/output/config.rs": 0.7,
+  "shore-cli/src/run.rs": 0.8,
+  "shore-cli/src/tui/ansi.rs": 0.6,
+  "shore-cli/src/tui/app/input.rs": 0.65,
+  "shore-cli/src/tui/clipboard.rs": 0.95,
+  "shore-cli/src/tui/draft.rs": 0.65,
+  "shore-cli/src/tui/input.rs": 0.5,
+  "shore-cli/src/tui/keymap.rs": 0.85,
+  "shore-cli/src/tui/mod.rs": 0.45,
+  "shore-common/src/active_character.rs": 0.95,
+  "shore-common/src/dirs.rs": 0.95,
+  "shore-common/src/protocol/types.rs": 0.45,
+  "shore-common/src/swp_client/conn_manager.rs": 0.5,
+  "shore-common/src/swp_client/connection.rs": 0.75,
+  "shore-common/src/swp_client/discovery.rs": 0.95,
+  "shore-common/src/swp_client/sync.rs": 0.95,
+  "shore-common/src/token.rs": 0.95,
+};

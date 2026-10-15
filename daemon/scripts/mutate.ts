@@ -1,10 +1,10 @@
 import * as ts from "typescript/unstable/ast";
-import { closeSync, cpSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { availableParallelism, freemem, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { parseInventorySources } from "./capability_inventory.ts";
-import { GUARDS, type Guard } from "./mutation_guards.ts";
+import { CLIENT_FLOORS, GUARDS, type Guard } from "./mutation_guards.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const COPIED = ["src", "tests"];
@@ -273,6 +273,53 @@ async function runAll(jobs: readonly Job[], workers: number, timeouts: ReadonlyM
 const args = process.argv.slice(2);
 const listOnly = args.includes("--list");
 const filters = args.filter((a) => !a.startsWith("--"));
+
+interface CargoOutcome {
+  readonly scenario: "Baseline" | { readonly Mutant: { readonly name: string; readonly file: string } };
+  readonly summary: string;
+}
+
+async function runClient(): Promise<number> {
+  const client = join(ROOT, "..", "client");
+  const output = mkdtempSync(join(tmpdir(), "shore-mutate-client-"));
+  const requested = Number(args.find((a) => a.startsWith("--workers="))?.slice("--workers=".length));
+  const jobs = Number.isInteger(requested) && requested > 0 ? requested : 2;
+  const cargoTmp = join(output, "tmp");
+  mkdirSync(cargoTmp);
+  const cargo = Bun.spawn(["cargo", "mutants", "-j", String(jobs), "--output", output], { cwd: client, env: { ...process.env, TMPDIR: cargoTmp }, stdout: "inherit", stderr: "inherit" });
+  await cargo.exited;
+  let outcomes: CargoOutcome[];
+  try {
+    outcomes = (JSON.parse(readFileSync(join(output, "mutants.out", "outcomes.json"), "utf8")) as { outcomes: CargoOutcome[] }).outcomes;
+  } finally {
+    rmSync(output, { recursive: true, force: true });
+  }
+  const problems: string[] = [];
+  if (outcomes.some((o) => o.scenario === "Baseline" && o.summary !== "Success")) problems.push("the client tests fail before any mutation");
+  const byFile = new Map<string, { caught: number; missed: string[] }>();
+  for (const o of outcomes) {
+    if (o.scenario === "Baseline" || o.summary === "Unviable") continue;
+    const entry = byFile.get(o.scenario.Mutant.file) ?? { caught: 0, missed: [] };
+    if (o.summary === "MissedMutant") entry.missed.push(o.scenario.Mutant.name);
+    else entry.caught += 1;
+    byFile.set(o.scenario.Mutant.file, entry);
+  }
+  let below = 0;
+  for (const [file, { caught, missed }] of [...byFile].sort(([a], [b]) => a.localeCompare(b))) {
+    const floor = CLIENT_FLOORS[file];
+    if (floor === undefined) problems.push(`no floor for ${file}`);
+    const rate = caught / (caught + missed.length);
+    const failing = floor === undefined || rate < floor;
+    if (failing) below++;
+    console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${floor === undefined ? "-" : `${String(Math.round(floor * 100))}%`}) ${String(caught)}/${String(caught + missed.length)}  ${file}`);
+    if (args.includes("--survivors") || failing) for (const name of missed) console.log(`    missed: ${name}`);
+  }
+  for (const file of Object.keys(CLIENT_FLOORS)) if (!byFile.has(file)) problems.push(`floor for ${file}, which has no mutants`);
+  for (const problem of problems) console.log(`problem: ${problem}`);
+  return below > 0 || problems.length > 0 ? 1 : 0;
+}
+
+if (args.includes("--client")) process.exit(await runClient());
 const chosen = GUARDS.filter((g) => filters.length === 0 || filters.some((f) => g.tests.some((t) => t.includes(f)) || g.functions.some((fn) => fn.includes(f))));
 const { targets, problems } = await targetsFor(chosen);
 
@@ -299,9 +346,9 @@ for (const r of baseline) {
   else rmSync(log, { force: true });
   timeouts.set(r.job.target, Math.max(MIN_TIMEOUT_MS, Math.ceil(r.ms * TIMEOUT_FACTOR)));
 }
+if (problems.length === 0) rmSync(logs, { recursive: true, force: true });
 if (args.includes("--baseline")) {
   for (const p of problems) console.log(`problem: ${p}`);
-  if (problems.length === 0) rmSync(logs, { recursive: true, force: true });
   process.exit(problems.length > 0 ? 1 : 0);
 }
 const healthy = targets.filter((t) => baseline.some((r) => r.job.target === t && r.outcome === "survived"));

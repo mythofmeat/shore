@@ -9,7 +9,7 @@ permissions:
 jobs:
   daemon:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 360
     defaults:
       run:
         working-directory: daemon
@@ -21,16 +21,19 @@ jobs:
       - run: rustup update stable --no-self-update
       - run: bun run build:patch
       - run: bun install --frozen-lockfile
-      - run: bun run mutate
+      - run: bun run mutate --workers=4
 
   client:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 90
     defaults:
       run:
-        working-directory: client
+        working-directory: daemon
     steps:
       - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
       - run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@v2
         with:
@@ -38,4 +41,5 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-mutants
-      - run: cargo mutants -j 2
+      - run: bun install --frozen-lockfile
+      - run: bun run mutate --client

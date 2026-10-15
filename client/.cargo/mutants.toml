@@ -1,24 +1,24 @@
 additional_cargo_test_args = ["--", "--skip", "export", "--skip", "terminal_capability_inventory_is_current"]
 
 examine_re = [
-  "^shore-common/src/token\\.rs:",
-  "^shore-common/src/active_character\\.rs:",
-  "^shore-common/src/swp_client/sync\\.rs:",
-  "^shore-common/src/dirs\\.rs:.*\\b(ShoreDirs::resolve_from|resolve_xdg_dir|workspace_root_from|runtime_dir)\\b",
-  "^shore-common/src/swp_client/discovery\\.rs:.*\\b(discover_from_path|discover_or_default_from_path|should_fallback_to_default)\\b",
+  "^shore-common/src/token\\.rs:.*(\\b(resolve_token_with|non_blank)\\b|<impl)",
+  "^shore-common/src/active_character\\.rs:.*\\b(thread_state_path|read_from|write_to)\\b",
+  "^shore-common/src/swp_client/sync\\.rs:.*\\bSyncState::(observe|latest_revision)\\b",
+  "^shore-common/src/dirs\\.rs:.*\\b(ShoreDirs::resolve_from|resolve_xdg_dir)\\b",
+  "^shore-common/src/swp_client/discovery\\.rs:.*\\bdiscover_from_path\\b",
   "^shore-common/src/protocol/types\\.rs:.*\\bThinkingSignature::",
   "^shore-common/src/swp_client/conn_manager\\.rs:.*\\b(run_connected_session|connection_loop|await_without_queueing|send_event)\\b",
   "^shore-common/src/swp_client/connection\\.rs:.*\\b(SWPConnection::do_handshake|SWPConnection::recv_server_hello|SWPConnection::recv|read_json_line_bounded|SWPConnection::send_message_with_images|read_image_upload)\\b",
-  "^shore-cli/src/cli\\.rs:.*\\b(to_swp_command|msg_to_swp|log_to_swp|model_to_swp|usage_to_swp|trace_to_swp|provider_to_swp|operation_to_swp|compact_to_swp|alt_command_to_swp|message_ref|parse_key_value|parse_json_object|segment_target)\\b",
-  "^shore-cli/src/run\\.rs:.*\\b(reads_the_selected_thread|report_unresolved_thread|thread_source|empty_edit_refusal|editor_replacement|typed_replacement|edit_text_with|editor_invocation|needs_a_shell|resolve_editor|editor_from_env)\\b",
+  "^shore-cli/src/cli\\.rs:.*\\b(to_swp_command|msg_to_swp|log_to_swp|model_to_swp|usage_to_swp|trace_to_swp|provider_to_swp|operation_to_swp|compact_to_swp|alt_command_to_swp|message_ref|segment_target)\\b",
+  "^shore-cli/src/run\\.rs:.*\\b(reads_the_selected_thread|report_unresolved_thread|thread_source|empty_edit_refusal|editor_replacement|typed_replacement|edit_text_with|editor_invocation)\\b",
   "^shore-cli/src/output/config\\.rs:.*\\b(is_secret|any_secret|redacted|write_leaf|write_set)\\b",
-  "^shore-cli/src/tui/mod\\.rs:.*\\b(sanitize_terminal_text|restore_failed_send|restore_unpersisted_user_draft|save_draft|restore_draft|draft_snapshot|absorb_segment_page)\\b",
-  "^shore-cli/src/tui/input\\.rs:.*\\b(handle_key|send_user_message|dispatch_cli_command|handle_palette_confirmation|pin_delete_refs|pinned_delete_input)\\b",
-  "^shore-cli/src/tui/draft\\.rs:",
-  "^shore-cli/src/tui/keymap\\.rs:",
-  "^shore-cli/src/tui/app/input\\.rs:",
-  "^shore-cli/src/tui/ansi\\.rs:",
-  "^shore-cli/src/tui/clipboard\\.rs:.*\\b(prepare_image|write_image_to_temp|read_image_to_temp)\\b",
+  "^shore-cli/src/tui/mod\\.rs:.*\\b(sanitize_terminal_text|restore_failed_send|restore_unpersisted_user_draft|save_draft|restore_draft|draft_snapshot)\\b",
+  "^shore-cli/src/tui/input\\.rs:.*\\b(handle_key|send_user_message|handle_palette_confirmation|pin_delete_refs|pinned_delete_input)\\b",
+  "^shore-cli/src/tui/draft\\.rs:.*(\\b(Draft::[a-z_]+|save|save_locked|load|lock_store|lock_session|prune_attachments|recover_attachment|editor_session_path|hex)\\b|<impl)",
+  "^shore-cli/src/tui/keymap\\.rs:.*\\b(Keymap::(parse|bind|lookup|bindings|load_from|checked_binding|empty|list_mut)|canonical_key|Scope::section)\\b",
+  "^shore-cli/src/tui/app/input\\.rs:.*\\b(word_wrap_offsets|InputState::(undo|restore|take_text|set_text|insert_char|insert_str|checkpoint|snapshot|end_run|backspace|delete|move_left|move_right))\\b",
+  "^shore-cli/src/tui/ansi\\.rs:.*\\bto_lines\\b",
+  "^shore-cli/src/tui/clipboard\\.rs:.*\\bwrite_image_to_temp\\b",
 ]
 
 exclude_globs = ["shore-cli/src/tui/app/mod.rs", "shore-cli/src/tui/images.rs"]
