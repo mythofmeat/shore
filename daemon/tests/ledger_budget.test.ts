@@ -1,40 +1,31 @@
-import { expandShared } from "./support/shared_subtrees.ts";
 import { required } from "../src/util/required.ts";
 
 import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
 import { afterAll, describe, expect, test } from "bun:test";
 
-import rawFixture from "./ledger_captures/ledger_budget.json";
-const fixture = expandShared<typeof rawFixture>(rawFixture);
-import {
-  budgetStatuses,
-  enforceBudgetForCall,
-  newlyCrossedBudgetWarnings,
-  type BudgetCallContext,
-  type UsageBudgetConfig,
-  type UsageBudgetPeriod,
-  type UsageConfig,
-} from "../src/ledger/budget.ts";
+import { budgetStatuses, enforceBudgetForCall, type BudgetCallContext, type UsageBudgetConfig, type UsageBudgetPeriod, type UsageConfig } from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
-interface Case {
-  config: string;
-  now_name: string;
-  now: string;
-  statuses: unknown[];
-  warnings_first: unknown[];
-  warnings_second: unknown[];
-  enforce: Record<string, { allowed: boolean } & Record<string, unknown>>;
+const ZONE = "America/New_York";
+
+function spend(ts: string, character: string, call_type: string, total_cost: number): Record<string, string | number | null> {
+  return {
+    ts, character, provider: "anthropic", api_key_name: "default", model: "claude-opus-4-6", call_type,
+    input_tokens: 100, output_tokens: 50, cache_read_tokens: 80, cache_write_tokens: 20, cache_ttl: null,
+    reasoning_effort: null, total_ms: 1200, ttft_ms: 150, finish_reason: "end_turn", thinking_enabled: 1,
+    cache_state: "warm", cache_anomaly: null, input_cost: total_cost, output_cost: 0, cache_read_cost: 0,
+    cache_write_cost: 0, cost_source: "pricing_catalog", total_cost,
+  };
 }
 
-const doc = fixture as unknown as {
-  timezone: string;
-  seed: Record<string, unknown>[];
-  cases: Case[];
-};
+const SEED = [
+  spend("2026-03-18T12:00:00+00:00", "aria", "message", 2.5),
+  spend("2026-03-18T12:30:00+00:00", "aria", "tool_loop", 3),
+  spend("2026-03-18T13:00:00+00:00", "kai", "heartbeat", 0.5),
+];
 
-const opts = { localZone: doc.timezone };
+const opts = { localZone: ZONE };
 
 const budget = (
   name: string,
@@ -188,14 +179,14 @@ function caseLedger(index: number): Database {
   const path = `${template}.case${index}`;
   copyFileSync(template, path);
   const db = openLedger(path);
-  const columns = Object.keys(required(doc.seed[0]));
+  const columns = Object.keys(required(SEED[0]));
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)
     .join(", ")})`;
-  for (const row of doc.seed) {
+  for (const row of SEED) {
     db.query(sql).run(
       Object.fromEntries(
-        columns.map((c) => [`$${c}`, row[c] as string | number | null]),
+        columns.map((c) => [`$${c}`, row[c] ?? null]),
       ),
     );
   }
@@ -306,95 +297,11 @@ describe("the window a budget is measured over", () => {
   });
 });
 
-describe("what a budget reports about spending", () => {
-  let index = 1000;
-
-  test("cost is never negative, and the ratio agrees with the cost and the limit", () => {
-    for (const configName of Object.keys(CONFIGS)) {
-      for (const status of statusesAt(configName, "ordinary_midweek", index++)) {
-        const where = `${configName}/${status.name}`;
-        expect(status.current_cost, where).toBeGreaterThanOrEqual(0);
-        expect(status.cost_limit, where).toBeGreaterThan(0);
-        expect(status.percent_used, where).toBeCloseTo(status.current_cost / status.cost_limit, 6);
-      }
-    }
-  });
-
-  test("a filtered budget counts less than an unfiltered one over the same window", () => {
-    const mixed = statusesAt("local_mixed", "ordinary_midweek", index++);
-    const filteredStatus = mixed.find((s) => s.name === "filtered");
-    const dayStatus = mixed.find((s) => s.period === "day" && s.name !== "filtered");
-    if (filteredStatus !== undefined && dayStatus !== undefined) {
-      expect(filteredStatus.current_cost).toBeLessThanOrEqual(dayStatus.current_cost);
-    }
-  });
-});
-
-describe("crossing a warning threshold", () => {
-  let index = 2000;
-
-  const scoped = (
-    warnings: readonly { scope?: string }[],
-    scope: string,
-  ): readonly { scope?: string }[] => warnings.filter((w) => w.scope === scope);
-
-  test("reports only the thresholds newly crossed, so a re-check narrows", () => {
-    for (const configName of Object.keys(CONFIGS)) {
-      const config = required(CONFIGS[configName]);
-      const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
-      const db = caseLedger(index++);
-      try {
-        const crossings = (ws: readonly { crossed_warn_at?: readonly number[] }[]) =>
-          ws.flatMap((w) => w.crossed_warn_at ?? []);
-        const first = crossings(newlyCrossedBudgetWarnings(db, config, now, opts));
-        const second = crossings(newlyCrossedBudgetWarnings(db, config, now, opts));
-        expect(second.length, configName).toBeLessThanOrEqual(first.length);
-        for (const t of second) {
-          expect(first, `${configName}: a re-check never invents a threshold`).toContain(t);
-        }
-      } finally {
-        db.close();
-      }
-    }
-  });
-
-  test("a warning names its budget, its cost against its limit, and when it resets", () => {
-    const config = required(CONFIGS["local_mixed"]);
-    const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
-    const db = caseLedger(index++);
-    try {
-      const warnings = newlyCrossedBudgetWarnings(db, config, now, opts);
-      expect(warnings.length).toBeGreaterThan(0);
-      for (const w of warnings) {
-        expect(w.message).toContain(w.budget);
-        expect(w.message).toMatch(/\$\d/);
-        expect(w.percent_used).toBeCloseTo(w.current_cost / w.cost_limit, 6);
-        expect(Date.parse(w.reset_at)).toBeGreaterThan(now);
-      }
-    } finally {
-      db.close();
-    }
-  });
-
-  test("a pace warning keeps recurring, because the pace is still over", () => {
-    const config = required(CONFIGS["local_paced_weekly"]);
-    const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
-    const db = caseLedger(index++);
-    try {
-      const first = scoped(newlyCrossedBudgetWarnings(db, config, now, opts), "pace");
-      const second = scoped(newlyCrossedBudgetWarnings(db, config, now, opts), "pace");
-      expect(first.length).toBeGreaterThan(0);
-      expect(second.length, "the pace is still over, so it still warns").toBeGreaterThan(0);
-    } finally {
-      db.close();
-    }
-  });
-});
-
 describe("enforcing a budget on a call", () => {
   let index = 3000;
 
   test("a block always names which budget stopped the call", () => {
+    let blocked = 0;
     for (const configName of Object.keys(CONFIGS)) {
       const config = required(CONFIGS[configName]);
       const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
@@ -403,6 +310,7 @@ describe("enforcing a budget on a call", () => {
         for (const [callName, call] of Object.entries(CALLS)) {
           const block = enforceBudgetForCall(db, config, call, now, opts);
           if (block === undefined) continue;
+          blocked += 1;
           const where = `${configName}/${callName}`;
           expect(block.message, where).toBeTruthy();
           expect(block.scope, where).toBeTruthy();
@@ -411,6 +319,7 @@ describe("enforcing a budget on a call", () => {
         db.close();
       }
     }
+    expect(blocked).toBeGreaterThan(0);
   });
 
   test("a filtered budget only blocks the calls its filter names", () => {

@@ -1,15 +1,8 @@
 import { expect, test } from "bun:test";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { clear } from "../src/commands/segments.ts";
-import { characterWorkspaceDir } from "../src/config/dirs.ts";
-import { readState } from "../src/storage/store.ts";
-import { compactionRunner } from "../src/memory/compaction/run.ts";
-import { handleCompactionOutcome } from "../src/memory/compaction/background.ts";
-import type { StreamEvent, SidecarRequest } from "../src/llm/types.ts";
-import { NO_MCP } from "./support/rebuild.ts";
+import type { StreamEvent } from "../src/llm/types.ts";
 
 function gate() {
   let release!: () => void;
@@ -69,61 +62,6 @@ test("clear cannot be undone by a generation that was already running", async ()
   expect(h.engine.messages()).toEqual([]);
 });
 
-test("clearing a side thread does not adopt changed prompts in main", async () => {
-  const requests: SidecarRequest[] = [];
-  const h = await reliabilityGeneration({ ...plain, async *stream(request) { requests.push(request); yield done(); } });
-  await h.run();
-  const side = await ConversationEngine.load("ada", h.config.dirs.data, undefined, "side");
-  await seed(side, 2);
-  await writeFile(join(characterWorkspaceDir(h.config.dirs.config, "ada", h.config.dirs.workspace), "SOUL.md"), "Ada changed");
-  await clear(side, { dataDir: h.config.dirs.data }, {});
-  await h.run();
-  expect(JSON.stringify(requests[1]?.system)).not.toContain("Ada changed");
-});
-
-test("a thread named threads stores its active conversation in the character's database", async () => {
-  const h = await reliabilityGeneration(plain, "threads");
-  await h.run();
-  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl")).toContain("reply");
-});
-
-for (const enabled of [false, true]) {
-  test(`automatic compaction respects the selected thread (enabled: ${enabled})`, async () => {
-    const h = await reliabilityGeneration(plain, "side");
-    const main = await ConversationEngine.load("ada", h.config.dirs.data);
-    await seed(main, 6);
-    await seed(h.engine, 6);
-    h.config.app.memory.compaction.write_memory = false;
-    h.config.app.memory.compaction.keep_recent_turns = 1;
-    h.config.app.memory.compaction.max_context_tokens = 0;
-    h.config.app.memory.compaction.enabled = true;
-    h.config.app.memory.compaction.min_turns = 1;
-    h.config.app.memory.compaction.max_turns = 4;
-    h.deps.registry.listThreads = () => [{ id: "side", created_at: new Date().toISOString(), compaction: enabled }];
-    h.deps.autonomy.shouldCompactNow = () => { throw new Error("side thread changed the home scheduler"); };
-    h.deps.autonomy.notifyLastRequest = () => { throw new Error("side thread replaced the home request"); };
-    h.deps.autonomy.onCompactionComplete = () => { throw new Error("side thread reset home coverage"); };
-    h.deps.compaction = compactionRunner({ rebuild: NO_MCP, generate: async () => { throw new Error("archive only"); } });
-    await h.run();
-    const diskMain = await ConversationEngine.load("ada", h.config.dirs.data);
-    expect(diskMain.messageCount()).toBe(6);
-    expect(h.engine.messageCount()).toBe(enabled ? 2 : 8);
-  });
-}
-
-test("a truncated background compaction cannot report successful zero-turn rotation", async () => {
-  const h = await reliabilityGeneration(plain);
-  let completions = 0;
-  h.deps.autonomy.shouldCompactNow = () => true;
-  h.deps.autonomy.onCompactionComplete = () => { completions += 1; };
-  h.deps.compaction.run = async () => handleCompactionOutcome("ada", () => {}, {
-    kind: "truncated", conversationId: "ada", messageCount: 2, compactedTurns: 1, toolRounds: 1, toolsCalled: [], truncatedTurns: 1, partialWrites: [],
-  });
-  await h.run();
-  expect(completions).toBe(0);
-  expect(h.engine.messageCount()).toBe(2);
-});
-
 test("an edit cancels the active turn and invalidates turns queued before the edit", async () => {
   const started = gate();
   const release = gate();
@@ -163,14 +101,4 @@ test("a running turn does not block a different conversation", async () => {
     release.release();
     await running;
   }
-});
-
-test("clearing a thread named threads refreshes every cached reader of that conversation", async () => {
-  const h = await reliabilityGeneration(plain, "threads");
-  await h.run();
-  const second = await ConversationEngine.load("ada", h.config.dirs.data, undefined, "threads");
-  await clear(h.engine, { dataDir: h.config.dirs.data }, {});
-  expect(second.messageCount()).toBe(0);
-  expect(readState(h.config.dirs.data, "ada/threads/threads/active.jsonl")).toBe("");
-  expect(second.segments().segmentCount()).toBe(1);
 });

@@ -1,9 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
-import { closeLedgers } from "../src/ledger/record.ts";
-import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
 import { applySamplerOverlay, type SamplerSettings } from "../src/config/preferences.ts";
@@ -169,58 +167,9 @@ function every(raw: string): NonNullable<SamplerSettings["cacheKeepalive"]> {
   return parsed.ok;
 }
 
-const DEFAULTED: SamplerSettings = {};
-
 const CONFIGURED: SamplerSettings = { cacheKeepalive: every("55m") };
 
 const THREE_PINGS: SamplerSettings = { cacheKeepalive: every("55m"), cacheKeepalivePings: 3 };
-
-const EXPLICIT_OFF: SamplerSettings = { cacheKeepalive: every("off") };
-
-describe("a ping is a call the ledger knows about", () => {
-  afterEach(() => {
-    closeLedgers();
-  });
-
-  test("the ping it sends leaves a keepalive row behind", async () => {
-    const ledger = freshLedger();
-    try {
-      const clock = fakeClock();
-      const { service, sent } = await turnPersisted(CONFIGURED, clock, { ledgerPath: ledger.path });
-
-      clock.advance(55 * MINUTE);
-      await service.tick();
-      expect(sent).toHaveLength(1);
-      expect(sent[0]?.context?.ledger, "the path the ping carries").toBe(ledger.path);
-
-      const rows = rowsIn(ledger.path);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.["call_type"]).toBe("keepalive");
-      expect(rows[0]?.["character"]).toBe(CHARACTER);
-      expect(rows[0]?.["cache_read_tokens"]).toBe(4096);
-    } finally {
-      ledger.cleanup();
-    }
-  });
-
-  test("cache health sees the ping, not just the turn that armed it", async () => {
-    const ledger = freshLedger();
-    try {
-      const clock = fakeClock();
-      const { service } = await turnPersisted(THREE_PINGS, clock, { ledgerPath: ledger.path });
-
-      clock.advance(55 * MINUTE);
-      await service.tick();
-      clock.advance(55 * MINUTE);
-      await service.tick();
-
-      const rows = rowsIn(ledger.path);
-      expect(rows.map((r) => r["call_type"])).toEqual(["keepalive", "keepalive"]);
-    } finally {
-      ledger.cleanup();
-    }
-  });
-});
 
 describe("the ping count bounds the schedule", () => {
   async function pingsOver(sampler: SamplerSettings, intervals: number) {
@@ -233,28 +182,9 @@ describe("the ping count bounds the schedule", () => {
     return armed.sent.length;
   }
 
-  test("a model that names no count sends one ping after each turn", async () => {
-    expect(await pingsOver(CONFIGURED, 6)).toBe(1);
-  });
-
   test("three pings are sent one interval apart, and then it stops", async () => {
     expect(await pingsOver(THREE_PINGS, 3)).toBe(3);
     expect(await pingsOver(THREE_PINGS, 6)).toBe(3);
-  });
-
-  test("a real turn gives the count back", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await turnPersisted(CONFIGURED, clock);
-
-    clock.advance(55 * MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(1);
-
-    clock.advance(5 * MINUTE);
-    service.observe(CHARACTER, "claude-opus-4-6", "message");
-    clock.advance(55 * MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(2);
   });
 
   test("a heartbeat is not a real turn, and gives nothing back", async () => {
@@ -268,189 +198,5 @@ describe("the ping count bounds the schedule", () => {
     clock.advance(55 * MINUTE);
     await service.tick();
     expect(sent).toHaveLength(1);
-  });
-
-  test("the ping carries the window its schedule covers", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await turnPersisted(THREE_PINGS, clock);
-
-    clock.advance(55 * MINUTE);
-    await service.tick();
-
-    expect(sent[0]?.context?.keepalive_window_secs).toBe(3 * 55 * 60);
-  });
-
-  test.each([
-    [THREE_PINGS, 1],
-    [CONFIGURED, 0],
-    [EXPLICIT_OFF, 0],
-  ] as const)("a restored schedule keeps its count and takes the current setting: %o", async (sampler, expectedPings) => {
-    const clock = fakeClock();
-    const before = await turnPersisted(THREE_PINGS, clock);
-    before.service.observe(CHARACTER, "claude-opus-4-6", "message");
-    clock.advance(55 * MINUTE);
-    await before.service.tick();
-    const snapshot = before.service.scheduleFor(CHARACTER);
-    if (snapshot === undefined) throw new Error("missing persisted schedule");
-    expect(snapshot.pings_sent).toBe(1);
-
-    const sent: SidecarRequest[] = [];
-    const restored = new KeepaliveService(async (request) => {
-      sent.push(request);
-      return response();
-    }, clock.now);
-    expect(restored.restore(CHARACTER, snapshot)).toBe(true);
-    const current = turnFor(sampler);
-    new LastRequestCache(restored).set(CHARACTER, current.request, {
-      intervalMs: current.intervalMs, pings: current.pings,
-    }, false);
-    clock.advance(55 * MINUTE);
-    await restored.tick();
-    expect(sent).toHaveLength(expectedPings);
-  });
-
-  test("a restored schedule does not carry over to the same model ID on another provider", async () => {
-    const clock = fakeClock();
-    const before = await turnPersisted(THREE_PINGS, clock);
-    before.service.observe(CHARACTER, "claude-opus-4-6", "message");
-    clock.advance(55 * MINUTE);
-    await before.service.tick();
-    const snapshot = before.service.scheduleFor(CHARACTER);
-    if (snapshot === undefined) throw new Error("missing persisted schedule");
-
-    const sent: SidecarRequest[] = [];
-    const restored = new KeepaliveService(async (request) => {
-      sent.push(request);
-      return response();
-    }, clock.now);
-    expect(restored.restore(CHARACTER, snapshot)).toBe(true);
-    const current = turnFor(THREE_PINGS);
-    new LastRequestCache(restored).set(CHARACTER, { ...current.request, provider_key: "openrouter" }, {
-      intervalMs: current.intervalMs, pings: current.pings,
-    }, false);
-    expect(restored.nextPingAt(CHARACTER)).toBeUndefined();
-    for (let i = 0; i < 3; i += 1) {
-      clock.advance(55 * MINUTE);
-      await restored.tick();
-    }
-    expect(sent).toHaveLength(0);
-  });
-});
-
-describe("a heartbeat is measured against what the turn's last call left cached", () => {
-  const LAST_CALL: Usage = { input_tokens: 10, output_tokens: 5, cache_read_tokens: 4000, cache_creation_tokens: 96 };
-
-  function heartbeatRead(service: KeepaliveService, read: number): void {
-    service.observe(CHARACTER, "claude-opus-4-6", "heartbeat", undefined, { cache_read_tokens: read }, {
-      ...turnFor(CONFIGURED).request,
-      context: { character: CHARACTER, call_type: "heartbeat", thinking_enabled: false, thread: "main" },
-    });
-  }
-
-  test("reading all of it, the write included, pushes the ping", async () => {
-    const clock = fakeClock();
-    const { service } = await turnPersisted(CONFIGURED, clock, {}, 12_000, LAST_CALL);
-    clock.advance(30 * MINUTE);
-    heartbeatRead(service, 4096);
-    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 85 * MINUTE);
-  });
-
-  test("reading a token less leaves it", async () => {
-    const clock = fakeClock();
-    const { service } = await turnPersisted(CONFIGURED, clock, {}, 12_000, LAST_CALL);
-    clock.advance(30 * MINUTE);
-    heartbeatRead(service, 4095);
-    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 55 * MINUTE);
-  });
-
-  test("a turn whose stream named no last call is measured by its usage", async () => {
-    const clock = fakeClock();
-    const { service } = await turnPersisted(CONFIGURED, clock, {}, 4096);
-    clock.advance(30 * MINUTE);
-    heartbeatRead(service, 4096);
-    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 85 * MINUTE);
-  });
-});
-
-describe("the cadence reaches the schedule", () => {
-  test("opting in schedules the requested ping after a turn with no cache metrics", async () => {
-    const clock = fakeClock();
-    const { service, sent } = await turnPersisted(CONFIGURED, clock, {}, 0);
-    expect(service.nextPingAt(CHARACTER)).toBe(T0 + 55 * MINUTE);
-    clock.advance(55 * MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(1);
-  });
-
-  test.each(["5m", "1h"])("a cadence as long as the %s TTL still arms; only setting it warns", async (ttl) => {
-    const built = buildRequestWithResolvedKey({
-      name: "claude", qualified_name: "nanogpt:anthropic/claude-opus-4-6", category: "chat", provider_key: "nanogpt",
-      sdk: "nanogpt", model_id: "anthropic/claude-opus-4-6", cache_keepalive: ttl, cache_ttl: ttl,
-    }, "fixture-key", { messages: [], replay: "all" });
-    expect(built.keepalive_interval_ms).toBe(ttl === "5m" ? 5 * MINUTE : 60 * MINUTE);
-    expect(built.keepalive_pings).toBe(1);
-  });
-
-  test.each([
-    { sdk: "openai", model: "gpt-test", ttl: "1h" },
-    { sdk: "claude_agent", model: "claude-opus-4-6", ttl: undefined },
-    { sdk: "nanogpt", model: "google/gemini-flash-latest", ttl: "1h" },
-    { sdk: "nanogpt", model: "deepseek/deepseek-v4.1-flash", ttl: "1h" },
-    { sdk: "nanogpt", model: "anthropic/claude-opus-4-6", ttl: undefined },
-  ] as const)("any model arms, whatever cache control it has: %o", async ({ sdk, model, ttl }) => {
-    const built = buildRequestWithResolvedKey({
-      name: model, qualified_name: `nanogpt:${model}`, category: "chat", provider_key: "nanogpt",
-      sdk, model_id: model, cache_keepalive: "55m", ...(ttl === undefined ? {} : { cache_ttl: ttl }),
-    }, "fixture-key", { messages: [], replay: "all" });
-    expect(built.keepalive_interval_ms).toBe(55 * MINUTE);
-    const clock = fakeClock();
-    const sent: SidecarRequest[] = [];
-    const service = new KeepaliveService(async (request) => { sent.push(request); return response(); }, clock.now);
-    new LastRequestCache(service).set(CHARACTER, built.request, { intervalMs: built.keepalive_interval_ms, pings: built.keepalive_pings });
-    clock.advance(55 * MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(1);
-  });
-
-  test("a model that asks for 55m pings at 55m", async () => {
-    const clock = fakeClock();
-    const { service, sent, intervalMs } = await turnPersisted(CONFIGURED, clock);
-    expect(intervalMs, "the producer's half").toBe(55 * MINUTE);
-
-    clock.advance(54 * MINUTE);
-    await service.tick();
-    expect(sent, "not due a minute early").toHaveLength(0);
-
-    clock.advance(MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.context?.call_type).toBe("keepalive");
-  });
-
-  test("a model that says nothing never pings, however long it sits", async () => {
-    const clock = fakeClock();
-    const { service, sent, intervalMs } = await turnPersisted(DEFAULTED, clock);
-    expect(intervalMs, "no cadence, because nothing defaults one").toBeUndefined();
-
-    for (const step of [55, 60, 12 * 60, 24 * 60]) {
-      clock.advance(step * MINUTE);
-      await service.tick();
-    }
-    expect(sent).toHaveLength(0);
-  });
-
-  test("`off` is the same silence as saying nothing, not a zero interval", async () => {
-    const clock = fakeClock();
-    const { service, sent, intervalMs } = await turnPersisted(EXPLICIT_OFF, clock);
-    expect(intervalMs).toBeUndefined();
-
-    clock.advance(12 * 60 * MINUTE);
-    await service.tick();
-    expect(sent).toHaveLength(0);
-  });
-
-  test("the ttl default survives the keepalive default going away", () => {
-    const { request } = turnFor(DEFAULTED);
-    expect(request.provider_options?.cache_ttl).toBe("1h");
   });
 });

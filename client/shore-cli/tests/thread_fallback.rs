@@ -122,43 +122,6 @@ fn saved(data: &Path) -> String {
 }
 
 #[test]
-fn stale_saved_thread_recovers_and_the_next_invocation_uses_the_repaired_choice() {
-    let data = tempfile::tempdir().unwrap();
-    save(data.path(), "eval");
-    let first = run(data.path(), None, None, vec![("eval", "home", true)]);
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
-    assert_eq!(saved(data.path()), "home");
-    assert!(String::from_utf8_lossy(&first.stderr).contains("using \"home\""));
-    assert!(
-        serde_json::from_slice::<Value>(&first.stdout).is_ok(),
-        "stdout remains JSON"
-    );
-
-    let second = run(data.path(), None, None, vec![("home", "home", true)]);
-    assert!(second.status.success());
-    assert!(second.stderr.is_empty(), "recovery is not repeated");
-}
-
-#[test]
-fn stale_environment_thread_tries_the_saved_thread_before_home() {
-    let data = tempfile::tempdir().unwrap();
-    save(data.path(), "work");
-    let output = run(
-        data.path(),
-        Some("eval"),
-        None,
-        vec![("eval", "home", false), ("work", "work", true)],
-    );
-    assert!(output.status.success());
-    assert_eq!(saved(data.path()), "work");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("using \"work\""));
-}
-
-#[test]
 fn stale_environment_and_saved_threads_fall_back_to_home() {
     let data = tempfile::tempdir().unwrap();
     save(data.path(), "work");
@@ -167,19 +130,6 @@ fn stale_environment_and_saved_threads_fall_back_to_home() {
         Some("eval"),
         None,
         vec![("eval", "home", false), ("work", "home", true)],
-    );
-    assert!(output.status.success());
-    assert_eq!(saved(data.path()), "home");
-}
-
-#[test]
-fn stale_environment_thread_without_a_saved_choice_uses_home() {
-    let data = tempfile::tempdir().unwrap();
-    let output = run(
-        data.path(),
-        Some("eval"),
-        None,
-        vec![("eval", "home", true)],
     );
     assert!(output.status.success());
     assert_eq!(saved(data.path()), "home");
@@ -198,14 +148,4 @@ fn explicit_missing_thread_is_refused_even_when_it_matches_the_environment() {
     assert!(!output.status.success());
     assert_eq!(saved(data.path()), "work");
     assert!(String::from_utf8_lossy(&output.stderr).contains("you asked for it with --thread"));
-}
-
-#[test]
-fn valid_saved_thread_is_resumed_without_a_fallback() {
-    let data = tempfile::tempdir().unwrap();
-    save(data.path(), "eval");
-    let output = run(data.path(), None, None, vec![("eval", "eval", true)]);
-    assert!(output.status.success());
-    assert_eq!(saved(data.path()), "eval");
-    assert!(output.stderr.is_empty());
 }

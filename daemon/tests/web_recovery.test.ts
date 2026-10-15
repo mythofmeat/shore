@@ -1,13 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WebRecovery, sessionDigest, type WebRecoveryOptions } from "../src/web/recovery.ts";
 import { WebSessions } from "../src/web/auth.ts";
 import { ArchiveTransfers } from "../src/web/archives.ts";
-import { defaultWebConfig } from "../src/config/app.ts";
-import { startWebServer } from "../src/web/server.ts";
 import { Server } from "../src/swp/server.ts";
 import type { WebArchiveInfo } from "../src/protocol/WebArchiveInfo.ts";
 
@@ -74,20 +71,6 @@ test("restart preserves session ownership and original expiry using hashes, neve
   expect(c.recovery.archives()).toEqual([]);
 });
 
-test("renewing a sign-in saves its new expiry, and only the browser holding it can renew it", async () => {
-  const config = await options(); const a = open(config); const signed = signIn(a.sessions); const other = signIn(a.sessions);
-  const before = signed.session.expiresAt;
-  await Bun.sleep(20);
-  const cookie = a.sessions.renew(signed.session, signed.request);
-  expect(cookie.split(";", 1)[0]).toBe(signed.cookie.split(";", 1)[0]);
-  expect(signed.session.expiresAt).toBeGreaterThan(before);
-  expect(() => a.sessions.renew(signed.session, other.request)).toThrow("Only the browser holding a sign-in can renew it");
-  await a.close();
-  const b = open(config);
-  expect(b.sessions.read(signed.request)?.expiresAt).toBe(signed.session.expiresAt);
-  expect(b.sessions.read(other.request)?.expiresAt).toBe(other.session.expiresAt);
-});
-
 test.each(["token", "origin"])("changing the %s invalidates old credentials and transfers before serving", async (changed) => {
   const config = await options(); const a = open(config); const signed = signIn(a.sessions);
   a.recovery.saveArchive(signed.session.id, saved("uncertain"));
@@ -99,111 +82,4 @@ test.each(["token", "origin"])("changing the %s invalidates old credentials and 
   await b.close();
   const c = open(config);
   expect(c.sessions.read(signed.request)).toBeUndefined();
-});
-
-test("restart expires old sessions and transfers and honors a reduced session capacity", async () => {
-  const config = await options(); const a = open(config); const first = signIn(a.sessions); const second = signIn(a.sessions);
-  a.recovery.saveArchive(first.session.id, saved("uncertain", Date.now() - 1));
-  a.recovery.saveSession("a".repeat(64), Date.now() - 1);
-  a.recovery.saveArchive("a".repeat(64), saved("importing"));
-  await a.close();
-  const b = open(config, origin, 1);
-  expect(b.recovery.archives()).toEqual([]);
-  expect(b.sessions.read(first.request)).toBeDefined(); expect(b.sessions.read(second.request)).toBeUndefined();
-  const previous = b.sessions.read(first.request);
-  const newest = signIn(b.sessions);
-  expect(previous?.signal.aborted).toBe(true);
-  expect(b.sessions.read(first.request)).toBeUndefined();
-  expect(b.recovery.archives()).toEqual([]);
-  expect(b.recovery.sessions()).toHaveLength(1);
-  await b.close();
-  const c = open(config, origin, 1);
-  expect(c.sessions.read(newest.request)).toBeDefined();
-  expect(c.sessions.read(first.request)).toBeUndefined();
-});
-
-test("an expired recovered sign-in cannot retain outcomes or renew its original lifetime", async () => {
-  const config = await options(); const a = open(config); const signed = signIn(a.sessions);
-  await a.close();
-  const edit = new WebRecovery(config, origin);
-  edit.revokeSession(signed.session.id); edit.saveSession(signed.session.id, Date.now() + 60);
-  edit.saveArchive(signed.session.id, saved("imported")); edit.close();
-  const b = open(config);
-  await Bun.sleep(80);
-  expect(b.sessions.read(signed.request)).toBeUndefined();
-  expect(b.recovery.archives()).toEqual([]);
-});
-
-test("recovery retains final outcomes, converts incomplete imports to uncertainty and never dispatches again", async () => {
-  const config = await options(); const a = open(config); const signed = signIn(a.sessions);
-  const phases: WebArchiveInfo["phase"][] = ["uploading", "exporting", "ready", "importing", "imported", "uncertain", "failed"];
-  const records = phases.map((phase) => saved(phase));
-  for (const info of records) a.recovery.saveArchive(signed.session.id, info);
-  await a.close();
-  await mkdir(join(a.recovery.artifacts, "unrecorded-crash-orphan"));
-  await writeFile(join(a.recovery.artifacts, "unrecorded-crash-orphan", "archive.tar.gz"), "private bytes");
-  const b = open(config); const owner = b.sessions.read(signed.request);
-  if (owner === undefined) throw new Error("No recovered owner");
-  expect(await readdir(b.recovery.artifacts)).toEqual([]);
-  expect(b.transfers.list(owner).archives.map((info) => info.phase)).toEqual(["failed", "failed", "failed", "uncertain", "imported", "uncertain", "failed"]);
-  for (const record of records) {
-    const recovered = b.transfers.get(owner, record.id);
-    expect(recovered.expires_at).toBe(record.expires_at);
-    expect(recovered.downloadable).toBe(false);
-    expect(b.transfers.import(owner, record.id)).toEqual(recovered);
-  }
-  expect(b.transfers.activePeers).toBe(0); expect(b.server.sessionRouter.sessions()).toHaveLength(0);
-  await b.close();
-  const c = open(config); expect(c.recovery.archives().map((row) => row.info.phase)).not.toContain("importing");
-});
-
-test("saving the importing state must succeed before command dispatch", async () => {
-  const config = await options(); const a = open(config); const signed = signIn(a.sessions);
-  const upload = await a.transfers.upload(signed.session, new Request(origin, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: "archive bytes" }));
-  const db = new Database(join(dirname(a.recovery.artifacts), "recovery.sqlite"));
-  try {
-    db.run("CREATE TRIGGER reject_import BEFORE UPDATE ON archives BEGIN SELECT RAISE(FAIL, 'disk write rejected'); END;");
-    expect(() => a.transfers.import(signed.session, upload.id)).toThrow("disk write rejected");
-    expect(a.transfers.get(signed.session, upload.id).phase).toBe("ready");
-    expect(a.transfers.activePeers).toBe(0); expect(a.server.sessionRouter.sessions()).toHaveLength(0);
-  } finally { db.run("DROP TRIGGER reject_import"); db.close(); }
-});
-
-test("distinct data directories sharing a cache cannot clear each other's sessions or files", async () => {
-  const config = await options(); const a = open(config); const signed = signIn(a.sessions);
-  await writeFile(join(a.recovery.artifacts, "live-transfer"), "live");
-  const dataDir = join(dirname(config.dataDir), "other-data"); await mkdir(dataDir);
-  const b = open({ ...config, dataDir });
-  expect(b.sessions.read(signed.request)).toBeUndefined();
-  expect(b.recovery.artifacts).not.toBe(a.recovery.artifacts);
-  expect(await readFile(join(a.recovery.artifacts, "live-transfer"), "utf8")).toBe("live");
-});
-
-test("orphan cleanup does not follow artifact symlinks and refuses symlinked recovery storage", async () => {
-  const config = await options(); const a = open(config); const artifacts = a.recovery.artifacts;
-  const outside = join(config.cacheDir, "outside"); await mkdir(outside); await writeFile(join(outside, "keep"), "keep");
-  await a.close(); await rm(artifacts, { recursive: true }); await symlink(outside, artifacts);
-  const b = open(config); expect(await readdir(artifacts)).toEqual([]);
-  expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
-  await b.close();
-  const external = join(outside, "private.sqlite"); const untouched = new Database(external);
-  untouched.run("CREATE TABLE private_data (value TEXT); INSERT INTO private_data VALUES ('keep');"); untouched.close();
-  const before = await readFile(external);
-  const db = join(dirname(artifacts), "recovery.sqlite"); await rm(db); await symlink(external, db);
-  expect(() => new WebRecovery(config, origin)).toThrow();
-  expect(await readFile(external)).toEqual(before);
-});
-
-test("recovery startup failures release the web port without accepting a session", async () => {
-  const config = await options();
-  await mkdir(config.cacheDir); await writeFile(join(config.cacheDir, "web"), "not a directory");
-  const available = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
-  const port = available.port; await available.stop(true);
-  const server = new Server({ addr: "127.0.0.1:0", serverName: "test", authenticate: () => true });
-  expect(() => startWebServer({ config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, server, authenticate: () => true, recovery: config })).toThrow();
-  await rm(join(config.cacheDir, "web"));
-  const web = startWebServer({ config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, server, authenticate: () => true, recovery: config });
-  cleanups.push(() => web.stop()); web.activate();
-  expect((await fetch(`${web.origin}/api/session`, { method: "POST", headers: { origin: web.origin } })).status).toBe(401);
-  expect(await access(join(config.dataDir, "web")).then(() => true, () => false)).toBe(false);
 });

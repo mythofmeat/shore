@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,8 +8,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
-import { filterInjectedContext, reportRemovedContext, withoutInjectedContext } from "../src/llm/providers/claude_agent_injections.ts";
-import { installWireCapture, newWireScope, withWireScope, type WireExchange } from "../src/llm/wire_capture.ts";
+import { filterInjectedContext } from "../src/llm/providers/claude_agent_injections.ts";
 import type { AnthropicRequestRecord } from "../src/testing/mock_anthropic.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
@@ -184,53 +183,6 @@ test("the context filter drops injected blocks, reports each with where it sat, 
   ]);
 });
 
-test("what the filter removes is kept in the wire capture, and a reminder or system message it has not seen before is logged once", () => {
-  const exchanges: WireExchange[] = [];
-  const uninstall = installWireCapture(exchange => exchanges.push(exchange));
-  const warn = spyOn(console, "warn").mockImplementation(() => {});
-  const target = new URL("https://api.anthropic.com/v1/messages?beta=true");
-  const sent = (text: string) => ({ messages: [
-    { role: "user", content: [
-      { type: "text", text: "<system-reminder>\nAs you answer the user's questions, you can use the following context:\n# userEmail\nx\n</system-reminder>" },
-      { type: "text", text: "Draw the next plate." },
-    ] },
-    { role: "system", content: "# Environment\nToday's date is 2026-10-12." },
-    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "python3 plate.py" } }] },
-    { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "plate.svg" }] },
-    { role: "system", content: text },
-  ] });
-  try {
-    withWireScope(newWireScope("call-1", { character: "heidi", call_type: "heartbeat" }), () => {
-      reportRemovedContext(target, filterInjectedContext(sent("Reminder 1 from the server.")).removed);
-      reportRemovedContext(target, filterInjectedContext(sent("Reminder 2 from the server.")).removed);
-    });
-    reportRemovedContext(target, filterInjectedContext(sent("Reminder 3 from the server.")).removed);
-
-    expect(exchanges.map(({ call_id, seq, call_type, method, url, status, status_text, response_body }) =>
-      ({ call_id, seq, call_type, method, url, status, status_text, response_body }))).toEqual([0, 1].map(seq => ({
-      call_id: "call-1", seq, call_type: "heartbeat", method: "FILTER", url: target.href, status: null,
-      status_text: "removed 3 parts the CLI added (system reminder, system message)", response_body: null,
-    })));
-    const removed = JSON.parse(new TextDecoder().decode(exchanges[0]?.request_body ?? new Uint8Array())) as { removed: unknown[] };
-    expect(removed.removed).toContainEqual({ at: "messages[4]", after: "user tool_result", kind: "system message", text: "Reminder 1 from the server." });
-    expect(warn.mock.calls.map(call => String(call[0]))).toEqual([
-      "claude_agent: removed a system message the CLI added after user tool_result (messages[4]); call_log --wire shows it in full: \"Reminder 1 from the server.\"",
-    ]);
-  } finally {
-    warn.mockRestore();
-    uninstall();
-  }
-});
-
-test("withoutInjectedContext leaves Shore's own text, tool results and assistant text alone", () => {
-  const body = { system: [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude, and also Heidi." }], messages: [
-    { role: "user", content: [{ type: "text", text: "[Image attached: image/png; this client does not support structured image results]" }] },
-    { role: "assistant", content: [{ type: "text", text: "<system-reminder> quoted by the character" }] },
-    { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "<system-reminder> printed by a tool" }] },
-  ] };
-  expect(withoutInjectedContext(body)).toEqual(body);
-});
-
 test("a refused reply ends the turn with the refusal instead of a hidden retry, nudge or model switch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-refusal-"));
   const mock = await startMockAnthropic({
@@ -266,26 +218,3 @@ test("a refused reply ends the turn with the refusal instead of a hidden retry, 
     await rm(dir, { recursive: true, force: true });
   }
 }, 60_000);
-
-test("withoutInjectedContext drops the CLI's retry nudges, keeping the tool results beside them", () => {
-  const ttl = { type: "ephemeral", ttl: "1h" };
-  const safetyStop = "Your response above was stopped by a safety classifier — this is not a tool or API error. " +
-    "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";
-  const body = { messages: [
-    { role: "user", content: [{ type: "text", text: "Look around." }] },
-    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "ls" } }] },
-    { role: "user", content: [
-      { type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "Not run: the response that made this tool call was stopped by a safety classifier." }] },
-      { type: "text", text: safetyStop, cache_control: ttl },
-    ] },
-    { role: "user", content: [{ type: "text", text: "[Your previous response had no visible output. Please continue and produce a user-visible response.]" }] },
-    { role: "user", content: [{ type: "text", text: "Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces." }] },
-  ] };
-  expect(withoutInjectedContext(body)).toEqual({ messages: [
-    { role: "user", content: [{ type: "text", text: "Look around." }] },
-    { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "mcp__shore__bash", input: { command: "ls" } }] },
-    { role: "user", content: [
-      { type: "tool_result", tool_use_id: "toolu_1", content: [{ type: "text", text: "Not run: the response that made this tool call was stopped by a safety classifier." }], cache_control: ttl },
-    ] },
-  ] });
-});

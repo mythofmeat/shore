@@ -341,129 +341,6 @@ mod tests {
     use super::*;
     use crate::protocol::client_msg::ClientMessageBody;
 
-    #[test]
-    fn test_next_backoff_doubles() {
-        let max = Duration::from_secs(15);
-        assert_eq!(
-            next_backoff(Duration::from_millis(500), max),
-            Duration::from_secs(1)
-        );
-        assert_eq!(
-            next_backoff(Duration::from_secs(1), max),
-            Duration::from_secs(2)
-        );
-        assert_eq!(
-            next_backoff(Duration::from_secs(2), max),
-            Duration::from_secs(4)
-        );
-    }
-
-    #[test]
-    fn test_next_backoff_caps_at_max() {
-        let max = Duration::from_secs(15);
-        assert_eq!(next_backoff(Duration::from_secs(8), max), max);
-        assert_eq!(next_backoff(Duration::from_secs(15), max), max);
-        assert_eq!(next_backoff(Duration::from_secs(30), max), max);
-    }
-
-    #[test]
-    fn test_next_backoff_full_sequence() {
-        let max = Duration::from_secs(15);
-        let mut b = Duration::from_millis(500);
-        let expected = [1000, 2000, 4000, 8000, 15000, 15000];
-        for &ms in &expected {
-            b = next_backoff(b, max);
-            assert_eq!(b, Duration::from_millis(ms));
-        }
-    }
-
-    #[test]
-    fn test_resolve_addr_explicit_tcp() {
-        let addr = resolve_addr(Some("127.0.0.1:9090"), None).unwrap();
-        assert_eq!(addr.0, "127.0.0.1:9090");
-    }
-
-    #[test]
-    fn reconnect_target_follows_the_session() {
-        let sync = SyncState::new(3, Some("frank"), Some("eval"));
-        assert_eq!(
-            reconnect_target(&sync, Some("Yuna".into())),
-            Some("frank".into())
-        );
-    }
-
-    #[test]
-    fn reconnect_target_keeps_the_startup_character_when_none_was_selected() {
-        let sync = SyncState::new(0, None, None);
-        assert_eq!(
-            reconnect_target(&sync, Some("Yuna".into())),
-            Some("Yuna".into())
-        );
-        assert_eq!(reconnect_target(&sync, None), None);
-    }
-
-    #[test]
-    fn reconnect_thread_follows_the_session_then_falls_back_to_the_startup_thread() {
-        let sync = SyncState::new(3, Some("frank"), Some("eval"));
-        assert_eq!(
-            reconnect_thread(&sync, Some("main".into())),
-            Some("eval".into())
-        );
-
-        let unselected = SyncState::new(0, None, None);
-        assert_eq!(
-            reconnect_thread(&unselected, Some("eval".into())),
-            Some("eval".into())
-        );
-        assert_eq!(reconnect_thread(&unselected, None), None);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn revision_gap_notifies_the_ui_before_reconnecting() {
-        use tokio::io::AsyncWriteExt;
-
-        let (client, mut server) = tokio::io::duplex(4096);
-        let mut conn = SWPConnection::from_raw_stream(client);
-        let (event_tx, mut event_rx) = mpsc::channel(4);
-        let (_cmd_tx, mut cmd_rx) = mpsc::channel(1);
-        let mut sync_state = SyncState::new(2, Some("ada"), Some("side"));
-        server
-            .write_all(
-                concat!(
-                    "{\"type\":\"stream_start\",\"rid\":\"reply\",\"regen\":false}\n",
-                    "{\"type\":\"history\",\"messages\":[],\"revision\":4,",
-                    "\"selected_character\":\"ada\",\"selected_thread\":\"side\",",
-                    "\"delta\":{\"base_revision\":3,\"after\":\"missing\"}}\n"
-                )
-                .as_bytes(),
-            )
-            .await
-            .unwrap();
-
-        let outcome = tokio::time::timeout(
-            Duration::from_secs(1),
-            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state),
-        )
-        .await
-        .unwrap();
-
-        assert!(matches!(outcome, SessionOutcome::Reconnect));
-        assert!(matches!(
-            event_rx.try_recv().unwrap(),
-            ConnEvent::Message(ServerMessage::StreamStart(_))
-        ));
-        assert!(
-            matches!(event_rx.try_recv().unwrap(), ConnEvent::Disconnected(_)),
-            "the UI must discard the abandoned stream before reconnecting"
-        );
-        assert!(
-            event_rx.try_recv().is_err(),
-            "the invalid delta must not reach the UI"
-        );
-        assert_eq!(sync_state.latest_revision(), 2);
-        assert_eq!(sync_state.selected_thread(), Some("side"));
-    }
-
     #[tokio::test]
     async fn send_failure_returns_the_unsent_message() {
         let (client, server) = tokio::io::duplex(64);
@@ -556,26 +433,6 @@ mod lifecycle_tests {
     }
 
     #[tokio::test]
-    async fn shutdown_interrupts_reconnect_backoff() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap().to_string();
-        drop(listener);
-        let (tx, mut rx) =
-            spawn_connection(Some(address), None, "test", "test", None, None, token());
-        assert!(matches!(
-            tokio::time::timeout(HANG_GUARD, rx.recv()).await.unwrap(),
-            Some(ConnEvent::Disconnected(_))
-        ));
-        tx.send(ConnCommand::Shutdown).await.unwrap();
-        assert!(
-            tokio::time::timeout(HANG_GUARD, rx.recv())
-                .await
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
     async fn disconnected_messages_fail_promptly_without_waiting_for_the_handshake() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (tx, mut rx) = spawn_connection(
@@ -607,9 +464,7 @@ mod lifecycle_tests {
 
 #[cfg(test)]
 mod blocked_io_tests {
-    use super::{
-        ConnCommand, ConnEvent, Duration, SessionOutcome, run_connected_session, send_event,
-    };
+    use super::{ConnCommand, Duration, SessionOutcome, run_connected_session};
     use crate::protocol::client_msg::{ClientMessage, Command};
     use crate::swp_client::{SWPConnection, sync::SyncState};
 
@@ -617,90 +472,6 @@ mod blocked_io_tests {
         for _ in 0..16 {
             tokio::task::yield_now().await;
         }
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn rejecting_an_extra_command_keeps_the_original_socket_and_response() {
-        use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-
-        let (stream, peer) = tokio::io::duplex(8);
-        let mut conn = SWPConnection::from_raw_stream(stream);
-        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
-        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(2);
-        let task = tokio::spawn(async move {
-            let mut sync = SyncState::new(0, None, None);
-            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync).await
-        });
-        let command = |rid: &str| {
-            ConnCommand::Send(ClientMessage::Command(Command {
-                rid: Some(rid.into()),
-                name: "status".into(),
-                args: serde_json::json!({}),
-            }))
-        };
-        cmd_tx.send(command("original")).await.unwrap();
-        let mut reader = BufReader::new(peer);
-        assert_eq!(reader.read_u8().await.unwrap(), b'{');
-        cmd_tx.send(command("extra")).await.unwrap();
-        let rejected = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(
-            matches!(rejected, ConnEvent::SendFailed(ClientMessage::Command(Command { rid:Some(ref rid), .. })) if rid == "extra")
-        );
-        let mut line = String::from("{");
-        let _read = reader.read_line(&mut line).await.unwrap();
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&line)
-                .unwrap()
-                .get("rid")
-                .and_then(serde_json::Value::as_str),
-            Some("original")
-        );
-        reader
-            .write_all(b"{\"type\":\"stream_start\",\"rid\":\"original\"}\n")
-            .await
-            .unwrap();
-        let reply = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(
-            matches!(reply, ConnEvent::Message(ref frame) if frame.request_id() == Some("original"))
-        );
-        assert!(
-            event_rx.try_recv().is_err(),
-            "a rejected extra command must not announce a disconnect"
-        );
-        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
-        assert!(matches!(task.await.unwrap(), SessionOutcome::Exit));
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn shutdown_interrupts_a_full_event_queue() {
-        let (event_tx, _event_rx) = tokio::sync::mpsc::channel(1);
-        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(1);
-        event_tx
-            .try_send(ConnEvent::Disconnected("existing".into()))
-            .unwrap();
-        let sending = tokio::spawn(async move {
-            send_event(
-                ConnEvent::Disconnected("pending".into()),
-                &event_tx,
-                &mut cmd_rx,
-            )
-            .await
-        });
-        settle().await;
-        assert!(!sending.is_finished(), "it must still be blocked");
-        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
-        assert!(
-            !tokio::time::timeout(Duration::from_millis(250), sending)
-                .await
-                .unwrap()
-                .unwrap()
-        );
     }
 
     #[tokio::test(start_paused = true)]

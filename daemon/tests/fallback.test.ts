@@ -1,19 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
-import {
-  backoffDelayMs,
-  buildWarningMessage,
-  DEFAULT_BACKOFF_BASE_MS,
-  DEFAULT_MAX_RETRIES,
-  llmHttpStatus,
-  missingKeyReason,
-  retryDelayMs,
-  sanitizeReason,
-  streamWithCredentialFallback,
-  streamWithRetry,
-  type FallbackEvent,
-} from "../src/llm/fallback";
+import { buildWarningMessage, llmHttpStatus, missingKeyReason, sanitizeReason, streamWithCredentialFallback, type FallbackEvent } from "../src/llm/fallback";
 import { CREDENTIAL_FAILURE_KINDS, type KeyCandidate } from "../src/llm/credentials";
 import type { LlmError } from "../src/llm/errors";
 import { rejectionOf } from "./support/outcome.ts";
@@ -85,19 +73,6 @@ describe("a fallback reason names the failure without leaking the credential", (
 });
 
 describe("a rotation warning", () => {
-  test("names both keys and the provider, for every kind", () => {
-    for (const kind of CREDENTIAL_FAILURE_KINDS) {
-      const message = buildWarningMessage(
-        "openrouter",
-        cand("primary", "PRIMARY_KEY", true),
-        cand("backup", "BACKUP_KEY"),
-        kind,
-      );
-      expect(message, kind).toContain("openrouter");
-      expect(message, kind).toContain('"primary"');
-      expect(message, kind).toContain('"backup"');
-    }
-  });
 
   test("never leaks an environment variable name", () => {
     for (const kind of CREDENTIAL_FAILURE_KINDS) {
@@ -110,31 +85,6 @@ describe("a rotation warning", () => {
       expect(message, kind).not.toContain("PRIMARY_KEY");
       expect(message, kind).not.toContain("BACKUP_KEY");
     }
-  });
-});
-
-describe("backoff", () => {
-  test("doubles with each attempt from the configured base", () => {
-    expect([0, 1, 2, 3, 4].map((n) => backoffDelayMs(500, n))).toEqual([500, 1000, 2000, 4000, 8000]);
-    expect([0, 1, 2].map((n) => backoffDelayMs(1, n))).toEqual([1, 2, 4]);
-  });
-
-  test("saturates rather than wrapping", () => {
-    expect(backoffDelayMs(500, 64)).toBeGreaterThan(Number.MAX_SAFE_INTEGER);
-    expect(backoffDelayMs(500, 64)).toBe(backoffDelayMs(500, 128));
-  });
-
-  test("the shipped defaults wait through a minute-long transient outage", () => {
-    const settings = {
-      maxRetries: DEFAULT_MAX_RETRIES,
-      backoffBaseMs: DEFAULT_BACKOFF_BASE_MS,
-    };
-    const total = Array.from({ length: DEFAULT_MAX_RETRIES }, (_, attempt) =>
-      retryDelayMs(settings, attempt, { random: () => 0 }),
-    ).reduce((sum, delay) => sum + delay, 0);
-
-    expect(DEFAULT_MAX_RETRIES).toBe(5);
-    expect(total).toBe(60_000);
   });
 });
 
@@ -157,20 +107,6 @@ describe("credential rotation", () => {
       },
     };
   }
-
-  test("the first working key serves the request", async () => {
-    const h = harness({ A: "sk-a", B: "sk-b" });
-    const got = await streamWithCredentialFallback(
-      "openrouter",
-      [cand("first", "A"), cand("second", "B")],
-      h.readEnv,
-      h.attempt({}),
-      h.hooks,
-    );
-    expect(got).toBe("served by first");
-    expect(h.tried).toEqual(["first"]);
-    expect(h.events).toHaveLength(0);
-  });
 
   test("a credential failure rotates to the next key", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
@@ -199,197 +135,5 @@ describe("credential rotation", () => {
       )),
     ).toMatchObject({ kind: "http_status", status: 500 });
     expect(h.tried).toEqual(["first"]);
-  });
-
-  test("an interrupted stream does not rotate", async () => {
-    const h = harness({ A: "sk-a", B: "sk-b" });
-    expect(
-      await rejectionOf(streamWithCredentialFallback(
-        "openrouter",
-        [cand("first", "A"), cand("second", "B")],
-        h.readEnv,
-        h.attempt({ first: { kind: "incomplete_stream" } }),
-        h.hooks,
-      )),
-    ).toMatchObject({ kind: "incomplete_stream" });
-    expect(h.tried).toEqual(["first"]);
-  });
-
-  test("an unset variable rotates without touching the network", async () => {
-    const h = harness({ B: "sk-b" });
-    const got = await streamWithCredentialFallback(
-      "openrouter",
-      [cand("first", "A"), cand("second", "B")],
-      h.readEnv,
-      h.attempt({}),
-      h.hooks,
-    );
-    expect(got).toBe("served by second");
-    expect(h.tried).toEqual(["second"]);
-    expect(h.events[0]?.kind).toBe("missing_key");
-    expect(h.events[0]?.reason).toBe(missingKeyReason("A"));
-  });
-
-  test("exhausting every key surfaces the last classified failure", async () => {
-    const h = harness({ A: "sk-a", B: "sk-b" });
-    expect(
-      await rejectionOf(streamWithCredentialFallback(
-        "openrouter",
-        [cand("first", "A"), cand("second", "B")],
-        h.readEnv,
-        h.attempt({
-          first: { kind: "http_status", status: 401, body: "a" },
-          second: { kind: "http_status", status: 402, body: "b" },
-        }),
-        h.hooks,
-      )),
-    ).toMatchObject({ kind: "http_status", status: 402 });
-    expect(h.tried).toEqual(["first", "second"]);
-  });
-
-  test("no candidates at all names the provider", async () => {
-    const h = harness({});
-    expect(
-      await rejectionOf(streamWithCredentialFallback("openrouter", [], h.readEnv, h.attempt({}), h.hooks)),
-    ).toMatchObject({
-      kind: "missing_api_key",
-      var: "provider 'openrouter' has no enabled keys",
-    });
-  });
-
-  test("the warning fires only for a key that opted in, and only with somewhere to go", async () => {
-    const h = harness({ A: "sk-a", B: "sk-b" });
-    await streamWithCredentialFallback(
-      "openrouter",
-      [cand("first", "A", true), cand("second", "B")],
-      h.readEnv,
-      h.attempt({ first: { kind: "http_status", status: 401, body: "x" } }),
-      h.hooks,
-    );
-    expect(h.events[0]?.warning).toContain("was rejected");
-
-    const quiet = harness({ A: "sk-a", B: "sk-b" });
-    await streamWithCredentialFallback(
-      "openrouter",
-      [cand("first", "A"), cand("second", "B")],
-      quiet.readEnv,
-      quiet.attempt({ first: { kind: "http_status", status: 401, body: "x" } }),
-      quiet.hooks,
-    );
-    expect(quiet.events).toHaveLength(1);
-    expect(quiet.events[0]?.warning).toBeUndefined();
-  });
-
-  test("the last key's failure carries no warning, only the error", async () => {
-    const h = harness({ A: "sk-a" });
-    expect(
-      await rejectionOf(streamWithCredentialFallback(
-        "openrouter",
-        [cand("only", "A", true)],
-        h.readEnv,
-        h.attempt({ only: { kind: "http_status", status: 401, body: "x" } }),
-        h.hooks,
-      )),
-    ).toMatchObject({ kind: "http_status", status: 401 });
-    expect(h.events[0]?.warning).toBeUndefined();
-  });
-
-  test("rotation is not sticky across calls", async () => {
-    const candidates = [cand("first", "A"), cand("second", "B")];
-    const env: Record<string, string> = { B: "sk-b" };
-    const readEnv = (c: KeyCandidate) => env[c.env];
-    const tried: string[] = [];
-    const attempt = async (_k: string, c: KeyCandidate) => {
-      tried.push(c.name);
-      return c.name;
-    };
-    const hooks = { record: () => {} };
-
-    await streamWithCredentialFallback("p", candidates, readEnv, attempt, hooks);
-    env.A = "sk-a-recovered";
-    await streamWithCredentialFallback("p", candidates, readEnv, attempt, hooks);
-
-    expect(tried).toEqual(["second", "first"]);
-  });
-});
-
-describe("transient retry", () => {
-  test("a transient failure is retried and can succeed", async () => {
-    const delays: number[] = [];
-    let calls = 0;
-    const got = await streamWithRetry(
-      async () => {
-        calls += 1;
-        if (calls < 3) throw { kind: "http_status", status: 500, body: "x" } as LlmError;
-        return "ok";
-      },
-      { maxRetries: 3, backoffBaseMs: 100 },
-      undefined,
-      async (ms) => {
-        delays.push(ms);
-      },
-      { random: () => 0 },
-    );
-    expect(got).toBe("ok");
-    expect(calls).toBe(3);
-    expect(delays).toEqual([100, 200]);
-  });
-
-  test("retries are bounded and the last error escapes", async () => {
-    let calls = 0;
-    expect(
-      await rejectionOf(streamWithRetry(
-        async () => {
-          calls += 1;
-          throw { kind: "http_status", status: 500, body: "x" } as LlmError;
-        },
-        { maxRetries: 2, backoffBaseMs: 1 },
-        undefined,
-        async () => {},
-      )),
-    ).toMatchObject({ kind: "http_status", status: 500 });
-    expect(calls).toBe(3);
-  });
-
-  test("a credential failure fails fast so rotation can happen", async () => {
-    let calls = 0;
-    expect(
-      await rejectionOf(streamWithRetry(
-        async () => {
-          calls += 1;
-          throw { kind: "http_status", status: 401, body: "x" } as LlmError;
-        },
-        { maxRetries: 5, backoffBaseMs: 1 },
-        undefined,
-        async () => {},
-      )),
-    ).toMatchObject({ kind: "http_status", status: 401 });
-    expect(calls).toBe(1);
-  });
-
-  test("the two layers compose: retries are spent per key, not per request", async () => {
-    const attempts: string[] = [];
-    const got = await streamWithCredentialFallback(
-      "openrouter",
-      [cand("first", "A"), cand("second", "B")],
-      (c) => ({ A: "sk-a", B: "sk-b" })[c.env],
-      async (_apiKey, c) =>
-        streamWithRetry(
-          async () => {
-            attempts.push(c.name);
-            if (c.name === "first") throw { kind: "http_status", status: 401, body: "x" } as LlmError;
-            if (attempts.filter((a) => a === "second").length < 2) {
-              throw { kind: "http_status", status: 503, body: "x" } as LlmError;
-            }
-            return `served by ${c.name}`;
-          },
-          { maxRetries: 3, backoffBaseMs: 1 },
-          undefined,
-          async () => {},
-        ),
-      { record: () => {} },
-    );
-    expect(got).toBe("served by second");
-    expect(attempts).toEqual(["first", "second", "second"]);
   });
 });

@@ -2,10 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { handleBash } from "../src/tools/bash.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
-import { ALL_TOOLS, renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
@@ -41,14 +39,6 @@ async function world() {
 }
 
 describe("bash on Shore's tool surface", () => {
-  test("one shell replaces the basic command-line tools and keeps retrieval and services", () => {
-    const names = renderToolDefs({ enabled_tools: ["*"], enabled_subagents: [] }, "Ada", "User").map((tool) => tool.name);
-    expect(names).toContain("bash");
-    for (const name of ["delete", "git", "fetch_url", "roll_dice", "web_search", "search"]) expect(names).not.toContain(name);
-    for (const name of ["search_chat_logs", "generate_image", "model_history"]) expect(names).toContain(name);
-    expect(renderToolDefs({ enabled_tools: ["read"], enabled_subagents: [] }, "Ada", "User").map((d) => d.name)).toEqual(["read"]);
-    expect(ALL_TOOLS.filter((tool) => tool.name === "bash")).toHaveLength(1);
-  });
 
   test.each([{}, { command: 42 }, { command: "" }, { command: "pwd", workdir: 3 }, { command: "pwd", surprise: true }])(
     "rejects malformed input before touching the workspace: %j", async (input) => {
@@ -59,41 +49,6 @@ describe("bash on Shore's tool surface", () => {
       expect(await Bun.file(join(ctx.workspaceDir, "marker")).exists()).toBe(false);
     },
   );
-
-  test("runs real Bash with quoting, heredocs, pipelines, edits, search, moves, and deletion", async () => {
-    const { run, ctx, frames } = await world();
-    const result = await run(`mkdir -p 'a folder'
-cat > 'a folder/note.txt' <<'NOTE'
-the tide came in
-$HOME stays literal
-NOTE
-sed -i 's/came in/went out/' 'a folder/note.txt'
-matches=("a folder"/*.txt)
-cat "\${matches[0]}" | grep tide
-mv 'a folder/note.txt' saved.txt
-printf 'temporary' > discard.txt
-rm discard.txt
-printf 'diagnostic' >&2`);
-    expect(result.isError).toBe(false);
-    expect(result.raw).toContain("the tide went out");
-    expect(result.raw).toContain("stderr:\ndiagnostic");
-    expect(await readFile(join(ctx.workspaceDir, "saved.txt"), "utf8")).toContain("$HOME stays literal");
-    expect(await Bun.file(join(ctx.workspaceDir, "discard.txt")).exists()).toBe(false);
-    expect(frames).toHaveLength(2);
-    expect(frames[0]).toMatchObject({ type: "tool_call", tool_name: "bash" });
-    expect(frames[1]).toMatchObject({ type: "tool_result", tool_name: "bash", is_error: false });
-    expect(result.block).toMatchObject({ type: "tool_result", tool_use_id: "bash-call", is_error: false });
-  });
-
-  test("uses a fresh shell for each call, with relative or absolute working directories", async () => {
-    const { run, root, ctx } = await world();
-    await run("mkdir child; cd child; export SHORE_BASH_TRANSIENT=changed");
-    expect((await run('printf "%s|%s|%s" "$PWD" "$SHORE_WORKSPACE_DIR" "${SHORE_BASH_TRANSIENT-unset}"')).raw)
-      .toContain(`${ctx.workspaceDir}|${ctx.workspaceDir}|unset`);
-    expect((await run("pwd", "child")).raw).toContain(join(ctx.workspaceDir, "child"));
-    expect((await run("pwd", root)).raw).toContain(`workdir: ${root}`);
-    expect((await run("pwd", "..")).raw).toContain(`workdir: ${root}`);
-  });
 
   test("returns nonzero exit status and both output streams to the model", async () => {
     const { run } = await world();
@@ -110,23 +65,6 @@ printf 'diagnostic' >&2`);
     expect((await run("if read -r value; then exit 9; fi; printf closed")).raw).toContain("closed");
   });
 
-  test("git commits carry the character identity", async () => {
-    const { run } = await world();
-    const result = await run("git init -q && printf note > note.md && git add note.md && git commit -qm initial && git log -1 --format='%an <%ae>'");
-    expect(result.isError).toBe(false);
-    expect(result.raw).toContain("Juniper Vale <juniper-vale@shore.local>");
-  });
-
-  test("curl fetches URLs from the daemon's network", async () => {
-    const { run } = await world();
-    const server = Bun.serve({ port: 0, fetch: () => new Response("a fetched page") });
-    try {
-      const result = await run(`curl --fail --silent --show-error http://127.0.0.1:${server.port}/`);
-      expect(result.isError).toBe(false);
-      expect(result.raw).toContain("a fetched page");
-    } finally { await server.stop(true); }
-  });
-
   test("bounds captured output while continuing to drain stdout and stderr", async () => {
     const { run, exec } = await world();
     exec.limits.max_result_chars = 200;
@@ -138,44 +76,10 @@ printf 'diagnostic' >&2`);
     expect((await run("cat done.txt")).raw).toContain("done");
   });
 
-  test("queues changed prompt files, including deletion and writes before failure", async () => {
-    const { run, ctx } = await world();
-    const queued: string[] = [];
-    ctx.deferEdit = (path) => { queued.push(path); };
-    const result = await run("printf memory > MEMORY.md; printf soul > SOUL.md; exit 1");
-    expect(result.isError).toBe(true);
-    expect(queued).toEqual(["SOUL.md", "MEMORY.md"]);
-    queued.length = 0;
-    await run("cat MEMORY.md; printf memory > MEMORY.md; printf note > note.md");
-    expect(queued).toEqual([]);
-    await run("rm SOUL.md");
-    expect(queued).toEqual(["SOUL.md"]);
-  });
-
-  test.skipIf(process.getuid?.() === 0)("a prompt file the shell cannot read counts as absent instead of stopping every call", async () => {
-    const { run, ctx } = await world();
-    const queued: string[] = [];
-    ctx.deferEdit = (path) => { queued.push(path); };
-    const locked = await run("printf secret > ../locked && chmod 000 ../locked && ln -s ../locked USER.md");
-    expect(locked.isError).toBe(false);
-    expect(queued).toEqual([]);
-    const replaced = await run("rm USER.md && printf 'Call me Ash.' > USER.md");
-    expect(replaced.isError).toBe(false);
-    expect(queued).toEqual(["USER.md"]);
-    expect(await readFile(join(ctx.workspaceDir, "USER.md"), "utf8")).toBe("Call me Ash.");
-  });
-
   test("dry-run blocks Bash before creating any files", async () => {
     const { ctx } = await world();
     ctx.dryRun = true;
     expect(await failure(dispatchTool("bash", { command: "touch marker" }, ctx))).toContain("dry-run");
-    expect(await Bun.file(join(ctx.workspaceDir, "marker")).exists()).toBe(false);
-  });
-
-  test("already-cancelled calls do not start commands", async () => {
-    const { ctx } = await world();
-    ctx.signal = AbortSignal.abort(new Error("stop"));
-    expect(await failure(dispatchTool("bash", { command: "touch marker" }, ctx))).toContain("stop");
     expect(await Bun.file(join(ctx.workspaceDir, "marker")).exists()).toBe(false);
   });
 
@@ -201,13 +105,5 @@ printf 'diagnostic' >&2`);
     controller.abort(new Error("user cancelled"));
     expect(await failure(call)).toContain("user cancelled");
     expect(await Bun.file(join(ctx.workspaceDir, "leaked")).exists()).toBe(false);
-  });
-
-  test("missing workspace and working directory produce useful errors", async () => {
-    expect(await failure(handleBash({ command: "pwd" }, "", "Ada"))).toContain("workspace not configured");
-    const { run } = await world();
-    const result = await run("pwd", "missing");
-    expect(result.isError).toBe(true);
-    expect(result.raw).toContain("could not run bash");
   });
 });

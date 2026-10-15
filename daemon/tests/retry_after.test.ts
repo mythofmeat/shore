@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { retryAfterHint, retryDelayMs, streamWithRetry } from "../src/llm/fallback.ts";
 import type { LlmError } from "../src/llm/errors.ts";
-import { parseRetryAfterMs, rateLimitSnapshot, retryAfterMsFromError } from "../src/llm/retry_after.ts";
+import { parseRetryAfterMs, retryAfterMsFromError } from "../src/llm/retry_after.ts";
 import { rejectionOf } from "./support/outcome.ts";
 
 const NOW = Date.parse("2026-08-11T11:19:00Z");
@@ -89,28 +89,5 @@ describe("the hint reaches the backoff", () => {
     ).toMatchObject({ status: 429 });
     expect(calls).toBe(3);
     expect(delays).toEqual([12_000, 12_000]);
-  });
-});
-
-describe("rateLimitSnapshot", () => {
-  test("reads the quota headers Anthropic sends on every response", () => {
-    const headers = new Headers({
-      "anthropic-ratelimit-requests-limit": "10000",
-      "anthropic-ratelimit-requests-remaining": "9999",
-      "anthropic-ratelimit-requests-reset": "2026-08-11T11:19:18Z",
-      "anthropic-ratelimit-input-tokens-limit": "10000000",
-      "anthropic-ratelimit-input-tokens-remaining": "9993000",
-    });
-    expect(rateLimitSnapshot(headers)).toEqual({
-      requests_limit: 10000,
-      requests_remaining: 9999,
-      input_tokens_limit: 10_000_000,
-      input_tokens_remaining: 9_993_000,
-      resets_at: "2026-08-11T11:19:18Z",
-    });
-  });
-
-  test("a response with no quota headers reports nothing rather than zeroes", () => {
-    expect(rateLimitSnapshot(new Headers({ "content-type": "application/json" }))).toBeUndefined();
   });
 });

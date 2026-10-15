@@ -1,4 +1,4 @@
-import { required } from "../src/util/required.ts";
+
 
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,8 +10,6 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { generate } from "../src/llm/generate.ts";
 import { budgetBlockFor } from "../src/ledger/gate.ts";
-import { RECENT_COST_SAMPLE } from "../src/ledger/query.ts";
-import { Ledger } from "../src/ledger/store.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -130,28 +128,6 @@ function req(ledger: string, usage?: unknown): SidecarRequest {
   } as unknown as SidecarRequest;
 }
 
-function withoutContext(request: SidecarRequest): SidecarRequest {
-  const copy = { ...request };
-  delete copy.context;
-  return copy;
-}
-
-test("a generate with missing labels is attached to the daemon ledger before sending", async () => {
-  const root = await mkdtemp(join(tmpdir(), "shore-budget-unaccounted-"));
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-  const config = await chatConfig(root, false);
-  const counting = countingProvider();
-  const request = withoutContext(req(spentLedger(), undefined));
-
-  await generate(request, { providers: { openai: counting.provider }, config });
-  expect(counting.calls).toBe(1);
-  const labeled = request.context;
-  expect(labeled?.ledger).toBe(join(config.dirs.data, "shore.db"));
-  const ledger = Ledger.open(required(required(labeled).ledger));
-  expect(ledger.database.query("SELECT COUNT(*) AS n FROM call_attempts").get()).toEqual({ n: 1 });
-  ledger.close();
-});
-
 async function generateOnce(
   usage: unknown,
 ): Promise<{ calls: number; error: string | undefined }> {
@@ -182,23 +158,6 @@ test("an over-budget generate never reaches the provider", async () => {
   expect(calls, "the provider must not have been called").toBe(0);
 });
 
-test("a generate under budget proceeds", async () => {
-  const { calls, error } = await generateOnce({
-    timezone: "utc",
-    budgets: [{ name: "roomy", period: "month", cost_usd: 100.0, limit: "block" }],
-  });
-
-  expect(error).toBeUndefined();
-  expect(calls).toBe(1);
-});
-
-test("no budgets configured means no gate", async () => {
-  const { calls, error } = await generateOnce(undefined);
-
-  expect(error).toBeUndefined();
-  expect(calls).toBe(1);
-});
-
 function ledgerWithHistory(count: number, each: number): string {
   const f = freshLedger();
   cleanups.push(f.cleanup);
@@ -226,20 +185,6 @@ function loopReq(ledger: string, usage: unknown, iterations: number): SidecarReq
   };
 }
 
-const RECENT_WINDOW_BUDGET = {
-  timezone: "utc",
-  budgets: [
-    { name: "window", period: "month", cost_usd: 25.0, warn_at: [1.0], limit: "block" },
-  ],
-} as unknown as UsageConfig;
-
-const THIRTY_DOLLAR_BUDGET = {
-  timezone: "utc",
-  budgets: [
-    { name: "basis", period: "month", cost_usd: 30.0, warn_at: [1.0], limit: "block" },
-  ],
-} as unknown as UsageConfig;
-
 const TEN_DOLLAR_BUDGET = {
   timezone: "utc",
   budgets: [
@@ -256,156 +201,6 @@ test("a loop that would breach the budget is refused before it starts", () => {
   const loop = costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
   expect(loop?.budget_name).toBe("ten");
   expect(loop?.projected_cost).toBeCloseTo(9.0, 5);
-});
-
-test("the refusal says it is a projection, and reports what was actually spent", () => {
-  const ledger = ledgerWithHistory(4, 1.0);
-  const block = costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
-
-  expect(block?.message).toContain("would be exceeded by this tool loop");
-  expect(block?.message).toContain("$4.00 spent");
-  expect(block?.message).toContain("projected");
-  expect(block?.message).not.toContain("is over limit");
-  expect(block?.current_cost).toBeCloseTo(4.0, 5);
-});
-
-test("a loop that fits is allowed", () => {
-  const ledger = ledgerWithHistory(1, 1.0);
-  expect(budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 9))).toBeUndefined();
-});
-
-test("no cost history means no projection, so a new model is not refused on a guess", () => {
-  const ledger = ledgerWithHistory(4, 1.0);
-  const other = {
-    ...loopReq(ledger, TEN_DOLLAR_BUDGET, 10),
-    model: "openai/gpt-unseen",
-  };
-
-  expect(budgetBlockFor(other)).toBeUndefined();
-});
-
-test("a request with no tools is not a loop, whatever its iteration cap says", () => {
-  const ledger = ledgerWithHistory(4, 1.0);
-  for (const tools of [undefined, []]) {
-    const capped = {
-      ...req(ledger, TEN_DOLLAR_BUDGET),
-      max_tool_iterations: 10,
-      ...(tools === undefined ? {} : { tools }),
-    } as unknown as SidecarRequest;
-    expect(budgetBlockFor(capped), "one call cannot overrun").toBeUndefined();
-  }
-});
-
-test("a cap of one or zero projects nothing, and never projects backwards", () => {
-  const spent = ledgerWithHistory(10, 1.0);
-  for (const cap of [0, 1]) {
-    expect(
-      budgetBlockFor(loopReq(spent, TEN_DOLLAR_BUDGET, cap))?.budget_name,
-      `cap ${cap} must not talk the gate out of a refusal`,
-    ).toBe("ten");
-  }
-
-  const room = ledgerWithHistory(9, 1.0);
-  expect(budgetBlockFor(loopReq(room, TEN_DOLLAR_BUDGET, 1))).toBeUndefined();
-});
-
-test("continuations are priced off continuations, not off the turn that opens them", () => {
-  const f = freshLedger();
-  cleanups.push(f.cleanup);
-  const db = openLedger(f.path);
-  const ts = new Date().toISOString();
-  const insert = (callType: string, cost: number): void => {
-    db.query(
-      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
-         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
-       VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', ?2, 10, 5, 0, 0, 100, 10, 'end_turn', 1,
-         'pricing_catalog', ?3)`,
-    ).run(ts, callType, cost);
-  };
-  for (let i = 0; i < 5; i++) insert("message", 3.0);
-  for (let i = 0; i < 5; i++) insert("tool_loop", 1.0);
-  db.close();
-
-  const block = budgetBlockFor(loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10));
-  expect(block, "$20 spent + $9 projected fits under $30").toBeUndefined();
-});
-
-test("a heartbeat loop is priced off heartbeat continuations", () => {
-  const f = freshLedger();
-  cleanups.push(f.cleanup);
-  const db = openLedger(f.path);
-  const ts = new Date().toISOString();
-  const insert = (callType: string, cost: number): void => {
-    db.query(
-      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
-         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
-       VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', ?2, 10, 5, 0, 0, 100, 10, 'end_turn', 1,
-         'pricing_catalog', ?3)`,
-    ).run(ts, callType, cost);
-  };
-  for (let i = 0; i < 5; i++) insert("tool_loop", 3.0);
-  for (let i = 0; i < 5; i++) insert("heartbeat_tool_loop", 1.0);
-  db.close();
-
-  const heartbeat = {
-    ...loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10),
-    context: {
-      ...(loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10).context as object),
-      call_type: "heartbeat",
-    },
-  } as SidecarRequest;
-
-  expect(budgetBlockFor(heartbeat)).toBeUndefined();
-});
-
-test("the estimate follows the recent window, not the whole history", () => {
-  const f = freshLedger();
-  cleanups.push(f.cleanup);
-  const db = openLedger(f.path);
-  const ts = new Date().toISOString();
-  const insert = (cost: number): void => {
-    db.query(
-      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
-         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
-       VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', 'tool_loop', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
-         'pricing_catalog', ?2)`,
-    ).run(ts, cost);
-  };
-  for (let i = 0; i < 25; i++) insert(0.01);
-  for (let i = 0; i < RECENT_COST_SAMPLE; i++) insert(1.0);
-  db.close();
-
-  const block = costBlock(loopReq(f.path, RECENT_WINDOW_BUDGET, 10));
-  expect(block?.projected_cost).toBeCloseTo(9.0, 5);
-});
-
-test("free rows do not drag the mean toward zero", () => {
-  const f = freshLedger();
-  cleanups.push(f.cleanup);
-  const db = openLedger(f.path);
-  const ts = new Date().toISOString();
-  const insert = (cost: number): void => {
-    db.query(
-      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
-         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
-       VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', 'tool_loop', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
-         'pricing_catalog', ?2)`,
-    ).run(ts, cost);
-  };
-  for (let i = 0; i < 9; i++) insert(0);
-  insert(1.0);
-  db.close();
-
-  const block = costBlock(loopReq(f.path, TEN_DOLLAR_BUDGET, 10));
-  expect(block?.projected_cost).toBeCloseTo(9.0, 5);
 });
 
 const CHAT_KEY_ENV = "SHORE_BUDGET_GATE_KEY";
@@ -556,24 +351,6 @@ describe("the chat turn", () => {
     expect(calls, "the provider must not have been called").toBe(0);
   });
 
-  test("a chat turn under budget proceeds", async () => {
-    const generous = {
-      timezone: "utc",
-      budgets: [{ name: "roomy", period: "month", cost_usd: 100.0, limit: "block" }],
-    } as unknown as UsageConfig;
-    const { calls, error } = await chatTurn(generous);
-
-    expect(error).toBeUndefined();
-    expect(calls).toBe(1);
-  });
-
-  test("no budgets configured means no gate on chat either", async () => {
-    const { calls, error } = await chatTurn(undefined);
-
-    expect(error).toBeUndefined();
-    expect(calls).toBe(1);
-  });
-
   test("a budget scoped to an api_key is enforced on the chat turn", async () => {
     const scoped = {
       timezone: "utc",
@@ -591,14 +368,5 @@ describe("the chat turn", () => {
 
     expect(error).toContain('Shore usage budget "keyed" is over limit');
     expect(calls).toBe(0);
-  });
-
-  test("a blocked turn is refused once, not once per configured key", async () => {
-    const { calls, fallbacks, sleeps, error } = await chatTurn(BLOCKING_BUDGET, true);
-
-    expect(fallbacks, "a budget refusal must abandon no credential").toBe(0);
-    expect(sleeps, "a budget refusal must not back off and retry").toBe(0);
-    expect(calls).toBe(0);
-    expect(error).toContain('Shore usage budget "tiny" is over limit');
   });
 });

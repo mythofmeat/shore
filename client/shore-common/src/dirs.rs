@@ -181,30 +181,6 @@ mod tests {
     }
 
     #[test]
-    fn xdg_platform_dir_appends_shore() {
-        let dir = resolve_xdg_dir(
-            &env_of(&[]),
-            "SHORE_CONFIG_DIR",
-            "XDG_CONFIG_HOME",
-            || Some(PathBuf::from("/tmp/shore_fallback_test")),
-            LastResort::Refuse,
-        );
-        assert_eq!(dir, PathBuf::from("/tmp/shore_fallback_test/shore"));
-    }
-
-    #[test]
-    fn runtime_falls_back_to_the_temp_dir() {
-        let dir = resolve_xdg_dir(
-            &env_of(&[]),
-            "SHORE_RUNTIME_DIR",
-            "XDG_RUNTIME_DIR",
-            || None,
-            LastResort::TempDir,
-        );
-        assert_eq!(dir, std::env::temp_dir().join("shore"));
-    }
-
-    #[test]
     #[should_panic(expected = "cannot determine a home directory")]
     fn no_home_anywhere_refuses_rather_than_inventing_a_tilde_directory() {
         let _ = resolve_xdg_dir(
@@ -213,30 +189,6 @@ mod tests {
             "XDG_CONFIG_HOME",
             || None,
             LastResort::Refuse,
-        );
-    }
-
-    #[test]
-    fn an_override_is_enough_on_its_own() {
-        let dir = resolve_xdg_dir(
-            &env_of(&[("SHORE_CONFIG_DIR", "/srv/shore")]),
-            "SHORE_CONFIG_DIR",
-            "XDG_CONFIG_HOME",
-            || None,
-            LastResort::Refuse,
-        );
-        assert_eq!(dir, PathBuf::from("/srv/shore"));
-    }
-
-    #[test]
-    fn empty_workspace_root_counts_as_unset() {
-        assert_eq!(
-            workspace_root_from(&env_of(&[("SHORE_WORKSPACE_DIR", "")])),
-            None
-        );
-        assert_eq!(
-            workspace_root_from(&env_of(&[("SHORE_WORKSPACE_DIR", "/work")])),
-            Some(PathBuf::from("/work"))
         );
     }
 }

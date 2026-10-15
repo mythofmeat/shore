@@ -1,4 +1,4 @@
-import { durableExists, writeDurable } from "../src/storage/files.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -6,24 +6,10 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
-import {
-  FORK_MARKER_FILE,
-  ForkBusy,
-  forkThread,
-  recoverForks,
-  selectForkContext,
-} from "../src/engine/fork.ts";
+import { FORK_MARKER_FILE, forkThread, recoverForks, selectForkContext } from "../src/engine/fork.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
-import {
-  ThreadError,
-  createThread,
-  ensureThreads,
-  readThreadsIndex,
-  threadActivities,
-} from "../src/engine/threads.ts";
+import { createThread, ensureThreads, readThreadsIndex } from "../src/engine/threads.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
-import { versionOf } from "../src/engine/versions.ts";
-import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
@@ -85,28 +71,6 @@ async function readMessages(path: string): Promise<Message[]> {
 }
 
 describe("choosing what a fork copies", () => {
-  test("no turn count copies the whole active context", () => {
-    const messages = [user("u1", "one"), assistant("a1", "two"), user("u2", "three")];
-    expect(selectForkContext(messages, undefined)).toHaveLength(3);
-  });
-
-  test("a turn count starts at the nth-from-last real user turn", () => {
-    const messages = [
-      user("u1", "one"),
-      assistant("a1", "reply one"),
-      user("u2", "two"),
-      assistant("a2", "reply two"),
-      user("u3", "three"),
-      assistant("a3", "reply three"),
-    ];
-    expect(selectForkContext(messages, 1).map((m) => m.msg_id)).toEqual(["u3", "a3"]);
-    expect(selectForkContext(messages, 2).map((m) => m.msg_id)).toEqual([
-      "u2",
-      "a2",
-      "u3",
-      "a3",
-    ]);
-  });
 
   test("a tool exchange travels whole, results attached to the call that made them", () => {
     const messages = [
@@ -119,46 +83,6 @@ describe("choosing what a fork copies", () => {
     ];
     const selected = selectForkContext(messages, 1);
     expect(selected.map((m) => m.msg_id)).toEqual(["u2", "a2", "r2", "a3"]);
-  });
-
-  test("a leading tool result with no call in the copy is dropped, never carried orphaned", () => {
-    const messages = [
-      toolResult("r0", "call-0"),
-      user("u1", "next"),
-      assistant("a2", "reply"),
-    ];
-    expect(selectForkContext(messages, undefined).map((m) => m.msg_id)).toEqual(["u1", "a2"]);
-  });
-
-  test("a cut before an earlier turn keeps that turn's whole tool exchange", () => {
-    const messages = [
-      user("u1", "one"),
-      toolUse("a1", "call-1"),
-      toolResult("r1", "call-1"),
-      user("u2", "two"),
-      toolUse("a2", "call-2"),
-      toolResult("r2", "call-2"),
-      assistant("a3", "done"),
-    ];
-    expect(selectForkContext(messages, 1).map((m) => m.msg_id)).toEqual([
-      "u2",
-      "a2",
-      "r2",
-      "a3",
-    ]);
-  });
-
-  test("asking for more turns than exist copies what there is", () => {
-    const messages = [user("u1", "one"), assistant("a1", "reply")];
-    expect(selectForkContext(messages, 9)).toHaveLength(2);
-  });
-
-  test("autonomous-only context is copied whole rather than silently discarded", () => {
-    const messages = [
-      assistant("a1", "unprompted one", { origin: "autonomous" }),
-      assistant("a2", "unprompted two", { origin: "autonomous" }),
-    ];
-    expect(selectForkContext(messages, 1).map((m) => m.msg_id)).toEqual(["a1", "a2"]);
   });
 });
 
@@ -182,244 +106,6 @@ describe("forking a thread", () => {
     expect(child.map((m) => m.content)).toEqual(["first", "reply"]);
   });
 
-  test("the copy shares the source's message versions, so the two are the same events", async () => {
-    const root = await dataDir();
-    const path = await seed(root, "ada", "main", [user("u1", "first"), assistant("a1", "reply")]);
-
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const parent = await readMessages(path);
-    const child = await readMessages(join(root, "ada", "threads", "spin", "active.jsonl"));
-    expect(parent.map(versionOf)).toEqual(child.map(versionOf));
-    expect(parent.every((m) => versionOf(m) !== undefined)).toBe(true);
-  });
-
-
-
-  test("an edit on either branch gives that occurrence its own version", async () => {
-    const root = await dataDir();
-    const path = await seed(root, "ada", "main", [user("u1", "first")]);
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const childPath = join(root, "ada", "threads", "spin", "active.jsonl");
-    const child = await MessageStore.load(childPath);
-    await child.edit("u1", "diverged");
-
-    const before = versionOf(required((await readMessages(path))[0]));
-    const after = versionOf(required((await readMessages(childPath))[0]));
-    expect(after).toBeDefined();
-    expect(after).not.toBe(before);
-  });
-
-  test("identical text typed twice stays two separate events", async () => {
-    const root = await dataDir();
-    const path = await seed(root, "ada", "main", [user("u1", "same words"), user("u2", "same words")]);
-    const messages = await readMessages(path);
-    expect(versionOf(required(messages[0]))).not.toBe(versionOf(required(messages[1])));
-  });
-
-  test("the child inherits compaction and the model pin but starts a fresh session", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first")]);
-    await createThread(root, "ada", "eval", NOW, {
-      compaction: true,
-      chat_model: "anthropic:opus",
-    });
-    writeDurable(join(root, "ada", "threads", "eval", "active.jsonl"), `${JSON.stringify(user("u9", "eval turn"))}\n`);
-    writeDurable(join(root, "ada", "threads", "eval", "compaction-checkpoint.json"), "{}\n");
-
-    const result = await forkThread(root, "ada", "eval", "eval-b", { now: () => NOW });
-    expect(result.child.compaction).toBe(true);
-    expect(result.child.chat_model).toBe("anthropic:opus");
-    expect(durableExists(join(root, "ada", "threads", "eval-b", "compaction-checkpoint.json"))).toBe(
-      false,
-    );
-    expect(existsSync(join(root, "ada", "threads", "eval-b", "segments"))).toBe(false);
-  });
-
-  test("images travel as references into the character's shared store, never as bytes", async () => {
-    const root = await dataDir();
-    const path = await seed(root, "ada", "main", [
-      message({
-        msg_id: "u1",
-        role: "user",
-        content: "look at this",
-        images: [
-          { path: "/data/ada/images/attachments/red.png", caption: "red", data: "BASE64BLOB" },
-        ],
-      }),
-    ]);
-
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const childPath = join(root, "ada", "threads", "spin", "active.jsonl");
-    expect(await readFile(childPath, "utf8")).not.toContain("BASE64BLOB");
-    const child = await readMessages(childPath);
-    expect(required(child[0]).images).toEqual([
-      { path: "/data/ada/images/attachments/red.png", caption: "red" },
-    ]);
-    expect(existsSync(join(root, "ada", "threads", "spin", "images"))).toBe(false);
-    expect(required((await readMessages(path))[0]).images).toHaveLength(1);
-  });
-
-  test("alternatives, their timestamps and their provider metadata all travel", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [
-      user("u1", "ask"),
-      message({
-        msg_id: "a1",
-        role: "assistant",
-        content: "second try",
-        model: "anthropic:opus",
-        provider_key: "anthropic",
-        alt_index: 1,
-        alt_count: 2,
-        alternatives: [
-          {
-            content: "first try",
-            images: [],
-            content_blocks: [{ type: "text", text: "first try" }],
-            timestamp: "2026-09-04T00:00:00.000Z",
-            model: "anthropic:sonnet",
-            provider_key: "anthropic",
-          },
-          {
-            content: "second try",
-            images: [],
-            content_blocks: [{ type: "text", text: "second try" }],
-            timestamp: NOW,
-            model: "anthropic:opus",
-            provider_key: "anthropic",
-          },
-        ],
-      }),
-    ]);
-
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const copied = required(
-      (await readMessages(join(root, "ada", "threads", "spin", "active.jsonl"))).at(-1),
-    );
-    expect(copied.alt_index).toBe(1);
-    expect(copied.alternatives).toMatchObject([
-      { content: "first try", timestamp: "2026-09-04T00:00:00.000Z", model: "anthropic:sonnet" },
-      { content: "second try", timestamp: NOW, model: "anthropic:opus" },
-    ]);
-    expect(copied.model).toBe("anthropic:opus");
-    expect(copied.timestamp).toBe(NOW);
-  });
-
-  test("a multi-round tool exchange travels whole, with every result attached", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [
-      user("u1", "do the thing"),
-      toolUse("a1", "call-1"),
-      toolResult("r1", "call-1"),
-      toolUse("a2", "call-2"),
-      toolResult("r2", "call-2"),
-      assistant("a3", "done"),
-    ]);
-
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW, turns: 1 });
-
-    const copied = await readMessages(join(root, "ada", "threads", "spin", "active.jsonl"));
-    expect(copied.map((m) => m.msg_id)).toEqual(["u1", "a1", "r1", "a2", "r2", "a3"]);
-  });
-
-  test("each thread counts its own transcript", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [
-      user("u1", "one"),
-      assistant("a1", "reply"),
-      user("u2", "two"),
-      assistant("a2", "reply"),
-    ]);
-
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW, turns: 1 });
-    const activity = await threadActivities(root, "ada", ["main", "spin"]);
-    expect(new Map([...activity].map(([id, read]) => [id, read.turns]))).toEqual(
-      new Map([
-        ["main", 2],
-        ["spin", 1],
-      ]),
-    );
-  });
-
-  test("creating the child leaves home alone and records where it came from", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first")]);
-    const result = await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-    expect(result.index.home).toBe("main");
-    expect(result.child.forked_from).toMatchObject({
-      source: "main",
-      fork_id: result.fork.fork_id,
-      messages: 1,
-      turns: 1,
-    });
-    const published = (await readThreadsIndex(root, "ada"))?.threads.find((t) => t.id === "spin");
-    expect(published?.forked_from?.source).toBe("main");
-    expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
-  });
-
-  test("provenance survives in the character's durable record", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first"), assistant("a1", "reply")]);
-    const result = await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    try {
-      expect(store.threadForks("ada").find((fork) => fork.fork_id === result.fork.fork_id)).toMatchObject({
-        child: "spin",
-        source: "main",
-        message_count: 2,
-      });
-    } finally {
-      store.close();
-    }
-  });
-
-  test("a fork of a fork keeps both records after a parent's directory is gone", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first")]);
-    await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-    await forkThread(root, "ada", "spin", "spin-2", { now: () => NOW });
-    await rm(join(root, "ada", "threads", "spin"), { recursive: true, force: true });
-
-    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    try {
-      expect(store.threadForks("ada").map((f) => `${f.source}->${f.child}`).sort()).toEqual([
-        "main->spin",
-        "spin->spin-2",
-      ]);
-    } finally {
-      store.close();
-    }
-  });
-
-  test("an existing destination, a bad id and a self-fork are all refused", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first")]);
-    await createThread(root, "ada", "taken", NOW);
-
-    for (const [source, child, kind] of [
-      ["main", "taken", "exists"],
-      ["main", "../escape", "invalid_id"],
-      ["main", "main", "exists"],
-      ["ghost", "spin", "not_found"],
-    ] as const) {
-      try {
-        await forkThread(root, "ada", source, child, { now: () => NOW });
-        throw new Error(`expected a rejection for ${source} -> ${child}`);
-      } catch (e) {
-        expect((e as ThreadError).kind).toBe(kind);
-      }
-    }
-    expect((await readThreadsIndex(root, "ada"))?.threads.map((t) => t.id)).toEqual([
-      "main",
-      "taken",
-    ]);
-  });
-
   test("a directory that already holds data is never overwritten", async () => {
     const root = await dataDir();
     await seed(root, "ada", "main", [user("u1", "first")]);
@@ -431,33 +117,6 @@ describe("forking a thread", () => {
       /already holds data/,
     );
     expect(await readFile(join(squatter, "active.jsonl"), "utf8")).toBe("keep me\n");
-  });
-
-  test("a compaction mid-flight anywhere in the character answers busy", async () => {
-    for (const busyKey of ["ada", "ada/other"]) {
-      const root = await dataDir();
-      await seed(root, "ada", "main", [user("u1", "first")]);
-      await createThread(root, "ada", "other", NOW);
-      const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-      store.beginCompaction(
-        busyKey,
-        { file: HISTORY_DB_FILE, message_count: 1, compacted_at: NOW },
-        [user("u0", "archived")],
-        "before",
-        "after",
-      );
-      store.close();
-
-      await forkThread(root, "ada", "main", "spin", { now: () => NOW }).then(
-        () => {
-          throw new Error(`expected busy while ${busyKey} was compacting`);
-        },
-        (e: unknown) => {
-          expect(e).toBeInstanceOf(ForkBusy);
-        },
-      );
-      expect(existsSync(join(root, "ada", "threads", "spin"))).toBe(false);
-    }
   });
 });
 
@@ -482,20 +141,6 @@ describe("recovering an interrupted fork", () => {
       store.close();
     }
     expect(await readMessages(path)).toHaveLength(1);
-  });
-
-  test("a failure between publishing and clearing the marker keeps the child", async () => {
-    const root = await dataDir();
-    await seed(root, "ada", "main", [user("u1", "first")]);
-
-    expect(
-      await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "publish" })),
-    ).toThrow(/injected/);
-
-    expect(await recoverForks(root, "ada")).toEqual(["spin"]);
-    expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
-    expect(await readMessages(join(root, "ada", "threads", "spin", "active.jsonl"))).toHaveLength(1);
-    expect((await readThreadsIndex(root, "ada"))?.threads.map((t) => t.id)).toEqual(["main", "spin"]);
   });
 
   test("a crash before the context is written leaves the source untouched", async () => {

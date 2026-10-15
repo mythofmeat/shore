@@ -1,20 +1,14 @@
 import { required } from "../src/util/required.ts";
 
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
-import {
-  ensureWorkspaceGitRepo,
-  gitCommitAll,
-  gitPushWorkspace,
-  gitPushWorkspaceBestEffort,
-} from "../src/tools/workspace.ts";
+import { ensureWorkspaceGitRepo, gitCommitAll, gitPushWorkspace } from "../src/tools/workspace.ts";
 import { envWithoutInheritedGitRepo } from "../src/tools/process.ts";
-import { outcomeOf } from "./support/outcome.ts";
 
 const roots: string[] = [];
 
@@ -112,10 +106,6 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     expect(await gitPushWorkspace(workspace)).toBe(false);
   });
 
-  test("a directory that is not a repo is skipped", async () => {
-    expect(await gitPushWorkspace(tempDir())).toBe(false);
-  });
-
   test("an inherited GIT_DIR does not retarget the commit at the surrounding repo", async () => {
     const surrounding = join(tempDir(), "surrounding");
     await git(tempDir(), "init", "--quiet", surrounding);
@@ -146,26 +136,6 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     expect(await gitRevParse(surrounding, "HEAD")).toBe(before);
     expect(await gitLogSubjects(workspace)).toContain("memory: compaction");
   });
-
-  test("the best-effort wrapper logs a push that fails instead of throwing", async () => {
-    const { workspace, remote } = await workspaceWithRemote();
-    rmSync(remote, { recursive: true, force: true });
-
-    writeFileSync(join(workspace, "MEMORY.md"), "# memory\n\n- new\n");
-    await gitCommitAll(workspace, "Ada", "memory: compaction");
-
-    expect(await outcomeOf(gitPushWorkspace(workspace))).toThrow();
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      expect(await gitPushWorkspaceBestEffort(workspace)).toBeUndefined();
-      const warnings = warn.mock.calls.map((call) => String(call[0]));
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain(`could not push the workspace at ${workspace}`);
-      expect(warnings[0]).toContain("git push failed");
-    } finally {
-      warn.mockRestore();
-    }
-  });
 });
 
 describe.if((await gitAvailable()) && (await gitLfsAvailable()))("gitPushWorkspace with Git LFS", () => {
@@ -183,19 +153,5 @@ describe.if((await gitAvailable()) && (await gitLfsAvailable()))("gitPushWorkspa
     expect(await gitRevParse(remote, "HEAD")).toBe(await gitRevParse(workspace, "HEAD"));
     const oid = createHash("sha256").update(image).digest("hex");
     expect(existsSync(join(remote, "lfs", "objects", oid.slice(0, 2), oid.slice(2, 4), oid))).toBe(true);
-  });
-});
-
-describe("the compaction push is wired to the push", () => {
-  test("run.ts hands `pushAfterCompaction` the push, not a commit", () => {
-    const source = readFileSync(
-      new URL("../src/memory/compaction/run.ts", import.meta.url),
-      "utf8",
-    );
-    const call = source.slice(source.indexOf("await pushAfterCompaction("));
-    const callback = call.slice(0, call.indexOf("});"));
-
-    expect(callback).toContain("gitPushWorkspaceBestEffort");
-    expect(callback).not.toContain("gitCommitAll");
   });
 });

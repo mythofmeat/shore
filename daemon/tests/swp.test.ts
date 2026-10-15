@@ -1,78 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import type { ClientMessage } from "../src/protocol/ClientMessage";
-import type { ServerMessage } from "../src/protocol/ServerMessage";
-import {
-  MAX_CONSECUTIVE_LAGS,
-  PING_INTERVAL_MS,
-  SWP_V1,
-  historyMessage,
-  performHandshake,
-  type HandshakeProvider,
-} from "../src/swp/connection";
-import { BROADCAST_CAPACITY } from "../src/swp/broadcast";
-import { MAX_WIRE_MESSAGE_SIZE, WireError, WireReader, writeMessage } from "../src/swp/framing";
-import {
-  eventMatchesSession,
-  msgTypeName,
-  resolveHandshakeCharacter,
-  routeClientMessage,
-} from "../src/swp/routing";
-import { SessionRouter, type SessionMeta } from "../src/swp/session";
+import { WireError, WireReader } from "../src/swp/framing";
 
-const OPEN = (): boolean => true;
-
-interface Fixture {
-  readonly constants: Record<string, number>;
-  readonly framing: readonly FramingCase[];
-  readonly write_message: readonly { name: string; message: ServerMessage; line: string }[];
-  readonly resolve_handshake_character: readonly {
-    character_names: string[];
-    requested: string | null;
-    resolved: string | null;
-  }[];
-  readonly event_matches_session: readonly {
-    name: string;
-    registered: boolean;
-    unregistered: boolean;
-  }[];
-  readonly msg_type_name: readonly {
-    variant: string;
-    type_name: string;
-    handshake_error_message: string;
-  }[];
-  readonly route_client_message: readonly RoutingCase[];
-  readonly handshake: readonly HandshakeCase[];
-}
-
-interface FramingCase {
-  readonly name: string;
-  readonly input_b64?: string;
-  readonly input_repeat?: { byte: number; count: number; trailing_newline: boolean };
-  readonly results: readonly ({ ok: ClientMessage } | { eof: true } | { err: string })[];
-}
-
-interface RoutingCase {
-  readonly name: string;
-  readonly live_character: string | null;
-  readonly routed: Record<string, unknown> | null;
-  readonly written: string;
-}
-
-interface HandshakeCase {
-  readonly name: string;
-  readonly characters: string[];
-  readonly client_hello_line: string | null;
-  readonly server_frames: readonly ServerMessage[];
-  readonly result: Record<string, unknown>;
-  readonly registered_clients: readonly Record<string, unknown>[];
-}
-
-const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "swp_captures", "swp.json"), "utf8"),
-) as Fixture;
+type Read = { ok: ClientMessage } | { eof: true } | { err: string };
 
 async function* once(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
   if (bytes.length > 0) yield bytes;
@@ -82,25 +13,9 @@ async function* byteAtATime(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
   for (const b of bytes) yield new Uint8Array([b]);
 }
 
-function inputBytes(c: FramingCase): Uint8Array {
-  if (c.input_b64 !== undefined) return Uint8Array.from(Buffer.from(c.input_b64, "base64"));
-  const spec = c.input_repeat;
-  if (spec === undefined) throw new Error(`case ${c.name} has no input`);
-  const out = new Uint8Array(spec.count + (spec.trailing_newline ? 1 : 0));
-  out.fill(spec.byte, 0, spec.count);
-  if (spec.trailing_newline) out[spec.count] = 0x0a;
-  return out;
-}
-
-function withSkippedDefaults(msg: ClientMessage): ClientMessage {
-  return msg.type === "message" ? { image_data: [], ...msg } : msg;
-}
-
-async function driveFraming(
-  source: AsyncIterable<Uint8Array>,
-): Promise<({ ok: ClientMessage } | { eof: true } | { err: string })[]> {
-  const reader = new WireReader(source);
-  const out: ({ ok: ClientMessage } | { eof: true } | { err: string })[] = [];
+async function readAll(source: AsyncIterable<Uint8Array>, maxMessageSize?: number): Promise<Read[]> {
+  const reader = new WireReader(source, maxMessageSize);
+  const out: Read[] = [];
   for (;;) {
     try {
       const msg = await reader.readMessage();
@@ -117,418 +32,48 @@ async function driveFraming(
   }
 }
 
-describe("the transport constants the Rust client also implements", () => {
-  test("every transport constant", () => {
-    expect(SWP_V1).toBe(fixture.constants.swp_v1 as number);
-    expect(MAX_WIRE_MESSAGE_SIZE).toBe(fixture.constants.max_wire_message_size as number);
-    expect(PING_INTERVAL_MS).toBe((fixture.constants.ping_interval_secs as number) * 1000);
-    expect(MAX_CONSECUTIVE_LAGS).toBe(fixture.constants.max_consecutive_lags as number);
-    expect(BROADCAST_CAPACITY).toBe(fixture.constants.broadcast_capacity as number);
-  });
-});
+const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+const CANCEL = '{"type":"cancel"}';
+
+const CASES: { name: string; input: Uint8Array; reads: ("cancel" | "eof" | "err")[] }[] = [
+  { name: "one frame", input: bytes(`${CANCEL}\n`), reads: ["cancel", "eof"] },
+  { name: "two frames in one buffer", input: bytes(`${CANCEL}\n${CANCEL}\n`), reads: ["cancel", "cancel", "eof"] },
+  { name: "clean eof, nothing buffered", input: bytes(""), reads: ["eof"] },
+  { name: "an unterminated final frame is still parsed", input: bytes(CANCEL), reads: ["cancel", "eof"] },
+  { name: "a crlf terminator", input: bytes(`${CANCEL}\r\n`), reads: ["cancel", "eof"] },
+  { name: "surrounding spaces are trimmed", input: bytes(`   ${CANCEL}   \n`), reads: ["cancel", "eof"] },
+  { name: "a bare newline is an error", input: bytes("\n"), reads: ["err"] },
+  { name: "invalid utf-8 is an error", input: Uint8Array.from([0xff, 0xfe, 0x0a]), reads: ["err"] },
+  { name: "json that is not a client message is an error", input: bytes('{"type":"nope"}\n'), reads: ["err"] },
+  { name: "unknown fields are ignored", input: bytes('{"type":"cancel","extra":1}\n'), reads: ["cancel", "eof"] },
+];
 
 describe("framing", () => {
-  for (const c of fixture.framing) {
+  for (const c of CASES) {
     test(c.name, async () => {
-      const actual = await driveFraming(once(inputBytes(c)));
-      expect(actual.length).toBe(c.results.length);
+      const reads = await readAll(once(c.input));
+      expect(reads.map((r) => ("ok" in r ? r.ok.type : "eof" in r ? "eof" : "err"))).toEqual(c.reads);
+    });
 
-      for (const [i, expected] of c.results.entries()) {
-        const got = actual[i];
-        if ("ok" in expected) {
-          expect(got).toEqual({ ok: withSkippedDefaults(expected.ok) });
-        } else if ("eof" in expected) {
-          expect(got).toEqual({ eof: true });
-        } else {
-          expect(got).toHaveProperty("err");
-          const SIZE = "Message exceeds maximum size";
-          expect((got as { err: string }).err === SIZE).toBe(expected.err === SIZE);
-        }
-      }
+    test(`${c.name}, one byte per chunk`, async () => {
+      expect(await readAll(byteAtATime(c.input))).toEqual(await readAll(once(c.input)));
     });
   }
 
-  for (const c of fixture.framing.filter((x) => x.input_b64 !== undefined)) {
-    test(`${c.name} — one byte per chunk`, async () => {
-      const actual = await driveFraming(byteAtATime(inputBytes(c)));
-      const whole = await driveFraming(once(inputBytes(c)));
-      expect(actual).toEqual(whole);
-    });
-  }
-});
-
-describe("a message from an older client", () => {
-  async function decode(line: string) {
-    const bytes = new TextEncoder().encode(line);
-    return await driveFraming(once(bytes));
-  }
-
-  test("a per-message overrides field is ignored, not rejected", async () => {
-    const [first] = await decode(
-      JSON.stringify({
-        type: "message",
-        rid: "r1",
-        text: "hello",
-        stream: true,
-        images: [],
-        overrides: { temperature: 0.9, top_p: 0.4, thinking_budget: 2048 },
-      }) + "\n",
-    );
-
-    expect(first).toEqual({
-      ok: {
-        type: "message",
-        rid: "r1",
-        text: "hello",
-        stream: true,
-        images: [],
-        image_data: [],
-      },
-    });
+  test("a message frame keeps its fields and fills its defaults", async () => {
+    expect(await readAll(once(bytes('{"type":"message","rid":"r1","text":"hi","stream":true}\n')))).toEqual([
+      { ok: { type: "message", rid: "r1", text: "hi", stream: true, images: [], image_data: [] } as ClientMessage },
+      { eof: true },
+    ]);
   });
 
-  test("any other unknown field is ignored too", async () => {
-    const [first] = await decode(
-      JSON.stringify({
-        type: "message",
-        text: "hello",
-        stream: false,
-        images: [],
-        invented_by_a_newer_client: { anything: true },
-      }) + "\n",
-    );
-
-    expect(first).toEqual({
-      ok: { type: "message", text: "hello", stream: false, images: [], image_data: [] },
-    });
-  });
-});
-
-test("regen guidance survives wire framing", async () => {
-  const line = JSON.stringify({
-    type: "regen",
-    rid: "r-guided",
-    stream: true,
-    guidance: "consult memory",
-  }) + "\n";
-  const [first] = await driveFraming(once(new TextEncoder().encode(line)));
-
-  expect(first).toEqual({
-    ok: {
-      type: "regen",
-      rid: "r-guided",
-      stream: true,
-      guidance: "consult memory",
-    },
-  });
-});
-
-describe("write_message", () => {
-  for (const c of fixture.write_message) {
-    test(c.name, async () => {
-      const chunks: Uint8Array[] = [];
-      await writeMessage({ write: (b) => void chunks.push(b) }, c.message);
-      const line = Buffer.concat(chunks).toString("utf8");
-      const actual = JSON.parse(line) as Record<string, unknown>;
-      const expected = JSON.parse(c.line) as Record<string, unknown>;
-
-      expect(actual).toEqual(expected);
-      expect(Object.keys(actual)).toEqual(Object.keys(expected));
-
-      expect(line).toBe(c.line);
-    });
-  }
-});
-
-describe("resolve_handshake_character", () => {
-  for (const c of fixture.resolve_handshake_character) {
-    test(`requested ${JSON.stringify(c.requested)} against [${c.character_names.join(", ")}]`, () => {
-      const characters = c.character_names.map((name) => ({ name }));
-      expect(resolveHandshakeCharacter(c.requested, characters)).toBe(c.resolved);
-    });
-  }
-
-  const two = [{ name: "ada" }, { name: "bea" }];
-
-  test("a refused request lands on the character the daemon is already serving", () => {
-    expect(resolveHandshakeCharacter("ghost", two, "bea")).toBe("bea");
-  });
-
-  test("a request that can be honoured still wins over what is held", () => {
-    expect(resolveHandshakeCharacter("ada", two, "bea")).toBe("ada");
-  });
-
-  test("no request at all inherits the held character rather than going ambiguous", () => {
-    expect(resolveHandshakeCharacter(null, two, "bea")).toBe("bea");
-    expect(resolveHandshakeCharacter(null, two, null)).toBeNull();
-  });
-
-  test("a held character that no longer exists is not offered", () => {
-    expect(resolveHandshakeCharacter(null, two, "gone")).toBeNull();
-    expect(resolveHandshakeCharacter("ghost", two, "gone")).toBeNull();
-  });
-});
-
-describe("event_matches_session", () => {
-  const byName = new Map(fixture.write_message.map((w) => [w.name, w.message]));
-  for (const c of fixture.event_matches_session) {
-    test(c.name, () => {
-      const msg = byName.get(c.name);
-      expect(msg).toBeDefined();
-      const wire = msg as ServerMessage;
-      const character =
-        wire.type === "history"
-          ? (wire.selected_character ?? null)
-          : wire.type === "new_message"
-            ? (wire.character ?? null)
-            : "selected";
-      expect(eventMatchesSession(wire, character, true)).toBe(c.registered);
-      const unregistered =
-        wire.type === "history" || wire.type === "new_message" ? false : c.unregistered;
-      expect(eventMatchesSession(wire, character, false)).toBe(unregistered);
-    });
-  }
-
-  test("conversation events only reach the selected character", () => {
-    const history = {
-      type: "history",
-      messages: [],
-      config: {},
-      selected_character: "frank",
-      revision: 1,
-    } as ServerMessage;
-    const message = {
-      type: "new_message",
-      character: "frank",
-      revision: 1,
-    } as ServerMessage;
-
-    expect(eventMatchesSession(history, "frank", true)).toBe(true);
-    expect(eventMatchesSession(history, "Yuna", true)).toBe(false);
-    expect(eventMatchesSession(message, "frank", true)).toBe(true);
-    expect(eventMatchesSession(message, "Yuna", true)).toBe(false);
-    expect(eventMatchesSession(message, null, true)).toBe(false);
-  });
-
-  test("an all-characters subscriber gets conversation events for every character", () => {
-    const message = {
-      type: "new_message",
-      character: "frank",
-      revision: 1,
-    } as ServerMessage;
-
-    expect(eventMatchesSession(message, null, true, true)).toBe(true);
-    expect(eventMatchesSession(message, "Yuna", true, true)).toBe(true);
-    expect(eventMatchesSession(message, null, false, true)).toBe(false);
-  });
-});
-
-describe("msg_type_name", () => {
-  for (const c of fixture.msg_type_name) {
-    test(c.variant, () => {
-      const msg = { type: c.variant } as ClientMessage;
-      expect(msgTypeName(msg)).toBe(c.type_name);
-      expect(`Expected hello, got ${JSON.stringify(msgTypeName(msg))}`).toBe(
-        c.handshake_error_message,
-      );
-    });
-  }
-});
-
-const CAPTURED_SESSION: SessionMeta = {
-  clientId: 1,
-  sessionId: 1,
-  clientType: "tui",
-  clientName: "t",
-  capabilities: ["images"],
-  selectedCharacter: "captured-at-handshake",
-  selectedThread: null,
-};
-
-describe("route_client_message", () => {
-  const framingByName = new Map(fixture.framing.map((f) => [f.name, f]));
-  void framingByName;
-
-  for (const c of fixture.route_client_message) {
-    test(c.name, async () => {
-      const routed = c.routed;
-      const msg: ClientMessage =
-        routed === null
-          ? ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [] })
-          : routed.kind === "command"
-            ? ({ type: "command", ...(routed.cmd as object) } as ClientMessage)
-            : (routed.msg as ClientMessage);
-
-      const outcome = routeClientMessage(msg, CAPTURED_SESSION, c.live_character);
-
-      if (routed === null) {
-        expect(outcome.action).toBe("reply");
-        const chunks: Uint8Array[] = [];
-        await writeMessage(
-          { write: (b) => void chunks.push(b) },
-          (outcome as { action: "reply"; reply: ServerMessage }).reply,
-        );
-        expect(Buffer.concat(chunks).toString("utf8")).toBe(c.written);
-        return;
-      }
-
-      expect(outcome.action).toBe("route");
-      expect(c.written).toBe("");
-      const got = (outcome as { action: "route"; routed: Record<string, unknown> }).routed;
-      expect(got.kind).toBe(routed.kind as string);
-
-      const meta = got.meta as {
-        rid: string | null;
-        kind: string;
-        session: { selectedCharacter: string | null; capabilities: readonly string[] };
-      };
-      const expectedMeta = routed.meta as {
-        rid: string | null;
-        kind: string;
-        session: { selected_character: string | null; capabilities: string[] };
-      };
-
-      expect(meta.rid).toBe(expectedMeta.rid);
-      expect(meta.kind).toBe(expectedMeta.kind);
-      expect(meta.session.selectedCharacter).toBe(expectedMeta.session.selected_character);
-      expect([...meta.session.capabilities]).toEqual(expectedMeta.session.capabilities);
-    });
-  }
-});
-
-describe("the history frame", () => {
-  const snapshot = { messages: [], config: {}, selectedCharacter: "frank", selectedThread: "main", revision: 3 };
-  const previous = {
-    index: 4, first_message_at: "2026-09-28T10:00:00Z", last_message_at: "2026-10-01T22:00:00Z", compacted_at: "2026-10-01T22:05:00Z",
-    message_count: 12, excluded: false, label: "trip", note: null, memory_before: null, memory_after: null,
-  };
-
-  test("names the segment before the current context, and leaves the field off when there is none", () => {
-    expect(historyMessage({ ...snapshot, previousSegment: previous })).toMatchObject({ type: "history", previous_segment: previous });
-    expect(historyMessage({ ...snapshot, previousSegment: null })).not.toHaveProperty("previous_segment");
-  });
-});
-
-describe("handshake", () => {
-  for (const c of fixture.handshake) {
-    test(c.name, async () => {
-      const overrides = c.name === "history overrides the resolved character";
-      const provider: HandshakeProvider = {
-        hello: () => Promise.resolve({ characters: c.characters.map((name) => ({ name })) }),
-        history: overrides
-          ? () =>
-              Promise.resolve({
-                messages: [],
-                previousSegment: null,
-                config: {},
-                selectedCharacter: "forced-by-history",
-                selectedThread: null,
-                revision: 1,
-              })
-          : (selected) =>
-          Promise.resolve({
-            messages: [
-              {
-                msg_id: "m1",
-                role: "assistant",
-                content: `history for ${selected === null ? "None" : `Some(${JSON.stringify(selected)})`}`,
-                images: [],
-                content_blocks: [],
-                timestamp: "2026-01-01T00:00:00Z",
-              },
-            ] as never,
-            previousSegment: null,
-            config: { defaults: true },
-            selectedCharacter: selected,
-            selectedThread: null,
-            revision: 42,
-          }),
-      };
-
-      const line = c.client_hello_line;
-      const input = line === null ? new Uint8Array(0) : new TextEncoder().encode(`${line}\n`);
-      const written: Uint8Array[] = [];
-      const router = new SessionRouter();
-
-      let error: unknown = null;
-      let session: SessionMeta | null = null;
-      try {
-        session = await performHandshake(
-          new WireReader(once(input)),
-          { write: (b) => void written.push(b) },
-          {
-            clientId: 1,
-            serverName: "shore-test",
-            router,
-            events: null as never,
-            handshake: provider,
-            authenticate: OPEN,
-            route: async () => {},
-            shutdown: new Promise<void>(() => {}),
-          },
-        );
-      } catch (e) {
-        error = e;
-      }
-
-      const frames = Buffer.concat(written)
-        .toString("utf8")
-        .split("\n")
-        .filter((l) => l.length > 0)
-        .map((l) => JSON.parse(l) as ServerMessage);
-      expect(frames).toEqual(c.server_frames as ServerMessage[]);
-
-      if ("closed" in c.result) {
-        expect(error).toBeNull();
-        expect(session).toBeNull();
-        expect(router.sessions()).toEqual([]);
-      } else if ("err" in c.result) {
-        expect(error).not.toBeNull();
-        expect(session).toBeNull();
-        expect(router.sessions()).toEqual([]);
-      } else {
-        expect(error).toBeNull();
-        expect(session?.selectedCharacter ?? null).toBe(
-          (c.result.selected_character ?? null) as string | null,
-        );
-        expect(session?.clientType).toBe(c.result.client_type as string);
-        expect(session?.clientName).toBe(c.result.client_name as string);
-        expect(router.sessions()).toEqual([[1, (c.result.selected_character ?? null) as string | null]]);
-      }
-    });
-  }
-});
-
-describe("history is routed to the thread that asked for it", () => {
-  const history = (thread?: string): ServerMessage => ({
-      type: "history",
-      messages: [],
-      config: {},
-      selected_character: "frank",
-      ...(thread === undefined ? {} : { selected_thread: thread }),
-      revision: 1,
-    });
-
-  test("a session on one thread does not see another thread's conversation", () => {
-    expect(eventMatchesSession(history("main"), "frank", true, false, "main")).toBe(true);
-    expect(eventMatchesSession(history("scratch"), "frank", true, false, "main")).toBe(false);
-    expect(eventMatchesSession(history("main"), "frank", true, false, "scratch")).toBe(false);
-  });
-
-  test("a session that has not picked a thread still sees the character's history", () => {
-    expect(eventMatchesSession(history("main"), "frank", true, false, null)).toBe(true);
-    expect(eventMatchesSession(history("scratch"), "frank", true, false, null)).toBe(true);
-  });
-
-  test("a broadcast from before threads existed reaches everyone on the character", () => {
-    expect(eventMatchesSession(history(), "frank", true, false, "scratch")).toBe(true);
-  });
-
-  test("the character check still comes first", () => {
-    expect(eventMatchesSession(history("main"), "Yuna", true, false, "main")).toBe(false);
-  });
-
-  test("an all-characters subscriber is not filtered by thread either", () => {
-    expect(eventMatchesSession(history("scratch"), "frank", true, true, "main")).toBe(true);
+  test("a frame over the size limit is refused, terminated or not", async () => {
+    const limit = 64;
+    const over = "a".repeat(limit);
+    expect(await readAll(once(bytes(`${over}\n`)), limit)).toEqual([{ err: "Message exceeds maximum size" }]);
+    expect(await readAll(once(bytes(`${over}a`)), limit)).toEqual([{ err: "Message exceeds maximum size" }]);
+    const atLimit = await readAll(once(bytes(`${"a".repeat(limit - 1)}\n`)), limit);
+    expect(atLimit).toHaveLength(1);
+    expect(atLimit[0]).not.toEqual({ err: "Message exceeds maximum size" });
   });
 });

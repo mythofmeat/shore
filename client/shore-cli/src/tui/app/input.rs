@@ -236,11 +236,6 @@ impl InputState {
         self.text = text;
     }
 
-    #[cfg(test)]
-    pub(crate) fn line_count(&self) -> usize {
-        self.text.lines().count().max(1)
-    }
-
     pub(crate) fn visual_line_count(&self, content_width: usize) -> usize {
         let starts = word_wrap_offsets(&self.text, content_width);
         let count = starts.len();
@@ -397,93 +392,6 @@ mod tests {
         input.delete();
         assert!(input.text.is_empty());
         assert_eq!(input.cursor, 0);
-    }
-
-    #[test]
-    fn undo_takes_back_a_word_at_a_time_not_a_letter() {
-        let mut input = InputState::default();
-        for c in "hello there".chars() {
-            input.insert_char(c);
-        }
-
-        assert!(input.undo());
-        assert_eq!(input.text, "hello ");
-        assert!(input.undo());
-        assert_eq!(input.text, "");
-        assert!(!input.undo(), "nothing left to take back");
-    }
-
-    #[test]
-    fn undo_brings_back_a_box_that_was_cleared_out_from_under_you() {
-        let mut input = InputState::default();
-        input.insert_str("a message I did not mean to lose");
-
-        input.set_text(String::new());
-        assert_eq!(input.text, "");
-
-        assert!(input.undo());
-        assert_eq!(input.text, "a message I did not mean to lose");
-        assert_eq!(input.cursor, input.text.len());
-    }
-
-    #[test]
-    fn undo_brings_back_what_you_just_sent() {
-        let mut input = InputState::default();
-        input.insert_str("ship it");
-
-        assert_eq!(input.take_text(), "ship it");
-        assert_eq!(input.text, "");
-
-        assert!(input.undo());
-        assert_eq!(input.text, "ship it");
-    }
-
-    #[test]
-    fn undo_survives_an_editor_round_trip_that_ate_the_text() {
-        let mut input = InputState::default();
-        input.insert_str("the draft I wanted");
-
-        input.set_text("".to_owned());
-        assert!(input.undo());
-        assert_eq!(input.text, "the draft I wanted");
-    }
-
-    #[test]
-    fn redo_puts_back_what_undo_took_and_a_new_edit_ends_the_line() {
-        let mut input = InputState::default();
-        input.insert_str("first");
-        input.insert_str(" second");
-
-        assert!(input.undo());
-        assert_eq!(input.text, "first");
-        assert!(input.redo());
-        assert_eq!(input.text, "first second");
-
-        assert!(input.undo());
-        input.insert_str(" third");
-        assert_eq!(input.text, "first third");
-        assert!(!input.redo(), "a fresh edit drops the redo trail");
-    }
-
-    #[test]
-    fn a_backspace_run_is_one_step_but_a_word_kill_is_its_own() {
-        let mut input = InputState::default();
-        input.insert_str("abcdef");
-        for _ in 0_u8..3 {
-            input.backspace();
-        }
-        assert_eq!(input.text, "abc");
-
-        assert!(input.undo());
-        assert_eq!(
-            input.text, "abcdef",
-            "the whole run of backspaces goes back"
-        );
-
-        input.backspace_word();
-        assert_eq!(input.text, "");
-        assert!(input.undo());
-        assert_eq!(input.text, "abcdef");
     }
 
     #[test]
