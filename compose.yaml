@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: daemon/Dockerfile
       args:
-        # The bind mounts must be writable by the daemon's user. If your UID or GID is not 1000, set SHORE_UID and SHORE_GID in .env.
         USER_UID: ${SHORE_UID:-1000}
         USER_GID: ${SHORE_GID:-1000}
         CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}

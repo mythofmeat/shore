@@ -13,7 +13,6 @@ makedepends=('rust' 'git' 'sccache' 'bun')
 options=('!lto' '!debug' 'strip')
 sha256sums=('SKIP')
 
-# The desktop app runs on the system Electron, so it ships only its own files.
 _electron=electron44
 
 export RUSTC_WRAPPER="sccache"

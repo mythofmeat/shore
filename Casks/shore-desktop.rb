@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-# The release workflow builds Shore.app with desktop/scripts/macos-app.ts, attaches its zip to the release, and
-# moves the version and checksum below.
-#   brew tap mythofmeat/shore https://github.com/mythofmeat/shore.git
-#   brew install --cask mythofmeat/shore/shore-desktop
 cask "shore-desktop" do
   version "4.35.2"
   sha256 "41ff152be436a2c697ef4952e3864487c632d6ef130b203716ec9f42a30d7ece"
@@ -17,11 +13,8 @@ cask "shore-desktop" do
   depends_on :macos
 
   app "Shore.app"
-  # Electron finds its helper apps from the path it ran as, so a link to it can't start; a wrapper can.
   command_wrapper "shore-desktop", executable: "#{appdir}/Shore.app/Contents/MacOS/Shore"
 
-  # Shore.app is signed ad hoc, not notarized, so macOS would make you approve it in System Settings after every
-  # install and upgrade while Homebrew's quarantine flag is on it.
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Shore.app"]
   end

@@ -1,15 +1,10 @@
-# Rust. Deliberately not root-anchored: the Cargo workspace lives in client/,
-# and a `/target/` rule would silently stop matching if it moved again.
 target/
 **/*.rs.bk
 *.profraw
 *.profdata
 
-# IDE / AI tooling
 .idea/
 .vscode/
-# Track committed agent skills/config under .claude/, but never the local
-# worktree checkouts the harness creates there.
 .claude/worktrees/
 .codex
 .skill-staging/
@@ -17,11 +12,9 @@ target/
 *.swo
 *~
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Runtime / data
 *.db
 *.sqlite
 *.sqlite3
@@ -34,8 +27,6 @@ Thumbs.db
 contrib/arch/src/
 out/
 
-# Environment / secrets
-# What compose.yaml mounts when Shore runs from this checkout.
 /config/
 /workspace/
 .env

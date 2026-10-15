@@ -82,12 +82,46 @@ for (const rel of new Glob("**/*.rs").scanSync(CLIENT)) {
   });
 }
 
+const tracked = new TextDecoder()
+  .decode(Bun.spawnSync(["git", "ls-files"], { cwd: REPO }).stdout)
+  .split("\n")
+  .filter((rel) => rel !== "");
+
+const HASH_FILE = /(\.(ya?ml|sh|toml|rb|spec|py)|(^|\/)(Dockerfile|PKGBUILD|\.gitignore|\.gitattributes|\.dockerignore))$/;
+const HASH_DIRECTIVE = /^#(!|\s*frozen_string_literal:|\s*Maintainer:)/;
+const PROMPTS = /^daemon\/prompts\//;
+
+let otherScanned = 0;
+for (const rel of tracked) {
+  if (rel.endsWith(".md")) {
+    if (!PROMPTS.test(rel)) offenders.push(`${rel}  (markdown outside daemon/prompts)`);
+    continue;
+  }
+  const hash = HASH_FILE.test(rel);
+  const css = rel.endsWith(".css");
+  const html = rel.endsWith(".html");
+  if (!hash && !css && !html) continue;
+  const text = readFileSync(join(REPO, rel), "utf8");
+  if (GENERATED.test(text)) continue;
+  otherScanned++;
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.trim();
+    const comment =
+      (hash && line.startsWith("#") && !HASH_DIRECTIVE.test(line)) ||
+      (css && raw.includes("/*")) ||
+      (html && raw.includes("<!--"));
+    if (comment) offenders.push(`${rel}:${i + 1}  ${line.slice(0, 80)}`);
+  });
+}
+
 if (offenders.length > 0) {
-  console.error(`Comments are not allowed in daemon/, desktop/ or client/. Found ${offenders.length}:\n`);
+  console.error(`Comments and markdown docs are not allowed. Found ${offenders.length}:\n`);
   for (const o of offenders) console.error(`  ${o}`);
   console.error(`\nRename something or write a test instead.`);
-  console.error(`Directives (@ts-expect-error, eslint-*) and generated files are exempt.`);
+  console.error(`Directives (@ts-expect-error, eslint-*, shebangs) and generated files are exempt.`);
   process.exit(1);
 }
 
-console.log(`no comments in ${scanned} ts and ${rustScanned} rust files (${generated} generated skipped)`);
+console.log(
+  `no comments in ${scanned} ts, ${rustScanned} rust and ${otherScanned} other files (${generated} generated skipped)`,
+);

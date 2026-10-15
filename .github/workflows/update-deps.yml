@@ -24,13 +24,10 @@ jobs:
         working-directory: daemon
       - run: cargo upgrade --incompatible && cargo update
         working-directory: client
-      # The generated files are committed, and verify fails the pull request if they are stale.
       - run: cargo test -p shore-common export
         working-directory: client
       - run: bun run browser:generate && bun run browser:build
         working-directory: daemon
-      # Pull requests opened with the default GITHUB_TOKEN don't trigger other workflows, so verify
-      # would never run on this one.
       - uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.DEPS_PR_TOKEN }}

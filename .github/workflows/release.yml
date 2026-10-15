@@ -76,8 +76,6 @@ jobs:
           git push origin "release/v$version"
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
-  # The cask pins Shore.app's zip by checksum, so the zip is built from the release branch before it merges and
-  # its checksum goes in with the version. The squash merge changes nothing the app is built from.
   macos:
     needs: version
     runs-on: macos-15
@@ -127,8 +125,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: release/v${{ needs.version.outputs.version }}
-      # main only takes commits that passed verify, and pull requests opened with the default
-      # GITHUB_TOKEN don't trigger it, so the version bump goes through one opened with a personal token.
       - env:
           GH_TOKEN: ${{ secrets.DEPS_PR_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}

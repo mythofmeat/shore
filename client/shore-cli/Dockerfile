@@ -1,5 +1,3 @@
-# Build from the repository root: docker build -f client/shore-cli/Dockerfile .
-# compose.yaml at the root runs it against the daemon as the `shore` service.
 
 FROM rust:alpine AS builder
 WORKDIR /src

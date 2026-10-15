@@ -1,8 +1,4 @@
-# Built by .github/workflows/package.yml from a `git archive` of the checkout. cargo and bun aren't
-# BuildRequires: CI installs current stable Rust with rustup and the bun daemon/.bun-version pins, since the
-# weekly dependency updates can need a newer Rust than Fedora ships.
 
-# Fedora packages no Electron, so shore-desktop carries its own. Its libraries stay private to it.
 %global debug_package %{nil}
 %global _build_id_links none
 %global __strip /bin/true
@@ -44,7 +40,6 @@ A desktop window for the shore daemon's browser client, with its own Electron.
 %autosetup
 
 %build
-# Fedora's RUSTFLAGS add full debug info and turn stripping off, which would override the client's release profile.
 unset RUSTFLAGS
 cd client
 cargo build --release --locked --bin shore
@@ -63,7 +58,6 @@ client/target/release/shore completions zsh >%{buildroot}%{_datadir}/zsh/site-fu
 
 install -dm755 %{buildroot}%{_libdir}
 cp -r --no-preserve=ownership out/desktop/shore-desktop-linux-* %{buildroot}%{_libdir}/shore-desktop
-# Chromium falls back to this helper where unprivileged user namespaces are off, and it only works setuid.
 chmod 4755 %{buildroot}%{_libdir}/shore-desktop/chrome-sandbox
 install -dm755 %{buildroot}%{_bindir}
 ln -s ../%{_lib}/shore-desktop/shore-desktop %{buildroot}%{_bindir}/shore-desktop

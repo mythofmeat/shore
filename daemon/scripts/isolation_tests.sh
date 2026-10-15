@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Runs tests/isolation.test.ts the way the Docker image runs the daemon: as an
-# ordinary user holding only CAP_SETUID, CAP_SETGID and CAP_KILL, with two
-# characters' tools running as users of their own. Switching users needs root,
-# so this happens in a throwaway container; the ordinary test suite skips
-# these tests. Needs Docker, and bun install (and bun run build:patch, for the
-# apply_patch test) in daemon/ first.
 set -euo pipefail
 
 daemon=$(cd "$(dirname "$0")/.." && pwd)

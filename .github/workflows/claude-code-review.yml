@@ -10,7 +10,6 @@ concurrency:
 
 jobs:
   claude-review:
-    # Release pull requests only move version numbers.
     if: ${{ !github.event.pull_request.draft && !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -21,10 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Claude submits the review itself with the Claude app's token, so it
-      # shows up as claude[bot] approving or requesting changes. The action
-      # skips (green, no review) on a pull request that edits this file,
-      # because the app token is only issued for the workflow on main.
       - id: review
         uses: anthropics/claude-code-action@v1
         with:
@@ -45,8 +40,6 @@ jobs:
             --allowedTools "Read,Grep,Glob,Write,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews:*)"
             --disallowedTools "Agent,Task"
 
-      # A run that ends without a review would otherwise pass silently, so
-      # print how Claude finished and fail unless the head commit got one.
       - if: ${{ always() && steps.review.outputs.execution_file != '' }}
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-# This repository is its own tap:
-#   brew tap mythofmeat/shore https://github.com/mythofmeat/shore.git
-#   brew install mythofmeat/shore/shore
-# The release workflow moves the tag below with every release.
 class Shore < Formula
   desc "Terminal chat client for the shore AI character engine"
   homepage "https://github.com/mythofmeat/shore"
