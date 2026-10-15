@@ -1,144 +1,29 @@
-# Runs the Shore daemon in Docker, from a checkout of this repository:
-#
-#   mkdir -p config workspace          # create these yourself, or Docker creates them owned by root
-#   docker compose up -d --build
-#   docker compose run --rm shore      # the terminal client, connected to the daemon below
-#
-# The browser client is at http://localhost:7340. Sign in with the token in
-# config/token, then sign in other devices from Settings › Devices.
-#
-# On first start the daemon writes config/config.toml and config/token. Put
-# provider keys in config/.env (ANTHROPIC_API_KEY=...) and each character's
-# SOUL.md in workspace/<name>/.
-#
-# A character's tools (bash, read, edit, apply_patch) run as the daemon's
-# user unless the character has a user of its own. Then they cannot open
-# config/, the data and cache volumes, Claude Code's login or other
-# characters' files. For a character named ada:
-#
-#   1. Add ada:2001 to SHORE_CHARACTER_USERS in .env (space-separated
-#      name:uid pairs) and rebuild. The image creates the user and a group
-#      ada with the same number, which the daemon's user joins.
-#   2. Put tools.user = "ada" in config/characters/ada/config.toml, or in
-#      config/config.toml to give every character that one user.
-#   3. Give ada a home that survives the container: a volume at /home/ada,
-#      as for home below.
-#   4. On the host, give workspace/ada to that uid and gid:
-#        mkdir -p workspace/ada
-#        sudo chown -R 2001:2001 workspace/ada && sudo chmod 2770 workspace/ada
-#      To read and write it as yourself too, join a group with that gid
-#      and keep new files writable by the group:
-#        sudo groupadd -g 2001 ada && sudo usermod -aG ada "$USER"
-#        sudo chmod -R g+rwX workspace/ada
-#        sudo setfacl -R -d -m u::rwX,g::rwX,o::- workspace/ada
-#
-# Setting tools.pass_env = ["NAME"] passes the daemon's NAME variable to
-# characters with their own user; they get no other variable of the daemon's.
-#
-# Pushing a workspace, whether the character runs git push or Shore pushes
-# after compaction (compaction.git_push = true), runs as the user the
-# character's tools run as. For an SSH remote, give that user a key and the
-# remote's host key, then add the printed public key to the remote with write
-# access. As app, the daemon's user, or ada for a character with its own:
-#
-#   docker compose exec -u app shore-daemon sh -c 'mkdir -p -m 700 ~/.ssh \
-#     && ssh-keygen -q -t ed25519 -N "" -f ~/.ssh/id_ed25519 \
-#     && ssh-keyscan git.example.com >> ~/.ssh/known_hosts \
-#     && cat ~/.ssh/id_ed25519.pub'
-#
-# To keep the deployment outside the checkout, extend the daemon's service
-# from git rather than copying this file, and override what you change; a
-# list such as volumes or ports needs !override to replace the one here
-# rather than add to it. Give the volumes in any case, as ./config here would
-# be in Compose's copy of the repository. For programs the image lacks, build
-# an image of your own, image/Dockerfile, starting FROM shore: the stock
-# image, which a service that never starts builds.
-#
-#   x-shore: &shore
-#     file: https://github.com/mythofmeat/shore.git#main:compose.yaml
-#     service: shore-daemon
-#
-#   services:
-#     shore-stock:
-#       extends: *shore
-#       scale: 0
-#       volumes: !reset []
-#     shore-daemon:
-#       extends: *shore
-#       build: !override
-#         context: ./image
-#         additional_contexts:
-#           shore: service:shore-stock
-#       volumes: !override
-#         - ./config:/config
-#         - ./workspace:/workspace
-#         - data:/data
-#         - cache:/cache
-#         - home:/home/app
-#
-#   volumes:
-#     data:
-#     cache:
-#     home:
-#
-# The repository is private, so git needs credentials for it.
-#
-# The same daemon without compose:
-#
-#   docker build -f daemon/Dockerfile -t shore-daemon .
-#   docker run -d --name shore-daemon --stop-timeout 1800 \
-#     -p 127.0.0.1:7320:7320 -p 127.0.0.1:7340:7340 \
-#     -v "$PWD/config:/config" -v "$PWD/workspace:/workspace" \
-#     -v shore-data:/data -v shore-cache:/cache -v shore-home:/home/app \
-#     --read-only --tmpfs /tmp:exec --security-opt no-new-privileges \
-#     --cap-drop ALL --cap-add SETUID --cap-add SETGID --cap-add KILL \
-#     shore-daemon
-
 services:
   shore-daemon:
     build:
       context: .
       dockerfile: daemon/Dockerfile
       args:
-        # The bind mounts must be writable by the daemon's user. If your UID or
-        # GID is not 1000, set SHORE_UID and SHORE_GID in .env.
+        # The bind mounts must be writable by the daemon's user. If your UID or GID is not 1000, set SHORE_UID and SHORE_GID in .env.
         USER_UID: ${SHORE_UID:-1000}
         USER_GID: ${SHORE_GID:-1000}
-        # Users for characters' tools, as described at the top.
         CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
-        # Sets /etc/localtime in the image. Keep it the same as TZ below.
         TZ: ${TZ:-UTC}
     restart: unless-stopped
-    # On stop the daemon finishes replies and heartbeats already running, for
-    # up to daemon.shutdown_grace (29m by default). Keep this a little longer.
     stop_grace_period: 30m
     environment:
       TZ: ${TZ:-UTC}
     ports:
-      # Loopback only. Publishing them wider, e.g. "7340:7340", lets anyone who
-      # can reach the port and holds config/token drive the daemon.
       - "127.0.0.1:7320:7320"
-      # The browser client.
       - "127.0.0.1:7340:7340"
     volumes:
       - ./config:/config
       - ./workspace:/workspace
       - data:/data
       - cache:/cache
-      # The daemon's home: Claude Code's login unless CLAUDE_CONFIG_DIR
-      # points elsewhere, and, for characters without a user of their own,
-      # tool caches and what they install with pip --user or uv.
       - home:/home/app
-      # A character with its own user keeps those in its own home:
-      # - ada-home:/home/ada
-    # The bash tool runs whatever the model asks for inside this container.
-    # The container starts as root only to hand the daemon these three
-    # capabilities: SETUID and SETGID to run each character's tools as its
-    # user, KILL to stop them. Those tools get none, and nothing in the
-    # container can gain privileges or write anywhere but the volumes and /tmp.
     read_only: true
     tmpfs:
-      # exec: installers such as cargo and pip build and run programs here.
       - /tmp:exec
     cap_drop:
       - ALL
@@ -158,7 +43,6 @@ services:
       SHORE_ADDR: shore-daemon:7320
       SHORE_CONFIG_DIR: /config
     volumes:
-      # For the token the daemon wrote there.
       - ./config:/config:ro
     depends_on:
       - shore-daemon
@@ -169,4 +53,3 @@ volumes:
   data:
   cache:
   home:
-  # ada-home:
