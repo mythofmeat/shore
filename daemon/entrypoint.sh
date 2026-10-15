@@ -1,8 +1,4 @@
 #!/bin/sh
-# Starts the daemon as its own user, keeping the three capabilities it needs
-# to run each character's tools as that character's user: CAP_SETUID and
-# CAP_SETGID to switch to it, and CAP_KILL to stop its commands on timeout or
-# cancellation. Started as any other user, it runs the daemon unchanged.
 set -eu
 
 if [ "$(id -u)" != 0 ]; then
