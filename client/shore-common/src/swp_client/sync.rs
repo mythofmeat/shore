@@ -156,6 +156,42 @@ mod tests {
     }
 
     #[test]
+    fn switching_character_resets_independent_revision_watermarks() {
+        let mut sync = SyncState::new(650, Some("frank"), None);
+        let switched = ServerMessage::History(History {
+            delta: None,
+            rid: None,
+            messages: vec![message("y1")],
+            previous_segment: None,
+            config: serde_json::json!({}),
+            selected_character: Some("Yuna".into()),
+            selected_thread: None,
+            revision: 12,
+        });
+
+        assert_eq!(sync.observe(&switched), SyncDecision::Deliver);
+        assert_eq!(sync.latest_revision(), 12);
+    }
+    #[test]
+    fn switching_thread_resets_the_watermark_even_when_the_new_thread_is_behind() {
+        let mut sync = SyncState::new(40, Some("alice"), Some("main"));
+        let switched = ServerMessage::History(History {
+            delta: None,
+            rid: None,
+            messages: vec![message("e1")],
+            previous_segment: None,
+            config: serde_json::json!({}),
+            selected_character: Some("alice".into()),
+            selected_thread: Some("eval".into()),
+            revision: 2,
+        });
+
+        assert_eq!(sync.observe(&switched), SyncDecision::Deliver);
+        assert_eq!(sync.latest_revision(), 2);
+        assert_eq!(sync.selected_thread(), Some("eval"));
+    }
+
+    #[test]
     fn drops_stale_history_snapshots() {
         let mut sync = SyncState::new(5, Some("alice"), None);
         let stale = ServerMessage::History(History {
@@ -170,6 +206,27 @@ mod tests {
         });
 
         assert_eq!(sync.observe(&stale), SyncDecision::DropStale);
+        assert_eq!(sync.latest_revision(), 5);
+    }
+
+    #[test]
+    fn a_snapshot_of_the_thread_on_screen_is_shown_again_at_the_same_revision_but_never_older() {
+        let mut sync = SyncState::new(5, Some("alice"), Some("main"));
+        let snapshot = |revision| {
+            ServerMessage::History(History {
+                delta: None,
+                rid: None,
+                messages: vec![message("m1")],
+                previous_segment: None,
+                config: serde_json::json!({}),
+                selected_character: Some("alice".into()),
+                selected_thread: Some("main".into()),
+                revision,
+            })
+        };
+
+        assert_eq!(sync.observe(&snapshot(4)), SyncDecision::DropStale);
+        assert_eq!(sync.observe(&snapshot(5)), SyncDecision::Deliver);
         assert_eq!(sync.latest_revision(), 5);
     }
 

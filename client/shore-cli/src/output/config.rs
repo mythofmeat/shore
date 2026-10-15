@@ -426,6 +426,10 @@ mod tests {
                     "whoop": {
                         "url": "http://mcp-whoop:3000/mcp",
                         "headers": {"Authorization": "Bearer c78911b4d4502e957cbee6546"}
+                    },
+                    "search": {
+                        "command": "tavily-mcp",
+                        "env": {"TAVILY_API_KEY": "tvly-5e1f0a99c3", "REGION": "eu-west"}
                     }
                 },
                 "subagents": {
@@ -449,6 +453,14 @@ mod tests {
         );
         assert!(out.contains("(set, hidden)"), "{out}");
         assert!(out.contains("--json to read them"), "{out}");
+        assert!(
+            !out.contains("tvly-5e1f0a99c3"),
+            "a key named like a credential must not be printed: {out}"
+        );
+        assert!(
+            out.contains("http://mcp-whoop:3000/mcp") && out.contains("eu-west"),
+            "values that are not credentials stay readable: {out}"
+        );
     }
 
     #[test]
