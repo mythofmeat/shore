@@ -1,9 +1,8 @@
 import { afterAll, afterEach, expect, setSystemTime, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { type KeepaliveEvent } from "../src/cache/keepalive.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -14,7 +13,7 @@ import { buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
-import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
+import { createRuntime, startRuntimeClocks } from "../src/runtime.ts";
 import { required } from "../src/util/required.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -55,12 +54,8 @@ function recordingProvider(seen: SidecarRequest[], heartbeatRead: number): Sidec
 }
 
 interface IdleChat {
-  runtime: ShoreRuntime;
   seen: SidecarRequest[];
-  events: KeepaliveEvent[];
-  chatPrefix: SidecarRequest;
   heartbeatAt: (minutes: number) => Promise<void>;
-  keepaliveTickAt: (minutes: number) => Promise<void>;
 }
 
 async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Promise<void>): Promise<void> {
@@ -93,8 +88,6 @@ async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Pro
   const env = { [KEY_ENV]: "fixture-key" };
   const runtime = await createRuntime({ config, providers: { anthropic: recordingProvider(seen, heartbeatRead) }, env });
   const clocks = startRuntimeClocks(runtime);
-  const events: KeepaliveEvent[] = [];
-  runtime.keepalive.onEvent((event) => events.push(event));
   try {
     const autonomy = new TurnAutonomyBridge(runtime.autonomy);
     const deps = buildGenerationDeps({
@@ -110,25 +103,17 @@ async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Pro
     });
     await autonomy.settled("ada");
     await idle({
-      runtime,
       seen,
-      events,
-      chatPrefix: required(runtime.cache.get("ada")),
       heartbeatAt: async (minutes) => {
         setSystemTime(new Date(T0 + minutes * MINUTE));
         expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
         await runtime.autonomy.tick();
-      },
-      keepaliveTickAt: async (minutes) => {
-        setSystemTime(new Date(T0 + minutes * MINUTE));
-        await runtime.keepalive.tick();
       },
     });
   } finally {
     clocks.stop();
     await runtime.autonomy.shutdown();
     await runtime.shutdown();
-    await rm(root, { recursive: true, force: true });
   }
 }
 
