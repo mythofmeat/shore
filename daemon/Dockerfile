@@ -34,7 +34,7 @@ RUN apt-get install -y python3
 RUN apt-get install -y python3-pip
 RUN apt-get install -y ripgrep
 RUN apt-get install -y tini
-RUN apt-get install -y tzda
+RUN apt-get install -y tzdata
 RUN git lfs install --system
 
 COPY --from=mikefarah/yq:latest /usr/bin/yq /usr/local/bin/yq
