@@ -45,7 +45,7 @@ await run(["cargo", "+stable", "build", "--release", "--locked", "-p", "codex-ap
 const dist = join(root, "dist");
 await mkdir(dist, { recursive: true });
 const extension = process.platform === "win32" ? ".exe" : "";
-const temporary = join(dist, `shore-apply-patch${extension}.tmp`);
+const temporary = join(dist, `shore-apply-patch${extension}.${process.pid}.tmp`);
 await copyFile(join(target, "release", `apply_patch${extension}`), temporary);
 await chmod(temporary, 0o755);
 await rename(temporary, join(dist, `shore-apply-patch${extension}`));
