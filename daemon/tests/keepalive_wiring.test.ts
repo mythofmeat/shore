@@ -9,7 +9,7 @@ import { parseCacheKeepalive } from "../src/config/keepalive.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
 import { persistAndNotify, type PersistContext } from "../src/handler/persistence.ts";
 import { buildRequestWithResolvedKey } from "../src/llm/request.ts";
-import type { GenerateResponse, SidecarRequest, Usage } from "../src/llm/types.ts";
+import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import type { StreamResult } from "../src/llm/stream.ts";
 
 const CHARACTER = "ada";
@@ -101,13 +101,7 @@ function streamResult(): StreamResult {
   } as unknown as StreamResult;
 }
 
-async function turnPersisted(
-  sampler: SamplerSettings,
-  clock: ReturnType<typeof fakeClock>,
-  opts: { ledgerPath?: string } = {},
-  cacheReadTokens = 4096,
-  lastCall?: Usage,
-) {
+async function turnPersisted(sampler: SamplerSettings, clock: ReturnType<typeof fakeClock>) {
   const sent: SidecarRequest[] = [];
   const service = new KeepaliveService(
     async (req) => {
@@ -115,7 +109,6 @@ async function turnPersisted(
       return response();
     },
     clock.now,
-    opts,
   );
 
   const cache = new LastRequestCache(service);
@@ -144,13 +137,10 @@ async function turnPersisted(
     newMessageId: () => "m_1",
   } as unknown as PersistContext;
 
-  const result = streamResult();
-  result.usage.cache_read_tokens = cacheReadTokens;
-  if (lastCall !== undefined) result.context_usage = lastCall;
   await persistAndNotify(ctx, new CountingEngine(), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
-    result,
+    result: streamResult(),
     request: sentBody,
     keepaliveIntervalMs: intervalMs,
     keepalivePings: pings,

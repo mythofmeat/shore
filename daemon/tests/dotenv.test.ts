@@ -1,24 +1,14 @@
-import { required } from "../src/util/required.ts";
-
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { applyDotenv, DotenvError, parseDotenv } from "../src/config/dotenv.ts";
 import { loadRawConfigTable } from "../src/config/loader.ts";
 
-const roots: string[] = [];
-
 function tempDir(): string {
-  const root = mkdtempSync(join(tmpdir(), "shore-dotenv-"));
-  roots.push(root);
-  return root;
+  return mkdtempSync(join(tmpdir(), "shore-dotenv-"));
 }
-
-afterEach(() => {
-  while (roots.length > 0) rmSync(required(roots.pop()), { recursive: true, force: true });
-});
 
 const parse = (text: string, env: Record<string, string> = {}) =>
   parseDotenv(text, (name) => env[name]);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, chmodSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +27,6 @@ afterEach(() => {
 
 function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "shore-token-"));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
 

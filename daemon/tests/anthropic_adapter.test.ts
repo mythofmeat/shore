@@ -8,7 +8,8 @@ import {
   buildAnthropicParams,
   buildThinkingParams,
 } from "../src/llm/providers/anthropic.ts";
-import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import type { SidecarRequest } from "../src/llm/types.ts";
+import { collect, tickingClock } from "./support/stream.ts";
 
 function req(over: Partial<SidecarRequest>): SidecarRequest {
   return {
@@ -189,18 +190,6 @@ function asEvent(e: unknown): RawMessageStreamEvent {
 async function* fakeEvents(arr: unknown[]): AsyncIterable<RawMessageStreamEvent> {
   for (const e of arr) yield asEvent(e);
 }
-function fakeClock(): () => number {
-  let t = 0;
-  return () => {
-    t += 10;
-    return t;
-  };
-}
-async function collect(it: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
-  const out: StreamEvent[] = [];
-  for await (const e of it) out.push(e);
-  return out;
-}
 
 test("maps thinking+signature+text+tool_use SSE to StreamEvents in order", async () => {
   const events = [
@@ -220,7 +209,7 @@ test("maps thinking+signature+text+tool_use SSE to StreamEvents in order", async
   ];
 
   const out = await collect(
-    anthropicStreamEvents("anthropic/claude-opus-4.8", fakeEvents(events), fakeClock()),
+    anthropicStreamEvents("anthropic/claude-opus-4.8", fakeEvents(events), tickingClock()),
   );
 
   expect(out[0]).toEqual({ type: "start", model: "anthropic/claude-opus-4.8" });

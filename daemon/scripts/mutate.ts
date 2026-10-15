@@ -1,5 +1,5 @@
 import * as ts from "typescript/unstable/ast";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -137,6 +137,9 @@ async function targetsFor(guards: readonly Guard[]): Promise<{ targets: Target[]
   const targets: Target[] = [];
   const parsed = new Map<string, { text: string; source: ts.SourceFile }>();
   for (const guard of guards) {
+    for (const test of guard.tests) {
+      if (!existsSync(join(ROOT, "tests", test))) problems.push(`no such test file: tests/${test}`);
+    }
     const mutants: Mutant[] = [];
     for (const ref of guard.functions) {
       const colon = ref.lastIndexOf(":");

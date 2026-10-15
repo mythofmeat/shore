@@ -6,9 +6,11 @@ import {
   KeepaliveService,
   buildKeepalivePing,
   pingLandedCold,
+  prefixFingerprint,
   type KeepaliveEvent,
   type KeepalivePrefix,
 } from "../src/cache/keepalive.ts";
+import { CacheKeepalive } from "../src/cache/schedule.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 
@@ -44,14 +46,14 @@ function usage(read: number, write: number) {
   };
 }
 
-function response(read: number, write: number): GenerateResponse {
+function response(read: number, write: number, model = MODEL): GenerateResponse {
   return {
     content: "",
     content_blocks: [],
     finish_reason: "end_turn",
     usage: usage(read, write),
     timing: { total_ms: 120, time_to_first_token_ms: 120 },
-    model: MODEL,
+    model,
   };
 }
 
@@ -82,13 +84,13 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
   };
 }
 
-function harness(replies: Array<GenerateResponse | Error> = []) {
+function harness(replies: Array<GenerateResponse | Error> = [], otherwise = response(2200, 0)) {
   const clock = fakeClock();
   const sent: SidecarRequest[] = [];
   let n = 0;
   const service = new KeepaliveService(async (req) => {
     sent.push(req);
-    const reply = replies[n++] ?? response(2200, 0);
+    const reply = replies[n++] ?? otherwise;
     if (reply instanceof Error) throw reply;
     return reply;
   }, clock.now);
@@ -360,5 +362,205 @@ describe("only the selected chat model is kept warm", () => {
     await h.service.tick();
 
     expect(h.sent.map((req) => req.model)).toEqual([OTHER_MODEL]);
+  });
+});
+
+function rhia(): KeepalivePrefix {
+  return prefix({
+    provider_key: "anthropic",
+    model: "claude-opus-5",
+    keepalive_interval_ms: 1000,
+    keepalive_pings: 100,
+    context: { character: "Rhia", call_type: "message", thinking_enabled: false },
+  });
+}
+
+describe("a ping that would miss is not sent", () => {
+  function movedPrefix(): KeepalivePrefix {
+    const moved = rhia();
+    moved.messages = [
+      ...moved.messages,
+      { role: "assistant", content: [{ type: "text", text: "a compacted summary" }] },
+    ];
+    return moved;
+  }
+
+  test("a prefix left behind by a compaction is skipped, not paid for", async () => {
+    const h = harness([], response(0, 12_000, "claude-opus-5"));
+    h.service.arm(rhia(), true);
+    h.clock.advance(1);
+    h.service.observe(
+      "Rhia",
+      "claude-opus-5",
+      "compaction",
+      prefixFingerprint(movedPrefix()),
+    );
+
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    expect(h.sent.length).toBe(0);
+    expect(h.events.map((e) => e.outcome)).toEqual(["skipped"]);
+    expect(h.events[0]?.detail).toContain("already superseded");
+  });
+});
+
+describe("two misses in a row halt that model", () => {
+
+  test("one miss alone does not halt", async () => {
+    const h = harness([], response(0, 14_144, "claude-opus-5"));
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold"]);
+    expect(h.service.halted).toBeUndefined();
+  });
+
+  test("a second miss with nothing between stops that model's keepalives", async () => {
+    const h = harness([], response(0, 14_144, "claude-opus-5"));
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted?.character).toBe("Rhia");
+    expect(h.service.halted?.model).toBe("anthropic:claude-opus-5");
+    expect(h.service.halted?.reason).toContain("two keepalive pings in a row missed");
+    expect(h.events.at(-1)?.outcome).toBe("halted");
+  });
+
+  test("once halted it sends nothing more on that model", async () => {
+    const h = harness([], response(0, 14_144, "claude-opus-5"));
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    const sentWhenHalted = h.sent.length;
+
+    for (let i = 0; i < 5; i += 1) {
+      h.service.arm(rhia(), true);
+      h.clock.advance(10_000);
+      await h.service.tick();
+    }
+    expect(h.sent.length).toBe(sentWhenHalted);
+  });
+
+  test("a real call on a halted model cannot schedule another ping before it is re-armed", async () => {
+    const h = harness([], response(0, 14_144, "claude-opus-5"));
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    const sentWhenHalted = h.sent.length;
+
+    h.service.observe("Rhia", "claude-opus-5", "message", prefixFingerprint(rhia()), usage(0, 0));
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.sent.length).toBe(sentWhenHalted);
+  });
+
+  test("a miss on one model does not count toward the next model's halt", async () => {
+    const h = harness([], response(0, 14_144, "claude-opus-5"));
+    const other: KeepalivePrefix = { ...rhia(), model: "claude-sonnet-5" };
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(other, true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "cold"]);
+    expect(h.service.haltFor(other)).toBeUndefined();
+    expect(h.service.haltFor(rhia())).toBeUndefined();
+  });
+});
+
+describe("a provider that never reports cache writes", () => {
+
+  test("a model whose pings never read halts itself, not the models that work", async () => {
+    const events: KeepaliveEvent[] = [];
+    let at = 0;
+    const sent: string[] = [];
+    const service = new KeepaliveService(async (req) => {
+      sent.push(req.model);
+      return response(req.model === "kimi-k3" ? 0 : 12_000, 0, req.model);
+    }, () => at);
+    service.onEvent((e) => events.push(e));
+    const working: KeepalivePrefix = { ...rhia(), context: { character: "Ada", call_type: "message", thinking_enabled: false } };
+
+    for (let i = 0; i < 3; i += 1) {
+      service.arm({ ...rhia(), sdk: "moonshot", provider_key: "moonshotai", model: "kimi-k3" }, true);
+      service.arm(working, true);
+      at += 10_000;
+      await service.tick();
+    }
+
+    expect(service.halted?.model).toBe("moonshotai:kimi-k3");
+    expect(service.haltFor(working)).toBeUndefined();
+    expect(sent.filter((model) => model === "kimi-k3")).toHaveLength(2);
+    expect(sent.filter((model) => model === "claude-opus-5")).toHaveLength(3);
+  });
+});
+
+const START = minutes(1000);
+const ENOUGH_PINGS = 12;
+
+describe("the cadence a turn arms", () => {
+  test("off interval never pings", () => {
+    const ka = new CacheKeepalive(ENOUGH_PINGS);
+    ka.onCacheWarmed(MODEL, START);
+    expect(ka.tick(START + hours(2))).toBe("none");
+    ka.setInterval(undefined, MODEL, START);
+    expect(ka.tick(START + hours(2))).toBe("none");
+  });
+});
+
+describe("the ping count", () => {
+  test("each successful ping spends one, and a spent count stops the schedule", () => {
+    const ka = new CacheKeepalive(2);
+    ka.setInterval(minutes(55), MODEL, START);
+    ka.onCacheWarmed(MODEL, START);
+
+    expect(ka.tick(START + minutes(55))).toBe("ping");
+    ka.onPingSucceeded(START + minutes(55));
+    expect(ka.tick(START + minutes(110))).toBe("ping");
+    ka.onPingSucceeded(START + minutes(110));
+    expect(ka.tick(START + minutes(165))).toBe("none");
+    expect(ka.tick(START + minutes(166))).toBe("none");
+  });
+
+  test("the last allowed ping leaves no next ping scheduled", () => {
+    const ka = new CacheKeepalive(1);
+    ka.setInterval(minutes(55), MODEL, START);
+    ka.onCacheWarmed(MODEL, START);
+    ka.onPingSucceeded(START + minutes(55));
+    expect(ka.nextPingAt).toBeUndefined();
+
+    const restored = new CacheKeepalive(1);
+    expect(restored.restore(required(ka.snapshot()), START + minutes(60))).toBe(true);
+    expect(restored.nextPingAt).toBeUndefined();
+  });
+
+  test("real activity gives the count back and resumes", () => {
+    const ka = new CacheKeepalive(1);
+    ka.setInterval(minutes(55), MODEL, START);
+    ka.onCacheWarmed(MODEL, START);
+    expect(ka.tick(START + minutes(55))).toBe("ping");
+    ka.onPingSucceeded(START + minutes(55));
+    expect(ka.tick(START + minutes(110))).toBe("none");
+
+    ka.onCacheWarmed(MODEL, START + minutes(115));
+    ka.onPrefixWarmed(START + minutes(115));
+    expect(ka.tick(START + minutes(120))).toBe("none");
+    expect(ka.tick(START + minutes(170))).toBe("ping");
   });
 });

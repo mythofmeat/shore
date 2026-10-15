@@ -1,9 +1,8 @@
-
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,14 +13,12 @@ import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 
 const running: RunningDaemon[] = [];
-const roots: string[] = [];
 
 afterEach(async () => {
   for (const daemon of running.splice(0)) {
     daemon.stop();
     await daemon.done;
   }
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
 const TEST_TOKEN = "test-token";
@@ -35,7 +32,6 @@ interface Layout {
 
 async function layout(config = "", characters: readonly string[] = ["ada"]): Promise<Layout> {
   const root = await mkdtemp(join(tmpdir(), "shore-daemon-"));
-  roots.push(root);
   const configDir = join(root, "config");
   await mkdir(configDir, { recursive: true });
   const configPath = join(configDir, "shore.toml");

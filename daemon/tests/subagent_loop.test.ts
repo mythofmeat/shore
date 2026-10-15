@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,11 +17,6 @@ import type {
 } from "../src/llm/types.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
-
-const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
 
 function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
   return {
@@ -56,7 +51,6 @@ async function configWith(
   over: (app: ReturnType<typeof defaultAppConfig>) => void = () => {},
 ): Promise<{ config: LoadedConfig; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "shore-subagent-"));
-  roots.push(root);
   const app = defaultAppConfig();
   app.defaults.model = "cheap";
   app.advanced.max_retries = 0;

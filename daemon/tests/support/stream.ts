@@ -28,3 +28,17 @@ export async function* eventsForResponse(
     timing: response.timing,
   };
 }
+
+export async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
+  const out: StreamEvent[] = [];
+  for await (const event of events) out.push(event);
+  return out;
+}
+
+export function tickingClock(): () => number {
+  let t = 0;
+  return () => {
+    t += 10;
+    return t;
+  };
+}

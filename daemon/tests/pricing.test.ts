@@ -1,5 +1,3 @@
-
-
 import { describe, expect, test } from "bun:test";
 
 import { calculateCost, type ModelPricing } from "../src/ledger/pricing.ts";

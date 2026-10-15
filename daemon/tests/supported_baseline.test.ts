@@ -1,8 +1,8 @@
 import { extract } from "tar";
 import { removeStoredCharacter } from "../src/storage/archive.ts";
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, copyFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
@@ -18,14 +18,8 @@ import { databasePath, withStorage } from "../src/storage/store.ts";
 import { loadActivePromptFile } from "../src/memory/deferred_edits.ts";
 import { attachmentCacheDir } from "../src/storage/image_cache.ts";
 
-const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
-
 test("the oldest supported release's archive restores current data through the character flow", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-supported-baseline-"));
-  roots.push(root);
   const dirs = {
     config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"),
     runtime: join(root, "runtime"), workspace: join(root, "workspace"),

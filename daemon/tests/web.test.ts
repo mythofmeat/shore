@@ -1,35 +1,38 @@
-
+import { until } from "./support/until.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { hostname } from "node:os";
-import type { WebLoginCode } from "../src/protocol/WebLoginCode.ts";
-import type { WebProblem } from "../src/protocol/WebProblem.ts";
+import { hostname, tmpdir } from "node:os";
+import { type WebLoginCode } from "../src/protocol/WebLoginCode.ts";
+import { type WebProblem } from "../src/protocol/WebProblem.ts";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { tokenMatches } from "../src/config/token.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
-import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import type { WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
-import type { HandshakeProvider } from "../src/swp/connection.ts";
+import { type ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { type WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
+import { type HandshakeProvider } from "../src/swp/connection.ts";
 import { Server } from "../src/swp/server.ts";
-import type { ControlRoutedMessage, RoutedMessage } from "../src/swp/session.ts";
+import { type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
-import { LoginCodes } from "../src/web/auth.ts";
+import { LoginCodes, WebSessions, type WebSession } from "../src/web/auth.ts";
 import { WEB_LIMITS } from "../src/web/policy.ts";
 import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chmod, symlink } from "node:fs/promises";
+import { dirname, join, basename } from "node:path";
+import { WebRecovery, sessionDigest, type WebRecoveryOptions } from "../src/web/recovery.ts";
+import { ArchiveTransfers, type ArchiveTransferLimits } from "../src/web/archives.ts";
+import { type WebArchiveInfo } from "../src/protocol/WebArchiveInfo.ts";
+import { parseOperationInput } from "../src/operations/contracts.ts";
+import { validWebArchiveInfo, validWebArchiveList } from "../src/web/contracts.ts";
+import { findSentPicture, sentPicturesDir } from "../src/storage/sent_pictures.ts";
+import { sizedImage } from "./support/sized_image.ts";
+import { testTmp } from "./support/tmp.ts";
 
-const TOKEN = "web-transport-test-token";
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
-async function until(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Transport did not settle");
-    await new Promise<void>((resolve) => { setTimeout(resolve, 1); });
-  }
-}
+const TOKEN = "web-transport-test-token";
 
 async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authenticate">> = {}, provider?: HandshakeProvider) {
   let histories = 0;
@@ -298,7 +301,7 @@ describe("staying signed in and signing in other devices", () => {
     const laptop = browserConnection(f.web.origin);
     const late = browserConnection(f.web.origin);
     try {
-      await laptop.client.signIn(next.code, "This link was used"); await until(() => laptop.client.status === "ready");
+      await laptop.client.signIn(next.code, "This link was used"); await until(() => laptop.client.status === "ready", "the transport to settle");
       expect(await outcomeOf(late.client.signIn(next.code, "This link was used"))).toThrow("This link was used");
       expect(late.client.status).toBe("signed_out");
       expect(late.client.detail).toBe("This link was used");
@@ -321,4 +324,230 @@ describe("staying signed in and signing in other devices", () => {
     expect(codes.redeem(second.code)).toBe(true);
     expect(codes.redeem(second.code)).toBe(false);
   });
+});
+
+const origin = "http://127.0.0.1:7430";
+
+async function recoveryOptions(): Promise<WebRecoveryOptions> {
+  const root = await mkdtemp(join(tmpdir(), "shore-web-recovery-"));
+  const dataDir = join(root, "data"); await mkdir(dataDir);
+  return { dataDir, cacheDir: join(root, "cache"), token: "private-recovery-daemon-token" };
+}
+
+function open(config: WebRecoveryOptions, url = origin, capacity = 4, lifetime = 60_000) {
+  const recovery = new WebRecovery(config, url);
+  const sessions = new WebSessions(url, capacity, lifetime, recovery);
+  const server = new Server({ addr: "127.0.0.1:0", serverName: "recovery", authenticate: () => true });
+  const transfers = new ArchiveTransfers(server, () => true, {}, recovery);
+  transfers.restore(sessions);
+  let closed = false;
+  const close = async () => { if (closed) return; closed = true; await transfers.close(); sessions.close(); recovery.close(); };
+  cleanups.push(close);
+  return { recovery, sessions, transfers, server, close };
+}
+
+function signIn(sessions: WebSessions) {
+  const session = sessions.create();
+  if (session === undefined) throw new Error("Missing test sign-in");
+  const cookie = sessions.cookie(session);
+  return { session, cookie, request: new Request(origin, { headers: { cookie } }) };
+}
+
+function saved(phase: WebArchiveInfo["phase"], expiresAt = Date.now() + 60_000): WebArchiveInfo {
+  return { id: crypto.randomUUID(), filename: "test.tar.gz", bytes: 12, expires_at: expiresAt, phase, downloadable: false };
+}
+
+test("restart preserves session ownership and original expiry using hashes, never persisted bearer credentials", async () => {
+  const config = await recoveryOptions(); const a = open(config);
+  const first = signIn(a.sessions); const second = signIn(a.sessions);
+  const info = saved("imported"); a.recovery.saveArchive(first.session.id, info);
+  const path = join(dirname(a.recovery.artifacts), "recovery.sqlite");
+  expect((await stat(path)).mode & 0o777).toBe(0o600);
+  expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
+  const cookieToken = first.cookie.split(";")[0]?.split("=")[1];
+  if (cookieToken === undefined) throw new Error("Missing token");
+  expect(first.session.id).toBe(sessionDigest(cookieToken));
+  const bytes = await readFile(path);
+  expect(bytes.includes(cookieToken)).toBe(false); expect(bytes.includes(config.token)).toBe(false);
+  await a.close();
+  const b = open(config); const recovered = b.sessions.read(first.request); const other = b.sessions.read(second.request);
+  expect(recovered?.expiresAt).toBe(first.session.expiresAt);
+  if (recovered === undefined || other === undefined) throw new Error("Sign-ins did not recover");
+  expect(b.transfers.get(recovered, info.id)).toEqual(info);
+  expect(b.transfers.list(other).archives).toEqual([]);
+  expect(() => b.transfers.import(other, info.id)).toThrow("missing or expired");
+  const forged = new Request(origin, { headers: { cookie: first.cookie.replace(cookieToken, first.session.id) } });
+  expect(b.sessions.read(forged)).toBeUndefined();
+  b.sessions.revoke(recovered);
+  await b.close();
+  const c = open(config);
+  expect(c.sessions.read(first.request)).toBeUndefined();
+  expect(c.sessions.read(second.request)).toBeDefined();
+  expect(c.recovery.archives()).toEqual([]);
+});
+
+test.each(["token", "origin"])("changing the %s invalidates old credentials and transfers before serving", async (changed) => {
+  const config = await recoveryOptions(); const a = open(config); const signed = signIn(a.sessions);
+  a.recovery.saveArchive(signed.session.id, saved("uncertain"));
+  const artifacts = a.recovery.artifacts;
+  await a.close(); await writeFile(join(artifacts, "crash-orphan"), "private bytes");
+  const b = open(changed === "token" ? { ...config, token: "rotated-token" } : config, changed === "origin" ? "https://shore.example" : origin);
+  expect(b.sessions.read(signed.request)).toBeUndefined(); expect(b.recovery.archives()).toEqual([]);
+  expect(await readdir(artifacts)).toEqual([]);
+  await b.close();
+  const c = open(config);
+  expect(c.sessions.read(signed.request)).toBeUndefined();
+});
+
+type CommandRoute = Extract<RoutedMessage, { kind: "command" }>;
+
+function owner() {
+  const controller = new AbortController();
+  const session: WebSession = { id: crypto.randomUUID(), expiresAt: Date.now() + 60_000, signal: controller.signal };
+  return { session, controller };
+}
+
+function upload(body: NonNullable<RequestInit["body"]> = "archive bytes", headers: Record<string, string> = {}, signal?: AbortSignal): Request {
+  return new Request("http://localhost/api/archives", { method: "POST", body, headers: { "content-type": "application/octet-stream", "x-shore-filename": "ada.tar.gz", ...headers }, ...(signal === undefined ? {} : { signal }) });
+}
+
+async function archiveFixture(limits: Partial<ArchiveTransferLimits> = {}, singleCharacter = false) {
+  const server = new Server({ addr: "127.0.0.1:0", serverName: "archive-test", authenticate: () => true,
+    handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: null, revision: 0 }) },
+  });
+  const commands: CommandRoute[] = [];
+  await server.bind();
+  const served = server.serve();
+  let count = 0;
+  const routing = (async () => { for await (const route of server.routes()) if (route.kind === "command") { commands.push(route); count += 1; } })();
+  const transfers = new ArchiveTransfers(server, () => true, limits);
+  cleanups.push(async () => { await transfers.close(); server.stop(); await Promise.all([served, routing]); });
+  const next = async () => { await until(() => commands.length > 0, "the archive transfer to settle"); const command = commands.shift(); if (command === undefined) throw new Error("Missing archive command"); return command; };
+  const finish = async (route: CommandRoute, scenario = "completed", contents: Uint8Array = new TextEncoder().encode("download archive")) => {
+    const name = route.cmd.name;
+    let data: unknown;
+    if (name === "export_character") {
+      const args = parseOperationInput(name, route.cmd.args);
+      await writeFile(args.output, contents);
+      data = { character: args.character, archive: args.output, bytes: contents.length, live: true, call_diagnostics: "included", external_memory: "rebuild_from_archived_segments" };
+    } else if (name === "import_character") {
+      const args = parseOperationInput(name, route.cmd.args);
+      data = { character: "ada", archive: args.archive, imported: true, external_memory: "queued_for_rebuild_when_retain_is_enabled" };
+    } else throw new Error(`Unexpected command ${name}`);
+    const rid = route.meta.rid;
+    if (rid === null) throw new Error("Missing archive request ID");
+    const send = (message: Parameters<typeof server.sessionRouter.sendToSession>[1]) => server.sessionRouter.sendToSession(route.meta.session.sessionId, message);
+    await send({ type: "command_output", rid: "unrelated", name, data: {} });
+    if (scenario !== "missing") await send({ type: "command_output", rid, name: scenario === "wrong-name" ? "status" : name, data: scenario === "invalid" ? {} : data });
+    if (scenario === "duplicate") await send({ type: "command_output", rid, name, data });
+    await send({ type: "request_finished", rid, outcome: scenario === "failed" ? "failed" : scenario === "cancelled" ? "cancelled" : "completed", ...(scenario === "failed" ? { error: { code: "invalid_request" as const, message: "Refusing to overwrite existing character" } } : {}) });
+  };
+  return { server, transfers, next, finish, count: () => count };
+}
+
+test("download refuses substituted links and changed files and releases its download claim", async () => {
+  const f = await archiveFixture(); const a = owner();
+  const info = f.transfers.export(a.session, "ada");
+  const route = await f.next(); await f.finish(route);
+  await until(() => f.transfers.get(a.session, info.id).downloadable, "the archive transfer to settle");
+  const path = parseOperationInput("export_character", route.cmd.args).output;
+  const target = join(dirname(path), "private.txt"); await writeFile(target, "private contents");
+  await rm(path); await symlink(target, path);
+  expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow();
+  await rm(path); await writeFile(path, "changed");
+  expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow("Archive changed");
+  await writeFile(path, "download archive"); await chmod(path, 0o600);
+  expect(await (await f.transfers.download(a.session, info.id, upload())).text()).toBe("download archive");
+});
+
+test("uploads enforce declared and streamed byte limits, valid filenames, content type and nonempty complete bodies", async () => {
+  const f = await archiveFixture({ uploadBytes: 16 }); const a = owner();
+  for (const request of [upload("", {}), upload("short", { "content-length": "10" }), upload("x", { "content-type": "text/plain" }), upload("x", { "x-shore-filename": "%ZZ" }), upload("x", { "x-shore-filename": "%00bad" })]) {
+    expect(await outcomeOf(f.transfers.upload(a.session, request))).toThrow();
+  }
+  expect(await outcomeOf(f.transfers.upload(a.session, upload("x", { "content-length": "17" })))).toThrow("size limit");
+  expect(await outcomeOf(f.transfers.upload(a.session, upload(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(10)); controller.enqueue(new Uint8Array(7)); controller.close(); } }))))).toThrow("size limit");
+  await until(() => f.transfers.list(a.session).archives.length === 0, "the archive transfer to settle");
+  expect(f.server.sessionRouter.sessions()).toHaveLength(0);
+});
+
+test("HTTP archive endpoints authenticate and enforce origin before attaching a bounded worker alongside a browser", async () => {
+  const f = await archiveFixture();
+  const web = startWebServer({ server: f.server, authenticate: (token) => token === "archive-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 }, archiveLimits: { uploadBytes: 8192 } });
+  cleanups.push(() => web.stop()); web.activate();
+  const post = (path: string, cookie = "", body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } });
+  const login = async () => {
+    const response = await post("/login", "", JSON.stringify({ token: "archive-token" }));
+    expect(response.status).toBe(200); const cookie = response.headers.get("set-cookie")?.split(";").at(0);
+    if (cookie === undefined) throw new Error("Missing archive session cookie"); return cookie;
+  };
+  for (const path of ["/archives", "/archives/export", "/archives/list", `/archives/${crypto.randomUUID()}/download`]) expect((await post(path)).status).toBe(401);
+  expect(f.server.sessionRouter.sessions()).toHaveLength(0);
+  const cookie = await login(); const other = await login();
+  expect((await post("/archives/export", cookie, '{"character":"ada"}', { origin: "https://outside.example" })).status).toBe(403);
+  expect((await post("/archives/export", cookie, '{"character":"ada","output":"/private/file"}')).status).toBe(400);
+  const response = await post("/archives", cookie, "local archive bytes", { "content-type": "application/octet-stream", "x-shore-filename": "picked.tar.gz" });
+  expect(response.status).toBe(200); const info: unknown = await response.json();
+  if (!validWebArchiveInfo(info)) throw new Error("Invalid archive info");
+  for (const action of ["status", "import", "download", "remove"]) expect((await post(`/archives/${info.id}/${action}`, other)).status).toBe(404);
+  const listing: unknown = await (await post("/archives/list", cookie)).json();
+  expect(validWebArchiveList(listing)).toBe(true);
+  expect((await post("/archives", cookie, "x".repeat(8193), { "content-type": "application/octet-stream" })).status).toBe(413);
+  const browser = new BrowserSocket(web.origin, cookie, WEB_SUBPROTOCOL);
+  cleanups.push(() => browser.close()); await browser.attach();
+  expect((await post(`/archives/${info.id}/import`, cookie)).status).toBe(202);
+  const route = await f.next();
+  expect(f.server.sessionRouter.sessions()).toHaveLength(2);
+  expect((await post("/archives/export", cookie, '{"character":"ada"}')).status).toBe(429);
+  expect((await post(`/archives/${info.id}/remove`, cookie)).status).toBe(409);
+  await f.finish(route);
+  await until(() => f.server.sessionRouter.sessions().length === 1, "the archive transfer to settle");
+  expect((await (await post(`/archives/${info.id}/status`, cookie)).json() as { phase: string }).phase).toBe("imported");
+  expect((await post(`/archives/${info.id}/import`, cookie)).status).toBe(200);
+  expect(f.count()).toBe(1);
+  expect((await post("/logout", cookie)).status).toBe(204);
+  expect((await post(`/archives/${info.id}/status`, cookie)).status).toBe(401);
+});
+
+async function workspace(): Promise<{ root: string; dir: string; data: string }> {
+  const root = await mkdtemp(testTmp("shore-picture-delivery-"));
+  const dir = join(root, "workspace");
+  await mkdir(join(dir, "art"), { recursive: true });
+  await writeFile(join(dir, "art", "2026-01-01-lighthouse.png"), await sizedImage(64, 48));
+  return { root, dir, data: join(root, "data") };
+}
+
+test("signed-in pages can load a sent picture without an Origin header, and nobody else can", async () => {
+  const { data, dir } = await workspace();
+  const bytes = await readFile(join(dir, "art", "2026-01-01-lighthouse.png"));
+  const kept = join(sentPicturesDir(data, "qifei"), `${"a".repeat(64)}.png`);
+  await mkdir(sentPicturesDir(data, "qifei"), { recursive: true });
+  await writeFile(kept, bytes);
+  const swp = new Server({
+    addr: "127.0.0.1:0", serverName: "picture-test", authenticate: (token) => tokenMatches("token", token),
+    handshake: { hello: async () => ({ characters: [] }), history: async () => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: null, selectedThread: "main", revision: 0 }) },
+  });
+  await swp.bind();
+  const served = swp.serve();
+  const web = startWebServer({
+    server: swp, authenticate: (token) => tokenMatches("token", token),
+    config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" },
+    picture: (file) => findSentPicture(data, file),
+  });
+  web.activate();
+  cleanups.push(async () => { await web.stop(); swp.stop(); await served; });
+  const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: "token" }) });
+  const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+  const picture = (file: string, headers?: Record<string, string>) => fetch(`${web.origin}/api/pictures/${file}`, { headers: headers ?? { cookie } });
+
+  const shown = await picture(basename(kept));
+  expect(shown.status).toBe(200);
+  expect(shown.headers.get("content-type")).toBe("image/png");
+  expect(shown.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+  expect(Buffer.from(await shown.arrayBuffer())).toEqual(bytes);
+  expect((await picture(basename(kept), { cookie, "sec-fetch-site": "same-origin" })).status).toBe(200);
+  expect((await picture(basename(kept), {})).status).toBe(401);
+  expect((await picture(basename(kept), { cookie, "sec-fetch-site": "cross-site" })).status).toBe(403);
+  expect((await picture(`${"b".repeat(64)}.png`)).status).toBe(404);
+  expect((await picture("..%2F..%2Fshore.db")).status).toBe(404);
 });

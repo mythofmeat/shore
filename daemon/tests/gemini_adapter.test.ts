@@ -2,7 +2,7 @@ import { type GenerateContentResponse } from "@google/genai";
 import { describe, expect, test } from "bun:test";
 
 import { geminiStreamEvents, translateMessages } from "../src/llm/providers/gemini.ts";
-import type { StreamEvent } from "../src/llm/types.ts";
+import { collect, tickingClock } from "./support/stream.ts";
 
 function asGeminiResponse(raw: unknown): GenerateContentResponse {
   return raw as GenerateContentResponse;
@@ -10,20 +10,6 @@ function asGeminiResponse(raw: unknown): GenerateContentResponse {
 
 async function* fakeChunks(arr: unknown[]): AsyncIterable<GenerateContentResponse> {
   for (const item of arr) yield asGeminiResponse(item);
-}
-
-function fakeClock(): () => number {
-  let t = 0;
-  return () => {
-    t += 10;
-    return t;
-  };
-}
-
-async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
-  const out: StreamEvent[] = [];
-  for await (const event of events) out.push(event);
-  return out;
 }
 
 describe("request construction", () => {
@@ -100,7 +86,7 @@ test("maps Gemini stream chunks to StreamEvents", async () => {
   ];
 
   const events = await collect(
-    geminiStreamEvents("gemini-3-flash-preview", fakeChunks(chunks), fakeClock()),
+    geminiStreamEvents("gemini-3-flash-preview", fakeChunks(chunks), tickingClock()),
   );
 
   expect(events[0]).toEqual({ type: "start", model: "gemini-3-flash-preview" });

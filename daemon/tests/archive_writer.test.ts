@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
@@ -8,10 +8,6 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 
-const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
-});
 const stamp = "2026-09-20T00:00:00Z";
 const messages: Message[] = Array.from({ length: 4 }, (_, i) => ({
   msg_id: `m${i}`, role: i % 2 === 0 ? "user" : "assistant", timestamp: stamp,
@@ -22,7 +18,6 @@ const jsonl = (rows: Message[]) => rows.map(row => JSON.stringify(row) + "\n").j
 for (const keep of [0, 1, 4, 10]) {
   test(`archiving with ${keep} retained messages survives a conversation restart`, async () => {
     const data = await mkdtemp(join(tmpdir(), "shore-archive-writer-"));
-    roots.push(data);
     const dir = join(data, "ada/threads/main");
     await mkdir(dir, { recursive: true });
     const active = threadFile(data, "ada", "main", "active.jsonl");
@@ -47,7 +42,6 @@ for (const keep of [0, 1, 4, 10]) {
 
 test("blank lines between messages are not counted as messages to keep", async () => {
   const data = await mkdtemp(join(tmpdir(), "shore-archive-blank-"));
-  roots.push(data);
   const dir = join(data, "ada/threads/main");
   await mkdir(dir, { recursive: true });
   const active = threadFile(data, "ada", "main", "active.jsonl");
@@ -59,7 +53,6 @@ test("blank lines between messages are not counted as messages to keep", async (
 
 test("retrying a completed compaction does not create another archive segment", async () => {
   const data = await mkdtemp(join(tmpdir(), "shore-archive-retry-"));
-  roots.push(data);
   const dir = join(data, "ada/threads/main");
   await mkdir(dir, { recursive: true });
   const location = { dbPath: join(data, "shore.db"), archiveKey: "ada" };

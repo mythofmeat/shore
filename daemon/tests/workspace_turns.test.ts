@@ -1,6 +1,4 @@
-import { required } from "../src/util/required.ts";
-
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,15 +18,8 @@ import {
 } from "../src/tools/workspace_turns.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/workspace.ts";
 
-const roots: string[] = [];
-
-afterEach(() => {
-  while (roots.length > 0) rmSync(required(roots.pop()), { recursive: true, force: true });
-});
-
 function setup(): WorkspaceTurns {
   const root = mkdtempSync(join(tmpdir(), "shore-turns-"));
-  roots.push(root);
   const turns = workspaceTurnsFor({ config: join(root, "config"), cache: join(root, "cache"), workspace: join(root, "workspace") }, "Ada");
   mkdirSync(turns.workspace, { recursive: true });
   return turns;
