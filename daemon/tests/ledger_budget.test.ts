@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
 import { afterAll, describe, expect, test } from "bun:test";
 
-import { budgetStatuses, enforceBudgetForCall, type BudgetCallContext, type UsageBudgetConfig, type UsageBudgetPeriod, type UsageConfig } from "../src/ledger/budget.ts";
+import { actionBlocks, budgetStatuses, enforceBudgetForCall, type BudgetCallContext, type UsageBudgetConfig, type UsageBudgetPeriod, type UsageConfig } from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const ZONE = "America/New_York";
@@ -342,5 +342,80 @@ describe("enforcing a budget on a call", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe("which calls a budget covers and stops", () => {
+  let index = 6000;
+  const blocking = (filter: Partial<UsageBudgetConfig>, allowCompaction = false): UsageConfig => ({
+    timezone: "utc",
+    budgets: [{ ...budget("filtered", "month", 0.1), limit: "block", allow_compaction_over_budget: allowCompaction, ...filter }],
+  });
+  const call = (over: Partial<BudgetCallContext>): BudgetCallContext => ({
+    provider: "anthropic", api_key_name: "default", model: "claude-opus-4-6", call_type: "message", character: "aria", ...over,
+  });
+  const blocks = (config: UsageConfig, c: BudgetCallContext): boolean => {
+    const db = caseLedger(index++);
+    try {
+      return enforceBudgetForCall(db, config, c, Date.parse(required(NOW_MOMENTS["ordinary_midweek"])), opts) !== undefined;
+    } finally {
+      db.close();
+    }
+  };
+
+  test.each<[string, Partial<UsageBudgetConfig>, Partial<BudgetCallContext>, Partial<BudgetCallContext>]>([
+    ["character", { character: "aria" }, {}, { character: "kai" }],
+    ["provider", { provider: "anthropic" }, {}, { provider: "openai" }],
+    ["model", { model: "claude-opus-4-6" }, {}, { model: "claude-haiku-4-5" }],
+    ["call type", { call_type: "message" }, {}, { call_type: "heartbeat" }],
+    ["api key", { api_key: "default" }, {}, { api_key_name: "spare" }],
+    ["usage kind", { usage_kind: ["heartbeat"] }, { call_type: "heartbeat", character: "kai" }, { call_type: "message" }],
+  ])("a budget filtered by %s stops only the calls it names", (_name, filter, matching, other) => {
+    expect(blocks(blocking(filter), call(matching))).toBe(true);
+    expect(blocks(blocking(filter), call(other))).toBe(false);
+  });
+
+  test("a call with no key name is not mistaken for a named key", () => {
+    const { api_key_name: _dropped, ...unnamed } = call({});
+    expect(blocks(blocking({ api_key: "default" }), unnamed)).toBe(false);
+  });
+
+  test("compaction is let through only when the budget allows it", () => {
+    expect(blocks(blocking({}), call({ call_type: "compaction" }))).toBe(true);
+    expect(blocks(blocking({}, true), call({ call_type: "compaction" }))).toBe(false);
+  });
+
+  test("each action stops the calls it names and nothing else", () => {
+    const background = ["heartbeat", "heartbeat_tool_loop", "keepalive", "compaction", "dreaming", "memory_query"];
+    for (const callType of [...background, "message", "tool_loop", "subagent"]) {
+      expect(actionBlocks("warn", { call_type: callType })).toBe(false);
+      expect(actionBlocks("block", { call_type: callType })).toBe(true);
+      expect(actionBlocks("pause_background", { call_type: callType }), callType).toBe(background.includes(callType));
+      expect(actionBlocks("pause_heartbeat", { call_type: callType }), callType).toBe(callType.startsWith("heartbeat"));
+    }
+    expect(actionBlocks("pause_background", { call_type: "compaction", foreground: true })).toBe(false);
+  });
+});
+
+describe("where a budget window starts and ends", () => {
+  let index = 7000;
+  const windowOf = (b: Partial<UsageBudgetConfig> & { period: UsageBudgetPeriod }, at: string) => {
+    const db = caseLedger(index++);
+    try {
+      const [status] = budgetStatuses(db, { timezone: "utc", budgets: [{ ...budget("w", b.period, 100), ...b }] }, Date.parse(at), opts);
+      return [Date.parse(required(status).period_start), Date.parse(required(status).period_end)].map((t) => new Date(t).toISOString());
+    } finally {
+      db.close();
+    }
+  };
+
+  test("hours, days, weeks and months start at their reset and end where the next one starts", () => {
+    expect(windowOf({ period: "hour" }, "2026-03-18T15:20:00Z")).toEqual(["2026-03-18T15:00:00.000Z", "2026-03-18T16:00:00.000Z"]);
+    expect(windowOf({ period: "day", reset_hour: 6 }, "2026-03-18T15:00:00Z")).toEqual(["2026-03-18T06:00:00.000Z", "2026-03-19T06:00:00.000Z"]);
+    expect(windowOf({ period: "day", reset_hour: 6 }, "2026-03-18T05:00:00Z")).toEqual(["2026-03-17T06:00:00.000Z", "2026-03-18T06:00:00.000Z"]);
+    expect(windowOf({ period: "week", reset_hour: 6, reset_day_of_week: "wednesday" }, "2026-03-18T15:00:00Z")).toEqual(["2026-03-18T06:00:00.000Z", "2026-03-25T06:00:00.000Z"]);
+    expect(windowOf({ period: "week", reset_hour: 6, reset_day_of_week: "wednesday" }, "2026-03-17T15:00:00Z")).toEqual(["2026-03-11T06:00:00.000Z", "2026-03-18T06:00:00.000Z"]);
+    expect(windowOf({ period: "month", reset_day_of_month: 1, reset_hour: 0 }, "2026-12-15T12:00:00Z")).toEqual(["2026-12-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z"]);
+    expect(windowOf({ period: "month", reset_day_of_month: 1, reset_hour: 0 }, "2027-01-15T12:00:00Z")).toEqual(["2027-01-01T00:00:00.000Z", "2027-02-01T00:00:00.000Z"]);
   });
 });

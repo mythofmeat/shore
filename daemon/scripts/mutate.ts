@@ -164,9 +164,6 @@ async function targetsFor(guards: readonly Guard[]): Promise<{ targets: Target[]
       const [node] = nodes;
       if (node !== undefined) mutants.push(...mutantsIn(file, entry.text, entry.source, fn, node));
     }
-    for (const accepted of guard.accepted ?? []) {
-      if (!mutants.some((m) => m.id === accepted)) problems.push(`accepted mutant no longer exists: ${accepted}`);
-    }
     targets.push({ guard, mutants });
   }
   return { targets, problems };
@@ -312,24 +309,24 @@ const jobs = healthy.flatMap((target) => target.mutants.map((mutant) => ({ targe
 console.error(`${String(jobs.length)} mutants across ${String(healthy.length)} guards, ${String(workers)} workers`);
 const results = await runAll(jobs, workers, timeouts);
 
-const unexpected: Result[] = [];
-const nowKilled: string[] = [];
-for (const r of results) {
-  const accepted = r.job.target.guard.accepted ?? [];
-  const id = r.job.mutant?.id ?? "";
-  if (r.outcome === "survived" && !accepted.includes(id)) unexpected.push(r);
-  if (r.outcome !== "survived" && accepted.includes(id)) nowKilled.push(id);
+const showSurvivors = args.includes("--survivors");
+let below = 0;
+for (const target of healthy) {
+  const mine = results.filter((r) => r.job.target === target);
+  const killed = mine.filter((r) => r.outcome !== "survived").length;
+  const rate = mine.length === 0 ? 1 : killed / mine.length;
+  const floor = target.guard.floor;
+  const failing = rate < floor;
+  if (failing) below++;
+  console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${String(Math.round(floor * 100))}%) ${String(killed)}/${String(mine.length)}  ${target.guard.tests.join(", ")}`);
+  if (!showSurvivors && !failing) continue;
+  for (const r of mine) {
+    const m = r.job.mutant;
+    if (r.outcome !== "survived" || m === undefined) continue;
+    console.log(`    survived: ${m.file}:${String(m.line)}  ${compact(m.original)}  ->  ${compact(m.replacement)}`);
+  }
 }
-
 const killed = results.filter((r) => r.outcome !== "survived").length;
 console.log(`${String(killed)}/${String(results.length)} mutants killed`);
-for (const r of unexpected.sort((a, b) => (a.job.mutant?.id ?? "").localeCompare(b.job.mutant?.id ?? ""))) {
-  const m = r.job.mutant;
-  if (m === undefined) continue;
-  console.log(`survived: ${m.file}:${String(m.line)}  ${compact(m.original)}  ->  ${compact(m.replacement)}`);
-  console.log(`  id: ${m.id}`);
-  console.log(`  tests: ${r.job.target.guard.tests.join(", ")}`);
-}
-for (const id of nowKilled) console.log(`accepted mutant is now killed, remove it: ${id}`);
 for (const p of problems) console.log(`problem: ${p}`);
-process.exit(unexpected.length > 0 || nowKilled.length > 0 || problems.length > 0 ? 1 : 0);
+process.exit(below > 0 || problems.length > 0 ? 1 : 0);

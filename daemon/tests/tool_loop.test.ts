@@ -113,6 +113,15 @@ describe("the iteration cap", () => {
     expect(r.dispatches).toBe(2);
   });
 
+  test("stopping after the dispatch spends no closing call, and closing spends exactly one", async () => {
+    expect(await run({ toolTurns: 10, maxIterations: 2, cap: "stop_after_dispatch" })).toMatchObject({ dispatches: 2, modelCalls: 2, userTurns: 2 });
+    expect(await run({ toolTurns: 10, maxIterations: 2, cap: "close_with_final_turn" })).toMatchObject({ dispatches: 2, modelCalls: 3, userTurns: 2 });
+  });
+
+  test("a turn that says end_turn ends the loop even while it asks for tools", async () => {
+    expect(await run({ toolTurns: 3, mode: "always_end_turn", maxIterations: 5 })).toMatchObject({ stop: "model_done", dispatches: 0, modelCalls: 1 });
+  });
+
   test("of zero refuses the first dispatch rather than allowing one", async () => {
     const r = await run({ toolTurns: 3, maxIterations: 0 });
     expect(r).toMatchObject({ stop: "cap_reached", dispatches: 0, modelCalls: 1 });

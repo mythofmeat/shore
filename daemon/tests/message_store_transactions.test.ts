@@ -145,6 +145,15 @@ test("concurrent message mutations preserve call order across reload", async () 
   expect(reloaded.messages()).toEqual(store.messages());
 });
 
+test("concurrent edits each land, none overwritten by another's stale copy", async () => {
+  const { path } = await workspace();
+  const store = MessageStore.create(path);
+  for (let i = 1; i <= 5; i += 1) await store.append(message(`u${String(i)}`, "user", `original ${String(i)}`, i));
+  await Promise.all([1, 2, 3, 4, 5].map((i) => store.edit(`u${String(i)}`, `edited ${String(i)}`)));
+  const reloaded = await MessageStore.load(path);
+  expect(reloaded.messages().map((m) => m.content)).toEqual([1, 2, 3, 4, 5].map((i) => `edited ${String(i)}`));
+});
+
 test("a failed store commit does not advance the conversation revision", async () => {
   const { dir } = await workspace();
   const characterDir = join(dir, "ada");

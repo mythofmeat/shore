@@ -3,7 +3,7 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Header } from "tar";
@@ -49,6 +49,57 @@ describe("character archives", () => {
     await writeFile(output, Bun.gzipSync(Buffer.concat([block, Buffer.from("x"), Buffer.alloc(511 + 1024)])));
     expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("unexpected path");
     expect(existsSync(join(target.workspace as string, "outside"))).toBe(false);
+  });
+
+  test.each(["../evil", "a/b", ""])("an archive naming its character %j is refused", async (character) => {
+    const target = await root("bad-name");
+    const output = join(target.runtime, "bad-name.tar.gz");
+    const manifest = Buffer.from(JSON.stringify({ format: "shore-character", version: 2, character, source_data: "/data" }));
+    const header = Buffer.alloc(512);
+    new Header({ path: "manifest.json", size: manifest.length, mode: 0o600, type: "File" }).encode(header);
+    const padding = Buffer.alloc((512 - (manifest.length % 512)) % 512);
+    await writeFile(output, Bun.gzipSync(Buffer.concat([header, manifest, padding, Buffer.alloc(1024)])));
+    expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("invalid character name");
+    expect(await readdir(join(target.config, "characters")).catch(() => [])).toEqual([]);
+  });
+
+  test.each([
+    { bytes: 8, entries: 100, message: "processing limits" },
+    { bytes: 1024 * 1024, entries: 1, message: "processing limits" },
+    { bytes: 4096, entries: 100, message: "Database snapshot" },
+  ])("browser export budget $bytes bytes/$entries entries rejects before publishing an archive", async (limits) => {
+    const source = await root("limited-export"); await seedCharacter(source, "ada", "preserve source");
+    const output = join(source.runtime, "limited.tar.gz");
+    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow(limits.message);
+    expect(await outcomeOf(access(output))).toThrow();
+    expect(await readFile(join(source.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
+  });
+
+  test.each([
+    { bytes: 128, entries: 100, message: "browser processing limit" },
+    { bytes: 1024 * 1024, entries: 1, message: "too many files" },
+  ])("browser import budget $bytes bytes/$entries entries rejects before installing data", async (limits) => {
+    const source = await root("limited-source"); await seedCharacter(source, "ada", "archive history");
+    const output = join(source.runtime, "ada.tar.gz");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("limited-target"); await seedCharacter(target, "bea", "preserve other character");
+    expect(await outcomeOf(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output }))).toThrow(limits.message);
+    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
+    const history = HistoryStore.open(join(target.data, "shore.db"));
+    try { expect(history.archiveKeys("ada")).toEqual([]); expect(history.readSegment("bea", 0)[0]?.content).toBe("preserve other character"); }
+    finally { history.close(); }
+  });
+
+  test("browser transfers reject links while native archives preserve their existing link support", async () => {
+    const source = await root("link-source"); await seedCharacter(source, "ada", "archive history");
+    await symlink("SOUL.md", join(source.workspace as string, "ada", "linked.md"));
+    const output = join(source.runtime, "ada.tar.gz");
+    const limits = { bytes: 1024 * 1024, entries: 100 };
+    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow("regular files and directories");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("link-target");
+    expect(await outcomeOf(importCharacter({ ...context(target, new Set()), limits }, { archive: output }))).toThrow("unsupported entries");
+    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
   });
 
   test("a compressed export restores one character without carrying another", async () => {

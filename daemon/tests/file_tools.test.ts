@@ -70,6 +70,20 @@ test("edit validates exact, unique matches without writing, with explicit replac
   expect((await run("edit", { file_path: "absent", old_string: "x", new_string: "y" })).isError).toBe(true);
 });
 
+test("edit leaves binary files, invalid text and folders untouched", async () => {
+  const { put, run, ctx } = await world();
+  const binary = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x41]);
+  const png = await put("image.png", binary);
+  expect((await run("edit", { file_path: "image.png", old_string: "A", new_string: "B" })).isError).toBe(true);
+  expect(await readFile(png)).toEqual(binary);
+  const latin = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]);
+  const text = await put("latin.txt", latin);
+  expect((await run("edit", { file_path: "latin.txt", old_string: "caf", new_string: "tea" })).isError).toBe(true);
+  expect(await readFile(text)).toEqual(latin);
+  await mkdir(join(ctx.workspaceDir, "folder"));
+  expect((await run("edit", { file_path: "folder", old_string: "a", new_string: "b" })).isError).toBe(true);
+});
+
 test("edit rejects overlapping ambiguity and preserves BOM", async () => {
   const { put, run } = await world();
   const path = await put("note", "\uFEFFaaa");

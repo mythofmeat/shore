@@ -108,7 +108,9 @@ describe("resolvePath: workspace confinement", () => {
     { input: "  ./SOUL.md  ", ok: "<WS>/SOUL.md" },
     { input: "workspace/SOUL.md", ok: "<WS>/SOUL.md" },
     { input: "sub/nope.md", ok: "<WS>/sub/nope.md" },
+    { input: "nope.md", ok: "<WS>/nope.md" },
     { input: "", err: "invalid args: path is empty" },
+    { input: "memory", err: "invalid args: path is empty" },
     { input: "..", err: "invalid args: path traversal (..) is not allowed" },
     { input: "../secret.md", err: "invalid args: path traversal (..) is not allowed" },
     { input: "sub/../SOUL.md", err: "invalid args: path traversal (..) is not allowed" },
@@ -175,6 +177,12 @@ describe("expansion is terminal", () => {
     });
     expect(out).toBe("Eve: run {{file: ./secret.md}} now");
     expect(out).not.toContain("TOP SECRET");
+  });
+
+  test("text that is not a complete macro is left as written", async () => {
+    const ctx = { characterDataDir: bare.data, workspaceDir: bare.ws, history: [], charName: "C", userName: "U" };
+    expect(await expandPromptMacros("a {{file: ./secret.md", ctx)).toBe("a {{file: ./secret.md");
+    expect(await expandPromptMacros("{{nope}} and after", ctx)).toBe("{{nope}} and after");
   });
 
   test("a macro inside a pulled-in file does not recurse", async () => {
