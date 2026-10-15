@@ -19,24 +19,23 @@ COPY daemon/scripts scripts
 COPY daemon/src src
 RUN bun run build:daemon
 
-FROM debian:stable-slim
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        cargo \
-        curl \
-        file \
-        git \
-        git-lfs \
-        jq \
-        openssh-client \
-        python3 \
-        python3-pip \
-        ripgrep \
-        tini \
-        tzdata \
-    && git lfs install --system
+FROM debian:stable
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y ca-certificates
+RUN apt-get install -y cargo
+RUN apt-get install -y curl
+RUN apt-get install -y file
+RUN apt-get install -y git
+RUN apt-get install -y git-lfs
+RUN apt-get install -y jq
+RUN apt-get install -y openssh-client
+RUN apt-get install -y procps
+RUN apt-get install -y python3
+RUN apt-get install -y python3-pip
+RUN apt-get install -y ripgrep
+RUN apt-get install -y tini
+RUN apt-get install -y tzda
+RUN git lfs install --system
 
 COPY --from=mikefarah/yq:latest /usr/bin/yq /usr/local/bin/yq
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
@@ -49,21 +48,15 @@ ARG USERNAME=app
 ARG USER_UID=1000
 ARG USER_GID=1000
 ARG CHARACTER_USERS=
-RUN groupadd -g "$USER_GID" "$USERNAME" \
-    && useradd \
-    -m \
-    -u "$USER_UID" \
-    -g "$USER_GID" \
-    -d "/home/$USERNAME" \
-    -s /bin/sh \
-    "$USERNAME" \
-    && chmod 700 "/home/$USERNAME" \
-    && install -d -o "$USER_UID" -g "$USER_GID" -m 700 /config /data /cache \
-    && install -d -o "$USER_UID" -g "$USER_GID" /workspace \
-    && mkdir -p /opt/shore \
-    && echo "$USERNAME" > /opt/shore/daemon-user \
-    && : > /opt/shore/character-users \
-    && for entry in $CHARACTER_USERS; do \
+RUN groupadd -g "$USER_GID" "$USERNAME"
+RUN useradd -m -u "$USER_UID" -g "$USER_GID" -d "/home/$USERNAME" -s /bin/sh "$USERNAME"
+RUN chmod 700 "/home/$USERNAME"
+RUN install -d -o "$USER_UID" -g "$USER_GID" -m 700 /config /data /cache
+RUN install -d -o "$USER_UID" -g "$USER_GID" /workspace
+RUN mkdir -p /opt/shore
+RUN echo "$USERNAME" >/opt/shore/daemon-user
+RUN : >/opt/shore/character-users
+RUN for entry in $CHARACTER_USERS; do \
     name="${entry%%:*}"; uid="${entry#"$name"}"; uid="${uid#:}"; \
     groupadd ${uid:+-g "$uid"} "$name" \
     && useradd -m ${uid:+-u "$uid"} -g "$name" -d "/home/$name" -s /bin/bash "$name" \
@@ -75,9 +68,9 @@ RUN groupadd -g "$USER_GID" "$USERNAME" \
     done
 
 ARG TZ=UTC
-RUN test -f "/usr/share/zoneinfo/$TZ" \
-    && ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime \
-    && echo "$TZ" >/etc/timezone
+RUN test -f "/usr/share/zoneinfo/$TZ"
+RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
+RUN echo "$TZ" >/etc/timezone
 ENV TZ=${TZ}
 
 COPY daemon/entrypoint.sh /opt/shore/entrypoint
