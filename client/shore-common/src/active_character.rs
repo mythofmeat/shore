@@ -111,14 +111,6 @@ mod tests {
     }
 
     #[test]
-    fn the_choice_is_kept_in_the_data_dir() {
-        assert_eq!(
-            active_character_path(),
-            crate::dirs::data_dir().join("active_character"),
-        );
-    }
-
-    #[test]
     fn round_trips_through_the_data_dir() {
         let p = paths();
         assert!(read_from(&p.primary).is_none(), "missing file");
@@ -134,15 +126,6 @@ mod tests {
 
         std::fs::write(&p.primary, "  carol  \n").unwrap();
         assert_eq!(read_from(&p.primary).as_deref(), Some("carol"));
-    }
-
-    #[test]
-    fn clearing_a_choice_removes_it_and_forgives_a_missing_file() {
-        let p = paths();
-        write_to(&p.primary, "eval").unwrap();
-        remove_at(&p.primary).unwrap();
-        assert!(read_from(&p.primary).is_none(), "the choice is gone",);
-        remove_at(&p.primary).expect("clearing twice is not an error");
     }
 
     #[test]

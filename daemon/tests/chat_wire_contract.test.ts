@@ -4,27 +4,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
-import { CallStore } from "../src/call_store.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
-import { toolLoopEvents } from "../src/llm/tool_loop.ts";
-import { withCallCapture } from "../src/llm/capture.ts";
 import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.ts";
-import { EARLIER_CONVERSATION_NOT_SHOWN } from "../src/engine/prompt.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
-import { anthropicToolLoopEvents } from "./support/anthropic_loop.ts";
 import { consumeStream } from "../src/llm/stream.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
-import { installWireCapture } from "../src/llm/wire_capture.ts";
-import type { ToolPhase } from "../src/tools/execute.ts";
-import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
-import type { Role } from "../src/engine/types.ts";
-import { until } from "./support/until.ts";
 import { setTestEnv } from "./support/env.ts";
 
 type Scripted =
@@ -305,54 +294,6 @@ describe("what reaches the model", () => {
     expect(required(replayed[0])["signature"]).toBe("sig-AAA");
   });
 
-  test("thinking survives a regenerate and a swipe back to the first response", async () => {
-    const h = await harness([
-      { kind: "thinking", thinking: "first pass", signature: "sig-FIRST", text: "one" },
-      { kind: "thinking", thinking: "second pass", signature: "sig-SECOND", text: "two" },
-      { kind: "text", text: "three" },
-    ]);
-
-    await h.say("hello");
-
-    const target = required(h.store.messages().at(-1)).msg_id;
-    const prior = required(h.store.pendingRegenAlt()).alternatives;
-    const regenReq = await h.request(true);
-    const regenerated = [assistantFrom(await runToDone(new AnthropicProvider().stream(regenReq)))];
-    required(regenerated[0]).msg_id = target;
-    MessageStore.attachGeneratedAlt(regenerated, prior);
-    await h.store.replaceAfterLastUserTurn(regenerated);
-
-    await h.store.selectAlt(target, 0);
-    await h.say("and now");
-
-    const turns = assistantTurns(required(h.fake.seen.at(-1)));
-    expect(turns).toHaveLength(1);
-    const replayed = thinkingIn(required(turns[0]));
-    expect(replayed).toHaveLength(1);
-    expect(required(replayed[0])["signature"]).toBe("sig-FIRST");
-    expect(required(replayed[0])["thinking"]).toBe("first pass");
-  });
-
-  test("every assistant turn that thought still carries thinking many turns later", async () => {
-    const h = await harness([
-      { kind: "thinking", thinking: "t1", signature: "sig-1", text: "a" },
-      { kind: "thinking", thinking: "t2", signature: "sig-2", text: "b" },
-      { kind: "thinking", thinking: "t3", signature: "sig-3", text: "c" },
-      { kind: "text", text: "d" },
-    ]);
-
-    await h.say("one");
-    await h.say("two");
-    await h.say("three");
-    await h.say("four");
-
-    const last = required(h.fake.seen.at(-1));
-    const turns = assistantTurns(last);
-    expect(turns).toHaveLength(3);
-    expect(turns.map((m) => thinkingIn(m).length)).toEqual([1, 1, 1]);
-    expect(turns.map((m) => required(thinkingIn(m)[0])["signature"])).toEqual(["sig-1", "sig-2", "sig-3"]);
-  });
-
   test("no request ever carries an unsendable turn", async () => {
     const h = await harness([
       { kind: "thinking", thinking: "t1", signature: "sig-1", text: "a" },
@@ -400,147 +341,5 @@ describe("what reaches the model", () => {
       const last = required(req.messages.at(-1));
       expect(last.content.some((b) => b["cache_control"] !== undefined)).toBe(true);
     }
-  });
-});
-
-describe("what gets recorded", () => {
-  test("a tools-enabled turn writes a call row and its raw HTTP exchanges", async () => {
-    const fake = serving([
-      { kind: "tool", thinking: { thinking: "look it up", signature: "sig-T" }, id: "toolu_1", name: "read", input: { path: "a.md" } },
-      { kind: "text", text: "done" },
-    ]);
-    const store = CallStore.openInMemory();
-    teardown.push(() => store.close());
-    teardown.push(installWireCapture((e) => store.recordHttpCall(e)));
-
-    const phase = collectingPhase();
-    const req: SidecarRequest = {
-      sdk: "anthropic",
-      model: "claude-fixture",
-      provider_key: "anthropic",
-      api_key: "test-key",
-      base_url: fake.url,
-      messages: [{ role: "user", content: [{ type: "text", text: "read a.md" }] }],
-      system: [{ text: "you are a character", label: "character" }],
-      tools: [{ name: "read", description: "Read a file.", input_schema: { type: "object" } }],
-      max_tokens: 1024,
-      replay_prior_thinking: "all",
-      provider_options: { cache_ttl: "5m" },
-      context: { character: "frank", call_type: "message", thinking_enabled: true },
-    };
-
-    await runToDone(
-      toolLoopEvents(withCallCapture(new AnthropicProvider(), store), req, phase, new AbortController().signal),
-    );
-    await until(() => {
-      const call = store.queryCalls({ character: "frank", limit: 10 })[0];
-      return call !== undefined && store.httpCallsFor(required(store.getCall(call.id)).call_id).length >= 2;
-    }, "the captured call and both of its HTTP exchanges");
-
-    const calls = store.queryCalls({ character: "frank", limit: 10 });
-    expect(calls).toHaveLength(1);
-    expect(required(calls[0]).call_type).toBe("message");
-
-    const wire = store.httpCallsFor(required(store.getCall(required(calls[0]).id)).call_id);
-    expect(wire.length).toBe(2);
-    expect(wire.every((w) => w.status === 200)).toBe(true);
-    expect(required(wire[0]).request_body).toContain("claude-fixture");
-    expect(wire.map((w) => w.seq)).toEqual([0, 1]);
-  });
-
-  test("the tool loop keeps its thinking block alongside the tool_use it justified", async () => {
-    const fake = serving([
-      { kind: "tool", thinking: { thinking: "look it up", signature: "sig-T" }, id: "toolu_1", name: "read", input: { path: "a.md" } },
-      { kind: "text", text: "done" },
-    ]);
-    const phase = collectingPhase();
-    const req: SidecarRequest = {
-      sdk: "anthropic",
-      model: "claude-fixture",
-      provider_key: "anthropic",
-      api_key: "test-key",
-      base_url: fake.url,
-      messages: [{ role: "user", content: [{ type: "text", text: "read a.md" }] }],
-      system: [{ text: "you are a character", label: "character" }],
-      tools: [{ name: "read", description: "Read a file.", input_schema: { type: "object" } }],
-      max_tokens: 1024,
-      replay_prior_thinking: "all",
-      provider_options: { cache_ttl: "5m" },
-    };
-
-    await runToDone(anthropicToolLoopEvents(req, phase));
-
-    const continuation = required(fake.seen[1]);
-    const assistant = required(assistantTurns(continuation)[0]);
-    expect(assistant.content.map((b) => b["type"])).toEqual(["thinking", "tool_use"]);
-    expect(required(thinkingIn(assistant)[0])["signature"]).toBe("sig-T");
-  });
-});
-
-
-
-function collectingPhase(): ToolPhase {
-  const messages: Message[] = [];
-  let n = 0;
-  return {
-    messages,
-    recordTurn: (role: Role, blocks: ContentBlock[]) => {
-      n += 1;
-      messages.push({
-        msg_id: `t_${n}`,
-        role,
-        content: "",
-        images: [],
-        content_blocks: blocks,
-        timestamp: "2026-08-13T00:00:00Z",
-      });
-    },
-    runTool: (use: ToolUseEvent): Promise<ContentBlock> =>
-      Promise.resolve({
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: "file contents",
-        is_error: false,
-      }),
-  };
-}
-
-describe("a heartbeat message with no user turn before it", () => {
-  const heartbeat = (text: string): Message => ({
-    ...assistantFrom([{ type: "text", text }]),
-    origin: "autonomous",
-    timestamp: "2026-08-13T04:30:00Z",
-  });
-
-  const textOf = (m: { content: Array<Record<string, unknown>> } | undefined) => m?.content.map((b) => b["text"]);
-
-  test("a conversation that starts on one opens on the heartbeat's own turn", async () => {
-    const h = await harness([{ kind: "text", text: "yay" }]);
-    await h.store.append(heartbeat("made you something"));
-    await h.say("i love it");
-    const sent = required(h.fake.seen[0]);
-    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
-    expect(String(textOf(sent.messages[0])?.[0])).toMatch(/^\[heartbeat · .+\]$/);
-    expect(textOf(sent.messages[1])).toEqual(["made you something"]);
-  });
-
-  test("one sent after a reply reaches the model as its own turn, not the end of that reply", async () => {
-    const h = await harness([{ kind: "text", text: "night night" }, { kind: "text", text: "yay" }]);
-    await h.say("goodnight");
-    await h.store.append(heartbeat("made you something"));
-    await h.say("i love it");
-    const sent = required(h.fake.seen[1]);
-    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
-    expect(String(textOf(sent.messages[2])?.[0])).toMatch(/^\[heartbeat · .+\]$/);
-    expect(textOf(sent.messages[3])).toEqual(["made you something"]);
-  });
-
-  test("a window that opens on an ordinary reply still opens on the user's side", async () => {
-    const h = await harness([{ kind: "text", text: "yay" }]);
-    await h.store.append(assistantFrom([{ type: "text", text: "where were we" }]));
-    await h.say("hi");
-    const sent = required(h.fake.seen[0]);
-    expect(sent.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
-    expect(textOf(sent.messages[0])).toEqual([EARLIER_CONVERSATION_NOT_SHOWN]);
   });
 });

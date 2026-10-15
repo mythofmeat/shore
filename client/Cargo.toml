@@ -20,8 +20,6 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 dirs = "7"
 libc = "0.2"
 tempfile = "3"
-insta = { version = "1", features = ["json"] }
-proptest = "1"
 
 [workspace.lints.clippy]
 needless_else = "allow"

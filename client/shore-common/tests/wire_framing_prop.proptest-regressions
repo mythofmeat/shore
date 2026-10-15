@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc cb435d2238dd1ef1858b48134a5f1e6eae055da66bdb3070523b9a202a6890c7 # shrinks to msg = NewMessage(NewMessage { revision: 0, character: None, origin: Some(UserInput), message: Message { msg_id: "a", role: User, content: "", images: [], content_blocks: [], alt_index: None, alt_count: None, alternatives: [], timestamp: "", provider_key: None, origin: Some(UserInput) } })

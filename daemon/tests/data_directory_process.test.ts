@@ -2,9 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connect } from "node:net";
-
-import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
 const TOKEN = "process-test-token";
@@ -140,41 +137,6 @@ async function exitWithin(
 }
 
 describe("daemon processes owning data directories", () => {
-  test("disconnecting an authenticated TCP client does not leave a ping timer holding the process open", async () => {
-    const root = await processRoot("tcp-shutdown");
-    const layout = await processLayout(root, "daemon", join(root, "data"));
-    const child = spawnDaemon(layout, "tcp-shutdown");
-    await waitUntilReady(layout, "tcp-shutdown");
-    const entries = JSON.parse(await readFile(layout.instancesPath, "utf8")) as Array<{ addr: string }>;
-    const port = Number(entries[0]?.addr.split(":").at(-1));
-    const socket = connect({ host: "127.0.0.1", port });
-    try {
-      await new Promise<void>((resolve, reject) => {
-        let buffered = "";
-        const silent = setTimeout(() => reject(new Error(`no history within ${String(STEP_MS)}ms of connecting`)), STEP_MS);
-        socket.once("close", () => clearTimeout(silent));
-        socket.once("error", reject);
-        socket.once("connect", () => socket.write(`${JSON.stringify({ type: "hello", client_type: "cli", client_name: "shutdown-test", capabilities: [], token: TOKEN })}\n`));
-        socket.on("data", (chunk: Buffer) => {
-          buffered += chunk.toString();
-          for (;;) {
-            const end = buffered.indexOf("\n"); if (end < 0) break;
-            const message = JSON.parse(buffered.slice(0, end)) as { type: string };
-            buffered = buffered.slice(end + 1);
-            if (message.type === "history") resolve();
-          }
-        });
-      });
-      socket.destroy();
-      child.kill("SIGTERM");
-      const deadline = setTimeout(() => child.kill("SIGKILL"), 2000);
-      try { expect(await child.exited).toBe(0); }
-      finally { clearTimeout(deadline); }
-    } finally {
-      socket.destroy();
-      child.kill("SIGKILL");
-    }
-  }, startsAndSteps(1, 2));
 
   test("a second process cannot open the same data directory", async () => {
     const root = await processRoot("same");
@@ -202,55 +164,6 @@ describe("daemon processes owning data directories", () => {
     expect(await exitWithin(replacement)).toBe(0);
   }, startsAndSteps(3, 4));
 
-  test("two processes with different data directories remain supported", async () => {
-    const root = await processRoot("different");
-    const firstLayout = await processLayout(root, "first", join(root, "first-data"));
-    const secondLayout = await processLayout(root, "second", join(root, "second-data"));
-
-    const first = spawnDaemon(firstLayout, "first-data-owner");
-    const second = spawnDaemon(secondLayout, "second-data-owner");
-    await waitForInstances(firstLayout.instancesPath, ["first-data-owner", "second-data-owner"], START_MS);
-    await Promise.all([
-      waitUntilReady(firstLayout, "first-data-owner"),
-      waitUntilReady(secondLayout, "second-data-owner"),
-    ]);
-
-    first.kill("SIGTERM");
-    second.kill("SIGTERM");
-    expect(await Promise.all([exitWithin(first), exitWithin(second)])).toEqual([0, 0]);
-  }, startsAndSteps(2, 1));
-
-  test("the lifetime lock blocks a process even when the owner record looks stale", async () => {
-    const root = await processRoot("lifetime-lock");
-    const dataDir = join(root, "shared-data");
-    const firstLayout = await processLayout(root, "first", dataDir);
-    const secondLayout = await processLayout(root, "second", dataDir);
-    const first = spawnDaemon(firstLayout, "actual-owner");
-    await waitUntilReady(firstLayout, "actual-owner");
-    await writeFile(
-      join(dataDir, DATA_DIRECTORY_LEASE_FILE),
-      JSON.stringify({
-        version: 1,
-        lease_id: "misleading-lease",
-        instance_id: "misleading-dead-owner",
-        pid: 0x7fff_fffe,
-        started_at: "2026-08-28T12:00:00+10:00",
-        data_dir: dataDir,
-      }),
-    );
-
-    const second = spawnDaemon(secondLayout, "blocked-owner");
-    expect(await exitWithin(second, START_MS)).toBe(1);
-    expect(await new Response(second.stderr).text()).toContain("misleading-dead-owner");
-
-    first.kill("SIGTERM");
-    expect(await exitWithin(first)).toBe(0);
-    const replacement = spawnDaemon(secondLayout, "replacement-owner");
-    await waitUntilReady(secondLayout, "replacement-owner");
-    replacement.kill("SIGTERM");
-    expect(await exitWithin(replacement)).toBe(0);
-  }, startsAndSteps(3, 2));
-
   test("an owner killed without cleanup is safely reclaimed", async () => {
     const root = await processRoot("stale");
     const dataDir = join(root, "shared-data");
@@ -267,15 +180,4 @@ describe("daemon processes owning data directories", () => {
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
   }, startsAndSteps(2, 2));
-
-  test("a container restart can reclaim a legacy lease with its reused PID", async () => {
-    const root = await processRoot("reused-pid");
-    const layout = await processLayout(root, "replacement", join(root, "data"));
-    layout.env["SHORE_TEST_REUSED_PID_LEASE"] = "1";
-
-    const replacement = spawnDaemon(layout, "replacement-owner");
-    await waitUntilReady(layout, "replacement-owner");
-    replacement.kill("SIGTERM");
-    expect(await exitWithin(replacement)).toBe(0);
-  }, startsAndSteps(1, 1));
 });

@@ -30,7 +30,6 @@ ts-rs = { version = "12.0.1", features = ["no-serde-warnings"] }
 libc = { workspace = true }
 
 [dev-dependencies]
-proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { version = "1", features = ["full", "test-util"] }
 

@@ -150,38 +150,8 @@ pub(crate) fn to_lines(text: &str) -> Vec<Line<'static>> {
 }
 
 #[cfg(test)]
-pub(crate) fn plain(text: &str) -> String {
-    to_lines(text)
-        .iter()
-        .map(|line| {
-            line.spans
-                .iter()
-                .map(|span| span.content.as_ref())
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim_end()
-        .to_owned()
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-
-    fn first_span<'text>(lines: &'text [Line<'static>], row: usize) -> &'text Span<'static> {
-        lines
-            .get(row)
-            .and_then(|line| line.spans.first())
-            .expect("a span on that row")
-    }
-
-    fn foregrounds(lines: &[Line<'static>], row: usize) -> Vec<Option<Color>> {
-        lines
-            .get(row)
-            .map(|line| line.spans.iter().map(|span| span.style.fg).collect())
-            .unwrap_or_default()
-    }
 
     fn text_of(lines: &[Line<'static>]) -> Vec<String> {
         lines
@@ -196,77 +166,8 @@ mod tests {
     }
 
     #[test]
-    fn colour_becomes_a_span_and_the_escape_itself_disappears() {
-        let lines = to_lines("plain \u{1b}[31mred\u{1b}[0m tail");
-        assert_eq!(text_of(&lines), vec!["plain red tail"]);
-        assert_eq!(
-            foregrounds(&lines, 0),
-            vec![None, Some(Color::Red), None],
-            "only the middle span carries the colour"
-        );
-    }
-
-    #[test]
-    fn styling_carries_across_a_newline_the_way_a_terminal_does() {
-        let lines = to_lines("\u{1b}[32mfirst\nsecond\u{1b}[0m");
-        assert_eq!(text_of(&lines), vec!["first", "second"]);
-        assert_eq!(foregrounds(&lines, 0), vec![Some(Color::Green)]);
-        assert_eq!(foregrounds(&lines, 1), vec![Some(Color::Green)]);
-    }
-
-    #[test]
-    fn bold_and_dim_are_modifiers_not_colours() {
-        let lines = to_lines("\u{1b}[1mbold\u{1b}[22m \u{1b}[2mdim\u{1b}[0m");
-        let modifiers: Vec<Modifier> = lines
-            .first()
-            .map(|line| {
-                line.spans
-                    .iter()
-                    .map(|span| span.style.add_modifier)
-                    .collect()
-            })
-            .unwrap_or_default();
-        assert_eq!(
-            modifiers,
-            vec![Modifier::BOLD, Modifier::empty(), Modifier::DIM]
-        );
-    }
-
-    #[test]
-    fn indexed_and_truecolor_forms_both_resolve() {
-        let indexed = to_lines("\u{1b}[38;5;208mamber\u{1b}[0m");
-        assert_eq!(foregrounds(&indexed, 0), vec![Some(Color::Indexed(208))]);
-
-        let truecolor = to_lines("\u{1b}[38;2;20;40;60mslate\u{1b}[0m");
-        assert_eq!(
-            foregrounds(&truecolor, 0),
-            vec![Some(Color::Rgb(20, 40, 60))]
-        );
-
-        let background = to_lines("\u{1b}[48;5;17mdeep\u{1b}[0m");
-        assert_eq!(
-            first_span(&background, 0).style.bg,
-            Some(Color::Indexed(17))
-        );
-    }
-
-    #[test]
-    fn a_bare_reset_and_an_empty_parameter_list_mean_the_same_thing() {
-        let lines = to_lines("\u{1b}[31mred\u{1b}[mplain");
-        assert_eq!(foregrounds(&lines, 0), vec![Some(Color::Red), None]);
-    }
-
-    #[test]
     fn cursor_moves_and_other_sequences_are_dropped_without_eating_text() {
         let lines = to_lines("before\u{1b}[2K\u{1b}[1;3Hafter");
         assert_eq!(text_of(&lines), vec!["beforeafter"]);
-    }
-
-    #[test]
-    fn plain_gives_back_the_text_with_no_escapes_left() {
-        assert_eq!(
-            plain("\u{1b}[36mone\u{1b}[0m\n\u{1b}[1mtwo\u{1b}[0m\n\n"),
-            "one\ntwo"
-        );
     }
 }

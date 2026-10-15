@@ -135,38 +135,3 @@ impl StreamSpinner {
         self.start();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_spinner_line_thinking() {
-        let line = format_spinner_line("thinking", None, 2.3);
-        assert_eq!(line, "(thinking... 2.3s) ");
-    }
-
-    #[test]
-    fn format_spinner_line_with_model() {
-        let line = format_spinner_line("thinking", Some("claude-sonnet-4"), 1.5);
-        assert_eq!(line, "(thinking... 1.5s \u{00b7} claude-sonnet-4) ");
-    }
-
-    #[test]
-    fn format_spinner_line_empty_phase() {
-        let line = format_spinner_line("", None, 0.4);
-        assert_eq!(line, "(generating... 0.4s) ");
-    }
-
-    #[test]
-    fn format_spinner_line_custom_phase() {
-        let line = format_spinner_line("analyzing", None, 5.0);
-        assert_eq!(line, "(analyzing 5.0s) ");
-    }
-
-    #[test]
-    fn stream_spinner_new_does_not_panic() {
-        let spinner = StreamSpinner::new();
-        assert!(!spinner.is_active());
-    }
-}

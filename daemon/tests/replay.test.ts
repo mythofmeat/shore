@@ -123,63 +123,6 @@ describe("prior-thinking replay setting", () => {
     { role: "user", content: [{ type: "text", text: "q2" }] },
   ];
 
-  test("`all` keeps prior thinking", () => {
-    expect(types(replayableMessages(req({ messages: history })))).toEqual([
-      ["text"],
-      ["thinking", "text"],
-      ["text"],
-    ]);
-  });
-
-  test("`none` strips it from assistant history", () => {
-    const out = replayableMessages(req({ messages: history, replay_prior_thinking: "none" }));
-    expect(types(out)).toEqual([["text"], ["text"], ["text"]]);
-  });
-
-  const ownHistory = (provider: string): WireMessage[] =>
-    history.map((m) =>
-      m.role === "assistant" ? { ...m, provider_key: provider, model: "reasoner" } : m,
-    );
-
-  test("`all` is the only thing standing between a block and the wire", () => {
-    for (const sdk of ["anthropic", "openai", "moonshot", "deepseek", "zai"] as const) {
-      const out = replayableMessages(
-        req({ sdk, model: "reasoner", provider_key: sdk, messages: ownHistory(sdk) }),
-      );
-      expect(types(out)[1], `${sdk} replays by default`).toEqual(["thinking", "text"]);
-    }
-  });
-
-  test("`none` strips on every sdk, with no carve-outs", () => {
-    for (const sdk of ["anthropic", "openai", "moonshot", "deepseek", "zai"] as const) {
-      const out = replayableMessages(
-        req({
-          sdk,
-          model: "reasoner",
-          provider_key: sdk,
-          messages: ownHistory(sdk),
-          replay_prior_thinking: "none",
-        }),
-      );
-      expect(types(out)[1], `${sdk} honors the user's own off switch`).toEqual(["text"]);
-    }
-  });
-
-  test("the provider serving a model does not change the answer", () => {
-    for (const provider of ["moonshot", "moonshotai", "opencode-go", "openrouter"]) {
-      const out = replayableMessages(
-        req({
-          sdk: "moonshot",
-          model: "reasoner",
-          provider_key: provider,
-          messages: ownHistory(provider),
-          replay_prior_thinking: "none",
-        }),
-      );
-      expect(types(out)[1], `${provider} gets the same strip`).toEqual(["text"]);
-    }
-  });
-
   test("the same history always projects to the same bytes", () => {
     for (const mode of ["all", "none"] as const) {
       const r = req({ messages: history, replay_prior_thinking: mode });

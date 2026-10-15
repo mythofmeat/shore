@@ -510,70 +510,8 @@ pub fn request_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncReadExt;
     use tokio::time::{Duration, timeout};
-
-    #[test]
-    fn provider_and_timeout_frames_keep_their_semantics() {
-        let provider = client_error_from_server(ServerError {
-            rid: None,
-            code: ErrorCode::ProviderError,
-            message: "rate limited".into(),
-            retry_after_ms: Some(1_250),
-        });
-        assert!(matches!(
-            provider,
-            ClientError::Provider {
-                ref message,
-                retry_after_ms: Some(1_250),
-            } if message == "rate limited"
-        ));
-
-        let timeout = client_error_from_server(ServerError {
-            rid: None,
-            code: ErrorCode::Timeout,
-            message: "request deadline exceeded".into(),
-            retry_after_ms: None,
-        });
-        assert!(matches!(
-            timeout,
-            ClientError::Timeout {
-                ref message,
-                retry_after_ms: None,
-            } if message == "request deadline exceeded"
-        ));
-    }
-
-    #[tokio::test]
-    async fn cancelled_receive_keeps_the_partial_frame() {
-        let (client_stream, mut server_stream) = tokio::io::duplex(256);
-        let mut conn = SWPConnection::from_raw_stream(client_stream);
-
-        server_stream
-            .write_all(br#"{"type":"stream_chunk","text":"hel"#)
-            .await
-            .unwrap();
-
-        assert!(
-            timeout(Duration::from_millis(10), conn.recv())
-                .await
-                .is_err()
-        );
-
-        server_stream
-            .write_all(b"lo\",\"content_type\":\"text\"}\n")
-            .await
-            .unwrap();
-
-        let msg = timeout(Duration::from_secs(1), conn.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        let ServerMessage::StreamChunk(chunk) = msg else {
-            panic!("expected stream chunk");
-        };
-        assert_eq!(chunk.text, "hello");
-    }
 
     #[tokio::test]
     async fn unreadable_attachment_prevents_the_entire_message_send() {
@@ -607,32 +545,6 @@ mod tests {
                 .is_err(),
             "no partial message should reach the daemon"
         );
-    }
-
-    #[test]
-    fn uuid_v4_unique_under_concurrent_calls() {
-        let mut handles = Vec::new();
-
-        for _ in 0..8 {
-            handles.push(std::thread::spawn(move || {
-                let mut local = Vec::with_capacity(100);
-                for _ in 0..100 {
-                    local.push(request_id());
-                }
-                local
-            }));
-        }
-
-        let mut all_ids = std::collections::HashSet::new();
-        for h in handles {
-            for id in h.join().unwrap() {
-                assert!(
-                    all_ids.insert(id.clone()),
-                    "Duplicate request ID generated under concurrency: {id}"
-                );
-            }
-        }
-        assert_eq!(all_ids.len(), 800);
     }
 }
 

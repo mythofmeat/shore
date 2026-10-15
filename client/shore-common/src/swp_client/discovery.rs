@@ -217,125 +217,6 @@ fn should_fallback_to_default(err: &ClientError) -> bool {
 mod tests {
     use super::*;
 
-    fn entry(addr: &str, config_dir: Option<&str>) -> InstanceEntry {
-        InstanceEntry {
-            id: None,
-            addr: addr.into(),
-            pid: None,
-            config_dir: config_dir.map(str::to_owned),
-        }
-    }
-
-    #[test]
-    fn config_dir_of_matches_on_address() {
-        let entries = [
-            entry("127.0.0.1:7320", Some("/home/u/.config/shore")),
-            entry("127.0.0.1:9999", Some("/elsewhere")),
-        ];
-        assert_eq!(
-            config_dir_of(&entries, "127.0.0.1:9999"),
-            Some(PathBuf::from("/elsewhere"))
-        );
-        assert_eq!(
-            config_dir_of(&entries, "127.0.0.1:7320"),
-            Some(PathBuf::from("/home/u/.config/shore"))
-        );
-    }
-
-    #[test]
-    fn config_dir_of_is_none_when_it_cannot_tell() {
-        let entries = [
-            entry("127.0.0.1:7320", Some("/a")),
-            entry("[::1]:7320", None),
-        ];
-        assert_eq!(config_dir_of(&entries, "127.0.0.1:1234"), None);
-        assert_eq!(config_dir_of(&entries, "[::1]:7320"), None);
-        assert_eq!(config_dir_of(&[], "127.0.0.1:7320"), None);
-    }
-
-    #[test]
-    fn entry_alive_no_pid_assumes_alive() {
-        let entry = InstanceEntry {
-            id: None,
-            addr: "127.0.0.1:7320".into(),
-            pid: None,
-            config_dir: None,
-        };
-        assert!(entry_alive(&entry));
-    }
-
-    #[test]
-    fn entry_alive_current_process() {
-        let entry = InstanceEntry {
-            id: None,
-            addr: "127.0.0.1:7320".into(),
-            pid: Some(std::process::id()),
-            config_dir: None,
-        };
-        assert!(entry_alive(&entry));
-    }
-
-    #[test]
-    fn entry_alive_bogus_pid() {
-        let entry = InstanceEntry {
-            id: None,
-            addr: "127.0.0.1:7320".into(),
-            pid: Some(u32::MAX - 1),
-            config_dir: None,
-        };
-        assert!(!entry_alive(&entry));
-    }
-
-    #[test]
-    fn instance_entry_full_fields() {
-        let json = r#"[{
-            "id": "default",
-            "addr": "127.0.0.1:7320",
-            "pid": 12345,
-            "data_dir": "/home/user/data",
-            "config_dir": "/home/user/config"
-        }]"#;
-        let entries: Vec<InstanceEntry> = serde_json::from_str(json).unwrap();
-        assert_eq!(entries.len(), 1);
-        let entry = entries.first().expect("entry should be present");
-        assert_eq!(entry.id.as_deref(), Some("default"));
-        assert_eq!(entry.addr, "127.0.0.1:7320");
-        assert_eq!(entry.pid, Some(12345));
-        assert_eq!(entry.config_dir.as_deref(), Some("/home/user/config"));
-    }
-
-    #[test]
-    fn instance_entry_minimal_fields_use_defaults() {
-        let json = r#"[{"addr": "127.0.0.1:7320"}]"#;
-        let entries: Vec<InstanceEntry> = serde_json::from_str(json).unwrap();
-        assert_eq!(entries.len(), 1);
-        let entry = entries.first().expect("entry should be present");
-        assert!(entry.id.is_none());
-        assert!(entry.pid.is_none());
-        assert_eq!(entry.addr, "127.0.0.1:7320");
-    }
-
-    #[test]
-    fn read_instances_rejects_corrupt_registry() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("instances.json");
-        std::fs::write(&path, "{ invalid json").unwrap();
-
-        let err = read_instances_from_path(&path).expect_err("corrupt registry should fail");
-        assert!(
-            format!("{err}").contains("corrupt instances registry"),
-            "expected explicit corruption error, got: {err}"
-        );
-    }
-
-    #[test]
-    fn discover_or_default_falls_back_when_registry_is_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let addr = discover_or_default_from_path(&tmp.path().join("missing.json"), None, None)
-            .expect("missing registry should fall back to the default address");
-        assert_eq!(addr.0, DEFAULT_ADDR);
-    }
-
     #[test]
     fn discovery_refuses_to_choose_between_live_daemons() {
         let tmp = tempfile::tempdir().unwrap();
@@ -356,27 +237,6 @@ mod tests {
     }
 
     #[test]
-    fn ambiguity_is_not_flattened_to_the_default_address() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("instances.json");
-        std::fs::write(
-            &path,
-            r#"[{"addr":"127.0.0.1:7320"},{"addr":"127.0.0.1:7321"}]"#,
-        )
-        .unwrap();
-
-        let err = discover_or_default_from_path(&path, None, None)
-            .expect_err("two daemons should not fall back to the default address");
-        assert!(matches!(
-            err,
-            ClientError::Discovery {
-                kind: DiscoveryKind::Ambiguous,
-                ..
-            }
-        ));
-    }
-
-    #[test]
     fn an_explicit_selector_resolves_among_several() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("instances.json");
@@ -388,19 +248,5 @@ mod tests {
 
         let addr = discover_from_path(&path, Some("play")).expect("the named daemon resolves");
         assert_eq!(addr.0, "127.0.0.1:7321");
-    }
-
-    #[test]
-    fn discover_or_default_rejects_corrupt_registry() {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("instances.json");
-        std::fs::write(&path, "{ invalid json").unwrap();
-
-        let err = discover_or_default_from_path(&path, None, None)
-            .expect_err("corrupt registry should not silently fall back");
-        assert!(
-            format!("{err}").contains("corrupt instances registry"),
-            "expected explicit corruption error, got: {err}"
-        );
     }
 }

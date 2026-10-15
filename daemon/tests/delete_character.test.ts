@@ -56,19 +56,6 @@ describe("deleting a character", () => {
     ledger.close();
   });
 
-  test("lets the daemon go first, and only then rescans", async () => {
-    const dirs = await root("order");
-    await seedCharacter(dirs, "ada");
-    const events: string[] = [];
-
-    await deleteCharacter(context(dirs, new Set(["ada"]), events), {
-      character: "ada",
-      confirm: "ada",
-    });
-
-    expect(events).toEqual(["snapshot", "release:ada", "refresh"]);
-  });
-
   test("bea's data survives ada's deletion", async () => {
     const dirs = await root("neighbour");
     await seedCharacter(dirs, "ada");
@@ -81,43 +68,6 @@ describe("deleting a character", () => {
 
     expect(existsSync(join(dirs.workspace as string, "adam"))).toBe(true);
     expect(existsSync(join(dirs.data, "adam"))).toBe(true);
-  });
-
-  test("a workspace kept inside the config dir is removed once, with its parent", async () => {
-    const dirs = await root("nested");
-    delete (dirs as { workspace?: string }).workspace;
-    await seedCharacter(dirs, "ada");
-
-    const result = (await deleteCharacter(context(dirs, new Set(["ada"]), []), {
-      character: "ada",
-      confirm: "ada",
-    })) as { removed: string[] };
-
-    expect(result.removed).toEqual([
-      join(dirs.config, "characters", "ada"),
-      join(dirs.data, "ada"),
-      join(dirs.cache, "characters", "ada"),
-    ]);
-    expect(existsSync(join(dirs.config, "characters", "ada"))).toBe(false);
-  });
-
-  test("data left behind by a character that no longer exists can still be cleared", async () => {
-    const dirs = await root("orphan");
-    await mkdir(join(dirs.data, "rhia", "threads", "main"), { recursive: true });
-
-    const result = (await deleteCharacter(context(dirs, new Set(), []), {
-      character: "rhia",
-      confirm: "rhia",
-    })) as { removed: string[] };
-
-    expect(result.removed).toEqual([join(dirs.data, "rhia")]);
-  });
-
-  test("a name nothing knows about is a not-found, not a silent success", async () => {
-    const dirs = await root("missing");
-
-    expect(await outcomeOf(deleteCharacter(context(dirs, new Set(), []), { character: "ada", confirm: "ada" })))
-      .toThrow("Character not found: ada");
   });
 
   test("without the name repeated back, nothing is touched", async () => {

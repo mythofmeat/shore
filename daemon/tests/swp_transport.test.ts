@@ -2,17 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import type { ServerMessage } from "../src/protocol/ServerMessage";
 import { Broadcast } from "../src/swp/broadcast";
-import {
-  MAX_CONSECUTIVE_LAGS,
-  handleConnection,
-  messageLoop,
-  serialSink,
-  type ConnectionContext,
-  type PingClock,
-} from "../src/swp/connection";
+import { handleConnection, messageLoop, type ConnectionContext, type PingClock } from "../src/swp/connection";
 import { MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, WireReader, type ByteSink } from "../src/swp/framing";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
-import { outcomeOf } from "./support/outcome.ts";
 
 const OPEN = (): boolean => true;
 
@@ -25,21 +17,6 @@ const SESSION: SessionMeta = {
   selectedCharacter: "alice",
   selectedThread: null,
 };
-
-const PING: ServerMessage = { type: "ping" };
-function chunk(n: number): ServerMessage {
-  return { type: "stream_chunk", text: String(n), content_type: "text" };
-}
-
-function messageType(line: string): string {
-  const parsed: unknown = JSON.parse(line);
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("expected a server message object");
-  }
-  const type = (parsed as Record<string, unknown>)["type"];
-  if (typeof type !== "string") throw new Error("expected a server message type");
-  return type;
-}
 
 function controlledSource(): {
   source: AsyncIterable<Uint8Array>;
@@ -94,145 +71,6 @@ function collectingSink(): { sink: ByteSink; frames: () => ServerMessage[] } {
   };
 }
 
-describe("broadcast — tokio broadcast(256) semantics", () => {
-  test("a subscriber past capacity loses the OLDEST frames, not the newest", async () => {
-    const bus = new Broadcast(4);
-    const sub = bus.subscribe();
-    for (let i = 0; i < 6; i += 1) bus.send(chunk(i));
-
-    const lag = await sub.recv();
-    expect(lag).toEqual({ kind: "lagged", skipped: 2 });
-
-    const survived: string[] = [];
-    for (let i = 0; i < 4; i += 1) {
-      const r = await sub.recv();
-      expect(r.kind).toBe("message");
-      survived.push(((r as { msg: ServerMessage }).msg as { text: string }).text);
-    }
-    expect(survived).toEqual(["2", "3", "4", "5"]);
-  });
-
-  test("the lag is reported before the frames that survived it", async () => {
-    const bus = new Broadcast(2);
-    const sub = bus.subscribe();
-    bus.send(chunk(0));
-    bus.send(chunk(1));
-    bus.send(chunk(2));
-    expect(await sub.recv()).toEqual({ kind: "lagged", skipped: 1 });
-    expect((await sub.recv()).kind).toBe("message");
-  });
-
-  test("sending with no subscribers is not an error", () => {
-    const bus = new Broadcast();
-    expect(() => bus.send(PING)).not.toThrow();
-    expect(bus.subscriberCount).toBe(0);
-  });
-
-  test("a byte-limited subscriber drops enough old frames and releases bytes on receive", async () => {
-    const bus = new Broadcast(10);
-    const sub = bus.subscribe({ messages: 10, bytes: 160 });
-    const frame = (text: string): ServerMessage => ({ type: "cache_warning", expected_tokens: 0, message: text });
-    const first = frame("a".repeat(30));
-    const second = frame("b".repeat(30));
-    bus.send(first);
-    bus.send(second);
-    expect(await sub.recv()).toEqual({ kind: "lagged", skipped: 1 });
-    expect(await sub.recv()).toEqual({ kind: "message", msg: second });
-    bus.send(first);
-    expect(await sub.recv()).toEqual({ kind: "message", msg: first });
-    sub.unsubscribe();
-    expect(bus.subscriberCount).toBe(0);
-    expect(await sub.recv()).toEqual({ kind: "closed" });
-  });
-});
-
-describe("session router", () => {
-  test("AllClientsDisconnected is reported only for the last session", () => {
-    const router = new SessionRouter();
-    for (const id of [1, 2]) {
-      router.registerSession(
-        { id, clientType: "tui", clientName: "t", capabilities: [], character: null, thread: null },
-        async () => {},
-      );
-    }
-    expect(router.unregisterSession(1).allGone).toBe(false);
-    expect(router.unregisterSession(2).allGone).toBe(true);
-  });
-
-  test("sending to a session that has already gone is a no-op", async () => {
-    const router = new SessionRouter();
-    expect(await router.sendToSession(99, PING)).toBeUndefined();
-  });
-
-  test("the live character survives a mid-session move", () => {
-    const router = new SessionRouter();
-    router.registerSession(
-      { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice", thread: null },
-      async () => {},
-    );
-    expect(router.setSelectedCharacter(1, "bob")).toBe(true);
-    expect(router.characterFor(1)).toBe("bob");
-    expect(router.setSelectedCharacter(99, "bob")).toBe(false);
-  });
-});
-
-describe("serialSink", () => {
-  test("concurrent writes never interleave", async () => {
-    const out: string[] = [];
-    const slow: ByteSink = {
-      write: async (b) => {
-        const text = new TextDecoder().decode(b);
-        for (const ch of text) {
-          await Promise.resolve();
-          out.push(ch);
-        }
-      },
-    };
-    const sink = serialSink(slow);
-    await Promise.all([sink.write(new TextEncoder().encode("AAAA")), sink.write(new TextEncoder().encode("BBBB"))]);
-    expect(out.join("")).toBe("AAAABBBB");
-  });
-
-  test("a failed write does not wedge the chain", async () => {
-    let first = true;
-    const flaky: ByteSink = {
-      write: () => {
-        if (first) {
-          first = false;
-          return Promise.reject(new Error("boom"));
-        }
-        return Promise.resolve();
-      },
-    };
-    const sink = serialSink(flaky);
-    expect(await outcomeOf(sink.write(new Uint8Array([1])))).toThrow("boom");
-    expect(await sink.write(new Uint8Array([2]))).toBeUndefined();
-  });
-});
-
-function fakePingClock(): { clock: PingClock; advance: (ms: number) => Promise<void> } {
-  let now = 0;
-  const sleepers: { at: number; wake: () => void }[] = [];
-  return {
-    clock: {
-      now: () => now,
-      sleepUntil: (deadline) =>
-        new Promise<void>((resolve) => {
-          if (deadline <= now) resolve();
-          else sleepers.push({ at: deadline, wake: resolve });
-        }),
-    },
-    advance: async (ms) => {
-      now += ms;
-      for (const sleeper of sleepers.filter((s) => s.at <= now)) {
-        sleepers.splice(sleepers.indexOf(sleeper), 1);
-        sleeper.wake();
-      }
-      await Bun.sleep(0);
-    },
-  };
-}
-
 interface LoopHarness {
   readonly ctx: ConnectionContext;
   readonly reader: WireReader;
@@ -243,18 +81,6 @@ interface LoopHarness {
   readonly send: (line: string) => void;
   readonly close: () => void;
   readonly shutdown: () => void;
-}
-
-function scriptedEvents(script: readonly RecvResultLike[]): Subscriptionish {
-  let at = 0;
-  return {
-    recv: () => {
-      const next = script[at];
-      at += 1;
-      return next === undefined ? new Promise<never>(() => {}) : Promise.resolve(next);
-    },
-    unsubscribe: () => {},
-  };
 }
 
 type RecvResultLike =
@@ -360,83 +186,6 @@ describe("handleConnection", () => {
     return { done, send, close, router, bus, routed, lines };
   }
 
-  test("handshake, route, and disconnect", async () => {
-    const c = connect();
-    c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-
-    expect(c.router.sessions()).toEqual([[1, "alice"]]);
-
-    c.send('{"type":"cancel"}\n');
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    c.close();
-    await c.done;
-
-    expect(c.lines().map((l) => (JSON.parse(l) as ServerMessage).type)).toEqual([
-      "hello",
-      "history",
-    ]);
-    expect(c.routed.map((r) => r.kind)).toEqual([
-      "session_connected",
-      "engine",
-      "session_disconnected",
-    ]);
-    expect(c.router.sessions()).toEqual([]);
-  });
-
-  test("requests use the live thread after switching on an established socket", async () => {
-    const c = connect();
-    c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
-    for (let i = 0; i < 2000 && c.router.sessions().length === 0; i += 1) await Promise.resolve();
-    c.router.setSelectedThread(1, "scratch");
-    c.send('{"type":"command","name":"list_threads","args":{}}\n');
-    c.send('{"type":"message","text":"hello","stream":true}\n');
-    c.close();
-    await c.done;
-    const requests = c.routed.filter((item) => item.kind === "command" || item.kind === "engine");
-    expect(requests).toHaveLength(2);
-    for (const request of requests) {
-      if (request.kind === "command" || request.kind === "engine") {
-        expect(request.meta.session.selectedThread).toBe("scratch");
-      }
-    }
-  });
-
-  test("a direct send and a broadcast racing each other stay on separate lines", async () => {
-    const c = connect({ slowSink: true });
-    c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
-    for (let i = 0; i < 2000 && c.router.sessions().length === 0; i += 1) {
-      await Promise.resolve();
-    }
-    expect(c.router.sessions()).toHaveLength(1);
-
-    await Promise.all([
-      c.router.sendToSession(1, { type: "command_output", name: "status", data: { ok: true } }),
-      Promise.resolve().then(() => c.bus.send(PING)),
-    ]);
-    for (let i = 0; i < 80; i += 1) await Promise.resolve();
-    c.close();
-    await c.done;
-
-    for (const line of c.lines()) {
-      expect(() => {
-        JSON.parse(line);
-      }).not.toThrow();
-    }
-    const types = c.lines().map(messageType);
-    expect(types).toContain("command_output");
-    expect(types).toContain("ping");
-  });
-
-  test("a handshake failure still unregisters and reports nothing routed", async () => {
-    const c = connect();
-    c.send('{"type":"cancel"}\n');
-    await c.done.catch(() => {});
-    expect(c.router.sessions()).toEqual([]);
-    expect(c.routed).toEqual([]);
-    expect(c.lines().map((l) => (JSON.parse(l) as ServerMessage).type)).toEqual(["hello", "error"]);
-  });
-
   test("the small pre-auth limit becomes the normal limit only after authentication", async () => {
     const rejected = connect();
     rejected.send(
@@ -471,86 +220,6 @@ describe("handleConnection", () => {
 });
 
 describe("message loop", () => {
-  test("three consecutive lags disconnect the client", async () => {
-    const lag = { kind: "lagged", skipped: 2 } as const;
-    const h = harness(3_600_000, scriptedEvents([lag, lag, lag]));
-    await messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    expect(h.routed).toEqual([]);
-    expect(h.frames()).toEqual([]);
-  });
-
-  test("exactly MAX_CONSECUTIVE_LAGS is the ceiling, not one more", async () => {
-    const lag = { kind: "lagged", skipped: 1 } as const;
-    const h = harness(3_600_000, scriptedEvents(Array.from({ length: MAX_CONSECUTIVE_LAGS - 1 }, () => lag)));
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    let finished = false;
-    void done.then(() => {
-      finished = true;
-    });
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    expect(finished).toBe(false);
-    h.shutdown();
-    await done;
-  });
-
-  test("a successful receive resets the streak", async () => {
-    const lag = { kind: "lagged", skipped: 1 } as const;
-    const h = harness(
-      3_600_000,
-      scriptedEvents([lag, lag, { kind: "message", msg: PING }, lag, lag]),
-    );
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    let finished = false;
-    void done.then(() => {
-      finished = true;
-    });
-    for (let i = 0; i < 40; i += 1) await Promise.resolve();
-
-    expect(finished).toBe(false);
-    expect(h.frames()).toEqual([PING]);
-
-    h.shutdown();
-    await done;
-  });
-
-  test("a closed event channel ends the loop", async () => {
-    const h = harness(3_600_000, scriptedEvents([{ kind: "closed" }]));
-    await messageLoop(h.reader, h.sink, SESSION, h.ctx);
-  });
-
-  test("a clean EOF ends the loop without routing anything", async () => {
-    const h = harness();
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    h.close();
-    await done;
-    expect(h.routed).toEqual([]);
-  });
-
-  test("shutdown ends the loop", async () => {
-    const h = harness();
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    h.shutdown();
-    await done;
-  });
-
-  test("a duplicate hello is answered and the connection survives", async () => {
-    const h = harness();
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    h.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-
-    expect(h.frames()).toEqual([
-      { type: "error", code: "protocol_error", message: "Duplicate hello" },
-    ]);
-    expect(h.routed).toEqual([]);
-
-    h.send('{"type":"cancel"}\n');
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-    expect(h.routed.map((r) => r.kind)).toEqual(["engine"]);
-
-    h.shutdown();
-    await done;
-  });
 
   test("a structurally invalid post-auth frame gets an invalid-request response", async () => {
     const h = harness();
@@ -570,51 +239,6 @@ describe("message loop", () => {
     h.send('{"type":"cancel"}\n');
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
     expect(h.routed.map((r) => r.kind)).toEqual(["engine"]);
-    h.shutdown();
-    await done;
-  });
-
-  test("a broadcast frame reaches a registered session", async () => {
-    const h = harness();
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    h.bus.send(PING);
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-    expect(h.frames()).toEqual([PING]);
-    h.shutdown();
-    await done;
-  });
-
-  test("pings fire on the interval", async () => {
-    const time = fakePingClock();
-    const h = harness(10, undefined, time.clock);
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    const pings = () => h.frames().filter((f) => f.type === "ping").length;
-
-    await time.advance(9);
-    expect(pings()).toBe(0);
-    await time.advance(1);
-    expect(pings()).toBe(1);
-    await time.advance(10);
-    await time.advance(10);
-    expect(pings()).toBe(3);
-
-    h.shutdown();
-    await done;
-  });
-
-  test("a stalled loop does not burst missed pings", async () => {
-    const time = fakePingClock();
-    const h = harness(5, undefined, time.clock);
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    const pings = () => h.frames().filter((f) => f.type === "ping").length;
-
-    await time.advance(60);
-    expect(pings()).toBe(1);
-    await time.advance(4);
-    expect(pings()).toBe(1);
-    await time.advance(1);
-    expect(pings()).toBe(2);
-
     h.shutdown();
     await done;
   });

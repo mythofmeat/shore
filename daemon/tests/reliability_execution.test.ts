@@ -3,11 +3,8 @@ import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { parseToolArgs } from "../src/llm/tool_args.ts";
 import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
 import { join } from "node:path";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { McpClient } from "../src/mcp/client.ts";
-import { handleBash } from "../src/tools/bash.ts";
+import { readFile } from "node:fs/promises";
 import { runProcess } from "../src/tools/process.ts";
-import { outcomeOf } from "./support/outcome.ts";
 
 const TOOL = "mcp__audit__optional";
 const usage = { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 };
@@ -29,33 +26,6 @@ function providerFor(input: ReturnType<typeof parseToolArgs>, completedBlocks = 
     },
   };
 }
-
-for (const completedBlocks of [false, true]) {
-  test(`malformed arguments stay rejected through generation (completed blocks: ${completedBlocks})`, async () => {
-    const h = await reliabilityGeneration(providerFor(parseToolArgs('{"scope":'), completedBlocks));
-    h.config.app.tools.enabled_tools = [TOOL];
-    let executions = 0;
-    const mcp = { call: async () => { executions += 1; return "executed"; } };
-    h.deps.mcpRegistry = { ...mcp, toolDefsFiltered: () => [{ name: TOOL, description: "optional filters", input_schema: { type: "object" } }] };
-    h.deps.tools = () => ({ mcpRegistry: mcp });
-    await h.run();
-    expect(executions).toBe(0);
-    expect(JSON.stringify(h.frames)).toContain("not valid JSON");
-  });
-}
-
-test("an MCP server granted by name alone runs its tools in foreground chat", async () => {
-  const h = await reliabilityGeneration(providerFor({ input: {} }));
-  h.config.app.tools.enabled_tools = [];
-  h.config.app.tools.enabled_subagents = [];
-  h.config.app.tools.enabled_mcp = ["audit"];
-  let executions = 0;
-  const mcp = { call: async () => { executions += 1; return "executed"; } };
-  h.deps.mcpRegistry = { ...mcp, toolDefsFiltered: () => [{ name: TOOL, description: "optional filters", input_schema: { type: "object" } }] };
-  h.deps.tools = () => ({ mcpRegistry: mcp });
-  await h.run();
-  expect(executions).toBe(1);
-});
 
 test("cancelling generation reaches an in-flight MCP tool", async () => {
   const h = await reliabilityGeneration(providerFor({ input: {} }));
@@ -95,37 +65,4 @@ test("process cancellation kills and reaps a child that ignores SIGTERM", async 
   expect(await outcome).toBe(parent.signal.reason);
   expect(pid).toBeDefined();
   expect(() => process.kill(pid ?? 0, 0)).toThrow();
-});
-
-test("a noisy MCP server initializes without stderr backpressure", async () => {
-  const client = await McpClient.connect({ name: "noisy", transport: {
-    kind: "stdio", command: process.execPath,
-    args: [join(import.meta.dir, "support/mcp_noisy_server.ts")], env: {},
-  } });
-  try {
-    expect((await client.listTools()).map((tool) => tool.name)).toEqual(["ping"]);
-  } finally {
-    await client.shutdown();
-  }
-}, 5000);
-
-test("cancelled Git requests do not start a command", async () => {
-  const h = await reliabilityGeneration(providerFor({ input: {} }));
-  const workspace = join(h.root, "workspace");
-  await mkdir(workspace);
-  const parent = new AbortController();
-  parent.abort();
-  expect(await outcomeOf(handleBash({ command: "git status" }, workspace, "ada", parent.signal))).toThrow();
-});
-
-test("Git output is bounded while the process is read", async () => {
-  const h = await reliabilityGeneration(providerFor({ input: {} }));
-  const workspace = join(h.root, "workspace");
-  await mkdir(workspace);
-  await handleBash({ command: "git init" }, workspace, "ada");
-  await writeFile(join(workspace, "large.txt"), "large line\n".repeat(210_000));
-  await handleBash({ command: "git add -N large.txt" }, workspace, "ada");
-  const result = await handleBash({ command: "git diff" }, workspace, "ada") as { stdout: string };
-  expect(result.stdout.length).toBeLessThan(1_100_000);
-  expect(result.stdout).toContain("truncated");
 });

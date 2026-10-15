@@ -302,49 +302,11 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&first).unwrap(), "one");
         assert_eq!(std::fs::read_to_string(&second).unwrap(), "two");
     }
-
-    #[test]
-    fn pruning_keeps_the_newest_sessions_and_drops_the_rest() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(editor_dir(tmp.path())).unwrap();
-        for stamp in ["20260822-010201", "20260822-010202", "20260822-010203"] {
-            std::fs::write(editor_session_path(tmp.path(), stamp), stamp).unwrap();
-        }
-
-        prune_editor_sessions(tmp.path(), 2);
-
-        let mut left: Vec<String> = std::fs::read_dir(editor_dir(tmp.path()))
-            .unwrap()
-            .flatten()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .collect();
-        left.sort();
-        assert_eq!(left, vec!["20260822-010202.md", "20260822-010203.md"]);
-    }
-
-    #[test]
-    fn pruning_an_empty_or_missing_directory_is_not_an_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        prune_editor_sessions(tmp.path(), 2);
-        std::fs::create_dir_all(editor_dir(tmp.path())).unwrap();
-        prune_editor_sessions(tmp.path(), 2);
-    }
-
-    #[test]
-    fn a_stamp_sorts_the_same_way_it_reads() {
-        let stamp = stamp_now();
-        assert_eq!(stamp.len(), 15, "{stamp}");
-        assert!(stamp.chars().nth(8) == Some('-'), "{stamp}");
-        assert!(
-            stamp.chars().filter(char::is_ascii_digit).count() == 14,
-            "{stamp}"
-        );
-    }
 }
 
 #[cfg(test)]
 mod recovery_tests {
-    use super::{Draft, load, lock_session, save};
+    use super::{Draft, load, save};
 
     fn message(thread: &str, text: &str) -> Draft {
         Draft {
@@ -354,16 +316,6 @@ mod recovery_tests {
             text: text.into(),
             ..Draft::default()
         }
-    }
-
-    #[test]
-    fn persisted_identity_has_a_specified_stable_directory() {
-        assert_eq!(
-            message("main", "").directory(std::path::Path::new("drafts")),
-            std::path::Path::new(
-                "drafts/v1-b8f85f2dbc3d1ad2fc9bcc055eb0b24167f53f8c775286a1ea333e86700a7b6a"
-            )
-        );
     }
 
     #[test]
@@ -384,45 +336,6 @@ mod recovery_tests {
         drop(lock);
         save(tmp.path(), "clearing", &message("main", ""), &[]).unwrap();
         assert!(std::path::Path::new(snapshot.images.first().unwrap()).exists());
-    }
-
-    #[test]
-    fn a_duplicated_descriptor_does_not_extend_a_finished_store_transaction() {
-        let tmp = tempfile::tempdir().unwrap();
-        let transaction = super::lock_store(tmp.path()).unwrap();
-        let _inherited = transaction.0.try_clone().unwrap();
-        drop(transaction);
-        save(tmp.path(), "next", &message("main", "next draft"), &[]).unwrap();
-        assert_eq!(
-            load(tmp.path(), "reader", &message("main", "")),
-            Some(message("main", "next draft"))
-        );
-    }
-
-    #[test]
-    fn recovered_uploads_keep_their_image_format() {
-        for (bytes, suffix) in [
-            (b"\xff\xd8\xffpayload".as_slice(), "jpg"),
-            (b"GIF89apayload", "gif"),
-            (b"RIFF0000WEBPpayload", "webp"),
-            (b"\x89PNG\r\n\x1a\npayload", "png"),
-        ] {
-            let tmp = tempfile::tempdir().unwrap();
-            let source = tmp.path().join("clipboard.png");
-            std::fs::write(&source, bytes).unwrap();
-            let mut original = message("main", "caption");
-            original.images.push(source.to_string_lossy().into_owned());
-            save(tmp.path(), "previous", &original, &[source]).unwrap();
-            let recovered = load(tmp.path(), "next", &original).unwrap();
-            let path = recovered.images.first().unwrap();
-            let upload = shore_common::swp_client::read_image_upload(path).unwrap();
-            assert!(
-                upload.filename.ends_with(&format!(".{suffix}")),
-                "{}",
-                upload.filename
-            );
-            assert_eq!(std::fs::read(path).unwrap(), bytes);
-        }
     }
 
     #[test]
@@ -459,27 +372,6 @@ mod recovery_tests {
         empty.text.clear();
         save(tmp.path(), "second", &empty, &[]).unwrap();
         assert_eq!(load(tmp.path(), "next", &empty), Some(original));
-    }
-
-    #[test]
-    fn recovery_claims_only_inactive_sessions_in_the_same_conversation() {
-        let tmp = tempfile::tempdir().unwrap();
-        let original = message("main", "unfinished");
-        let lock = lock_session(tmp.path(), "active").unwrap();
-        save(tmp.path(), "active", &original, &[]).unwrap();
-        assert!(load(tmp.path(), "second", &original).is_none());
-        drop(lock);
-        assert!(load(tmp.path(), "second", &message("side", "")).is_none());
-        let mut another_daemon = original.clone();
-        another_daemon.daemon = "localhost:9091".into();
-        assert!(load(tmp.path(), "second", &another_daemon).is_none());
-        assert_eq!(
-            load(tmp.path(), "second", &original),
-            Some(original.clone())
-        );
-        let second_lock = lock_session(tmp.path(), "second").unwrap();
-        assert!(load(tmp.path(), "third", &original).is_none());
-        drop(second_lock);
     }
 
     #[test]

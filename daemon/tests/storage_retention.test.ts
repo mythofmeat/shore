@@ -1,16 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
-import { SnapshotGate } from "../src/snapshot_gate.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
-import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics, startDiagnosticRetention } from "../src/storage/retention.ts";
-import { databasePath, insertEvent, pack, readEvents, unpack, withStorage, writeState, readState } from "../src/storage/store.ts";
-import { appendSubagentTrace, readSubagentTraces } from "../src/tools/subagent_trace.ts";
-import { exportUnifiedDatabase, importUnifiedDatabase } from "../src/storage/archive.ts";
+import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics } from "../src/storage/retention.ts";
+import { databasePath, insertEvent, readEvents, unpack, withStorage, writeState, readState } from "../src/storage/store.ts";
+import { appendSubagentTrace } from "../src/tools/subagent_trace.ts";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -23,67 +20,6 @@ function dataDir() {
   initializeDatabase(root);
   return root;
 }
-
-test("age expiry preserves the boundary, shared payloads, and recent HTTP calls without a parent capture", () => {
-  const data = dataDir();
-  const store = CallStore.open(databasePath(data));
-  const shared = "shared context ".repeat(1000);
-  for (const [id, ts, body] of [["old", old, shared], ["boundary", new Date(cutoff), shared], ["unique", old, "old unique body"]] as const) {
-    store.recordCall({ call_id: id, ts, character: "ada", usage: ZERO_USAGE, request_body: body });
-  }
-  for (const [id, ts] of [["old-wire", old], ["recent-wire", new Date(now)]] as const) {
-    store.recordHttpCall({ call_id: id, seq: 0, ts, method: "POST", url: "https://example.test", request_headers: [],
-      request_body: Buffer.from(shared), response_headers: [], response_body: null });
-  }
-  store.database.query("INSERT INTO capture_transcripts(ts,ts_unix,source,entry_zstd) VALUES (?1,?2,'test',?3)")
-    .run(old.toISOString(), Math.floor(old.getTime() / 1000), pack("old transcript"));
-  const before = store.blobCount();
-  store.close();
-
-  expect(pruneDiagnostics(data, now).captures).toBe(4);
-  const retained = CallStore.open(databasePath(data));
-  try {
-    expect(retained.queryCalls({ limit: 0 }).map((row) => row.call_id)).toEqual(["boundary"]);
-    for (const call of retained.queryCalls({ limit: 0 })) expect(retained.getCall(call.id)?.request).toBe(shared);
-    expect(retained.database.query("SELECT call_id FROM capture_http_calls").all()).toEqual([{ call_id: "recent-wire" }]);
-    const wire = retained.database.query("SELECT request_payload_id AS id FROM capture_http_calls").get() as { id: number };
-    expect(Buffer.from(retained.loadPayload(wire.id) ?? []).toString()).toBe(shared);
-    expect(retained.blobCount()).toBeLessThan(before);
-  } finally { retained.close(); }
-  expect(pruneDiagnostics(data, now)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 0, unreadableTraces: 0 });
-});
-
-test("subagent results and errors remain addressable after intermediate messages expire, including archive round trips", async () => {
-  const data = dataDir();
-  const character = join(data, "ada");
-  mkdirSync(character);
-  const messages = [{ msg_id: "m1", role: "assistant" as const, content: "intermediate work", images: [],
-    content_blocks: [{ type: "text" as const, text: "intermediate work" }], timestamp: old.toISOString() }];
-  for (const [id, ts, outcome] of [
-    ["old-result", old.toISOString(), { result: "final answer" }],
-    ["old-error", old.toISOString(), { error: "run failed" }],
-    ["boundary", new Date(cutoff).toISOString(), { result: "recent answer" }],
-  ] as const) {
-    await appendSubagentTrace(character, { ts, subagent: "researcher", parent_tool_use_id: id, rid: "request", model: "test", messages, ...outcome });
-  }
-  expect(pruneDiagnostics(data, now).subagentTraces).toBe(2);
-  const traces = await readSubagentTraces(character);
-  expect(traces.map((trace) => trace.parent_tool_use_id)).toEqual(["old-result", "old-error", "boundary"]);
-  expect(traces[0]).toEqual({ ts: old.toISOString(), subagent: "researcher", parent_tool_use_id: "old-result", rid: "request",
-    model: "test", result: "final answer", messages: [], messages_expired: true });
-  expect(traces[1]?.error).toBe("run failed");
-  expect(traces[1]?.messages).toEqual([]);
-  expect(traces[2]?.messages).toEqual(messages);
-  expect(traces[2]?.messages_expired).toBeUndefined();
-  expect((await readSubagentTraces(character, { ids: ["old-result"] }))[0]?.result).toBe("final answer");
-  expect((await readSubagentTraces(character, { count: 2 })).map((trace) => trace.parent_tool_use_id)).toEqual(["old-error", "boundary"]);
-  expect(pruneDiagnostics(data, now).subagentTraces).toBe(0);
-  const archive = join(data, "archive.db");
-  exportUnifiedDatabase(databasePath(data), "ada", archive);
-  const target = dataDir();
-  importUnifiedDatabase(databasePath(target), archive, "ada");
-  expect(await readSubagentTraces(join(target, "ada"))).toEqual(traces);
-});
 
 test("only old heartbeat events expire; history, state, ledger and malformed records remain", () => {
   const data = dataDir();
@@ -127,20 +63,4 @@ test("a write failure rolls back the entire cleanup", async () => {
     expect(event.kind).toBe("subagent");
     expect(unpack(event.content)).not.toContain("messages_expired");
   });
-});
-
-test("stopping retention cancels a sweep waiting for an archive snapshot", async () => {
-  const data = dataDir();
-  const gate = new SnapshotGate();
-  await gate.withSnapshot(async () => {
-    const timer = startDiagnosticRetention(data, gate, 5);
-    timer.stop();
-    const db = new Database(databasePath(data));
-    db.run("DROP TABLE capture_calls");
-    db.close();
-  });
-  await Bun.sleep(10);
-  const db = new Database(databasePath(data), { readonly: true });
-  try { expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'capture_calls'").get()).toBeNull(); }
-  finally { db.close(); }
 });

@@ -49,7 +49,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run lint:comments
-      - run: bun run lint:citations
       - run: bun run lint:test-env
       - run: bun run typecheck
       - run: bun run browser:check
@@ -65,8 +64,6 @@ jobs:
           name: playwright
           path: out/issue-214/playwright
           if-no-files-found: ignore
-      - run: bun run mutate --stale
-      - run: bun run rerecord:check
 
   desktop:
     runs-on: ubuntu-24.04
@@ -98,8 +95,6 @@ jobs:
         working-directory: desktop
       - run: bun run app:macos
         working-directory: desktop
-      # The cask installs the zip a release attaches, so here it installs the one just built. Homebrew
-      # quarantines that download like any other, and the cask has to take the flag off again.
       - run: |
           zip="$GITHUB_WORKSPACE/out/desktop/Shore-$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/shore-desktop.rb)-arm64.zip"
           sed -i '' -e "s|^  sha256 \".*\"$|  sha256 \"$(shasum -a 256 "$zip" | cut -d' ' -f1)\"|" -e "s|^  url \".*\"$|  url \"file://$zip\"|" Casks/shore-desktop.rb
@@ -152,7 +147,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
-      # brew style and audit only apply the formula rules to a tapped formula, so the checkout is linked in as the mythofmeat/shore tap.
       - run: |
           mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
           ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"

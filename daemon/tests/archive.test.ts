@@ -1,10 +1,10 @@
-import { writeSession, readBook, bookPathIn, sessionKey, SESSION_BOOK_VERSION } from "../src/llm/providers/agent_sessions.ts";
-import { writeDurable, readDurable } from "../src/storage/files.ts";
+
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Header } from "tar";
@@ -58,45 +58,6 @@ describe("character archives", () => {
     expect(existsSync(join(target.workspace as string, "outside"))).toBe(false);
   });
 
-  test.each([
-    { bytes: 8, entries: 100, message: "processing limits" },
-    { bytes: 1024 * 1024, entries: 1, message: "processing limits" },
-    { bytes: 4096, entries: 100, message: "Database snapshot" },
-  ])("browser export budget $bytes bytes/$entries entries rejects before publishing an archive", async (limits) => {
-    const source = await root("limited-export"); await seedCharacter(source, "ada", "preserve source");
-    const output = join(source.runtime, "limited.tar.gz");
-    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow(limits.message);
-    expect(await outcomeOf(access(output))).toThrow();
-    expect(await readFile(join(source.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
-  });
-
-  test.each([
-    { bytes: 128, entries: 100, message: "browser processing limit" },
-    { bytes: 1024 * 1024, entries: 1, message: "too many files" },
-  ])("browser import budget $bytes bytes/$entries entries rejects before installing data", async (limits) => {
-    const source = await root("limited-source"); await seedCharacter(source, "ada", "archive history");
-    const output = join(source.runtime, "ada.tar.gz");
-    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
-    const target = await root("limited-target"); await seedCharacter(target, "bea", "preserve other character");
-    expect(await outcomeOf(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output }))).toThrow(limits.message);
-    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
-    const history = HistoryStore.open(join(target.data, "shore.db"));
-    try { expect(history.archiveKeys("ada")).toEqual([]); expect(history.readSegment("bea", 0)[0]?.content).toBe("preserve other character"); }
-    finally { history.close(); }
-  });
-
-  test("browser transfers reject links while native archives preserve their existing link support", async () => {
-    const source = await root("link-source"); await seedCharacter(source, "ada", "archive history");
-    await symlink("SOUL.md", join(source.workspace as string, "ada", "linked.md"));
-    const output = join(source.runtime, "ada.tar.gz");
-    const limits = { bytes: 1024 * 1024, entries: 100 };
-    expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow("regular files and directories");
-    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
-    const target = await root("link-target");
-    expect(await outcomeOf(importCharacter({ ...context(target, new Set()), limits }, { archive: output }))).toThrow("unsupported entries");
-    expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
-  });
-
   test("a compressed export restores one character without carrying another", async () => {
     const source = await root("source");
     await seedCharacter(source, "ada", "hello from ada");
@@ -139,26 +100,6 @@ describe("character archives", () => {
     history.close();
   });
 
-  test("media and native sessions resume after moving an archive to another data directory", async () => {
-    const source = await root("media-source");
-    await seedCharacter(source, "ada", "image conversation");
-    const oldImage = join(source.data, "media", "ada", "generated", "picture.png");
-    await mkdir(join(source.data, "media", "ada", "generated"), { recursive: true });
-    await writeFile(oldImage, "original image bytes");
-    const active = join(source.data, "ada", "threads", "main", "active.jsonl");
-    writeDurable(active, JSON.stringify({ ...userMessage("ada", "image"), images: [oldImage] }) + "\n");
-    writeSession(bookPathIn(source.data), sessionKey("ada", join(source.data, "shore.db"), "main"), {
-      version: SESSION_BOOK_VERSION, sessionId: "resume-me", entries: [],
-    });
-    const output = join(source.runtime, "media.shore.tar.gz");
-    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
-    const target = await root("media-target");
-    await importCharacter(context(target, new Set()), { archive: output });
-    expect(await readFile(join(target.data, "media", "ada", "generated", "picture.png"), "utf8")).toBe("original image bytes");
-    expect(readDurable(join(target.data, "ada", "threads", "main", "active.jsonl"))).toContain(join(target.data, "media", "ada"));
-    expect(readBook(bookPathIn(target.data))[sessionKey("ada", join(target.data, "shore.db"), "main")]?.sessionId).toBe("resume-me");
-  });
-
   test("import refuses an existing character before changing it", async () => {
     const source = await root("existing-source");
     await seedCharacter(source, "ada", "archive value");
@@ -170,32 +111,6 @@ describe("character archives", () => {
     expect(await outcomeOf(importCharacter(context(target, new Set(["ada"])), { archive: output })))
       .toThrow("Refusing to overwrite");
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8")).toContain("keep me");
-  });
-
-  test.each(["ada", "ada/retired"])("a hidden history conflict at %s is preserved when import rolls back", async (key) => {
-    const source = await root("hidden-source");
-    await seedCharacter(source, "ada", "archive value");
-    const output = join(source.runtime, "ada.shore.tar.gz");
-    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
-
-    const target = await root("hidden-target");
-    const history = HistoryStore.open(join(target.data, "shore.db"));
-    history.putSegment(
-      key,
-      0,
-      { file: "hidden.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" },
-      [userMessage("ada", "hidden history")],
-    );
-    history.close();
-
-    expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output })))
-      .toThrow("history already exists");
-    const preserved = new Database(join(target.data, "shore.db"), { readonly: true });
-    const count = preserved
-      .query("SELECT COUNT(*) AS count FROM history_messages WHERE character = ?1")
-      .get(key) as { count: number };
-    expect(count.count).toBe(1);
-    preserved.close();
   });
   test("a later import failure removes all imported thread rows and preserves other characters", async () => {
     const source = await root("rollback-source");

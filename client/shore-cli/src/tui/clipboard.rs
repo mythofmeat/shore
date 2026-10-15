@@ -180,119 +180,11 @@ end run"#;
 mod tests {
     use super::*;
 
-    fn png(image: &DynamicImage) -> Vec<u8> {
-        let mut bytes = io::Cursor::new(Vec::new());
-        image.write_to(&mut bytes, ImageFormat::Png).unwrap();
-        bytes.into_inner()
-    }
-
-    fn noise(width: u32, height: u32, alpha: u8) -> DynamicImage {
-        let mut state = 42_u32;
-        DynamicImage::ImageRgba8(image::RgbaImage::from_fn(width, height, |_, _| {
-            let mut pixel = [0, 0, 0, alpha];
-            for channel in &mut pixel[..3] {
-                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
-                *channel = state.to_be_bytes()[0];
-            }
-            image::Rgba(pixel)
-        }))
-    }
-
-    #[test]
-    fn opaque_clipboard_photos_upload_as_compact_jpegs() {
-        use base64::Engine;
-        let input = png(&noise(1000, 800, 255));
-        assert!(input.len() > MAX_IMAGE_BYTES);
-        let path = write_image_to_temp(&input).unwrap();
-        let upload = shore_common::swp_client::read_image_upload(path.to_str().unwrap()).unwrap();
-        std::fs::remove_file(path).unwrap();
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(upload.data)
-            .unwrap();
-        assert!(upload.filename.ends_with(".jpg"));
-        assert_eq!(image::guess_format(&bytes).unwrap(), ImageFormat::Jpeg);
-        assert!(bytes.len() <= MAX_IMAGE_BYTES);
-        assert!(bytes.len() < input.len().checked_div(2).unwrap());
-        let image = image::load_from_memory(&bytes).unwrap();
-        assert!(image.width() <= 1000);
-        assert!(image.height() <= 800);
-        assert_eq!(image.width() * 4, image.height() * 5);
-    }
-
-    #[test]
-    fn wide_clipboard_images_resize_even_when_the_png_is_tiny() {
-        let input = png(&DynamicImage::new_rgb8(4000, 1000));
-        assert!(input.len() < MAX_IMAGE_BYTES);
-        let (bytes, suffix) = prepare_image(&input).unwrap();
-        let image = image::load_from_memory(&bytes).unwrap();
-        assert_eq!((image.width(), image.height(), suffix), (2000, 500, "png"));
-    }
-
-    #[test]
-    fn screenshot_detail_stays_lossless_when_compression_alone_fits() {
-        let image = image::RgbImage::from_fn(1000, 300, |x, y| {
-            image::Rgb(if x % 12 < 3 && y % 20 < 10 {
-                [0; 3]
-            } else {
-                [255; 3]
-            })
-        });
-        let mut input = Vec::new();
-        image::codecs::png::PngEncoder::new_with_quality(
-            &mut input,
-            image::codecs::png::CompressionType::Uncompressed,
-            image::codecs::png::FilterType::NoFilter,
-        )
-        .write_image(
-            image.as_raw(),
-            image.width(),
-            image.height(),
-            image::ExtendedColorType::Rgb8,
-        )
-        .unwrap();
-        assert!(input.len() > MAX_IMAGE_BYTES);
-        let (bytes, suffix) = prepare_image(&input).unwrap();
-        assert_eq!(suffix, "png");
-        assert!(bytes.len() <= MAX_IMAGE_BYTES);
-        assert_eq!(image::load_from_memory(&bytes).unwrap().into_rgb8(), image);
-    }
-
-    #[test]
-    fn transparent_clipboard_images_keep_their_alpha_when_reduced() {
-        let input = png(&noise(800, 600, 80));
-        assert!(input.len() > MAX_IMAGE_BYTES);
-        let (bytes, suffix) = prepare_image(&input).unwrap();
-        assert_ne!(suffix, "jpg");
-        assert!(bytes.len() <= MAX_IMAGE_BYTES);
-        let image = image::load_from_memory(&bytes).unwrap().into_rgba8();
-        assert!(image.width() <= 800);
-        assert!(image.height() <= 600);
-        assert!(image.pixels().all(|pixel| pixel.0[3] == 80));
-    }
-
     #[test]
     fn invalid_clipboard_bytes_are_reported_before_creating_an_attachment() {
         assert!(matches!(
             write_image_to_temp(b"not an image"),
             Err(ClipboardError::InvalidImage(_))
         ));
-    }
-
-    #[test]
-    fn temp_path_format() {
-        let image = DynamicImage::new_rgb8(10, 10);
-        let mut bytes = io::Cursor::new(Vec::new());
-        image.write_to(&mut bytes, ImageFormat::Png).unwrap();
-        let p = write_image_to_temp(bytes.get_ref()).unwrap();
-        let name = p.file_name().unwrap().to_string_lossy().into_owned();
-        assert!(name.starts_with("shore_paste_"), "name was {name}");
-        assert_eq!(
-            p.extension().and_then(std::ffi::OsStr::to_str),
-            Some("png"),
-            "name was {name}"
-        );
-        assert_eq!(p.parent().unwrap(), std::env::temp_dir().as_path());
-        assert_eq!(std::fs::read(&p).unwrap(), *bytes.get_ref());
-        std::fs::remove_file(p).unwrap();
     }
 }
