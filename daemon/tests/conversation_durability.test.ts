@@ -128,4 +128,18 @@ describe("the store takes a copy before it rewrites the file", () => {
     expect(await readFile(join(backupDirFor(path), required(backups[0])), "utf8")).toContain("before");
     expect(await readFile(path, "utf8")).toContain("after");
   });
+
+  test("the prior contents survive a deletion", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    writeDurable(path, `${line("m1", "keep me")}\n${line("m2", "doomed")}\n`);
+
+    const store = await MessageStore.load(path);
+    await store.deleteAll(["m2"]);
+
+    const backups = await readdir(backupDirFor(path));
+    expect(backups).toHaveLength(1);
+    expect(await readFile(join(backupDirFor(path), required(backups[0])), "utf8")).toContain("doomed");
+    expect(await readFile(path, "utf8")).not.toContain("doomed");
+  });
 });

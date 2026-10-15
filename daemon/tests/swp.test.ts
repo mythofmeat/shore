@@ -6,6 +6,7 @@ import { Broadcast } from "../src/swp/broadcast";
 import { handleConnection, messageLoop, type ConnectionContext, type PingClock } from "../src/swp/connection";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
 import { Server } from "../src/swp/server.ts";
+import { eventMatchesSession } from "../src/swp/routing.ts";
 import { MAX_TOTAL_ATTACHMENT_BYTES, AdmissionError, admitCapabilities, admitClientMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_CAPABILITIES } from "../src/swp/admission.ts";
 import { rejectionOf } from "./support/outcome.ts";
 
@@ -31,7 +32,8 @@ async function readAll(source: AsyncIterable<Uint8Array>, maxMessageSize?: numbe
       }
       out.push({ ok: msg });
     } catch (e) {
-      out.push({ err: e instanceof WireError ? e.message : String(e) });
+      if (!(e instanceof WireError)) throw e;
+      out.push({ err: e.message });
       return out;
     }
     if (out.length > 16) return out;
@@ -400,6 +402,68 @@ const message = <T,>(imageData: T[] = []) => ({
   image_data: imageData,
 });
 
+describe("what a client may send", () => {
+  const over = (limit: number) => "é".repeat(Math.floor(limit / 2) + 1);
+  const at = (limit: number) => "x".repeat(limit);
+  const hello = (capability: string) => ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [capability] });
+  const regen = (guidance: string) => ({ type: "regen", stream: true, guidance });
+  const withText = (text: string) => ({ ...message(), text });
+  const withImage = (path: string) => ({ ...message(), images: [path] });
+  const withFile = (filename: string) => message([upload(filename, "AQIDBA==")]);
+  const withMime = (mime_type: string) => message([{ ...upload("a.png", "AQIDBA=="), mime_type }]);
+
+  test.each([
+    ["message text", withText, 1024 * 1024],
+    ["image path", withImage, 4096],
+    ["capability", hello, 128],
+    ["regeneration guidance", regen, 1024 * 1024],
+    ["attachment filename", withFile, 255],
+    ["attachment mime type", withMime, 255],
+  ] as const)("%s is held to its byte limit, counted in bytes", (_name, build, limit) => {
+    expect(() => admitClientMessage(build(at(limit)))).not.toThrow();
+    expect(() => admitClientMessage(build(over(limit)))).toThrow(AdmissionError);
+  });
+
+  test("a message type the daemon does not know is refused", () => {
+    expect(() => admitClientMessage({ type: "shell", command: "rm -rf /" })).toThrow("Unknown client message type");
+  });
+
+  test("optional fields stay absent rather than arriving as something else", () => {
+    expect(admitClientMessage({ type: "regen", stream: false })).toEqual({ type: "regen", stream: false });
+    expect(admitClientMessage({ type: "regen", stream: false, guidance: "shorter" })).toEqual({ type: "regen", stream: false, guidance: "shorter" });
+    expect(admitClientMessage({ type: "command", name: "status" })).toEqual({ type: "command", name: "status", args: null });
+    expect(admitClientMessage({ type: "command", name: "log", args: { turns: 2 } })).toEqual({ type: "command", name: "log", args: { turns: 2 } });
+  });
+});
+
+describe("which events a session receives", () => {
+  const history = (character: string, thread: string | null) => ({ type: "history", selected_character: character, selected_thread: thread, messages: [], revision: 1 }) as unknown as ServerMessage;
+  const newMessage = (character: string, thread?: string) => ({ type: "new_message", character, ...(thread === undefined ? {} : { thread }), message: {} }) as unknown as ServerMessage;
+  const status = { type: "command_output", name: "status", success: true, data: null } as unknown as ServerMessage;
+
+  test("a conversation reaches only the sessions viewing that character and thread", () => {
+    expect(eventMatchesSession(history("ada", "main"), "ada", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(history("ada", "main"), "bea", true, false, "main")).toBe(false);
+    expect(eventMatchesSession(history("ada", "side"), "ada", true, false, "main")).toBe(false);
+    expect(eventMatchesSession(history("ada", null), "ada", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(history("ada", "side"), "ada", true, false, null)).toBe(true);
+    expect(eventMatchesSession(newMessage("ada"), "ada", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(newMessage("ada"), "ada", true, false, "side")).toBe(false);
+    expect(eventMatchesSession(newMessage("ada", "side"), "ada", true, false, "side")).toBe(true);
+    expect(eventMatchesSession(newMessage("bea", "main"), "ada", true, false, "main")).toBe(false);
+  });
+
+  test("an unregistered or characterless session hears only what everyone hears", () => {
+    expect(eventMatchesSession({ type: "ping" }, null, false)).toBe(true);
+    expect(eventMatchesSession(newMessage("ada"), "ada", false)).toBe(false);
+    expect(eventMatchesSession(newMessage("ada"), null, true)).toBe(false);
+    expect(eventMatchesSession(status, null, true)).toBe(false);
+    expect(eventMatchesSession(status, "ada", true)).toBe(true);
+    expect(eventMatchesSession(newMessage("bea"), null, true, true)).toBe(true);
+    expect(eventMatchesSession({ type: "request_finished", rid: "r", outcome: "completed" } as unknown as ServerMessage, "ada", true, true)).toBe(false);
+  });
+});
+
 describe("client request admission", () => {
   test("accepts and preserves a well-formed attachment", () => {
     expect(admitClientMessage(message([upload("shot.png", "AQIDBA==")]))).toEqual(
@@ -415,9 +479,15 @@ describe("client request admission", () => {
     expect(() => admitClientMessage(message([upload("x.png", "not base64")]))).toThrow(
       /not valid base64/,
     );
+    expect(() => admitClientMessage({ ...message(), image_data: "x.png" })).toThrow(AdmissionError);
+    expect(() => admitClientMessage(message([upload("", "AQIDBA==")]))).toThrow(/empty filename/);
+    expect(() => admitClientMessage(message([upload("x", "AQIDBA==")]))).not.toThrow();
   });
 
   test("caps attachment and capability counts", () => {
+    expect(() =>
+      admitClientMessage(message(Array.from({ length: MAX_ATTACHMENTS }, (_, i) => upload(`${String(i)}.png`, "")))),
+    ).not.toThrow();
     expect(() =>
       admitClientMessage(
         message(Array.from({ length: MAX_ATTACHMENTS + 1 }, (_, i) => upload(`${String(i)}.png`, ""))),

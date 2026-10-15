@@ -12,6 +12,7 @@ import {
 } from "../src/cache/keepalive.ts";
 import { CacheKeepalive } from "../src/cache/schedule.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 
 const MODEL = "claude-opus-4-6";
@@ -229,6 +230,36 @@ describe("firing", () => {
 
     required(release)();
     await first;
+  });
+});
+
+describe("a ping a budget would stop", () => {
+  test("is skipped rather than sent, and says which budget stopped it", async () => {
+    const ledger = freshLedger();
+    const db = openLedger(ledger.path);
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type, input_tokens, output_tokens,
+         cache_read_tokens, cache_write_tokens, total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, ?2, 'anthropic', 'default', ?3, 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 5.0)`,
+    ).run(new Date(T0).toISOString(), CHARACTER, MODEL);
+    db.close();
+    const h = harness();
+    const base = prefix();
+    h.service.arm(prefix({
+      context: {
+        ...required(base.context),
+        ledger: ledger.path,
+        usage: { timezone: "utc", budgets: [{ name: "tiny", period: "month", cost_usd: 1, limit: "block", warn_at: [], usage_kind: [] }] },
+      },
+    }));
+    h.service.observe(CHARACTER, MODEL, "message");
+
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(0);
+    expect(h.events.at(-1)?.outcome).toBe("skipped");
+    expect(h.events.at(-1)?.detail).toContain("tiny");
+    ledger.cleanup();
   });
 });
 

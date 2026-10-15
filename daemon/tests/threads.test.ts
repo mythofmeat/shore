@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_THREAD_ID_LENGTH, isValidThreadId, createThread, ensureThreads, readThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureThreads, readThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,6 +22,9 @@ import { outcomeOf } from "./support/outcome.ts";
 describe("thread ids", () => {
   test("accepts ordinary ids and rejects path-shaped ones", () => {
     expect(isValidThreadId("main")).toBe(true);
+    expect(isValidThreadId("a")).toBe(true);
+    expect(() => assertThreadId("../escape")).toThrow("invalid thread id");
+    expect(() => assertThreadId("side")).not.toThrow();
     expect(isValidThreadId("agent-sdk-eval")).toBe(true);
     expect(isValidThreadId("v1.2_scratch")).toBe(true);
 
@@ -186,6 +189,15 @@ describe("choosing what a fork copies", () => {
 });
 
 describe("forking a thread", () => {
+  test("a path-shaped thread id is refused before anything is written", async () => {
+    const root = await freshDataDir();
+    await seed(root, "ada", "main", [user("u1", "first"), assistant("a1", "reply")]);
+    expect(await outcomeOf(forkThread(root, "ada", "main", "../escape", { now: () => NOW }))).toThrow("invalid thread id");
+    expect(await outcomeOf(createThread(root, "ada", "../escape", NOW))).toThrow("invalid thread id");
+    expect(existsSync(join(root, "ada", "escape"))).toBe(false);
+    expect(existsSync(join(root, "escape"))).toBe(false);
+  });
+
   test("the child holds a copy the parent can no longer change", async () => {
     const root = await freshDataDir();
     const path = await seed(root, "ada", "main", [

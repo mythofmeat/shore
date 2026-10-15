@@ -32,6 +32,7 @@ test("image sources allow raster data only and download names cannot escape thei
   for (const mime of ["image/svg+xml", "text/html", "image/png;url=evil"]) expect(mediaSource(png, mime)).toBeUndefined();
   expect(imageFilename("../private\\secret\u0000.svg", `data:image/png;base64,${png}`)).toBe(".._private_secret_.svg.png");
   expect(imageFilename("photo.jpg", "data:image/jpeg;base64,/9j/")).toBe("photo.jpg");
+  expect(imageFilename("a b\u0000c\u007Fd\u001Fe", "data:image/png;base64,")).toBe("a b_c_d_e.png");
   expect(imageFilename("", "data:image/webp;base64,UklGR")).toBe("shore-image.webp");
   expect(imageFilename("a".repeat(1000), `data:image/png;base64,${png}`).length).toBe(184);
 });
