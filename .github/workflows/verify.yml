@@ -23,6 +23,9 @@ jobs:
         working-directory: daemon
     steps:
       - uses: actions/checkout@v7
+      - uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: daemon/.bun-version
