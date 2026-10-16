@@ -320,8 +320,26 @@ async function runClient(): Promise<number> {
 }
 
 if (args.includes("--client")) process.exit(await runClient());
+function shardOf(all: readonly Target[], index: number, count: number): Target[] {
+  const loads = Array.from({ length: count }, () => 0);
+  const mine: Target[] = [];
+  for (const target of [...all].sort((a, b) => b.mutants.length - a.mutants.length)) {
+    const lightest = loads.indexOf(Math.min(...loads));
+    loads[lightest] = (loads[lightest] ?? 0) + target.mutants.length;
+    if (lightest === index - 1) mine.push(target);
+  }
+  return mine;
+}
+
+const shardArg = args.find((a) => a.startsWith("--shard="));
+const shard = shardArg === undefined ? undefined : /^--shard=(\d+)\/(\d+)$/.exec(shardArg);
+if (shard === null || (shard !== undefined && (Number(shard[1]) < 1 || Number(shard[1]) > Number(shard[2])))) {
+  console.error("--shard takes i/n with 1 <= i <= n, such as --shard=2/4");
+  process.exit(2);
+}
 const chosen = GUARDS.filter((g) => filters.length === 0 || filters.some((f) => g.tests.some((t) => t.includes(f)) || g.functions.some((fn) => fn.includes(f))));
-const { targets, problems } = await targetsFor(chosen);
+const { targets: candidates, problems } = await targetsFor(chosen);
+const targets = shard === undefined ? candidates : shardOf(candidates, Number(shard[1]), Number(shard[2]));
 
 if (listOnly) {
   for (const t of targets) {

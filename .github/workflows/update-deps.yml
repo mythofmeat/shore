@@ -12,6 +12,10 @@ jobs:
   update:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      number: ${{ steps.pr.outputs.pull-request-number }}
+      operation: ${{ steps.pr.outputs.pull-request-operation }}
+      sha: ${{ steps.pr.outputs.pull-request-head-sha }}
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -28,7 +32,8 @@ jobs:
         working-directory: client
       - run: bun run browser:generate && bun run browser:build
         working-directory: daemon
-      - uses: peter-evans/create-pull-request@v8
+      - id: pr
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.DEPS_PR_TOKEN }}
           branch: deps/weekly
@@ -37,4 +42,40 @@ jobs:
           title: "chore(deps): update"
           body: |
             Bun, every daemon package and every client crate at their latest versions, majors included,
-            with the generated files they change. Merging this doesn't cut a release.
+            with the generated files they change. The weekly workflow merges this once every check
+            and the mutation pass succeed on it, then cuts a patch release.
+
+  mutation:
+    needs: update
+    uses: ./.github/workflows/mutation.yml
+    with:
+      ref: ${{ (needs.update.outputs.operation == 'created' || needs.update.outputs.operation == 'updated') && needs.update.outputs.sha || '' }}
+
+  merge:
+    needs: [update, mutation]
+    if: needs.update.outputs.operation == 'created' || needs.update.outputs.operation == 'updated'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ needs.update.outputs.number }}
+          SHA: ${{ needs.update.outputs.sha }}
+        run: |
+          gh pr checks "$PR" --watch --interval 30 >/dev/null || true
+          failed=$(gh pr checks "$PR" --json name,bucket \
+            --jq '[.[] | select(.name != "claude-review" and .bucket != "pass" and .bucket != "skipping") | .name] | join(", ")')
+          if [ -n "$failed" ]; then
+            echo "::error::#$PR stays open and nothing is released: $failed did not pass."
+            exit 1
+          fi
+          if ! gh pr merge "$PR" --squash --match-head-commit "$SHA"; then
+            echo "::error::#$PR could not be merged as $SHA; if main moved, update the branch and merge it by hand."
+            exit 1
+          fi
+          gh workflow run release.yml --ref main -f bump=patch

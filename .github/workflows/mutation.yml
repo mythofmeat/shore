@@ -1,36 +1,58 @@
 name: mutation
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  daemon:
+  mutate-daemon:
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     defaults:
       run:
         working-directory: daemon
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: daemon/.bun-version
       - run: rustup update stable --no-self-update
+      - id: rust
+        run: echo "version=$(rustc +stable --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/shore/codex-apply-patch
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
       - run: bun run build:patch
       - run: bun install --frozen-lockfile
-      - run: bun run mutate --workers=4
+      - run: bun run mutate --shard=${{ matrix.shard }}/4 --workers=4
 
-  client:
+  mutate-client:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: daemon
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: daemon/.bun-version
