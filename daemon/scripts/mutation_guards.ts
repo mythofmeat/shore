@@ -218,7 +218,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["archive.test.ts", "supported_baseline.test.ts", "delete_character.test.ts", "storage_archive.test.ts"],
-    floor: 0.5,
+    floor: 0.55,
     functions: [
       ...fns("commands/archive.ts", ["exportCharacter", "importCharacter", "deleteCharacter", "deletionTargets", "extractArchive", "readManifest", "installCharacter"]),
       ...fns("storage/archive.ts", ["exportUnifiedDatabase", "importUnifiedDatabase", "removeStoredCharacter"]),
