@@ -3,7 +3,7 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, writeFile, symlink } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, stat, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Header } from "tar";
@@ -119,6 +119,13 @@ describe("character archives", () => {
       output,
     }) as Record<string, unknown>;
     expect(exported["bytes"]).toBeGreaterThan(0);
+    expect((await stat(output)).mode & 0o777).toBe(0o600);
+    const first = await readFile(output);
+    expect(await outcomeOf(exportCharacter(context(source, new Set(["ada", "bea"])), { character: "ada", output })))
+      .toThrow("Refusing to overwrite existing archive");
+    expect(await readFile(output)).toEqual(first);
+    expect(await outcomeOf(exportCharacter(context(source, new Set(["ada", "bea"])), { character: "cy", output: join(source.runtime, "cy.tar.gz") })))
+      .toThrow("Character not found");
 
     const target = await root("target");
     let refreshed = false;
@@ -156,6 +163,23 @@ describe("character archives", () => {
       .toThrow("Refusing to overwrite");
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8")).toContain("keep me");
   });
+  test("import refuses to land on anything a character left behind, even one no longer listed", async () => {
+    const source = await root("leftover-source");
+    await seedCharacter(source, "ada", "archive value");
+    const output = join(source.runtime, "ada.shore.tar.gz");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+
+    for (const leftover of ["workspace", "data", "config"] as const) {
+      const target = await root(`leftover-${leftover}`);
+      const path = leftover === "workspace" ? join(target.workspace as string, "ada")
+        : leftover === "data" ? join(target.data, "ada") : join(target.config, "characters", "ada");
+      await mkdir(path, { recursive: true });
+      await writeFile(join(path, "notes.md"), "keep me\n");
+      expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("Refusing to overwrite");
+      expect(await readFile(join(path, "notes.md"), "utf8")).toBe("keep me\n");
+    }
+  });
+
   test("a later import failure removes all imported thread rows and preserves other characters", async () => {
     const source = await root("rollback-source");
     await seedCharacter(source, "ada", "main");
@@ -170,6 +194,9 @@ describe("character archives", () => {
     await seedCharacter(target, "adam", "preserved");
     expect(await outcomeOf(importCharacter(context(target, new Set(["adam"]), () => { throw new Error("refresh failed"); }), { archive: output })))
       .toThrow("refresh failed");
+    for (const path of [join(target.config, "characters", "ada"), join(target.workspace as string, "ada"), join(target.data, "ada")]) {
+      expect(existsSync(path)).toBe(false);
+    }
     const restored = HistoryStore.open(join(target.data, "shore.db"));
     expect(restored.archiveKeys("ada")).toEqual([]);
     expect(restored.readSegment("adam", 0)[0]?.content).toBe("preserved");
