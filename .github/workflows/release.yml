@@ -58,6 +58,10 @@ jobs:
               exit 1
               ;;
           esac
+          if git ls-remote --exit-code --heads origin "release/v$version" >/dev/null; then
+            echo "::error::release/v$version is left over from an earlier release run; close its pull request if one is open, delete the branch and retry."
+            exit 1
+          fi
           sed -i "/^\[workspace\.package\]$/,/^\[/s/^version = \".*\"$/version = \"$version\"/" client/Cargo.toml
           sed -i "/^name = \"shore-\(cli\|common\)\"$/{n;s/^version = .*/version = \"$version\"/}" client/Cargo.lock
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
@@ -129,6 +133,9 @@ jobs:
           GH_TOKEN: ${{ secrets.DEPS_PR_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
+          if [ -n "$(gh pr list --head "release/v$VERSION" --base main --json number --jq '.[].number')" ]; then
+            exit 0
+          fi
           gh pr create --base main --head "release/v$VERSION" --title "chore(release): v$VERSION" \
             --body "Opened by the release workflow, which merges it once verify passes, then tags the merge and publishes v$VERSION."
       - id: merge
@@ -154,6 +161,9 @@ jobs:
           merged=$(gh pr view "release/v$VERSION" --json mergeCommit --jq .mergeCommit.oid)
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$merged" >/dev/null
           echo "tag=v$VERSION" >>"$GITHUB_OUTPUT"
+          if ! gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/release/v$VERSION" >/dev/null; then
+            echo "::warning::v$VERSION is merged and tagged, but release/v$VERSION couldn't be deleted."
+          fi
 
   packages:
     needs: merge
