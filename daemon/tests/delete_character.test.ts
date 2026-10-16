@@ -30,6 +30,7 @@ describe("deleting a character", () => {
     })) as { removed: string[]; deleted: boolean };
 
     expect(result.deleted).toBe(true);
+    expect(events).toEqual(["snapshot", "release:ada", "refresh"]);
     expect(result.removed.sort()).toEqual([
       join(dirs.cache, "characters", "ada"),
       join(dirs.config, "characters", "ada"),
@@ -62,6 +63,16 @@ describe("deleting a character", () => {
 
     expect(existsSync(join(dirs.workspace as string, "adam"))).toBe(true);
     expect(existsSync(join(dirs.data, "adam"))).toBe(true);
+  });
+
+  test("a character that does not exist anywhere is not found, and nothing runs", async () => {
+    const dirs = await root("missing");
+    await seedCharacter(dirs, "ada");
+    const events: string[] = [];
+    expect(await outcomeOf(deleteCharacter(context(dirs, new Set(["ada"]), events), { character: "cy", confirm: "cy" })))
+      .toThrow("Character not found");
+    expect(events).toEqual([]);
+    expect(existsSync(join(dirs.workspace as string, "ada"))).toBe(true);
   });
 
   test("without the name repeated back, nothing is touched", async () => {

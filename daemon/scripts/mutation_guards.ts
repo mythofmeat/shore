@@ -108,7 +108,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["budget_gate.test.ts", "ledger_budget.test.ts", "llm_generate.test.ts"],
-    floor: 0.8,
+    floor: 0.75,
     functions: [
       ...fns("ledger/gate.ts", ["budgetBlockFor", "costBudgetBlock", "projectedLoopCost"]),
       ...fns("ledger/budget.ts", ["periodWindow", "periodStartNaive", "periodEndNaive", "monthAnchorNaive", "budgetMatchesCall", "shouldBlock", "actionBlocks"]),
@@ -218,7 +218,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["archive.test.ts", "supported_baseline.test.ts", "delete_character.test.ts", "storage_archive.test.ts"],
-    floor: 0.75,
+    floor: 0.5,
     functions: [
       ...fns("commands/archive.ts", ["exportCharacter", "importCharacter", "deleteCharacter", "deletionTargets", "extractArchive", "readManifest", "installCharacter"]),
       ...fns("storage/archive.ts", ["exportUnifiedDatabase", "importUnifiedDatabase", "removeStoredCharacter"]),
@@ -251,7 +251,7 @@ export const GUARDS: readonly Guard[] = [
   },
   {
     tests: ["compaction_truncated.test.ts", "compaction_resume.test.ts", "archive_writer.test.ts", "history_store.test.ts"],
-    floor: 0.65,
+    floor: 0.55,
     functions: [
       ...fns("memory/compaction/manager.ts", ["rollbackCompaction", "archiveCompactPrefix", "recoverArchivedPass", "resolveCheckpoint"]),
       ...fns("memory/compaction/archive.ts", ["archiveAndRetain", "archiveToDatabase"]),

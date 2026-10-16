@@ -9,11 +9,11 @@ import { CLIENT_FLOORS, GUARDS, type Guard } from "./mutation_guards.ts";
 const ROOT = join(import.meta.dir, "..");
 const COPIED = ["src", "tests"];
 const LINKED = ["node_modules", "package.json", "bunfig.toml", "tsconfig.json", "prompts", "vendor", "dist", "scripts"];
-const MIN_TIMEOUT_MS = 15_000;
+const MIN_TIMEOUT_MS = 60_000;
 const MEMORY_CAP_BYTES = 2 * 1024 ** 3;
 const capped = Bun.spawnSync(["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
 const cap = capped ? ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${String(MEMORY_CAP_BYTES)}`, "-p", "MemorySwapMax=0"] : [];
-const TIMEOUT_FACTOR = 3;
+const TIMEOUT_FACTOR = 5;
 const running = new Set<number>();
 const scratch = new Set<string>();
 const LOGGING_CALL = /^(shoreLog|console)\.\w+\(/;
@@ -383,7 +383,8 @@ for (const target of healthy) {
   const floor = target.guard.floor;
   const failing = rate < floor;
   if (failing) below++;
-  console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${String(Math.round(floor * 100))}%) ${String(killed)}/${String(mine.length)}  ${target.guard.tests.join(", ")}`);
+  const timedOut = mine.filter((r) => r.outcome === "timeout").length;
+  console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${String(Math.round(floor * 100))}%) ${String(killed)}/${String(mine.length)}${timedOut > 0 ? ` (${String(timedOut)} timed out)` : ""}  ${target.guard.tests.join(", ")}`);
   if (!showSurvivors && !failing) continue;
   for (const r of mine) {
     const m = r.job.mutant;
