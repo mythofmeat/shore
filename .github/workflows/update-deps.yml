@@ -69,7 +69,7 @@ jobs:
         run: |
           gh pr checks "$PR" --watch --interval 30 >/dev/null || true
           failed=$(gh pr checks "$PR" --json name,bucket \
-            --jq '[.[] | select(.name != "claude-review" and .bucket != "pass" and .bucket != "skipping") | .name] | join(", ")')
+            --jq '[.[] | select(.bucket != "pass" and .bucket != "skipping") | .name] | join(", ")')
           if [ -n "$failed" ]; then
             echo "::error::#$PR stays open and nothing is released: $failed did not pass."
             exit 1
