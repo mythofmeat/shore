@@ -34,6 +34,7 @@ import { startConfigWatcher } from "./hot_reload.ts";
 import { describeWork, runningReport, type ShutdownWindowState } from "./running.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 import { findSentPicture } from "../storage/sent_pictures.ts";
+import { startCharacterInits } from "../tools/character_init.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -279,6 +280,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     };
     await registerKnownCharacters(runtime, assembly.autonomy, log);
     seedActivityInBackground(runtime, assembly.autonomy, log);
+    startCharacterInits(runtime.config, runtime.registry.availableCharacters(), log);
     const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
     rollback.push(() => { clocks.stop(); });
 

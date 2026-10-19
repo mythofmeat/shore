@@ -227,7 +227,7 @@ function describeImageOption(path: readonly string[]): string | undefined {
 }
 
 const USER_DESCRIPTIONS: Record<string, string> = {
-  tools: "Unix user the character's tools run as: a name, uid or uid:gid. bash, apply_patch, read, edit and the daemon's work in the workspace then have that user's permissions, not the daemon's. The daemon needs CAP_SETUID, CAP_SETGID and CAP_KILL. Unset runs them as the daemon's user.",
+  tools: "Unix user the character's tools run as: a name, uid or uid:gid. bash, apply_patch, read, edit and the daemon's work in the workspace then have that user's permissions, not the daemon's. The daemon needs CAP_SETUID, CAP_SETGID and CAP_KILL. When the daemon starts, it runs ~/.init.sh from that user's home as that user, if the script exists, with its output in ~/.init.log, and leaves whatever it starts running. Unset runs them as the daemon's user.",
   mcp: "Unix user this stdio server runs as: a name, uid or uid:gid. Unset runs it as the daemon's user. The daemon needs CAP_SETUID and CAP_SETGID.",
 };
 

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { characterWorkspaceDir } from "../config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "../config/loader.ts";
@@ -92,6 +92,13 @@ export class CharacterWorkspace {
   async spawn(program: string, args: readonly string[], options: Pick<CharacterRunOptions, "cwd" | "env"> = {}): Promise<ChildProcessWithoutNullStreams> {
     const launch = await this.#launch(program, args, options);
     return spawn(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdio: ["pipe", "pipe", "pipe"] });
+  }
+
+  async detach(program: string, args: readonly string[], options: Pick<CharacterRunOptions, "cwd" | "env"> = {}): Promise<ChildProcess> {
+    const launch = await this.#launch(program, args, options);
+    const child = spawn(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdio: "ignore", detached: true });
+    child.unref();
+    return child;
   }
 
   async #launch(program: string, args: readonly string[], options: Pick<CharacterRunOptions, "cwd" | "env">): Promise<Launch> {
