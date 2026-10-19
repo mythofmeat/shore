@@ -119,7 +119,7 @@ export async function currentDaemonInventory(): Promise<object> {
 }
 
 export function assertInventoryCurrent(expected: object, actual: object): void {
-  if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+  if (!Bun.deepEquals(expected, actual)) {
     throw new Error("Daemon capabilities changed; run bun run inventory:generate and review the operation, field, result, and event differences");
   }
 }
