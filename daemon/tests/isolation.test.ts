@@ -276,28 +276,10 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
   });
 
   test("a daemon whose character has a workspace helper running stops when told to", async () => {
-    const root = (await freshWorkspace()).dir;
-    const character = new CharacterWorkspace(join(root, "ada"), { user: USER, passEnv: [] });
-    await character.call("mkdir", { path: character.dir });
-    await character.call("createFile", { path: join(character.dir, "SOUL.md"), data: Buffer.from("You are Ada.\n").toString("base64") });
-    const base = await privateDir("isolation-daemon");
-    await mkdir(join(base, "config"));
-    await writeFile(join(base, "config", "config.toml"), `[tools]\nuser = ${JSON.stringify(USER)}\n`);
-    const daemon = Bun.spawn([process.execPath, join(import.meta.dir, "..", "src", "daemon", "main.ts")], {
-      env: {
-        ...process.env, SHORE_CONFIG_DIR: join(base, "config"), SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: join(base, "cache"),
-        SHORE_RUNTIME_DIR: join(base, "runtime"), SHORE_WORKSPACE_DIR: root, SHORE_ADDR: "127.0.0.1:0", SHORE_WEB_ADDR: "127.0.0.1:0",
-      },
-      stdin: "ignore", stdout: "ignore", stderr: "pipe",
-    });
-    let log = "";
-    const decoder = new TextDecoder();
-    const logged = (async () => {
-      for await (const chunk of daemon.stderr) log += decoder.decode(chunk, { stream: true });
-    })();
+    const { daemon, logged, log } = await startDaemonProcess();
     try {
       for (const deadline = Date.now() + 30_000; !catchesSigterm(daemon.pid); await Bun.sleep(20)) {
-        if (Date.now() > deadline || daemon.exitCode !== null) throw new Error(`the daemon did not start:\n${log}`);
+        if (Date.now() > deadline || daemon.exitCode !== null) throw new Error(`the daemon did not start:\n${log()}`);
       }
       const helpers = childrenOf(daemon.pid).filter((pid) => commandOf(pid).includes("--workspace-helper"));
       expect(helpers).toHaveLength(1);
@@ -306,12 +288,57 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
       const code = await Promise.race([daemon.exited, Bun.sleep(8_000).then(() => "still running")]);
       await Promise.race([logged, Bun.sleep(1_000)]);
 
-      expect(code, log).toBe(0);
-      expect(log).toContain("Daemon shut down cleanly");
-      expect(log).not.toContain("exiting anyway");
+      expect(code, log()).toBe(0);
+      expect(log()).toContain("Daemon shut down cleanly");
+      expect(log()).not.toContain("exiting anyway");
       expect(helpers.filter(running)).toEqual([]);
     } finally {
       daemon.kill("SIGKILL");
+    }
+  }, 60_000);
+
+  test("runs the character's ~/.init.sh as that user when the daemon starts, and what it starts outlives it", async () => {
+    const user = await ownUser();
+    const home = new CharacterWorkspace(user.home ?? "", { user: USER, passEnv: [] });
+    const script = join(home.dir, ".init.sh");
+    const output = join(home.dir, ".init.log");
+    const commands = [
+      "id -u",
+      "grep -E '^(CapEff|CapAmb|NoNewPrivs):' /proc/self/status",
+      "env | grep -E '^(HOME|USER|SHORE_TOKEN|SHORE_ISOLATION_ROOT)=' | sort",
+      "sleep 300 &",
+      "echo \"$$ $!\"",
+    ];
+    await home.call("writeFile", { path: script, data: Buffer.from(`${commands.join("\n")}\n`).toString("base64") });
+    const { daemon, logged, log } = await startDaemonProcess({ SHORE_TOKEN: "isolation-token" });
+    let pids: RegExpExecArray | null = null;
+    try {
+      let text = "";
+      for (const deadline = Date.now() + 30_000; pids === null; await Bun.sleep(20)) {
+        if (Date.now() > deadline || daemon.exitCode !== null) throw new Error(`the init script did not run:\n${log()}\n${text}`);
+        const [read] = await home.call("readFiles", { paths: [output] });
+        text = read !== undefined && "data" in read ? Buffer.from(read.data, "base64").toString("utf8") : "";
+        pids = /^(\d+) (\d+)\n$/m.exec(text);
+      }
+      const [, scriptPid = "", servicePid = ""] = pids;
+      expect(text.slice(0, pids.index)).toBe(
+        `${String(user.uid)}\nCapEff:\t0000000000000000\nCapAmb:\t0000000000000000\nNoNewPrivs:\t1\nHOME=${user.home ?? ""}\nUSER=${USER}\n`,
+      );
+      for (const deadline = Date.now() + 5_000; running(Number(scriptPid)); await Bun.sleep(20)) {
+        if (Date.now() > deadline) throw new Error("the init script did not exit");
+      }
+      expect(running(Number(servicePid))).toBe(true);
+      expect(procFile(Number(servicePid), "status")).toMatch(new RegExp(`^Uid:\\s+${String(user.uid)}\\s`, "m"));
+
+      daemon.kill("SIGTERM");
+      const code = await Promise.race([daemon.exited, Bun.sleep(8_000).then(() => "still running")]);
+      await Promise.race([logged, Bun.sleep(1_000)]);
+      expect(code, log()).toBe(0);
+    } finally {
+      daemon.kill("SIGKILL");
+      if (pids?.[2] !== undefined && running(Number(pids[2]))) process.kill(Number(pids[2]), "SIGKILL");
+      await home.call("deleteFile", { path: script });
+      await home.call("deleteFile", { path: output }).catch(() => {});
     }
   }, 60_000);
 });
@@ -323,6 +350,29 @@ describe.skipIf(!READY)("a character without a user of its own", () => {
     expect(result.stdout).toBe(`${String(process.getuid?.())}\nCapEff:\t0000000000000000\nCapAmb:\t0000000000000000\n`);
   });
 });
+
+async function startDaemonProcess(env: Record<string, string> = {}) {
+  const root = (await freshWorkspace()).dir;
+  const character = new CharacterWorkspace(join(root, "ada"), { user: USER, passEnv: [] });
+  await character.call("mkdir", { path: character.dir });
+  await character.call("createFile", { path: join(character.dir, "SOUL.md"), data: Buffer.from("You are Ada.\n").toString("base64") });
+  const base = await privateDir("isolation-daemon");
+  await mkdir(join(base, "config"));
+  await writeFile(join(base, "config", "config.toml"), `[tools]\nuser = ${JSON.stringify(USER)}\n`);
+  const daemon = Bun.spawn([process.execPath, join(import.meta.dir, "..", "src", "daemon", "main.ts")], {
+    env: {
+      ...process.env, SHORE_CONFIG_DIR: join(base, "config"), SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: join(base, "cache"),
+      SHORE_RUNTIME_DIR: join(base, "runtime"), SHORE_WORKSPACE_DIR: root, SHORE_ADDR: "127.0.0.1:0", SHORE_WEB_ADDR: "127.0.0.1:0", ...env,
+    },
+    stdin: "ignore", stdout: "ignore", stderr: "pipe",
+  });
+  let log = "";
+  const decoder = new TextDecoder();
+  const logged = (async () => {
+    for await (const chunk of daemon.stderr) log += decoder.decode(chunk, { stream: true });
+  })();
+  return { daemon, logged, log: () => log };
+}
 
 async function dirsUnder(workspace: string): Promise<ShoreDirs> {
   const base = await privateDir("isolation-archive");
