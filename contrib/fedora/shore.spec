@@ -6,7 +6,7 @@
 %global __requires_exclude ^lib(EGL|GLESv2|ffmpeg|vk_swiftshader|vulkan)\\.so.*$
 
 Name:           shore
-Version:        4.36.0
+Version:        4.36.1
 Release:        1%{?dist}
 Summary:        Persistent AI character engine
 License:        MIT OR Apache-2.0
