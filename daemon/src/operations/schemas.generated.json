@@ -1549,6 +1549,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "compacted"
+            },
             "character": {
               "type": "string"
             },
@@ -1596,10 +1600,6 @@
               "items": {
                 "type": "string"
               }
-            },
-            "status": {
-              "type": "string",
-              "const": "compacted"
             }
           },
           "required": [
@@ -1619,6 +1619,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "rotated"
+            },
             "character": {
               "type": "string"
             },
@@ -1660,10 +1664,6 @@
               "type": "integer",
               "format": "uint",
               "minimum": 0
-            },
-            "status": {
-              "type": "string",
-              "const": "rotated"
             }
           },
           "required": [
@@ -1682,6 +1682,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "dry_run"
+            },
             "character": {
               "type": "string"
             },
@@ -1731,10 +1735,6 @@
               "items": {
                 "type": "string"
               }
-            },
-            "status": {
-              "type": "string",
-              "const": "dry_run"
             }
           },
           "required": [
@@ -1754,6 +1754,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "truncated"
+            },
             "character": {
               "type": "string"
             },
@@ -1793,10 +1797,6 @@
               "items": {
                 "type": "string"
               }
-            },
-            "status": {
-              "type": "string",
-              "const": "truncated"
             }
           },
           "required": [
@@ -1814,6 +1814,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "segment"
+            },
             "character": {
               "type": "string"
             },
@@ -1853,10 +1857,6 @@
               "items": {
                 "type": "string"
               }
-            },
-            "status": {
-              "type": "string",
-              "const": "segment"
             }
           },
           "required": [
@@ -1874,6 +1874,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "paused"
+            },
             "character": {
               "type": "string"
             },
@@ -1915,10 +1919,6 @@
                 "string",
                 "null"
               ]
-            },
-            "status": {
-              "type": "string",
-              "const": "paused"
             }
           },
           "required": [
@@ -2053,6 +2053,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "compacted"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2100,10 +2104,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "compacted"
                 }
               },
               "required": [
@@ -2123,6 +2123,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "rotated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2164,10 +2168,6 @@
                   "type": "integer",
                   "format": "uint",
                   "minimum": 0
-                },
-                "status": {
-                  "type": "string",
-                  "const": "rotated"
                 }
               },
               "required": [
@@ -2186,6 +2186,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "dry_run"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2235,10 +2239,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "dry_run"
                 }
               },
               "required": [
@@ -2258,6 +2258,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "truncated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2297,10 +2301,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "truncated"
                 }
               },
               "required": [
@@ -2318,6 +2318,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2357,10 +2361,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "segment"
                 }
               },
               "required": [
@@ -2378,6 +2378,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "paused"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2419,10 +2423,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "status": {
-                  "type": "string",
-                  "const": "paused"
                 }
               },
               "required": [
@@ -2557,6 +2557,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "compacted"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2604,10 +2608,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "compacted"
                 }
               },
               "required": [
@@ -2627,6 +2627,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "rotated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2668,10 +2672,6 @@
                   "type": "integer",
                   "format": "uint",
                   "minimum": 0
-                },
-                "status": {
-                  "type": "string",
-                  "const": "rotated"
                 }
               },
               "required": [
@@ -2690,6 +2690,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "dry_run"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2739,10 +2743,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "dry_run"
                 }
               },
               "required": [
@@ -2762,6 +2762,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "truncated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2801,10 +2805,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "truncated"
                 }
               },
               "required": [
@@ -2822,6 +2822,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2861,10 +2865,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "segment"
                 }
               },
               "required": [
@@ -2882,6 +2882,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "paused"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -2923,10 +2927,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "status": {
-                  "type": "string",
-                  "const": "paused"
                 }
               },
               "required": [
@@ -3285,12 +3285,12 @@
             {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "text"
+                },
+                "text": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -3301,6 +3301,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                },
                 "thinking": {
                   "type": "string"
                 },
@@ -3309,10 +3313,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "thinking"
                 }
               },
               "required": [
@@ -3323,6 +3323,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -3335,10 +3339,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_use"
                 }
               },
               "required": [
@@ -3351,12 +3351,12 @@
             {
               "type": "object",
               "properties": {
-                "data": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "redacted_thinking"
+                },
+                "data": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -3367,12 +3367,12 @@
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/ImageSource"
-                },
                 "type": {
                   "type": "string",
                   "const": "image"
+                },
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
                 }
               },
               "required": [
@@ -3383,6 +3383,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                },
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -3394,10 +3398,6 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_result"
                 }
               },
               "required": [
@@ -3413,15 +3413,15 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "base64"
+                },
                 "media_type": {
                   "type": "string"
                 },
                 "data": {
                   "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "const": "base64"
                 }
               },
               "required": [
@@ -3561,6 +3561,10 @@
         {
           "type": "object",
           "properties": {
+            "status": {
+              "type": "string",
+              "const": "clear"
+            },
             "character": {
               "type": "string"
             },
@@ -3581,10 +3585,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "status": {
-              "type": "string",
-              "const": "clear"
             }
           },
           "required": [
@@ -4397,6 +4397,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "compacted"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4444,10 +4448,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "compacted"
                 }
               },
               "required": [
@@ -4467,6 +4467,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "rotated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4508,10 +4512,6 @@
                   "type": "integer",
                   "format": "uint",
                   "minimum": 0
-                },
-                "status": {
-                  "type": "string",
-                  "const": "rotated"
                 }
               },
               "required": [
@@ -4530,6 +4530,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "dry_run"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4579,10 +4583,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "dry_run"
                 }
               },
               "required": [
@@ -4602,6 +4602,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "truncated"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4641,10 +4645,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "truncated"
                 }
               },
               "required": [
@@ -4662,6 +4662,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "segment"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4701,10 +4705,6 @@
                   "items": {
                     "type": "string"
                   }
-                },
-                "status": {
-                  "type": "string",
-                  "const": "segment"
                 }
               },
               "required": [
@@ -4722,6 +4722,10 @@
             {
               "type": "object",
               "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "paused"
+                },
                 "character": {
                   "type": "string"
                 },
@@ -4763,10 +4767,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "status": {
-                  "type": "string",
-                  "const": "paused"
                 }
               },
               "required": [
@@ -6115,12 +6115,12 @@
             {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "text"
+                },
+                "text": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -6131,6 +6131,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                },
                 "thinking": {
                   "type": "string"
                 },
@@ -6139,10 +6143,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "thinking"
                 }
               },
               "required": [
@@ -6153,6 +6153,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -6165,10 +6169,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_use"
                 }
               },
               "required": [
@@ -6181,12 +6181,12 @@
             {
               "type": "object",
               "properties": {
-                "data": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "redacted_thinking"
+                },
+                "data": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -6197,12 +6197,12 @@
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/ImageSource"
-                },
                 "type": {
                   "type": "string",
                   "const": "image"
+                },
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
                 }
               },
               "required": [
@@ -6213,6 +6213,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                },
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -6224,10 +6228,6 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_result"
                 }
               },
               "required": [
@@ -6243,15 +6243,15 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "base64"
+                },
                 "media_type": {
                   "type": "string"
                 },
                 "data": {
                   "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "const": "base64"
                 }
               },
               "required": [
@@ -6990,15 +6990,15 @@
             {
               "type": "object",
               "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "equals"
+                },
                 "field": {
                   "type": "string"
                 },
                 "value": {
                   "$ref": "#/$defs/OperationScalar"
-                },
-                "kind": {
-                  "type": "string",
-                  "const": "equals"
                 }
               },
               "required": [
@@ -7010,12 +7010,12 @@
             {
               "type": "object",
               "properties": {
-                "field": {
-                  "type": "string"
-                },
                 "kind": {
                   "type": "string",
                   "const": "absent"
+                },
+                "field": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -8352,6 +8352,10 @@
             {
               "type": "object",
               "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "slider"
+                },
                 "min": {
                   "type": "number",
                   "format": "double"
@@ -8363,10 +8367,6 @@
                 "step": {
                   "type": "number",
                   "format": "double"
-                },
-                "kind": {
-                  "type": "string",
-                  "const": "slider"
                 }
               },
               "required": [
@@ -9919,12 +9919,12 @@
             {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "text"
+                },
+                "text": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -9935,6 +9935,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                },
                 "thinking": {
                   "type": "string"
                 },
@@ -9943,10 +9947,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "thinking"
                 }
               },
               "required": [
@@ -9957,6 +9957,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -9969,10 +9973,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_use"
                 }
               },
               "required": [
@@ -9985,12 +9985,12 @@
             {
               "type": "object",
               "properties": {
-                "data": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "redacted_thinking"
+                },
+                "data": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -10001,12 +10001,12 @@
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/ImageSource"
-                },
                 "type": {
                   "type": "string",
                   "const": "image"
+                },
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
                 }
               },
               "required": [
@@ -10017,6 +10017,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                },
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -10028,10 +10032,6 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_result"
                 }
               },
               "required": [
@@ -10047,15 +10047,15 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "base64"
+                },
                 "media_type": {
                   "type": "string"
                 },
                 "data": {
                   "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "const": "base64"
                 }
               },
               "required": [
@@ -10468,12 +10468,12 @@
             {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "text"
+                },
+                "text": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -10484,6 +10484,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                },
                 "thinking": {
                   "type": "string"
                 },
@@ -10492,10 +10496,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "thinking"
                 }
               },
               "required": [
@@ -10506,6 +10506,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -10518,10 +10522,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_use"
                 }
               },
               "required": [
@@ -10534,12 +10534,12 @@
             {
               "type": "object",
               "properties": {
-                "data": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "redacted_thinking"
+                },
+                "data": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -10550,12 +10550,12 @@
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/ImageSource"
-                },
                 "type": {
                   "type": "string",
                   "const": "image"
+                },
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
                 }
               },
               "required": [
@@ -10566,6 +10566,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                },
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -10577,10 +10581,6 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_result"
                 }
               },
               "required": [
@@ -10596,15 +10596,15 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "base64"
+                },
                 "media_type": {
                   "type": "string"
                 },
                 "data": {
                   "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "const": "base64"
                 }
               },
               "required": [
@@ -10920,12 +10920,12 @@
             {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "text"
+                },
+                "text": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -10936,6 +10936,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "thinking"
+                },
                 "thinking": {
                   "type": "string"
                 },
@@ -10944,10 +10948,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "thinking"
                 }
               },
               "required": [
@@ -10958,6 +10958,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_use"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -10970,10 +10974,6 @@
                     "string",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_use"
                 }
               },
               "required": [
@@ -10986,12 +10986,12 @@
             {
               "type": "object",
               "properties": {
-                "data": {
-                  "type": "string"
-                },
                 "type": {
                   "type": "string",
                   "const": "redacted_thinking"
+                },
+                "data": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -11002,12 +11002,12 @@
             {
               "type": "object",
               "properties": {
-                "source": {
-                  "$ref": "#/$defs/ImageSource"
-                },
                 "type": {
                   "type": "string",
                   "const": "image"
+                },
+                "source": {
+                  "$ref": "#/$defs/ImageSource"
                 }
               },
               "required": [
@@ -11018,6 +11018,10 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_result"
+                },
                 "tool_use_id": {
                   "type": "string"
                 },
@@ -11029,10 +11033,6 @@
                     "boolean",
                     "null"
                   ]
-                },
-                "type": {
-                  "type": "string",
-                  "const": "tool_result"
                 }
               },
               "required": [
@@ -11048,15 +11048,15 @@
             {
               "type": "object",
               "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "base64"
+                },
                 "media_type": {
                   "type": "string"
                 },
                 "data": {
                   "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "const": "base64"
                 }
               },
               "required": [
