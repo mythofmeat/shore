@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+unit=shore-daemon.service
+
+case "$1" in
+configure | abort-upgrade | abort-deconfigure | abort-remove)
+	if ! getent passwd shore >/dev/null; then
+		useradd --system --user-group --home-dir /var/lib/shore/home --no-create-home \
+			--shell /usr/sbin/nologin --comment "shore daemon" shore
+	fi
+	if command -v systemd-tmpfiles >/dev/null; then
+		systemd-tmpfiles --create shore-daemon.conf || true
+	fi
+	deb-systemd-helper unmask "$unit" >/dev/null || true
+	if deb-systemd-helper --quiet was-enabled "$unit"; then
+		deb-systemd-helper enable "$unit" >/dev/null || true
+	else
+		deb-systemd-helper update-state "$unit" >/dev/null || true
+	fi
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+		if [ -n "$2" ]; then
+			deb-systemd-invoke restart "$unit" >/dev/null || true
+		else
+			deb-systemd-invoke start "$unit" >/dev/null || true
+		fi
+	fi
+	;;
+esac

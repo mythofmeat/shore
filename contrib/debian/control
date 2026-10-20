@@ -1,0 +1,14 @@
+Package: shore-daemon
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: eshen <mythofmeat>
+Installed-Size: @SIZE@
+Depends: @DEPENDS@, git, util-linux
+Recommends: cargo, curl, file, git-lfs, jq, openssh-client, procps, python3, python3-pip, ripgrep
+Section: net
+Priority: optional
+Homepage: https://github.com/mythofmeat/shore
+Description: Persistent AI character engine — daemon
+ The shore daemon as a systemd service, running as its own shore user.
+ Claude Code is not included: install it separately and set
+ SHORE_CLAUDE_PATH to use the claude_agent provider.

@@ -1,0 +1,6 @@
+d /var/lib/shore 0755 shore shore -
+d /var/lib/shore/home 0700 shore shore -
+d /var/lib/shore/config 0700 shore shore -
+d /var/lib/shore/data 0700 shore shore -
+d /var/lib/shore/workspace 0755 shore shore -
+d /var/cache/shore 0700 shore shore -

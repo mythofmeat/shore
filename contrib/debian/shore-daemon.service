@@ -1,0 +1,29 @@
+[Unit]
+Description=shore daemon
+Documentation=https://github.com/mythofmeat/shore
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=shore
+Group=shore
+WorkingDirectory=/var/lib/shore/workspace
+Environment=SHORE_CONFIG_DIR=/var/lib/shore/config
+Environment=SHORE_DATA_DIR=/var/lib/shore/data
+Environment=SHORE_CACHE_DIR=/var/cache/shore
+Environment=SHORE_WORKSPACE_DIR=/var/lib/shore/workspace
+#Environment=SHORE_CLAUDE_PATH=/var/lib/shore/home/.local/bin/claude
+ExecStart=/usr/lib/shore-daemon/shore-daemon
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_KILL
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/shore /var/cache/shore
+PrivateTmp=yes
+KillMode=mixed
+TimeoutStopSec=30min
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
