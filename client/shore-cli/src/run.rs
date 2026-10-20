@@ -246,6 +246,23 @@ pub(crate) async fn execute(
         CliCommand::Status { .. } => {
             handle_status_command(&mut conn, command_ref, &display_character).await?;
         }
+        CliCommand::Export {
+            character: exported,
+            all: _,
+            output,
+            json,
+        } => {
+            crate::archives::handle_export(
+                &mut conn,
+                exported.as_deref(),
+                output.as_deref(),
+                *json,
+            )
+            .await?;
+        }
+        CliCommand::Import { archive, json } => {
+            crate::archives::handle_import(&mut conn, archive, *json).await?;
+        }
         CliCommand::Model { .. } if model_change(command_ref).is_some() => {
             let Some(change) = model_change(command_ref) else {
                 return Ok(());
@@ -261,8 +278,6 @@ pub(crate) async fn execute(
             handle_compact(&mut conn, compact, cli.character.as_deref()).await?;
         }
         other @ (CliCommand::Character { .. }
-        | CliCommand::Export { .. }
-        | CliCommand::Import { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }
@@ -1325,22 +1340,32 @@ async fn handle_delete_character(
         return Ok(());
     }
 
+    let backup = archive
+        .map(|path| crate::archives::archive_target(Some(path), Some(name)))
+        .transpose()?;
+    if let Some(target) = &backup {
+        _ = crate::archives::export_to(conn, Some(name), target).await?;
+    }
+
     info!(character = name, "Deleting character");
-    let (data, raw) = execute_operation_with_raw::<DeleteCharacter>(
+    let (data, mut raw) = execute_operation_with_raw::<DeleteCharacter>(
         conn,
         DeleteCharacterArgs {
             character: name.to_owned(),
             confirm: name.to_owned(),
-            archive: archive.map(crate::cli::absolute_path),
+            archive: None,
         },
     )
     .await?;
 
     if json {
+        if let (Some(target), Some(fields)) = (&backup, raw.as_object_mut()) {
+            _ = fields.insert("archive".to_owned(), target.display().to_string().into());
+        }
         cli_out!("{}", serde_json::to_string_pretty(&raw)?);
     } else {
-        if let Some(written) = data.archive {
-            cli_out!("Backed up to {written}");
+        if let Some(target) = &backup {
+            cli_out!("Backed up to {}", target.display());
         }
         cli_out!("Deleted character: {name}");
         for path in data.removed {
@@ -2062,14 +2087,14 @@ async fn recv_streaming_response(
     }
 }
 
-async fn execute_operation<O: Operation>(
+pub(crate) async fn execute_operation<O: Operation>(
     conn: &mut SWPConnection,
     input: O::Input,
 ) -> Result<O::Output, Box<dyn std::error::Error>> {
     Ok(execute_operation_with_raw::<O>(conn, input).await?.0)
 }
 
-async fn execute_operation_with_raw<O: Operation>(
+pub(crate) async fn execute_operation_with_raw<O: Operation>(
     conn: &mut SWPConnection,
     input: O::Input,
 ) -> Result<(O::Output, serde_json::Value), Box<dyn std::error::Error>> {

@@ -27,7 +27,7 @@ test("the oldest supported release's archive restores current data through the c
   await Promise.all(Object.values(dirs).map(directory => mkdir(directory, { recursive: true })));
   let refreshed = false;
   const context: ArchiveContext = {
-    dirs, hasCharacter: () => false, withSnapshot: async run => await run(),
+    dirs, characters: () => [], hasCharacter: () => false, withSnapshot: async run => await run(),
     refreshDiscovery: async () => { refreshed = true; }, releaseCharacter: async () => {},
   };
   const archive = join(import.meta.dir, "support/supported-baseline/ada.shore.tar.gz");

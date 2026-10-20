@@ -8,7 +8,7 @@ import { modelCopies } from "../llm/images.ts";
 import { Database } from "bun:sqlite";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -25,20 +25,32 @@ import {
 } from "../config/dirs.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { isolatedTurnsRepo } from "../tools/workspace_turns.ts";
-import { CommandError, invalidRequest, notFound } from "./errors.ts";
+import type { ArchiveSpool, SpoolEntry } from "./archive_spool.ts";
+import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import type { ExportCharacterResult } from "../protocol/ExportCharacterResult.ts";
 import type { ImportCharacterResult } from "../protocol/ImportCharacterResult.ts";
 import type { DeleteCharacterResult } from "../protocol/DeleteCharacterResult.ts";
+import type { BackupExported } from "../protocol/BackupExported.ts";
+import type { ArchiveImported } from "../protocol/ArchiveImported.ts";
+import type { TransferChunk } from "../protocol/TransferChunk.ts";
+import type { TransferWritten } from "../protocol/TransferWritten.ts";
 
 const FORMAT = "shore-character";
 const VERSION = 2;
 const MAX_EXTRACTED_BYTES = 4 * 1024 * 1024 * 1024 * 1024;
 const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "shore.db", "media"]);
+const BACKUP_FORMAT = "shore-backup";
+const BACKUP_VERSION = 1;
+const BACKUP_TOP_LEVEL = ["manifest.json", "config", "data", "characters"];
+const BACKUP_DATA = ["preferences", "plugins"];
 
 export interface ArchiveContext {
   readonly dirs: ShoreDirs;
   readonly limits?: ArchiveLimits;
+  readonly spool?: ArchiveSpool;
+  readonly owner?: number;
+  characters(): readonly string[];
   hasCharacter(name: string): boolean;
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
   refreshDiscovery(): Promise<void>;
@@ -52,6 +64,13 @@ function isolatedWorkspace(ctx: ArchiveContext, character: string): CharacterWor
 }
 
 export interface ArchiveLimits { readonly bytes: number; readonly entries: number; readonly temporaryDirectory?: string }
+
+interface BackupManifest {
+  format: typeof BACKUP_FORMAT;
+  version: typeof BACKUP_VERSION;
+  created_at: string;
+  characters: string[];
+}
 
 interface Manifest {
   format: typeof FORMAT;
@@ -73,11 +92,29 @@ interface Manifest {
 export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<ExportCharacterResult> {
   const character = requiredCharacter(args["character"]);
   if (!ctx.hasCharacter(character)) throw notFound(`Character not found: ${character}`);
+  if (args["output"] === undefined) {
+    const { entry, bytes } = await spooled(ctx, async (spool) => await writeCharacterArchive(ctx, character, spool.file, spool.directory));
+    return { ...exported(character, entry.file, bytes), transfer: entry.id };
+  }
   const output = requiredAbsolutePath(args["output"], "output");
   if (await exists(output)) throw invalidRequest(`Refusing to overwrite existing archive: ${output}`);
-  if (!await exists(dirname(output))) throw invalidRequest(`Archive directory does not exist: ${dirname(output)}`);
+  if (!await exists(dirname(output))) throw invalidRequest(`Archive directory does not exist on the daemon host: ${dirname(output)}`);
+  return exported(character, output, await writeCharacterArchive(ctx, character, output, ctx.limits?.temporaryDirectory ?? tmpdir()));
+}
 
-  const stage = await mkdtemp(join(ctx.limits?.temporaryDirectory ?? tmpdir(), "shore-export-"));
+function exported(character: string, archive: string, bytes: number): ExportCharacterResult {
+  return {
+    character,
+    archive,
+    bytes,
+    live: true,
+    call_diagnostics: "included",
+    external_memory: "rebuild_from_archived_segments",
+  };
+}
+
+async function writeCharacterArchive(ctx: ArchiveContext, character: string, output: string, scratch: string): Promise<number> {
+  const stage = await mkdtemp(join(scratch, "shore-export-"));
   const temporaryOutput = join(
     dirname(output),
     `.${basename(output)}.${crypto.randomUUID()}.tmp`,
@@ -106,19 +143,175 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
       }
       throw error;
     }
-    const size = (await stat(output)).size;
-    return {
-      character,
-      archive: output,
-      bytes: size,
-      live: true,
-      call_diagnostics: "included",
-      external_memory: "rebuild_from_archived_segments",
-    };
+    return (await stat(output)).size;
   } finally {
     await unlink(temporaryOutput).catch(() => {});
     await rm(stage, { recursive: true, force: true });
   }
+}
+
+export async function exportBackup(ctx: ArchiveContext): Promise<BackupExported> {
+  const characters = [...ctx.characters()].sort();
+  const { entry, bytes } = await spooled(ctx, async (spool) => {
+    const stage = await mkdtemp(join(spool.directory, "shore-backup-"));
+    try {
+      await mkdir(join(stage, "characters"));
+      for (const character of characters) {
+        await writeCharacterArchive(ctx, character, join(stage, "characters", `${character}.shore.tar.gz`), spool.directory);
+      }
+      await stageGlobal(ctx.dirs, stage);
+      const manifest: BackupManifest = { format: BACKUP_FORMAT, version: BACKUP_VERSION, created_at: new Date().toISOString(), characters };
+      await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await create({ cwd: stage, file: spool.file, gzip: true, portable: true, noMtime: false, strict: true }, BACKUP_TOP_LEVEL);
+      await chmod(spool.file, 0o600);
+      return (await stat(spool.file)).size;
+    } finally {
+      await rm(stage, { recursive: true, force: true });
+    }
+  });
+  return { characters, archive: entry.file, bytes, transfer: entry.id };
+}
+
+async function stageGlobal(dirs: ShoreDirs, stage: string): Promise<void> {
+  const characters = resolve(dirs.config, "characters");
+  if (await exists(dirs.config)) {
+    await cp(dirs.config, join(stage, "config"), {
+      ...copyOptions(),
+      filter: (source) => resolve(source) !== characters && (dirs.workspace === undefined || !insideOrSame(resolve(dirs.workspace), resolve(source))),
+    });
+  } else {
+    await mkdir(join(stage, "config"));
+  }
+  await mkdir(join(stage, "data"));
+  for (const name of BACKUP_DATA) {
+    if (await exists(join(dirs.data, name))) await cp(join(dirs.data, name), join(stage, "data", name), copyOptions());
+  }
+}
+
+function insideOrSame(parent: string, path: string): boolean {
+  return path === parent || contains(parent, path);
+}
+
+async function spooled(ctx: ArchiveContext, write: (entry: SpoolEntry) => Promise<number>): Promise<{ entry: SpoolEntry; bytes: number }> {
+  const { spool, owner } = transfers(ctx);
+  const entry = await spool.reserve(owner);
+  try {
+    const bytes = await write(entry);
+    spool.publish(entry, "download", bytes);
+    return { entry, bytes };
+  } catch (error) {
+    await spool.discard(entry);
+    throw error;
+  }
+}
+
+function transfers(ctx: ArchiveContext): { spool: ArchiveSpool; owner: number } {
+  if (ctx.spool === undefined || ctx.owner === undefined) throw internalError("Archive transfers are unavailable on this connection");
+  return { spool: ctx.spool, owner: ctx.owner };
+}
+
+export async function readTransfer(ctx: ArchiveContext, args: Args): Promise<TransferChunk> {
+  const { spool, owner } = transfers(ctx);
+  return await spool.read(owner, requiredTransfer(args["transfer"]), Number(args["offset"]));
+}
+
+export async function writeTransfer(ctx: ArchiveContext, args: Args): Promise<TransferWritten> {
+  const { spool, owner } = transfers(ctx);
+  const data = args["data"];
+  if (typeof data !== "string") throw invalidRequest("data must be base64 text");
+  return await spool.append(owner, args["transfer"] === undefined ? undefined : requiredTransfer(args["transfer"]), data);
+}
+
+export async function importArchive(ctx: ArchiveContext, args: Args): Promise<ArchiveImported> {
+  const { spool, owner } = transfers(ctx);
+  const entry = spool.claim(owner, requiredTransfer(args["transfer"]));
+  try {
+    const stage = await mkdtemp(join(entry.directory, "shore-import-"));
+    await extractArchive(entry.file, stage, ctx.limits, new Set([...TOP_LEVEL, ...BACKUP_TOP_LEVEL]));
+    const backup = await readBackupManifest(stage);
+    if (backup !== undefined) return await restoreBackup(ctx, stage, backup, entry.directory);
+    return { characters: [await installStaged(ctx, stage)], skipped: [], restored: [], kept: [] };
+  } finally {
+    await spool.discard(entry);
+  }
+}
+
+async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: BackupManifest, scratch: string): Promise<ArchiveImported> {
+  const restored: string[] = [];
+  const kept: string[] = [];
+  await restoreMissing(join(stage, "config"), ctx.dirs.config, "config", restored, kept);
+  await restoreMissing(join(stage, "data"), ctx.dirs.data, "data", restored, kept);
+  const characters: string[] = [];
+  const skipped: string[] = [];
+  for (const name of manifest.characters) {
+    if (ctx.hasCharacter(name)) {
+      skipped.push(name);
+      continue;
+    }
+    const inner = await mkdtemp(join(scratch, "shore-import-"));
+    try {
+      await extractArchive(join(stage, "characters", `${name}.shore.tar.gz`), inner, ctx.limits);
+      const { character } = await readManifest(inner);
+      if (character !== name) throw invalidRequest(`The backup lists ${name}, but its archive holds ${character}`);
+      await installStaged(ctx, inner);
+      characters.push(name);
+    } catch (error) {
+      if (characters.length === 0) throw error;
+      const message = `Restored ${characters.join(", ")}, then ${name} failed: ${error instanceof Error ? error.message : String(error)}`;
+      throw error instanceof CommandError ? new CommandError(error.code, message) : internalError(message);
+    } finally {
+      await rm(inner, { recursive: true, force: true });
+    }
+  }
+  if (characters.length === 0 && restored.length > 0) await ctx.refreshDiscovery();
+  return { characters, skipped, restored, kept };
+}
+
+async function restoreMissing(source: string, target: string, label: string, restored: string[], kept: string[]): Promise<void> {
+  const entries = await readdir(source, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const from = join(source, entry.name);
+    const to = join(target, entry.name);
+    const path = `${label}/${entry.name}`;
+    const present = await lstat(to).catch(() => undefined);
+    if (entry.isDirectory() && (present === undefined || present.isDirectory())) {
+      await mkdir(to, { recursive: true });
+      await restoreMissing(from, to, path, restored, kept);
+    } else if (present !== undefined) {
+      kept.push(path);
+    } else {
+      await cp(from, to, copyOptions());
+      restored.push(path);
+    }
+  }
+}
+
+async function readBackupManifest(stage: string): Promise<BackupManifest | undefined> {
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(join(stage, "manifest.json"), "utf8"));
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(value) || value["format"] !== BACKUP_FORMAT) return undefined;
+  const characters = value["characters"];
+  if (
+    value["version"] !== BACKUP_VERSION ||
+    !Array.isArray(characters) ||
+    !characters.every((name) => typeof name === "string" && isUsableCharacterName(name)) ||
+    new Set(characters).size !== characters.length
+  ) {
+    throw invalidRequest("Unsupported or malformed Shore backup");
+  }
+  return value as unknown as BackupManifest;
+}
+
+async function installStaged(ctx: ArchiveContext, stage: string): Promise<string> {
+  const { character } = await readManifest(stage);
+  await ctx.withSnapshot(async () => {
+    await installCharacter(ctx, stage, character);
+  });
+  return character;
 }
 
 export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<ImportCharacterResult> {
@@ -127,11 +320,7 @@ export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<
   const stage = await mkdtemp(join(ctx.limits?.temporaryDirectory ?? tmpdir(), "shore-import-"));
   try {
     await extractArchive(archive, stage, ctx.limits);
-    const manifest = await readManifest(stage);
-    const character = manifest.character;
-    await ctx.withSnapshot(async () => {
-      await installCharacter(ctx, stage, character);
-    });
+    const character = await installStaged(ctx, stage);
     return {
       character,
       archive,
@@ -328,7 +517,7 @@ async function stageActiveImages(
   return staged;
 }
 
-async function extractArchive(archive: string, stage: string, limits?: ArchiveLimits): Promise<void> {
+async function extractArchive(archive: string, stage: string, limits?: ArchiveLimits, allowed: ReadonlySet<string> = TOP_LEVEL): Promise<void> {
   let total = 0;
   let entries = 0;
   await extract({
@@ -341,7 +530,7 @@ async function extractArchive(archive: string, stage: string, limits?: ArchiveLi
       const reject = (message: string): false => { this.abort(invalidRequest(message)); return false; };
       const normalized = path.replaceAll("\\", "/").replace(/^\.\//, "");
       const top = normalized.split("/")[0] ?? "";
-      if (!TOP_LEVEL.has(top) || isAbsolute(path) || normalized.split("/").includes("..")) {
+      if (!allowed.has(top) || isAbsolute(path) || normalized.split("/").includes("..")) {
         return reject(`Archive contains an unexpected path: ${path}`);
       }
       total += entry.size;
@@ -461,6 +650,11 @@ function requiredCharacter(value: unknown): string {
   if (typeof value !== "string" || !isUsableCharacterName(value)) {
     throw invalidRequest("Missing or invalid character name");
   }
+  return value;
+}
+
+function requiredTransfer(value: unknown): string {
+  if (typeof value !== "string" || value === "") throw invalidRequest("Missing archive transfer id");
   return value;
 }
 

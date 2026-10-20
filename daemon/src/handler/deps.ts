@@ -4,6 +4,7 @@ import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
+import { ArchiveSpool } from "../commands/archive_spool.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
 import {
@@ -227,7 +228,9 @@ export interface HandlerAssembly
 
 const EXCLUSIVE_COMMANDS = new Set([
   "export_character",
+  "export_backup",
   "import_character",
+  "import_archive",
   "delete_character",
   "fork_thread",
 ]);
@@ -597,6 +600,8 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     archive: {
       dirs: runtime.config.dirs,
+      spool: new ArchiveSpool(rustJoin(runtime.config.dirs.cache, "archive-transfers"), (owner) => a.router.has(owner)),
+      characters: () => runtime.registry.availableCharacters(),
       hasCharacter: (character) => runtime.registry.hasCharacter(character),
       withSnapshot: async (run) => await runtime.snapshotGate.withSnapshot(run),
       refreshDiscovery: async () => {

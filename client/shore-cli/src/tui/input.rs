@@ -1477,6 +1477,12 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             app.set_error("shell completion generation is a terminal-only CLI operation");
             return Action::Redraw;
         }
+        CliCommand::Export { .. } | CliCommand::Import { .. } => {
+            app.set_error(
+                "export and import copy archives to and from this machine; run them from a shell",
+            );
+            return Action::Redraw;
+        }
         CliCommand::Status {
             section: Some(section),
             ..
@@ -1517,8 +1523,6 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
         | CliCommand::Thread { .. }
-        | CliCommand::Export { .. }
-        | CliCommand::Import { .. }
         | CliCommand::Status { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }

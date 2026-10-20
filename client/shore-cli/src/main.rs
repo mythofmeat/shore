@@ -22,6 +22,7 @@ macro_rules! cli_err {
     };
 }
 
+mod archives;
 mod cli;
 mod output;
 mod run;

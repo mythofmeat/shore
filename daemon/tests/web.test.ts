@@ -407,6 +407,12 @@ function owner() {
   return { session, controller };
 }
 
+function exportOutput(route: CommandRoute): string {
+  const { output } = parseOperationInput("export_character", route.cmd.args);
+  if (output === undefined) throw new Error("Browser exports name their archive file");
+  return output;
+}
+
 function upload(body: NonNullable<RequestInit["body"]> = "archive bytes", headers: Record<string, string> = {}, signal?: AbortSignal): Request {
   return new Request("http://localhost/api/archives", { method: "POST", body, headers: { "content-type": "application/octet-stream", "x-shore-filename": "ada.tar.gz", ...headers }, ...(signal === undefined ? {} : { signal }) });
 }
@@ -427,9 +433,9 @@ async function archiveFixture(limits: Partial<ArchiveTransferLimits> = {}, singl
     const name = route.cmd.name;
     let data: unknown;
     if (name === "export_character") {
-      const args = parseOperationInput(name, route.cmd.args);
-      await writeFile(args.output, contents);
-      data = { character: args.character, archive: args.output, bytes: contents.length, live: true, call_diagnostics: "included", external_memory: "rebuild_from_archived_segments" };
+      const output = exportOutput(route);
+      await writeFile(output, contents);
+      data = { character: parseOperationInput(name, route.cmd.args).character, archive: output, bytes: contents.length, live: true, call_diagnostics: "included", external_memory: "rebuild_from_archived_segments" };
     } else if (name === "import_character") {
       const args = parseOperationInput(name, route.cmd.args);
       data = { character: "ada", archive: args.archive, imported: true, external_memory: "queued_for_rebuild_when_retain_is_enabled" };
@@ -450,7 +456,7 @@ test("download refuses substituted links and changed files and releases its down
   const info = f.transfers.export(a.session, "ada");
   const route = await f.next(); await f.finish(route);
   await until(() => f.transfers.get(a.session, info.id).downloadable, "the archive transfer to settle");
-  const path = parseOperationInput("export_character", route.cmd.args).output;
+  const path = exportOutput(route);
   const target = join(dirname(path), "private.txt"); await writeFile(target, "private contents");
   await rm(path); await symlink(target, path);
   expect(await outcomeOf(f.transfers.download(a.session, info.id, upload()))).toThrow();
