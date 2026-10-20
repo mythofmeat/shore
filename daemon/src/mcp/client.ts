@@ -15,6 +15,7 @@ import { base64Bytes } from "../util/base64.ts";
 import {
   CharacterUserError,
   characterPath,
+  characterRuntimeDir,
   characterUser,
   hasAmbientCapabilities,
   setprivArgs,
@@ -97,12 +98,14 @@ export async function stdioLaunch(
   const problem = switchUserProblem(user);
   if (problem !== undefined) throw new CharacterUserError(problem.replace("tools.user", "the server's user"));
   const path = characterPath(user, parent["PATH"]);
+  const runtime = characterRuntimeDir(user);
   return {
     command: setprivFor(path),
     args: [...setprivArgs(user), "--", "env", `--chdir=${cwd ?? user.home ?? "/"}`, "--", command, ...args],
     env: {
       ...(path === undefined ? {} : { PATH: path }),
       ...(user.home === undefined ? {} : { HOME: user.home }),
+      ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }),
       ...env,
     },
     cwd: "/",

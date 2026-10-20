@@ -121,6 +121,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect(env.get("PWD")).toBe(workspace.dir);
     expect(env.get("SHORE_WORKSPACE_DIR")).toBe(workspace.dir);
     expect(env.get("PATH")?.startsWith(`${user.home ?? ""}/.local/bin:`)).toBe(true);
+    expect(env.get("XDG_RUNTIME_DIR")).toBe(`/run/user/${String(user.uid)}`);
   });
 
   test("reads and edits files with the character's permissions", async () => {
@@ -213,6 +214,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const launch = await stdioLaunch({ kind: "stdio", command: "id", args: ["-u"], env: {}, user: USER });
     const run = Bun.spawnSync([launch.command, ...launch.args], { env: launch.env, ...(launch.cwd === undefined ? {} : { cwd: launch.cwd }) });
     expect(run.stdout.toString().trim()).toBe(String(user.uid));
+    expect(launch.env["XDG_RUNTIME_DIR"]).toBe(`/run/user/${String(user.uid)}`);
   });
 
   test("exports, imports and deletes the character through its user", async () => {

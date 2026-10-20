@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export interface ToolsUserSpec {
@@ -35,6 +35,8 @@ const CAP_SETUID = 7n;
 const PASSED_ENV = new Set(["LANG", "LANGUAGE", "TZ"]);
 
 const USER_BIN_DIRS = [".local/bin", ".bun/bin", ".cargo/bin"];
+
+const RUNTIME_DIRS = "/run/user";
 
 function numericId(text: string): number | undefined {
   if (!NUMERIC_ID.test(text)) return undefined;
@@ -226,6 +228,12 @@ export function characterPath(user: Pick<CharacterUser, "home">, daemonPath: str
   return path.length === 0 ? undefined : path.join(":");
 }
 
+export function characterRuntimeDir(user: Pick<CharacterUser, "uid">): string | undefined {
+  const dir = join(RUNTIME_DIRS, String(user.uid));
+  const stat = statSync(dir, { throwIfNoEntry: false });
+  return stat?.isDirectory() === true && stat.uid === user.uid ? dir : undefined;
+}
+
 export function characterEnv(
   user: CharacterUser,
   daemonEnv: NodeJS.ProcessEnv,
@@ -238,6 +246,8 @@ export function characterEnv(
   const path = characterPath(user, daemonEnv.PATH);
   if (path !== undefined) env.PATH = path;
   if (user.home !== undefined) env.HOME = user.home;
+  const runtime = characterRuntimeDir(user);
+  if (runtime !== undefined) env.XDG_RUNTIME_DIR = runtime;
   if (user.name !== undefined) {
     env.USER = user.name;
     env.LOGNAME = user.name;

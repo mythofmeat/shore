@@ -27,6 +27,7 @@ chmod 600 /srv/isolation/config/token
 for name in ada bea; do
 	install -d -o "$name" -g "$name" -m 2770 "/srv/isolation/workspace/$name"
 done
+install -d -o ada -g ada -m 700 /run/user/3001
 cd /src/daemon
 exec setpriv --reuid=shore --regid=shore --init-groups --no-new-privs \
 	--inh-caps=-all,+setuid,+setgid,+kill --ambient-caps=-all,+setuid,+setgid,+kill \
