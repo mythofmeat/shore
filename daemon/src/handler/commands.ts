@@ -57,8 +57,10 @@ export async function dispatchCommand(
   signal: AbortSignal = new AbortController().signal,
 ): Promise<ServerMessage> {
   const archive = originalDeps.commands.archive;
-  const deps = archive === undefined || meta.session.archiveLimits === undefined ? originalDeps : {
-    ...originalDeps, commands: { ...originalDeps.commands, archive: { ...archive, limits: meta.session.archiveLimits } },
+  const deps = archive === undefined ? originalDeps : {
+    ...originalDeps, commands: { ...originalDeps.commands, archive: {
+      ...archive, owner: meta.session.sessionId, ...(meta.session.archiveLimits === undefined ? {} : { limits: meta.session.archiveLimits }),
+    } },
   };
   const sessionId = meta.session.sessionId;
   const selected = meta.session.selectedCharacter ?? undefined;

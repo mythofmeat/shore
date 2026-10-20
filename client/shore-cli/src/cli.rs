@@ -429,13 +429,20 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Back up one character to a compressed archive while Shore keeps running
+    /// Download one character, or with --all everything, as a compressed archive
+    /// while Shore keeps running
     #[command(display_order = 9)]
     Export {
         /// Character to back up
-        character: String,
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        character: Option<String>,
 
-        /// Archive path on the daemon host (defaults to `<character>.shore.tar.gz`)
+        /// Back up every character and the global configuration
+        #[arg(long)]
+        all: bool,
+
+        /// Where to save the archive on this machine (defaults to
+        /// `<character>.shore.tar.gz`, or `shore-backup-<time>.tar.gz` with --all)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -444,10 +451,11 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Restore a character archive; existing characters are never overwritten
+    /// Restore a character archive or a backup; existing characters and files are
+    /// never overwritten
     #[command(display_order = 9)]
     Import {
-        /// Archive created by `shore export`, on the daemon host
+        /// Archive created by `shore export`, on this machine
         archive: PathBuf,
 
         /// Output raw JSON
@@ -1305,7 +1313,7 @@ pub(crate) enum CharacterCommand {
         /// Character name
         name: String,
 
-        /// Back it up to this path on the daemon host before deleting
+        /// Download a backup to this path before deleting
         #[arg(long, value_name = "PATH")]
         archive: Option<PathBuf>,
 
@@ -2347,24 +2355,7 @@ pub(crate) fn to_swp_command(
             )),
         },
 
-        CliCommand::Export {
-            character: export_character,
-            output,
-            ..
-        } => {
-            use shore_common::protocol::operations::{ExportCharacter, ExportCharacterArgs};
-            let fallback = PathBuf::from(format!("{export_character}.shore.tar.gz"));
-            operation_to_swp::<ExportCharacter>(ExportCharacterArgs {
-                character: export_character.clone(),
-                output: absolute_path(output.as_deref().unwrap_or(&fallback)),
-            })
-        }
-        CliCommand::Import { archive, .. } => {
-            use shore_common::protocol::operations::{ImportCharacter, ImportCharacterArgs};
-            operation_to_swp::<ImportCharacter>(ImportCharacterArgs {
-                archive: absolute_path(archive),
-            })
-        }
+        CliCommand::Export { .. } | CliCommand::Import { .. } => None,
 
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,

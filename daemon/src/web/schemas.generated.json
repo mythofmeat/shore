@@ -237,6 +237,12 @@
           },
           "external_memory": {
             "type": "string"
+          },
+          "transfer": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -422,6 +428,12 @@
           },
           "external_memory": {
             "type": "string"
+          },
+          "transfer": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -594,6 +606,70 @@
               },
               "data": {
                 "$ref": "#/$defs/DeleteCharacterResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "export_backup"
+              },
+              "data": {
+                "$ref": "#/$defs/BackupExported"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "import_archive"
+              },
+              "data": {
+                "$ref": "#/$defs/ArchiveImported"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "read_transfer"
+              },
+              "data": {
+                "$ref": "#/$defs/TransferChunk"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "write_transfer"
+              },
+              "data": {
+                "$ref": "#/$defs/TransferWritten"
               }
             },
             "required": [
@@ -1505,6 +1581,12 @@
           },
           "external_memory": {
             "type": "string"
+          },
+          "transfer": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1566,6 +1648,109 @@
           "deleted",
           "removed",
           "archive"
+        ]
+      },
+      "BackupExported": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archive": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "transfer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characters",
+          "archive",
+          "bytes",
+          "transfer"
+        ]
+      },
+      "ArchiveImported": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "characters",
+          "skipped",
+          "restored",
+          "kept"
+        ]
+      },
+      "TransferChunk": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "data",
+          "offset",
+          "bytes"
+        ]
+      },
+      "TransferWritten": {
+        "type": "object",
+        "properties": {
+          "transfer": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "transfer",
+          "bytes"
         ]
       },
       "UsageResult": {
@@ -8938,6 +9123,70 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "export_backup"
+              },
+              "data": {
+                "$ref": "#/$defs/BackupExported"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "import_archive"
+              },
+              "data": {
+                "$ref": "#/$defs/ArchiveImported"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "read_transfer"
+              },
+              "data": {
+                "$ref": "#/$defs/TransferChunk"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "write_transfer"
+              },
+              "data": {
+                "$ref": "#/$defs/TransferWritten"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "usage"
               },
               "data": {
@@ -9837,6 +10086,12 @@
           },
           "external_memory": {
             "type": "string"
+          },
+          "transfer": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -9898,6 +10153,109 @@
           "deleted",
           "removed",
           "archive"
+        ]
+      },
+      "BackupExported": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archive": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "transfer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characters",
+          "archive",
+          "bytes",
+          "transfer"
+        ]
+      },
+      "ArchiveImported": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "characters",
+          "skipped",
+          "restored",
+          "kept"
+        ]
+      },
+      "TransferChunk": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "data",
+          "offset",
+          "bytes"
+        ]
+      },
+      "TransferWritten": {
+        "type": "object",
+        "properties": {
+          "transfer": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "transfer",
+          "bytes"
         ]
       },
       "UsageResult": {

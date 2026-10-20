@@ -193,6 +193,7 @@ function userMessage(character: string): Message {
 function context(dirs: ShoreDirs, characters: Set<string>, events: string[]): ArchiveContext {
   return {
     dirs,
+    characters: () => [...characters],
     hasCharacter: (name) => characters.has(name),
     withSnapshot: async (run) => {
       events.push("snapshot");

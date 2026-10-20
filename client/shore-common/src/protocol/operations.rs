@@ -194,7 +194,10 @@ wire_types! {
     #[serde(deny_unknown_fields)]
     pub struct ExportCharacterArgs {
         pub character: String,
-        pub output: String,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub output: Option<String>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -219,6 +222,54 @@ wire_types! {
         pub live: bool,
         pub call_diagnostics: String,
         pub external_memory: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub transfer: Option<String>,
+    }
+
+    pub struct BackupExported {
+        pub characters: Vec<String>,
+        pub archive: String,
+        pub bytes: usize,
+        pub transfer: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ImportArchiveArgs {
+        pub transfer: String,
+    }
+
+    pub struct ArchiveImported {
+        pub characters: Vec<String>,
+        pub skipped: Vec<String>,
+        pub restored: Vec<String>,
+        pub kept: Vec<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ReadTransferArgs {
+        pub transfer: String,
+        pub offset: usize,
+    }
+
+    pub struct TransferChunk {
+        pub data: String,
+        pub offset: usize,
+        pub bytes: usize,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct WriteTransferArgs {
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub transfer: Option<String>,
+        pub data: String,
+    }
+
+    pub struct TransferWritten {
+        pub transfer: String,
+        pub bytes: usize,
     }
 
     pub struct ImportCharacterResult {
@@ -2445,6 +2496,10 @@ operations! {
     ExportCharacter: "export_character" (ExportCharacterArgs) => ExportCharacterResult,
     ImportCharacter: "import_character" (ImportCharacterArgs) => ImportCharacterResult,
     DeleteCharacter: "delete_character" (DeleteCharacterArgs) => DeleteCharacterResult,
+    ExportBackup: "export_backup" (EmptyOperationArgs) => BackupExported,
+    ImportArchive: "import_archive" (ImportArchiveArgs) => ArchiveImported,
+    ReadTransfer: "read_transfer" (ReadTransferArgs) => TransferChunk,
+    WriteTransfer: "write_transfer" (WriteTransferArgs) => TransferWritten,
     UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,

@@ -235,7 +235,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const name = basename((await freshWorkspace([], root)).dir);
     await seedCharacter(source, name);
     const isolated = (dirs: ShoreDirs): ArchiveContext => ({
-      dirs, hasCharacter: () => true, withSnapshot: async (run) => await run(), refreshDiscovery: async () => {},
+      dirs, characters: () => [], hasCharacter: () => true, withSnapshot: async (run) => await run(), refreshDiscovery: async () => {},
       releaseCharacter: async () => {}, workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
     });
     const archive = join(source.runtime, "ada.tar.gz");
@@ -261,7 +261,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     await bash(new CharacterWorkspace(join(root, name), OWN_USER), "head -c 20000000 /dev/zero > big.bin");
     const archive = join(source.runtime, "limited.tar.gz");
     const ctx: ArchiveContext = {
-      dirs: source, limits: { bytes: 50_000, entries: 100 }, hasCharacter: () => true, withSnapshot: async (run) => await run(),
+      dirs: source, limits: { bytes: 50_000, entries: 100 }, characters: () => [], hasCharacter: () => true, withSnapshot: async (run) => await run(),
       refreshDiscovery: async () => {}, releaseCharacter: async () => {},
       workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
     };
@@ -276,7 +276,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     await seedCharacter(source, name);
     const archive = join(source.runtime, "refused.tar.gz");
     const ctx = (dirs: ShoreDirs, workspaceRoot: string): ArchiveContext => ({
-      dirs: { ...dirs, workspace: workspaceRoot }, hasCharacter: () => false, withSnapshot: async (run) => await run(),
+      dirs: { ...dirs, workspace: workspaceRoot }, characters: () => [], hasCharacter: () => false, withSnapshot: async (run) => await run(),
       refreshDiscovery: async () => {}, releaseCharacter: async () => {},
       workspace: (character) => new CharacterWorkspace(join(workspaceRoot, character), OWN_USER),
     });

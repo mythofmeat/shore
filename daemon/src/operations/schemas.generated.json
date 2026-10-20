@@ -15,8 +15,7 @@
       },
       "additionalProperties": false,
       "required": [
-        "character",
-        "output"
+        "character"
       ]
     },
     "output": {
@@ -43,6 +42,12 @@
         },
         "external_memory": {
           "type": "string"
+        },
+        "transfer": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -149,6 +154,186 @@
         "deleted",
         "removed",
         "archive"
+      ]
+    }
+  },
+  {
+    "name": "export_backup",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "BackupExported",
+      "type": "object",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archive": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "transfer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "characters",
+        "archive",
+        "bytes",
+        "transfer"
+      ]
+    }
+  },
+  {
+    "name": "import_archive",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ImportArchiveArgs",
+      "type": "object",
+      "properties": {
+        "transfer": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "transfer"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ArchiveImported",
+      "type": "object",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restored": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kept": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "characters",
+        "skipped",
+        "restored",
+        "kept"
+      ]
+    }
+  },
+  {
+    "name": "read_transfer",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ReadTransferArgs",
+      "type": "object",
+      "properties": {
+        "transfer": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "transfer",
+        "offset"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TransferChunk",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "data",
+        "offset",
+        "bytes"
+      ]
+    }
+  },
+  {
+    "name": "write_transfer",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "WriteTransferArgs",
+      "type": "object",
+      "properties": {
+        "transfer": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "data"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TransferWritten",
+      "type": "object",
+      "properties": {
+        "transfer": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "transfer",
+        "bytes"
       ]
     }
   },
