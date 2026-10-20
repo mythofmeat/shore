@@ -9,6 +9,7 @@ import {
   characterUser,
   hasAmbientCapabilities,
   missingCapabilities,
+  runsWithNoNewPrivs,
   setprivArgs,
   setprivFor,
   switchUserProblem,
@@ -21,6 +22,7 @@ import { envWithoutInheritedGitRepo, runProcess, type ProcessOutput } from "./pr
 export interface CharacterTools {
   readonly user: string | undefined;
   readonly passEnv: readonly string[];
+  readonly noNewPrivs: boolean;
 }
 
 export interface CharacterRunOptions {
@@ -37,7 +39,7 @@ interface Launch {
   env: NodeJS.ProcessEnv;
 }
 
-const NO_USER: CharacterTools = { user: undefined, passEnv: [] };
+const NO_USER: CharacterTools = { user: undefined, passEnv: [], noNewPrivs: true };
 
 const helpers = new Map<string, WorkspaceHelper>();
 
@@ -47,6 +49,14 @@ function warnIfUnkillable(user: CharacterUser): void {
   if (warnedWithoutKill || !missingCapabilities().includes("CAP_KILL")) return;
   warnedWithoutKill = true;
   shoreLog.warn(`shore: tools run as ${user.spec}, but the daemon lacks CAP_KILL, so timeouts and cancellation cannot stop the character's commands`);
+}
+
+const warnedNoNewPrivs = new Set<string>();
+
+export function warnIfNoNewPrivsInherited(tools: CharacterTools, user: CharacterUser, status?: string): void {
+  if (tools.noNewPrivs || warnedNoNewPrivs.has(user.spec) || !runsWithNoNewPrivs(status)) return;
+  warnedNoNewPrivs.add(user.spec);
+  shoreLog.warn(`shore: tools run as ${user.spec} may raise privileges (tools.no_new_privs = false), but the daemon itself runs with no_new_privs, so they cannot`);
 }
 
 function withChanges(base: NodeJS.ProcessEnv, changes: CharacterRunOptions["env"]): NodeJS.ProcessEnv {
@@ -81,6 +91,7 @@ export class CharacterWorkspace {
     const problem = switchUserProblem(user);
     if (problem !== undefined) throw new CharacterUserError(problem);
     warnIfUnkillable(user);
+    warnIfNoNewPrivsInherited(this.tools, user);
     return user;
   }
 
@@ -111,7 +122,7 @@ export class CharacterWorkspace {
     }
     const env = withChanges(characterEnv(user, process.env, this.tools.passEnv), options.env);
     const cwd = options.cwd ?? user.home ?? "/";
-    return { command: setprivFor(env.PATH), args: [...setprivArgs(user), "--", "env", `--chdir=${cwd}`, "--", program, ...args], cwd: "/", env };
+    return { command: setprivFor(env.PATH), args: [...setprivArgs(user, this.tools.noNewPrivs), "--", "env", `--chdir=${cwd}`, "--", program, ...args], cwd: "/", env };
   }
 
   async call<K extends WorkspaceOp>(op: K, args: OpArgs<K>, signal?: AbortSignal): Promise<OpResult<K>> {
@@ -150,7 +161,7 @@ const toolsCache = new WeakMap<LoadedConfig, Map<string, CharacterTools>>();
 
 function toolsOnDisk(config: LoadedConfig, name: string): CharacterTools {
   const tools = (loadCharacterConfig(config, name, () => {}) ?? config).app.tools;
-  return { user: tools.user, passEnv: tools.pass_env };
+  return { user: tools.user, passEnv: tools.pass_env, noNewPrivs: tools.no_new_privs };
 }
 
 export function characterToolsFor(config: LoadedConfig, name: string): CharacterTools {

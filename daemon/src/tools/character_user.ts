@@ -160,22 +160,27 @@ export interface CapabilitySets {
   ambient: bigint;
 }
 
-export function capabilitySets(status?: string): CapabilitySets | undefined {
-  let text = status;
-  if (text === undefined) {
-    try {
-      text = readFileSync("/proc/self/status", "utf8");
-    } catch {
-      return undefined;
-    }
+function ownStatus(): string | undefined {
+  try {
+    return readFileSync("/proc/self/status", "utf8");
+  } catch {
+    return undefined;
   }
+}
+
+export function capabilitySets(status = ownStatus()): CapabilitySets | undefined {
+  if (status === undefined) return undefined;
   const field = (name: string): bigint | undefined => {
-    const match = new RegExp(`^${name}:\\s*([0-9a-f]+)$`, "m").exec(text);
+    const match = new RegExp(`^${name}:\\s*([0-9a-f]+)$`, "m").exec(status);
     return match?.[1] === undefined ? undefined : BigInt(`0x${match[1]}`);
   };
   const effective = field("CapEff");
   const ambient = field("CapAmb");
   return effective === undefined || ambient === undefined ? undefined : { effective, ambient };
+}
+
+export function runsWithNoNewPrivs(status = ownStatus()): boolean {
+  return status !== undefined && /^NoNewPrivs:\s*1$/m.test(status);
 }
 
 const has = (set: bigint, cap: bigint): boolean => ((set >> cap) & 1n) === 1n;
@@ -211,12 +216,12 @@ export function setprivFor(path: string | undefined): string {
   return found;
 }
 
-export function setprivArgs(user: CharacterUser | undefined): string[] {
+export function setprivArgs(user: CharacterUser | undefined, noNewPrivs = true): string[] {
   const identity = user === undefined ? [] : [
     `--reuid=${String(user.uid)}`,
     `--regid=${String(user.gid)}`,
     user.name === undefined ? "--clear-groups" : "--init-groups",
-    "--no-new-privs",
+    ...(noNewPrivs ? ["--no-new-privs"] : []),
   ];
   return [...identity, "--inh-caps=-all", "--ambient-caps=-all"];
 }

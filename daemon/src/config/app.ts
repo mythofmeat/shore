@@ -495,6 +495,7 @@ export interface ToolsConfig {
   timeout: ConfigDuration;
   user: string | undefined;
   pass_env: string[];
+  no_new_privs: boolean;
   config: Map<string, ToolOverride>;
 }
 
@@ -507,6 +508,7 @@ export const defaultToolsConfig = (): ToolsConfig => ({
   timeout: ConfigDuration.fromSecs(300),
   user: undefined,
   pass_env: [],
+  no_new_privs: true,
   config: new Map(),
 });
 
@@ -522,6 +524,7 @@ const TOOLS: StructSpec<ToolsConfig> = {
     timeout: readDuration,
     user: optional(readToolsUser),
     pass_env: readEnvNameSeq,
+    no_new_privs: readBool,
     config: readMap(struct(TOOL_OVERRIDE)),
   },
 };

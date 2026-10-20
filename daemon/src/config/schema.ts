@@ -255,6 +255,7 @@ function describeOption(path: readonly string[]): string {
     system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",
     max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
     pass_env: "Environment variables of the daemon's that a character with its own tools.user gets. It gets no others besides its locale and time zone.",
+    no_new_privs: "Whether a character with its own tools.user runs its commands under no_new_privs, which stops sudo and other setuid programs from raising privileges. True by default; false only takes effect when the daemon itself runs without NoNewPrivileges.",
     image_cache_bytes: "Most bytes the image cache keeps for every character together: images users send, their reduced copies and images tools return. Past it the least recently used go first; an image a model request read in the last hour stays. Defaults to 512 MiB.",
     shutdown_grace: "How long a stopping daemon waits for replies, heartbeats and compactions already running before it stops anyway. New messages are refused meanwhile, and a second stop signal stops at once. Defaults to 29m, which covers 90% of heartbeat turns and leaves a minute of a 30m Docker stop_grace_period for the exit itself.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",

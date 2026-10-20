@@ -1,10 +1,11 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
+import { loadConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
@@ -12,8 +13,10 @@ import { stdioLaunch } from "../src/mcp/client.ts";
 import { loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
 import { writeDurable } from "../src/storage/files.ts";
 import type { BashResult } from "../src/tools/bash.ts";
-import { canSwitchUser, characterUser, type CharacterUser } from "../src/tools/character_user.ts";
-import { CharacterWorkspace, closeWorkspaceHelpers } from "../src/tools/character_workspace.ts";
+import { canSwitchUser, characterUser, runsWithNoNewPrivs, setprivArgs, type CharacterUser } from "../src/tools/character_user.ts";
+import {
+  CharacterWorkspace, characterToolsFor, closeWorkspaceHelpers, warnIfNoNewPrivsInherited, type CharacterTools,
+} from "../src/tools/character_workspace.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/workspace.ts";
 import { recordTurn, redoTurns, snapshotTree, undoTurns, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
@@ -26,6 +29,7 @@ const OTHER = process.env["SHORE_ISOLATION_OTHER_USER"] ?? "";
 const READY = ROOT !== "" && USER !== "" && OTHER !== "" && canSwitchUser();
 const SECRET = join(ROOT, "config", "token");
 const PATCH_HELPER = join(import.meta.dir, "..", "dist", "shore-apply-patch");
+const OWN_USER: CharacterTools = { user: USER, passEnv: [], noNewPrivs: true };
 
 afterAll(() => {
   closeWorkspaceHelpers();
@@ -43,7 +47,7 @@ async function privateDir(name: string): Promise<string> {
 }
 
 async function freshWorkspace(passEnv: string[] = [], root = join(ROOT, "workspace", USER)): Promise<CharacterWorkspace> {
-  const parent = new CharacterWorkspace(root, { user: USER, passEnv });
+  const parent = new CharacterWorkspace(root, { ...OWN_USER, passEnv });
   const dir = join(root, randomUUID());
   await parent.call("mkdir", { path: dir });
   return parent.at(dir);
@@ -82,6 +86,13 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
       `${String(user.uid)}\n${String(user.gid)}\nCapPrm:\t0000000000000000\nCapEff:\t0000000000000000\n` +
         "CapAmb:\t0000000000000000\nNoNewPrivs:\t1\n",
     );
+  });
+
+  test("stays under no_new_privs when it opts out but the daemon runs under it", async () => {
+    const workspace = await freshWorkspace();
+    const optedOut = new CharacterWorkspace(workspace.dir, { ...workspace.tools, noNewPrivs: false });
+    const result = await bash(optedOut, "grep -E '^(CapEff|NoNewPrivs):' /proc/self/status");
+    expect(result.stdout).toBe("CapEff:\t0000000000000000\nNoNewPrivs:\t1\n");
   });
 
   test("cannot open, change or signal what belongs to the daemon", async () => {
@@ -225,14 +236,14 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     await seedCharacter(source, name);
     const isolated = (dirs: ShoreDirs): ArchiveContext => ({
       dirs, hasCharacter: () => true, withSnapshot: async (run) => await run(), refreshDiscovery: async () => {},
-      releaseCharacter: async () => {}, workspace: (character) => new CharacterWorkspace(join(root, character), { user: USER, passEnv: [] }),
+      releaseCharacter: async () => {}, workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
     });
     const archive = join(source.runtime, "ada.tar.gz");
-    await bash(new CharacterWorkspace(join(root, name), { user: USER, passEnv: [] }), "chmod 600 SOUL.md && mkdir private && printf mine > private/kept.txt");
+    await bash(new CharacterWorkspace(join(root, name), OWN_USER), "chmod 600 SOUL.md && mkdir private && printf mine > private/kept.txt");
     expect(await exportCharacter(isolated(source), { character: name, output: archive })).toMatchObject({ character: name });
 
     const target = await dirsUnder(root);
-    const workspace = new CharacterWorkspace(join(root, name), { user: USER, passEnv: [] });
+    const workspace = new CharacterWorkspace(join(root, name), OWN_USER);
     await deleteCharacter(isolated(source), { character: name, confirm: name });
     expect(await workspace.call("entries", { path: workspace.dir })).toBeNull();
     await workspace.call("mkdir", { path: workspace.dir });
@@ -247,12 +258,12 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const source = await dirsUnder(root);
     const name = basename((await freshWorkspace([], root)).dir);
     await seedCharacter(source, name);
-    await bash(new CharacterWorkspace(join(root, name), { user: USER, passEnv: [] }), "head -c 20000000 /dev/zero > big.bin");
+    await bash(new CharacterWorkspace(join(root, name), OWN_USER), "head -c 20000000 /dev/zero > big.bin");
     const archive = join(source.runtime, "limited.tar.gz");
     const ctx: ArchiveContext = {
       dirs: source, limits: { bytes: 50_000, entries: 100 }, hasCharacter: () => true, withSnapshot: async (run) => await run(),
       refreshDiscovery: async () => {}, releaseCharacter: async () => {},
-      workspace: (character) => new CharacterWorkspace(join(root, character), { user: USER, passEnv: [] }),
+      workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
     };
     expect(await failure(exportCharacter(ctx, { character: name, output: archive }))).toBe("Character exceeds browser archive processing limits");
     expect(existsSync(archive)).toBe(false);
@@ -267,7 +278,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const ctx = (dirs: ShoreDirs, workspaceRoot: string): ArchiveContext => ({
       dirs: { ...dirs, workspace: workspaceRoot }, hasCharacter: () => false, withSnapshot: async (run) => await run(),
       refreshDiscovery: async () => {}, releaseCharacter: async () => {},
-      workspace: (character) => new CharacterWorkspace(join(workspaceRoot, character), { user: USER, passEnv: [] }),
+      workspace: (character) => new CharacterWorkspace(join(workspaceRoot, character), OWN_USER),
     });
     await exportCharacter({ ...ctx(source, root), hasCharacter: () => true }, { character: name, output: archive });
     const target = await dirsUnder(root);
@@ -301,7 +312,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
 
   test("runs the character's ~/.init.sh as that user when the daemon starts, and what it starts outlives it", async () => {
     const user = await ownUser();
-    const home = new CharacterWorkspace(user.home ?? "", { user: USER, passEnv: [] });
+    const home = new CharacterWorkspace(user.home ?? "", OWN_USER);
     const script = join(home.dir, ".init.sh");
     const output = join(home.dir, ".init.log");
     const commands = [
@@ -345,6 +356,58 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
   }, 60_000);
 });
 
+describe("tools.no_new_privs", () => {
+  const own = (uid: number): CharacterUser => ({ spec: String(uid), uid, gid: uid, name: undefined, home: undefined, shell: undefined });
+
+  test("is on unless a character's own config turns it off", async () => {
+    const root = await privateDir("no-new-privs");
+    const characters = { ada: 'user = "ada"\nno_new_privs = false', bea: 'user = "bea"', cy: 'user = "cy"\nno_new_privs = "false"' };
+    for (const [name, tools] of Object.entries(characters)) {
+      await mkdir(join(root, "characters", name), { recursive: true });
+      await writeFile(join(root, "characters", name, "config.toml"), `[tools]\n${tools}\n`);
+    }
+    await writeFile(join(root, "config.toml"), "");
+    const config = loadConfig(join(root, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: root, SHORE_DATA_DIR: join(root, "data"), SHORE_CACHE_DIR: join(root, "cache") },
+      onWarn: () => {},
+    });
+    expect(config.app.tools.no_new_privs).toBe(true);
+    expect(characterToolsFor(config, "ada")).toEqual({ user: "ada", passEnv: [], noNewPrivs: false });
+    expect(characterToolsFor(config, "bea")).toEqual({ user: "bea", passEnv: [], noNewPrivs: true });
+    expect(() => characterToolsFor(config, "cy")).toThrow("a boolean");
+  });
+
+  test("turned off drops only setpriv's --no-new-privs, and only for a user of the character's own", () => {
+    const caps = ["--inh-caps=-all", "--ambient-caps=-all"];
+    expect(setprivArgs(own(4001))).toEqual(["--reuid=4001", "--regid=4001", "--clear-groups", "--no-new-privs", ...caps]);
+    expect(setprivArgs(own(4001), false)).toEqual(["--reuid=4001", "--regid=4001", "--clear-groups", ...caps]);
+    expect(setprivArgs(undefined, false)).toEqual(caps);
+  });
+
+  test("is read from the daemon's own status", () => {
+    expect(runsWithNoNewPrivs("Name:\tbun\nNoNewPrivs:\t1\nSeccomp:\t0\n")).toBe(true);
+    expect(runsWithNoNewPrivs("Name:\tbun\nNoNewPrivs:\t0\nSeccomp:\t0\n")).toBe(false);
+    expect(runsWithNoNewPrivs("Name:\tbun\n")).toBe(false);
+  });
+
+  test("turned off under a daemon that runs with it warns once per user", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const optedOut = { ...OWN_USER, noNewPrivs: false };
+      warnIfNoNewPrivsInherited(OWN_USER, own(4002), "NoNewPrivs:\t1\n");
+      warnIfNoNewPrivsInherited(optedOut, own(4002), "NoNewPrivs:\t0\n");
+      expect(warn).not.toHaveBeenCalled();
+      warnIfNoNewPrivsInherited(optedOut, own(4002), "NoNewPrivs:\t1\n");
+      warnIfNoNewPrivsInherited(optedOut, own(4002), "NoNewPrivs:\t1\n");
+      expect(warn).toHaveBeenCalledTimes(1);
+      warnIfNoNewPrivsInherited(optedOut, own(4003), "NoNewPrivs:\t1\n");
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe.skipIf(!READY)("a character without a user of its own", () => {
   test("runs as the daemon's user, without the daemon's capabilities", async () => {
     const workspace = new CharacterWorkspace(await privateDir("isolation-plain"));
@@ -355,7 +418,7 @@ describe.skipIf(!READY)("a character without a user of its own", () => {
 
 async function startDaemonProcess(env: Record<string, string> = {}) {
   const root = (await freshWorkspace()).dir;
-  const character = new CharacterWorkspace(join(root, "ada"), { user: USER, passEnv: [] });
+  const character = new CharacterWorkspace(join(root, "ada"), OWN_USER);
   await character.call("mkdir", { path: character.dir });
   await character.call("createFile", { path: join(character.dir, "SOUL.md"), data: Buffer.from("You are Ada.\n").toString("base64") });
   const base = await privateDir("isolation-daemon");
@@ -391,7 +454,7 @@ async function seedCharacter(dirs: ShoreDirs, name: string): Promise<void> {
   await mkdir(join(data, "threads", "main"), { recursive: true });
   await mkdir(join(dirs.config, "characters", name), { recursive: true });
   await writeFile(join(dirs.config, "characters", name, "config.toml"), '[chat]\nmodel = "openai:gpt-test"\n');
-  const workspace = new CharacterWorkspace(join(dirs.workspace ?? "", name), { user: USER, passEnv: [] });
+  const workspace = new CharacterWorkspace(join(dirs.workspace ?? "", name), OWN_USER);
   await workspace.call("createFile", { path: join(workspace.dir, "SOUL.md"), data: Buffer.from(`You are ${name}.\n`).toString("base64") });
   const message: Message = {
     msg_id: `m_${name}`, role: "user", content: "hello", content_blocks: [{ type: "text", text: "hello" }], images: [], timestamp: "2026-09-01T00:00:00Z",
