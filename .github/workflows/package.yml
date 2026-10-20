@@ -70,3 +70,34 @@ jobs:
         with:
           name: fedora
           path: rpms/*.rpm
+
+  debian:
+    if: ${{ !startsWith(github.head_ref, 'release/') }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    container: debian:bookworm
+    steps:
+      - run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git unzip build-essential pkg-config libssl-dev
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: daemon/.bun-version
+      - run: |
+          curl --proto '=https' -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      - run: contrib/debian/build.sh "$PWD/debs"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: debian-${{ matrix.arch }}
+          path: debs/*.deb

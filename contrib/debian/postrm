@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+unit=shore-daemon.service
+
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = remove ] && command -v deb-systemd-helper >/dev/null; then
+	deb-systemd-helper mask "$unit" >/dev/null || true
+fi
+if [ "$1" = purge ] && command -v deb-systemd-helper >/dev/null; then
+	deb-systemd-helper purge "$unit" >/dev/null || true
+	deb-systemd-helper unmask "$unit" >/dev/null || true
+fi
