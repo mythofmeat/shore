@@ -73,6 +73,14 @@ export const GUARDS: readonly Guard[] = [
     ],
   },
   {
+    tests: ["isolation.test.ts"],
+    floor: 0.9,
+    functions: [
+      ...fns("tools/character_user.ts", ["setprivArgs", "runsWithNoNewPrivs"]),
+      ...fns("tools/character_workspace.ts", ["warnIfNoNewPrivsInherited", "toolsOnDisk"]),
+    ],
+  },
+  {
     tests: ["tool_args_rejected.test.ts"],
     floor: 0.7,
     functions: [
