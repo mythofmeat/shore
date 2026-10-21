@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { access, mkdir, mkdtemp, readdir, stat, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { create, Header } from "tar";
+import { create, Header, Parser } from "tar";
 
 import { exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
@@ -14,6 +14,7 @@ import type { ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { freezeDatabase } from "../src/storage/frozen_database.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 describe("character archives", () => {
@@ -249,6 +250,70 @@ describe("character archives", () => {
     finally { history.close(); }
   });
 
+  test("a backup against the previous one's manifest sends only what changed and rebuilds the same database", async () => {
+    const source = await root("incremental"); await seedCharacter(source, "ada", "first segment");
+    await writeFile(join(source.workspace as string, "ada", "notes.md"), "one\n");
+    const padding = new Database(join(source.data, "shore.db"));
+    padding.run("CREATE TABLE padding (data BLOB)");
+    for (let i = 0; i < 48; i++) padding.query("INSERT INTO padding VALUES (?1)").run(crypto.getRandomValues(new Uint8Array(65536)));
+    padding.close();
+    const sending = spooling(source, new Set(["ada"]), 1);
+    const full = await tarEntries(await download(sending, (await exportBackup(sending)).transfer));
+    for (const path of ["workspace/ada/SOUL.md", "workspace/ada/notes.md", "data/shore.db", "manifest.json"]) expect(full.has(path)).toBe(true);
+
+    await writeFile(join(source.workspace as string, "ada", "notes.md"), "two\n");
+    const history = HistoryStore.open(join(source.data, "shore.db"));
+    history.putSegment("ada", 1, { file: "segment-1.jsonl", message_count: 1, compacted_at: "2026-09-02T00:00:00Z" }, [userMessage("ada", "second segment")]);
+    history.close();
+    const second = await exportBackup(sending, { base: await uploaded(sending, full.get("manifest.json") ?? Buffer.alloc(0)) });
+    const delta = await tarEntries(await download(sending, second.transfer));
+    expect([...delta.keys()].filter((path) => !path.startsWith("shore.db.blocks/"))).toEqual(["workspace/ada/notes.md", "manifest.json"]);
+    expect(delta.get("workspace/ada/notes.md")?.toString()).toBe("two\n");
+    expect(second.files_sent).toBe(1);
+    expect(second.blocks_sent).toBeGreaterThan(0);
+    expect(second.blocks_sent).toBeLessThan(second.blocks);
+
+    const manifest = JSON.parse((delta.get("manifest.json") ?? "").toString()) as { database: { bytes: number; block_bytes: number } };
+    const blocks: Buffer[] = [];
+    const whole = full.get("data/shore.db") ?? Buffer.alloc(0);
+    for (let offset = 0; offset < manifest.database.bytes; offset += manifest.database.block_bytes) {
+      blocks.push(delta.get(`shore.db.blocks/${String(offset)}`) ?? whole.subarray(offset, offset + manifest.database.block_bytes));
+    }
+    const rebuilt = join(source.runtime, "rebuilt.db");
+    await writeFile(rebuilt, Buffer.concat(blocks).subarray(0, manifest.database.bytes));
+    const restored = HistoryStore.open(rebuilt);
+    try { expect(restored.readSegment("ada", 1)[0]?.content).toBe("second segment"); }
+    finally { restored.close(); }
+  });
+
+  test("a database snapshot holds still while another connection keeps writing and checkpointing", async () => {
+    const dirs = await root("frozen");
+    const path = join(dirs.data, "frozen.db");
+    const writer = new Database(path);
+    writer.run("PRAGMA journal_mode = WAL; CREATE TABLE rows (data BLOB)");
+    const insert = writer.query("INSERT INTO rows VALUES (?1)");
+    for (let i = 0; i < 200; i++) insert.run(crypto.getRandomValues(new Uint8Array(4096)));
+    const frozen = await freezeDatabase(path);
+    try {
+      for (let i = 0; i < 200; i++) {
+        insert.run(crypto.getRandomValues(new Uint8Array(4096)));
+        if (i % 20 === 0) writer.run("PRAGMA wal_checkpoint(TRUNCATE)");
+      }
+      const blocks: Buffer[] = [];
+      for await (const block of frozen.blocks(65536)) blocks.push(Buffer.from(block));
+      const copy = join(dirs.runtime, "copy.db");
+      await writeFile(copy, Buffer.concat(blocks));
+      const snapshot = new Database(copy);
+      try {
+        expect(snapshot.query("PRAGMA integrity_check").values()).toEqual([["ok"]]);
+        expect(snapshot.query("SELECT count(*) FROM rows").values()).toEqual([[200]]);
+      } finally { snapshot.close(); }
+    } finally {
+      frozen.release();
+      writer.close();
+    }
+  });
+
   test("a gzipped backup holding gzipped character archives still restores", async () => {
     const source = await root("gzip-backup-source"); await seedCharacter(source, "ada", "ada from a gzipped backup");
     const stage = join(source.runtime, "backup"); await mkdir(join(stage, "characters"), { recursive: true }); await mkdir(join(stage, "config")); await mkdir(join(stage, "data"));
@@ -296,6 +361,20 @@ async function download(ctx: ArchiveContext, transfer: string): Promise<Buffer> 
     parts.push(bytes); offset += bytes.length; total = chunk.bytes;
   }
   return Buffer.concat(parts);
+}
+
+async function tarEntries(bytes: Buffer): Promise<Map<string, Buffer>> {
+  const entries = new Map<string, Buffer>();
+  const pending: Promise<void>[] = [];
+  const parser = new Parser({
+    onReadEntry: (entry) => {
+      if (entry.type !== "File") { entry.resume(); return; }
+      pending.push(entry.concat().then((data) => { entries.set(entry.path, Buffer.from(data)); }));
+    },
+  });
+  parser.end(bytes);
+  await Promise.all(pending);
+  return entries;
 }
 
 async function uploaded(ctx: ArchiveContext, bytes: Buffer): Promise<string> {

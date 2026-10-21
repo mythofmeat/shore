@@ -161,8 +161,13 @@
     "name": "export_backup",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "EmptyOperationArgs",
+      "title": "ExportBackupArgs",
       "type": "object",
+      "properties": {
+        "base": {
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     },
     "output": {
@@ -186,13 +191,41 @@
         },
         "transfer": {
           "type": "string"
+        },
+        "files": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "files_sent": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "blocks": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "blocks_sent": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
         }
       },
       "required": [
         "characters",
         "archive",
         "bytes",
-        "transfer"
+        "transfer",
+        "files",
+        "files_sent",
+        "blocks",
+        "blocks_sent"
       ]
     }
   },

@@ -32,6 +32,7 @@ libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 shlex = "2"
 sha2 = "0.11.1"
+tar = { version = "0.4.46", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

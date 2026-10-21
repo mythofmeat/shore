@@ -429,20 +429,25 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Download one character, or with --all everything, as a compressed archive
-    /// while Shore keeps running
+    /// Download one character as an archive, or with --all keep a folder holding
+    /// everything up to date, while Shore keeps running
     #[command(display_order = 9)]
     Export {
         /// Character to back up
         #[arg(required_unless_present = "all", conflicts_with = "all")]
         character: Option<String>,
 
-        /// Back up every character and the global configuration
+        /// Back up every character and the global configuration into a folder;
+        /// exporting into the same folder again only sends what changed
         #[arg(long)]
         all: bool,
 
-        /// Where to save the archive on this machine (defaults to
-        /// `<character>.shore.tar`, or `shore-backup-<time>.tar` with --all)
+        /// With --all, send everything again instead of only what changed
+        #[arg(long, requires = "all")]
+        full: bool,
+
+        /// Where to save it on this machine (defaults to `<character>.shore.tar`,
+        /// or the folder `shore-backup` with --all)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -455,7 +460,7 @@ pub(crate) enum CliCommand {
     /// never overwritten
     #[command(display_order = 9)]
     Import {
-        /// Archive created by `shore export`, on this machine
+        /// Archive or backup folder created by `shore export`, on this machine
         archive: PathBuf,
 
         /// Output raw JSON

@@ -227,11 +227,27 @@ wire_types! {
         pub transfer: Option<String>,
     }
 
+    #[serde(deny_unknown_fields)]
+    pub struct ExportBackupArgs {
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub base: Option<String>,
+    }
+
     pub struct BackupExported {
         pub characters: Vec<String>,
         pub archive: String,
         pub bytes: usize,
         pub transfer: String,
+        #[serde(default)]
+        pub files: usize,
+        #[serde(default)]
+        pub files_sent: usize,
+        #[serde(default)]
+        pub blocks: usize,
+        #[serde(default)]
+        pub blocks_sent: usize,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2496,7 +2512,7 @@ operations! {
     ExportCharacter: "export_character" (ExportCharacterArgs) => ExportCharacterResult,
     ImportCharacter: "import_character" (ImportCharacterArgs) => ImportCharacterResult,
     DeleteCharacter: "delete_character" (DeleteCharacterArgs) => DeleteCharacterResult,
-    ExportBackup: "export_backup" (EmptyOperationArgs) => BackupExported,
+    ExportBackup: "export_backup" (ExportBackupArgs) => BackupExported,
     ImportArchive: "import_archive" (ImportArchiveArgs) => ArchiveImported,
     ReadTransfer: "read_transfer" (ReadTransferArgs) => TransferChunk,
     WriteTransfer: "write_transfer" (WriteTransferArgs) => TransferWritten,

@@ -6,8 +6,6 @@ import { imageBlobDir } from "../storage/image_blobs.ts";
 import { activeImagePaths, copyAttachment, insideDir, legacyAttachmentsDir, moveCharacterImagesToCache, repointActiveImages } from "../storage/image_migration.ts";
 import { modelCopies } from "../llm/images.ts";
 import { Database } from "bun:sqlite";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { once } from "node:events";
 import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -26,6 +24,8 @@ import {
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { isolatedTurnsRepo } from "../tools/workspace_turns.ts";
 import type { ArchiveSpool, SpoolEntry } from "./archive_spool.ts";
+import { TarWriter } from "../storage/tar_writer.ts";
+import { BACKUP_FORMAT, captureTree, DATABASE_ENTRY, finished, readTreeManifest, TREE_TOP_LEVEL, treeManifest, type TreeManifest } from "./backup.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import type { ExportCharacterResult } from "../protocol/ExportCharacterResult.ts";
@@ -40,10 +40,10 @@ const FORMAT = "shore-character";
 const VERSION = 2;
 const MAX_EXTRACTED_BYTES = 4 * 1024 * 1024 * 1024 * 1024;
 const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "shore.db", "media"]);
-const BACKUP_FORMAT = "shore-backup";
 const BACKUP_VERSION = 1;
 const BACKUP_TOP_LEVEL = ["manifest.json", "config", "data", "characters"];
 const BACKUP_DATA = ["preferences", "plugins"];
+const IMPORT_TOP_LEVEL = new Set([...TOP_LEVEL, ...BACKUP_TOP_LEVEL, ...TREE_TOP_LEVEL]);
 const CHARACTER_ARCHIVE = ".shore.tar";
 
 export interface ArchiveContext {
@@ -150,46 +150,36 @@ async function writeCharacterArchive(ctx: ArchiveContext, character: string, out
   }
 }
 
-export async function exportBackup(ctx: ArchiveContext): Promise<BackupExported> {
-  const characters = [...ctx.characters()].sort();
+export async function exportBackup(ctx: ArchiveContext, args: Args = {}): Promise<BackupExported> {
+  const base = args["base"] === undefined ? undefined : await uploadedManifest(ctx, requiredTransfer(args["base"]));
+  let capture: Awaited<ReturnType<typeof captureTree>> | undefined;
   const { entry, bytes } = await spooled(ctx, async (spool) => {
-    const stage = await mkdtemp(join(spool.directory, "shore-backup-"));
+    const writer = await TarWriter.create(spool.file);
     try {
-      await mkdir(join(stage, "characters"));
-      for (const character of characters) {
-        await writeCharacterArchive(ctx, character, join(stage, "characters", `${character}${CHARACTER_ARCHIVE}`), spool.directory);
-      }
-      await stageGlobal(ctx.dirs, stage);
-      const manifest: BackupManifest = { format: BACKUP_FORMAT, version: BACKUP_VERSION, created_at: new Date().toISOString(), characters };
-      await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-      await create({ cwd: stage, file: spool.file, portable: true, noMtime: false, strict: true }, BACKUP_TOP_LEVEL);
-      await chmod(spool.file, 0o600);
-      return (await stat(spool.file)).size;
-    } finally {
-      await rm(stage, { recursive: true, force: true });
+      capture = await captureTree({
+        dirs: ctx.dirs,
+        characters: ctx.characters(),
+        isolated: (character) => isolatedWorkspace(ctx, character),
+        withSnapshot: async (run) => await ctx.withSnapshot(run),
+      }, writer, base);
+    } catch (error) {
+      await writer.abort();
+      throw error;
     }
+    return await writer.close();
   });
-  return { characters, archive: entry.file, bytes, transfer: entry.id };
+  if (capture === undefined) throw internalError("The backup finished without a summary");
+  return { ...capture, archive: entry.file, bytes, transfer: entry.id };
 }
 
-async function stageGlobal(dirs: ShoreDirs, stage: string): Promise<void> {
-  const characters = resolve(dirs.config, "characters");
-  if (await exists(dirs.config)) {
-    await cp(dirs.config, join(stage, "config"), {
-      ...copyOptions(),
-      filter: (source) => resolve(source) !== characters && (dirs.workspace === undefined || !insideOrSame(resolve(dirs.workspace), resolve(source))),
-    });
-  } else {
-    await mkdir(join(stage, "config"));
+async function uploadedManifest(ctx: ArchiveContext, transfer: string): Promise<TreeManifest> {
+  const { spool, owner } = transfers(ctx);
+  const entry = spool.claim(owner, transfer);
+  try {
+    return await readTreeManifest(entry.file);
+  } finally {
+    await spool.discard(entry);
   }
-  await mkdir(join(stage, "data"));
-  for (const name of BACKUP_DATA) {
-    if (await exists(join(dirs.data, name))) await cp(join(dirs.data, name), join(stage, "data", name), copyOptions());
-  }
-}
-
-function insideOrSame(parent: string, path: string): boolean {
-  return path === parent || contains(parent, path);
 }
 
 async function spooled(ctx: ArchiveContext, write: (entry: SpoolEntry) => Promise<number>): Promise<{ entry: SpoolEntry; bytes: number }> {
@@ -227,8 +217,9 @@ export async function importArchive(ctx: ArchiveContext, args: Args): Promise<Ar
   const entry = spool.claim(owner, requiredTransfer(args["transfer"]));
   try {
     const stage = await mkdtemp(join(entry.directory, "shore-import-"));
-    await extractArchive(entry.file, stage, ctx.limits, new Set([...TOP_LEVEL, ...BACKUP_TOP_LEVEL]));
+    await extractArchive(entry.file, stage, ctx.limits, IMPORT_TOP_LEVEL);
     const backup = await readBackupManifest(stage);
+    if (backup?.version === 2) return await restoreTree(ctx, stage, backup, entry.directory);
     if (backup !== undefined) return await restoreBackup(ctx, stage, backup, entry.directory);
     return { characters: [await installStaged(ctx, stage)], skipped: [], restored: [], kept: [] };
   } finally {
@@ -241,18 +232,31 @@ async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: Backu
   const kept: string[] = [];
   await restoreMissing(join(stage, "config"), ctx.dirs.config, "config", restored, kept);
   await restoreMissing(join(stage, "data"), ctx.dirs.data, "data", restored, kept);
+  return await restoreCharacters(ctx, manifest.characters, scratch, restored, kept, async (name, inner) => {
+    await extractArchive(await backedUpArchive(stage, name), inner, ctx.limits);
+    const { character } = await readManifest(inner);
+    if (character !== name) throw invalidRequest(`The backup lists ${name}, but its archive holds ${character}`);
+  });
+}
+
+async function restoreCharacters(
+  ctx: ArchiveContext,
+  names: readonly string[],
+  scratch: string,
+  restored: string[],
+  kept: string[],
+  stageOne: (name: string, inner: string) => Promise<void>,
+): Promise<ArchiveImported> {
   const characters: string[] = [];
   const skipped: string[] = [];
-  for (const name of manifest.characters) {
+  for (const name of names) {
     if (ctx.hasCharacter(name)) {
       skipped.push(name);
       continue;
     }
     const inner = await mkdtemp(join(scratch, "shore-import-"));
     try {
-      await extractArchive(await backedUpArchive(stage, name), inner, ctx.limits);
-      const { character } = await readManifest(inner);
-      if (character !== name) throw invalidRequest(`The backup lists ${name}, but its archive holds ${character}`);
+      await stageOne(name, inner);
       await installStaged(ctx, inner);
       characters.push(name);
     } catch (error) {
@@ -267,15 +271,35 @@ async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: Backu
   return { characters, skipped, restored, kept };
 }
 
+async function restoreTree(ctx: ArchiveContext, stage: string, manifest: TreeManifest, scratch: string): Promise<ArchiveImported> {
+  if (!await exists(join(stage, DATABASE_ENTRY))) throw invalidRequest(`The backup has no ${DATABASE_ENTRY}`);
+  const restored: string[] = [];
+  const kept: string[] = [];
+  await restoreMissing(join(stage, "config"), ctx.dirs.config, "config", restored, kept, new Set(["characters"]));
+  for (const name of BACKUP_DATA) {
+    const source = join(stage, "data", name);
+    if (!await exists(source)) continue;
+    await mkdir(join(ctx.dirs.data, name), { recursive: true });
+    await restoreMissing(source, join(ctx.dirs.data, name), `data/${name}`, restored, kept);
+  }
+  const tree: ShoreDirs = { config: join(stage, "config"), data: join(stage, "data"), cache: join(stage, "cache"), runtime: join(stage, "runtime"), workspace: join(stage, "workspace") };
+  const database = new Database(databasePath(tree.data));
+  try { database.run("PRAGMA journal_mode = DELETE"); } finally { database.close(); }
+  return await restoreCharacters(ctx, manifest.characters, scratch, restored, kept, async (name, inner) => {
+    await stageCharacter(tree, name, inner, ctx.limits, undefined, manifest.source);
+  });
+}
+
 async function backedUpArchive(stage: string, name: string): Promise<string> {
   const archive = join(stage, "characters", `${name}${CHARACTER_ARCHIVE}`);
   const gzipped = `${archive}.gz`;
   return !await exists(archive) && await exists(gzipped) ? gzipped : archive;
 }
 
-async function restoreMissing(source: string, target: string, label: string, restored: string[], kept: string[]): Promise<void> {
+async function restoreMissing(source: string, target: string, label: string, restored: string[], kept: string[], skip: ReadonlySet<string> = new Set()): Promise<void> {
   const entries = await readdir(source, { withFileTypes: true }).catch(() => []);
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (skip.has(entry.name)) continue;
     const from = join(source, entry.name);
     const to = join(target, entry.name);
     const path = `${label}/${entry.name}`;
@@ -292,7 +316,7 @@ async function restoreMissing(source: string, target: string, label: string, res
   }
 }
 
-async function readBackupManifest(stage: string): Promise<BackupManifest | undefined> {
+async function readBackupManifest(stage: string): Promise<BackupManifest | TreeManifest | undefined> {
   let value: unknown;
   try {
     value = JSON.parse(await readFile(join(stage, "manifest.json"), "utf8"));
@@ -300,6 +324,8 @@ async function readBackupManifest(stage: string): Promise<BackupManifest | undef
     return undefined;
   }
   if (!isRecord(value) || value["format"] !== BACKUP_FORMAT) return undefined;
+  const tree = treeManifest(value);
+  if (tree !== undefined) return tree;
   const characters = value["characters"];
   if (
     value["version"] !== BACKUP_VERSION ||
@@ -413,6 +439,7 @@ async function stageCharacter(
   stage: string,
   limits?: ArchiveLimits,
   workspace?: CharacterWorkspace,
+  origin: { data: string; cache: string } = dirs,
 ): Promise<void> {
   let bytes = 0;
   let entries = 0;
@@ -475,7 +502,7 @@ async function stageCharacter(
   const media = characterMediaDir(dirs.data, character);
   if (await exists(media)) await cp(media, join(stage, "media"), { ...copyOptions(), filter: admit });
   else await mkdir(join(stage, "media"));
-  const cachedImages = await stageActiveImages(dirs, character, stage, admit);
+  const cachedImages = await stageActiveImages(dirs, character, stage, admit, origin);
   const blobs = imageBlobDir(dirs.cache, character);
   if (await exists(blobs)) await cp(blobs, join(stage, "media", "blobs"), { ...copyOptions(), filter: admit });
   exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
@@ -490,7 +517,7 @@ async function stageCharacter(
   const manifest: Manifest = {
     format: FORMAT,
     version: VERSION,
-    source_data: dirs.data,
+    source_data: origin.data,
     character,
     created_at: new Date().toISOString(),
     contents: {
@@ -511,16 +538,27 @@ async function stageActiveImages(
   character: string,
   stage: string,
   admit: (path: string) => Promise<boolean>,
+  origin: { data: string; cache: string },
 ): Promise<Map<string, string>> {
-  const cached = attachmentCacheDir(dirs.cache, character);
+  const cached = attachmentCacheDir(origin.cache, character);
   const staged = new Map<string, string>();
-  for (const path of withStorage(dirs.data, (db) => activeImagePaths(db, character))) {
+  const paths = origin === dirs
+    ? withStorage(dirs.data, (db) => activeImagePaths(db, character))
+    : withDatabase(dirs.data, (db) => activeImagePaths(db, character));
+  for (const path of paths) {
     const name = insideDir(cached, path);
-    if (name === undefined || !await exists(path)) continue;
-    for (const file of [path, ...modelCopies(path)]) await admit(file);
-    if (copyAttachment(path, join(stage, "media", "attachments", name))) staged.set(path, join(legacyAttachmentsDir(dirs.data, character), name));
+    if (name === undefined) continue;
+    const file = join(attachmentCacheDir(dirs.cache, character), name);
+    if (!await exists(file)) continue;
+    for (const copy of [file, ...modelCopies(file)]) await admit(copy);
+    if (copyAttachment(file, join(stage, "media", "attachments", name))) staged.set(path, join(legacyAttachmentsDir(origin.data, character), name));
   }
   return staged;
+}
+
+function withDatabase<T>(data: string, run: (db: Database) => T): T {
+  const db = new Database(databasePath(data), { readonly: true });
+  try { return run(db); } finally { db.close(); }
 }
 
 async function extractArchive(archive: string, stage: string, limits?: ArchiveLimits, allowed: ReadonlySet<string> = TOP_LEVEL): Promise<void> {
@@ -677,18 +715,6 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function finished(child: ChildProcessWithoutNullStreams, transfer: Promise<void>, what: string): Promise<void> {
-  let stderr = "";
-  child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-4000); });
-  const exited = once(child, "close") as Promise<[number | null]>;
-  exited.catch(() => {});
-  const moved = await transfer.then(() => undefined, (error: unknown) => error);
-  const [code] = await exited;
-  if (moved instanceof CommandError) throw moved;
-  if (code !== 0) throw new Error(`${what}: tar exited with ${String(code)}${stderr.trim() === "" ? "" : `: ${stderr.trim()}`}`);
-  if (moved !== undefined) throw moved;
 }
 
 async function copyWorkspaceOut(
