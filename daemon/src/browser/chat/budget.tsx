@@ -13,7 +13,7 @@ function PlanChip({ plan, mode }: { plan: ClaudePlanLimitsReport; mode: string }
   try { shown = plan.windows.filter((limit) => showPlanLimit(mode, limit)); } catch { shown = []; }
   if (shown.length === 0) return null;
   const percentOf = (fraction: number) => Math.round(fraction * 100);
-  return <button type="button" className="budget-chip" title={shown.map((limit) => `${PLAN_WINDOWS[limit.window].name}: ${String(percentOf(limit.percent_used))}% used`).join(" · ")} onClick={() => navigate({ view: "settings", page: "usage" })}>
+  return <button type="button" className="budget-chip" title={`${plan.account === undefined ? "" : `${plan.account}: `}${shown.map((limit) => `${PLAN_WINDOWS[limit.window].name}: ${String(percentOf(limit.percent_used))}% used`).join(" · ")}`} onClick={() => navigate({ view: "settings", page: "usage" })}>
     {shown.map((limit) => <span key={limit.window} className={`budget-chip-window ${levelWarning(limit) ? "warning" : ""}`}>
       <span className="budget-chip-bar"><span style={{ width: `${String(Math.min(100, percentOf(limit.percent_used)))}%` }} /></span>
       <span>{PLAN_WINDOWS[limit.window].short} {percentOf(limit.percent_used)}%</span>

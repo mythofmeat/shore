@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { ClaudeAccountReport } from "../../protocol/ClaudeAccountReport.ts";
 import type { ClaudePlanLimit } from "../../protocol/ClaudePlanLimit.ts";
 import type { ClaudePlanLimitsReport } from "../../protocol/ClaudePlanLimitsReport.ts";
 import type { UsageArgs } from "../../protocol/UsageArgs.ts";
@@ -41,8 +42,27 @@ function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
   </div>;
 }
 
+const ACCOUNT_STATES = { ok: "has room", limited: "at a limit", out: "can't be used", unknown: "not checked" } as const;
+
+function ClaudeAccount({ account }: { account: ClaudeAccountReport }) {
+  const who = [account.email, account.subscription_type].filter((part) => part !== null).join(" · ");
+  return <div className="budget">
+    <div className="budget-head"><span className="setting-label">{account.name}{account.in_use ? " (in use)" : ""}</span><span className="mono">{who}</span></div>
+    {account.windows.map((window) => {
+      const percent = Math.min(100, Math.max(0, window.percent_used * 100));
+      const name = PLAN_WINDOWS[window.window].name;
+      return <div key={window.window} className={`budget-track ${account.state === "limited" ? "over_limit" : "ok"}`} role="progressbar" aria-label={`${account.name} ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} title={`${name}: ${String(Math.round(percent))}%${window.resets_at === null ? "" : `, resets ${formatTime(window.resets_at)}`}`}><span style={{ width: `${String(percent)}%` }} /></div>;
+    })}
+    <div className="setting-description">{ACCOUNT_STATES[account.state]}: {account.detail}</div>
+    {account.login_command === undefined ? null : <div className="setting-description">Sign in with <code>{account.login_command}</code></div>}
+  </div>;
+}
+
 function PlanLimits({ report }: { report: ClaudePlanLimitsReport }) {
-  return <div className="budgets">{report.windows.map((limit) => <PlanLimitBar key={limit.window} limit={limit} />)}</div>;
+  return <div className="budgets">
+    {report.windows.map((limit) => <PlanLimitBar key={limit.window} limit={limit} />)}
+    {report.accounts.map((account) => <ClaudeAccount key={account.name} account={account} />)}
+  </div>;
 }
 
 function Table({ head, rows }: { head: (string | [string, "number"])[]; rows: ReactNode[][] }) {

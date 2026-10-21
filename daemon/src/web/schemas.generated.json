@@ -2162,12 +2162,23 @@
             "items": {
               "$ref": "#/$defs/ClaudePlanLimit"
             }
+          },
+          "account": {
+            "type": "string"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudeAccountReport"
+            },
+            "default": []
           }
         },
         "required": [
           "updated_at",
           "subscription_type",
-          "windows"
+          "windows",
+          "accounts"
         ]
       },
       "ClaudePlanLimit": {
@@ -2248,6 +2259,85 @@
           "block",
           "pause_background",
           "pause_heartbeat"
+        ]
+      },
+      "ClaudeAccountReport": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "in_use": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/$defs/ClaudeAccountState"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subscription_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudeAccountWindow"
+            }
+          },
+          "login_command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "in_use",
+          "state",
+          "detail",
+          "email",
+          "subscription_type",
+          "windows"
+        ]
+      },
+      "ClaudeAccountState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "limited",
+          "out",
+          "unknown"
+        ]
+      },
+      "ClaudeAccountWindow": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "$ref": "#/$defs/ClaudePlanWindow"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "window",
+          "percent_used",
+          "resets_at"
         ]
       },
       "UsageCallAttempts": {
@@ -10695,12 +10785,23 @@
             "items": {
               "$ref": "#/$defs/ClaudePlanLimit"
             }
+          },
+          "account": {
+            "type": "string"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudeAccountReport"
+            },
+            "default": []
           }
         },
         "required": [
           "updated_at",
           "subscription_type",
-          "windows"
+          "windows",
+          "accounts"
         ]
       },
       "ClaudePlanLimit": {
@@ -10781,6 +10882,85 @@
           "block",
           "pause_background",
           "pause_heartbeat"
+        ]
+      },
+      "ClaudeAccountReport": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "in_use": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/$defs/ClaudeAccountState"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subscription_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ClaudeAccountWindow"
+            }
+          },
+          "login_command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "in_use",
+          "state",
+          "detail",
+          "email",
+          "subscription_type",
+          "windows"
+        ]
+      },
+      "ClaudeAccountState": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "limited",
+          "out",
+          "unknown"
+        ]
+      },
+      "ClaudeAccountWindow": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "$ref": "#/$defs/ClaudePlanWindow"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "window",
+          "percent_used",
+          "resets_at"
         ]
       },
       "UsageCallAttempts": {

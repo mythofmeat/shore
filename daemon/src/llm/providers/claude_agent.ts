@@ -9,6 +9,7 @@ import {
   query,
   type CanUseTool,
   type Options,
+  type SDKAssistantMessageError,
   type SDKMessage,
   type SDKUserMessage,
   type SessionStore,
@@ -46,7 +47,8 @@ import { anchorKeys, contextFilterEnvironment, resultAnchor, type SystemNote } f
 import { currentWireScope } from "../wire_capture.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
-import { observeClaudeRateLimit, type ClaudePlanPoll } from "../../ledger/plan_limits.ts";
+import { claudeAccountInUse, claudeAccountNamed, observeClaudeRateLimit, type ClaudePlanCheck } from "../../ledger/plan_limits.ts";
+import type { ClaudeAccount } from "../claude_accounts.ts";
 import { claudePlanUsageEnvironment, fetchClaudePlanLimits, type ClaudePlanUsageQuery } from "../claude_plan_limits.ts";
 import { cacheTtlTier } from "../cache_capability.ts";
 import { hostZone } from "../../ledger/zoned.ts";
@@ -332,7 +334,7 @@ interface AgentToolSurface {
   timeoutMs: number;
 }
 
-export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<string, string> {
+export function claudeAgentEnvironment(baseUrl?: string, apiKey = "", configDir?: string): Record<string, string> {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
@@ -347,11 +349,10 @@ export function claudeAgentEnvironment(baseUrl?: string, apiKey = ""): Record<st
     CLAUDE_CODE_DISABLE_REFUSAL_RETRY: "1",
     CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1",
     CLAUDE_SECURESTORAGE_CONFIG_DIR:
-      process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
+      configDir ?? process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
   };
-  if (process.env.CLAUDE_CONFIG_DIR !== undefined) {
-    env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-  }
+  const config = configDir ?? process.env.CLAUDE_CONFIG_DIR;
+  if (config !== undefined) env.CLAUDE_CONFIG_DIR = config;
   if (baseUrl !== undefined) env.ANTHROPIC_BASE_URL = baseUrl;
   if (apiKey !== "") env.ANTHROPIC_API_KEY = apiKey;
   return env;
@@ -364,7 +365,8 @@ function buildOptions(
   surface: AgentToolSurface | undefined,
   notes: readonly SystemNote[],
 ): Options {
-  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key), ...contextFilterEnvironment(req.base_url, currentWireScope(), notes) };
+  const account = accountFor(req);
+  const env = { ...claudeAgentEnvironment(req.base_url, req.api_key, account.configDir), ...contextFilterEnvironment(req.base_url, currentWireScope(), notes) };
   if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
 
   const system = systemToText(req.system);
@@ -443,7 +445,37 @@ function lastRoundUsage(acc: TurnAccumulator): Usage | undefined {
   return context === 0 ? undefined : u;
 }
 
+function accountFor(req: Pick<SidecarRequest, "context">): ClaudeAccount {
+  return claudeAccountNamed(req.context?.api_key_name) ?? claudeAccountInUse();
+}
+
+const ACCOUNT_REFUSALS: Partial<Record<SDKAssistantMessageError, { status: number; type: string; reason: string }>> = {
+  rate_limit: { status: 429, type: "rate_limit_error", reason: "usage limit reached" },
+  billing_error: { status: 402, type: "billing_error", reason: "payment required" },
+  authentication_failed: { status: 401, type: "authentication_error", reason: "authentication failed" },
+};
+
+class ClaudeAccountRefusal extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, type: string, message: string) {
+    super(`claude_agent: ${message}`);
+    this.name = "ClaudeAccountRefusal";
+    this.status = status;
+    this.body = JSON.stringify({ type: "error", error: { type, message } });
+  }
+}
+
+function accountRefusal(error: SDKAssistantMessageError, message: BetaMessage): ClaudeAccountRefusal | undefined {
+  const refusal = ACCOUNT_REFUSALS[error];
+  if (refusal === undefined) return undefined;
+  const said = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join(" ").trim();
+  return new ClaudeAccountRefusal(refusal.status, refusal.type, said === "" ? refusal.reason : `${refusal.reason}: ${said}`);
+}
+
 interface SdkTurnFacts {
+  account: string;
   subtype: string;
   sessionId?: string;
   assistantUuids: string[];
@@ -464,10 +496,10 @@ function endsATurn(event: RawMessageStreamEvent): boolean {
   return event.type === "message_delta" && event.delta.stop_reason !== null;
 }
 
-function captureAgentEvent(msg: SDKMessage): void {
+function captureAgentEvent(msg: SDKMessage, account: string): void {
   if (msg.type === "rate_limit_event") {
     recordProviderEvent("claude_agent", msg);
-    observeClaudeRateLimit(msg.rate_limit_info);
+    observeClaudeRateLimit(msg.rate_limit_info, account);
   } else if (msg.type === "result") {
     recordProviderEvent("claude_agent", {
       type: msg.type,
@@ -552,7 +584,7 @@ async function* rawEventsOf(
     if (event.type === "message_stop") await onRoundEnd?.();
   }
   for await (const msg of run) {
-    captureAgentEvent(msg);
+    captureAgentEvent(msg, seen.account);
     const sid = (msg as { session_id?: string }).session_id;
     if (sid !== undefined) seen.sessionId = sid;
 
@@ -566,6 +598,8 @@ async function* rawEventsOf(
 
     if (msg.type === "assistant") {
       noteAssistant(seen, msg.message.id, msg.uuid);
+      const refusal = msg.error === undefined ? undefined : accountRefusal(msg.error, msg.message);
+      if (refusal !== undefined) throw refusal;
       if (!startedMessages.has(msg.message.id) && msg.error === undefined && msg.message.model !== SYNTHETIC_MODEL) {
         startedMessages.add(msg.message.id);
         for (const event of unstreamedEvents(msg.message)) yield* emit(event as RawMessageStreamEvent);
@@ -764,9 +798,9 @@ function keepaliveSurface(req: SidecarRequest): AgentToolSurface | undefined {
   };
 }
 
-async function keepaliveUsage(run: AsyncIterable<SDKMessage>): Promise<Usage> {
+async function keepaliveUsage(run: AsyncIterable<SDKMessage>, account: string): Promise<Usage> {
   for await (const msg of run) {
-    captureAgentEvent(msg);
+    captureAgentEvent(msg, account);
     if (msg.type === "stream_event" && !isNestedFrame(msg) && msg.event.type === "message_start") {
       return usageFrom(msg.event.message.usage);
     }
@@ -795,10 +829,10 @@ export class ClaudeAgentProvider implements SidecarProvider {
     this.#planQuery = deps.planQuery;
   }
 
-  planLimits(): Promise<ClaudePlanPoll | undefined> {
+  planLimits(account: ClaudeAccount): Promise<ClaudePlanCheck> {
     const planQuery = this.#planQuery;
-    if (planQuery === undefined) return Promise.resolve(undefined);
-    return fetchClaudePlanLimits(planQuery, claudePlanUsageEnvironment(claudeAgentEnvironment()));
+    if (planQuery === undefined) return Promise.resolve({ status: "unavailable" });
+    return fetchClaudePlanLimits(planQuery, claudePlanUsageEnvironment(claudeAgentEnvironment(undefined, "", account.configDir)));
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -809,7 +843,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
     let blocks = new BlockAssembler();
-    const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
+    const seen: SdkTurnFacts = { account: accountFor(req).name, subtype: "success", assistantUuids: [] };
     const restartRound = (): Promise<void> => {
       blocks = new BlockAssembler();
       acc.text = "";
@@ -878,9 +912,10 @@ export class ClaudeAgentProvider implements SidecarProvider {
       abort.abort();
       discardMissingAnchor(path, key, record, plan, e);
       const launch = claudeCodeLaunchFailure(e);
+      const cause = launch ?? (e instanceof ClaudeAccountRefusal ? e : undefined);
       yield {
         ...streamErrorEvent(launch ?? e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now),
-        ...(launch === undefined ? {} : { cause: launch }),
+        ...(cause === undefined ? {} : { cause }),
       };
     }
   }
@@ -908,7 +943,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
         prompt: agentPrompt(plan),
         options: buildOptions(req, plan, abort, keepaliveSurface(req), plan.notes),
       });
-      const usage = await keepaliveUsage(run);
+      const usage = await keepaliveUsage(run, accountFor(req).name);
       const total = Date.now() - startedAt;
       return {
         content: "",
@@ -1153,7 +1188,7 @@ export async function* claudeAgentToolLoopEvents(
   const startedAt = Date.now();
   let firstTokenAt = 0;
   const acc = newTurnAccumulator();
-  const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
+  const seen: SdkTurnFacts = { account: accountFor(req).name, subtype: "success", assistantUuids: [] };
 
   const path = (deps.bookPath ?? bookPath)();
   const key = conversationKey(req);

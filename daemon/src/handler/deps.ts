@@ -23,7 +23,8 @@ import {
   type UsageConfig,
 } from "../ledger/budget.ts";
 import { ledgerFor } from "../ledger/record.ts";
-import { claudePlanLimitsState, newlyCrossedPlanLimitWarnings, type PlanLimitWarningEvent } from "../ledger/plan_limits.ts";
+import { claudePlanLimitsState, newlyCrossedPlanLimitWarnings, setClaudeAccounts, type PlanLimitWarningEvent } from "../ledger/plan_limits.ts";
+import { claudeAccountNames } from "../config/providers.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
@@ -425,6 +426,7 @@ export async function applyReloadedConfig(
   const summary = await a.runtime.registry.reloadRuntimeState(config);
   config.adoptEnvironment?.();
   applySubscriptionProviders(a.runtime.registry);
+  setClaudeAccounts(claudeAccountNames(config.providers));
   await a.runtime.refreshHistoryIndexes();
   await reconnectMcpIfChanged(a, config);
   a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));

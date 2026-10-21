@@ -26,6 +26,7 @@ interface AnthropicReply {
   usage?: Partial<AnthropicUsage>;
   status?: number;
   errorBody?: unknown;
+  headers?: Record<string, string>;
   delayMs?: number;
 }
 
@@ -249,7 +250,7 @@ export async function startMockAnthropic(
             type: "error",
             error: { type: "mock_error", message: `scripted ${reply.status}` },
           },
-          { status: reply.status },
+          { status: reply.status, ...(reply.headers === undefined ? {} : { headers: reply.headers }) },
         );
       }
 

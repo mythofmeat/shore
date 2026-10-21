@@ -2,12 +2,26 @@ import { shoreLog } from "../log.ts";
 
 import type { Database } from "bun:sqlite";
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 
 import { defaultPlanLimitPolicy, type PlanLimitPolicyConfig } from "../config/app.ts";
+import {
+  assessClaudeAccount,
+  claudeAccountsOf,
+  claudeLoginCommand,
+  decideClaudeAccount,
+  DEFAULT_CLAUDE_ACCOUNT,
+  rankClaudeAccounts,
+  type ClaudeAccount,
+  type ClaudeAccountStanding,
+  type ClaudeLogin,
+} from "../llm/claude_accounts.ts";
+import { claudeCodeExecutable } from "../llm/providers/claude_code.ts";
 import type { SidecarRequest } from "../llm/types.ts";
+import type { ClaudeAccountReport } from "../protocol/ClaudeAccountReport.ts";
 import type { ClaudePlanLimit } from "../protocol/ClaudePlanLimit.ts";
 import type { ClaudePlanLimitsReport } from "../protocol/ClaudePlanLimitsReport.ts";
 import type { ClaudePlanWindow } from "../protocol/ClaudePlanWindow.ts";
@@ -23,6 +37,7 @@ import {
   type UsageConfig,
 } from "./budget.ts";
 import { formatLocalAmPm, toRfc3339, zoneFor } from "./zoned.ts";
+import { required } from "../util/required.ts";
 
 const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
 
@@ -51,11 +66,18 @@ export interface ClaudePlanLimitsState extends ClaudePlanPoll {
 
 export type PlanLimitWarningEvent = Omit<PlanLimitWarning, "rid">;
 
-type ClaudePlanFetcher = () => Promise<ClaudePlanPoll | undefined>;
+export type ClaudePlanCheck =
+  | { status: "ok"; poll: ClaudePlanPoll; email?: string }
+  | { status: "unavailable"; email?: string }
+  | { status: "logged_out" };
+
+type ClaudePlanFetcher = (account: ClaudeAccount) => Promise<ClaudePlanCheck>;
 
 export interface ClaudePlanLimitsOptions {
   cacheDir?: string;
   fetch?: ClaudePlanFetcher;
+  accounts?: readonly string[];
+  home?: string;
 }
 
 const WINDOW_NAMES: Record<ClaudePlanWindow, string> = {
@@ -70,63 +92,184 @@ const ACTION_PHRASES: Record<UsageBudgetAction, string> = {
   pause_heartbeat: "heartbeat paused",
 };
 
+const CHECKS_AT_ONCE = 2;
+
+interface AccountPlan {
+  account: ClaudeAccount;
+  state: ClaudePlanLimitsState | undefined;
+  login: ClaudeLogin;
+  email: string | undefined;
+  attemptedAt: number;
+  refreshing: Promise<void> | undefined;
+  observed: Record<ClaudePlanWindow, number>;
+  persisting: Promise<void>;
+}
+
 let cacheDir: string | undefined;
 let fetcher: ClaudePlanFetcher | undefined;
-let current: ClaudePlanLimitsState | undefined;
-let attemptedAt = Number.NEGATIVE_INFINITY;
-let refreshing: Promise<void> | undefined;
-let observed: Record<ClaudePlanWindow, number> = { five_hour: 0, seven_day: 0 };
-let persisting: Promise<void> = Promise.resolve();
+let plans: AccountPlan[] = [freshPlan({ name: DEFAULT_CLAUDE_ACCOUNT })];
+let named = false;
+let inUse = DEFAULT_CLAUDE_ACCOUNT;
 
-export function claudePlanLimitsPath(dir: string): string {
-  return join(dir, "providers", "claude_agent", "plan_limits.json");
+function freshPlan(account: ClaudeAccount, state?: ClaudePlanLimitsState): AccountPlan {
+  return {
+    account,
+    state,
+    login: "unchecked",
+    email: undefined,
+    attemptedAt: Number.NEGATIVE_INFINITY,
+    refreshing: undefined,
+    observed: { five_hour: 0, seven_day: 0 },
+    persisting: Promise.resolve(),
+  };
+}
+
+export function claudePlanLimitsPath(dir: string, account: string = DEFAULT_CLAUDE_ACCOUNT): string {
+  return account === DEFAULT_CLAUDE_ACCOUNT
+    ? join(dir, "providers", "claude_agent", "plan_limits.json")
+    : join(dir, "providers", "claude_agent", "accounts", account, "plan_limits.json");
+}
+
+export function claudeAccountInUsePath(dir: string): string {
+  return join(dir, "providers", "claude_agent", "account_in_use");
 }
 
 export function configureClaudePlanLimits(options: ClaudePlanLimitsOptions = {}): void {
   cacheDir = options.cacheDir;
   fetcher = options.fetch;
-  current = cacheDir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(cacheDir));
-  attemptedAt = Number.NEGATIVE_INFINITY;
-  refreshing = undefined;
-  observed = { five_hour: 0, seven_day: 0 };
+  plans = [];
+  setClaudeAccounts(options.accounts ?? [], options.home);
+  const remembered = cacheDir === undefined ? undefined : readAccountInUse(claudeAccountInUsePath(cacheDir));
+  inUse = plans.find((plan) => plan.account.name === remembered)?.account.name ?? required(plans[0]).account.name;
 }
 
-export function claudePlanLimitsState(): ClaudePlanLimitsState | undefined {
-  return current;
+export function setClaudeAccounts(names: readonly string[], home?: string): void {
+  named = names.length > 0;
+  const dir = cacheDir;
+  plans = claudeAccountsOf(names, home).map((account) =>
+    plans.find((plan) => plan.account.name === account.name && plan.account.configDir === account.configDir) ??
+      freshPlan(account, dir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(dir, account.name))));
+  if (planOf(inUse) === undefined) inUse = required(plans[0]).account.name;
+}
+
+function readAccountInUse(path: string): string | undefined {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") shoreLog.warn(`shore: could not read ${path}: ${String(e)}`);
+    return undefined;
+  }
+}
+
+function planOf(account: string | undefined): AccountPlan | undefined {
+  return plans.find((plan) => plan.account.name === (account ?? inUse));
+}
+
+export function claudeAccounts(): ClaudeAccount[] {
+  return plans.map((plan) => plan.account);
+}
+
+export function claudeConfigDirs(): string[] {
+  const own = process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME ?? homedir(), ".claude");
+  return [...new Set([own, ...plans.flatMap((plan) => (plan.account.configDir === undefined ? [] : [plan.account.configDir]))])];
+}
+
+export function claudeAccountInUse(): ClaudeAccount {
+  return required(planOf(inUse)).account;
+}
+
+export function claudeAccountNamed(name: string | undefined): ClaudeAccount | undefined {
+  return name === undefined ? undefined : planOf(name)?.account;
+}
+
+export function claudePlanLimitsState(account?: string): ClaudePlanLimitsState | undefined {
+  return planOf(account)?.state;
+}
+
+export function claudePlanLimitsKnown(): boolean {
+  return named || planOf(inUse)?.state !== undefined;
+}
+
+function standingOf(plan: AccountPlan): ClaudeAccountStanding {
+  return {
+    account: plan.account,
+    login: plan.login,
+    five_hour: plan.state?.five_hour ?? null,
+    seven_day: plan.state?.seven_day ?? null,
+  };
+}
+
+export function claudeAccountOrder(now: number = Date.now()): ClaudeAccount[] {
+  if (plans.length === 1) return [required(plans[0]).account];
+  const assessments = plans.map((plan) => assessClaudeAccount(standingOf(plan), now));
+  const decision = decideClaudeAccount(assessments, inUse, now);
+  if (decision.to !== undefined) useClaudeAccount(decision.to.name, decision.reason);
+  const rest = rankClaudeAccounts(assessments, inUse)
+    .filter((a) => a.account.name !== inUse && (a.state === "ok" || a.state === "unknown"))
+    .map((a) => a.account);
+  return [claudeAccountInUse(), ...rest];
+}
+
+export function useClaudeAccount(name: string, reason: string): void {
+  if (name === inUse || planOf(name) === undefined) return;
+  shoreLog.info(`shore: Claude account "${inUse}" → "${name}": ${reason}`);
+  inUse = name;
+  const dir = cacheDir;
+  if (dir === undefined) return;
+  const path = claudeAccountInUsePath(dir);
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(`${path}.tmp`, `${name}\n`);
+    renameSync(`${path}.tmp`, path);
+  } catch (e) {
+    shoreLog.warn(`shore: could not remember the Claude account in use: ${String(e)}`);
+  }
 }
 
 export async function refreshClaudePlanLimits(maxAgeMs: number, now: number = Date.now()): Promise<void> {
   const fetch = fetcher;
   if (fetch === undefined) return;
-  if (refreshing === undefined && now - lastAttempt() < maxAgeMs) return;
-  refreshing ??= pollClaudePlanLimits(fetch, now).finally(() => {
-    refreshing = undefined;
-  });
-  await refreshing;
+  const due = plans.filter((plan) => plan.refreshing !== undefined || now - lastAttempt(plan) >= maxAgeMs);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < due.length) {
+      const plan = required(due[next++]);
+      plan.refreshing ??= pollClaudePlanLimits(plan, fetch, now).finally(() => {
+        plan.refreshing = undefined;
+      });
+      await plan.refreshing;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CHECKS_AT_ONCE, due.length) }, worker));
 }
 
-function lastAttempt(): number {
-  const polled = current?.polled_at;
+function lastAttempt(plan: AccountPlan): number {
+  const polled = plan.state?.polled_at;
   const at = polled === undefined || polled === null ? Number.NaN : Date.parse(polled);
-  return Number.isFinite(at) ? Math.max(attemptedAt, at) : attemptedAt;
+  return Number.isFinite(at) ? Math.max(plan.attemptedAt, at) : plan.attemptedAt;
 }
 
-async function pollClaudePlanLimits(fetch: ClaudePlanFetcher, now: number): Promise<void> {
-  attemptedAt = now;
-  const seen = { ...observed };
-  let poll: ClaudePlanPoll | undefined;
+async function pollClaudePlanLimits(plan: AccountPlan, fetch: ClaudePlanFetcher, now: number): Promise<void> {
+  plan.attemptedAt = now;
+  const seen = { ...plan.observed };
+  let check: ClaudePlanCheck;
   try {
-    poll = await fetch();
+    check = await fetch(plan.account);
   } catch (e) {
-    shoreLog.warn(`shore: could not read Claude plan limits: ${e instanceof Error ? e.message : String(e)}`);
+    const message = e instanceof Error ? e.message : String(e);
+    plan.login = { error: message };
+    shoreLog.warn(`shore: could not read Claude plan limits${named ? ` for "${plan.account.name}"` : ""}: ${message}`);
     return;
   }
-  if (poll === undefined) return;
+  plan.login = check.status;
+  if (check.status !== "logged_out") plan.email = check.email;
+  if (check.status !== "ok") return;
+  const poll = check.poll;
   const stamp = toRfc3339(now);
-  const prior = current;
+  const prior = plan.state;
   const newer = (window: ClaudePlanWindow): ClaudePlanReading | null =>
-    observed[window] === seen[window] ? poll[window] : prior?.[window] ?? null;
-  current = {
+    plan.observed[window] === seen[window] ? poll[window] : prior?.[window] ?? null;
+  plan.state = {
     version: 1,
     updated_at: stamp,
     polled_at: stamp,
@@ -134,20 +277,23 @@ async function pollClaudePlanLimits(fetch: ClaudePlanFetcher, now: number): Prom
     five_hour: newer("five_hour"),
     seven_day: newer("seven_day"),
   };
-  await persist();
+  await persist(plan);
 }
 
-export function observeClaudeRateLimit(info: SDKRateLimitInfo, now: number = Date.now()): void {
+export function observeClaudeRateLimit(info: SDKRateLimitInfo, account?: string, now: number = Date.now()): void {
   const window = CLAUDE_PLAN_WINDOWS.find((name) => name === info.rateLimitType);
   if (window === undefined) return;
+  const plan = planOf(account);
+  if (plan === undefined) return;
   const reported = typeof info.utilization === "number" && Number.isFinite(info.utilization) ? info.utilization : undefined;
   const percent = info.status === "rejected" ? Math.max(1, reported ?? 1) : reported;
   if (percent === undefined || percent < 0) return;
-  const prior = current;
+  const prior = plan.state;
   const resets_at = info.resetsAt === undefined ? prior?.[window]?.resets_at ?? null : claudePlanInstant(info.resetsAt);
   const reading = { percent_used: percent, resets_at };
-  observed[window] += 1;
-  current = {
+  plan.observed[window] += 1;
+  plan.login = "ok";
+  plan.state = {
     version: 1,
     updated_at: toRfc3339(now),
     polled_at: prior?.polled_at ?? null,
@@ -155,7 +301,7 @@ export function observeClaudeRateLimit(info: SDKRateLimitInfo, now: number = Dat
     five_hour: window === "five_hour" ? reading : prior?.five_hour ?? null,
     seven_day: window === "seven_day" ? reading : prior?.seven_day ?? null,
   };
-  void persist();
+  void persist(plan);
 }
 
 export function claudePlanInstant(value: unknown): string | null {
@@ -165,16 +311,16 @@ export function claudePlanInstant(value: unknown): string | null {
   return Number.isFinite(instant) ? toRfc3339(instant) : null;
 }
 
-function persist(): Promise<void> {
+function persist(plan: AccountPlan): Promise<void> {
   const dir = cacheDir;
-  const state = current;
-  if (dir === undefined || state === undefined) return persisting;
-  persisting = persisting
-    .then(() => writeClaudePlanLimits(claudePlanLimitsPath(dir), state))
+  const state = plan.state;
+  if (dir === undefined || state === undefined) return plan.persisting;
+  plan.persisting = plan.persisting
+    .then(() => writeClaudePlanLimits(claudePlanLimitsPath(dir, plan.account.name), state))
     .catch((e: unknown) => {
       shoreLog.warn(`shore: could not cache Claude plan limits: ${String(e)}`);
     });
-  return persisting;
+  return plan.persisting;
 }
 
 async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
@@ -264,15 +410,57 @@ function planLimit(window: ClaudePlanWindow, reading: ClaudePlanReading, policy:
 export function claudePlanLimitsReport(
   config: UsageConfig | undefined,
   now: number = Date.now(),
-  state: ClaudePlanLimitsState | undefined = current,
+  account?: string,
 ): ClaudePlanLimitsReport | undefined {
-  if (state === undefined) return undefined;
-  const windows = CLAUDE_PLAN_WINDOWS.flatMap((window) => {
+  const plan = planOf(claudeAccountNamed(account)?.name);
+  if (plan === undefined) return undefined;
+  const state = plan.state;
+  const windows = state === undefined ? [] : CLAUDE_PLAN_WINDOWS.flatMap((window) => {
     const reading = liveReading(state[window], now);
     return reading === undefined ? [] : [planLimit(window, reading, policyFor(config, window))];
   });
-  if (windows.length === 0) return undefined;
-  return { updated_at: state.updated_at, subscription_type: state.subscription_type, windows };
+  if (!named) {
+    if (state === undefined || windows.length === 0) return undefined;
+    return { updated_at: state.updated_at, subscription_type: state.subscription_type, windows, accounts: [] };
+  }
+  const updated = plans.flatMap((other) => (other.state === undefined ? [] : [other.state.updated_at])).sort().at(-1);
+  return {
+    updated_at: state?.updated_at ?? updated ?? toRfc3339(now),
+    subscription_type: state?.subscription_type ?? null,
+    windows,
+    account: plan.account.name,
+    accounts: plans.map((other) => accountReport(other, now)),
+  };
+}
+
+function accountReport(plan: AccountPlan, now: number): ClaudeAccountReport {
+  const assessment = assessClaudeAccount(standingOf(plan), now);
+  return {
+    name: plan.account.name,
+    in_use: plan.account.name === inUse,
+    state: assessment.state,
+    detail: assessment.reason,
+    email: plan.email ?? null,
+    subscription_type: plan.state?.subscription_type ?? null,
+    windows: CLAUDE_PLAN_WINDOWS.flatMap((window) => {
+      const reading = liveReading(plan.state?.[window] ?? null, now);
+      return reading === undefined ? [] : [{ window, percent_used: reading.percent_used, resets_at: reading.resets_at }];
+    }),
+    ...(plan.login === "logged_out" ? { login_command: claudeLoginCommand(plan.account, daemonUser(), claudeBinary()) } : {}),
+  };
+}
+
+function daemonUser(): string {
+  const name = process.env.USER ?? process.env.LOGNAME ?? userInfo().username;
+  return name === "" || name === "unknown" ? `'#${String(process.getuid?.() ?? 0)}'` : name;
+}
+
+function claudeBinary(): string {
+  try {
+    return claudeCodeExecutable() ?? "claude";
+  } catch {
+    return "claude";
+  }
 }
 
 export function runsOnClaudePlan(request: Pick<SidecarRequest, "sdk">): boolean {
@@ -282,13 +470,17 @@ export function runsOnClaudePlan(request: Pick<SidecarRequest, "sdk">): boolean 
 export function claudePlanBlockFor(request: SidecarRequest, now: number = Date.now()): CallBlock | undefined {
   const context = request.context;
   if (!runsOnClaudePlan(request) || context === undefined) return undefined;
-  const report = claudePlanLimitsReport(context.usage, now);
+  const report = claudePlanLimitsReport(context.usage, now, context.api_key_name);
   const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context));
-  return limit === undefined ? undefined : planBlock(limit, zoneFor(context.usage?.timezone ?? "local"));
+  return limit === undefined ? undefined : planBlock(limit, zoneFor(context.usage?.timezone ?? "local"), report?.account);
 }
 
-function planBlock(limit: ClaudePlanLimit, zone: string): CallBlock {
-  const name = WINDOW_NAMES[limit.window];
+function limitName(window: ClaudePlanWindow, account: string | undefined): string {
+  return account === undefined ? WINDOW_NAMES[window] : `${WINDOW_NAMES[window]} (${account})`;
+}
+
+function planBlock(limit: ClaudePlanLimit, zone: string, account: string | undefined): CallBlock {
+  const name = limitName(limit.window, account);
   const standing = `is at ${percentOf(limit.percent_used)}% (limit ${percentOf(limit.limit_at)}%, ${ACTION_PHRASES[limit.action]})`;
   const resets = limit.resets_at;
   return {
@@ -313,7 +505,7 @@ export function newlyCrossedPlanLimitWarnings(
   for (const limit of report.windows) {
     const resets = limit.resets_at;
     if (resets === null) continue;
-    const name = WINDOW_NAMES[limit.window];
+    const name = limitName(limit.window, report.account);
     const window = windowKey(resets);
     const reached = limit.over_limit ? [...limit.crossed_warn_at, limit.limit_at] : limit.crossed_warn_at;
     const fresh = reached.filter((threshold) => recordBudgetWarningThreshold(db, name, "plan", window, threshold, now));

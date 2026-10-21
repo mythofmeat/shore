@@ -87,7 +87,7 @@ function fixture() {
     await mirror.append({ projectKey: "-tmp", sessionId: id }, [{ type: "user", uuid: randomUUID(), timestamp: "2000-01-01T00:00:00Z" }]);
     await mirror.append({ projectKey: "-tmp", sessionId: id, subpath: "subagents/agent" }, [{ type: "assistant", uuid: randomUUID() }]);
   };
-  const prune = (now: number) => pruneSdkSessions(data, now - DIAGNOSTIC_RETENTION_MS, now, config);
+  const prune = (now: number) => pruneSdkSessions(data, now - DIAGNOSTIC_RETENTION_MS, now, [config]);
   return { data, config, project, book, key, local, mirror, add, prune };
 }
 

@@ -2,7 +2,9 @@ use std::io::Write;
 
 use serde_json::Value;
 
-use super::vocab::{Align, Meter, Rows, Table, Tone, blank, count, empty, money, note, section};
+use super::vocab::{
+    Align, Mark, Meter, Rows, Table, Tone, blank, count, empty, money, note, section,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum View {
@@ -229,20 +231,7 @@ fn whole_percent(fraction: f64) -> f64 {
     (fraction * 100.0).round()
 }
 
-fn write_claude_plan<W: Write>(out: &mut W, plan: &Value) {
-    let subscription = text(plan, "subscription_type");
-    let mut header = Rows::new();
-    header.add(
-        "Claude plan",
-        if subscription.is_empty() {
-            "subscription"
-        } else {
-            subscription
-        },
-    );
-    header.write(out);
-
-    let windows = rows_of(plan, "windows");
+fn plan_window_meters<W: Write>(out: &mut W, windows: &[Value]) {
     let width = windows
         .iter()
         .map(|window| plan_window_label(text(window, "window")).chars().count())
@@ -258,6 +247,85 @@ fn write_claude_plan<W: Write>(out: &mut W, plan: &Value) {
         };
         Meter::new(decimal(window, "percent_used"), 1.0).write_row(out, label, width, &detail);
     }
+}
+
+fn account_tone(state: &str) -> Tone {
+    match state {
+        "ok" => Tone::Good,
+        "limited" => Tone::Warn,
+        "out" => Tone::Bad,
+        _ => Tone::Muted,
+    }
+}
+
+fn account_standing(account: &Value) -> String {
+    let detail = text(account, "detail");
+    match text(account, "state") {
+        "ok" => "has room".to_owned(),
+        "limited" => format!("at a limit: {detail}"),
+        _ => detail.to_owned(),
+    }
+}
+
+fn write_claude_accounts<W: Write>(out: &mut W, accounts: &[Value]) {
+    for account in accounts {
+        let in_use = account
+            .get("in_use")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let who = [text(account, "email"), text(account, "subscription_type")]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" \u{00b7} ");
+        let mut header = Rows::new();
+        header.add_marked_noted(
+            if in_use { Mark::Active } else { Mark::None },
+            text(account, "name"),
+            &account_standing(account),
+            &who,
+            account_tone(text(account, "state")),
+        );
+        header.write(out);
+        plan_window_meters(out, rows_of(account, "windows"));
+        let login = text(account, "login_command");
+        if !login.is_empty() {
+            note(out, &format!("sign in with: {login}"));
+        }
+    }
+}
+
+fn write_claude_plan<W: Write>(out: &mut W, plan: &Value) {
+    let accounts = rows_of(plan, "accounts");
+    if !accounts.is_empty() {
+        let mut header = Rows::new();
+        header.add(
+            "Claude accounts",
+            &format!("using {}", text(plan, "account")),
+        );
+        header.write(out);
+        write_claude_accounts(out, accounts);
+        write_plan_limit_notes(out, rows_of(plan, "windows"));
+        return;
+    }
+    let subscription = text(plan, "subscription_type");
+    let mut header = Rows::new();
+    header.add(
+        "Claude plan",
+        if subscription.is_empty() {
+            "subscription"
+        } else {
+            subscription
+        },
+    );
+    header.write(out);
+
+    let windows = rows_of(plan, "windows");
+    plan_window_meters(out, windows);
+    write_plan_limit_notes(out, windows);
+}
+
+fn write_plan_limit_notes<W: Write>(out: &mut W, windows: &[Value]) {
     for window in windows.iter().filter(|window| {
         window
             .get("over_limit")

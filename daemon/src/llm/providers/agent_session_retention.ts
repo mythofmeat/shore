@@ -54,7 +54,7 @@ function removeLocalSession(sessionId: string, configDir: string): void {
   }
 }
 
-export function pruneSdkSessions(data: string, cutoffMs: number, nowMs: number, configDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")): number {
+export function pruneSdkSessions(data: string, cutoffMs: number, nowMs: number, configDirs: readonly string[] = [process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")]): number {
   return withStorage(data, db => {
     const book: SessionBook = {};
     const records = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_sessions/*'").all() as { path: string; content: Uint8Array }[];
@@ -81,7 +81,7 @@ export function pruneSdkSessions(data: string, cutoffMs: number, nowMs: number, 
       try {
         const record = JSON.parse(unpack(row.content)) as { sessionId: string; retiredAt: number };
         if (typeof record.sessionId !== "string" || !Number.isFinite(record.retiredAt) || active.has(record.sessionId) || record.retiredAt >= cutoffMs) continue;
-        removeLocalSession(record.sessionId, configDir);
+        for (const configDir of configDirs) removeLocalSession(record.sessionId, configDir);
         db.transaction(() => {
           for (const path of paths.get(record.sessionId) ?? []) db.query("DELETE FROM state_files WHERE path = ?1").run(path);
           db.query("DELETE FROM state_files WHERE path = ?1").run(row.path);
