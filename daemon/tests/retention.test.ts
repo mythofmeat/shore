@@ -67,6 +67,7 @@ test("a write failure rolls back the entire cleanup", async () => {
 });
 
 const start = Date.parse("2026-09-10T12:00:00Z");
+const DAY = 24 * 3_600_000;
 const record = (sessionId: string, parent?: string): SessionRecord => ({
   version: SESSION_BOOK_VERSION, sessionId, entries: parent === undefined ? [] : [{ hash: "hash", uuid: "anchor", sessionId: parent }],
 });
@@ -87,24 +88,31 @@ function fixture() {
     await mirror.append({ projectKey: "-tmp", sessionId: id }, [{ type: "user", uuid: randomUUID(), timestamp: "2000-01-01T00:00:00Z" }]);
     await mirror.append({ projectKey: "-tmp", sessionId: id, subpath: "subagents/agent" }, [{ type: "assistant", uuid: randomUUID() }]);
   };
-  const prune = (now: number) => pruneSdkSessions(data, now - DIAGNOSTIC_RETENTION_MS, now, [config]);
-  return { data, config, project, book, key, local, mirror, add, prune };
+  const prune = (now: number) => pruneSdkSessions(data, now, [config]);
+  const stored = () => withStorage(data, db => [...new Set((db.query("SELECT path FROM state_files WHERE path GLOB 'sdk_transcripts/*'").all() as { path: string }[])
+    .map(row => Buffer.from(row.path.split("/")[3] ?? "", "base64url").toString()))].sort());
+  return { data, config, project, book, key, local, mirror, add, prune, stored };
 }
 
-test("fork ancestors and other threads remain live; reactivation resets the grace period", async () => {
+test("retired transcripts last a day; fork ancestors and other threads remain live; reactivation resets the grace period", async () => {
   const f = fixture();
   const parent = randomUUID(), child = randomUUID(), other = randomUUID();
   for (const id of [parent, child, other]) await f.add(id);
   const otherKey = sessionKey("ada", "", "other");
   writeBook(f.book, { [f.key]: record(parent), [otherKey]: record(other) }, start);
   writeBook(f.book, { [f.key]: record(child, parent), [otherKey]: record(other) }, start);
-  expect(f.prune(start + DIAGNOSTIC_RETENTION_MS * 2)).toBe(0);
-  forgetThreadSessions(f.data, "ada", "main", start + DIAGNOSTIC_RETENTION_MS * 2);
-  writeBook(f.book, { ...readBook(f.book), [f.key]: record(child, parent) }, start + DIAGNOSTIC_RETENTION_MS * 2 + 1);
-  expect(f.prune(start + DIAGNOSTIC_RETENTION_MS * 4)).toBe(0);
-  forgetThreadSessions(f.data, "ada", "main", start + DIAGNOSTIC_RETENTION_MS * 4);
-  expect(f.prune(start + DIAGNOSTIC_RETENTION_MS * 5 + 1)).toBe(2);
-  expect(existsSync(f.local(other))).toBe(true);
+  expect(f.prune(start + DAY * 2)).toBe(0);
+  expect(f.prune(start + DAY * 4)).toBe(0);
+  forgetThreadSessions(f.data, "ada", "main", start + DAY * 4);
+  writeBook(f.book, { ...readBook(f.book), [f.key]: record(child, parent) }, start + DAY * 4 + 1);
+  expect(f.prune(start + DAY * 6)).toBe(0);
+  forgetThreadSessions(f.data, "ada", "main", start + DAY * 6);
+  expect(f.prune(start + DAY * 7)).toBe(0);
+  expect(f.stored()).toEqual([parent, child, other].sort());
+  expect(f.prune(start + DAY * 7 + 1)).toBe(2);
+  expect(f.stored()).toEqual([other]);
+  expect([parent, child, other].map(id => existsSync(f.local(id)))).toEqual([false, false, true]);
+  withStorage(f.data, db => expect(db.query("SELECT count(*) AS n FROM state_lines WHERE path NOT IN (SELECT path FROM state_files)").get()).toEqual({ n: 0 }));
 });
 
 test("an unreadable session book prevents transcript deletion", async () => {
@@ -113,6 +121,6 @@ test("an unreadable session book prevents transcript deletion", async () => {
   await f.add(id);
   expect(f.prune(start)).toBe(0);
   withStorage(f.data, db => db.query("INSERT INTO state_files VALUES ('sdk_sessions/broken/key', 'ada', ?1)").run(pack("{}")));
-  expect(() => f.prune(start + DIAGNOSTIC_RETENTION_MS + 1)).toThrow("Invalid SDK session references");
+  expect(() => f.prune(start + DAY + 1)).toThrow("Invalid SDK session references");
   expect(existsSync(f.local(id))).toBe(true);
 });

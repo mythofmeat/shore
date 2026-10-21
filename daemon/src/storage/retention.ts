@@ -70,8 +70,7 @@ export function startDiagnosticRetention(data: string, gate: SnapshotGate, inter
       await gate.withActivity(async () => {
         if (stopped) return;
         const stats = pruneDiagnostics(data);
-        const nowMs = Date.now();
-        const sdkSessions = pruneSdkSessions(data, nowMs - DIAGNOSTIC_RETENTION_MS, nowMs, claudeConfigDirs());
+        const sdkSessions = pruneSdkSessions(data, Date.now(), claudeConfigDirs());
         if (sdkSessions > 0) shoreLog.info(`shore: diagnostic retention removed ${sdkSessions} retired SDK sessions and their transcript copies`);
         if (stats.captures + stats.heartbeats + stats.subagentTraces > 0) {
           shoreLog.info(`shore: diagnostic retention removed ${stats.captures} captures and ${stats.heartbeats} heartbeat events; retained results for ${stats.subagentTraces} expired subagent traces`);
