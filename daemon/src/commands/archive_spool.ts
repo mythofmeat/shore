@@ -18,6 +18,7 @@ interface Transfer extends SpoolEntry {
   readonly direction: "download" | "upload";
   bytes: number;
   touched: number;
+  ahead?: { offset: number; chunk: Promise<Buffer> } | undefined;
 }
 
 export class ArchiveSpool {
@@ -56,6 +57,21 @@ export class ArchiveSpool {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset >= transfer.bytes) {
       throw invalidRequest(`Offset ${String(offset)} is outside the ${String(transfer.bytes)}-byte archive`);
     }
+    const ahead = transfer.ahead;
+    transfer.ahead = undefined;
+    const chunk = ahead?.offset === offset ? await ahead.chunk : await this.#chunk(transfer, offset);
+    const next = offset + chunk.length;
+    if (next === transfer.bytes) {
+      await this.discard(transfer);
+    } else {
+      const prefetch = this.#chunk(transfer, next);
+      prefetch.catch(() => {});
+      transfer.ahead = { offset: next, chunk: prefetch };
+    }
+    return { data: chunk.toString("base64"), offset, bytes: transfer.bytes };
+  }
+
+  async #chunk(transfer: Transfer, offset: number): Promise<Buffer> {
     const chunk = Buffer.alloc(Math.min(this.chunkBytes, transfer.bytes - offset));
     const file = await open(transfer.file, "r");
     try {
@@ -65,8 +81,7 @@ export class ArchiveSpool {
         filled += bytesRead;
       }
     } finally { await file.close(); }
-    if (offset + chunk.length === transfer.bytes) await this.discard(transfer);
-    return { data: chunk.toString("base64"), offset, bytes: transfer.bytes };
+    return chunk;
   }
 
   async append(owner: number, id: string | undefined, data: string): Promise<{ transfer: string; bytes: number }> {

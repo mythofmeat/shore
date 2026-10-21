@@ -8,6 +8,7 @@ import { InvalidArgs, NotImplemented, ToolIoError } from "./errors.ts";
 import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "./media.ts";
 import { handleRead } from "./read.ts";
 import { lookUpPictures, type PictureLookup, type PictureTarget } from "./message_pictures.ts";
+import { indexTree, type IndexedEntry } from "./tree_index.ts";
 import { restoreWorkspaceEntry, snapshotWorkspace, workspaceEntry, type WorkspaceEntry } from "./workspace_snapshot.ts";
 
 export type FileRead = { data: string } | { error: { code?: string; message: string } };
@@ -29,6 +30,7 @@ export interface WorkspaceOpTable {
   clear: (args: { path: string }) => Promise<void>;
   remove: (args: { root: string; path: string }) => Promise<void>;
   snapshot: (args: { root: string }) => Promise<[string, WorkspaceEntry][]>;
+  index: (args: { root: string }) => Promise<IndexedEntry[] | null>;
   entry: (args: { path: string }) => Promise<WorkspaceEntry | null>;
   restore: (args: { path: string; entry: WorkspaceEntry | null }) => Promise<void>;
 }
@@ -122,6 +124,7 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
     await pruneEmptyParents(root, path);
   },
   snapshot: async ({ root }) => [...await snapshotWorkspace(root)],
+  index: async ({ root }) => await indexTree(root),
   entry: async ({ path }) => await workspaceEntry(path),
   restore: async ({ path, entry }) => {
     await restoreWorkspaceEntry(path, entry);

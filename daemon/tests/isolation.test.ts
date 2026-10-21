@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
+import { Parser } from "tar";
+import { deleteCharacter, exportBackup, exportCharacter, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
+import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
@@ -253,6 +255,31 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect((await bash(workspace, "cat SOUL.md private/kept.txt")).stdout).toBe(`You are ${name}.\nmine`);
   });
 
+  test("backs up the character's workspace through its user and later sends only what changed", async () => {
+    const root = join(ROOT, "workspace", USER);
+    const source = await dirsUnder(root);
+    const name = basename((await freshWorkspace([], root)).dir);
+    await seedCharacter(source, name);
+    const workspace = new CharacterWorkspace(join(root, name), OWN_USER);
+    await bash(workspace, "chmod 600 SOUL.md && mkdir private && printf mine > private/kept.txt && chmod 600 private/kept.txt && ln -s SOUL.md soul");
+    const ctx: ArchiveContext = {
+      dirs: source, characters: () => [name], hasCharacter: () => true, withSnapshot: async (run) => await run(), refreshDiscovery: async () => {},
+      releaseCharacter: async () => {}, workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
+      spool: new ArchiveSpool(join(source.cache, "archive-transfers"), () => true), owner: 1,
+    };
+    const first = await tarEntries(ctx, (await exportBackup(ctx)).transfer);
+    expect(first.get(`workspace/${name}/private/kept.txt`)?.toString()).toBe("mine");
+    expect(first.get(`workspace/${name}/soul`)?.toString()).toBe("-> SOUL.md");
+    await bash(workspace, "printf again >> private/kept.txt");
+    const manifest = first.get("manifest.json") ?? Buffer.alloc(0);
+    const base = (await writeTransfer(ctx, { data: manifest.toString("base64") })).transfer;
+    const second = await exportBackup(ctx, { base });
+    const delta = await tarEntries(ctx, second.transfer);
+    expect([...delta.keys()].filter((path) => path.startsWith("workspace/"))).toEqual([`workspace/${name}/private/kept.txt`]);
+    expect(delta.get(`workspace/${name}/private/kept.txt`)?.toString()).toBe("mineagain");
+    expect(second).toMatchObject({ files_sent: 1 });
+  });
+
   test("a browser export over its limits says so, whoever reads the workspace", async () => {
     const root = join(ROOT, "workspace", USER);
     const source = await dirsUnder(root);
@@ -437,6 +464,27 @@ async function startDaemonProcess(env: Record<string, string> = {}) {
     for await (const chunk of daemon.stderr) log += decoder.decode(chunk, { stream: true });
   })();
   return { daemon, logged, log: () => log };
+}
+
+async function tarEntries(ctx: ArchiveContext, transfer: string): Promise<Map<string, Buffer>> {
+  const parts: Buffer[] = [];
+  for (let offset = 0, total = 1; offset < total;) {
+    const chunk = await readTransfer(ctx, { transfer, offset });
+    const bytes = Buffer.from(chunk.data, "base64");
+    parts.push(bytes); offset += bytes.length; total = chunk.bytes;
+  }
+  const entries = new Map<string, Buffer>();
+  const pending: Promise<void>[] = [];
+  const parser = new Parser({
+    onReadEntry: (entry) => {
+      if (entry.type === "SymbolicLink") entries.set(entry.path, Buffer.from(`-> ${entry.linkpath ?? ""}`));
+      if (entry.type !== "File") { entry.resume(); return; }
+      pending.push(entry.concat().then((data) => { entries.set(entry.path, Buffer.from(data)); }));
+    },
+  });
+  parser.end(Buffer.concat(parts));
+  await Promise.all(pending);
+  return entries;
 }
 
 async function dirsUnder(workspace: string): Promise<ShoreDirs> {

@@ -249,6 +249,7 @@ pub(crate) async fn execute(
         CliCommand::Export {
             character: exported,
             all: _,
+            full,
             output,
             json,
         } => {
@@ -256,6 +257,7 @@ pub(crate) async fn execute(
                 &mut conn,
                 exported.as_deref(),
                 output.as_deref(),
+                *full,
                 *json,
             )
             .await?;
@@ -1341,10 +1343,10 @@ async fn handle_delete_character(
     }
 
     let backup = archive
-        .map(|path| crate::archives::archive_target(Some(path), Some(name)))
+        .map(|path| crate::archives::archive_target(Some(path), name))
         .transpose()?;
     if let Some(target) = &backup {
-        _ = crate::archives::export_to(conn, Some(name), target).await?;
+        _ = crate::archives::export_to(conn, name, target).await?;
     }
 
     info!(character = name, "Deleting character");

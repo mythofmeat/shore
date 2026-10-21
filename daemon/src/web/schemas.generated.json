@@ -1669,13 +1669,41 @@
           },
           "transfer": {
             "type": "string"
+          },
+          "files": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "files_sent": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "blocks": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "blocks_sent": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
           }
         },
         "required": [
           "characters",
           "archive",
           "bytes",
-          "transfer"
+          "transfer",
+          "files",
+          "files_sent",
+          "blocks",
+          "blocks_sent"
         ]
       },
       "ArchiveImported": {
@@ -10174,13 +10202,41 @@
           },
           "transfer": {
             "type": "string"
+          },
+          "files": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "files_sent": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "blocks": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "blocks_sent": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
           }
         },
         "required": [
           "characters",
           "archive",
           "bytes",
-          "transfer"
+          "transfer",
+          "files",
+          "files_sent",
+          "blocks",
+          "blocks_sent"
         ]
       },
       "ArchiveImported": {

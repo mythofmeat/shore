@@ -105,8 +105,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     character: { label: "Character", choices: "characters" },
     output: { label: "Archive output on daemon host", hint: "Absolute server path to a new archive; its parent directory must exist. Existing files are never overwritten. Omit to download it with read_transfer." },
   }, policies: [{ condition: { kind: "absent", field: "output" }, effects: ["read"], confirmation: "none" }] }, (context, args) => exportCharacter(archiveContext(context), args)),
-  export_backup: register("export_backup", { ...characterPresentation, prerequisites: ["archive"], label: "Back up every character and the global configuration", fields: {} },
-    (context) => exportBackup(archiveContext(context))),
+  export_backup: register("export_backup", { ...characterPresentation, prerequisites: ["archive"], label: "Back up every character and the global configuration", fields: {
+    base: { label: "Previous backup", hint: "A write_transfer upload of the previous backup's manifest.json. Only files and database blocks that changed since then are sent." },
+  } }, (context, args) => exportBackup(archiveContext(context), args)),
   import_archive: register("import_archive", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], label: "Import an uploaded archive", fields: {
     transfer: { label: "Upload", hint: "A write_transfer upload holding a character archive or a backup. Characters that exist and files already present are left alone." },
   } }, (context, args) => importArchive(archiveContext(context), args)),

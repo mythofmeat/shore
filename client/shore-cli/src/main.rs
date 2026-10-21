@@ -23,6 +23,7 @@ macro_rules! cli_err {
 }
 
 mod archives;
+mod backups;
 mod cli;
 mod output;
 mod run;
