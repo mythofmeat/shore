@@ -273,15 +273,16 @@ fn write_claude_accounts<W: Write>(out: &mut W, accounts: &[Value]) {
             .get("in_use")
             .and_then(Value::as_bool)
             .unwrap_or(false);
+        let name = text(account, "name");
         let who = [text(account, "email"), text(account, "subscription_type")]
             .into_iter()
-            .filter(|part| !part.is_empty())
+            .filter(|part| !part.is_empty() && *part != name)
             .collect::<Vec<_>>()
             .join(" \u{00b7} ");
         let mut header = Rows::new();
         header.add_marked_noted(
             if in_use { Mark::Active } else { Mark::None },
-            text(account, "name"),
+            name,
             &account_standing(account),
             &who,
             account_tone(text(account, "state")),

@@ -30,15 +30,14 @@ afterEach(() => {
   configureClaudePlanLimits();
 });
 
-async function signIn(home: string, names: string[]): Promise<void> {
-  for (const name of names) {
-    const dir = join(claudeAccountsRoot(home), name);
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, ".credentials.json"), JSON.stringify({ claudeAiOauth: {
-      accessToken: `token-${name}`, refreshToken: `refresh-${name}`, expiresAt: Date.now() + HOUR,
-      scopes: ["user:inference", "user:profile", "user:sessions:claude_code"], subscriptionType: "pro",
-    } }));
-  }
+async function signIn(home: string, folder: string, name: string): Promise<void> {
+  const dir = join(claudeAccountsRoot(home), folder);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, ".claude.json"), JSON.stringify({ oauthAccount: { emailAddress: `${name}@example.com` } }));
+  await writeFile(join(dir, ".credentials.json"), JSON.stringify({ claudeAiOauth: {
+    accessToken: `token-${name}`, refreshToken: `refresh-${name}`, expiresAt: Date.now() + HOUR,
+    scopes: ["user:inference", "user:profile", "user:sessions:claude_code"], subscriptionType: "pro",
+  } }));
 }
 
 function sessionLimitFor(refusing: readonly string[]) {
@@ -87,8 +86,9 @@ function conversation(home: string, mock: MockAnthropic): (text: string) => Prom
 
 test("a reply one account refuses for its usage limit is answered by the next, which later replies keep using, each on its own login", async () => {
   const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
-  await signIn(home, ["first", "second"]);
-  configureClaudePlanLimits({ accounts: ["first", "second"], home, cacheDir: home });
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  configureClaudePlanLimits({ home, cacheDir: home });
   const mock = await startMockAnthropic({ fallback: sessionLimitFor(["first"]) });
   try {
     const say = conversation(home, mock);
@@ -96,7 +96,7 @@ test("a reply one account refuses for its usage limit is answered by the next, w
     expect(await say("Still there?")).toBe("Hello from the next account.");
 
     expect(tokensSeen(mock)).toEqual(["Bearer token-first", "Bearer token-second", "Bearer token-second"]);
-    expect((await readFile(claudeAccountInUsePath(home), "utf8")).trim()).toBe("second");
+    expect((await readFile(claudeAccountInUsePath(home), "utf8")).trim()).toBe("second@example.com");
   } finally {
     await mock.stop();
   }
@@ -104,8 +104,9 @@ test("a reply one account refuses for its usage limit is answered by the next, w
 
 test("a reply every account refuses fails with the refusal instead of arriving empty", async () => {
   const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
-  await signIn(home, ["first", "second"]);
-  configureClaudePlanLimits({ accounts: ["first", "second"], home, cacheDir: home });
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  configureClaudePlanLimits({ home, cacheDir: home });
   const mock = await startMockAnthropic({ fallback: sessionLimitFor(["first", "second"]) });
   try {
     const say = conversation(home, mock);
@@ -116,32 +117,41 @@ test("a reply every account refuses fails with the refusal instead of arriving e
   }
 }, 60_000);
 
-test("shore stays on the account in use while it has room, then moves to the usable account whose week resets soonest", async () => {
+test("shore stays on the account in use while it has room, then moves to the usable account whose week resets soonest, and takes in logins added later", async () => {
   const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
   const now = Date.now();
   const reading = (used: number, resetsIn: number) => ({ percent_used: used, resets_at: new Date(now + resetsIn).toISOString() });
   const checks: Record<string, ClaudePlanCheck> = {
-    busy: { status: "ok", email: "busy@example.com", poll: { subscription_type: "pro", five_hour: reading(0.5, HOUR), seven_day: reading(0.6, 5 * DAY) } },
-    soon: { status: "ok", poll: { subscription_type: "pro", five_hour: reading(0, HOUR), seven_day: reading(0.1, 2 * DAY) } },
-    gone: { status: "logged_out" },
-    later: { status: "ok", poll: { subscription_type: "pro", five_hour: reading(0, HOUR), seven_day: reading(0.2, 4 * DAY) } },
+    "busy@example.com": { status: "ok", poll: { subscription_type: "pro", five_hour: reading(0.5, HOUR), seven_day: reading(0.6, 5 * DAY) } },
+    "soon@example.com": { status: "ok", poll: { subscription_type: "pro", five_hour: reading(0, HOUR), seven_day: reading(0.1, 2 * DAY) } },
+    "later@example.com": { status: "ok", poll: { subscription_type: "pro", five_hour: reading(0, HOUR), seven_day: reading(0.2, 4 * DAY) } },
   };
+  await signIn(home, "zzz", "busy");
+  await signIn(home, "x1", "soon");
+  await signIn(home, "keysmash", "later");
+  await mkdir(join(claudeAccountsRoot(home), "gone"));
   configureClaudePlanLimits({
-    accounts: ["busy", "soon", "gone", "later"], home, cacheDir: home,
+    home, cacheDir: home,
     fetch: (account) => Promise.resolve(checks[account.name] ?? { status: "logged_out" }),
   });
   await refreshClaudePlanLimits(0, now);
 
-  expect(claudeAccountOrder(now).map((account) => account.name)).toEqual(["busy", "soon", "later"]);
+  expect(claudeAccountOrder(now).map((account) => account.name)).toEqual(["busy@example.com", "soon@example.com", "later@example.com"]);
 
-  observeClaudeRateLimit({ status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.96 }, "busy", now);
-  expect(claudeAccountOrder(now).map((account) => account.name)).toEqual(["soon", "later"]);
+  observeClaudeRateLimit({ status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.96 }, "busy@example.com", now);
+  expect(claudeAccountOrder(now).map((account) => account.name)).toEqual(["soon@example.com", "later@example.com"]);
 
   const report = claudePlanLimitsReport(undefined, now);
-  expect(report?.account).toBe("soon");
+  expect(report?.account).toBe("soon@example.com");
   expect(report?.accounts.map((account) => [account.name, account.state, account.in_use])).toEqual([
-    ["busy", "limited", false], ["soon", "ok", true], ["gone", "out", false], ["later", "ok", false],
+    ["busy@example.com", "limited", false], ["gone", "out", false], ["later@example.com", "ok", false], ["soon@example.com", "ok", true],
   ]);
   expect(report?.accounts.find((account) => account.name === "gone")?.login_command)
     .toContain(`CLAUDE_CONFIG_DIR=${join(claudeAccountsRoot(home), "gone")} claude auth login`);
+
+  await writeFile(join(claudeAccountsRoot(home), "x1", ".claude.json"), "{");
+  await signIn(home, "new", "fresh");
+  const rescanned = claudeAccountOrder(now + DAY).map((account) => account.name);
+  expect(rescanned[0]).toBe("soon@example.com");
+  expect(rescanned).toContain("fresh@example.com");
 });
