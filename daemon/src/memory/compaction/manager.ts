@@ -174,7 +174,7 @@ async function dispatchCompactionTool(
   workspaceDir: string,
   state: ToolLoopState,
 ): Promise<import("./types.ts").ToolOutput> {
-  if (["bash", "edit", "apply_patch"].includes(name)) {
+  if (["bash", "edit", "apply_patch", "save_picture"].includes(name)) {
     if (state.dryRun) return { output: `${name} blocked: dry-run compaction does not modify files`, isError: true };
     const workspace = workspaceOf(tools, workspaceDir);
     const before = await snapshotOf(workspace);

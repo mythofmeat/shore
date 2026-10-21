@@ -9,6 +9,7 @@ export interface ImageRef {
   embed?: string;
   name?: string;
   problem?: string;
+  sha256?: string;
 }
 
 export type ContentBlock =

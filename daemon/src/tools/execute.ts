@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
 import { imageDataForPath } from "../engine/wire_images.ts";
+import { pictureId, sha256Hex } from "../engine/picture_ids.ts";
 import type { ToolUseEvent } from "../engine/tool_loop.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import {
@@ -66,6 +67,7 @@ export interface ToolRun {
   durationMs: number;
   window?: ToolResultWindow;
   value?: unknown;
+  pictures: ImageRef[];
 }
 
 export async function executeToolUse(
@@ -104,6 +106,7 @@ export async function runToolUse(
       isError: true,
       rejected: true,
       durationMs: rejectedMs,
+      pictures: [],
     };
   }
 
@@ -155,6 +158,7 @@ export async function runToolUse(
     durationMs: dispatchMs,
     window: windowed,
     value: okValue,
+    pictures: attached.shown,
   };
 }
 
@@ -174,6 +178,7 @@ interface PlacedImage {
 interface AttachedMedia {
   placed: PlacedImage[];
   images: ImageRef[];
+  shown: ImageRef[];
   notes: string[];
   failed: boolean;
 }
@@ -213,7 +218,7 @@ async function attachToolMedia(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
 ): Promise<AttachedMedia> {
-  const attached: AttachedMedia = { placed: [], images: [], notes: [], failed: false };
+  const attached: AttachedMedia = { placed: [], images: [], shown: [], notes: [], failed: false };
   if (payload === undefined || payload.media.length === 0) return attached;
   const maxBytes = inlineImageBytesFor(exec.limits, toolUse.name);
   let inlinedBytes = 0;
@@ -226,12 +231,17 @@ async function attachToolMedia(
       exec.sendDirect({
         type: "send_image",
         ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
-        path: saved,
+        path: saved.path,
         caption: item.label,
         data: item.data,
       });
     }
-    const original: ImageRef = { path: saved ?? `tool-image:${toolUse.id}:${String(index)}`, caption: item.label, data: item.data };
+    const original: ImageRef = {
+      path: saved?.path ?? `tool-image:${toolUse.id}:${String(index)}`,
+      caption: item.label,
+      data: item.data,
+      ...(saved === undefined ? {} : { sha256: saved.sha256 }),
+    };
     if (attached.placed.length >= MAX_INLINE_TOOL_IMAGES || inlinedBytes >= maxBytes) {
       attached.notes.push(...unsaved);
       skipped.push(item.label);
@@ -251,10 +261,15 @@ async function attachToolMedia(
         continue;
       }
       const note = toolImageNote(item, reduced, exec, toolUse);
-      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${saved === undefined ? "" : `, saved to ${saved}`}]`];
+      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${saved === undefined ? "" : ` as picture ${pictureId(saved.sha256)}`}]`];
       attached.placed.push({ block, notes, ...(item.at === undefined ? {} : { at: item.at }) });
       inlinedBytes += bytes;
       attached.images.push({ ...original, data: block.source.data });
+      if (saved !== undefined) {
+        const shown: ImageRef = { path: saved.path, caption: item.label, sha256: saved.sha256 };
+        attached.shown.push(shown);
+        exec.ctx.shownPictures?.push(shown);
+      }
     } catch (error) {
       attached.failed = true;
       attached.images.push(original);
@@ -303,7 +318,7 @@ async function saveToolMedia(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
   index: number,
-): Promise<string | undefined> {
+): Promise<{ path: string; sha256: string } | undefined> {
   const cache = exec.ctx.cacheDir;
   if (cache === undefined || cache === "") return undefined;
   const extension = EXTENSION_BY_MIME[item.mime_type] ?? "bin";
@@ -316,7 +331,7 @@ async function saveToolMedia(
     const bytes = Buffer.from(item.data, "base64");
     await writeFile(target, bytes);
     noteCachedImages(cache, bytes.byteLength);
-    return target;
+    return { path: target, sha256: sha256Hex(bytes) };
   } catch (e) {
     shoreLog.warn(`shore: failed to save ${toolUse.name} image result: ${String(e)}`);
     return undefined;
@@ -396,12 +411,13 @@ export function recordReportedMessage(
   role: Role,
   blocks: ContentBlock[],
   exec: Pick<ToolExecution, "now" | "newMessageId" | "onRecordTurn">,
+  images: ImageRef[] = [],
 ): void | Promise<void> {
   const message: Message = {
     msg_id: exec.newMessageId(),
     role,
     content: deriveContentFromBlocks(blocks, true),
-    images: [],
+    images,
     content_blocks: blocks,
     timestamp: exec.now(),
   };
@@ -420,10 +436,21 @@ export interface ToolPhase {
 }
 
 export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {
+  const pictures = new Map<string, ImageRef[]>();
+  const picturesOf = (blocks: readonly ContentBlock[]): ImageRef[] => blocks.flatMap((block) => {
+    if (block.type !== "tool_result") return [];
+    const shown = pictures.get(block.tool_use_id) ?? [];
+    pictures.delete(block.tool_use_id);
+    return shown;
+  });
   return {
     messages,
     ...(exec.ctx.trackWorkspaceWrite === undefined ? {} : { parallel: false }),
-    runTool: (toolUse) => executeToolUse(toolUse, exec, messages),
-    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec),
+    runTool: async (toolUse) => {
+      const run = await runToolUse(toolUse, exec, messages);
+      if (run.pictures.length > 0) pictures.set(toolUse.id, run.pictures);
+      return run.block;
+    },
+    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec, picturesOf(blocks)),
   };
 }

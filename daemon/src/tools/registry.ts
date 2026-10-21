@@ -12,6 +12,7 @@ import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with
 import readChatLogsDesc from "../../prompts/tools/history/read_chat_logs.md" with { type: "text" };
 import searchChatLogsDesc from "../../prompts/tools/history/search_chat_logs.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
+import savePictureDesc from "../../prompts/tools/images/save_picture.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
 export interface ToolDef {
@@ -116,6 +117,19 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
       required: ["prompt"],
+    },
+  },
+  {
+    name: "save_picture",
+    description: stripOneTrailingNewline(savePictureDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        picture: { type: "string", minLength: 6, description: "The picture's id from `[picture …]`, or at least its first 6 characters." },
+        path: { type: "string", minLength: 1, description: "Where to save it, relative to the workspace root, such as `pictures/harbor.png`." },
+      },
+      required: ["picture", "path"],
+      additionalProperties: false,
     },
   },
   {

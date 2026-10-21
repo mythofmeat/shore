@@ -1801,6 +1801,12 @@
                 "string",
                 "null"
               ]
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -3578,6 +3584,12 @@
               ]
             },
             "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
               "type": [
                 "string",
                 "null"
@@ -6408,6 +6420,12 @@
               ]
             },
             "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
               "type": [
                 "string",
                 "null"
@@ -10216,6 +10234,12 @@
                 "string",
                 "null"
               ]
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10765,6 +10789,12 @@
                 "string",
                 "null"
               ]
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -11213,6 +11243,12 @@
               ]
             },
             "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
               "type": [
                 "string",
                 "null"
@@ -11707,6 +11743,12 @@
               ]
             },
             "problem": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
               "type": [
                 "string",
                 "null"

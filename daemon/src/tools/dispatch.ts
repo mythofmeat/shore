@@ -10,16 +10,18 @@ import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors
 import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
+import { handleSavePicture } from "./save_picture.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
-import type { Message } from "../engine/types.ts";
+import type { ImageRef, Message } from "../engine/types.ts";
 
 export interface ToolContext {
   thread?: string;
   conversation?: readonly Message[];
+  shownPictures?: ImageRef[];
   dryRun?: boolean;
   maxResultChars?: number;
   maxInlineImageBytes?: number;
@@ -112,7 +114,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "set_next_wake"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -131,6 +133,10 @@ export async function dispatchTool(
     case "apply_patch": {
       const write = () => withPromptChanges(workspace,
         () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
+      return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
+    }
+    case "save_picture": {
+      const write = () => handleSavePicture(args, ctx, workspace);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "search_chat_logs":

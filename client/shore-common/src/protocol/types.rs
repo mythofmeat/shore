@@ -23,6 +23,8 @@ pub struct ImageRef {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 impl PartialEq for ImageRef {

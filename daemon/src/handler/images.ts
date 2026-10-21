@@ -10,6 +10,7 @@ import { findModelCopy, modelCopyPath, omissionNotice, resolveImage } from "../l
 import { prepareImageBlock, reduceImage } from "../llm/prepare_images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
 import { atomicWrite } from "../engine/atomic.ts";
+import { sha256Hex } from "../engine/picture_ids.ts";
 
 export interface ImageUpload {
   filename: string;
@@ -172,7 +173,7 @@ async function saveAttachment(
   }
 
   shoreLog.info(`shore: saved incoming image to attachments: ${sourceName} -> ${claimed.path}`);
-  return { path: claimed.path };
+  return { path: claimed.path, sha256: sha256Hex(bytes) };
 }
 
 export async function ingestImages(

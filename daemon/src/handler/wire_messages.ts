@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 
 import type { ImageRef, ContentBlock } from "../engine/types.ts";
+import { isToolResultOnly } from "../engine/message_store.ts";
+import { pictureLabel, pictureSha256 } from "../engine/picture_ids.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
 import { imageLabel, omissionNotice } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
@@ -84,11 +86,13 @@ async function renderMessageContent(
   const images = m.images.filter((image) => image.embed === undefined);
   const reroute = m.role === "assistant" && images.length > 0;
   const imageRender = reroute ? await renderAssistantImages(images, mode) : undefined;
-  const turnImages = reroute ? [] : images;
+  const turnImages = reroute || isToolResultOnly(m) ? [] : images;
 
   let content: ContentBlock[] = [];
   for (const img of turnImages) {
     const source = await encodeImageBlock(img, true);
+    const sha256 = source === undefined ? undefined : pictureSha256(img);
+    if (sha256 !== undefined) content.push({ type: "text", text: pictureLabel(sha256) });
     if (source !== undefined) content.push({ type: "image", source });
     else if (!existsSync(img.path)) content.push({ type: "text", text: omissionNotice(imageLabel(img), EVICTED_IMAGE) });
   }

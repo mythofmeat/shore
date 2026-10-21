@@ -165,7 +165,7 @@ export function serializeMessages(messages: readonly Message[]): string {
   return out;
 }
 
-export function isToolResultOnly(m: Message): boolean {
+export function isToolResultOnly(m: Pick<Message, "role" | "content_blocks">): boolean {
   return (
     m.role === "user" &&
     m.content_blocks.length > 0 &&
