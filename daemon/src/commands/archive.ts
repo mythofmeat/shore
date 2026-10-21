@@ -44,6 +44,7 @@ const BACKUP_FORMAT = "shore-backup";
 const BACKUP_VERSION = 1;
 const BACKUP_TOP_LEVEL = ["manifest.json", "config", "data", "characters"];
 const BACKUP_DATA = ["preferences", "plugins"];
+const CHARACTER_ARCHIVE = ".shore.tar";
 
 export interface ArchiveContext {
   readonly dirs: ShoreDirs;
@@ -127,7 +128,6 @@ async function writeCharacterArchive(ctx: ArchiveContext, character: string, out
       {
         cwd: stage,
         file: temporaryOutput,
-        gzip: true,
         portable: true,
         noMtime: false,
         strict: true,
@@ -157,12 +157,12 @@ export async function exportBackup(ctx: ArchiveContext): Promise<BackupExported>
     try {
       await mkdir(join(stage, "characters"));
       for (const character of characters) {
-        await writeCharacterArchive(ctx, character, join(stage, "characters", `${character}.shore.tar.gz`), spool.directory);
+        await writeCharacterArchive(ctx, character, join(stage, "characters", `${character}${CHARACTER_ARCHIVE}`), spool.directory);
       }
       await stageGlobal(ctx.dirs, stage);
       const manifest: BackupManifest = { format: BACKUP_FORMAT, version: BACKUP_VERSION, created_at: new Date().toISOString(), characters };
       await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-      await create({ cwd: stage, file: spool.file, gzip: true, portable: true, noMtime: false, strict: true }, BACKUP_TOP_LEVEL);
+      await create({ cwd: stage, file: spool.file, portable: true, noMtime: false, strict: true }, BACKUP_TOP_LEVEL);
       await chmod(spool.file, 0o600);
       return (await stat(spool.file)).size;
     } finally {
@@ -250,7 +250,7 @@ async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: Backu
     }
     const inner = await mkdtemp(join(scratch, "shore-import-"));
     try {
-      await extractArchive(join(stage, "characters", `${name}.shore.tar.gz`), inner, ctx.limits);
+      await extractArchive(await backedUpArchive(stage, name), inner, ctx.limits);
       const { character } = await readManifest(inner);
       if (character !== name) throw invalidRequest(`The backup lists ${name}, but its archive holds ${character}`);
       await installStaged(ctx, inner);
@@ -265,6 +265,12 @@ async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: Backu
   }
   if (characters.length === 0 && restored.length > 0) await ctx.refreshDiscovery();
   return { characters, skipped, restored, kept };
+}
+
+async function backedUpArchive(stage: string, name: string): Promise<string> {
+  const archive = join(stage, "characters", `${name}${CHARACTER_ARCHIVE}`);
+  const gzipped = `${archive}.gz`;
+  return !await exists(archive) && await exists(gzipped) ? gzipped : archive;
 }
 
 async function restoreMissing(source: string, target: string, label: string, restored: string[], kept: string[]): Promise<void> {
@@ -523,7 +529,6 @@ async function extractArchive(archive: string, stage: string, limits?: ArchiveLi
   await extract({
     cwd: stage,
     file: archive,
-    gzip: true,
     preservePaths: false,
     strict: true,
     filter: function (this: Unpack, path, entry) {

@@ -442,7 +442,7 @@ pub(crate) enum CliCommand {
         all: bool,
 
         /// Where to save the archive on this machine (defaults to
-        /// `<character>.shore.tar.gz`, or `shore-backup-<time>.tar.gz` with --all)
+        /// `<character>.shore.tar`, or `shore-backup-<time>.tar` with --all)
         #[arg(short, long)]
         output: Option<PathBuf>,
 

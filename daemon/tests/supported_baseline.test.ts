@@ -68,7 +68,7 @@ test("the oldest supported release's archive restores current data through the c
   expect(await loadActivePromptFile(character, "SOUL.md")).toBe("You are ada.\n");
   expect((await HeartbeatLog.load(join(character, "heartbeat.jsonl"))).recent(1)[0]?.detail).toBe("saved heartbeat");
   expect((await readSubagentTraces(character))[0]?.result).toBe("saved result");
-  const currentArchive = join(root, "current.shore.tar.gz");
+  const currentArchive = join(root, "current.shore.tar");
   await exportCharacter({ ...context, hasCharacter: () => true }, { character: "ada", output: currentArchive });
   const original = join(root, "original");
   await mkdir(original);

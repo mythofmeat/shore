@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { access, mkdir, mkdtemp, readdir, stat, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Header } from "tar";
+import { create, Header } from "tar";
 
 import { exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
@@ -21,7 +21,7 @@ describe("character archives", () => {
     const source = await root("owned-staging"); await seedCharacter(source, "ada", "archive history");
     const temporaryDirectory = join(source.runtime, "owned-transfer"); await mkdir(temporaryDirectory);
     const limits = { bytes: 1024 * 1024, entries: 100, temporaryDirectory };
-    const output = join(temporaryDirectory, "archive.tar.gz");
+    const output = join(temporaryDirectory, "archive.tar");
     let snapshot = false;
     await exportCharacter({ ...context(source, new Set(["ada"])), limits, withSnapshot: async (run) => {
       const result = await run();
@@ -30,7 +30,7 @@ describe("character archives", () => {
       expect(await access(join(temporaryDirectory, directory ?? "", "shore.db")).then(() => true, () => false)).toBe(true);
       snapshot = true; return result;
     } }, { character: "ada", output });
-    expect(snapshot).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar.gz"]);
+    expect(snapshot).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar"]);
     const target = await root("owned-extraction");
     let extracted = false;
     await importCharacter({ ...context(target, new Set()), limits, withSnapshot: async (run) => {
@@ -39,7 +39,7 @@ describe("character archives", () => {
       expect(await access(join(temporaryDirectory, directory ?? "", "shore.db")).then(() => true, () => false)).toBe(true);
       extracted = true; return await run();
     } }, { archive: output });
-    expect(extracted).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar.gz"]);
+    expect(extracted).toBe(true); expect(await readdir(temporaryDirectory)).toEqual(["archive.tar"]);
   });
 
   test.each(["../outside", "workspace/../../outside", "unexpected/file", "/absolute/path"])("unsafe archive path %s rejects asynchronously without installing a character", async (path) => {
@@ -70,7 +70,7 @@ describe("character archives", () => {
     { bytes: 4096, entries: 100, message: "Database snapshot" },
   ])("browser export budget $bytes bytes/$entries entries rejects before publishing an archive", async (limits) => {
     const source = await root("limited-export"); await seedCharacter(source, "ada", "preserve source");
-    const output = join(source.runtime, "limited.tar.gz");
+    const output = join(source.runtime, "limited.tar");
     expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow(limits.message);
     expect(await outcomeOf(access(output))).toThrow();
     expect(await readFile(join(source.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
@@ -81,7 +81,7 @@ describe("character archives", () => {
     { bytes: 1024 * 1024, entries: 1, message: "too many files" },
   ])("browser import budget $bytes bytes/$entries entries rejects before installing data", async (limits) => {
     const source = await root("limited-source"); await seedCharacter(source, "ada", "archive history");
-    const output = join(source.runtime, "ada.tar.gz");
+    const output = join(source.runtime, "ada.tar");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("limited-target"); await seedCharacter(target, "bea", "preserve other character");
     expect(await outcomeOf(importCharacter({ ...context(target, new Set(["bea"])), limits }, { archive: output }))).toThrow(limits.message);
@@ -94,7 +94,7 @@ describe("character archives", () => {
   test("browser transfers reject links while native archives preserve their existing link support", async () => {
     const source = await root("link-source"); await seedCharacter(source, "ada", "archive history");
     await symlink("SOUL.md", join(source.workspace as string, "ada", "linked.md"));
-    const output = join(source.runtime, "ada.tar.gz");
+    const output = join(source.runtime, "ada.tar");
     const limits = { bytes: 1024 * 1024, entries: 100 };
     expect(await outcomeOf(exportCharacter({ ...context(source, new Set(["ada"])), limits }, { character: "ada", output }))).toThrow("regular files and directories");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
@@ -103,7 +103,7 @@ describe("character archives", () => {
     expect(await outcomeOf(access(join(target.workspace as string, "ada")))).toThrow();
   });
 
-  test("a compressed export restores one character without carrying another", async () => {
+  test("a plain tar export restores one character without carrying another", async () => {
     const source = await root("source");
     await seedCharacter(source, "ada", "hello from ada");
     await seedCharacter(source, "bea", "hello from bea");
@@ -114,7 +114,7 @@ describe("character archives", () => {
       }, [userMessage(key, `archived ${key}`)]);
     }
     sourceHistory.close();
-    const output = join(source.runtime, "ada.shore.tar.gz");
+    const output = join(source.runtime, "ada.shore.tar");
     const exported = await exportCharacter(context(source, new Set(["ada", "bea"])), {
       character: "ada",
       output,
@@ -122,10 +122,11 @@ describe("character archives", () => {
     expect(exported["bytes"]).toBeGreaterThan(0);
     expect((await stat(output)).mode & 0o777).toBe(0o600);
     const first = await readFile(output);
+    expect(first.subarray(257, 262).toString()).toBe("ustar");
     expect(await outcomeOf(exportCharacter(context(source, new Set(["ada", "bea"])), { character: "ada", output })))
       .toThrow("Refusing to overwrite existing archive");
     expect(await readFile(output)).toEqual(first);
-    expect(await outcomeOf(exportCharacter(context(source, new Set(["ada", "bea"])), { character: "cy", output: join(source.runtime, "cy.tar.gz") })))
+    expect(await outcomeOf(exportCharacter(context(source, new Set(["ada", "bea"])), { character: "cy", output: join(source.runtime, "cy.tar") })))
       .toThrow("Character not found");
 
     const target = await root("target");
@@ -155,7 +156,7 @@ describe("character archives", () => {
   test("import refuses an existing character before changing it", async () => {
     const source = await root("existing-source");
     await seedCharacter(source, "ada", "archive value");
-    const output = join(source.runtime, "ada.shore.tar.gz");
+    const output = join(source.runtime, "ada.shore.tar");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
 
     const target = await root("existing-target");
@@ -167,7 +168,7 @@ describe("character archives", () => {
   test("import refuses to land on anything a character left behind, even one no longer listed", async () => {
     const source = await root("leftover-source");
     await seedCharacter(source, "ada", "archive value");
-    const output = join(source.runtime, "ada.shore.tar.gz");
+    const output = join(source.runtime, "ada.shore.tar");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
 
     for (const leftover of ["workspace", "data", "config"] as const) {
@@ -189,7 +190,7 @@ describe("character archives", () => {
       file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
     }, [userMessage("ada", "retired")]);
     store.close();
-    const output = join(source.runtime, "ada.shore.tar.gz");
+    const output = join(source.runtime, "ada.shore.tar");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
     const target = await root("rollback-target");
     await seedCharacter(target, "adam", "preserved");
@@ -245,6 +246,24 @@ describe("character archives", () => {
     expect(await readFile(join(target.data, "bea", "threads", "main", "active.jsonl"), "utf8")).toContain("bea already here");
     const history = HistoryStore.open(join(target.data, "shore.db"));
     try { expect(history.readSegment("ada", 0)[0]?.content).toBe("ada history"); expect(history.readSegment("bea", 0)[0]?.content).toBe("bea already here"); }
+    finally { history.close(); }
+  });
+
+  test("a gzipped backup holding gzipped character archives still restores", async () => {
+    const source = await root("gzip-backup-source"); await seedCharacter(source, "ada", "ada from a gzipped backup");
+    const stage = join(source.runtime, "backup"); await mkdir(join(stage, "characters"), { recursive: true }); await mkdir(join(stage, "config")); await mkdir(join(stage, "data"));
+    const inner = join(source.runtime, "ada.shore.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output: inner });
+    await writeFile(join(stage, "characters", "ada.shore.tar.gz"), Bun.gzipSync(await readFile(inner)));
+    await writeFile(join(stage, "manifest.json"), JSON.stringify({ format: "shore-backup", version: 1, created_at: "2026-10-20T00:00:00Z", characters: ["ada"] }));
+    const backup = join(source.runtime, "shore-backup.tar.gz");
+    await create({ cwd: stage, file: backup, gzip: true, portable: true }, ["manifest.json", "config", "data", "characters"]);
+    const target = await root("gzip-backup-target");
+    const receiving = spooling(target, new Set(), 2);
+    expect(await importArchive(receiving, { transfer: await uploaded(receiving, await readFile(backup)) }))
+      .toEqual({ characters: ["ada"], skipped: [], restored: [], kept: [] });
+    const history = HistoryStore.open(join(target.data, "shore.db"));
+    try { expect(history.readSegment("ada", 0)[0]?.content).toBe("ada from a gzipped backup"); }
     finally { history.close(); }
   });
 

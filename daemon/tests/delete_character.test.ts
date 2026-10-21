@@ -93,7 +93,7 @@ describe("deleting a character", () => {
   test("--archive leaves a backup that imports back into a clean root", async () => {
     const dirs = await root("backup");
     await seedCharacter(dirs, "ada");
-    const output = join(dirs.runtime, "ada.shore.tar.gz");
+    const output = join(dirs.runtime, "ada.shore.tar");
 
     const result = (await deleteCharacter(context(dirs, new Set(["ada"]), []), {
       character: "ada",
@@ -117,7 +117,7 @@ describe("deleting a character", () => {
       await outcomeOf(deleteCharacter(context(dirs, new Set(["ada"]), []), {
         character: "ada",
         confirm: "ada",
-        archive: join(dirs.runtime, "no", "such", "dir", "ada.tar.gz"),
+        archive: join(dirs.runtime, "no", "such", "dir", "ada.tar"),
       })),
     ).toThrow("Archive directory does not exist");
     expect(existsSync(join(dirs.workspace as string, "ada"))).toBe(true);
