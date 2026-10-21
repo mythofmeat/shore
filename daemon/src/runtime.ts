@@ -37,7 +37,7 @@ import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { setNanoGptSubscription, setSubscriptionProviders } from "./ledger/store.ts";
-import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
+import { claudeAccountNames, DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
 import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
@@ -136,7 +136,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   applySubscriptionProviders(registry);
   for (const character of registry.availableCharacters()) removeWorkspaceIndex(config.dirs.cache, character);
-  configureClaudePlanLimits({ cacheDir: config.dirs.cache, ...claudePlanFetcher(options.providers.claude_agent) });
+  configureClaudePlanLimits({
+    cacheDir: config.dirs.cache,
+    accounts: claudeAccountNames(config.providers),
+    ...claudePlanFetcher(options.providers.claude_agent),
+  });
 
   historyIndex = new HistoryIndexService();
   const refreshHistoryIndexes = async () => {
@@ -491,7 +495,7 @@ export function sharedToolDeps(
 }
 
 function claudePlanFetcher(provider: SidecarProvider | undefined): Pick<ClaudePlanLimitsOptions, "fetch"> {
-  return provider === undefined ? {} : { fetch: () => provider.planLimits?.() ?? Promise.resolve(undefined) };
+  return provider === undefined ? {} : { fetch: (account) => provider.planLimits?.(account) ?? Promise.resolve({ status: "unavailable" }) };
 }
 
 export function applySubscriptionProviders(registry: CharacterRegistry): void {

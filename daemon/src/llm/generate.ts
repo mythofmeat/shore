@@ -16,7 +16,8 @@ import {
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { isKeylessSdk, KEYLESS_CANDIDATE, readCandidateEnv, resolveKeyCandidates } from "./credentials.ts";
+import { isKeylessSdk, readCandidateEnv, resolveKeyCandidates, type KeyCandidate } from "./credentials.ts";
+import { claudeAccountOrder, useClaudeAccount } from "../ledger/plan_limits.ts";
 import { MissingApiKey } from "./request.ts";
 import {
   streamWithCredentialFallback,
@@ -176,7 +177,7 @@ export async function runGeneration(
   };
   const entry = deps.config.providers.get(resolved.providerKey);
   const candidates = isKeylessSdk(request.sdk)
-    ? [KEYLESS_CANDIDATE]
+    ? claudeAccountCandidates()
     : options.useRequestKey
       ? [{ name: "request", env: "", warn_on_fallback: false }]
       : resolveKeyCandidates(
@@ -269,7 +270,13 @@ export async function runGeneration(
       canFallback: () => replaySafe,
     },
   );
+  const moved = isKeylessSdk(request.sdk) ? fallbacks.at(-1) : undefined;
+  if (moved?.to !== undefined) useClaudeAccount(moved.to.name, `"${moved.from.name}" refused a call: ${moved.kind.replaceAll("_", " ")}`);
   return { result, fallbacks };
+}
+
+function claudeAccountCandidates(): KeyCandidate[] {
+  return claudeAccountOrder().map((account) => ({ name: account.name, env: "", warn_on_fallback: false }));
 }
 
 export async function generateViaStream(

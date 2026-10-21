@@ -223,6 +223,10 @@
   background: var(--line-2);
 }
 
+.budget-track + .budget-track {
+  margin-top: 4px;
+}
+
 .budget-track span {
   display: block;
   height: 100%;

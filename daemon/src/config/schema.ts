@@ -167,6 +167,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     for (const field of ["enabled", "warn_on_fallback"]) add([...prefix, "keys", "<index>", field], { kind: "boolean" });
     for (const field of MODEL_FIELDS) add([...prefix, canonicalSettingKey(field)], modelInfo(field));
   }
+  add(["providers", "claude_agent", "accounts"], { kind: "list", item: { kind: "string" } });
   for (const section of ["chat", "image"]) {
     for (const identity of new Set(["<provider:model_id>", ...live.instancesAt(section).filter((name) => name.includes(":"))])) {
       if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, canonicalSettingKey(field)], modelInfo(field));
@@ -250,6 +251,7 @@ function describeOption(path: readonly string[]): string {
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",
+    accounts: "Claude accounts claude_agent switches between, by name. Each signs in once with CLAUDE_CONFIG_DIR=~/.claude-accounts/<name> claude auth login, run as the daemon's user. Shore stays on one account until it reaches 95% of its session or 98% of its week, then moves to the one whose week resets soonest; a reply refused for a usage limit is retried on the next account. Empty uses the daemon's own login.",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
     system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",

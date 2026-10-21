@@ -567,11 +567,43 @@ wire_types! {
         pub over_limit: bool,
     }
 
+    pub struct ClaudeAccountWindow {
+        pub window: ClaudePlanWindow,
+        pub percent_used: f64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub resets_at: Option<String>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ClaudeAccountState { Ok, Limited, Out, Unknown }
+
+    pub struct ClaudeAccountReport {
+        pub name: String,
+        pub in_use: bool,
+        pub state: ClaudeAccountState,
+        pub detail: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub email: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub subscription_type: Option<String>,
+        pub windows: Vec<ClaudeAccountWindow>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub login_command: Option<String>,
+    }
+
     pub struct ClaudePlanLimitsReport {
         pub updated_at: String,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub subscription_type: Option<String>,
         pub windows: Vec<ClaudePlanLimit>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "String")]
+        #[ts(optional)]
+        pub account: Option<String>,
+        #[serde(default)]
+        pub accounts: Vec<ClaudeAccountReport>,
     }
 
     pub struct UsageSummaryReport {

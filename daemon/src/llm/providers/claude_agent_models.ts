@@ -1,5 +1,6 @@
 import { query, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { tmpdir } from "node:os";
+import { claudeAccountInUse } from "../../ledger/plan_limits.ts";
 import { toRfc3339 } from "../../ledger/zoned.ts";
 import type { DiscoveredModel, DiscoveryResult } from "../discovery.ts";
 import { claudeAgentEnvironment } from "./claude_agent.ts";
@@ -20,7 +21,7 @@ export async function discoverClaudeAgent(
     session = runQuery({
       prompt: (async function* (): AsyncGenerator<SDKUserMessage> {})(),
       options: {
-        cwd: tmpdir(), env: claudeAgentEnvironment(baseUrl), ...claudeCodeOptions(), abortController,
+        cwd: tmpdir(), env: claudeAgentEnvironment(baseUrl, "", claudeAccountInUse().configDir), ...claudeCodeOptions(), abortController,
         settingSources: [], strictMcpConfig: true, tools: [], skills: [],
         persistSession: false,
       },

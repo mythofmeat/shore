@@ -222,7 +222,7 @@ export interface SidecarProvider {
   ): AsyncIterable<StreamEvent>;
   stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent>;
   generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse>;
-  planLimits?(): Promise<import("../ledger/plan_limits.ts").ClaudePlanPoll | undefined>;
+  planLimits?(account: import("./claude_accounts.ts").ClaudeAccount): Promise<import("../ledger/plan_limits.ts").ClaudePlanCheck>;
 }
 
 export interface ImageRequest {

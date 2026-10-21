@@ -1,14 +1,14 @@
 import { query, type Query, type SDKControlGetUsageResponse, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { tmpdir } from "node:os";
 
-import { claudePlanInstant, type ClaudePlanPoll, type ClaudePlanReading } from "../ledger/plan_limits.ts";
+import { claudePlanInstant, type ClaudePlanCheck, type ClaudePlanPoll, type ClaudePlanReading } from "../ledger/plan_limits.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./providers/claude_code.ts";
 
 const CLAUDE_PLAN_FETCH_TIMEOUT_MS = 15_000;
 
 type UsageMethod = "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET";
 
-export type ClaudePlanUsageQuery = (params: Parameters<typeof query>[0]) => Pick<Query, UsageMethod | "close">;
+export type ClaudePlanUsageQuery = (params: Parameters<typeof query>[0]) => Pick<Query, UsageMethod | "accountInfo" | "close">;
 
 type UsageReply = Pick<SDKControlGetUsageResponse, "subscription_type" | "rate_limits_available" | "rate_limits">;
 
@@ -28,7 +28,7 @@ export async function fetchClaudePlanLimits(
   runQuery: ClaudePlanUsageQuery,
   env: Record<string, string>,
   timeoutMs: number = CLAUDE_PLAN_FETCH_TIMEOUT_MS,
-): Promise<ClaudePlanPoll | undefined> {
+): Promise<ClaudePlanCheck> {
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), timeoutMs);
   timeout.unref();
@@ -46,7 +46,13 @@ export async function fetchClaudePlanLimits(
         persistSession: false,
       },
     });
-    return claudePlanPoll(await session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }));
+    const info = await session.accountInfo();
+    const email = info.email === undefined ? {} : { email: info.email };
+    if (info.email === undefined && (info.tokenSource === undefined || info.tokenSource === "none") && info.apiKeySource === undefined) {
+      return { status: "logged_out" };
+    }
+    const poll = claudePlanPoll(await session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }));
+    return poll === undefined ? { status: "unavailable", ...email } : { status: "ok", poll, ...email };
   } catch (e) {
     throw claudeCodeLaunchFailure(e) ?? e;
   } finally {

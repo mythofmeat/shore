@@ -37,7 +37,7 @@ import { ledgerFor } from "./record.ts";
 import {
   CLAUDE_PLAN_REPORT_REFRESH_MS,
   claudePlanLimitsReport,
-  claudePlanLimitsState,
+  claudePlanLimitsKnown,
   refreshClaudePlanLimits,
 } from "./plan_limits.ts";
 import type { Ledger } from "./store.ts";
@@ -260,7 +260,7 @@ export async function usageReport(
     request.cacheDir === undefined
       ? undefined
       : readNanoGptSubscriptionSync(nanoGptSubscriptionPath(request.cacheDir)),
-    claudePlanLimitsState() === undefined ? undefined : currentClaudePlanLimits(config, now),
+    claudePlanLimitsKnown() ? currentClaudePlanLimits(config, now) : undefined,
   );
 }
 
