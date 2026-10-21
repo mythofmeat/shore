@@ -41,7 +41,7 @@ export class ArchiveSpool {
     const id = crypto.randomUUID();
     const directory = join(await this.#root, id);
     await mkdir(directory, { mode: 0o700 });
-    return { id, owner, directory, file: join(directory, "archive.tar.gz") };
+    return { id, owner, directory, file: join(directory, "archive.tar") };
   }
 
   publish(entry: SpoolEntry, direction: Transfer["direction"], bytes: number): void {

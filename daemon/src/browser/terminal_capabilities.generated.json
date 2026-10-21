@@ -3176,7 +3176,7 @@
           "long": "output",
           "aliases": [],
           "short_aliases": [],
-          "help": "Where to save the archive on this machine (defaults to `<character>.shore.tar.gz`, or `shore-backup-<time>.tar.gz` with --all)",
+          "help": "Where to save the archive on this machine (defaults to `<character>.shore.tar`, or `shore-backup-<time>.tar` with --all)",
           "long_help": null,
           "action": "Set",
           "required": false,

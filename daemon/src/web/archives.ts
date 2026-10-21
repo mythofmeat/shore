@@ -152,7 +152,7 @@ export class ArchiveTransfers {
     const declared = Number(request.headers.get("content-length") ?? "0");
     if (!Number.isSafeInteger(declared) || declared < 0 || declared > this.#limits.uploadBytes) throw new ArchiveTransferError(413, "Archive exceeds the upload size limit");
     let filename: string;
-    try { filename = decodeURIComponent(request.headers.get("x-shore-filename") ?? "character.shore.tar.gz").split(/[\\/]/).at(-1) ?? ""; }
+    try { filename = decodeURIComponent(request.headers.get("x-shore-filename") ?? "character.shore.tar").split(/[\\/]/).at(-1) ?? ""; }
     catch { throw new ArchiveTransferError(400, "Invalid archive filename"); }
     if (filename.length === 0 || filename.length > 200) throw new ArchiveTransferError(400, "Invalid archive filename");
     for (const character of filename) if (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) throw new ArchiveTransferError(400, "Invalid archive filename");
@@ -205,7 +205,7 @@ export class ArchiveTransfers {
   export(owner: WebSession, character: string): WebArchiveInfo {
     this.#available();
     parseOperationInput("export_character", { character, output: "/controlled/archive.tar.gz" });
-    const filename = `${character.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100)}.shore.tar.gz`;
+    const filename = `${character.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100)}.shore.tar`;
     const record = this.#allocate(owner, filename, "exporting");
     this.#start(record, "export_character", async () => ({ character, output: await this.#path(record) }));
     return { ...record.info };
@@ -333,8 +333,8 @@ export class ArchiveTransfers {
       async cancel() { await close(false); },
     });
     const headers = securityHeaders();
-    headers.set("content-type", "application/gzip"); headers.set("content-length", String(attributes.size));
-    headers.set("content-disposition", `attachment; filename="character.shore.tar.gz"; filename*=UTF-8''${encodeURIComponent(record.info.filename).replaceAll("'", "%27")}`);
+    headers.set("content-type", "application/x-tar"); headers.set("content-length", String(attributes.size));
+    headers.set("content-disposition", `attachment; filename="character.shore.tar"; filename*=UTF-8''${encodeURIComponent(record.info.filename).replaceAll("'", "%27")}`);
     return new Response(stream, { headers });
   }
 

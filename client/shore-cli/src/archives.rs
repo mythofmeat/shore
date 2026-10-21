@@ -105,9 +105,9 @@ pub(crate) fn archive_target(
 ) -> Result<PathBuf, Failure> {
     let path = match (output, character) {
         (Some(path), _) => path.to_path_buf(),
-        (None, Some(name)) => PathBuf::from(format!("{name}.shore.tar.gz")),
+        (None, Some(name)) => PathBuf::from(format!("{name}.shore.tar")),
         (None, None) => PathBuf::from(format!(
-            "shore-backup-{}.tar.gz",
+            "shore-backup-{}.tar",
             chrono::Local::now().format("%Y-%m-%d-%H%M%S")
         )),
     };

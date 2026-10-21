@@ -39,7 +39,7 @@ function PathTools({ state }: { state: WorkspaceSnapshot }) {
       return `Exported ${character} to ${result.archive}`;
     }); }}>
       <select className="select" aria-label="Character to export to a path" value={character} onChange={(event) => setCharacter(event.target.value)}>{state.characters.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
-      <input className="input mono" aria-label="Export path" placeholder="/path/to/folder or file.tar.gz" value={output} onChange={(event) => setOutput(event.target.value)} />
+      <input className="input mono" aria-label="Export path" placeholder="/path/to/folder or file.tar" value={output} onChange={(event) => setOutput(event.target.value)} />
       <button type="submit" className="button" disabled={busy || character === "" || output.trim() === ""}>Export to path</button>
     </form>
     <form className="inline-form wrap" onSubmit={(event) => { event.preventDefault(); void run(async () => {
@@ -47,7 +47,7 @@ function PathTools({ state }: { state: WorkspaceSnapshot }) {
       await workspace.refreshNavigation();
       return `Imported ${result.character}`;
     }); }}>
-      <input className="input mono" aria-label="Archive path to import" placeholder="/path/to/character.tar.gz" value={archive} onChange={(event) => setArchive(event.target.value)} />
+      <input className="input mono" aria-label="Archive path to import" placeholder="/path/to/character.tar" value={archive} onChange={(event) => setArchive(event.target.value)} />
       <button type="submit" className="button" disabled={busy || archive.trim() === ""}>Import from path</button>
     </form>
   </div>;
@@ -103,7 +103,7 @@ export function ArchivesPage({ state }: { state: WorkspaceSnapshot }) {
           <select className="select" aria-label="Character to export" value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose a character</option>{state.characters.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
           <button type="button" className="button primary" disabled={!ready || busy || selected === ""} onClick={() => void run(async () => { await archiveInfo(await transfer("/export", JSON.stringify({ character: selected }), { "content-type": "application/json" })); refresh(); return undefined; })}>Export and download</button>
         </div>
-        <label className="button file-button">Upload an archive to import<input type="file" accept=".tar.gz,.tgz,application/gzip" disabled={!ready || busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file !== undefined) receive(file); }} /></label>
+        <label className="button file-button">Upload an archive to import<input type="file" accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip" disabled={!ready || busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file !== undefined) receive(file); }} /></label>
         {upload.current === null ? null : <button type="button" className="button ghost" onClick={() => upload.current?.abort()}>Stop upload</button>}
       </div>
       {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
