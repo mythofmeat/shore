@@ -9,6 +9,7 @@ import { unsentNotice } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import { findModelCopy } from "../llm/images.ts";
+import { isToolResultOnly } from "./message_store.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
@@ -210,7 +211,7 @@ export function estimateMessageTokens(
 ): number {
   return msg.content_blocks.reduce(
     (total, block) => total + estimateBlockTokens(block, tier),
-    msg.images.reduce((total, image) => image.embed === undefined ? total + attachedImageTokens(image, tier) : total, 0),
+    isToolResultOnly(msg) ? 0 : msg.images.reduce((total, image) => image.embed === undefined ? total + attachedImageTokens(image, tier) : total, 0),
   );
 }
 

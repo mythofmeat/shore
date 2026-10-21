@@ -2,18 +2,20 @@ import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Parser } from "tar";
 import { deleteCharacter, exportBackup, exportCharacter, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
+import { MessageStore } from "../src/engine/message_store.ts";
+import { sha256Hex } from "../src/engine/picture_ids.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { stdioLaunch } from "../src/mcp/client.ts";
 import { loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
-import { writeDurable } from "../src/storage/files.ts";
+import { threadFile, writeDurable } from "../src/storage/files.ts";
 import type { BashResult } from "../src/tools/bash.ts";
 import { canSwitchUser, characterUser, runsWithNoNewPrivs, setprivArgs, type CharacterUser } from "../src/tools/character_user.ts";
 import {
@@ -150,6 +152,23 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect(readFileSync(join(workspace.dir, "note.md"), "utf8")).toBe("new text\n");
     expect(statSync(join(workspace.dir, "note.md")).uid).toBe(user.uid);
     expect(readFileSync(SECRET, "utf8")).toBe("isolation-secret\n");
+  });
+
+  test("saves a picture it was shown into its workspace as the character", async () => {
+    const user = await ownUser();
+    const workspace = await freshWorkspace();
+    const ctx = await context(workspace);
+    const data = dirname(ctx.historyDbPath);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const cached = join(data, "cached.png");
+    await writeFile(cached, png);
+    const active = await MessageStore.load(threadFile(data, "Ada", "main", "active.jsonl"));
+    await active.append({ msg_id: "m1", role: "user", content: "", images: [{ path: cached, sha256: sha256Hex(png) }], content_blocks: [], timestamp: "2026-10-21T10:00:00Z" });
+    const picture = sha256Hex(png).slice(0, 8);
+    expect(await dispatchTool("save_picture", { picture, path: "pictures/dot" }, ctx)).toContain("Saved picture");
+    expect(readFileSync(join(workspace.dir, "pictures", "dot.png"))).toEqual(png);
+    expect(statSync(join(workspace.dir, "pictures", "dot.png")).uid).toBe(user.uid);
+    expect(await failure(dispatchTool("save_picture", { picture, path: "pictures/dot.png" }, ctx))).toContain("already exists");
   });
 
   test("keeps a prompt file linked to the daemon's secrets out of the prompt, and can still replace it", async () => {

@@ -3073,6 +3073,12 @@
               "string",
               "null"
             ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -11692,6 +11698,12 @@
             ]
           },
           "problem": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
             "type": [
               "string",
               "null"

@@ -714,6 +714,21 @@ export class HistoryStore {
     return { messages: this.#messagesFromRows(rows, character, metrics), metrics };
   }
 
+  shownPictures(character: string, sha256Prefix: string): { images: ImageRef[]; timestamp: string }[] {
+    const rows = this.#db
+      .query(
+        `SELECT m.images, m.timestamp
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE (m.character = ?1 OR substr(m.character, 1, length(?1) + 1) = ?1 || '/')
+           AND s.committed = 1 AND s.excluded = 0 AND m.role = 'user'
+           AND m.images LIKE ?2
+         ORDER BY m.id DESC`,
+      )
+      .all(character, `%"sha256":"${sha256Prefix}%`) as { images: string; timestamp: string }[];
+    return rows.map((row) => ({ images: JSON.parse(row.images) as ImageRef[], timestamp: row.timestamp }));
+  }
+
   #messagesFromRows(rows: MessageRow[], character: string, metrics?: HistoryReadMetrics): Message[] {
     const altQuery = this.#db.query(
       `SELECT timestamp, provider_key, model, images, blocks_hash, version
