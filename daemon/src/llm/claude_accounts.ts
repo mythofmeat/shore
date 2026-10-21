@@ -1,7 +1,9 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { ClaudePlanReading } from "../ledger/plan_limits.ts";
+import { shoreLog } from "../log.ts";
 
 export const DEFAULT_CLAUDE_ACCOUNT = "subscription";
 
@@ -12,22 +14,54 @@ export const WEEKLY_CUTOFF = 0.98;
 export interface ClaudeAccount {
   name: string;
   configDir?: string;
-}
-
-const ACCOUNT_NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
-
-export function isClaudeAccountName(name: string): boolean {
-  return ACCOUNT_NAME.test(name);
+  email?: string;
 }
 
 export function claudeAccountsRoot(home: string = process.env.HOME ?? homedir()): string {
   return join(home, ".claude-accounts");
 }
 
-export function claudeAccountsOf(names: readonly string[], home?: string): ClaudeAccount[] {
-  if (names.length === 0) return [{ name: DEFAULT_CLAUDE_ACCOUNT }];
+function signedInEmail(configDir: string): string | undefined {
+  try {
+    const config = JSON.parse(readFileSync(join(configDir, ".claude.json"), "utf8")) as { oauthAccount?: { emailAddress?: unknown } };
+    const email = config.oauthAccount?.emailAddress;
+    return typeof email === "string" && email !== "" ? email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function discoverClaudeAccounts(home?: string, known: ReadonlyMap<string, string> = new Map()): ClaudeAccount[] {
   const root = claudeAccountsRoot(home);
-  return names.map((name) => ({ name, configDir: join(root, name) }));
+  let folders: string[];
+  try {
+    folders = readdirSync(root).filter((folder) => !folder.startsWith(".")).sort();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") shoreLog.warn(`shore: could not list Claude accounts in ${root}: ${String(e)}`);
+    folders = [];
+  }
+  const found = new Map<string, ClaudeAccount>();
+  for (const folder of folders) {
+    const configDir = join(root, folder);
+    if (!isDirectory(configDir)) continue;
+    const email = signedInEmail(configDir);
+    const name = email ?? known.get(configDir) ?? folder;
+    const twin = found.get(name);
+    if (twin !== undefined) {
+      shoreLog.warn(`shore: ${configDir} and ${String(twin.configDir)} are both signed in as ${name}; using the first`);
+      continue;
+    }
+    found.set(name, { name, configDir, ...(email === undefined ? {} : { email }) });
+  }
+  return found.size === 0 ? [{ name: DEFAULT_CLAUDE_ACCOUNT }] : [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 export function claudeLoginCommand(account: ClaudeAccount, user: string, claude = "claude"): string {

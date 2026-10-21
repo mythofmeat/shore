@@ -45,7 +45,7 @@ function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
 const ACCOUNT_STATES = { ok: "has room", limited: "at a limit", out: "can't be used", unknown: "not checked" } as const;
 
 function ClaudeAccount({ account }: { account: ClaudeAccountReport }) {
-  const who = [account.email, account.subscription_type].filter((part) => part !== null).join(" · ");
+  const who = [account.email, account.subscription_type].filter((part) => part !== null && part !== account.name).join(" · ");
   return <div className="budget">
     <div className="budget-head"><span className="setting-label">{account.name}{account.in_use ? " (in use)" : ""}</span><span className="mono">{who}</span></div>
     {account.windows.map((window) => {

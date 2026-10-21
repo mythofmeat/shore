@@ -10,10 +10,10 @@ import { dirname, join } from "node:path";
 import { defaultPlanLimitPolicy, type PlanLimitPolicyConfig } from "../config/app.ts";
 import {
   assessClaudeAccount,
-  claudeAccountsOf,
   claudeLoginCommand,
   decideClaudeAccount,
   DEFAULT_CLAUDE_ACCOUNT,
+  discoverClaudeAccounts,
   rankClaudeAccounts,
   type ClaudeAccount,
   type ClaudeAccountStanding,
@@ -76,7 +76,6 @@ type ClaudePlanFetcher = (account: ClaudeAccount) => Promise<ClaudePlanCheck>;
 export interface ClaudePlanLimitsOptions {
   cacheDir?: string;
   fetch?: ClaudePlanFetcher;
-  accounts?: readonly string[];
   home?: string;
 }
 
@@ -94,6 +93,8 @@ const ACTION_PHRASES: Record<UsageBudgetAction, string> = {
 
 const CHECKS_AT_ONCE = 2;
 
+const RESCAN_MS = 30_000;
+
 interface AccountPlan {
   account: ClaudeAccount;
   state: ClaudePlanLimitsState | undefined;
@@ -108,8 +109,10 @@ interface AccountPlan {
 let cacheDir: string | undefined;
 let fetcher: ClaudePlanFetcher | undefined;
 let plans: AccountPlan[] = [freshPlan({ name: DEFAULT_CLAUDE_ACCOUNT })];
-let named = false;
+let switching = false;
 let inUse = DEFAULT_CLAUDE_ACCOUNT;
+let home: string | undefined;
+let scannedAt = Number.NEGATIVE_INFINITY;
 
 function freshPlan(account: ClaudeAccount, state?: ClaudePlanLimitsState): AccountPlan {
   return {
@@ -127,7 +130,7 @@ function freshPlan(account: ClaudeAccount, state?: ClaudePlanLimitsState): Accou
 export function claudePlanLimitsPath(dir: string, account: string = DEFAULT_CLAUDE_ACCOUNT): string {
   return account === DEFAULT_CLAUDE_ACCOUNT
     ? join(dir, "providers", "claude_agent", "plan_limits.json")
-    : join(dir, "providers", "claude_agent", "accounts", account, "plan_limits.json");
+    : join(dir, "providers", "claude_agent", "accounts", encodeURIComponent(account), "plan_limits.json");
 }
 
 export function claudeAccountInUsePath(dir: string): string {
@@ -137,19 +140,27 @@ export function claudeAccountInUsePath(dir: string): string {
 export function configureClaudePlanLimits(options: ClaudePlanLimitsOptions = {}): void {
   cacheDir = options.cacheDir;
   fetcher = options.fetch;
+  home = options.home;
   plans = [];
-  setClaudeAccounts(options.accounts ?? [], options.home);
+  scanClaudeAccounts(Date.now());
   const remembered = cacheDir === undefined ? undefined : readAccountInUse(claudeAccountInUsePath(cacheDir));
   inUse = plans.find((plan) => plan.account.name === remembered)?.account.name ?? required(plans[0]).account.name;
 }
 
-export function setClaudeAccounts(names: readonly string[], home?: string): void {
-  named = names.length > 0;
+function scanClaudeAccounts(now: number): void {
+  scannedAt = now;
+  const known = new Map(plans.flatMap((plan) => (plan.account.configDir === undefined ? [] : [[plan.account.configDir, plan.account.name] as const])));
+  const accounts = discoverClaudeAccounts(home, known);
+  switching = accounts.some((account) => account.configDir !== undefined);
   const dir = cacheDir;
-  plans = claudeAccountsOf(names, home).map((account) =>
+  plans = accounts.map((account) =>
     plans.find((plan) => plan.account.name === account.name && plan.account.configDir === account.configDir) ??
       freshPlan(account, dir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(dir, account.name))));
   if (planOf(inUse) === undefined) inUse = required(plans[0]).account.name;
+}
+
+export function rescanClaudeAccounts(now: number = Date.now()): void {
+  if (now - scannedAt >= RESCAN_MS) scanClaudeAccounts(now);
 }
 
 function readAccountInUse(path: string): string | undefined {
@@ -187,7 +198,7 @@ export function claudePlanLimitsState(account?: string): ClaudePlanLimitsState |
 }
 
 export function claudePlanLimitsKnown(): boolean {
-  return named || planOf(inUse)?.state !== undefined;
+  return switching || planOf(inUse)?.state !== undefined;
 }
 
 function standingOf(plan: AccountPlan): ClaudeAccountStanding {
@@ -200,6 +211,7 @@ function standingOf(plan: AccountPlan): ClaudeAccountStanding {
 }
 
 export function claudeAccountOrder(now: number = Date.now()): ClaudeAccount[] {
+  rescanClaudeAccounts(now);
   if (plans.length === 1) return [required(plans[0]).account];
   const assessments = plans.map((plan) => assessClaudeAccount(standingOf(plan), now));
   const decision = decideClaudeAccount(assessments, inUse, now);
@@ -212,7 +224,7 @@ export function claudeAccountOrder(now: number = Date.now()): ClaudeAccount[] {
 
 export function useClaudeAccount(name: string, reason: string): void {
   if (name === inUse || planOf(name) === undefined) return;
-  shoreLog.info(`shore: Claude account "${inUse}" → "${name}": ${reason}`);
+  shoreLog.info(`shore: Claude account ${inUse} → ${name}: ${reason}`);
   inUse = name;
   const dir = cacheDir;
   if (dir === undefined) return;
@@ -229,6 +241,7 @@ export function useClaudeAccount(name: string, reason: string): void {
 export async function refreshClaudePlanLimits(maxAgeMs: number, now: number = Date.now()): Promise<void> {
   const fetch = fetcher;
   if (fetch === undefined) return;
+  rescanClaudeAccounts(now);
   const due = plans.filter((plan) => plan.refreshing !== undefined || now - lastAttempt(plan) >= maxAgeMs);
   let next = 0;
   const worker = async (): Promise<void> => {
@@ -258,7 +271,7 @@ async function pollClaudePlanLimits(plan: AccountPlan, fetch: ClaudePlanFetcher,
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     plan.login = { error: message };
-    shoreLog.warn(`shore: could not read Claude plan limits${named ? ` for "${plan.account.name}"` : ""}: ${message}`);
+    shoreLog.warn(`shore: could not read Claude plan limits${switching ? ` for ${plan.account.name}` : ""}: ${message}`);
     return;
   }
   plan.login = check.status;
@@ -419,7 +432,7 @@ export function claudePlanLimitsReport(
     const reading = liveReading(state[window], now);
     return reading === undefined ? [] : [planLimit(window, reading, policyFor(config, window))];
   });
-  if (!named) {
+  if (!switching) {
     if (state === undefined || windows.length === 0) return undefined;
     return { updated_at: state.updated_at, subscription_type: state.subscription_type, windows, accounts: [] };
   }
@@ -440,7 +453,7 @@ function accountReport(plan: AccountPlan, now: number): ClaudeAccountReport {
     in_use: plan.account.name === inUse,
     state: assessment.state,
     detail: assessment.reason,
-    email: plan.email ?? null,
+    email: plan.email ?? plan.account.email ?? null,
     subscription_type: plan.state?.subscription_type ?? null,
     windows: CLAUDE_PLAN_WINDOWS.flatMap((window) => {
       const reading = liveReading(plan.state?.[window] ?? null, now);

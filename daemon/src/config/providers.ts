@@ -7,7 +7,6 @@ import {
   type Sdk,
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import { isClaudeAccountName } from "../llm/claude_accounts.ts";
 import { isKeylessSdk, type ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 import { ZAI_SUB_PROVIDER } from "../llm/providers/zai_config.ts";
 
@@ -16,8 +15,7 @@ export type ProviderRegistryErrorKind =
   | "conflicting_key_forms"
   | "missing_key_field"
   | "duplicate_key_name"
-  | "transport_in_defaults"
-  | "accounts";
+  | "transport_in_defaults";
 
 export class ProviderRegistryError extends Error {
   constructor(
@@ -56,10 +54,6 @@ export class ProviderRegistryError extends Error {
       `[providers.${provider}] has duplicate key name ${JSON.stringify(name)}; ` +
         `each key under a provider must have a unique name`,
     );
-  }
-
-  static accounts(provider: string, problem: string): ProviderRegistryError {
-    return new ProviderRegistryError("accounts", `[providers.${provider}] accounts: ${problem}`);
   }
 
   static transportInDefaults(provider: string, field: string): ProviderRegistryError {
@@ -126,7 +120,6 @@ export interface ProviderEntry extends ProviderRegistryEntry {
   baseUrl?: string;
   apiKeyEnv?: string;
   keys: ProviderKeyEntry[];
-  accounts: string[];
   discovery: ProviderDiscovery;
   defaults: ModelConfigFields;
 }
@@ -144,16 +137,9 @@ function defaultProviderEntry(name?: string): ProviderEntry {
     enabled: true,
     subscription: name !== undefined && DEFAULT_SUBSCRIPTION_SET.has(name),
     keys: [],
-    accounts: [],
     discovery: defaultDiscovery(),
     defaults: {},
   };
-}
-
-export const CLAUDE_AGENT_PROVIDER = "claude_agent";
-
-export function claudeAccountNames(registry: ProviderRegistry): string[] {
-  return registry.get(CLAUDE_AGENT_PROVIDER)?.accounts ?? [];
 }
 
 export function enabledKeys(entry: ProviderEntry): ProviderKeyEntry[] {
@@ -236,18 +222,6 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
     throw ProviderRegistryError.conflictingKeyForms(provider);
   }
 
-  if (parsed.accounts.length > 0 && provider !== CLAUDE_AGENT_PROVIDER) {
-    throw ProviderRegistryError.accounts(provider, `only [providers.${CLAUDE_AGENT_PROVIDER}] signs in to Claude accounts`);
-  }
-  const named = new Set<string>();
-  for (const account of parsed.accounts) {
-    if (!isClaudeAccountName(account)) {
-      throw ProviderRegistryError.accounts(provider, `${JSON.stringify(account)} is not 1-32 lowercase letters, digits, "-" or "_" starting with a letter or digit`);
-    }
-    if (named.has(account)) throw ProviderRegistryError.accounts(provider, `${JSON.stringify(account)} is listed twice`);
-    named.add(account);
-  }
-
   const seen = new Set<string>();
   for (const [idx, key] of parsed.keys.entries()) {
     if (key.name === "") throw ProviderRegistryError.missingKeyField(provider, idx, "name");
@@ -285,7 +259,6 @@ const ENTRY_KEYS = [
   "base_url",
   "api_key_env",
   "keys",
-  "accounts",
   "discovery",
   "defaults",
 ];
@@ -344,15 +317,6 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
       const read = readKey(raw);
       if ("err" in read) return read;
       out.keys.push(read.ok);
-    }
-  }
-
-  const accounts = value["accounts"];
-  if (accounts !== undefined) {
-    if (!Array.isArray(accounts)) return { err: "invalid type: expected a sequence" };
-    for (const account of accounts) {
-      if (typeof account !== "string") return { err: "invalid type: expected a string" };
-      out.accounts.push(account);
     }
   }
 
