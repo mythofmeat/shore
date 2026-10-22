@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 cask "shore-desktop" do
-  version "4.44.6"
-  sha256 "a4edc40efe3f84c326f24aada1411c602eb16a640ad70c01d67e540273009f6c"
+  version "4.45.0"
+  sha256 "7a048eb7da2065c04de9e1a0f6515419d77be00f9cf38ec78bdd8dced43184da"
 
   url "https://github.com/mythofmeat/shore/releases/download/v#{version}/Shore-#{version}-arm64.zip"
   name "Shore"
