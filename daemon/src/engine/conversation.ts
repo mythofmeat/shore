@@ -15,7 +15,7 @@ import { MessageStore, type AltSelection, type PendingAlt } from "./message_stor
 import { SegmentReader, presentSegment, type SegmentRecord } from "./segments";
 import type { Message } from "./types";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
-import { imageDataForPath, embedMessagesImageData } from "./wire_images";
+import { imageDataFor, embedMessagesImageData } from "./wire_images";
 
 
 export interface History {
@@ -342,7 +342,7 @@ export class ConversationEngine {
       for (const message of outgoing) {
         for (const image of [...message.images, ...(message.alternatives ?? []).flatMap(alt => alt.images)]) {
           paths.add(image.path);
-          const data = image.data ?? this.#deltaImages.get(image.path) ?? imageDataForPath(image.path);
+          const data = image.data ?? this.#deltaImages.get(image.path) ?? imageDataFor(image);
           if (data !== undefined) { image.data = data; this.#deltaImages.set(image.path, data); }
         }
       }

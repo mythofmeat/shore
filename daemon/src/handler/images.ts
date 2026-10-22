@@ -1,8 +1,7 @@
-import { attachmentCacheDir, markImagesUsed, noteCachedImages } from "../storage/image_cache.ts";
+import { attachmentCacheDir, keepCachedImage, markImagesUsed, noteCachedImages } from "../storage/image_cache.ts";
 import { shoreLog } from "../log.ts";
 
-import { mkdir, open, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { base64Rejection } from "../tools/images.ts";
@@ -10,7 +9,6 @@ import { findModelCopy, modelCopyPath, omissionNotice, resolveImage } from "../l
 import { prepareImageBlock, reduceImage } from "../llm/prepare_images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
 import { atomicWrite } from "../engine/atomic.ts";
-import { sha256Hex } from "../engine/picture_ids.ts";
 
 export interface ImageUpload {
   filename: string;
@@ -106,74 +104,23 @@ export function attachmentFileName(
   return safe;
 }
 
-export function attachmentStamp(now: Date): string {
-  const p = (n: number, width = 2) => String(n).padStart(width, "0");
-  return (
-    `${p(now.getFullYear(), 4)}${p(now.getMonth() + 1)}${p(now.getDate())}` +
-    `_${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`
-  );
-}
-
-const MAX_NAME_ATTEMPTS = 1000;
-
-export async function createAttachmentFile(
-  attachmentsDir: string,
-  fileName: string,
-): Promise<{ path: string; handle: Awaited<ReturnType<typeof open>> }> {
-  const dot = fileName.lastIndexOf(".");
-  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
-  const dotExt = dot > 0 ? fileName.slice(dot) : "";
-
-  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
-    const candidate = attempt === 0 ? fileName : `${stem}_${attempt}${dotExt}`;
-    const path = join(attachmentsDir, candidate);
-    try {
-      return { path, handle: await open(path, "wx") };
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-  }
-  throw new Error(`could not find a free attachment name for ${fileName}`);
-}
-
 async function saveAttachment(
   attachmentsDir: string,
   sourceName: string,
   declaredMime: string | undefined,
   bytes: Uint8Array,
-  now: Date = new Date(),
-): Promise<ImageRef | undefined> {
+): Promise<{ ref: ImageRef; added: boolean } | undefined> {
+  const name = attachmentFileName(sourceName, declaredMime, bytes);
+  const extension = mediaTypeForPath(name) === undefined ? undefined : asciiLowercase(name.slice(name.lastIndexOf(".") + 1));
+  let kept: Awaited<ReturnType<typeof keepCachedImage>>;
   try {
-    await mkdir(attachmentsDir, { recursive: true });
+    kept = await keepCachedImage(attachmentsDir, bytes, extension);
   } catch (e) {
-    shoreLog.warn(`shore: failed to create attachments directory: ${String(e)}`);
+    shoreLog.warn(`shore: failed to save image to attachments for ${sourceName}: ${String(e)}`);
     return undefined;
   }
-
-  const destName = `${attachmentStamp(now)}_${attachmentFileName(sourceName, declaredMime, bytes)}`;
-  let claimed: Awaited<ReturnType<typeof createAttachmentFile>>;
-  try {
-    claimed = await createAttachmentFile(attachmentsDir, destName);
-  } catch (e) {
-    shoreLog.warn(`shore: failed to create attachment file for ${sourceName}: ${String(e)}`);
-    return undefined;
-  }
-
-  try {
-    await claimed.handle.write(bytes);
-  } catch (e) {
-    shoreLog.warn(`shore: failed to write image to attachments for ${sourceName}: ${String(e)}`);
-    await claimed.handle.close().catch(() => {});
-    await Bun.file(claimed.path)
-      .unlink()
-      .catch(() => {});
-    return undefined;
-  } finally {
-    await claimed.handle.close().catch(() => {});
-  }
-
-  shoreLog.info(`shore: saved incoming image to attachments: ${sourceName} -> ${claimed.path}`);
-  return { path: claimed.path, sha256: sha256Hex(bytes) };
+  if (kept.added) shoreLog.info(`shore: saved incoming image to attachments: ${sourceName} -> ${kept.path}`);
+  return { ref: { path: kept.path, name: sanitizeFilename(sourceName), sha256: kept.sha256 }, added: kept.added };
 }
 
 export async function ingestImages(
@@ -181,31 +128,31 @@ export async function ingestImages(
   charName: string,
   imagePaths: readonly string[],
   imageData: readonly ImageUpload[],
-  now: Date = new Date(),
   settings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
 ): Promise<{ images: ImageRef[]; blocks: ContentBlock[] }> {
   const attachmentsDir = attachmentCacheDir(cacheDir, charName);
   const images: ImageRef[] = [];
   const blocks: ContentBlock[] = [];
 
-  const keep = async (label: string, saved: { ref: ImageRef; bytes: Uint8Array } | undefined): Promise<void> => {
+  const keep = async (label: string, saved: { ref: ImageRef; added: boolean; bytes: Uint8Array } | undefined): Promise<void> => {
     if (saved === undefined) {
       blocks.push({ type: "text", text: omissionNotice(label, "it could not be attached") });
       return;
     }
+    const added = saved.added ? saved.bytes.byteLength : 0;
     const resolution = resolveImage(saved.ref);
     if ("omitted" in resolution) {
       blocks.push({ type: "text", text: omissionNotice(label, resolution.omitted) });
-      noteCachedImages(cacheDir, saved.bytes.byteLength);
+      if (added > 0) noteCachedImages(cacheDir, added);
       return;
     }
-    const copied = await saveModelCopy(saved.ref.path, saved.bytes, settings);
+    const copied = findModelCopy(saved.ref.path) === undefined ? await saveModelCopy(saved.ref.path, saved.bytes, settings) : 0;
     images.push(saved.ref);
-    noteCachedImages(cacheDir, saved.bytes.byteLength + copied);
+    if (added + copied > 0) noteCachedImages(cacheDir, added + copied);
   };
 
   for (const upload of imageData) {
-    await keep(upload.filename, await ingestUpload(attachmentsDir, upload, now));
+    await keep(upload.filename, await ingestUpload(attachmentsDir, upload));
   }
 
   let uploadIndex = 0;
@@ -227,8 +174,7 @@ export async function ingestImages(
 async function ingestUpload(
   attachmentsDir: string,
   upload: ImageUpload,
-  now: Date,
-): Promise<{ ref: ImageRef; bytes: Uint8Array } | undefined> {
+): Promise<{ ref: ImageRef; added: boolean; bytes: Uint8Array } | undefined> {
   const rejection = base64Rejection(upload.data);
   if (rejection !== undefined) {
     shoreLog.warn(
@@ -237,8 +183,8 @@ async function ingestUpload(
     return undefined;
   }
   const bytes = decodeBase64(upload.data);
-  const ref = await saveAttachment(attachmentsDir, upload.filename, upload.mime_type, bytes, now);
-  return ref === undefined ? undefined : { ref, bytes };
+  const saved = await saveAttachment(attachmentsDir, upload.filename, upload.mime_type, bytes);
+  return saved === undefined ? undefined : { ...saved, bytes };
 }
 
 async function saveModelCopy(original: string, bytes: Uint8Array, settings: Readonly<ImageSettings>): Promise<number> {

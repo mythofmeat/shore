@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { namedByHash, sha256Hex } from "../engine/picture_ids.ts";
 import type { ImageRef } from "../engine/types.ts";
 import { base64Bytes } from "../util/base64.ts";
 
@@ -64,6 +65,7 @@ export function resolveImage(
     const size = fs.statSync(ref.path).size;
     if (size > maxBytes) return { omitted: tooLarge(size, maxBytes) };
     const bytes = fs.readFileSync(ref.path);
+    if (ref.sha256 !== undefined && !namedByHash(ref.path, ref.sha256) && sha256Hex(bytes) !== ref.sha256) return { omitted: "the file has changed since it was shown" };
     return { image: { mediaType, base64: bytes.toString("base64") } };
   } catch (e) {
     return { omitted: `it could not be read (${(e as Error).message})` };

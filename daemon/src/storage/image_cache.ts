@@ -2,6 +2,8 @@ import { readdirSync, rmSync, statSync, utimesSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { characterCacheDir } from "../config/dirs.ts";
+import { atomicWrite } from "../engine/atomic.ts";
+import { sha256Hex } from "../engine/picture_ids.ts";
 import { shoreLog } from "../log.ts";
 
 export const DEFAULT_IMAGE_CACHE_BYTES = 512 * 1024 * 1024;
@@ -35,6 +37,17 @@ export function markImagesUsed(paths: readonly string[], now: Date = new Date())
       utimesSync(path, now, now);
     } catch {}
   }
+}
+
+export async function keepCachedImage(dir: string, bytes: Uint8Array, extension: string | undefined): Promise<{ path: string; sha256: string; added: boolean }> {
+  const sha256 = sha256Hex(bytes);
+  const path = join(dir, extension === undefined ? sha256 : `${sha256}.${extension}`);
+  if (statSync(path, { throwIfNoEntry: false })?.isFile() === true) {
+    markImagesUsed([path]);
+    return { path, sha256, added: false };
+  }
+  await atomicWrite(path, bytes);
+  return { path, sha256, added: true };
 }
 
 export function noteCachedImages(cache: string, bytes: number, nowMs: number = Date.now()): void {

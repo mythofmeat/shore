@@ -11,10 +11,7 @@ import {
 } from "../llm/prepare_images.ts";
 import { resolveImageBlock } from "../llm/images.ts";
 import { defaultImagesConfig, imageSettingsFor } from "../config/app.ts";
-import { noteCachedImages, toolImageCacheDir } from "../storage/image_cache.ts";
-
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { keepCachedImage, noteCachedImages, toolImageCacheDir } from "../storage/image_cache.ts";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
@@ -225,7 +222,7 @@ async function attachToolMedia(
   const skipped: string[] = [];
 
   for (const [index, item] of payload.media.entries()) {
-    const saved = await saveToolMedia(item, exec, toolUse, index);
+    const saved = await saveToolMedia(item, exec, toolUse);
     const unsaved = saved === undefined ? [`[${item.label}: a separate media copy could not be saved]`] : [];
     if (saved !== undefined) {
       exec.sendDirect({
@@ -317,29 +314,19 @@ async function saveToolMedia(
   item: ToolMediaItem,
   exec: ToolExecution,
   toolUse: ToolUseEvent,
-  index: number,
 ): Promise<{ path: string; sha256: string } | undefined> {
+  const bytes = Buffer.from(item.data, "base64");
+  if (item.path !== undefined && item.reducedFrom === undefined) return { path: item.path, sha256: sha256Hex(bytes) };
   const cache = exec.ctx.cacheDir;
   if (cache === undefined || cache === "") return undefined;
-  const extension = EXTENSION_BY_MIME[item.mime_type] ?? "bin";
-  const stamp = fileSafe(exec.now());
-  const id = fileSafe(toolUse.id).slice(0, 24);
-  const dir = toolImageCacheDir(cache, exec.ctx.characterName);
-  const target = join(dir, `${stamp}_${id}_${String(index)}.${extension}`);
   try {
-    await mkdir(dir, { recursive: true });
-    const bytes = Buffer.from(item.data, "base64");
-    await writeFile(target, bytes);
-    noteCachedImages(cache, bytes.byteLength);
-    return { path: target, sha256: sha256Hex(bytes) };
+    const kept = await keepCachedImage(toolImageCacheDir(cache, exec.ctx.characterName), bytes, EXTENSION_BY_MIME[item.mime_type] ?? "bin");
+    if (kept.added) noteCachedImages(cache, bytes.byteLength);
+    return { path: kept.path, sha256: kept.sha256 };
   } catch (e) {
     shoreLog.warn(`shore: failed to save ${toolUse.name} image result: ${String(e)}`);
     return undefined;
   }
-}
-
-function fileSafe(raw: string): string {
-  return Array.from(raw, (c) => (/[0-9A-Za-z]/.test(c) ? c : "_")).join("");
 }
 
 export function argumentRejection(
