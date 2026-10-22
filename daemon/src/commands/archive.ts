@@ -4,6 +4,7 @@ import { characterMediaDir } from "../storage/media.ts";
 import { attachmentCacheDir } from "../storage/image_cache.ts";
 import { imageBlobDir } from "../storage/image_blobs.ts";
 import { activeImagePaths, copyAttachment, insideDir, legacyAttachmentsDir, moveCharacterImagesToCache, repointActiveImages } from "../storage/image_migration.ts";
+import { repointArchivedImageRows } from "../storage/archived_images.ts";
 import { modelCopies } from "../llm/images.ts";
 import { Database } from "bun:sqlite";
 import { chmod, cp, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
@@ -666,6 +667,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     const cache = characterCacheDir(ctx.dirs.cache, character);
     if (!await exists(cache)) created.push(cache);
     moveCharacterImagesToCache(ctx.dirs.data, ctx.dirs.cache, character);
+    withStorage(ctx.dirs.data, (db) => db.transaction(() => repointArchivedImageRows(db, ctx.dirs, character))());
     await ctx.refreshDiscovery();
   } catch (error) {
     if (imported) {
