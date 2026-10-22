@@ -1,5 +1,6 @@
 import type { CharacterWorkspace } from "../../tools/character_workspace.ts";
 import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
+import type { WorkspaceTurns } from "../../tools/workspace_turns.ts";
 import type { FrameSink } from "../../llm/stream";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 
@@ -223,6 +224,8 @@ export interface CompactionTools {
 
   readonly workspace?: CharacterWorkspace;
 
+  readonly turns: WorkspaceTurns;
+
   dispatch(name: string, input: unknown, trackNestedWrite?: CompactionWriteTracker): Promise<ToolOutput>;
 
   deferEdit?(path: string): Promise<void>;
@@ -237,6 +240,8 @@ export interface CompactionTools {
 export interface AppliedCompactionWrite {
   displayPath: string;
   resolvedPath: string;
+  previousTree?: string;
+  resultingTree?: string;
   previousState?: WorkspaceEntry | null;
   resultingState?: WorkspaceEntry | null;
   previousContent?: string;

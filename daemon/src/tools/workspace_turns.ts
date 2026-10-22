@@ -31,6 +31,11 @@ interface Change {
   toMode: string;
 }
 
+export interface WorkspaceChange {
+  path: string;
+  deleted: boolean;
+}
+
 const REPO_DIR = "workspace-turns.git";
 const ABSENT = "000000";
 const GITLINK = "160000";
@@ -98,6 +103,26 @@ export async function recordTurn(turns: WorkspaceTurns, thread: string, version:
   });
 }
 
+export async function workspaceTree(turns: WorkspaceTurns): Promise<string> {
+  return await serialized(turns, async () => await snapshot(turns));
+}
+
+export async function workspaceChanges(turns: WorkspaceTurns, since: string): Promise<{ tree: string; changes: WorkspaceChange[] }> {
+  return await serialized(turns, async () => {
+    const tree = await snapshot(turns);
+    const changes = (await diff(turns, since, tree)).filter((change) => !isGitlink(change));
+    return { tree, changes: changes.map((change) => ({ path: change.path, deleted: change.toMode === ABSENT })) };
+  });
+}
+
+export async function restorePaths(turns: WorkspaceTurns, tree: string, paths: readonly string[]): Promise<void> {
+  const wanted = new Set(paths);
+  await serialized(turns, async () => {
+    const changes = await diff(turns, await snapshot(turns), tree);
+    await checkOut(turns, tree, changes.filter((change) => wanted.has(change.path) && !isGitlink(change)));
+  });
+}
+
 export async function undoTurns(turns: WorkspaceTurns, thread: string, versions: readonly string[]): Promise<WorkspaceRewind> {
   return await replay(turns, thread, versions, (record) => [record.after, record.before]);
 }
@@ -162,19 +187,21 @@ function isComplete(record: TurnRecord | undefined): record is Required<TurnReco
 }
 
 async function move(turns: WorkspaceTurns, from: string, to: string): Promise<WorkspaceRewind> {
-  const changes = parseRaw(await git(turns, ["diff-tree", "-r", "-z", "--no-renames", from, to]));
+  const changes = await diff(turns, from, to);
   if (changes.length === 0) return { restored: [], skipped: [] };
-  const current = await snapshot(turns);
-  const since = new Set(parseRaw(await git(turns, ["diff-tree", "-r", "-z", "--no-renames", from, current])).map((change) => change.path));
+  const since = new Set((await diff(turns, from, await snapshot(turns))).map((change) => change.path));
   const skipped: string[] = [];
-  const removals: string[] = [];
-  const writes: string[] = [];
+  const moving: Change[] = [];
   for (const change of changes) {
-    if (since.has(change.path)) skipped.push(change.path);
-    else if (change.toMode === GITLINK || change.fromMode === GITLINK) skipped.push(change.path);
-    else if (change.toMode === ABSENT) removals.push(change.path);
-    else writes.push(change.path);
+    if (since.has(change.path) || isGitlink(change)) skipped.push(change.path);
+    else moving.push(change);
   }
+  return { restored: await checkOut(turns, to, moving), skipped };
+}
+
+async function checkOut(turns: WorkspaceTurns, tree: string, changes: readonly Change[]): Promise<string[]> {
+  const removals = changes.filter((change) => change.toMode === ABSENT).map((change) => change.path);
+  const writes = changes.filter((change) => change.toMode !== ABSENT).map((change) => change.path);
   const access = accessOf(turns);
   for (const path of removals) {
     await access.call("remove", { root: turns.workspace, path });
@@ -183,13 +210,21 @@ async function move(turns: WorkspaceTurns, from: string, to: string): Promise<Wo
     const repo = await repoOf(turns);
     const index = join(repo, "index.rewind");
     try {
-      await git(turns, ["read-tree", to], { index });
+      await git(turns, ["read-tree", tree], { index });
       await git(turns, ["checkout-index", "--force", "-z", "--stdin"], { index, stdin: writes.map((path) => `${path}\0`).join("") });
     } finally {
       await access.call("remove", { root: repo, path: "index.rewind" });
     }
   }
-  return { restored: [...removals, ...writes], skipped };
+  return [...removals, ...writes];
+}
+
+function isGitlink(change: Change): boolean {
+  return change.toMode === GITLINK || change.fromMode === GITLINK;
+}
+
+async function diff(turns: WorkspaceTurns, from: string, to: string): Promise<Change[]> {
+  return parseRaw(await git(turns, ["diff-tree", "-r", "-z", "--no-renames", from, to]));
 }
 
 function parseRaw(output: string): Change[] {
@@ -261,8 +296,7 @@ async function git(turns: WorkspaceTurns, args: string[], options: { stdin?: str
 
 const queues = new Map<string, Promise<void>>();
 
-async function bestEffort<T>(turns: WorkspaceTurns, fallback: T, run: () => Promise<T>): Promise<T> {
-  if (!(await exists(turns, turns.workspace).catch(() => false))) return fallback;
+async function serialized<T>(turns: WorkspaceTurns, run: () => Promise<T>): Promise<T> {
   const prior = queues.get(turns.repo) ?? Promise.resolve();
   const next = prior.then(run);
   const settled = next.then(() => undefined, () => undefined);
@@ -270,8 +304,13 @@ async function bestEffort<T>(turns: WorkspaceTurns, fallback: T, run: () => Prom
   void settled.then(() => {
     if (queues.get(turns.repo) === settled) queues.delete(turns.repo);
   });
+  return await next;
+}
+
+async function bestEffort<T>(turns: WorkspaceTurns, fallback: T, run: () => Promise<T>): Promise<T> {
+  if (!(await exists(turns, turns.workspace).catch(() => false))) return fallback;
   try {
-    return await next;
+    return await serialized(turns, run);
   } catch (error) {
     shoreLog.warn(`shore: workspace turn history unavailable for ${turns.workspace}: ${error instanceof Error ? error.message : String(error)}`);
     return fallback;

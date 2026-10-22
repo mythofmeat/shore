@@ -23,7 +23,7 @@ import {
 } from "../src/tools/character_workspace.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/workspace.ts";
-import { recordTurn, redoTurns, snapshotTree, undoTurns, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
+import { recordTurn, redoTurns, restorePaths, snapshotTree, undoTurns, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -233,10 +233,12 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
   test("restores compaction snapshots as the character", async () => {
     const user = await ownUser();
     const workspace = await freshWorkspace();
+    const turns: WorkspaceTurns = { workspace: workspace.dir, repo: join(await privateDir("isolation-compaction"), "unused.git"), character: workspace, name: basename(workspace.dir) };
     await bash(workspace, "printf before > kept.md");
-    const entries = new Map(await workspace.call("snapshot", { root: workspace.dir }));
+    const before = await workspaceTree(turns);
     await bash(workspace, "rm kept.md");
-    await workspace.call("restore", { path: join(workspace.dir, "kept.md"), entry: entries.get("kept.md") ?? null });
+    expect((await workspaceChanges(turns, before)).changes).toEqual([{ path: "kept.md", deleted: true }]);
+    await restorePaths(turns, before, ["kept.md"]);
     expect(readFileSync(join(workspace.dir, "kept.md"), "utf8")).toBe("before");
     expect(statSync(join(workspace.dir, "kept.md")).uid).toBe(user.uid);
   });

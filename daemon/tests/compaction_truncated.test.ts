@@ -123,6 +123,7 @@ test("an archive that fails puts every memory file the pass touched back as it w
 function tools(workspace: string, deferred?: string[]): CompactionTools {
   return {
     workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
     dispatch: async (name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
