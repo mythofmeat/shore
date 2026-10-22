@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import type { ImageRef, Message } from "./types";
 import { isSentPicture, shownPicturePath } from "../storage/sent_pictures.ts";
+import { pictureFileMatches } from "./picture_ids.ts";
 
 export function imageDataForPath(path: string): string | undefined {
   if (path === "") return undefined;
@@ -16,11 +17,15 @@ export function imageDataForPath(path: string): string | undefined {
   }
 }
 
+export function imageDataFor(image: ImageRef): string | undefined {
+  return pictureFileMatches(image) ? imageDataForPath(image.path) : undefined;
+}
+
 export function embedImageData(images: ImageRef[] | undefined): void {
   if (images === undefined) return;
   for (const img of images) {
     if (img.data !== undefined) continue;
-    const data = imageDataForPath(img.path);
+    const data = imageDataFor(img);
     if (data !== undefined) img.data = data;
   }
 }

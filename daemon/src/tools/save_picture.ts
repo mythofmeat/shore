@@ -129,7 +129,7 @@ export async function handleSavePicture(args: ToolInput, ctx: ToolContext, works
   const sha256 = onePicture(found, prefix);
   const id = pictureId(sha256);
   const bytes = await cachedCopy(found, sha256);
-  if (bytes === undefined) throw new ToolIoError(`picture ${id} is no longer cached: it was evicted from the image cache, so it can't be saved`);
+  if (bytes === undefined) throw new ToolIoError(`picture ${id} is no longer available: it was evicted from the image cache or its file has changed, so it can't be saved`);
   const target = targetPath(ctx.workspaceDir, args["path"], bytes, id);
   await workspace.call("mkdir", { path: dirname(target) }, ctx.signal);
   if (!await workspace.call("createFile", { path: target, data: bytes.toString("base64") }, ctx.signal)) {

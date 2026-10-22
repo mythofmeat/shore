@@ -77,7 +77,6 @@ export async function appendUserTurn(
     charName,
     body.images,
     body.image_data,
-    new Date(ctx.now()),
     uploadSettings,
   );
 
