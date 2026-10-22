@@ -171,3 +171,57 @@ test("a message the daemon saved is never brought back when the conversation swi
   await expect(page.getByText(/Your draft was restored|back in its message box/)).toHaveCount(0);
   await check();
 });
+
+const savedDraft = (page: Page) => page.evaluate("new Promise((resolve, reject) => { const open = indexedDB.open('shore-drafts'); open.onerror = () => reject(open.error); open.onsuccess = () => { const all = open.result.transaction('drafts').objectStore('drafts').getAll(); all.onsuccess = () => { open.result.close(); resolve(all.result.map((row) => row.text).join('|')); }; }; })");
+
+test("vim mode edits with vim keys, keeps the draft over a reload, attaches pasted images and follows the Enter preference in insert mode", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "vesper");
+  await page.evaluate("location.hash = '#settings/keyboard'");
+  await page.getByRole("switch", { name: "Vim mode", exact: true }).click();
+  await expect(page.getByText("Switch to normal mode (Stop ends a response)")).toBeVisible();
+  await page.evaluate("location.hash = ''");
+  const box = page.getByRole("textbox", { name: "Message", exact: true }).and(page.locator("[contenteditable]"));
+  await expect(box).toBeFocused();
+  await page.keyboard.type("Ready? first line");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second line");
+  await expect(box).toContainText("second line");
+  await page.keyboard.press("Escape");
+  await page.keyboard.type("dd");
+  await expect(box).toHaveText("Ready? first line");
+  await page.keyboard.type("i");
+  await page.keyboard.type("Note: ");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await expect(box).toHaveText("Note: Ready? first line");
+  await expect(page.locator("article.message.user")).toHaveCount(0);
+
+  await expect.poll(() => savedDraft(page)).toBe("Note: Ready? first line");
+  await page.reload();
+  await expect(box).toHaveText("Note: Ready? first line");
+  await page.evaluate(`{ const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob("${PIXEL.toString("base64")}"), (char) => char.charCodeAt(0))], "pasted.png", { type: "image/png" })); document.getElementById("message-composer").shadowRoot.querySelector(".cm-content").dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true, composed: true })); }`);
+  await expect(page.getByRole("button", { name: "Remove pasted.png" })).toBeVisible();
+  await expect(box).toHaveText("Note: Ready? first line");
+  await expect(box).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("article.message.user")).toContainText("Note: Ready? first line");
+  await expect(page.locator(".attachment")).toHaveCount(0);
+  await expect(box.locator(".cm-placeholder")).toHaveText("Message vesper");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+
+  await page.evaluate("location.hash = '#settings/keyboard'");
+  await page.getByRole("switch", { name: "Enter sends", exact: true }).click();
+  await page.evaluate("location.hash = ''");
+  await expect(box).toBeFocused();
+  await page.keyboard.type("two");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("lines");
+  await expect(box.locator(".cm-line")).toHaveText(["two", "lines"]);
+  await expect(page.locator("article.message.user")).toHaveCount(1);
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(page.locator("article.message.user")).toHaveCount(2);
+  await expect(page.locator("article.message.user").last()).toContainText(/two\s*lines/);
+  await check();
+});

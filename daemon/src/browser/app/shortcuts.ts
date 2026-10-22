@@ -17,8 +17,17 @@ export const SHORTCUTS: readonly Shortcut[] = [
 
 const MOD_ENTER_SENDS: Shortcut = { keys: ["Mod", "Enter"], description: "Send (Enter for a new line)", where: "Message box" };
 
-export function shortcutsFor(enterSends: boolean): readonly Shortcut[] {
-  return enterSends ? SHORTCUTS : SHORTCUTS.map((item) => item.keys.length === 1 && item.keys[0] === "Enter" ? MOD_ENTER_SENDS : item);
+const VIM_COMPOSER: Readonly<Record<string, string>> = {
+  "Send (Shift+Enter for a new line)": "Send in insert mode (Shift+Enter for a new line)",
+  "Send (Enter for a new line)": "Send from any mode (Enter adds a new line in insert mode)",
+  "Edit your last message when the box is empty": "Edit your last message when the box is empty, in insert mode",
+  "Previous or next response when the box is empty": "Previous or next response when the box is empty, in insert mode",
+  "Stop a response, or move focus to the conversation": "Switch to normal mode (Stop ends a response)",
+};
+
+export function shortcutsFor(enterSends: boolean, vim = false): readonly Shortcut[] {
+  const shortcuts = enterSends ? SHORTCUTS : SHORTCUTS.map((item) => item.keys.length === 1 && item.keys[0] === "Enter" ? MOD_ENTER_SENDS : item);
+  return vim ? shortcuts.map((item) => item.where === "Message box" ? { ...item, description: VIM_COMPOSER[item.description] ?? item.description } : item) : shortcuts;
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);

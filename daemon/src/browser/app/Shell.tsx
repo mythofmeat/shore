@@ -42,7 +42,8 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || document.querySelector("dialog[open]") !== null) return;
-      const typing = event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable='true']") !== null;
+      const target = event.composedPath()[0];
+      const typing = target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']") !== null;
       const action = globalAction(event, typing);
       if (action === undefined) return;
       event.preventDefault();
