@@ -10,11 +10,13 @@ import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, enterSends, errorText, streamReplies, useConversationActive, workspace } from "../app/state.ts";
+import { conversation, enterSends, errorText, streamReplies, useConversationActive, VIM_MODE_KEY, workspace } from "../app/state.ts";
+import { useStoredFlag } from "../ui/hooks.ts";
 import { swipe } from "./actions.ts";
 import { EffortChip } from "./effort.tsx";
 import { QUOTE_EVENT, QUOTE_READY_EVENT, withQuote } from "./quote.ts";
 import { droppedNotice } from "./sending.ts";
+import type { default as VimEditorView, VimInput } from "./VimEditor.tsx";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
@@ -30,6 +32,8 @@ async function readImage(file: File): Promise<ImageUpload> {
   return imageUpload(file, data);
 }
 
+let vimEditor: typeof VimEditorView | undefined;
+
 export function Composer({ state, character, mobile }: { state: WorkspaceSnapshot; character: string; mobile: boolean }) {
   const key = JSON.stringify([state.character, state.thread]);
   const [store] = useState(() => browserDraft(key));
@@ -40,6 +44,11 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const [dragging, setDragging] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
+  const [vimMode] = useStoredFlag(VIM_MODE_KEY, false);
+  const vim = vimMode && !mobile;
+  const [VimEditor, setVimEditor] = useState(() => vimEditor);
+  const [vimFailed, setVimFailed] = useState(false);
+  const vimInput = useRef<VimInput>(null);
   const files = useRef<HTMLInputElement>(null);
   const active = useConversationActive();
   const streaming = active || state.streams.some((stream) => !stream.final && stream.subagent === null);
@@ -64,6 +73,12 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     node.style.height = `${String(Math.min(node.scrollHeight, mobile ? 160 : 280))}px`;
   }, [draft.text, mobile]);
   useEffect(() => { if (loaded && !mobile) area.current?.focus(); }, [loaded, mobile, key]);
+  useEffect(() => {
+    if (!vim || VimEditor !== undefined || vimFailed) return;
+    let alive = true;
+    import("./VimEditor.tsx").then((module) => { vimEditor = module.default; if (alive) setVimEditor(() => module.default); }, (error: unknown) => { if (alive) { setVimFailed(true); toasts.show(`Vim mode couldn’t load: ${errorText(error)}`, "error"); } });
+    return () => { alive = false; };
+  }, [vim, VimEditor, vimFailed]);
   const quoted = useRef(false);
   useEffect(() => {
     if (!loaded) return;
@@ -81,11 +96,14 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   useEffect(() => { if (loaded) dispatchEvent(new Event(QUOTE_READY_EVENT)); }, [loaded]);
   useLayoutEffect(() => {
     const node = area.current;
-    if (!quoted.current || node === null) return;
+    if (!quoted.current) return;
+    if (vimInput.current !== null) vimInput.current.toEnd();
+    else if (node !== null) {
+      node.focus();
+      node.setSelectionRange(node.value.length, node.value.length);
+      node.scrollTop = node.scrollHeight;
+    } else return;
     quoted.current = false;
-    node.focus();
-    node.setSelectionRange(node.value.length, node.value.length);
-    node.scrollTop = node.scrollHeight;
   }, [draft.text]);
 
   const attach = async (list: readonly File[]) => {
@@ -142,6 +160,16 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
       await restore(errorText(error));
     }
   };
+  const submits = (mod: boolean, shift = false, alt = false) => mod || (!mobile && enterSends() && !shift && !alt);
+  const blankKey = (pressed: string): boolean => {
+    if (current.current.text !== "" || current.current.images.length > 0) return false;
+    if (pressed === "ArrowUp") { dispatchEvent(new CustomEvent("shore:edit-last")); return true; }
+    if ((pressed !== "ArrowLeft" && pressed !== "ArrowRight") || streaming) return false;
+    const last = state.messages.findLast((message) => message.role === "assistant");
+    if (last === undefined) return false;
+    void swipe(last, pressed === "ArrowLeft" ? "prev" : "next", true).catch((error: unknown) => toasts.show(errorText(error), "error"));
+    return true;
+  };
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const pasted = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/"));
     if (pasted.length > 0) { event.preventDefault(); void attach(pasted); }
@@ -159,11 +187,13 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
           <button type="button" className="attachment-remove" aria-label={`Remove ${image.filename}`} onClick={() => void change({ ...current.current, images: current.current.images.filter((_, item) => item !== index) })}><Icon name="close" size={12} /></button>
         </div>)}
       </div>}
-      <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded}
+      {vim && VimEditor !== undefined ? <VimEditor ref={vimInput} text={draft.text} placeholder={`Message ${character}`} editable={loaded} autoFocus={loaded}
+        change={(text) => void change({ ...current.current, text })} paste={(list) => void attach(list)} blank={blankKey}
+        submit={(mod) => { if (!submits(mod)) return false; void send(); return true; }} />
+      : <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded || (vim && !vimFailed)}
         onChange={(event) => void change({ ...current.current, text: event.target.value })} onPaste={onPaste}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
-          const blank = current.current.text === "" && current.current.images.length === 0;
           const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
           if (event.key === "Escape") {
             event.preventDefault();
@@ -171,16 +201,10 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
             else document.querySelector<HTMLElement>(".transcript")?.focus();
             return;
           }
-          if (blank && plain && event.key === "ArrowUp") { event.preventDefault(); dispatchEvent(new CustomEvent("shore:edit-last")); return; }
-          if (blank && plain && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !streaming) {
-            const last = state.messages.findLast((message) => message.role === "assistant");
-            if (last !== undefined) { event.preventDefault(); void swipe(last, event.key === "ArrowLeft" ? "prev" : "next", true).catch((error: unknown) => toasts.show(errorText(error), "error")); }
-            return;
-          }
+          if (plain && blankKey(event.key)) { event.preventDefault(); return; }
           if (event.key !== "Enter") return;
-          const submit = event.ctrlKey || event.metaKey || (!mobile && enterSends() && !event.shiftKey && !event.altKey);
-          if (submit) { event.preventDefault(); void send(); }
-        }} />
+          if (submits(event.ctrlKey || event.metaKey, event.shiftKey, event.altKey)) { event.preventDefault(); void send(); }
+        }} />}
       <div className="composer-bar">
         <IconButton icon="attach" label="Attach image" disabled={!loaded} onClick={() => files.current?.click()} />
         <input ref={files} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(event) => { const list = [...(event.target.files ?? [])]; event.target.value = ""; void attach(list); }} />

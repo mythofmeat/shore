@@ -867,6 +867,12 @@ button.chip:hover {
   resize: none;
 }
 
+.composer .vim-composer {
+  display: block;
+  width: 100%;
+  cursor: text;
+}
+
 .shell[data-layout="mobile"] .composer textarea {
   font-size: max(16px, calc(16px * var(--font-scale)));
   padding: 6px 0 8px;

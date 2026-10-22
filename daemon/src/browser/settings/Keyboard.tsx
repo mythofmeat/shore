@@ -1,6 +1,6 @@
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { keyLabel, shortcutsFor } from "../app/shortcuts.ts";
-import { ENTER_SENDS_KEY } from "../app/state.ts";
+import { ENTER_SENDS_KEY, VIM_MODE_KEY } from "../app/state.ts";
 import { Switch } from "../ui/controls.tsx";
 import { useStoredFlag } from "../ui/hooks.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
@@ -8,13 +8,17 @@ import { SettingRow, SettingsSection } from "./layout.tsx";
 export function KeyboardPage(_: { state: WorkspaceSnapshot }) {
   const groups = ["Anywhere", "Message box", "Conversation"] as const;
   const [enterSends, setEnterSends] = useStoredFlag(ENTER_SENDS_KEY, true);
-  const shortcuts = shortcutsFor(enterSends);
+  const [vim, setVim] = useStoredFlag(VIM_MODE_KEY, false);
+  const shortcuts = shortcutsFor(enterSends, vim);
   return <>
     <p className="settings-description">Shortcuts work everywhere in the chat. They can’t be rebound yet.</p>
-    <SettingsSection title="Sending" description="Saved in this browser.">
+    <SettingsSection title="Writing messages" description="Saved in this browser.">
       <div className="rows">
         <SettingRow label="Enter sends" description={`When off, Enter adds a new line and ${keyLabel("Mod")}+Enter sends. On phones Enter always adds a new line.`}>
           <Switch label="Enter sends" checked={enterSends} change={setEnterSends} />
+        </SettingRow>
+        <SettingRow label="Vim mode" description="Edit messages with Vim keys. The message box starts in insert mode and Esc switches to normal mode. Phones keep the plain message box.">
+          <Switch label="Vim mode" checked={vim} change={setVim} />
         </SettingRow>
       </div>
     </SettingsSection>

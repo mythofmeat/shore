@@ -81,6 +81,8 @@ export function enterSends(): boolean {
   try { return localStorage.getItem(ENTER_SENDS_KEY) !== "false"; } catch { return true; }
 }
 
+export const VIM_MODE_KEY = "shore.vim-mode";
+
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
