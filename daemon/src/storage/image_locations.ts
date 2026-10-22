@@ -1,33 +1,59 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { sha256Hex } from "../engine/picture_ids.ts";
 import type { ImageRef } from "../engine/types.ts";
+import { imageCacheFor } from "./image_blobs.ts";
 import { imageCacheDir } from "./image_cache.ts";
 import { characterMediaDir } from "./media.ts";
 
-type ImageRoot = "cache" | "data";
+type ImageRoot = "cache" | "data" | "workspace";
 
 export type StoredImageRef = ImageRef & { root?: ImageRoot };
 
 export interface ImageDirs {
   data: string;
   cache: string | undefined;
+  workspace?: string | undefined;
 }
 
 export type Location = "kept" | "repointed" | "missing";
 
 const DERIVED_COPY_DIRS = new Set(["model", "display"]);
 
+const workspaces = new Map<string, (character: string) => string>();
+
+export function useWorkspacesFor(data: string, workspaceOf: (character: string) => string): void {
+  workspaces.set(resolve(data), workspaceOf);
+}
+
+export function imageDirsFor(data: string, archive: string): ImageDirs {
+  const character = archive.split("/")[0] ?? archive;
+  return { data, cache: imageCacheFor(data), workspace: workspaces.get(resolve(data))?.(character) };
+}
+
 function rootDirs(dirs: ImageDirs): [ImageRoot, string][] {
   const roots: [ImageRoot, string][] = [["data", resolve(dirs.data)]];
   if (dirs.cache !== undefined) roots.push(["cache", resolve(dirs.cache)]);
+  if (dirs.workspace !== undefined) roots.push(["workspace", resolve(dirs.workspace)]);
   return roots.sort(([, a], [, b]) => b.length - a.length);
 }
 
 function inside(dir: string, path: string): string | undefined {
   const rest = relative(dir, path);
   return rest === "" || isAbsolute(rest) || rest.split(sep)[0] === ".." ? undefined : rest;
+}
+
+function real(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+export function insideWorkspace(path: string, workspace: string): boolean {
+  return inside(real(workspace), real(resolve(workspace, path))) !== undefined;
 }
 
 export function storedImage(image: ImageRef, dirs: ImageDirs): StoredImageRef {
@@ -40,7 +66,7 @@ export function storedImage(image: ImageRef, dirs: ImageDirs): StoredImageRef {
 }
 
 export function loadedImage(image: StoredImageRef, dirs: ImageDirs | undefined): ImageRef {
-  const dir = image.root === "cache" ? dirs?.cache : image.root === "data" ? dirs?.data : undefined;
+  const dir = image.root === undefined ? undefined : dirs?.[image.root];
   if (dir === undefined) return image;
   const { root: _root, ...rest } = image;
   const path = resolve(dir, rest.path);

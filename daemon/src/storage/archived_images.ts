@@ -2,10 +2,11 @@ import type { Database } from "bun:sqlite";
 
 import { CHARACTER_ARCHIVES_SQL } from "../engine/history_store.ts";
 import { shoreLog } from "../log.ts";
-import { ImageLocator, loadedImage, storedImage, type ImageDirs, type Location, type StoredImageRef } from "./image_locations.ts";
+import { imageCacheFor } from "./image_blobs.ts";
+import { ImageLocator, imageDirsFor, loadedImage, storedImage, type Location, type StoredImageRef } from "./image_locations.ts";
 import { pack, withStorage } from "./store.ts";
 
-const DONE = "shore/archived-pictures-by-root";
+const DONE = "shore/archived-pictures-by-root-with-workspace";
 
 export type ArchivedImageCounts = Record<Location, number>;
 
@@ -46,15 +47,15 @@ function isPathRef(image: StoredImageRef): boolean {
   return image.root === undefined && typeof image.path === "string" && image.path !== "";
 }
 
-export function archivedImagePaths(db: Database, dirs: ImageDirs, character: string): string[] {
-  const paths = archivedImageRows(db, character).flatMap((row) => row.images.map((image) => loadedImage(image, dirs).path));
+export function archivedImagePaths(db: Database, data: string, character: string): string[] {
+  const paths = archivedImageRows(db, character).flatMap((row) => row.images.map((image) => loadedImage(image, imageDirsFor(data, row.character)).path));
   return [...new Set(paths.filter((path) => path !== ""))].sort();
 }
 
-export function rewriteArchivedImages(db: Database, rewrite: (image: StoredImageRef) => StoredImageRef, character?: string): void {
+export function rewriteArchivedImages(db: Database, rewrite: (image: StoredImageRef, archive: string) => StoredImageRef, character?: string): void {
   const changed = new Set<string>();
   for (const row of archivedImageRows(db, character)) {
-    const next = row.images.map(rewrite);
+    const next = row.images.map((image) => rewrite(image, row.character));
     if (next.every((image, index) => image === row.images[index])) continue;
     db.query(`UPDATE ${row.table} SET images = ?1 WHERE rowid = ?2`).run(JSON.stringify(next), row.id);
     changed.add(row.character);
@@ -64,29 +65,29 @@ export function rewriteArchivedImages(db: Database, rewrite: (image: StoredImage
   for (const key of changed) bump.run(key);
 }
 
-export function repointArchivedImageRows(db: Database, dirs: ImageDirs, character?: string): ArchivedImageCounts {
-  const locator = new ImageLocator(dirs);
+export function repointArchivedImageRows(db: Database, data: string, character?: string): ArchivedImageCounts {
+  const locator = new ImageLocator(imageDirsFor(data, ""));
   const counts: ArchivedImageCounts = { kept: 0, repointed: 0, missing: 0 };
-  rewriteArchivedImages(db, (image) => {
+  rewriteArchivedImages(db, (image, archive) => {
     if (!isPathRef(image)) return image;
     const located = locator.locate(image);
     counts[located.location] += 1;
-    return storedImage(located.image, dirs);
+    return storedImage(located.image, imageDirsFor(data, archive));
   }, character);
   return counts;
 }
 
-export function repointArchivedImages(data: string, cache: string): ArchivedImageCounts | undefined {
+export function repointArchivedImages(data: string): ArchivedImageCounts | undefined {
   if (withStorage(data, (db) => db.query("SELECT 1 FROM state_files WHERE path = ?1").get(DONE)) !== null) return undefined;
   const counts = withStorage(data, (db) => db.transaction(() => {
-    const repointed = repointArchivedImageRows(db, { data, cache });
+    const repointed = repointArchivedImageRows(db, data);
     db.query("INSERT INTO state_files(path, character, content) VALUES (?1, '', ?2) ON CONFLICT(path) DO NOTHING").run(DONE, pack("done"));
     return repointed;
   })());
   if (counts.kept + counts.repointed + counts.missing > 0) {
     shoreLog.info(
-      `shore: archived pictures now point into the data and cache dirs relative to them, so moving those dirs keeps them working: ` +
-        `${String(counts.kept)} were where the archive said, ${String(counts.repointed)} were found under ${data} or ${cache} and repointed, ` +
+      `shore: archived pictures now point into the data, cache and workspace dirs relative to them, so moving those dirs keeps them working: ` +
+        `${String(counts.kept)} were where the archive said, ${String(counts.repointed)} were found under ${data} or ${imageCacheFor(data) ?? "the image cache"} and repointed, ` +
         `${String(counts.missing)} can't be found there and keep their old path`,
     );
   }

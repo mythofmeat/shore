@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { embedImageData } from "../src/engine/wire_images.ts";
@@ -38,7 +38,7 @@ async function world() {
     const result = await runToolUse({ id: crypto.randomUUID(), name, input }, exec, []);
     return { isError: result.isError, text: result.output };
   };
-  return { cache, workspaceDir, read, run };
+  return { root, cache, workspaceDir, read, run };
 }
 
 function embedded(image: ImageRef): string | undefined {
@@ -74,4 +74,24 @@ test("a workspace picture that changed after it was shown is no longer shown or 
   const saved = await run("save_picture", { picture: shown.sha256.slice(0, 8), path: "kept.png" });
   expect(saved.isError).toBe(true);
   expect(saved.text).toContain("changed");
+});
+
+test("a picture outside the workspace that is overwritten keeps every version it was read as", async () => {
+  const { root, workspaceDir, read, run } = await world();
+  const sheet = join(root, "tmp", "contact-sheet.png");
+  await mkdir(join(root, "tmp"), { recursive: true });
+  const first = Buffer.from(await noisePng(8, 8, 3));
+  const second = Buffer.from(await noisePng(8, 8, 4));
+  await writeFile(sheet, first);
+  const [before] = await read(sheet);
+  await writeFile(sheet, second);
+  const [after] = await read(sheet);
+  if (before?.sha256 === undefined || after?.sha256 === undefined) throw new Error("the pictures were not shown with a hash");
+
+  expect([embedded(before), embedded(after)]).toEqual([first.toString("base64"), second.toString("base64")]);
+  for (const [image, name] of [[before, "first.png"], [after, "second.png"]] as const) {
+    const saved = await run("save_picture", { picture: image.sha256?.slice(0, 8), path: name });
+    expect(saved.isError).toBe(false);
+  }
+  expect([await readFile(join(workspaceDir, "first.png")), await readFile(join(workspaceDir, "second.png"))]).toEqual([first, second]);
 });

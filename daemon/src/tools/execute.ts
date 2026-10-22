@@ -12,6 +12,7 @@ import {
 import { resolveImageBlock } from "../llm/images.ts";
 import { defaultImagesConfig, imageSettingsFor } from "../config/app.ts";
 import { keepCachedImage, noteCachedImages, toolImageCacheDir } from "../storage/image_cache.ts";
+import { insideWorkspace } from "../storage/image_locations.ts";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
@@ -316,7 +317,9 @@ async function saveToolMedia(
   toolUse: ToolUseEvent,
 ): Promise<{ path: string; sha256: string } | undefined> {
   const bytes = Buffer.from(item.data, "base64");
-  if (item.path !== undefined && item.reducedFrom === undefined) return { path: item.path, sha256: sha256Hex(bytes) };
+  if (item.path !== undefined && item.reducedFrom === undefined && insideWorkspace(item.path, exec.ctx.workspaceDir)) {
+    return { path: item.path, sha256: sha256Hex(bytes) };
+  }
   const cache = exec.ctx.cacheDir;
   if (cache === undefined || cache === "") return undefined;
   try {
