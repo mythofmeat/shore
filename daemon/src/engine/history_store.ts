@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmodSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import {
@@ -10,6 +10,7 @@ import {
 } from "./message_store.ts";
 import { alternativeVersionOf, versionOf } from "./versions.ts";
 import { imageBlobs, imageCacheFor, withImageData, withImageReferences, type ImageBlobs } from "../storage/image_blobs.ts";
+import { ImageLocator, loadedImage, storedImage, type ImageDirs, type StoredImageRef } from "../storage/image_locations.ts";
 import { required } from "../util/required.ts";
 import type {
   ContentBlock,
@@ -726,7 +727,7 @@ export class HistoryStore {
          ORDER BY m.id DESC`,
       )
       .all(character, `%"sha256":"${sha256Prefix}%`) as { images: string; timestamp: string }[];
-    return rows.map((row) => ({ images: JSON.parse(row.images) as ImageRef[], timestamp: row.timestamp }));
+    return rows.map((row) => ({ images: this.#loadedImages(row.images), timestamp: row.timestamp }));
   }
 
   #messagesFromRows(rows: MessageRow[], character: string, metrics?: HistoryReadMetrics): Message[] {
@@ -760,7 +761,7 @@ export class HistoryStore {
     });
   }
 
-  #insertMessage(character: string, segment: number, ordinal: number, message: Message): void {
+  #insertMessage(character: string, segment: number, ordinal: number, message: Message, storedImages: (images: ImageRef[] | undefined) => string | null): void {
     const blocksHash = this.#storeBlob(utf8.encode(JSON.stringify(this.#referenced(character, message.content_blocks))));
     const kind = displayKind(message);
     this.#db
@@ -783,7 +784,7 @@ export class HistoryStore {
         message.origin ?? null,
         message.alt_index ?? null,
         message.alt_count ?? null,
-        imagesColumn(message.images),
+        storedImages(message.images),
         blocksHash,
         kind,
         message.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0,
@@ -805,7 +806,7 @@ export class HistoryStore {
         alternative.timestamp,
         alternative.provider_key ?? null,
         alternative.model ?? null,
-        imagesColumn(alternative.images),
+        storedImages(alternative.images),
         this.#storeBlob(utf8.encode(JSON.stringify(this.#referenced(character, alternative.content_blocks)))),
         alternativeVersionOf(alternative) ?? null,
       );
@@ -853,8 +854,9 @@ export class HistoryStore {
         entry.label ?? null,
         entry.note ?? null,
       );
+    const images = this.#imageColumnWriter();
     normalizedMessages.forEach((message, ordinal) => {
-      this.#insertMessage(character, idx, ordinal, message);
+      this.#insertMessage(character, idx, ordinal, message, images);
     });
     reindexDisplayMetadata(this.#db, character, idx);
   }
@@ -911,8 +913,28 @@ export class HistoryStore {
       if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
     }
     const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character));
-    const images = row.images === null ? [] : (JSON.parse(row.images) as ImageRef[]);
+    const images = row.images === null ? [] : this.#loadedImages(row.images);
     return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
+  }
+
+  #imageDirs(): ImageDirs | undefined {
+    return this.#data === undefined ? undefined : { data: this.#data, cache: imageCacheFor(this.#data) };
+  }
+
+  #loadedImages(column: string): ImageRef[] {
+    const dirs = this.#imageDirs();
+    return (JSON.parse(column) as StoredImageRef[]).map((image) => loadedImage(image, dirs));
+  }
+
+  #imageColumnWriter(): (images: ImageRef[] | undefined) => string | null {
+    const dirs = this.#imageDirs();
+    if (dirs === undefined) return imagesColumn;
+    const locator = new ImageLocator(dirs);
+    return (images) => imagesColumn(images?.map((image) => {
+      if (image.path === "" || !isAbsolute(image.path)) return image;
+      const located = locator.locate(image);
+      return storedImage(located.location === "missing" ? image : located.image, dirs);
+    }));
   }
 
   #blobs(character: string): ImageBlobs | undefined {
@@ -996,7 +1018,7 @@ export function characterOfArchiveKey(archiveKey: string): string {
   return slash === -1 ? archiveKey : archiveKey.slice(0, slash);
 }
 
-function imagesColumn(images: ImageRef[] | undefined): string | null {
+function imagesColumn(images: StoredImageRef[] | undefined): string | null {
   return images === undefined || images.length === 0 ? null : JSON.stringify(images);
 }
 

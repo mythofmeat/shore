@@ -6,7 +6,9 @@ import type { ImageRef, Message } from "../engine/types.ts";
 import { modelCopies } from "../llm/images.ts";
 import { shoreLog } from "../log.ts";
 import { imageBlobDir } from "./image_blobs.ts";
-import { attachmentCacheDir } from "./image_cache.ts";
+import { archivedImagePaths, rewriteArchivedImages } from "./archived_images.ts";
+import { attachmentCacheDir, toolImageCacheDir } from "./image_cache.ts";
+import { loadedImage, storedImage } from "./image_locations.ts";
 import { characterMediaDir } from "./media.ts";
 import { pack, unpack, withStorage } from "./store.ts";
 
@@ -32,7 +34,7 @@ export function moveImagesToCache(data: string, cache: string): ImageMove {
   }
   if (total.moved + total.removed > 0) {
     shoreLog.info(
-      `shore: moved ${String(total.moved)} images that active conversations show into the image cache ` +
+      `shore: moved ${String(total.moved)} images that active conversations or archived messages show into the image cache ` +
         `and deleted ${String(total.removed)} image files that nothing reads again`,
     );
   }
@@ -41,26 +43,36 @@ export function moveImagesToCache(data: string, cache: string): ImageMove {
 
 export function moveCharacterImagesToCache(data: string, cache: string, character: string): ImageMove {
   const media = characterMediaDir(data, character);
-  const tools = join(media, TOOLS_DIR);
-  const legacy = join(media, ATTACHMENTS_DIR);
-  const result: ImageMove = { moved: moveBlobs(join(media, BLOBS_DIR), imageBlobDir(cache, character)), removed: countFiles(tools) };
-  rmSync(tools, { recursive: true, force: true });
-  if (!existsSync(legacy)) return result;
+  const result: ImageMove = { moved: moveBlobs(join(media, BLOBS_DIR), imageBlobDir(cache, character)), removed: 0 };
+  const legacy = ([
+    [join(media, ATTACHMENTS_DIR), attachmentCacheDir(cache, character)],
+    [join(media, TOOLS_DIR), toolImageCacheDir(cache, character)],
+  ] as const).filter(([from]) => existsSync(from));
+  if (legacy.length === 0) return result;
 
-  const target = attachmentCacheDir(cache, character);
+  const dirs = { data, cache };
   const moves = new Map<string, string>();
   withStorage(data, (db) => {
-    for (const path of activeImagePaths(db, character)) {
-      const name = insideDir(legacy, path);
-      if (name === undefined) continue;
-      const destination = join(target, name);
-      if (copyAttachment(path, destination)) moves.set(path, destination);
+    for (const path of new Set([...activeImagePaths(db, character), ...archivedImagePaths(db, dirs, character)])) {
+      for (const [from, to] of legacy) {
+        const name = insideDir(from, path);
+        if (name !== undefined && copyAttachment(path, join(to, name))) moves.set(path, join(to, name));
+      }
     }
-    db.transaction(() => repointActiveImages(db, character, moves))();
+    db.transaction(() => {
+      repointActiveImages(db, character, moves);
+      rewriteArchivedImages(db, (image) => {
+        const to = moves.get(loadedImage(image, dirs).path);
+        return to === undefined ? image : storedImage({ ...loadedImage(image, dirs), path: to }, dirs);
+      }, character);
+    })();
   });
   result.moved += moves.size;
-  result.removed += countFiles(legacy) - [...moves.keys()].reduce((files, path) => files + 1 + modelCopies(path).length, 0);
-  rmSync(legacy, { recursive: true, force: true });
+  for (const [from] of legacy) {
+    const kept = [...moves.keys()].filter((path) => insideDir(from, path) !== undefined);
+    result.removed += countFiles(from) - kept.reduce((files, path) => files + 1 + modelCopies(path).length, 0);
+    rmSync(from, { recursive: true, force: true });
+  }
   return result;
 }
 
