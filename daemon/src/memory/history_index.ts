@@ -5,14 +5,15 @@ import { basename, dirname, join } from "node:path";
 
 import { characterCacheDir } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
-import { deriveContentFromBlocks } from "../engine/message_store.ts";
+import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
 import { pictureText } from "../engine/embeds.ts";
+import { pictureLabel } from "../engine/picture_ids.ts";
 import type { Message } from "../engine/types.ts";
 import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "2";
+const SCHEMA_VERSION = "3";
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -127,6 +128,22 @@ function compareKeys(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+const ATTACHMENT_STAMP = /^\d{8}_\d{6}_/;
+
+function shownPictures(message: Message): string[] {
+  if (message.role !== "user" || isToolResultOnly(message)) return [];
+  return message.images.flatMap((image) => {
+    if (image.embed !== undefined) return [];
+    if (image.sha256 !== undefined) return [pictureLabel(image.sha256)];
+    return [`[picture: ${basename(image.path).replace(ATTACHMENT_STAMP, "")}]`];
+  });
+}
+
+function messageText(message: Message): string {
+  const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
+  return [...shownPictures(message), ...(text === "" ? [] : [text])].join("\n");
+}
+
 async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
   const reader = await CharacterHistoryReader.load(ref);
   try {
@@ -144,7 +161,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
         continue;
       }
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
-        const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
+        const text = messageText(message);
         if (text === "") continue;
         const key = versionOf(message) ?? `${message.msg_id}\0${createHash("sha256").update(text).digest("hex")}`;
         if (seenInThread.has(`${thread}\0${key}`)) continue;
