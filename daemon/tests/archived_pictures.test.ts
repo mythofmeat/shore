@@ -10,6 +10,7 @@ import { repointArchivedImages } from "../src/storage/archived_images.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { useImageCacheFor } from "../src/storage/image_blobs.ts";
 import { attachmentCacheDir } from "../src/storage/image_cache.ts";
+import { useWorkspacesFor } from "../src/storage/image_locations.ts";
 import { moveImagesToCache } from "../src/storage/image_migration.ts";
 import { sentPicturesDir } from "../src/storage/sent_pictures.ts";
 import { noisePng } from "./support/test_images.ts";
@@ -91,14 +92,14 @@ test("archived pictures at paths from an older layout are repointed to where the
   const catNow = await put(join(attachmentCacheDir(cache, "ada"), "20260901_090000_cat.png"), cat);
   const drawingNow = await put(join(sentPicturesDir(data, "ada"), `${sha256Hex(drawing)}.png`), drawing);
 
-  expect(repointArchivedImages(data, cache)).toEqual({ kept: 0, repointed: 2, missing: 1 });
+  expect(repointArchivedImages(data)).toEqual({ kept: 0, repointed: 2, missing: 1 });
 
   expect(archivedImages(data)).toEqual([
     { path: catNow, sha256: sha256Hex(cat) },
     { path: drawingNow, embed: "![[drawing.png]]" },
     { path: "/cache/characters/ada/images/attachments/20260902_090000_lost.png", sha256: sha256Hex(lost) },
   ]);
-  expect(repointArchivedImages(data, cache)).toBeUndefined();
+  expect(repointArchivedImages(data)).toBeUndefined();
 });
 
 test("moving legacy attachments into the cache keeps the pictures archived messages show", async () => {
@@ -114,4 +115,20 @@ test("moving legacy attachments into the cache keeps the pictures archived messa
   const [image] = archivedImages(data);
   expect(image?.path).toBe(join(attachmentCacheDir(cache, "ada"), "20260915_120000_cat.png"));
   expect(readFileSync(image?.path ?? "")).toEqual(cat);
+});
+
+test("archived workspace pictures still open after the workspace dir moves", async () => {
+  const root = testTmp(`archived-pictures-${crypto.randomUUID()}`);
+  const { data } = install(root);
+  useWorkspacesFor(data, (character) => join(root, "workspace", character));
+  const drawing = await png(8);
+  const file = await put(join(root, "workspace", "ada", "art", "drawing.png"), drawing);
+  archive(data, [shown([{ path: file, sha256: sha256Hex(drawing) }])]);
+
+  await rename(join(root, "workspace"), join(root, "workspaces"));
+  useWorkspacesFor(data, (character) => join(root, "workspaces", character));
+
+  const [image] = archivedImages(data);
+  expect(image?.path).toBe(join(root, "workspaces", "ada", "art", "drawing.png"));
+  expect(readFileSync(image?.path ?? "")).toEqual(drawing);
 });

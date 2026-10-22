@@ -10,7 +10,7 @@ import {
 } from "./message_store.ts";
 import { alternativeVersionOf, versionOf } from "./versions.ts";
 import { imageBlobs, imageCacheFor, withImageData, withImageReferences, type ImageBlobs } from "../storage/image_blobs.ts";
-import { ImageLocator, loadedImage, storedImage, type ImageDirs, type StoredImageRef } from "../storage/image_locations.ts";
+import { ImageLocator, imageDirsFor, loadedImage, storedImage, type ImageDirs, type StoredImageRef } from "../storage/image_locations.ts";
 import { required } from "../util/required.ts";
 import type {
   ContentBlock,
@@ -727,7 +727,7 @@ export class HistoryStore {
          ORDER BY m.id DESC`,
       )
       .all(character, `%"sha256":"${sha256Prefix}%`) as { images: string; timestamp: string }[];
-    return rows.map((row) => ({ images: this.#loadedImages(row.images), timestamp: row.timestamp }));
+    return rows.map((row) => ({ images: this.#loadedImages(row.images, character), timestamp: row.timestamp }));
   }
 
   #messagesFromRows(rows: MessageRow[], character: string, metrics?: HistoryReadMetrics): Message[] {
@@ -854,7 +854,7 @@ export class HistoryStore {
         entry.label ?? null,
         entry.note ?? null,
       );
-    const images = this.#imageColumnWriter();
+    const images = this.#imageColumnWriter(character);
     normalizedMessages.forEach((message, ordinal) => {
       this.#insertMessage(character, idx, ordinal, message, images);
     });
@@ -913,21 +913,21 @@ export class HistoryStore {
       if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
     }
     const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character));
-    const images = row.images === null ? [] : this.#loadedImages(row.images);
+    const images = row.images === null ? [] : this.#loadedImages(row.images, character);
     return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
   }
 
-  #imageDirs(): ImageDirs | undefined {
-    return this.#data === undefined ? undefined : { data: this.#data, cache: imageCacheFor(this.#data) };
+  #imageDirs(character: string): ImageDirs | undefined {
+    return this.#data === undefined ? undefined : imageDirsFor(this.#data, character);
   }
 
-  #loadedImages(column: string): ImageRef[] {
-    const dirs = this.#imageDirs();
+  #loadedImages(column: string, character: string): ImageRef[] {
+    const dirs = this.#imageDirs(character);
     return (JSON.parse(column) as StoredImageRef[]).map((image) => loadedImage(image, dirs));
   }
 
-  #imageColumnWriter(): (images: ImageRef[] | undefined) => string | null {
-    const dirs = this.#imageDirs();
+  #imageColumnWriter(character: string): (images: ImageRef[] | undefined) => string | null {
+    const dirs = this.#imageDirs(character);
     if (dirs === undefined) return imagesColumn;
     const locator = new ImageLocator(dirs);
     return (images) => imagesColumn(images?.map((image) => {

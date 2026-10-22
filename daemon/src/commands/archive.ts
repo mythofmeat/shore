@@ -667,7 +667,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     const cache = characterCacheDir(ctx.dirs.cache, character);
     if (!await exists(cache)) created.push(cache);
     moveCharacterImagesToCache(ctx.dirs.data, ctx.dirs.cache, character);
-    withStorage(ctx.dirs.data, (db) => db.transaction(() => repointArchivedImageRows(db, ctx.dirs, character))());
+    withStorage(ctx.dirs.data, (db) => db.transaction(() => repointArchivedImageRows(db, ctx.dirs.data, character))());
     await ctx.refreshDiscovery();
   } catch (error) {
     if (imported) {

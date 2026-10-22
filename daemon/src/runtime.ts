@@ -3,6 +3,7 @@ import { initializeDatabase } from "./storage/database.ts";
 import { useImageCacheFor } from "./storage/image_blobs.ts";
 import { evictCachedImages, setImageCacheLimit } from "./storage/image_cache.ts";
 import { repointArchivedImages } from "./storage/archived_images.ts";
+import { useWorkspacesFor } from "./storage/image_locations.ts";
 import { moveImagesOutOfDatabase } from "./storage/image_db_migration.ts";
 import { moveImagesToCache } from "./storage/image_migration.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
@@ -19,6 +20,7 @@ import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
 import {
   characterCacheDir,
+  characterWorkspaceDir,
   pluginsDir,
   rustJoin,
   threadDataDir,
@@ -109,9 +111,10 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   initializeDatabase(config.dirs.data);
   setImageCacheLimit(config.app.daemon.image_cache_bytes);
   useImageCacheFor(config.dirs.data, config.dirs.cache);
+  useWorkspacesFor(config.dirs.data, (character) => characterWorkspaceDir(config.dirs.config, character, config.dirs.workspace));
   moveImagesToCache(config.dirs.data, config.dirs.cache);
   moveImagesOutOfDatabase(config.dirs.data, config.dirs.cache);
-  repointArchivedImages(config.dirs.data, config.dirs.cache);
+  repointArchivedImages(config.dirs.data);
   evictCachedImages(config.dirs.cache);
 
   const notifier = new NotificationService(config.app.notifications);

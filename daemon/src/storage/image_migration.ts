@@ -8,7 +8,7 @@ import { shoreLog } from "../log.ts";
 import { imageBlobDir } from "./image_blobs.ts";
 import { archivedImagePaths, rewriteArchivedImages } from "./archived_images.ts";
 import { attachmentCacheDir, toolImageCacheDir } from "./image_cache.ts";
-import { loadedImage, storedImage } from "./image_locations.ts";
+import { imageDirsFor, loadedImage, storedImage } from "./image_locations.ts";
 import { characterMediaDir } from "./media.ts";
 import { pack, unpack, withStorage } from "./store.ts";
 
@@ -50,10 +50,9 @@ export function moveCharacterImagesToCache(data: string, cache: string, characte
   ] as const).filter(([from]) => existsSync(from));
   if (legacy.length === 0) return result;
 
-  const dirs = { data, cache };
   const moves = new Map<string, string>();
   withStorage(data, (db) => {
-    for (const path of new Set([...activeImagePaths(db, character), ...archivedImagePaths(db, dirs, character)])) {
+    for (const path of new Set([...activeImagePaths(db, character), ...archivedImagePaths(db, data, character)])) {
       for (const [from, to] of legacy) {
         const name = insideDir(from, path);
         if (name !== undefined && copyAttachment(path, join(to, name))) moves.set(path, join(to, name));
@@ -61,7 +60,8 @@ export function moveCharacterImagesToCache(data: string, cache: string, characte
     }
     db.transaction(() => {
       repointActiveImages(db, character, moves);
-      rewriteArchivedImages(db, (image) => {
+      rewriteArchivedImages(db, (image, archive) => {
+        const dirs = imageDirsFor(data, archive);
         const to = moves.get(loadedImage(image, dirs).path);
         return to === undefined ? image : storedImage({ ...loadedImage(image, dirs), path: to }, dirs);
       }, character);
