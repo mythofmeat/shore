@@ -1,4 +1,5 @@
-import { sameWorkspaceEntry, type WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
+import { sameWorkspaceEntry } from "../../tools/workspace_snapshot.ts";
+import { restorePaths, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../../tools/workspace_turns.ts";
 import { CharacterWorkspace } from "../../tools/character_workspace.ts";
 import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
@@ -163,8 +164,25 @@ function workspaceOf(tools: CompactionTools, workspaceDir: string): CharacterWor
   return (tools.workspace ?? new CharacterWorkspace(tools.workspaceDir)).at(workspaceDir);
 }
 
-async function snapshotOf(workspace: CharacterWorkspace): Promise<Map<string, WorkspaceEntry>> {
-  return new Map(await workspace.call("snapshot", { root: workspace.dir }));
+async function tracked<T>(tools: CompactionTools, read: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch (error) {
+    shoreLog.warn(`shore: compaction could not record workspace changes in ${tools.turns.workspace}, so a rollback will leave them: ${describeError(error)}`);
+    return undefined;
+  }
+}
+
+async function recordChanges(tools: CompactionTools, workspaceDir: string, state: ToolLoopState, before: string): Promise<void> {
+  const after = await tracked(tools, () => workspaceChanges(tools.turns, before));
+  if (after === undefined) return;
+  for (const change of after.changes) {
+    state.writesApplied.push({
+      displayPath: change.path, resolvedPath: join(workspaceDir, change.path), previousTree: before, resultingTree: after.tree,
+      ...(change.deleted ? { deleted: true } : {}),
+    });
+    if (normalizePromptVisiblePath(change.path) !== undefined) await tools.deferEdit?.(change.path);
+  }
 }
 
 async function dispatchCompactionTool(
@@ -176,22 +194,11 @@ async function dispatchCompactionTool(
 ): Promise<import("./types.ts").ToolOutput> {
   if (["bash", "edit", "apply_patch", "save_picture"].includes(name)) {
     if (state.dryRun) return { output: `${name} blocked: dry-run compaction does not modify files`, isError: true };
-    const workspace = workspaceOf(tools, workspaceDir);
-    const before = await snapshotOf(workspace);
+    const before = await tracked(tools, () => workspaceTree(tools.turns));
     try {
       return await tools.dispatch(name, input);
     } finally {
-      const after = await snapshotOf(workspace);
-      for (const path of new Set([...before.keys(), ...after.keys()])) {
-        const previousState = before.get(path) ?? null;
-        const resultingState = after.get(path) ?? null;
-        if (sameWorkspaceEntry(previousState, resultingState)) continue;
-        state.writesApplied.push({
-          displayPath: path, resolvedPath: join(workspaceDir, path), previousState, resultingState,
-          ...(resultingState === null ? { deleted: true } : {}),
-        });
-        if (normalizePromptVisiblePath(path) !== undefined) await tools.deferEdit?.(path);
-      }
+      if (before !== undefined) await recordChanges(tools, workspaceDir, state, before);
     }
   }
 
@@ -469,9 +476,21 @@ async function writeWorkspaceFile(workspace: CharacterWorkspace, path: string, c
   }
 }
 
-async function rollbackCompaction(writes: AppliedCompactionWrite[], workspace: CharacterWorkspace): Promise<void> {
+async function rollbackCompaction(writes: AppliedCompactionWrite[], workspace: CharacterWorkspace, turns: WorkspaceTurns): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
     const write = required(writes[i]);
+    const tree = write.previousTree;
+    if (tree !== undefined) {
+      const batch = [write];
+      while (i > 0 && writes[i - 1]?.previousTree === tree) batch.push(required(writes[(i -= 1)]));
+      const paths = batch.filter((each) => each.superseded !== true).map((each) => each.displayPath);
+      try {
+        if (paths.length > 0) await restorePaths(turns, tree, paths);
+      } catch (error) {
+        shoreLog.warn(`shore: rollback failed to restore ${JSON.stringify(paths)}: ${String(error)}`);
+      }
+      continue;
+    }
     if (write.superseded === true) continue;
     if (write.previousState !== undefined) {
       try {
@@ -624,7 +643,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
   if (checkpointSourceIsCompatible(checkpoint, plan.sourceContent)) {
-    await adoptOutsideEdits(opts, checkpoint, workspaceOf(tools, workspaceDir));
+    await adoptOutsideEdits(opts, checkpoint, workspaceOf(tools, workspaceDir), tools.turns);
   } else {
     shoreLog.warn(
       `shore: discarding compaction checkpoint ${checkpoint.id} for ${opts.charName}: the active ` +
@@ -867,7 +886,7 @@ async function archiveCompactPrefix(
       ...(coverageClaim === undefined ? {} : { coverageClaim }),
     });
   } catch (e) {
-    await rollbackCompaction(writesApplied, workspaceOf(tools, workspaceDir));
+    await rollbackCompaction(writesApplied, workspaceOf(tools, workspaceDir), tools.turns);
     try {
       if (
         await tools.gitCommitAll(
@@ -1000,17 +1019,27 @@ async function discardCheckpoint(opts: CompactOptions): Promise<string | undefin
   return abandoned?.memoryBefore;
 }
 
-async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionCheckpoint, workspace: CharacterWorkspace): Promise<void> {
+async function adoptOutsideEdits(opts: CompactOptions, checkpoint: CompactionCheckpoint, workspace: CharacterWorkspace, turns: WorkspaceTurns): Promise<void> {
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
+  const since = new Map<string, Promise<{ tree: string; paths: Set<string> }>>();
+  const changesSince = (tree: string): Promise<{ tree: string; paths: Set<string> }> => {
+    const known = since.get(tree);
+    if (known !== undefined) return known;
+    const found = workspaceChanges(turns, tree).then((after) => ({ tree: after.tree, paths: new Set(after.changes.map((change) => change.path)) }));
+    since.set(tree, found);
+    return found;
+  };
   const changed: string[] = [];
   for (const write of latest.values()) {
-    if (await stillAsWritten(write, workspace)) continue;
+    const current = write.resultingTree === undefined ? undefined : await changesSince(write.resultingTree);
+    if (current === undefined ? await stillAsWritten(write, workspace) : !current.paths.has(write.displayPath)) continue;
     changed.push(write.displayPath);
     for (const earlier of checkpoint.loop.writesApplied) {
       if (earlier.resolvedPath === write.resolvedPath) earlier.superseded = true;
     }
-    write.resultingState = await workspace.call("entry", { path: write.resolvedPath });
+    if (current !== undefined) write.resultingTree = current.tree;
+    else write.resultingState = await workspace.call("entry", { path: write.resolvedPath });
   }
   if (changed.length === 0) return;
   shoreLog.info(

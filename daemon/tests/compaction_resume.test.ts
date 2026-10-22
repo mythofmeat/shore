@@ -41,6 +41,7 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   await writeFile(join(workspace, "projects/note.md"), "original context");
   const tools: CompactionTools = {
     workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
     dispatch: (name, input, trackNestedWrite) => {
       if (name !== "ask_research") return renderToolOutcome(() => handleBash(input as Record<string, unknown>, workspace, "ada"));
       const nested = input as { name: string; input: unknown };
@@ -83,6 +84,42 @@ test.each([false, true])("archive failure restores workspace edits, binary files
   expect(await outcomeOf(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"))).toThrow();
 });
 
+test("a resumed pass keeps files changed while it was paused and rolls back the rest", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-adopt-"));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+  await writeFile(join(workspace, "memory/kept.md"), "original kept");
+  await writeFile(join(workspace, "memory/reverted.md"), "original reverted");
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
+    dispatch: (_name, input) => renderToolOutcome(() => handleBash(input as Record<string, unknown>, workspace, "ada")),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const plan = async () => await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+  const first = await compact(options(dataDir, workspace, memoryStore, await plan(), tools, scripted([
+    response("tool_use", [{ type: "tool_use", id: "write", name: "bash", input: { command: "printf pass > memory/kept.md; printf pass > memory/reverted.md" } }]),
+    new Error("provider unavailable"),
+  ])), { keepRecentTurns: 1 });
+  expect(first.kind).toBe("paused");
+  await writeFile(join(workspace, "memory/kept.md"), "outside");
+
+  const resumed = await compact({
+    ...options(dataDir, workspace, memoryStore, await plan(), tools, scripted([response("end_turn", [{ type: "text", text: "done" }])])),
+    conversationMgr: { archiveAndRetain: async () => { throw new Error("archive failed"); } },
+  }, { keepRecentTurns: 1 }).catch((e: unknown) => e);
+
+  expect(resumed).toHaveProperty("message", "archive failed");
+  expect(await readFile(join(workspace, "memory/kept.md"), "utf8")).toBe("outside");
+  expect(await readFile(join(workspace, "memory/reverted.md"), "utf8")).toBe("original reverted");
+});
+
 test("compaction resumes without repeating writes and commits only after archive", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
   const dataDir = join(root, "data");
@@ -100,6 +137,7 @@ test("compaction resumes without repeating writes and commits only after archive
   const heads = ["before-sha", "during-sha", "after-sha"];
   const tools: CompactionTools = {
     workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
     dispatch: async (name, input) => {
       if (name !== "edit") return { output: "ok", isError: false };
       edits += 1;
@@ -295,6 +333,7 @@ test("a conversation rewritten after the plan was resolved pauses instead of arc
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
     dispatch: async () => ({ output: "ok", isError: false }),
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
@@ -343,6 +382,7 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
     dispatch: async () => ({ output: "ok", isError: false }),
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,

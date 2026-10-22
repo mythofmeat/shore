@@ -1,5 +1,5 @@
-import { chmod, lstat, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export type WorkspaceEntry =
   | { kind: "file"; content: string; mode: number }
@@ -18,22 +18,6 @@ export async function workspaceEntry(path: string): Promise<WorkspaceEntry | nul
     if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
   }
-}
-
-export async function snapshotWorkspace(root: string): Promise<Map<string, WorkspaceEntry>> {
-  const entries = new Map<string, WorkspaceEntry>();
-  const walk = async (relative: string): Promise<void> => {
-    for (const name of (await readdir(join(root, relative))).sort()) {
-      if (name === ".git") continue;
-      const path = join(relative, name);
-      const entry = await workspaceEntry(join(root, path));
-      if (entry === null) continue;
-      entries.set(path, entry);
-      if (entry.kind === "directory") await walk(path);
-    }
-  };
-  await walk("");
-  return entries;
 }
 
 export function sameWorkspaceEntry(a: WorkspaceEntry | null, b: WorkspaceEntry | null): boolean {

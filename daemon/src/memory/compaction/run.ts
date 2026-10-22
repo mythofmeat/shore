@@ -37,6 +37,7 @@ import {
 } from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
 import { CharacterWorkspace, characterWorkspace } from "../../tools/character_workspace.ts";
+import { workspaceTurnsFor } from "../../tools/workspace_turns.ts";
 import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
@@ -621,6 +622,7 @@ function compactionTools(
   return {
     workspaceDir: ctx.workspaceDir,
     workspace,
+    turns: workspaceTurnsFor(config.dirs, ctx.characterName, workspace),
     dispatch: async (name, input, trackNestedWrite) => {
       if (trackNestedWrite !== undefined) {
         ctx.trackWorkspaceWrite = async (nestedName, nestedInput, write) => {
