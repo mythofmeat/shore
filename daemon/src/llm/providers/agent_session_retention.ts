@@ -7,6 +7,7 @@ import { pack, unpack, withStorage } from "../../storage/store.ts";
 import type { SessionBook, SessionRecord } from "./agent_sessions.ts";
 
 const RETIRED_PREFIX = "sdk_retired/";
+const RETIRED_SESSION_RETENTION_MS = 24 * 3_600_000;
 
 function sessionReferences(book: SessionBook): Map<string, string> {
   const refs = new Map<string, string>();
@@ -54,7 +55,7 @@ function removeLocalSession(sessionId: string, configDir: string): void {
   }
 }
 
-export function pruneSdkSessions(data: string, cutoffMs: number, nowMs: number, configDirs: readonly string[] = [process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")]): number {
+export function pruneSdkSessions(data: string, nowMs: number, configDirs: readonly string[] = [process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")]): number {
   return withStorage(data, db => {
     const book: SessionBook = {};
     const records = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_sessions/*'").all() as { path: string; content: Uint8Array }[];
@@ -75,6 +76,7 @@ export function pruneSdkSessions(data: string, cutoffMs: number, nowMs: number, 
       paths.set(id, group);
       if (!active.has(id)) retireSession(db, id, row.character, nowMs);
     }
+    const cutoffMs = nowMs - RETIRED_SESSION_RETENTION_MS;
     let removed = 0;
     const retired = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_retired/*'").all() as { path: string; content: Uint8Array }[];
     for (const row of retired) {
