@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HistoryStore } from "../src/engine/history_store.ts";
@@ -100,6 +100,23 @@ test("archived pictures at paths from an older layout are repointed to where the
     { path: "/cache/characters/ada/images/attachments/20260902_090000_lost.png", sha256: sha256Hex(lost) },
   ]);
   expect(repointArchivedImages(data)).toBeUndefined();
+});
+
+test.skipIf(process.getuid?.() === 0)("archived pictures under a directory the daemon can't search count as missing", async () => {
+  const root = testTmp(`archived-pictures-${crypto.randomUUID()}`);
+  const { data, cache } = install(root);
+  const cat = await png(9);
+  const elsewhere = await put(join(root, "home", ".local", "20261001_100000_cat.png"), cat);
+  await put(join(attachmentCacheDir(cache, "ada"), "locked", "20261001_100000_cat.png"), cat);
+  archive(data, [shown([{ path: elsewhere }])]);
+  const locked = [join(root, "home", ".local"), join(attachmentCacheDir(cache, "ada"), "locked")];
+  await Promise.all(locked.map((dir) => chmod(dir, 0o400)));
+  try {
+    expect(repointArchivedImages(data)).toEqual({ kept: 0, repointed: 0, missing: 1 });
+  } finally {
+    await Promise.all(locked.map((dir) => chmod(dir, 0o700)));
+  }
+  expect(archivedImages(data).map((image) => image.path)).toEqual([elsewhere]);
 });
 
 test("moving legacy attachments into the cache keeps the pictures archived messages show", async () => {

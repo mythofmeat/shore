@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync, type Stats } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { sha256Hex } from "../engine/picture_ids.ts";
@@ -73,8 +73,16 @@ export function loadedImage(image: StoredImageRef, dirs: ImageDirs | undefined):
   return { ...rest, path: inside(resolve(dir), path) === undefined ? "" : path };
 }
 
+function statOf(path: string): Stats | undefined {
+  try {
+    return statSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
 function isFile(path: string): boolean {
-  return path !== "" && statSync(path, { throwIfNoEntry: false })?.isFile() === true;
+  return path !== "" && statOf(path)?.isFile() === true;
 }
 
 function entriesOf(dir: string): string[] {
@@ -88,7 +96,7 @@ function entriesOf(dir: string): string[] {
 function filesUnder(dir: string): string[] {
   return entriesOf(dir).flatMap((name) => {
     const path = join(dir, name);
-    const stat = statSync(path, { throwIfNoEntry: false });
+    const stat = statOf(path);
     if (stat?.isDirectory() === true) return DERIVED_COPY_DIRS.has(name) ? [] : filesUnder(path);
     return stat?.isFile() === true ? [path] : [];
   });
