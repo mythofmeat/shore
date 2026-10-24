@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +32,9 @@ const write = (turns: WorkspaceTurns, path: string, text: string): void => {
   mkdirSync(join(file(turns, path), ".."), { recursive: true });
   writeFileSync(file(turns, path), text);
 };
+
+const gitIn = (turns: WorkspaceTurns, ...args: string[]): string =>
+  execFileSync("git", args, { cwd: turns.workspace, encoding: "utf8" }).trim();
 
 async function turn(turns: WorkspaceTurns, version: string, change: () => void, thread = "main"): Promise<void> {
   const before = await snapshotTree(turns);
@@ -165,6 +169,77 @@ describe("workspace turns", () => {
     expect(await gitHead(turns.workspace)).toBe(head);
     expect(await gitCommitAll(turns.workspace, "Ada", "noop")).toBe(false);
     expect(existsSync(join(turns.workspace, ".git", "refs", "turns"))).toBe(false);
+  });
+
+  test("undoing a turn that committed moves HEAD back, and redo moves it forward", async () => {
+    const turns = setup();
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    const start = await gitHead(turns.workspace);
+
+    await turn(turns, "mv_1", () => {
+      write(turns, "notes/today.md", "note\n");
+      gitIn(turns, "add", "-A");
+      gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "-m", "today's note");
+    });
+    const committed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(existsSync(file(turns, "notes"))).toBe(false);
+    expect(await gitHead(turns.workspace)).toBe(start);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "notes/today.md")).toBe("note\n");
+    expect(await gitHead(turns.workspace)).toBe(committed);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+  });
+
+  test("undoing a pushed commit reverts it instead of rewriting history", async () => {
+    const turns = setup();
+    const remote = `${turns.workspace}-remote.git`;
+    execFileSync("git", ["init", "--quiet", "--bare", remote]);
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    gitIn(turns, "remote", "add", "origin", remote);
+    gitIn(turns, "push", "--quiet", "--set-upstream", "origin", "HEAD");
+
+    await turn(turns, "mv_1", () => {
+      write(turns, "SOUL.md", "changed\n");
+      gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "-am", "new soul");
+      gitIn(turns, "push", "--quiet");
+    });
+    const pushed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "SOUL.md")).toBe("soul\n");
+    expect(gitIn(turns, "log", "-1", "--format=%P %s")).toBe(`${pushed} Revert "new soul"`);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "SOUL.md")).toBe("changed\n");
+    expect(await gitHead(turns.workspace)).toBe(pushed);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+  });
+
+  test("commits made after the turn keep HEAD where it is", async () => {
+    const turns = setup();
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    await turn(turns, "mv_1", () => {
+      write(turns, "a.md", "a\n");
+      gitIn(turns, "add", "-A");
+      gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "-m", "a");
+    });
+    write(turns, "b.md", "b\n");
+    await gitCommitAll(turns.workspace, "Ada", "later");
+    const later = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(later);
   });
 
   test("a missing workspace records nothing", async () => {
