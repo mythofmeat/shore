@@ -26,7 +26,7 @@ crossterm = "0.29"
 base64 = "0.23"
 tempfile = "3"
 ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
-pulldown-cmark = { version = "0.13.4", default-features = false }
+pulldown-cmark = { version = "0.13.5", default-features = false }
 unicode-width = "0.2"
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
