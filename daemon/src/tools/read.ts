@@ -1,4 +1,4 @@
-import { stat, type FileHandle } from "node:fs/promises";
+import { readFile, stat, type FileHandle } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES, toolMediaOf } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
@@ -6,6 +6,7 @@ import { filePath, openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { readFolder } from "./read_folder.ts";
+import { byteSize, MAX_THREAD_FILE_BYTES, MAX_THREAD_FILES_BYTES, threadFileText } from "./thread_file_text.ts";
 import { linkedFile, namedFile, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import { WORKSPACE_LINK } from "./workspace_path.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
@@ -102,18 +103,35 @@ async function promptFile(value: string, workspaceDir: string, names: () => Prom
   throw new Error(`${value} does not exist; ${hint}`);
 }
 
+async function promptFileBytes(value: string, path: string, shown: string): Promise<number> {
+  const label = WORKSPACE_LINK.test(value) ? `${value} (${shown})` : shown;
+  const { size } = await stat(path);
+  if (size > MAX_THREAD_FILE_BYTES) throw new Error(`${label} is ${byteSize(size)}; a thread file can be at most ${byteSize(MAX_THREAD_FILE_BYTES)}`);
+  const read = threadFileText(path, await readFile(path));
+  if ("reason" in read) throw new Error(`${label} ${read.reason}; a thread file must be text`);
+  return size;
+}
+
 export async function locateWorkspaceFiles(files: readonly string[], workspaceDir: string, signal?: AbortSignal): Promise<{ paths: string[]; problems: string[] }> {
   let names: Promise<WorkspaceNames> | undefined;
   const lookUp = () => names ??= workspaceNames(workspaceDir, signal);
   const paths: string[] = [];
   const problems: string[] = [];
+  const sizes = new Map<string, number>();
   for (const file of files) {
     try {
-      paths.push(relative(workspaceDir, await promptFile(file, workspaceDir, lookUp)).split(sep).join("/"));
+      const path = await promptFile(file, workspaceDir, lookUp);
+      const shown = relative(workspaceDir, path).split(sep).join("/");
+      sizes.set(shown, await promptFileBytes(file.trim(), path, shown));
+      paths.push(shown);
     } catch (error) {
       signal?.throwIfAborted();
       problems.push(messageOf(error));
     }
+  }
+  const total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
+  if (problems.length === 0 && total > MAX_THREAD_FILES_BYTES) {
+    problems.push(`together these files are ${byteSize(total)}; a thread's files can be at most ${byteSize(MAX_THREAD_FILES_BYTES)} together`);
   }
   return { paths, problems };
 }
