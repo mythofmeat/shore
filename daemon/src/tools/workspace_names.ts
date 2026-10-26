@@ -1,22 +1,22 @@
 import { readdir } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS } from "./read_image.ts";
-
-export type NameKind = "note" | "picture" | "file" | "folder";
 
 interface NamedFile {
   path: string;
   folders: string[];
   file: string;
+  text?: Promise<boolean>;
 }
 
 export interface WorkspaceNames {
   root: string;
-  note: NamedFile[];
-  picture: NamedFile[];
-  file: NamedFile[];
-  folder: NamedFile[];
-  capitals: NamedFile[];
+  files: NamedFile[];
+  folders: NamedFile[];
+  byName: Map<string, NamedFile[]>;
+  byStem: Map<string, NamedFile[]>;
+  byFolder: Map<string, NamedFile[]>;
 }
 
 interface Link {
@@ -33,14 +33,17 @@ export interface Found {
 
 const MAX_SUGGESTIONS = 5;
 
+const TEXT_PROBE_BYTES = 8192;
+
 const isPicture = (file: string) => IMAGE_EXTENSIONS.has(extname(file).toLowerCase());
 
-const noteName = (name: string) => name.endsWith(".md") ? name.slice(0, -3) : name;
+const isNote = (file: string) => file.endsWith(".md");
 
-const allCaps = (name: string) => name !== name.toLowerCase() && name === name.toUpperCase();
+const stem = (file: string) => file.slice(0, file.length - extname(file).length);
 
 export async function workspaceNames(root: string, signal?: AbortSignal): Promise<WorkspaceNames> {
-  const names: WorkspaceNames = { root, note: [], picture: [], file: [], folder: [], capitals: [] };
+  const files: NamedFile[] = [];
+  const subfolders: NamedFile[] = [];
   const pending: string[][] = [[]];
   for (let folders = pending.pop(); folders !== undefined; folders = pending.pop()) {
     signal?.throwIfAborted();
@@ -49,18 +52,40 @@ export async function workspaceNames(root: string, signal?: AbortSignal): Promis
       const named = { path: [...folders, entry.name].join("/"), folders, file: entry.name };
       if (entry.isDirectory()) {
         if (entry.name === ".git") continue;
-        names.folder.push(named);
+        subfolders.push(named);
         pending.push([...folders, entry.name]);
-      } else if (!entry.isFile()) continue;
-      else if (isPicture(entry.name)) names.picture.push(named);
-      else if (!entry.name.endsWith(".md")) names.file.push(named);
-      else if (!named.path.split("/").some((part) => part.startsWith("."))) {
-        (allCaps(noteName(entry.name)) ? names.capitals : names.note).push(named);
+      } else if (entry.isFile() && !(isNote(entry.name) && named.path.split("/").some((part) => part.startsWith(".")))) {
+        files.push(named);
       }
     }
   }
-  for (const files of [names.note, names.picture, names.file, names.folder, names.capitals]) files.sort((a, b) => a.path < b.path ? -1 : 1);
-  return names;
+  for (const named of [files, subfolders]) named.sort((a, b) => a.path < b.path ? -1 : 1);
+  return {
+    root,
+    files,
+    folders: subfolders,
+    byName: Map.groupBy(files, (file) => file.file),
+    byStem: Map.groupBy(files, (file) => stem(file.file)),
+    byFolder: Map.groupBy(subfolders, (folder) => folder.file),
+  };
+}
+
+async function probedText(path: string): Promise<boolean> {
+  const file = await openRegularFile(path).catch(() => undefined);
+  if (file === undefined) return false;
+  try {
+    const head = Buffer.alloc(TEXT_PROBE_BYTES);
+    const { bytesRead } = await file.read(head, 0, head.length, 0);
+    return !head.subarray(0, bytesRead).includes(0);
+  } catch {
+    return false;
+  } finally {
+    await file.close();
+  }
+}
+
+function isText(names: WorkspaceNames, file: NamedFile): Promise<boolean> {
+  return file.text ??= isPicture(file.file) ? Promise.resolve(false) : probedText(join(names.root, file.path));
 }
 
 function parseLink(text: string): Link | undefined {
@@ -72,36 +97,41 @@ function parseLink(text: string): Link | undefined {
   return name === "" ? undefined : { anchored, folder, folders, name };
 }
 
-function wanted(link: Link, kind: NameKind): string {
-  return kind === "note" ? noteName(link.name) : link.name;
-}
-
-function nameOf(file: NamedFile, link: Link, kind: NameKind): string {
-  if (kind === "note") return noteName(file.file);
-  if (kind !== "picture") return file.file;
-  return isPicture(link.name) ? file.file : file.file.slice(0, -extname(file.file).length);
-}
-
 function placed(file: NamedFile, link: Link): boolean {
   const above = file.folders.length - link.folders.length;
   return above >= 0 && (!link.anchored || above === 0) && link.folders.every((folder, index) => file.folders[above + index] === folder);
 }
 
-function matching(files: readonly NamedFile[], link: Link, kind: NameKind): NamedFile[] {
-  return files.filter((file) => placed(file, link) && nameOf(file, link, kind) === wanted(link, kind));
+async function fitting(names: WorkspaceNames, link: Link): Promise<NamedFile[]> {
+  const named = (by: Map<string, NamedFile[]>) => (by.get(link.name) ?? []).filter((file) => placed(file, link));
+  if (link.folder) return named(names.byFolder);
+  const whole = named(names.byName);
+  const fits = whole.length > 0 ? whole : named(names.byStem);
+  if (fits.length < 2) return fits;
+  const texts: NamedFile[] = [];
+  for (const file of fits) if (await isText(names, file)) texts.push(file);
+  return texts.length > 0 ? texts : fits;
 }
 
-function render(link: Link, kind: NameKind): string {
-  return `${kind === "picture" ? "!" : ""}[[${link.anchored ? "/" : ""}${[...link.folders, link.name].join("/")}${kind === "folder" ? "/" : ""}]]`;
+function render(link: Link, embed: boolean): string {
+  return `${embed ? "!" : ""}[[${link.anchored ? "/" : ""}${[...link.folders, link.name].join("/")}${link.folder ? "/" : ""}]]`;
 }
 
-function linkTo(names: WorkspaceNames, file: NamedFile, kind: NameKind): string {
-  const name = kind === "note" ? noteName(file.file) : file.file;
-  for (let depth = 0; depth <= file.folders.length; depth += 1) {
-    const link = { anchored: false, folder: kind === "folder", folders: file.folders.slice(file.folders.length - depth), name };
-    if (matching(names[kind], link, kind).length === 1) return render(link, kind);
+function spellings(file: NamedFile, folder: boolean): Link[] {
+  const spelled = !folder && isNote(file.file) ? [stem(file.file), file.file] : [file.file];
+  return spelled.flatMap((name) => [
+    ...file.folders.map((_, depth) => ({ anchored: false, folder, folders: file.folders.slice(file.folders.length - depth), name })),
+    { anchored: false, folder, folders: file.folders, name },
+    { anchored: true, folder, folders: file.folders, name },
+  ]);
+}
+
+async function linkTo(names: WorkspaceNames, file: NamedFile, folder: boolean, embed: boolean): Promise<string> {
+  for (const link of spellings(file, folder)) {
+    const found = await fitting(names, link);
+    if (found.length === 1 && found[0] === file) return render(link, embed);
   }
-  return render({ anchored: true, folder: kind === "folder", folders: file.folders, name }, kind);
+  return render({ anchored: true, folder, folders: file.folders, name: file.file }, embed);
 }
 
 function editDistance(a: string, b: string): number {
@@ -117,63 +147,55 @@ function editDistance(a: string, b: string): number {
   return previous[right.length] ?? 0;
 }
 
-function suggestions(names: WorkspaceNames, link: Link, kinds: readonly NameKind[]): string[] {
-  return kinds.flatMap((kind) => {
-    const sought = wanted(link, kind).toLowerCase();
-    const reach = Math.max(1, Math.floor(sought.length / 3));
-    return names[kind]
-      .map((file) => ({ file, kind, distance: editDistance(sought, nameOf(file, link, kind).toLowerCase()) }))
-      .filter(({ distance }) => distance <= reach);
-  })
+async function suggestions(names: WorkspaceNames, links: readonly Link[], embed: boolean): Promise<string[]> {
+  const sought = (links[0]?.name ?? "").toLowerCase();
+  const reach = Math.max(1, Math.floor(sought.length / 3));
+  const files = embed ? names.files.filter((file) => isPicture(file.file)) : links.some((link) => !link.folder) ? names.files : [];
+  const close = [
+    ...files.map((file) => ({ file, folder: false, distance: Math.min(editDistance(sought, file.file.toLowerCase()), editDistance(sought, stem(file.file).toLowerCase())) })),
+    ...(embed ? [] : names.folders).map((file) => ({ file, folder: true, distance: editDistance(sought, file.file.toLowerCase()) })),
+  ]
+    .filter(({ distance }) => distance <= reach)
     .sort((a, b) => a.distance - b.distance)
-    .slice(0, MAX_SUGGESTIONS)
-    .map(({ file, kind }) => linkTo(names, file, kind));
+    .slice(0, MAX_SUGGESTIONS);
+  return await Promise.all(close.map(({ file, folder }) => linkTo(names, file, folder, embed)));
 }
 
-function either(kinds: readonly NameKind[]): string {
-  return kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} or ${kinds.at(-1) ?? ""}` : kinds.join("");
-}
-
-function listed(items: readonly string[], max: number): string {
-  return items.length > max ? `${items.slice(0, max).join(", ")} and ${String(items.length - max)} more` : items.join(", ");
-}
-
-function lookUp(names: WorkspaceNames, link: Link, kinds: readonly NameKind[], maxListed: number): Found {
-  for (const kind of kinds) {
-    const found = matching(names[kind], link, kind);
+async function lookUp(names: WorkspaceNames, links: readonly Link[], embed: boolean, maxListed: number): Promise<{ file: NamedFile; link: Link }> {
+  for (const link of links) {
+    const found = await fitting(names, link);
     const [only] = found;
-    if (only !== undefined && found.length === 1) return { path: join(names.root, only.path), link: linkTo(names, only, kind) };
-    if (found.length > 1) throw new Error(`${String(found.length)} ${kind}s match: ${listed(found.map((file) => linkTo(names, file, kind)), maxListed)}`);
+    if (only !== undefined && found.length === 1) return { file: only, link };
+    if (found.length > 1) {
+      const shown = await Promise.all(found.slice(0, maxListed).map((file) => linkTo(names, file, link.folder, embed)));
+      const more = found.length > shown.length ? ` and ${String(found.length - shown.length)} more` : "";
+      throw new Error(`${String(found.length)} ${link.folder ? "folders" : "files"} match: ${shown.join(", ")}${more}`);
+    }
   }
-  const problems = [`no ${either(kinds)} matches`];
-  const capitals = kinds.includes("note") ? matching(names.capitals, link, "note") : [];
-  if (capitals.length > 0) problems.push(`all-caps notes are skipped as names, so read ${capitals.length === 1 ? "it" : "one"} by path: ${capitals.map((file) => file.path).join(", ")}`);
-  const close = suggestions(names, link, kinds.includes("folder") ? kinds : [...kinds, "folder"]);
-  if (close.length > 0) problems.push(`did you mean ${close.join(", ")}?`);
-  throw new Error(problems.join("; "));
+  const missed = `no ${links.map((link) => link.folder ? "folder" : "file").join(" or ")} matches`;
+  const close = await suggestions(names, links, embed);
+  throw new Error(close.length > 0 ? `${missed}; did you mean ${close.join(", ")}?` : missed);
 }
 
-export function embeddedPicture(names: WorkspaceNames, text: string, maxListed: number): string | undefined {
+export async function embeddedPicture(names: WorkspaceNames, text: string, maxListed: number): Promise<string | undefined> {
   const link = parseLink(text);
-  if (link === undefined || (matching(names.picture, link, "picture").length === 0 && matching(names.note, link, "note").length > 0)) return undefined;
-  return lookUp(names, link, ["picture"], maxListed).path;
+  if (link === undefined) return undefined;
+  const { file } = await lookUp(names, [link], true, maxListed);
+  return !link.folder && isPicture(file.file) ? join(names.root, file.path) : undefined;
 }
 
-export function linkedFile(names: WorkspaceNames, embed: boolean, text: string): string {
+export async function linkedFile(names: WorkspaceNames, embed: boolean, text: string): Promise<string> {
   const link = parseLink(text);
   if (link === undefined) throw new Error("the link names no file");
-  const kinds: NameKind[] = link.folder ? ["folder"] : embed ? ["picture", "note"] : isPicture(link.name) ? ["picture"] : ["note", "file"];
-  return lookUp(names, link, kinds, Number.POSITIVE_INFINITY).path;
+  return join(names.root, (await lookUp(names, [link], embed, Number.POSITIVE_INFINITY)).file.path);
 }
 
-export function namedFile(names: WorkspaceNames, parts: readonly string[], findFolders = true): Found {
-  const folders = parts.slice(0, -1);
-  const name = parts.at(-1) ?? "";
-  const link = { anchored: false, folder: false, folders, name };
-  const kinds: NameKind[] = isPicture(name) ? ["picture"] : findFolders ? ["note", "file", "folder"] : ["note", "file"];
+export async function namedFile(names: WorkspaceNames, parts: readonly string[], findFolders = true): Promise<Found> {
+  const link: Link = { anchored: false, folder: false, folders: parts.slice(0, -1), name: parts.at(-1) ?? "" };
   try {
-    return lookUp(names, link, kinds, Number.POSITIVE_INFINITY);
+    const found = await lookUp(names, findFolders ? [link, { ...link, folder: true }] : [link], false, Number.POSITIVE_INFINITY);
+    return { path: join(names.root, found.file.path), link: await linkTo(names, found.file, found.link.folder, false) };
   } catch (error) {
-    throw new Error(`tried as ${render(link, kinds[0] ?? "note")}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`tried as ${render(link, false)}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

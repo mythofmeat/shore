@@ -37,14 +37,13 @@ async function walk(path: string, indent: string, listing: Listing, budget: numb
   }
 }
 
-export async function readFolder(path: string, maxChars: number, signal?: AbortSignal): Promise<string> {
+export async function readFolder(path: string, budget: number, signal?: AbortSignal): Promise<{ text: string; cut: boolean }> {
   const listing: Listing = { lines: [], folders: 0, files: 0, hidden: 0, cut: false, chars: 0 };
-  const budget = maxChars === 0 ? 50_000 : Math.max(1, maxChars - 512);
   await walk(path, "", listing, budget, signal);
   const header = `${path.endsWith("/") ? path : `${path}/`}: folder`;
   const footer = listing.cut
     ? `[Listing cut off after ${String(listing.lines.length)} entries; read a subfolder to see the rest.]`
     : `${String(listing.folders)} folder${listing.folders === 1 ? "" : "s"}, ${String(listing.files)} file${listing.files === 1 ? "" : "s"}`
       + (listing.hidden > 0 ? `; ${String(listing.hidden)} hidden not shown, read them by path` : "");
-  return [header, ...listing.lines, footer].join("\n");
+  return { text: [header, ...listing.lines, footer].join("\n"), cut: listing.cut };
 }

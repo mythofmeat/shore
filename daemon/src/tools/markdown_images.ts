@@ -116,7 +116,7 @@ export async function expandMarkdownImages(
       if (shownRefs.has(shown)) continue;
       shownRefs.add(shown);
       try {
-        const imagePath = wikilink ? embeddedPicture(await (names ??= workspaceNames(workspaceDir, signal)), target, MAX_LISTED_MEDIA_NOTES) : localImagePath(target, path);
+        const imagePath = wikilink ? await embeddedPicture(await (names ??= workspaceNames(workspaceDir, signal)), target, MAX_LISTED_MEDIA_NOTES) : localImagePath(target, path);
         if (imagePath === undefined || paths.has(imagePath)) continue;
         paths.add(imagePath);
         if (paths.size > MAX_INLINE_TOOL_IMAGES) continue;
