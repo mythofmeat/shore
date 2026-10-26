@@ -49,7 +49,7 @@ export const GUARDS: readonly Guard[] = [
       ...fns("tools/subagent.ts", ["expandPromptMacros", "readPromptFile", "subagentToolSubset"]),
       ...fns("commands/navigation.ts", ["requireUsableCharacterName"]),
       ...fns("engine/threads.ts", ["isValidThreadId", "assertThreadId"]),
-      ...fns("handler/images.ts", ["sanitizeFilename", "createAttachmentFile", "ingestUpload"]),
+      ...fns("handler/images.ts", ["sanitizeFilename", "saveAttachment", "ingestUpload"]),
       ...fns("browser/media.ts", ["mediaSource", "imageFilename"]),
     ],
   },

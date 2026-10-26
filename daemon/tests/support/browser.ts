@@ -11,7 +11,7 @@ export class BrowserSocket {
   closeDetail = "";
   invalidFrames: string[] = [];
 
-  constructor(origin: string, cookie: string, protocol = WEB_SUBPROTOCOL, options: Pick<WebSocketOptions, "headers" | "tls"> = {}) {
+  constructor(origin: string, cookie: string, protocol = WEB_SUBPROTOCOL, options: Pick<WebSocketOptions, "tls"> & { headers?: Record<string, string> } = {}) {
     this.socket = new WebSocket(`${origin.replace(/^http/, "ws")}/api/swp`, {
       protocols: [protocol], ...options, headers: { origin, cookie, ...options.headers },
     });
