@@ -1,5 +1,5 @@
 import { stat, type FileHandle } from "node:fs/promises";
-import { extname, relative, sep } from "node:path";
+import { extname, join, relative, sep } from "node:path";
 import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES, toolMediaOf } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
@@ -15,6 +15,16 @@ const MAX_READ_LINE_CHARS = 2000;
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd", ".mkdn"]);
 
 const LINK = /^(!?)\[\[([^[\]\n]*)\]\]$/;
+
+const FOLDER_INDEX = "INDEX.md";
+
+interface Located {
+  path: string;
+  note?: string;
+  folder?: string;
+}
+
+const resultBudget = (maxChars: number) => maxChars === 0 ? 50_000 : Math.max(1, maxChars - 512);
 
 function positiveInteger(input: Record<string, unknown>, name: string, fallback: number, maximum = Number.MAX_SAFE_INTEGER): number {
   const value = input[name] === undefined ? fallback : input[name];
@@ -37,12 +47,21 @@ async function isFolder(path: string): Promise<boolean> {
   return (await stat(path).catch(() => undefined))?.isDirectory() ?? false;
 }
 
-async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<{ path: string; note?: string }> {
+async function isFile(path: string): Promise<boolean> {
+  return (await stat(path).catch(() => undefined))?.isFile() ?? false;
+}
+
+async function withIndex(located: Located): Promise<Located> {
+  const index = join(located.path, FOLDER_INDEX);
+  return await isFile(index) ? { ...located, path: index, folder: located.path } : located;
+}
+
+async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<Located> {
   const value = String(input.file_path).trim();
   const link = LINK.exec(value);
   if (link !== null) {
     try {
-      return { path: linkedFile(await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") };
+      return await withIndex({ path: await linkedFile(await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") });
     } catch (error) {
       signal?.throwIfAborted();
       throw new ToolIoError(`${value}: ${error instanceof Error ? error.message : String(error)}`);
@@ -53,9 +72,9 @@ async function locate(input: Record<string, unknown>, requested: string, workspa
   const looked = folder ? !/[\\/]$/.test(value) : await missing(requested);
   if (!looked || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
   try {
-    const found = namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
+    const found = await namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
     const why = folder ? `is a folder; found ${found.link} by name. Read ${value}/ to list the folder` : `does not exist; found ${found.link} by name`;
-    return { path: found.path, note: `[${value} ${why}.]` };
+    return await withIndex({ path: found.path, note: `[${value} ${why}.]` });
   } catch (error) {
     signal?.throwIfAborted();
     if (folder) return { path: requested };
@@ -69,6 +88,11 @@ function withNote(value: unknown, note: string | undefined): unknown {
   return carryToolMedia({ ...payload, notes: [note, ...(payload.notes ?? [])] });
 }
 
+async function withListing(page: TextPage, folder: string, workspaceDir: string, maxChars: number, signal?: AbortSignal): Promise<TextPage> {
+  const listing = await readFolder(folder, resultBudget(maxChars) - page.output.length - 2, signal);
+  return { ...page, output: `${page.output}\n\n${listing.cut ? `[Read ${relative(workspaceDir, folder)}/ to list the folder.]` : listing.text}` };
+}
+
 export async function handleRead(
   input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal, maxChars = 50_000,
   maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES, images: ImagesConfig = defaultImagesConfig(),
@@ -79,10 +103,10 @@ export async function handleRead(
   const limit = positiveInteger(input, "limit", MAX_READ_LINES, MAX_READ_LINES);
   const original = input.original ?? false;
   if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
-  const { path, note } = await locate(input, requested, workspaceDir, signal);
+  const { path, note, folder } = await locate(input, requested, workspaceDir, signal);
   if (await isFolder(path)) {
     if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs("offset, limit and original do not apply to folders");
-    return withNote(await readFolder(path, maxChars, signal), note);
+    return withNote((await readFolder(path, resultBudget(maxChars), signal)).text, note);
   }
   const file = await openRegularFile(path);
   try {
@@ -97,7 +121,8 @@ export async function handleRead(
       return withNote(carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] }), note);
     }
     if (original) throw new InvalidArgs("original applies only to image files");
-    const page = await readText(file, path, offset, limit, maxChars, signal);
+    const text = await readText(file, path, offset, limit, maxChars, signal);
+    const page = folder === undefined ? text : await withListing(text, folder, workspaceDir, maxChars, signal);
     return withNote(MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
       ? await expandMarkdownImages(file, path, workspaceDir, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
       : page.output, note);
@@ -121,7 +146,7 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
   let position = 0;
   let outputChars = 0;
   let more = false;
-  const budget = maxChars === 0 ? 50_000 : Math.max(1, maxChars - 512);
+  const budget = resultBudget(maxChars);
   const lineLimit = Math.min(MAX_READ_LINE_CHARS, Math.max(1, budget - 80));
   const emit = (newline: boolean): boolean => {
     if (number < offset) return true;

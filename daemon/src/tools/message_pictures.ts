@@ -58,7 +58,7 @@ export async function lookUpPictures(
         results.push(await checked(real));
         continue;
       }
-      const path = embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES);
+      const path = await embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES);
       results.push(path === undefined ? null : await checked(path));
     } catch (error) {
       signal?.throwIfAborted();
