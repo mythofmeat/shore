@@ -221,6 +221,13 @@ export class AutonomyService {
     runner.recordUserActivity(localAt);
   }
 
+  onUserActivityElsewhere(character: string, localAt: number): void {
+    const runner = this.#entries.get(character)?.runner;
+    if (runner === undefined) return;
+    runner.onUserActivityElsewhere(this.#now());
+    runner.recordUserActivity(localAt);
+  }
+
   backfillActivity(
     character: string,
     localTimestamps: readonly number[],

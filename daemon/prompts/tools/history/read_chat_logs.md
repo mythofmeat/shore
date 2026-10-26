@@ -1,4 +1,4 @@
-Read archived conversations with {{user}} in order, in local time. Give exactly one of:
+Read conversations with {{user}} from any thread in order, in local time, archived or not. This thread's messages that are still in your context aren't included. Give exactly one of:
 
 - `around`: a message id from `search_chat_logs`. Shows that message, marked ▶, with the `before` and `after` messages around it in its thread (3 each by default).
 - `start` and/or `end`: the messages in that range, oldest first, in one `thread` (default main). Long ranges come in pages; the result gives the next `offset`.

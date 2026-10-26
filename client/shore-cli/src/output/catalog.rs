@@ -468,7 +468,24 @@ fn thread_facts(row: &Value) -> String {
     if !source.is_empty() {
         parts.push(format!("forked from {source}"));
     }
+    let files = row
+        .get("files")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    if files > 0 {
+        parts.push(format!("{files} file{}", if files == 1 { "" } else { "s" }));
+    }
     parts.join(" \u{b7} ")
+}
+
+fn thread_note(row: &Value) -> String {
+    let label = text(row, "label");
+    let purpose = text(row, "purpose");
+    match (label.is_empty(), purpose.is_empty()) {
+        (_, true) => label.to_owned(),
+        (true, false) => purpose.to_owned(),
+        (false, false) => format!("{label} \u{2014} {purpose}"),
+    }
 }
 
 fn fork_note(data: &Value) -> Option<String> {
@@ -512,7 +529,7 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
             if current { Mark::Active } else { Mark::None },
             text(thread, "id"),
             &thread_facts(thread),
-            text(thread, "label"),
+            &thread_note(thread),
             if current { Tone::Active } else { Tone::Plain },
         );
     }

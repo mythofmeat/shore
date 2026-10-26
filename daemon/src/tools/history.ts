@@ -1,11 +1,16 @@
 import { join } from "node:path";
 
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
+import { MessageStore } from "../engine/message_store.ts";
+import { readThreadsIndex } from "../engine/threads.ts";
+import { threadFile } from "../storage/files.ts";
 import {
   HISTORY_INDEX_FILE,
   HistoryIndex,
   refreshHistoryIndex,
+  refreshLiveRows,
   withHistoryIndexLock,
+  type LiveThread,
   type ChatLogFilter,
   type ChatLogHit,
   type ChatLogMatch,
@@ -90,6 +95,8 @@ function echoFraction(fraction: string | undefined): string {
 export interface ChatLogOptions {
   character: string;
   dbPath: string;
+  dataDir?: string;
+  thread?: string;
   indexPath?: string;
   userName?: string;
   timeZone?: string;
@@ -117,11 +124,31 @@ function checkConfigured(conversationDir: string): void {
   if (conversationDir === "") throw new InvalidArgs("conversation history is not configured");
 }
 
+async function otherThreads(options: ChatLogOptions): Promise<LiveThread[]> {
+  if (options.dataDir === undefined) return [];
+  const dataDir = options.dataDir;
+  const index = await readThreadsIndex(dataDir, options.character);
+  const live: LiveThread[] = [];
+  for (const record of index?.threads ?? []) {
+    if (record.id === (options.thread ?? "main")) continue;
+    try {
+      const { store, raw } = await MessageStore.loadWithRaw(threadFile(dataDir, options.character, record.id, "active.jsonl"));
+      live.push({ thread: record.id, raw, messages: store.messages() });
+    } catch {
+      continue;
+    }
+  }
+  return live;
+}
+
 async function withIndex<T>(conversationDir: string, options: ChatLogOptions, run: (index: HistoryIndex) => T): Promise<T> {
   const path = options.indexPath ?? join(conversationDir, HISTORY_INDEX_FILE);
   const ref = { mainConversationDir: conversationDir, dbPath: options.dbPath, character: options.character };
   const refreshed = async (force: boolean): Promise<HistoryIndex> => {
-    await withHistoryIndexLock(path, async () => { await refreshHistoryIndex(ref, path, force); });
+    await withHistoryIndexLock(path, async () => {
+      await refreshHistoryIndex(ref, path, force);
+      refreshLiveRows(path, options.thread ?? "main", await otherThreads(options));
+    });
     return HistoryIndex.open(path);
   };
   let index: HistoryIndex;
@@ -258,7 +285,7 @@ function checkThread(index: HistoryIndex, thread: string | undefined): void {
   if (thread === undefined) return;
   const threads = index.threads();
   if (!threads.includes(thread)) {
-    throw new InvalidArgs(`no archived thread is named ${JSON.stringify(thread)}; archived threads: ${threads.join(", ") || "none"}`);
+    throw new InvalidArgs(`no thread with messages to read is named ${JSON.stringify(thread)}; threads: ${threads.join(", ") || "none"}`);
   }
 }
 
@@ -297,8 +324,8 @@ function archiveSpan(index: HistoryIndex, zone: string): { text: string; message
 function emptyArchiveNote(index: HistoryIndex, zone: string): string {
   const span = archiveSpan(index, zone);
   return span === undefined
-    ? "The archive is empty; messages still in your context aren't archived yet."
-    : `The archive runs ${span.text}; newer messages are still in your context.`;
+    ? "There is nothing to read yet; this thread's messages in your context aren't included."
+    : `The chat logs run ${span.text}; this thread's messages in your context aren't included.`;
 }
 
 function quoteWords(query: string): string {
@@ -384,8 +411,8 @@ export async function handleSearchChatLogs(
       if (older === 0) {
         const span = archiveSpan(index, view.zone);
         lines.push(span === undefined
-          ? "The archive is empty; messages still in your context aren't archived yet."
-          : `Searched ${count(span.messages)} archived messages, ${span.text}. Newer messages are still in your context and aren't searched.`);
+          ? "There is nothing to search yet; this thread's messages in your context aren't searched."
+          : `Searched ${count(span.messages)} messages from every thread, ${span.text}. This thread's messages in your context aren't searched.`);
         if (match === "words") lines.push(`For partial words, typos or CJK, try match="substring".`);
       }
       return lines.join("\n");
@@ -439,7 +466,7 @@ function readAround(index: HistoryIndex, view: View, msgId: string, thread: stri
   checkThread(index, thread);
   const target = index.find(msgId, thread);
   if (target === undefined) {
-    return `No archived message has id ${msgId}${thread === undefined ? "" : ` in thread ${thread}`}. Messages still in your context aren't archived yet.`;
+    return `No message has id ${msgId}${thread === undefined ? "" : ` in thread ${thread}`}. This thread's messages in your context aren't included.`;
   }
   const earlier = index.neighbors(target, -1, before);
   const later = index.neighbors(target, 1, after);
@@ -487,7 +514,7 @@ function readRange(
     ? `${bounds.rawStart} → ${bounds.rawEnd}`
     : bounds.rawStart !== undefined ? `from ${bounds.rawStart}` : `until ${bounds.rawEnd ?? ""}`;
   const total = index.countRange(thread, low, high);
-  if (total === 0) return `${thread}, ${rangeText}: no archived messages. ${emptyArchiveNote(index, view.zone)}`;
+  if (total === 0) return `${thread}, ${rangeText}: no messages. ${emptyArchiveNote(index, view.zone)}`;
   if (offset >= total) return `${thread}, ${rangeText}: ${count(total)} messages, so offset ${String(offset)} is past the end.`;
   const rows: ChatLogMessage[] = [];
   let used = 0;
@@ -533,7 +560,7 @@ function dayOverview(index: HistoryIndex, view: View, date: string): string {
   const dayEnd = nextMidnight(year, month, day, view.zone) - 1;
   const inDay = (row: ChatLogMessage) => row.ts >= dayStart && row.ts <= dayEnd;
   const conversations = conversationsOf(index.between(dayStart - DAY_MS, dayEnd + DAY_MS)).filter((c) => c.some(inDay));
-  if (conversations.length === 0) return `${date}: no archived messages on this day. ${emptyArchiveNote(index, view.zone)}`;
+  if (conversations.length === 0) return `${date}: no messages on this day. ${emptyArchiveNote(index, view.zone)}`;
   const onDay = conversations.reduce((sum, c) => sum + c.filter(inDay).length, 0);
   const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? "";
   const rows = conversations.map((c) => {

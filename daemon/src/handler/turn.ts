@@ -11,7 +11,10 @@ import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
-import { homeThreadOf } from "../engine/threads.ts";
+import { homeThread, homeThreadOf, readThreadsIndex } from "../engine/threads.ts";
+import { MessageStore } from "../engine/message_store.ts";
+import { conversationRef, SegmentReader } from "../engine/segments.ts";
+import { threadFile } from "../storage/files.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
 import { characterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
@@ -35,6 +38,7 @@ export interface TurnAutonomy {
   needsActivityBackfill(character: string): boolean;
   backfillActivity(character: string, timestamps: readonly Date[]): void;
   onUserMessage(character: string, turnCount: number): void;
+  onUserActivityElsewhere?(character: string): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded?: boolean): boolean;
   onCompactionComplete(character: string, retained: number): void;
   onCompactionFailed(character: string, retryAt?: number): void;
@@ -55,7 +59,7 @@ export interface TurnBody {
   image_data: readonly ImageUpload[];
 }
 
-function bodyHasContent(body: TurnBody): boolean {
+export function bodyHasContent(body: TurnBody): boolean {
   return body.text !== "" || body.images.length > 0 || body.image_data.length > 0;
 }
 
@@ -68,6 +72,7 @@ export async function appendUserTurn(
   regen: boolean,
   rid: string | null = null,
   uploadSettings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
+  annotations: Pick<Message, "last_elsewhere"> = {},
 ): Promise<PendingAlt | undefined> {
   if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };
   if (!bodyHasContent(body)) return undefined;
@@ -91,6 +96,7 @@ export async function appendUserTurn(
     content_blocks: contentBlocks,
     alternatives: [],
     timestamp: ctx.now(),
+    ...annotations,
   };
 
   await engine.appendMessage(userMsg);
@@ -137,13 +143,36 @@ export async function ensureAndBackfillAutonomy(
     return kept;
   };
 
-  collect(engine.messages());
-  const segments = engine.segments();
-  let barren = 0;
-  for (let i = segments.segmentCount() - 1; i >= 0 && barren < SEGMENTS_PAST_THE_WINDOW; i -= 1) {
+  const collectThread = async (
+    messages: readonly Message[],
+    segments: { segmentCount(): number; readSegment(index: number): Promise<Message[]> },
+  ): Promise<void> => {
+    collect(messages);
+    let barren = 0;
+    for (let i = segments.segmentCount() - 1; i >= 0 && barren < SEGMENTS_PAST_THE_WINDOW; i -= 1) {
+      try {
+        barren = collect(await segments.readSegment(i)) === 0 ? barren + 1 : 0;
+      } catch {
+      }
+    }
+  };
+
+  await collectThread(engine.messages(), engine.segments());
+  const dataDir = config.dirs.data;
+  const index = await readThreadsIndex(dataDir, charName);
+  const current = engine.thread ?? homeThread(index);
+  for (const thread of index?.threads ?? []) {
+    if (thread.id === current) continue;
     try {
-      barren = collect(await segments.readSegment(i)) === 0 ? barren + 1 : 0;
-    } catch {
+      const store = await MessageStore.load(threadFile(dataDir, charName, thread.id, "active.jsonl"));
+      const segments = await SegmentReader.load(conversationRef(dataDir, charName, thread.id, false));
+      try {
+        await collectThread(store.messages(), segments);
+      } finally {
+        segments.close();
+      }
+    } catch (e) {
+      shoreLog.warn(`shore: could not read ${charName}/${thread.id} for activity history: ${String(e)}`);
     }
   }
 

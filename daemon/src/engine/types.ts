@@ -55,4 +55,5 @@ export interface Message {
   model?: string;
   origin?: MessageOrigin;
   version?: string;
+  last_elsewhere?: { thread: string; at: string };
 }

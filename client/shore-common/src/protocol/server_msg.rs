@@ -224,6 +224,13 @@ pub struct CacheWarning {
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct ThreadsChanged {
+    pub character: String,
+    pub thread: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -343,6 +350,7 @@ pub enum ServerMessage {
     ConfigWarning(ConfigWarning),
     RequestAccepted(RequestAccepted),
     RequestFinished(RequestFinished),
+    ThreadsChanged(ThreadsChanged),
     #[serde(other)]
     #[ts(skip)]
     #[schemars(skip)]
@@ -374,6 +382,7 @@ impl ServerMessage {
             | Self::Ping(_)
             | Self::NewMessage(_)
             | Self::CacheWarning(_)
+            | Self::ThreadsChanged(_)
             | Self::Unknown => None,
         }
     }
@@ -403,6 +412,7 @@ impl ServerMessage {
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
+            | ServerMessage::ThreadsChanged(_)
             | ServerMessage::Unknown => None,
         }
     }
@@ -432,6 +442,7 @@ impl ServerMessage {
             | ServerMessage::ConfigWarning(_)
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
+            | ServerMessage::ThreadsChanged(_)
             | ServerMessage::Unknown => None,
         }
     }

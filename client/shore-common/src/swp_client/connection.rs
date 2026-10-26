@@ -155,7 +155,7 @@ impl SWPConnection {
                     );
                     break h;
                 }
-                ServerMessage::Unknown => {
+                ServerMessage::Unknown | ServerMessage::ThreadsChanged(_) => {
                     debug!("skipping unknown frame during handshake");
                 }
                 other @ (ServerMessage::History(_)
@@ -196,7 +196,7 @@ impl SWPConnection {
                     debug!(message_count = h.messages.len(), "received history");
                     break h;
                 }
-                ServerMessage::Unknown => {
+                ServerMessage::Unknown | ServerMessage::ThreadsChanged(_) => {
                     debug!("skipping unknown frame during handshake");
                 }
                 ServerMessage::Error(e) => {

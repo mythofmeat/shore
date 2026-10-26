@@ -177,7 +177,7 @@ function keepaliveIntervalMs(setting: string | undefined): number | undefined {
   return parseDurationMs(setting);
 }
 
-function parseDurationMs(raw: string): number | undefined {
+export function parseDurationMs(raw: string): number | undefined {
   const m = /^(\d+(?:\.\d+)?)(ms|s|m|h|d)$/.exec(raw);
   if (m === null) return undefined;
   const value = Number(m[1]);

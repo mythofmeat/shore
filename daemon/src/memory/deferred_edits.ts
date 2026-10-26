@@ -9,7 +9,7 @@ import {
   threadDirIn,
   characterWorkspaceDir,
 } from "../config/dirs.ts";
-import { homeThreadIn } from "../engine/threads.ts";
+import { homeThreadIn, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 
 import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import {
@@ -25,6 +25,8 @@ const MEMORY_INDEX_FILE = "MEMORY.md";
 const MEMORY_DIR = "memory";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
+
+const THREAD_FILES_DIR = "thread_files";
 const stateFile = (thread: string, file: string): string => thread === MAIN_THREAD ? file : `threads/${thread}/${file}`;
 export const memoryIndexPath = (
   configDir: string,
@@ -163,7 +165,10 @@ async function copyPromptVisibleFile(
 ): Promise<void> {
   const key = stateFile(thread, `active_prompt/${path}`);
   if (seedOnly && readCharacterState(characterDataDir, key) !== undefined) return;
-  const content = await workspaceFile(workspace, path);
+  const workspacePath = workspacePathOf(path);
+  const content = workspacePath === path
+    ? await workspaceFile(workspace, path)
+    : await workspaceFile(workspace, workspacePath).catch(() => undefined);
   if (content !== undefined) writeCharacterState(characterDataDir, key, content);
   else deleteCharacterState(characterDataDir, key);
 }
@@ -174,6 +179,16 @@ export async function ensureCharacterWorkspace(workspace: CharacterWorkspace): P
   await workspace.call("createFile", { path: join(workspace.dir, "TOOLS.md"), data: Buffer.from(defaultToolsGuidance, "utf8").toString("base64") });
 }
 
+async function snapshotFiles(characterDataDir: string, thread: string): Promise<string[]> {
+  const index = await readThreadsIndexIn(characterDataDir);
+  const files = index === undefined ? [] : threadRecord(index, thread)?.files ?? [];
+  return [...PROTECTED_PATHS, MEMORY_INDEX_FILE, ...files.map((file) => `${THREAD_FILES_DIR}/${file}`)];
+}
+
+function workspacePathOf(snapshotPath: string): string {
+  return snapshotPath.startsWith(`${THREAD_FILES_DIR}/`) ? snapshotPath.slice(THREAD_FILES_DIR.length + 1) : snapshotPath;
+}
+
 export async function ensureActivePromptSnapshot(
   characterDataDir: string,
   workspace: CharacterWorkspace,
@@ -181,7 +196,7 @@ export async function ensureActivePromptSnapshot(
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
 
-  for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
+  for (const path of await snapshotFiles(characterDataDir, thread)) {
     await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread);
   }
 
@@ -195,9 +210,31 @@ export async function refreshActivePromptSnapshot(
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
-  for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
+  for (const path of await snapshotFiles(characterDataDir, thread)) {
     await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread);
   }
+}
+
+export interface ThreadFile {
+  path: string;
+  content: string | undefined;
+}
+
+export async function loadThreadFiles(
+  characterDataDir: string,
+  workspace: CharacterWorkspace,
+  thread: string,
+  files: readonly string[],
+): Promise<ThreadFile[]> {
+  const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
+  const loaded: ThreadFile[] = [];
+  for (const path of files) {
+    const content = snapshot
+      ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_FILES_DIR}/${path}`))
+      : await workspaceFile(workspace, path).catch(() => undefined);
+    loaded.push({ path, content });
+  }
+  return loaded;
 }
 
 export async function forkPromptState(

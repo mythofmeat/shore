@@ -1345,6 +1345,14 @@ pub(crate) enum ThreadCommand {
         #[arg(long)]
         label: Option<String>,
 
+        /// What the thread is for, in a line or two; the character sees it in this thread's prompt
+        #[arg(long)]
+        purpose: Option<String>,
+
+        /// Workspace file to keep in this thread's prompt, like a story's notes, as a path or a [[link]]; repeat for more
+        #[arg(long = "file", value_name = "PATH")]
+        files: Vec<String>,
+
         /// Chat model for this thread alone
         #[arg(long)]
         model: Option<String>,
@@ -1361,6 +1369,24 @@ pub(crate) enum ThreadCommand {
 
         /// New label; omit to clear it
         label: Option<String>,
+    },
+
+    /// Set or clear what a thread is for. The character sees it in that thread's prompt
+    Purpose {
+        /// Thread id
+        name: String,
+
+        /// A line or two; omit to clear it
+        purpose: Option<String>,
+    },
+
+    /// Set the workspace files kept in a thread's prompt, next to MEMORY.md
+    Files {
+        /// Thread id
+        name: String,
+
+        /// Paths relative to the workspace root or [[links]], like [[notes]] or [[lighthouse/]]; omit all to clear the list
+        files: Vec<String>,
     },
 
     /// Pin a thread to its own chat model, or clear the pin to inherit the character's
@@ -1810,7 +1836,9 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
                 })
         })
         .mut_subcommand("thread", |mut subcommand| {
-            for name in ["use", "label", "home", "archive", "model"] {
+            for name in [
+                "use", "label", "purpose", "files", "home", "archive", "model",
+            ] {
                 subcommand = subcommand.mut_subcommand(name, |leaf| {
                     with_palette_values(leaf, "name", &catalog.threads)
                 });
@@ -2335,19 +2363,36 @@ pub(crate) fn to_swp_command(
             ThreadCommand::New {
                 name,
                 label,
+                purpose,
+                files,
                 model,
                 compaction,
-            } => Some((
-                "create_thread",
-                json!({
+            } => {
+                let mut args = json!({
                     "name": name,
                     "label": label,
                     "model": model,
                     "compaction": compaction,
-                }),
-            )),
+                });
+                if let Some(map) = args.as_object_mut() {
+                    if let Some(text) = purpose {
+                        let _previous = map.insert("purpose".into(), json!(text));
+                    }
+                    if !files.is_empty() {
+                        let _previous = map.insert("files".into(), json!(files));
+                    }
+                }
+                Some(("create_thread", args))
+            }
             ThreadCommand::Label { name, label } => {
                 Some(("thread_label", json!({ "name": name, "label": label })))
+            }
+            ThreadCommand::Purpose { name, purpose } => Some((
+                "thread_purpose",
+                json!({ "name": name, "purpose": purpose }),
+            )),
+            ThreadCommand::Files { name, files } => {
+                Some(("thread_files", json!({ "name": name, "files": files })))
             }
             ThreadCommand::Model { name, model } => {
                 Some(("thread_model", json!({ "name": name, "model": model })))
@@ -2918,6 +2963,37 @@ mod tests {
                 Some((
                     "create_thread",
                     json!({"name": "eval", "label": "Agent SDK eval", "model": "claude-agent:opus5", "compaction": true}),
+                )),
+            ),
+            (
+                &[
+                    "thread",
+                    "new",
+                    "lighthouse",
+                    "--purpose",
+                    "The lighthouse story",
+                    "--file",
+                    "stories/lighthouse.md",
+                    "--file",
+                    "stories/cast.md",
+                ],
+                Some((
+                    "create_thread",
+                    json!({"name": "lighthouse", "label": null, "model": null, "compaction": false, "purpose": "The lighthouse story", "files": ["stories/lighthouse.md", "stories/cast.md"]}),
+                )),
+            ),
+            (
+                &["thread", "purpose", "lighthouse"],
+                Some((
+                    "thread_purpose",
+                    json!({"name": "lighthouse", "purpose": null}),
+                )),
+            ),
+            (
+                &["thread", "files", "lighthouse", "stories/lighthouse.md"],
+                Some((
+                    "thread_files",
+                    json!({"name": "lighthouse", "files": ["stories/lighthouse.md"]}),
                 )),
             ),
             (

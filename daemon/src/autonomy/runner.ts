@@ -146,6 +146,14 @@ export class CharacterAutonomy {
     this.#state.dirty = true;
   }
 
+  onUserActivityElsewhere(now: number): void {
+    if (this.#clock.ticksWithoutUser > 0) {
+      this.note("wake", "User active in another thread — idle counter reset", now);
+    }
+    this.#clock.onUserMessage(now);
+    this.#state.dirty = true;
+  }
+
   deferHeartbeat(now: number): void {
     this.#clock.boundWake(now, true);
     this.#state.lastActivityAt = now;

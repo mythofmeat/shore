@@ -40,7 +40,7 @@ export const EVENT_POLICIES = {
   phase: "activity", command_output: "result", error: "warning",
   cache_warning: "warning", provider_warning: "warning", provider_fallback_warning: "warning",
   usage_warning: "warning", plan_limit_warning: "warning", config_warning: "warning", request_accepted: "completion", request_finished: "completion",
-  ping: "connection", shutdown: "connection",
+  ping: "connection", shutdown: "connection", threads_changed: "navigation",
 } satisfies Record<ServerMessage["type"], string>;
 
 export function mergeHistory(previous: readonly Message[], history: History): Message[] | undefined {
@@ -275,6 +275,9 @@ export class Workspace {
       }
       case "command_output": case "phase": case "cache_warning": case "provider_warning": case "request_accepted":
       case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
+        this.#activity(message.type, message); break;
+      case "threads_changed":
+        if (message.character === this.#state.character && this.connection.status === "ready") void this.refreshNavigation();
         this.#activity(message.type, message); break;
       case "ping": break;
     }

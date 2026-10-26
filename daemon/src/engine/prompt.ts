@@ -1,6 +1,7 @@
 import { required } from "../util/required.ts";
 
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
+import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
@@ -13,6 +14,8 @@ import { isToolResultOnly } from "./message_store.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
+
+export const THREAD_OPENED_BY_YOU = "[this conversation starts with your message]";
 
 export const COMPACT_BEFORE_TRIM_FRACTION = 0.9;
 
@@ -28,6 +31,11 @@ const SECS_PER_HOUR = 3_600;
 const SECS_PER_DAY = 86_400;
 
 const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
+
+const THREAD_TEMPLATE = threadTemplate.trimEnd();
+
+const THREAD_FILES_HEADER =
+  "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
 
 export type UserTimestampMode = "never" | "always" | "auto";
 
@@ -51,7 +59,18 @@ export interface AssembledPrompt {
   messageBudget: number;
 }
 
+export interface ThreadPrompt {
+  id: string;
+  home: string;
+  created_at: string;
+  started_by_you: boolean;
+  label?: string | undefined;
+  purpose?: string | undefined;
+  files: readonly { path: string; content: string | undefined }[];
+}
+
 export interface PromptParams {
+  thread?: ThreadPrompt | undefined;
   character_name: string;
   display_name: string;
   system_prompt?: string | undefined;
@@ -74,7 +93,7 @@ export function assemblePrompt(
   const maxContext = params.max_context_tokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
   const maxOutput = params.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
-  const system = buildSystemBlocks(params);
+  const system = buildSystemBlocks(params, timeZone);
   const availableForMessages = availableMessageTokens(system, maxContext, maxOutput);
 
   return {
@@ -95,7 +114,27 @@ function present(value: string | undefined): string | undefined {
   return value !== undefined && value !== "" ? value : undefined;
 }
 
-function buildSystemBlocks(params: PromptParams): SystemBlock[] {
+function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string {
+  const created = Date.parse(thread.created_at);
+  const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
+  return renderTemplate(THREAD_TEMPLATE, new Map([
+    ...vars,
+    ["thread", thread.id],
+    ["home", thread.home],
+    ["started", started],
+    ["starter", thread.started_by_you ? "you" : vars.get("user") ?? ""],
+    ["label", thread.label ?? ""],
+    ["purpose", thread.purpose ?? ""],
+  ])).trim();
+}
+
+function threadFilesBlock(files: ThreadPrompt["files"]): string {
+  const shown = files.map(({ path, content }) =>
+    `## ${path}\n\n${content === undefined || content.trim() === "" ? "(This file is empty or isn't in the workspace.)" : content.trimEnd()}`);
+  return [THREAD_FILES_HEADER, ...shown].join("\n\n");
+}
+
+function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[] {
   const vars = new Map<string, string>([
     ["char", params.character_name],
     ["character_name", params.character_name],
@@ -126,9 +165,17 @@ function buildSystemBlocks(params: PromptParams): SystemBlock[] {
     system.push({ label: "user", content: userDef });
   }
 
+  if (params.thread !== undefined) {
+    system.push({ label: "thread", content: threadBlock(params.thread, vars, timeZone) });
+  }
+
   const index = present(params.memory_index);
   if (index !== undefined) {
     system.push({ label: "memory_index", content: index });
+  }
+
+  if (params.thread !== undefined && params.thread.files.length > 0) {
+    system.push({ label: "thread_files", content: threadFilesBlock(params.thread.files) });
   }
 
   return withDynamicBlocksLast(system);
@@ -257,16 +304,34 @@ function relativeGapPhrase(gapSecs: number): string {
   return `${Math.round(gapSecs / SECS_PER_DAY)} days later`;
 }
 
+export function agoPhrase(gapSecs: number): string {
+  if (gapSecs < SECS_PER_HOUR) {
+    const minutes = Math.max(1, Math.round(gapSecs / 60));
+    return minutes === 1 ? "a minute ago" : `${String(minutes)} minutes ago`;
+  }
+  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour ago";
+  if (gapSecs < EIGHTEEN_HOURS_SECS) return `${String(Math.round(gapSecs / SECS_PER_HOUR))} hours ago`;
+  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day ago";
+  return `${String(Math.round(gapSecs / SECS_PER_DAY))} days ago`;
+}
+
+function lastElsewherePhrase(elsewhere: Message["last_elsewhere"], instantMs: number): string | undefined {
+  if (elsewhere === undefined) return undefined;
+  const at = parseRfc3339(elsewhere.at);
+  if (at === undefined) return undefined;
+  return `last in ${elsewhere.thread} ${agoPhrase(Math.max(0, gapSeconds(at, instantMs)))}`;
+}
+
 function formatTimeMarker(
   gapSecs: number | undefined,
   instantMs: number,
   timeZone: string,
+  lastElsewhere?: Message["last_elsewhere"],
 ): string {
   const timeStr = formatWallClock(instantMs, timeZone);
-
-  return gapSecs !== undefined && gapSecs >= TIME_GAP_THRESHOLD_SECS
-    ? `[${relativeGapPhrase(gapSecs)} · ${timeStr}]`
-    : `[${timeStr}]`;
+  if (gapSecs === undefined || gapSecs < TIME_GAP_THRESHOLD_SECS) return `[${timeStr}]`;
+  const elsewhere = lastElsewherePhrase(lastElsewhere, instantMs);
+  return `[${relativeGapPhrase(gapSecs)} · ${timeStr}${elsewhere === undefined ? "" : ` · ${elsewhere}`}]`;
 }
 
 export function formatWallClock(instantMs: number, timeZone: string): string {
@@ -323,7 +388,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -342,6 +407,7 @@ function trimMessages(
       },
       ts: msg.timestamp,
       heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
+      elsewhere: msg.last_elsewhere,
     });
   }
   selected.reverse();
@@ -366,7 +432,7 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, heartbeat } of selected) {
+  for (const { pm, ts, heartbeat, elsewhere } of selected) {
     const currentMs = parseRfc3339(ts);
 
     if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
@@ -389,7 +455,7 @@ function trimMessages(
       }
 
       if (inject) {
-        const marker = formatTimeMarker(gap, currentMs, timeZone);
+        const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
         pm.content = `${marker}\n\n${pm.content}`;
         const first = pm.content_blocks[0];
         if (first !== undefined && first.type === "text") {
@@ -409,7 +475,7 @@ function trimMessages(
   }
 
   if (result.find((m) => m.role !== "system")?.role === "assistant") {
-    result.unshift(syntheticUserTurn(EARLIER_CONVERSATION_NOT_SHOWN));
+    result.unshift(syntheticUserTurn(lostContext ? EARLIER_CONVERSATION_NOT_SHOWN : THREAD_OPENED_BY_YOU));
   }
 
   return result;

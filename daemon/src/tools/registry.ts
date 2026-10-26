@@ -8,6 +8,8 @@ import { toolPatternMatches } from "../config/app.ts";
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
 import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
+import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
+import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import readChatLogsDesc from "../../prompts/tools/history/read_chat_logs.md" with { type: "text" };
 import searchChatLogsDesc from "../../prompts/tools/history/search_chat_logs.md" with { type: "text" };
@@ -204,6 +206,31 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "list_threads",
+    description: stripOneTrailingNewline(listThreadsDesc),
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "start_thread",
+    description: stripOneTrailingNewline(startThreadDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 64, description: "Thread id: letters, digits, dot, dash or underscore, starting with a letter or digit, such as `lighthouse`." },
+        label: { type: "string", minLength: 1, description: "Name shown in the thread list, such as `The lighthouse story`." },
+        purpose: { type: "string", description: "A line or two on what the thread is for." },
+        files: { type: "array", items: { type: "string" }, description: "Files to keep in the thread's prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`." },
+        opening: { type: "string", description: "Your first message in the new thread." },
+      },
+      required: ["name", "label"],
+      additionalProperties: false,
     },
   },
   {

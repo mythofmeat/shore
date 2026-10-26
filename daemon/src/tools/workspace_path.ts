@@ -10,6 +10,8 @@ export class PathError extends Error {
   }
 }
 
+export const WORKSPACE_LINK = /^(!?)\[\[([^[\]\n]*)\]\]$/;
+
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
 
 const MEMORY_INDEX_DEFERRED_PATH = "MEMORY.md";

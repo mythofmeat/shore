@@ -17,6 +17,14 @@ import { ForkBusy, type ForkResult, type ForkThreadOptions } from "../engine/for
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
+function fileList(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    throw invalidRequest("files must be a list of workspace paths");
+  }
+  return value.map((item) => item.trim()).filter((item) => item !== "");
+}
+
 function optionalText(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string") throw invalidRequest(`${field} must be a string`);
@@ -50,6 +58,18 @@ export interface ThreadRegistry {
     character: string,
     id: string,
     model: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
+  setThreadPurpose(
+    character: string,
+    id: string,
+    purpose: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
+  setThreadFiles(
+    character: string,
+    id: string,
+    files: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
   forkThread(
@@ -125,9 +145,13 @@ export function switchThread(ctx: ThreadContext, args: Args): ThreadSwitch {
 export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
   const label = optionalText(args["label"], "label");
+  const purpose = optionalText(args["purpose"], "purpose");
+  const files = fileList(args["files"]);
   const model = optionalText(args["model"], "model");
   const options: NewThread = {
     ...(label === undefined ? {} : { label }),
+    ...(purpose === undefined ? {} : { purpose }),
+    ...(files === undefined ? {} : { files }),
     ...(model === undefined ? {} : { chat_model: model }),
     ...(args["compaction"] === true ? { compaction: true } : {}),
   };
@@ -161,6 +185,26 @@ export async function threadLabel(ctx: ThreadContext, args: Args): Promise<Threa
   const label = optionalText(args["label"], "label");
   try {
     return listing(ctx, await ctx.registry.setThreadLabel(ctx.character, id, label, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadPurpose(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  const purpose = optionalText(args["purpose"], "purpose");
+  try {
+    return listing(ctx, await ctx.registry.setThreadPurpose(ctx.character, id, purpose, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadFiles(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  const files = fileList(args["files"]) ?? [];
+  try {
+    return listing(ctx, await ctx.registry.setThreadFiles(ctx.character, id, files, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }

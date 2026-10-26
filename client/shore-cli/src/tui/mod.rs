@@ -2081,6 +2081,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
+        | ServerMessage::ThreadsChanged(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2240,6 +2241,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
+        | ServerMessage::ThreadsChanged(_)
         | ServerMessage::Unknown => false,
     }
 }
@@ -2300,6 +2302,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::ConfigWarning(_)
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
+        | ServerMessage::ThreadsChanged(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2760,7 +2763,8 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         }
                     }
                 }
-                "create_thread" | "archive_thread" | "thread_home" | "thread_label" => {
+                "create_thread" | "archive_thread" | "thread_home" | "thread_label"
+                | "thread_purpose" | "thread_files" => {
                     absorb_thread_listing(app, &co.data);
                 }
                 "thread_model" => {
@@ -3383,6 +3387,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             return UiEffect {
                 cmds,
                 redraw: RedrawEffect::Immediate,
+            };
+        }
+
+        ServerMessage::ThreadsChanged(changed) => {
+            if changed.character != app.character_name {
+                return UiEffect::redraw(RedrawEffect::None);
+            }
+            return UiEffect {
+                cmds: vec![thread_refresh_command(app)],
+                redraw: RedrawEffect::None,
             };
         }
 

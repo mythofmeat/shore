@@ -23,9 +23,12 @@ import {
   createThread,
   ensureThreads,
   homeThread,
+  resolveThreadFiles,
   setHomeThread,
+  setThreadFiles,
   setThreadLabel,
   setThreadModel,
+  setThreadPurpose,
   threadRecord,
   ThreadError,
   type ArchiveThreadOptions,
@@ -226,15 +229,25 @@ export class CharacterRegistry {
     options: NewThread = {},
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
+    const files = options.files === undefined ? undefined : await this.#threadFiles(name, options.files, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
         this.#remember(
           name,
-          await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+          await createThread(this.#dataDir, name, id, new Date().toISOString(), {
+            ...options,
+            ...(files === undefined ? {} : { files }),
+          }),
         ),
       signal,
     );
+  }
+
+  async #threadFiles(name: string, files: readonly string[], signal?: AbortSignal): Promise<string[]> {
+    const workspace = characterWorkspace(this.#globalConfig, name);
+    return await resolveThreadFiles(files, async (requested) =>
+      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal));
   }
 
   async archiveThread(
@@ -304,6 +317,41 @@ export class CharacterRegistry {
         this.#remember(
           name,
           await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadPurpose(
+    name: string,
+    id: string,
+    purpose: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadPurpose(this.#dataDir, name, id, purpose, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadFiles(
+    name: string,
+    id: string,
+    files: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    const paths = await this.#threadFiles(name, files, signal);
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadFiles(this.#dataDir, name, id, paths, new Date().toISOString()),
         ),
       signal,
     );

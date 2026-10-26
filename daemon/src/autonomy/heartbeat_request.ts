@@ -14,7 +14,7 @@ import { resolveDisplayName, type HeartbeatConfig } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { formatWallClock, heartbeatMarker } from "../engine/prompt.ts";
-import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
+import { homeThreadOf, readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -109,6 +109,39 @@ export function applyHeartbeatModelOverride(
   }
 }
 
+const ELSEWHERE_WINDOW_MS = 86_400_000;
+
+function sinceText(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 90) return minutes === 1 ? "a minute ago" : `${String(minutes)} minutes ago`;
+  return `${String(Math.round(minutes / 60))} hours ago`;
+}
+
+export async function elsewhereNote(
+  dataDir: string,
+  character: string,
+  home: string,
+  userName: string,
+  nowMs: number,
+): Promise<string | undefined> {
+  const index = await readThreadsIndex(dataDir, character);
+  if (index === undefined) return undefined;
+  const activity = await threadActivities(dataDir, character, index.threads.map((thread) => thread.id));
+  const lastIn = (id: string) => Date.parse(activity.get(id)?.last_user ?? "");
+  const homeAt = lastIn(home);
+  let latest: { id: string; label: string | undefined; at: number } | undefined;
+  for (const thread of index.threads) {
+    if (thread.id === home) continue;
+    const at = lastIn(thread.id);
+    if (Number.isNaN(at) || (latest !== undefined && at <= latest.at)) continue;
+    latest = { id: thread.id, label: thread.label, at };
+  }
+  if (latest === undefined || nowMs - latest.at > ELSEWHERE_WINDOW_MS) return undefined;
+  if (!Number.isNaN(homeAt) && homeAt >= latest.at) return undefined;
+  const name = latest.label === undefined ? `"${latest.id}"` : `"${latest.id}" (${latest.label})`;
+  return `[${userName} last wrote to you ${sinceText(nowMs - latest.at)}, in the side thread ${name}. That conversation isn't shown here, so a quiet home thread doesn't mean ${userName} has been away.]`;
+}
+
 export interface PrepareHeartbeatDeps {
   thread?: string;
   cache: LastRequestCache;
@@ -182,12 +215,15 @@ export async function prepareHeartbeatRequest(
   const template =
     resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
     DEFAULT_HEARTBEAT_TEMPLATE;
-  const prompt = renderHeartbeatPrompt(
+  const userName = resolveDisplayName(config.app.defaults, deps.env);
+  const rendered = renderHeartbeatPrompt(
     template,
     formatWallClock(nowMs, timeZone),
-    resolveDisplayName(config.app.defaults, deps.env),
+    userName,
     fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
   );
+  const elsewhere = await elsewhereNote(config.dirs.data, character, thread, userName, nowMs).catch(() => undefined);
+  const prompt = elsewhere === undefined ? rendered : `${elsewhere}\n\n${rendered}`;
 
   const marker = heartbeatMarker(nowMs, config.app.behavior.user_message_timestamps, timeZone);
   request.messages.push({ role: "user", content: [{ type: "text", text: marker }] });
