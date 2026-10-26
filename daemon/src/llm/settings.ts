@@ -226,7 +226,8 @@ function reasoningAllowsCustom(sdk: Sdk, support?: DiscoveredModelSupport): bool
   return sdk !== "gemini" && sdk !== "claude_agent";
 }
 
-function wireParameter(support: DiscoveredModelSupport | undefined, name: string): SettingApplicability {
+function wireParameter(sdk: Sdk, support: DiscoveredModelSupport | undefined, name: string): SettingApplicability {
+  if (sdk === "anthropic") return "rejected";
   const parameters = support?.supported_parameters;
   if (parameters === undefined) return "honored";
   return parameters.includes(name) ? "honored" : "rejected";
@@ -263,8 +264,8 @@ const serializeKeepalive = (value: unknown): unknown => {
 };
 
 const INTERNAL_SETTING_DEFINITIONS: readonly SettingDefinition[] = [
-  { key: "temperature", field: "temperature", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 2, step: 0.1 }, applicability: (_sdk, support) => wireParameter(support, "temperature"), parse: parseNumber("temperature") },
-  { key: "top_p", field: "topP", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 1, step: 0.05 }, applicability: (_sdk, support) => wireParameter(support, "top_p"), parse: parseNumber("top_p") },
+  { key: "temperature", field: "temperature", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 2, step: 0.1 }, applicability: (sdk, support) => wireParameter(sdk, support, "temperature"), parse: parseNumber("temperature") },
+  { key: "top_p", field: "topP", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 1, step: 0.05 }, applicability: (sdk, support) => wireParameter(sdk, support, "top_p"), parse: parseNumber("top_p") },
   { key: "reasoning_effort", field: "reasoningEffort", kind: "string", suggestions: reasoningSuggestions, allowCustom: reasoningAllowsCustom, applicability: reasoningApplicability, parse: parseReasoning },
   { key: "budget_tokens", field: "budgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("budget_tokens") },
   { key: "max_output_tokens", field: "maxOutputTokens", kind: "u32", suggestions: ["16384", "32768", "65536"], allowCustom: true, applicability: always, parse: parseU32("max_output_tokens") },

@@ -9,6 +9,8 @@ import {
   buildThinkingParams,
 } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { resolvedModelFromParts } from "../src/config/models.ts";
+import { settingSchema } from "../src/llm/settings.ts";
 import { collect, tickingClock } from "./support/stream.ts";
 
 function req(over: Partial<SidecarRequest>): SidecarRequest {
@@ -156,6 +158,24 @@ describe("image blocks", () => {
       source: { type: "base64", media_type: "image/png", data: "AAAA" },
     });
     expect(blockCC(content)).toEqual([false, true]);
+  });
+});
+
+describe("sampling parameters", () => {
+  test("temperature and top_p never reach the wire", () => {
+    const p = buildAnthropicParams(req({ temperature: 0.7, top_p: 0.9 })) as unknown as Rec;
+    expect(p["temperature"]).toBeUndefined();
+    expect(p["top_p"]).toBeUndefined();
+  });
+
+  test("a configured temperature or top_p is dropped and not offered", () => {
+    const model = resolvedModelFromParts("opus", "anthropic:opus", "chat", "anthropic", "claude-opus-4-8", "anthropic", { sdk: "anthropic", temperature: 0.7, topP: 0.9 });
+    expect(model.temperature).toBeUndefined();
+    expect(model.topP).toBeUndefined();
+    const offered = settingSchema("anthropic").filter((entry) => entry.applicability !== "rejected").map((entry) => entry.key);
+    expect(offered).not.toContain("temperature");
+    expect(offered).not.toContain("top_p");
+    expect(settingSchema("openrouter").find((entry) => entry.key === "temperature")?.applicability).toBe("honored");
   });
 });
 
