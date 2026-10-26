@@ -23,6 +23,7 @@ import {
   createThread,
   ensureThreads,
   homeThread,
+  resolveThreadFiles,
   setHomeThread,
   setThreadFiles,
   setThreadLabel,
@@ -228,15 +229,25 @@ export class CharacterRegistry {
     options: NewThread = {},
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
+    const files = options.files === undefined ? undefined : await this.#threadFiles(name, options.files, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
         this.#remember(
           name,
-          await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+          await createThread(this.#dataDir, name, id, new Date().toISOString(), {
+            ...options,
+            ...(files === undefined ? {} : { files }),
+          }),
         ),
       signal,
     );
+  }
+
+  async #threadFiles(name: string, files: readonly string[], signal?: AbortSignal): Promise<string[]> {
+    const workspace = characterWorkspace(this.#globalConfig, name);
+    return await resolveThreadFiles(files, async (requested) =>
+      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal));
   }
 
   async archiveThread(
@@ -334,12 +345,13 @@ export class CharacterRegistry {
     files: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
+    const paths = await this.#threadFiles(name, files, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
         this.#remember(
           name,
-          await setThreadFiles(this.#dataDir, name, id, files, new Date().toISOString()),
+          await setThreadFiles(this.#dataDir, name, id, paths, new Date().toISOString()),
         ),
       signal,
     );

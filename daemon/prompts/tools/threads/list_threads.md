@@ -1,0 +1,1 @@
+List your threads with {{user}}: each one's id, label, purpose and files, who started it and when, when {{user}} last wrote there, and whether it compacts. It also says which thread is home and which one you're in. What's said in the other threads can be found with `search_chat_logs`.

@@ -57,7 +57,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { homeThreadOf, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { homeThreadOf, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -291,9 +291,9 @@ async function runGenerationCore(
   let built: Awaited<ReturnType<typeof buildGenerationRequest>>;
   try {
     const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-    const arrival = isHome || regen || !bodyHasContent(body)
+    const arrival = regen || !bodyHasContent(body)
       ? { cold: false, annotations: {} }
-      : await sideThreadArrival(deps, engine, charName, home, resolved, now());
+      : await threadArrival(deps, engine, charName, home, resolved, now());
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), arrival.annotations);
     if (arrival.cold) {
       try {
@@ -464,28 +464,59 @@ async function homeLastUserAt(deps: GenerationDeps, charName: string, home: stri
   return undefined;
 }
 
-async function sideThreadArrival(
+async function sideThreadLastUser(
+  deps: GenerationDeps,
+  charName: string,
+  home: string,
+  afterMs: number,
+  beforeMs: number,
+): Promise<Message["last_elsewhere"]> {
+  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home);
+  let latest: { thread: string; at: string; ms: number } | undefined;
+  for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
+    const at = activity.last_user;
+    const ms = at === undefined ? Number.NaN : Date.parse(at);
+    if (at === undefined || Number.isNaN(ms) || ms <= afterMs || ms > beforeMs || (latest !== undefined && ms <= latest.ms)) continue;
+    latest = { thread, at, ms };
+  }
+  return latest === undefined ? undefined : { thread: latest.thread, at: latest.at };
+}
+
+async function lastElsewhere(
+  deps: GenerationDeps,
+  charName: string,
+  thread: string,
+  home: string,
+  previous: string,
+  arrivedAt: string,
+): Promise<Message["last_elsewhere"]> {
+  if (thread === home) return await sideThreadLastUser(deps, charName, home, Date.parse(previous), Date.parse(arrivedAt));
+  const at = await homeLastUserAt(deps, charName, home);
+  return at === undefined ? undefined : { thread: home, at };
+}
+
+async function threadArrival(
   deps: GenerationDeps,
   engine: GenerationEngine,
   charName: string,
   home: string,
   resolved: ResolvedModel,
   arrivedAt: string,
-): Promise<{ cold: boolean; annotations: Pick<Message, "last_in_home"> }> {
+): Promise<{ cold: boolean; annotations: Pick<Message, "last_elsewhere"> }> {
   const previous = engine.messages().at(-1)?.timestamp;
   const gapSecs = previous === undefined ? Number.NaN : (Date.parse(arrivedAt) - Date.parse(previous)) / 1000;
-  if (Number.isNaN(gapSecs)) return { cold: false, annotations: {} };
-  let at: string | undefined;
+  if (previous === undefined || Number.isNaN(gapSecs)) return { cold: false, annotations: {} };
+  let elsewhere: Message["last_elsewhere"];
   if (gapSecs >= MARKED_GAP_SECS) {
     try {
-      at = await homeLastUserAt(deps, charName, home);
+      elsewhere = await lastElsewhere(deps, charName, engine.thread, home, previous, arrivedAt);
     } catch (e) {
-      deps.log?.warn?.("could not read the home thread's last message", { error: String(e) });
+      deps.log?.warn?.("could not read when the user last wrote in another thread", { error: String(e) });
     }
   }
   return {
-    cold: gapSecs >= cacheTtlSecs(resolved),
-    annotations: at === undefined ? {} : { last_in_home: { thread: home, at } },
+    cold: engine.thread !== home && gapSecs >= cacheTtlSecs(resolved),
+    annotations: elsewhere === undefined ? {} : { last_elsewhere: elsewhere },
   };
 }
 

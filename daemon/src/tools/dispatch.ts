@@ -13,6 +13,7 @@ import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from ".
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleSavePicture } from "./save_picture.ts";
+import { handleListThreads } from "./list_threads.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
@@ -176,6 +177,14 @@ export async function dispatchTool(
       return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
     }
+
+    case "list_threads":
+      return await handleListThreads({
+        dataDir: dirname(ctx.historyDbPath),
+        character: ctx.characterName,
+        userName: ctx.userName ?? "the user",
+        ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
+      });
 
     case "start_thread":
       return await handleStartThread(args, ctx.startThread, ctx.userName ?? "the user");

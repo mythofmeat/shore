@@ -185,6 +185,7 @@ async function startCharacterThread(a: ToolAssembly, character: string, request:
   await registry.createThread(character, request.name, {
     label: request.label,
     compaction: true,
+    created_by: "character",
     ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
     ...(request.files === undefined ? {} : { files: request.files }),
   });

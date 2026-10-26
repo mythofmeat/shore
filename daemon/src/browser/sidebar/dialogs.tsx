@@ -66,7 +66,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
       <details className="disclosure"><summary>More options</summary>
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>
-          <label className="field"><span>Files in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} placeholder="stories/lighthouse.md" value={files} onChange={(event) => setFiles(event.target.value)} /></label>
+          <label className="field"><span>Files in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
           <label className="field"><span>Automatic compaction</span><select className="select" value={compaction} onChange={(event) => setCompaction(event.target.value as "default" | "on" | "off")}><option value="default">Use the configured default</option><option value="on">On</option><option value="off">Off</option></select></label>
         </div>
       </details>

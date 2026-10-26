@@ -332,7 +332,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     fields: {
       name: { label: "New thread ID" }, label: { label: "Label" },
       purpose: { label: "Purpose", multiline: true, hint: "What the thread is for; the character sees it in this thread" },
-      files: { label: "Files in the prompt", hint: "Workspace paths kept in this thread's prompt" },
+      files: { label: "Files in the prompt", hint: "Workspace paths or [[links]] kept in this thread's prompt" },
       model: { label: "Chat model", choices: "models" }, compaction: { label: "Enable scheduled compaction" },
     },
   }, async (context, args) => newThread(await threadListingContext(context.deps, engineOf(context), context.session), args)),
@@ -370,7 +370,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, async (context, args) => threadPurpose(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_files: register("thread_files", {
     ...threadPresentation, label: "Set thread files", effects: ["history_write"],
-    fields: { name: threadName, files: { label: "Files in the prompt", hint: "Workspace paths; leave empty to clear" } },
+    fields: { name: threadName, files: { label: "Files in the prompt", hint: "Workspace paths or [[links]]; leave empty to clear" } },
   }, async (context, args) => threadFiles(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_model: register("thread_model", {
     ...threadPresentation, label: "Pin thread model", effects: ["model_selection"],

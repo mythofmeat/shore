@@ -52,16 +52,16 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
     case "rename": return <Form title="Edit conversation" close={close} busy={busy} error={error} action="Save" submit={() => run(async () => {
       const id = state.thread ?? "";
       const paths = threadFileList(files);
+      if (paths.join("\n") !== (thread?.files ?? []).join("\n")) await workspace.actions.run("thread_files", { name: id, files: paths });
       if (text.trim() !== (thread?.label ?? "")) await workspace.actions.run("thread_label", { name: id, label: text.trim() === "" ? null : text.trim() });
       if (purpose.trim() !== (thread?.purpose ?? "")) await workspace.actions.run("thread_purpose", { name: id, purpose: purpose.trim() === "" ? null : purpose.trim() });
-      if (paths.join("\n") !== (thread?.files ?? []).join("\n")) await workspace.actions.run("thread_files", { name: id, files: paths });
       await workspace.refreshNavigation(); return undefined;
     })}>
       <label className="field"><span>Label</span><input className="input" data-autofocus value={text} placeholder={state.thread ?? ""} onChange={(event) => setText(event.target.value)} /></label>
       <p className="form-hint">Leave empty to show the conversation’s name, “{state.thread}”.</p>
       <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
-      <label className="field"><span>Files in the prompt <span className="muted">(optional)</span></span><textarea className="input textarea mono" rows={3} placeholder="stories/lighthouse.md" value={files} onChange={(event) => setFiles(event.target.value)} /></label>
-      <p className="form-hint">The character sees the purpose and these workspace files in this conversation’s prompt. One path per line.</p>
+      <label className="field"><span>Files in the prompt <span className="muted">(optional)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
+      <p className="form-hint">The character sees the purpose and these workspace files in this conversation’s prompt. One path or [[link]] per line.</p>
     </Form>;
     case "fork": return <Form title={`Fork “${label}”`} close={close} busy={busy} error={error} action="Fork" disabled={name.trim() === "" || (turns !== "" && !(Number(turns) >= 1))} submit={() => run(async () => {
       const result = await workspace.actions.run("fork_thread", { name: name.trim(), from: state.thread, ...(turns === "" ? {} : { turns: Number(turns) }) });

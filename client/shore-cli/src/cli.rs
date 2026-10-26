@@ -1349,7 +1349,7 @@ pub(crate) enum ThreadCommand {
         #[arg(long)]
         purpose: Option<String>,
 
-        /// Workspace file to keep in this thread's prompt, like a story's notes; repeat for more
+        /// Workspace file to keep in this thread's prompt, like a story's notes, as a path or a [[link]]; repeat for more
         #[arg(long = "file", value_name = "PATH")]
         files: Vec<String>,
 
@@ -1385,7 +1385,7 @@ pub(crate) enum ThreadCommand {
         /// Thread id
         name: String,
 
-        /// Paths relative to the workspace root; omit all to clear the list
+        /// Paths relative to the workspace root or [[links]], like [[notes]] or [[lighthouse/]]; omit all to clear the list
         files: Vec<String>,
     },
 

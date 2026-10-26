@@ -16,7 +16,7 @@ import { isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
-import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents } from "../tools/workspace_path.ts";
+import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents, WORKSPACE_LINK } from "../tools/workspace_path.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
@@ -64,6 +64,7 @@ export interface ThreadRecord {
   purpose?: string;
   files?: string[];
   created_at: string;
+  created_by?: "character";
   chat_model?: string;
   compaction: boolean;
   forked_from?: ThreadForkOrigin;
@@ -236,6 +237,7 @@ export interface NewThread {
   files?: readonly string[];
   chat_model?: string;
   compaction?: boolean;
+  created_by?: "character";
 }
 
 function threadFilePath(raw: string): string {
@@ -259,6 +261,35 @@ export function threadFilePaths(files: readonly string[]): string[] {
   return paths;
 }
 
+export type LocateFiles = (files: string[]) => Promise<{ paths: string[]; problems: string[] }>;
+
+export async function resolveThreadFiles(files: readonly string[], locate: LocateFiles): Promise<string[]> {
+  const requested: string[] = [];
+  const problems: string[] = [];
+  for (const file of files) {
+    const trimmed = file.trim();
+    if (WORKSPACE_LINK.test(trimmed)) {
+      requested.push(trimmed);
+      continue;
+    }
+    try {
+      requested.push(threadFilePath(file));
+    } catch (e) {
+      if (!(e instanceof ThreadError)) throw e;
+      problems.push(e.message);
+    }
+  }
+  const located = requested.length === 0 ? { paths: [], problems: [] } : await locate(requested);
+  problems.push(...located.problems);
+  if (problems.length > 0) {
+    throw new ThreadError(
+      "invalid_files",
+      `nothing changed, because ${problems.length === 1 ? "a thread file" : "these thread files"} can't be loaded:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+    );
+  }
+  return threadFilePaths(located.paths);
+}
+
 export async function createThread(
   data: string,
   character: string,
@@ -276,6 +307,7 @@ export async function createThread(
   const record: ThreadRecord = {
     id,
     created_at: now,
+    ...(options.created_by === undefined ? {} : { created_by: options.created_by }),
     compaction: options.compaction ?? false,
     ...(options.label === undefined ? {} : { label: options.label }),
     ...(options.purpose === undefined ? {} : { purpose: options.purpose }),

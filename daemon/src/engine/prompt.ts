@@ -63,6 +63,7 @@ export interface ThreadPrompt {
   id: string;
   home: string;
   created_at: string;
+  started_by_you: boolean;
   label?: string | undefined;
   purpose?: string | undefined;
   files: readonly { path: string; content: string | undefined }[];
@@ -121,6 +122,7 @@ function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, ti
     ["thread", thread.id],
     ["home", thread.home],
     ["started", started],
+    ["starter", thread.started_by_you ? "you" : vars.get("user") ?? ""],
     ["label", thread.label ?? ""],
     ["purpose", thread.purpose ?? ""],
   ])).trim();
@@ -302,7 +304,7 @@ function relativeGapPhrase(gapSecs: number): string {
   return `${Math.round(gapSecs / SECS_PER_DAY)} days later`;
 }
 
-function agoPhrase(gapSecs: number): string {
+export function agoPhrase(gapSecs: number): string {
   if (gapSecs < SECS_PER_HOUR) {
     const minutes = Math.max(1, Math.round(gapSecs / 60));
     return minutes === 1 ? "a minute ago" : `${String(minutes)} minutes ago`;
@@ -313,22 +315,22 @@ function agoPhrase(gapSecs: number): string {
   return `${String(Math.round(gapSecs / SECS_PER_DAY))} days ago`;
 }
 
-function lastInHomePhrase(home: Message["last_in_home"], instantMs: number): string | undefined {
-  if (home === undefined) return undefined;
-  const at = parseRfc3339(home.at);
+function lastElsewherePhrase(elsewhere: Message["last_elsewhere"], instantMs: number): string | undefined {
+  if (elsewhere === undefined) return undefined;
+  const at = parseRfc3339(elsewhere.at);
   if (at === undefined) return undefined;
-  return `last in ${home.thread} ${agoPhrase(Math.max(0, gapSeconds(at, instantMs)))}`;
+  return `last in ${elsewhere.thread} ${agoPhrase(Math.max(0, gapSeconds(at, instantMs)))}`;
 }
 
 function formatTimeMarker(
   gapSecs: number | undefined,
   instantMs: number,
   timeZone: string,
-  home?: Message["last_in_home"],
+  lastElsewhere?: Message["last_elsewhere"],
 ): string {
   const timeStr = formatWallClock(instantMs, timeZone);
   if (gapSecs === undefined || gapSecs < TIME_GAP_THRESHOLD_SECS) return `[${timeStr}]`;
-  const elsewhere = lastInHomePhrase(home, instantMs);
+  const elsewhere = lastElsewherePhrase(lastElsewhere, instantMs);
   return `[${relativeGapPhrase(gapSecs)} · ${timeStr}${elsewhere === undefined ? "" : ` · ${elsewhere}`}]`;
 }
 
@@ -386,7 +388,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; home: Message["last_in_home"] }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -405,7 +407,7 @@ function trimMessages(
       },
       ts: msg.timestamp,
       heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
-      home: msg.last_in_home,
+      elsewhere: msg.last_elsewhere,
     });
   }
   selected.reverse();
@@ -430,7 +432,7 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, heartbeat, home } of selected) {
+  for (const { pm, ts, heartbeat, elsewhere } of selected) {
     const currentMs = parseRfc3339(ts);
 
     if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
@@ -453,7 +455,7 @@ function trimMessages(
       }
 
       if (inject) {
-        const marker = formatTimeMarker(gap, currentMs, timeZone, home);
+        const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
         pm.content = `${marker}\n\n${pm.content}`;
         const first = pm.content_blocks[0];
         if (first !== undefined && first.type === "text") {

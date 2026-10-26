@@ -85,6 +85,7 @@ async function threadPrompt(
     id: record.id,
     home,
     created_at: record.created_at,
+    started_by_you: record.created_by === "character",
     label: record.label,
     purpose: record.purpose,
     files: await loadThreadFiles(characterDataDir, workspace, record.id, record.files ?? []),

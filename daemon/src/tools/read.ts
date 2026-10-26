@@ -6,15 +6,14 @@ import { filePath, openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { readFolder } from "./read_folder.ts";
-import { linkedFile, namedFile, workspaceNames } from "./workspace_names.ts";
+import { linkedFile, namedFile, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
+import { WORKSPACE_LINK } from "./workspace_path.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_LINE_CHARS = 2000;
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd", ".mkdn"]);
-
-const LINK = /^(!?)\[\[([^[\]\n]*)\]\]$/;
 
 const FOLDER_INDEX = "INDEX.md";
 
@@ -58,7 +57,7 @@ async function withIndex(located: Located): Promise<Located> {
 
 async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<Located> {
   const value = String(input.file_path).trim();
-  const link = LINK.exec(value);
+  const link = WORKSPACE_LINK.exec(value);
   if (link !== null) {
     try {
       return await withIndex({ path: await linkedFile(await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") });
@@ -80,6 +79,43 @@ async function locate(input: Record<string, unknown>, requested: string, workspa
     if (folder) return { path: requested };
     throw new ToolIoError(`${requested} does not exist; ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+async function promptFile(value: string, workspaceDir: string, names: () => Promise<WorkspaceNames>): Promise<string> {
+  const link = WORKSPACE_LINK.exec(value);
+  if (link !== null) {
+    const found = await linkedFile(await names(), link[1] === "!", link[2] ?? "").catch((error: unknown) => {
+      throw new Error(`${value}: ${messageOf(error)}`);
+    });
+    if (!await isFolder(found)) return found;
+    const index = join(found, FOLDER_INDEX);
+    if (await isFile(index)) return index;
+    throw new Error(`${value}: ${relative(workspaceDir, found)}/ has no ${FOLDER_INDEX}`);
+  }
+  const path = join(workspaceDir, value);
+  const stats = await stat(path).catch(() => undefined);
+  if (stats?.isFile() === true) return path;
+  if (stats !== undefined) throw new Error(`${value} is ${stats.isDirectory() ? "a folder" : "not a regular file"}`);
+  const hint = await namedFile(await names(), value.split("/"), false).then((found) => `did you mean ${found.link}?`, messageOf);
+  throw new Error(`${value} does not exist; ${hint}`);
+}
+
+export async function locateWorkspaceFiles(files: readonly string[], workspaceDir: string, signal?: AbortSignal): Promise<{ paths: string[]; problems: string[] }> {
+  let names: Promise<WorkspaceNames> | undefined;
+  const lookUp = () => names ??= workspaceNames(workspaceDir, signal);
+  const paths: string[] = [];
+  const problems: string[] = [];
+  for (const file of files) {
+    try {
+      paths.push(relative(workspaceDir, await promptFile(file, workspaceDir, lookUp)).split(sep).join("/"));
+    } catch (error) {
+      signal?.throwIfAborted();
+      problems.push(messageOf(error));
+    }
+  }
+  return { paths, problems };
 }
 
 function withNote(value: unknown, note: string | undefined): unknown {

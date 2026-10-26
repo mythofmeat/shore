@@ -8851,6 +8851,12 @@
           "created_at": {
             "type": "string"
           },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "last_active": {
             "type": [
               "string",
@@ -17526,6 +17532,12 @@
           },
           "created_at": {
             "type": "string"
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "last_active": {
             "type": [

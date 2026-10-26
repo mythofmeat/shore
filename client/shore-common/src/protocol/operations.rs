@@ -2442,6 +2442,9 @@ wire_types! {
         pub created_at: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        pub created_by: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         pub last_active: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]

@@ -72,7 +72,7 @@ export async function appendUserTurn(
   regen: boolean,
   rid: string | null = null,
   uploadSettings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
-  annotations: Pick<Message, "last_in_home"> = {},
+  annotations: Pick<Message, "last_elsewhere"> = {},
 ): Promise<PendingAlt | undefined> {
   if (regen) return engine.pendingRegenAlt() ?? { alternatives: [] };
   if (!bodyHasContent(body)) return undefined;
