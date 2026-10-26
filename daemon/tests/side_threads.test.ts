@@ -145,6 +145,50 @@ describe("setting a thread's files", () => {
   });
 });
 
+describe("what a thread file can be", () => {
+  test("a picture, a file that isn't UTF-8 text, or one too big is refused, and the error says why", async () => {
+    const config = await setup();
+    const registry = await registryWith(config, { "stories/lighthouse.md": "Mara keeps the light." });
+    const workspace = characterWorkspace(config, "frank").dir;
+    await mkdir(join(workspace, "art"), { recursive: true });
+    await writeFile(join(workspace, "art", "map.png"), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]));
+    await writeFile(join(workspace, "save.dat"), Buffer.from([0xc3, 0x28, 0xff, 0xfe]));
+    await writeFile(join(workspace, "run.log"), "x".repeat(40 * 1024));
+    for (const name of ["a", "b", "c", "d", "e"]) await writeFile(join(workspace, `${name}.md`), "y".repeat(30 * 1024));
+
+    const refused = await outcomeOf(registry.createThread("frank", "story", { files: ["[[map]]", "save.dat", "run.log", "stories/lighthouse.md"] }));
+    expect(refused).toThrow("[[map]] (art/map.png) is a picture; a thread file must be text");
+    expect(refused).toThrow("save.dat isn't UTF-8 text; a thread file must be text");
+    expect(refused).toThrow("run.log is 40 KB; a thread file can be at most 32 KB");
+    expect(await outcomeOf(registry.createThread("frank", "story", { files: ["a.md", "b.md", "c.md", "d.md", "e.md"] })))
+      .toThrow("together these files are 150 KB; a thread's files can be at most 128 KB together");
+    expect(registry.listThreads("frank").map((thread) => thread.id)).toEqual(["main"]);
+
+    await registry.createThread("frank", "story", { files: ["stories/lighthouse.md"] });
+    expect(await outcomeOf(registry.setThreadFiles("frank", "story", ["art/map.png"]))).toThrow("art/map.png is a picture");
+    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.files).toEqual(["stories/lighthouse.md"]);
+  });
+
+  test("a file that grows too big or stops being text after it's set is cut or left out of the prompt, not sent whole", async () => {
+    const config = await setup();
+    const workspace = characterWorkspace(config, "frank").dir;
+    await mkdir(join(workspace, "notes"), { recursive: true });
+    await writeFile(join(workspace, "notes", "log.md"), "short");
+    await writeFile(join(workspace, "notes", "map.md"), "a map");
+    await createThread(config.dirs.data, "frank", "story", NOW, { files: ["notes/log.md", "notes/map.md"] });
+    const messages = [message("u1", "go on", NOW)];
+    writeDurable(threadFile(config.dirs.data, "frank", "story", "active.jsonl"), serializeMessages(messages));
+
+    await writeFile(join(workspace, "notes", "log.md"), "line of the log\n".repeat(64 * 1024));
+    await writeFile(join(workspace, "notes", "map.md"), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]));
+    await applyDeferredEdits(characterDataDir(config.dirs.data, "frank"), characterWorkspace(config, "frank"), "story");
+    const system = await systemText(config, "story", messages);
+    expect(system).toContain("[Cut at 32 KB of 1.0 MB; `read` notes/log.md for the rest.]");
+    expect(system).toContain("(notes/map.md is a picture, so it isn't shown. A thread file must be text.)");
+    expect(system.length).toBeLessThan(40 * 1024);
+  });
+});
+
 describe("who started a thread", () => {
   test("a thread the character started tells her she started it", async () => {
     const config = await setup();

@@ -15,6 +15,7 @@ import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/characte
 import {
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
+import { cutToBytes, MAX_THREAD_FILES_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
 import { localRfc3339 } from "../util/time.ts";
 import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { type: "text" };
 
@@ -34,12 +35,21 @@ export const memoryIndexPath = (
   workspaceRoot?: string,
 ) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
 
-async function workspaceFile(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
+async function workspaceBytes(workspace: CharacterWorkspace, name: string): Promise<Buffer | undefined> {
   const [read] = await workspace.call("readFiles", { paths: [join(workspace.dir, name)] });
   if (read === undefined) return undefined;
-  if ("data" in read) return Buffer.from(read.data, "base64").toString("utf8");
+  if ("data" in read) return Buffer.from(read.data, "base64");
   if (["ENOENT", "ENOTDIR", "EACCES", "ELOOP"].includes(read.error.code ?? "")) return undefined;
   throw Object.assign(new Error(read.error.message), read.error.code === undefined ? {} : { code: read.error.code });
+}
+
+async function workspaceFile(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
+  return (await workspaceBytes(workspace, name))?.toString("utf8");
+}
+
+async function threadFileContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
+  const bytes = await workspaceBytes(workspace, name).catch(() => undefined);
+  return bytes === undefined ? undefined : threadFilePromptText(name, bytes);
 }
 
 async function effectiveContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
@@ -168,7 +178,7 @@ async function copyPromptVisibleFile(
   const workspacePath = workspacePathOf(path);
   const content = workspacePath === path
     ? await workspaceFile(workspace, path)
-    : await workspaceFile(workspace, workspacePath).catch(() => undefined);
+    : await threadFileContent(workspace, workspacePath);
   if (content !== undefined) writeCharacterState(characterDataDir, key, content);
   else deleteCharacterState(characterDataDir, key);
 }
@@ -228,13 +238,25 @@ export async function loadThreadFiles(
 ): Promise<ThreadFile[]> {
   const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
   const loaded: ThreadFile[] = [];
+  let room = MAX_THREAD_FILES_BYTES;
   for (const path of files) {
     const content = snapshot
       ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_FILES_DIR}/${path}`))
-      : await workspaceFile(workspace, path).catch(() => undefined);
-    loaded.push({ path, content });
+      : await threadFileContent(workspace, path);
+    const fitted = content === undefined ? undefined : fitThreadFile(path, content, room);
+    room = fitted === content ? room - Buffer.byteLength(content ?? "", "utf8") : 0;
+    loaded.push({ path, content: fitted });
   }
   return loaded;
+}
+
+function fitThreadFile(path: string, content: string, room: number): string {
+  if (Buffer.byteLength(content, "utf8") <= room) return content;
+  const together = `a thread's files can be at most ${byteSize(MAX_THREAD_FILES_BYTES)} together`;
+  const head = cutToBytes(content, room).trimEnd();
+  return head === ""
+    ? `(Left out: ${together}. \`read\` ${path} to see it.)`
+    : `${head}\n\n[Cut: ${together}; \`read\` ${path} for the rest.]`;
 }
 
 export async function forkPromptState(
