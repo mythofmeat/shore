@@ -177,11 +177,19 @@ async function lookUp(names: WorkspaceNames, links: readonly Link[], embed: bool
   throw new Error(close.length > 0 ? `${missed}; did you mean ${close.join(", ")}?` : missed);
 }
 
+async function notAPicture(names: WorkspaceNames, file: NamedFile, link: Link): Promise<Error> {
+  const kind = link.folder ? `${file.path}/ is a folder, not a picture` : `${file.path} is not a picture`;
+  const pictures = (names.byStem.get(link.folder ? file.file : stem(file.file)) ?? []).filter((other) => isPicture(other.file) && placed(other, link));
+  const [only] = pictures;
+  return new Error(only !== undefined && pictures.length === 1 ? `${kind}; did you mean ${await linkTo(names, only, false, true)}?` : kind);
+}
+
 export async function embeddedPicture(names: WorkspaceNames, text: string, maxListed: number): Promise<string | undefined> {
   const link = parseLink(text);
   if (link === undefined) return undefined;
   const { file } = await lookUp(names, [link], true, maxListed);
-  return !link.folder && isPicture(file.file) ? join(names.root, file.path) : undefined;
+  if (link.folder || !isPicture(file.file)) throw await notAPicture(names, file, link);
+  return join(names.root, file.path);
 }
 
 export async function linkedFile(names: WorkspaceNames, embed: boolean, text: string): Promise<string> {
