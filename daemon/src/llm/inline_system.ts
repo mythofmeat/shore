@@ -1,21 +1,27 @@
 import type { ContentBlock } from "../engine/types.ts";
 import type { WireMessage } from "./types.ts";
 
+export type ConversationTurn = WireMessage & { role: "user" | "assistant" };
+
 export interface FoldedTurns {
-  turns: WireMessage[];
+  turns: ConversationTurn[];
   transientTail: number[];
 }
 
+function isConversationTurn(turn: WireMessage): turn is ConversationTurn {
+  return turn.role !== "system";
+}
+
 export function foldInlineSystemMessagesWithTail(turns: readonly WireMessage[]): FoldedTurns {
-  if (!turns.some((t) => t.role === "system")) {
+  if (turns.every(isConversationTurn)) {
     return { turns: [...turns], transientTail: turns.map((turn) => turn.transient_tail ?? 0) };
   }
 
-  const out: WireMessage[] = [];
+  const out: ConversationTurn[] = [];
   const transientTail: number[] = [];
 
   for (const turn of turns) {
-    if (turn.role !== "system") {
+    if (isConversationTurn(turn)) {
       out.push(turn);
       transientTail.push(turn.transient_tail ?? 0);
       continue;
@@ -36,7 +42,7 @@ export function foldInlineSystemMessagesWithTail(turns: readonly WireMessage[]):
   return { turns: out, transientTail };
 }
 
-export function foldInlineSystemMessages(turns: readonly WireMessage[]): WireMessage[] {
+export function foldInlineSystemMessages(turns: readonly WireMessage[]): ConversationTurn[] {
   return foldInlineSystemMessagesWithTail(turns).turns;
 }
 

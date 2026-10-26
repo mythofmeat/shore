@@ -40,7 +40,7 @@ import {
   messageBreakpoints,
   type PlacementTurn,
 } from "../cache_placement.ts";
-import { foldInlineSystemMessagesWithTail } from "../inline_system.ts";
+import { type ConversationTurn, foldInlineSystemMessagesWithTail } from "../inline_system.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -339,7 +339,7 @@ function messagesHaveCacheControl(messages: WireMessage[]): boolean {
   );
 }
 
-function normalizeMessages(messages: WireMessage[]): MessageParam[] {
+function normalizeMessages(messages: ConversationTurn[]): MessageParam[] {
   return messages.map((m): MessageParam => {
     const blocks = m.content.map(toContentBlockParam);
     for (const b of blocks) delete (b as { cache_control?: unknown }).cache_control;
@@ -583,7 +583,7 @@ function replayableForAnthropic(req: SidecarRequest): WireMessage[] {
   return messages;
 }
 
-function toMessageParam(m: WireMessage): MessageParam {
+function toMessageParam(m: ConversationTurn): MessageParam {
   return { role: m.role, content: m.content.map(toContentBlockParam) };
 }
 

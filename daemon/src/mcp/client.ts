@@ -151,7 +151,7 @@ export class McpClient {
             new URL(url),
             opts,
           );
-        await client.connect(transport as unknown as Parameters<Client["connect"]>[0]);
+        await client.connect(transport);
       }
     } catch (e) {
       await transport?.close().catch(() => {});
