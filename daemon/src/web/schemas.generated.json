@@ -1546,6 +1546,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_purpose"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_files"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -8800,6 +8832,21 @@
               "string",
               "null"
             ]
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "created_at": {
             "type": "string"
@@ -10175,6 +10222,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_purpose"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_files"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -17429,6 +17508,21 @@
               "string",
               "null"
             ]
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "created_at": {
             "type": "string"

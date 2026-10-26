@@ -58,6 +58,7 @@ export class SyncState {
       case "cache_warning":
       case "provider_warning":
       case "provider_fallback_warning":
+      case "threads_changed":
       case "usage_warning":
       case "plan_limit_warning":
       case "config_warning":

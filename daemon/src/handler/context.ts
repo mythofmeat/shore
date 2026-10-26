@@ -12,15 +12,18 @@ import {
   toRequestModel,
   type ResolvedModel,
 } from "../config/models.ts";
-import { assemblePrompt, type AssembledPrompt } from "../engine/prompt.ts";
+import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
+import { homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
   ensureCharacterWorkspace,
   loadPromptFile,
   loadMemoryIndex,
+  loadThreadFiles,
   resetActivePromptSnapshot,
 } from "../memory/deferred_edits.ts";
+import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.ts";
 import { imageTierForModel } from "../llm/image_tokens.ts";
 import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
@@ -65,6 +68,27 @@ export async function loadSystemPrompt(
       { cause: e },
     );
   }
+}
+
+async function threadPrompt(
+  characterDataDir: string,
+  workspace: CharacterWorkspace,
+  thread: string | undefined,
+): Promise<ThreadPrompt | undefined> {
+  if (thread === undefined) return undefined;
+  const index = await readThreadsIndexIn(characterDataDir);
+  if (index === undefined) return undefined;
+  const home = homeThread(index);
+  const record = threadRecord(index, thread);
+  if (record === undefined || record.id === home) return undefined;
+  return {
+    id: record.id,
+    home,
+    created_at: record.created_at,
+    label: record.label,
+    purpose: record.purpose,
+    files: await loadThreadFiles(characterDataDir, workspace, record.id, record.files ?? []),
+  };
 }
 
 export async function prepareChatContext(
@@ -112,6 +136,7 @@ export async function prepareChatContext(
   );
 
   const promptParams = {
+    thread: await threadPrompt(characterDataDir, workspace, params.thread),
     character_name: character,
     display_name: displayName,
     system_prompt: systemPrompt,

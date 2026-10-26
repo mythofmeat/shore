@@ -13,7 +13,7 @@ import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "3";
+const SCHEMA_VERSION = "4";
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -32,6 +32,8 @@ CREATE TABLE messages (
   model     TEXT,
   also_in   TEXT,
   copy_of   INTEGER,
+  key       TEXT    NOT NULL,
+  live      INTEGER NOT NULL DEFAULT 0,
   text      TEXT    NOT NULL
 );
 CREATE INDEX messages_ts ON messages (ts);
@@ -56,6 +58,8 @@ export interface ChatLogMessage {
   model: string | null;
   also_in: string | null;
   copy_of: number | null;
+  key: string;
+  live: number;
   text: string;
 }
 
@@ -106,6 +110,7 @@ interface Item {
   text: string;
   alsoIn: string[];
   copyOf: Item | undefined;
+  key: string;
   id: number;
 }
 
@@ -144,6 +149,10 @@ function messageText(message: Message): string {
   return [...shownPictures(message), ...(text === "" ? [] : [text])].join("\n");
 }
 
+function messageKey(message: Message, text: string): string {
+  return versionOf(message) ?? `${message.msg_id}\0${createHash("sha256").update(text).digest("hex")}`;
+}
+
 async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
   const reader = await CharacterHistoryReader.load(ref);
   try {
@@ -163,7 +172,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
         const text = messageText(message);
         if (text === "") continue;
-        const key = versionOf(message) ?? `${message.msg_id}\0${createHash("sha256").update(text).digest("hex")}`;
+        const key = messageKey(message, text);
         if (seenInThread.has(`${thread}\0${key}`)) continue;
         seenInThread.add(`${thread}\0${key}`);
         const original = firstSeen.get(key);
@@ -187,6 +196,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
           text,
           alsoIn: [],
           copyOf: original,
+          key,
           id: 0,
         };
         if (original === undefined) firstSeen.set(key, item);
@@ -243,15 +253,15 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
     try {
       db.run(SCHEMA);
       const put = db.query(
-        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, text)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
       );
       const meta = db.query("INSERT INTO metadata (key, value) VALUES (?1, ?2)");
       db.transaction(() => {
         for (const item of items) {
           put.run(
             item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.heartbeat ? 1 : 0,
-            item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.text,
+            item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.text,
           );
         }
         db.run("INSERT INTO messages_fts (messages_fts) VALUES ('rebuild')");
@@ -262,7 +272,7 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
     } finally {
       db.close();
     }
-    chmodSync(temp, 0o444);
+    chmodSync(temp, 0o644);
     renameSync(temp, path);
   } catch (error) {
     rmSync(temp, { force: true });
@@ -278,6 +288,68 @@ export async function refreshHistoryIndex(ref: CharacterHistoryRef, path: string
   if (!force && builtFingerprint(path) === fingerprint) return false;
   const { items, fingerprint: settled } = await readStableCorpus(ref, fingerprint);
   writeIndex(path, items, settled);
+  return true;
+}
+
+export interface LiveThread {
+  thread: string;
+  raw: string;
+  messages: readonly Message[];
+}
+
+export function liveFingerprint(caller: string, threads: readonly LiveThread[]): string {
+  const hash = createHash("sha256").update(SCHEMA_VERSION).update("\0").update(caller);
+  for (const thread of threads) hash.update(`\0${thread.thread}\0${String(thread.raw.length)}\0`).update(thread.raw);
+  return hash.digest("hex");
+}
+
+export function refreshLiveRows(path: string, caller: string, threads: readonly LiveThread[]): boolean {
+  const fingerprint = liveFingerprint(caller, threads);
+  chmodSync(path, 0o644);
+  const db = new Database(path, { readwrite: true });
+  try {
+    const current = (db.query("SELECT value FROM metadata WHERE key = 'live'").get() as { value: string } | null)?.value;
+    if (current === fingerprint) return false;
+    db.transaction(() => {
+      db.run("INSERT INTO messages_fts (messages_fts, rowid, text) SELECT 'delete', id, text FROM messages WHERE live = 1");
+      db.run("DELETE FROM messages WHERE live = 1");
+      const originals = new Map<string, number>();
+      const seenInThread = new Set<string>();
+      for (const row of db.query("SELECT id, thread, key, copy_of FROM messages").all() as { id: number; thread: string; key: string; copy_of: number | null }[]) {
+        seenInThread.add(`${row.thread}\0${row.key}`);
+        if (row.copy_of === null && !originals.has(row.key)) originals.set(row.key, row.id);
+      }
+      const cursors = new Map((db.query("SELECT thread, MAX(seq) AS seq, MAX(run) AS run, MAX(ts) AS ts FROM messages GROUP BY thread").all() as { thread: string; seq: number; run: number; ts: number }[])
+        .map((row) => [row.thread, { seq: row.seq, run: row.run, ts: row.ts }]));
+      let id = (db.query("SELECT COALESCE(MAX(id), 0) AS id FROM messages").get() as { id: number }).id;
+      const put = db.query(
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, live, text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, 1, ?12)`,
+      );
+      for (const live of threads) {
+        const cursor = cursors.get(live.thread) ?? { seq: 0, run: 0, ts: 0 };
+        for (const message of live.messages) {
+          const text = messageText(message);
+          if (text === "") continue;
+          const key = messageKey(message, text);
+          if (seenInThread.has(`${live.thread}\0${key}`)) continue;
+          seenInThread.add(`${live.thread}\0${key}`);
+          const parsed = Date.parse(message.timestamp);
+          if (!Number.isNaN(parsed)) cursor.ts = parsed;
+          cursor.seq += 1;
+          id += 1;
+          const original = originals.get(key);
+          if (original === undefined) originals.set(key, id);
+          put.run(id, message.msg_id, live.thread, cursor.seq, cursor.run, cursor.ts, speakerOf(message.role),
+            message.origin === "autonomous" ? 1 : 0, message.model ?? null, original ?? null, key, text);
+        }
+      }
+      db.run("INSERT INTO messages_fts (rowid, text) SELECT id, text FROM messages WHERE live = 1");
+      db.query("INSERT INTO metadata (key, value) VALUES ('live', ?1) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(fingerprint);
+    })();
+  } finally {
+    db.close();
+  }
   return true;
 }
 

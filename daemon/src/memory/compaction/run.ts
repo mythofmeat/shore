@@ -12,7 +12,7 @@ import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
-import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
+import { homeThread, readThreadsIndex, threadChatModel, threadRecord, homeThreadOf } from "../../engine/threads.ts";
 import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
@@ -310,6 +310,7 @@ async function passUnderGuard(
         promptTemplate: resolved.promptTemplate,
         charName: character,
         thread,
+        ...await noticeFor(dataDir, character, thread),
         userName: resolved.displayName,
         llm: resolved.llm,
         conversationMgr: conversationManager(
@@ -429,6 +430,7 @@ async function segmentPass(
     messages: archived.messages,
     promptTemplate: resolved.promptTemplate,
     charName: character,
+    ...await noticeFor(effective.dirs.data, character, thread),
     userName: resolved.displayName,
     llm: resolved.llm,
     ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
@@ -529,6 +531,30 @@ export function releaseCompactionCoverage(
   withCoverageStore(join(dataDir, HISTORY_DB_FILE), (store) => {
     store.releaseMemoryCoverage(character, "compaction", claim);
   });
+}
+
+async function noticeFor(dataDir: string, character: string, thread: string): Promise<{ threadNotice?: string }> {
+  const notice = await threadCompactionNotice(dataDir, character, thread).catch(() => undefined);
+  return notice === undefined ? {} : { threadNotice: notice };
+}
+
+export async function threadCompactionNotice(
+  dataDir: string,
+  character: string,
+  thread: string,
+): Promise<string | undefined> {
+  const index = await readThreadsIndex(dataDir, character);
+  if (index === undefined) return undefined;
+  const home = homeThread(index);
+  const record = threadRecord(index, thread);
+  if (record === undefined || thread === home) return undefined;
+  const named = record.label === undefined ? `"${thread}"` : `"${thread}" (${record.label})`;
+  const purpose = record.purpose === undefined ? "" : ` It is for: ${record.purpose}`;
+  return (
+    `\n\nThis conversation is from the side thread ${named}, not your home thread "${home}".${purpose} ` +
+    `Write what matters from it where this thread's material belongs, such as a file of its own that ` +
+    `MEMORY.md points to, rather than as part of what happened in the home thread.`
+  );
 }
 
 export function effectiveConfig(character: string, config: LoadedConfig): LoadedConfig {

@@ -1,5 +1,14 @@
 import { withConversation } from "../engine/lifecycle.ts";
-import { threadDataDir } from "../config/dirs.ts";
+import { archiveKey, characterDataDir, threadDataDir } from "../config/dirs.ts";
+import { join } from "node:path";
+import { readDurable, threadFile } from "../storage/files.ts";
+import { HISTORY_DB_FILE } from "../engine/history_store.ts";
+import { isToolResultOnly } from "../engine/message_store.ts";
+import { archivalPlanInput, archiveSplitIndex } from "../memory/compaction/plan.ts";
+import { conversationManager } from "../memory/compaction/archive.ts";
+import { tryBeginCompaction } from "../memory/compaction/manager.ts";
+import { parseDurationMs } from "../llm/request.ts";
+import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { keepaliveWindowSecs } from "../config/keepalive.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -52,6 +61,7 @@ import { homeThreadOf, threadModelOf, type ThreadRecord } from "../engine/thread
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
+  bodyHasContent,
   emitPostPersistStreamEnd,
   maybeCompact,
   notifyUserMessageIfFresh,
@@ -218,8 +228,9 @@ async function runGenerationCore(
 
   const config = deps.registry.effectiveConfig(charName);
 
-  const isHome = engine.thread === await homeThreadOf(deps.dataDir, charName);
-  const autonomy = isHome ? deps.autonomy : sideThreadAutonomy(config);
+  const home = await homeThreadOf(deps.dataDir, charName);
+  const isHome = engine.thread === home;
+  const autonomy = isHome ? deps.autonomy : sideThreadAutonomy(config, deps.autonomy);
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
     sendDirect: (message) => void params.send(message),
@@ -280,7 +291,17 @@ async function runGenerationCore(
   let built: Awaited<ReturnType<typeof buildGenerationRequest>>;
   try {
     const replaces = regen ? engine.messagesAfterLastUserTurn().map((message) => message.msg_id) : [];
-    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"));
+    const arrival = isHome || regen || !bodyHasContent(body)
+      ? { cold: false, annotations: {} }
+      : await sideThreadArrival(deps, engine, charName, home, resolved, now());
+    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), arrival.annotations);
+    if (arrival.cold) {
+      try {
+        await deps.compaction.applyDeferredEdits(characterDataDir(deps.dataDir, charName), workspace, engine.thread);
+      } catch (e) {
+        deps.log?.warn?.("could not refresh a side thread's prompt files after a pause", { error: String(e) });
+      }
+    }
 
     await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
     notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
@@ -392,9 +413,14 @@ async function runGenerationCore(
   }
   await settleWorkspace();
 
-  if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) return;
   const compaction = config.app.memory.compaction;
   const active = engine.messages();
+  const crowded = nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
+    canArchiveTurns(active, compaction.keep_recent_turns);
+  if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) {
+    if (crowded) await archiveTrimmedTurns(deps, engine, charName, workspace, compaction.keep_recent_turns, now);
+    return;
+  }
   await maybeCompact(
     turnCtx,
     engine,
@@ -404,9 +430,98 @@ async function runGenerationCore(
     result,
     params.rid ?? undefined,
     deps.compaction,
-    nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
-      canArchiveTurns(active, compaction.keep_recent_turns),
+    crowded,
   );
+}
+
+const DEFAULT_CACHE_TTL_SECS = 3_600;
+const MARKED_GAP_SECS = 1_800;
+const HOME_SEGMENTS_SEARCHED = 3;
+
+function cacheTtlSecs(resolved: ResolvedModel): number {
+  const ms = resolved.cacheTtl === undefined ? undefined : parseDurationMs(resolved.cacheTtl);
+  return ms === undefined ? DEFAULT_CACHE_TTL_SECS : ms / 1000;
+}
+
+function lastUserAt(messages: readonly Message[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message === undefined || message.role !== "user" || isToolResultOnly(message)) continue;
+    if (!Number.isNaN(Date.parse(message.timestamp))) return message.timestamp;
+  }
+  return undefined;
+}
+
+async function homeLastUserAt(deps: GenerationDeps, charName: string, home: string): Promise<string | undefined> {
+  const engine = await deps.registry.getOrCreate(charName, home);
+  const live = lastUserAt(engine.messages());
+  if (live !== undefined) return live;
+  const segments = engine.segments();
+  for (let i = segments.segmentCount() - 1; i >= Math.max(0, segments.segmentCount() - HOME_SEGMENTS_SEARCHED); i -= 1) {
+    const archived = lastUserAt(await segments.readSegment(i).catch(() => []));
+    if (archived !== undefined) return archived;
+  }
+  return undefined;
+}
+
+async function sideThreadArrival(
+  deps: GenerationDeps,
+  engine: GenerationEngine,
+  charName: string,
+  home: string,
+  resolved: ResolvedModel,
+  arrivedAt: string,
+): Promise<{ cold: boolean; annotations: Pick<Message, "last_in_home"> }> {
+  const previous = engine.messages().at(-1)?.timestamp;
+  const gapSecs = previous === undefined ? Number.NaN : (Date.parse(arrivedAt) - Date.parse(previous)) / 1000;
+  if (Number.isNaN(gapSecs)) return { cold: false, annotations: {} };
+  let at: string | undefined;
+  if (gapSecs >= MARKED_GAP_SECS) {
+    try {
+      at = await homeLastUserAt(deps, charName, home);
+    } catch (e) {
+      deps.log?.warn?.("could not read the home thread's last message", { error: String(e) });
+    }
+  }
+  return {
+    cold: gapSecs >= cacheTtlSecs(resolved),
+    annotations: at === undefined ? {} : { last_in_home: { thread: home, at } },
+  };
+}
+
+async function archiveTrimmedTurns(
+  deps: GenerationDeps,
+  engine: GenerationEngine,
+  charName: string,
+  workspace: CharacterWorkspace,
+  keepTurns: number,
+  now: () => string,
+): Promise<void> {
+  const guard = tryBeginCompaction(deps.dataDir, charName);
+  if (guard === undefined) return;
+  try {
+    const raw = readDurable(threadFile(deps.dataDir, charName, engine.thread, "active.jsonl"));
+    const input = archivalPlanInput(raw);
+    const splitAt = archiveSplitIndex([...input.messages], keepTurns, false);
+    if (splitAt === 0) return;
+    await conversationManager(
+      threadDataDir(deps.dataDir, charName, engine.thread),
+      { dbPath: join(deps.dataDir, HISTORY_DB_FILE), archiveKey: archiveKey(charName, engine.thread) },
+      now,
+      () => crypto.randomUUID(),
+    ).archiveAndRetain("trim", { keepLastN: input.messages.length - splitAt, activeContent: raw });
+  } catch (e) {
+    deps.log?.warn?.("could not archive the turns a thread without compaction trimmed", { error: String(e) });
+    return;
+  } finally {
+    guard.release();
+  }
+  await engine.reload();
+  try {
+    await deps.compaction.applyDeferredEdits(characterDataDir(deps.dataDir, charName), workspace, engine.thread);
+  } catch (e) {
+    deps.log?.warn?.("could not refresh a thread's prompt files after archiving", { error: String(e) });
+  }
 }
 
 export interface SubagentTurn {
@@ -605,12 +720,12 @@ function resolvedReasoningEffort(opts: ProviderOptions | undefined): string | un
   return opts?.thinking_enabled === false ? "off" : undefined;
 }
 
-function sideThreadAutonomy(config: LoadedConfig): GenerationDeps["autonomy"] {
+function sideThreadAutonomy(config: LoadedConfig, home: GenerationDeps["autonomy"]): GenerationDeps["autonomy"] {
   return {
-    ensureState: () => false,
-    needsActivityBackfill: () => false,
-    backfillActivity: () => {},
-    onUserMessage: () => {},
+    ensureState: (character, effective) => home.ensureState(character, effective),
+    needsActivityBackfill: (character) => home.needsActivityBackfill(character),
+    backfillActivity: (character, timestamps) => home.backfillActivity(character, timestamps),
+    onUserMessage: (character) => home.onUserActivityElsewhere?.(character),
     onCompactionComplete: () => {},
     onCompactionFailed: () => {},
     notifyAssistantMessage: () => {},

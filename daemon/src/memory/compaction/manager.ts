@@ -547,6 +547,7 @@ export interface CompactOptions {
   promptTemplate: string;
   charName: string;
   thread?: string;
+  threadNotice?: string;
   userName: string;
   llm: CompactionLlm;
   conversationMgr: ConversationManager;
@@ -794,6 +795,7 @@ export interface SegmentCompactOptions {
   messages: readonly Message[];
   promptTemplate: string;
   charName: string;
+  threadNotice?: string;
   userName: string;
   llm: CompactionLlm;
   markdownStore?: MarkdownMemoryStore;
@@ -807,7 +809,7 @@ export interface SegmentCompactOptions {
 export async function compactSegment(opts: SegmentCompactOptions): Promise<CompactionOutcome> {
   if (opts.markdownStore === undefined) throw CompactionError.markdownStore("markdown memory store not available");
   const prompt = buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) +
-    segmentNotice(opts.segment, opts.messages);
+    (opts.threadNotice ?? "") + segmentNotice(opts.segment, opts.messages);
   const request = opts.llm.buildInitialRequest(prompt, opts.chatRequest);
   const workspaceDir = await preparePassWorkspace(opts.markdownStore, opts.tools, opts.charName, false);
   opts.signal?.throwIfAborted();
@@ -858,7 +860,7 @@ function buildCompactLlmRequest(opts: CompactOptions): SidecarRequest {
   const notice =
     opts.coverage === undefined ? undefined : backgroundCoverageNotice(opts.coverage);
   const finalMsg =
-    buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) + (notice ?? "");
+    buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) + (opts.threadNotice ?? "") + (notice ?? "");
   return opts.llm.buildInitialRequest(finalMsg, opts.chatRequest);
 }
 

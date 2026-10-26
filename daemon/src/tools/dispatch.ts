@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { shoreLog } from "../log.ts";
 
 import { handleActivityHeatmap, type ActivityStatsLookup } from "./activity.ts";
@@ -11,6 +13,7 @@ import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from ".
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleSavePicture } from "./save_picture.ts";
+import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
@@ -61,6 +64,8 @@ export interface ToolContext {
 
   scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
 
+  startThread?: (request: StartThreadRequest) => Promise<void>;
+
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
   lookupImpl?: (hostname: string) => Promise<string[]>;
@@ -104,6 +109,8 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
   return {
     character: ctx.characterName,
     dbPath: ctx.historyDbPath,
+    dataDir: dirname(ctx.historyDbPath),
+    ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
     ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
     ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
   };
@@ -114,7 +121,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "start_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -169,6 +176,9 @@ export async function dispatchTool(
       return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
     }
+
+    case "start_thread":
+      return await handleStartThread(args, ctx.startThread, ctx.userName ?? "the user");
 
     case "set_next_wake": {
       if (ctx.scheduleNextWake === undefined) {

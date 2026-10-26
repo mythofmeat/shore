@@ -2312,6 +2312,10 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub label: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub purpose: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub files: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         pub model: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub compaction: Option<bool>,
@@ -2329,6 +2333,20 @@ wire_types! {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub label: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadPurposeArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub purpose: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadFilesArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub files: Option<Vec<String>>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2415,6 +2433,12 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub purpose: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub files: Option<Vec<String>>,
         pub created_at: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2602,6 +2626,8 @@ operations! {
     ForkThread: "fork_thread" (ForkThreadArgs) => ThreadForkResult,
     SetHomeThread: "thread_home" (NamedOperationArgs) => ThreadListing,
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,
+    SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
+    SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
     PinThreadModel: "thread_model" (ThreadModelArgs) => ThreadListing,
 }
 

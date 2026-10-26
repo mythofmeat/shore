@@ -1,0 +1,3 @@
+Start a new side thread with {{user}}: a conversation of its own, apart from this one, for something you'll both come back to over days or weeks, like a long-running story. The thread shows up in {{user}}'s thread list on every device, and switching to it is {{user}}'s call; you stay in this thread.
+
+`purpose` is a line or two on what the thread is for, and `files` are workspace files kept in its prompt, such as a story's notes and the characters in it. You'll see both whenever you're in that thread. `opening` is your first message there, so {{user}} finds something when they switch to it. The new thread compacts like the home thread does.

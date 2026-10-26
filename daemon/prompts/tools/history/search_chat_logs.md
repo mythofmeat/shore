@@ -1,4 +1,4 @@
-Find archived conversations with {{user}} by the words that were said: your messages, {{user}}'s, and your heartbeat messages, never thinking or tool calls. Messages still in your context aren't archived yet and aren't searched.
+Find conversations with {{user}} by the words that were said, in every thread: your messages, {{user}}'s, and your heartbeat messages, never thinking or tool calls. Other threads are searched as they stand, archived or not; only this thread's messages that are still in your context are left out.
 
 `query` is SQLite FTS5 syntax: words that must all appear (`lemon tart`), `"an exact phrase"`, `OR`, `NOT`, a prefix (`bake*` finds bake, baked, baking) and `NEAR(lemon tart, 10)`. If it isn't valid FTS5, each word is searched as written and the result says so. `match: "substring"` finds the text anywhere, inside words too, for partial words, typos and writing without spaces.
 

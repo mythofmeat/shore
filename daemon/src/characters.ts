@@ -24,8 +24,10 @@ import {
   ensureThreads,
   homeThread,
   setHomeThread,
+  setThreadFiles,
   setThreadLabel,
   setThreadModel,
+  setThreadPurpose,
   threadRecord,
   ThreadError,
   type ArchiveThreadOptions,
@@ -304,6 +306,40 @@ export class CharacterRegistry {
         this.#remember(
           name,
           await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadPurpose(
+    name: string,
+    id: string,
+    purpose: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadPurpose(this.#dataDir, name, id, purpose, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadFiles(
+    name: string,
+    id: string,
+    files: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadFiles(this.#dataDir, name, id, files, new Date().toISOString()),
         ),
       signal,
     );

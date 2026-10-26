@@ -55,6 +55,7 @@ type ServiceSlice = Pick<
   | "setHeartbeatConfig"
   | "backfillActivity"
   | "onUserMessage"
+  | "onUserActivityElsewhere"
   | "onAssistantMessage"
   | "shouldCompactNow"
   | "onCompactionComplete"
@@ -106,6 +107,13 @@ export class TurnAutonomyBridge {
     const localAt = localWallClock(this.#now(), this.#zone);
     this.#after(character, () => {
       this.#service.onUserMessage(character, turnCount, localAt);
+    });
+  }
+
+  onUserActivityElsewhere(character: string): void {
+    const localAt = localWallClock(this.#now(), this.#zone);
+    this.#after(character, () => {
+      this.#service.onUserActivityElsewhere(character, localAt);
     });
   }
 

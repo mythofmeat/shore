@@ -41,7 +41,11 @@ import {
   type ShoreRuntime,
 } from "../runtime.ts";
 import { McpRegistry } from "../tools/mcp_registry.ts";
-import { pluginsDir } from "../config/dirs.ts";
+import { pluginsDir, threadDataDir } from "../config/dirs.ts";
+import { withConversation } from "../engine/lifecycle.ts";
+import type { Message } from "../engine/types.ts";
+import type { StartThreadRequest } from "../tools/start_thread.ts";
+import { emitNewMessageEvent } from "./persistence.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
@@ -124,6 +128,9 @@ export function turnAutonomy(
     onUserMessage: (character, turnCount) => {
       bridge.onUserMessage(character, turnCount);
     },
+    onUserActivityElsewhere: (character) => {
+      bridge.onUserActivityElsewhere(character);
+    },
     shouldCompactNow: (character, turnCount, contextTokens, crowded) =>
       bridge.shouldCompactNow(character, turnCount, contextTokens, crowded),
     onCompactionComplete: (character, retained) => {
@@ -144,7 +151,7 @@ export function turnAutonomy(
 export type ToolAssembly = Pick<
   GenerationAssembly,
   "runtime" | "providers" | "diagnostics" | "env"
->;
+> & Partial<Pick<GenerationAssembly, "emitEvent">>;
 
 function runtimeToolDeps(a: ToolAssembly, turn?: SubagentTurn): ToolContextDeps {
   const { runtime } = a;
@@ -169,7 +176,38 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       (dir, path) => queueDeferredEdit(dir, path, turn.thread),
     ),
+    startThread: (character, request) => startCharacterThread(a, character, request),
   };
+}
+
+async function startCharacterThread(a: ToolAssembly, character: string, request: StartThreadRequest): Promise<void> {
+  const { registry } = a.runtime;
+  await registry.createThread(character, request.name, {
+    label: request.label,
+    compaction: true,
+    ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
+    ...(request.files === undefined ? {} : { files: request.files }),
+  });
+  if (request.opening !== undefined) {
+    const opening = request.opening;
+    const engine = await registry.getOrCreate(character, request.name);
+    const message: Message = {
+      msg_id: `m_${crypto.randomUUID()}`,
+      role: "assistant",
+      content: opening,
+      images: [],
+      content_blocks: [{ type: "text", text: opening }],
+      alternatives: [],
+      timestamp: new Date().toISOString(),
+    };
+    await withConversation(threadDataDir(a.runtime.config.dirs.data, character, request.name), "update", async () => {
+      await engine.appendMessage(message);
+    });
+    if (a.emitEvent !== undefined) {
+      emitNewMessageEvent(a.emitEvent, character, "assistant_reply", engine.currentRevision(), message, request.name);
+    }
+  }
+  a.emitEvent?.({ type: "threads_changed", character, thread: request.name });
 }
 
 export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["compaction"] {

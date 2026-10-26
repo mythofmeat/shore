@@ -16,12 +16,15 @@ import { isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
+import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents } from "../tools/workspace_path.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
+export const MAX_THREAD_FILES = 20;
+
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "exists" | "not_found" | "is_home";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home";
 
 export class ThreadError extends Error {
   constructor(
@@ -58,6 +61,8 @@ interface ThreadForkOrigin {
 export interface ThreadRecord {
   id: string;
   label?: string;
+  purpose?: string;
+  files?: string[];
   created_at: string;
   chat_model?: string;
   compaction: boolean;
@@ -99,6 +104,7 @@ function isUserTurnLine(raw: unknown): boolean {
 export interface ThreadActivity {
   turns: number;
   last_active?: string;
+  last_user?: string;
 }
 
 function messageTime(raw: unknown): number {
@@ -120,6 +126,7 @@ export async function threadActivity(
   }
   let turns = 0;
   let latest = -Infinity;
+  let latestUser = -Infinity;
   for (const line of raw.split("\n")) {
     if (line.trim() === "") continue;
     let parsed: unknown;
@@ -128,11 +135,18 @@ export async function threadActivity(
     } catch {
       continue;
     }
-    if (isUserTurnLine(parsed)) turns += 1;
     const time = messageTime(parsed);
+    if (isUserTurnLine(parsed)) {
+      turns += 1;
+      if (time > latestUser) latestUser = time;
+    }
     if (time > latest) latest = time;
   }
-  return latest === -Infinity ? { turns } : { turns, last_active: new Date(latest).toISOString() };
+  return {
+    turns,
+    ...(latest === -Infinity ? {} : { last_active: new Date(latest).toISOString() }),
+    ...(latestUser === -Infinity ? {} : { last_user: new Date(latestUser).toISOString() }),
+  };
 }
 
 export async function threadActivities(
@@ -166,7 +180,7 @@ function isThreadsIndex(raw: unknown): raw is ThreadsIndex {
   return threads.every(isThreadRecord);
 }
 
-async function readThreadsIndexIn(
+export async function readThreadsIndexIn(
   characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
@@ -218,8 +232,31 @@ export async function ensureThreads(
 
 export interface NewThread {
   label?: string;
+  purpose?: string;
+  files?: readonly string[];
   chat_model?: string;
   compaction?: boolean;
+}
+
+function threadFilePath(raw: string): string {
+  const parts = pathComponents(normalizeWorkspacePath(raw));
+  if (parts.length === 0) throw new ThreadError("invalid_files", "a thread file path is empty");
+  if (parts.includes("..")) {
+    throw new ThreadError("invalid_files", `thread file ${JSON.stringify(raw)} leaves the workspace`);
+  }
+  const path = parts.join("/");
+  if (normalizePromptVisiblePath(path) !== undefined) {
+    throw new ThreadError("invalid_files", `${path} is already in every thread's prompt`);
+  }
+  return path;
+}
+
+export function threadFilePaths(files: readonly string[]): string[] {
+  const paths = [...new Set(files.map(threadFilePath))];
+  if (paths.length > MAX_THREAD_FILES) {
+    throw new ThreadError("invalid_files", `a thread can load at most ${String(MAX_THREAD_FILES)} files`);
+  }
+  return paths;
 }
 
 export async function createThread(
@@ -234,12 +271,15 @@ export async function createThread(
   if (threadRecord(index, id) !== undefined) {
     throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
   }
+  const files = options.files === undefined ? [] : threadFilePaths(options.files);
   await mkdir(threadDataDir(data, character, id), { recursive: true });
   const record: ThreadRecord = {
     id,
     created_at: now,
     compaction: options.compaction ?? false,
     ...(options.label === undefined ? {} : { label: options.label }),
+    ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
+    ...(files.length === 0 ? {} : { files }),
     ...(options.chat_model === undefined ? {} : { chat_model: options.chat_model }),
   };
   const next: ThreadsIndex = { ...index, threads: [...index.threads, record] };
@@ -272,6 +312,22 @@ export async function setHomeThread(
   return next;
 }
 
+async function setThreadField<K extends "label" | "purpose" | "files" | "chat_model">(
+  data: string,
+  character: string,
+  id: string,
+  key: K,
+  value: ThreadRecord[K] | undefined,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const { [key]: _dropped, ...rest } = requireThread(index, character, id);
+  const record = (value === undefined ? rest : { ...rest, [key]: value }) as ThreadRecord;
+  const next = replaceThread(index, record);
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
 export async function setThreadLabel(
   data: string,
   character: string,
@@ -279,13 +335,28 @@ export async function setThreadLabel(
   label: string | undefined,
   now: string,
 ): Promise<ThreadsIndex> {
-  const index = await ensureThreads(data, character, now);
-  const current = requireThread(index, character, id);
-  const { label: _dropped, ...rest } = current;
-  const record: ThreadRecord = label === undefined ? rest : { ...rest, label };
-  const next = replaceThread(index, record);
-  await writeThreadsIndex(data, character, next);
-  return next;
+  return await setThreadField(data, character, id, "label", label, now);
+}
+
+export async function setThreadPurpose(
+  data: string,
+  character: string,
+  id: string,
+  purpose: string | undefined,
+  now: string,
+): Promise<ThreadsIndex> {
+  return await setThreadField(data, character, id, "purpose", purpose, now);
+}
+
+export async function setThreadFiles(
+  data: string,
+  character: string,
+  id: string,
+  files: readonly string[],
+  now: string,
+): Promise<ThreadsIndex> {
+  const paths = threadFilePaths(files);
+  return await setThreadField(data, character, id, "files", paths.length === 0 ? undefined : paths, now);
 }
 
 export async function setThreadModel(
@@ -295,13 +366,7 @@ export async function setThreadModel(
   model: string | undefined,
   now: string,
 ): Promise<ThreadsIndex> {
-  const index = await ensureThreads(data, character, now);
-  const current = requireThread(index, character, id);
-  const { chat_model: _dropped, ...rest } = current;
-  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };
-  const next = replaceThread(index, record);
-  await writeThreadsIndex(data, character, next);
-  return next;
+  return await setThreadField(data, character, id, "chat_model", model, now);
 }
 
 export async function threadChatModel(
