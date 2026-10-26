@@ -2,7 +2,7 @@
 
 cask "shore-desktop" do
   version "4.46.1"
-  sha256 "672e2d8bd16c5c81b1c3bbade4b66c04ba0586c24a0ffcc35a4decaace092b97"
+  sha256 "d7c3f3758da7bbae4bc451e8b51d09a92d1f597e9da44eadd5e78005c272f2f4"
 
   url "https://github.com/mythofmeat/shore/releases/download/v#{version}/Shore-#{version}-arm64.zip"
   name "Shore"
