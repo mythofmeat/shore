@@ -5,7 +5,7 @@ import { Avatar } from "../ui/avatar.tsx";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { navigate } from "../app/route.ts";
-import { perform, workspace } from "../app/state.ts";
+import { conversation, perform, useActiveRequests, workspace } from "../app/state.ts";
 import { sortThreads } from "./order.ts";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
@@ -28,6 +28,7 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
   state: WorkspaceSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void;
 }) {
   const [query, setQuery] = useState("");
+  useActiveRequests();
   const ready = state.status === "ready";
   const needle = query.trim().toLowerCase();
   const characters = state.characters.filter((character) => character.name.toLowerCase().includes(needle));
@@ -64,8 +65,10 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
             {sortThreads(state.threads).map((thread) => {
               const current = thread.id === state.thread;
               const unread = current ? 0 : thread.unread ?? 0;
+              const replying = !current && conversation.activeIn({ character: state.character, thread: thread.id });
               return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} disabled={!ready} onClick={() => selectThread(thread.id)}>
                 <Icon name={thread.home ? "home" : "chat"} size={14} /><span className="sidebar-name">{threadLabel(thread)}</span>
+                {replying ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(replying)</span></span> : null}
                 {unread > 0 ? <UnreadBadge count={unread} /> : null}
               </button>;
             })}

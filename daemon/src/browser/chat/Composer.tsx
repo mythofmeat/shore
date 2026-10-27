@@ -50,7 +50,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const [vimFailed, setVimFailed] = useState(false);
   const vimInput = useRef<VimInput>(null);
   const files = useRef<HTMLInputElement>(null);
-  const active = useConversationActive();
+  const active = useConversationActive({ character: state.character, thread: state.thread });
   const streaming = active || state.streams.some((stream) => !stream.final && stream.subagent === null);
   const request = state.requests.find((item) => item.name === "message");
   const ready = state.status === "ready" && request?.available !== false;

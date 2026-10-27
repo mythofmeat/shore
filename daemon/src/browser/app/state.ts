@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
-import { ConversationRequests } from "../chat/requests.ts";
+import { ConversationRequests, type ConversationScope } from "../chat/requests.ts";
 import { ReadMarks } from "../chat/read_marks.ts";
 import { conversationCharacter, droppedNotice } from "../chat/sending.ts";
 import { UnsentMessages } from "../chat/unsent.ts";
@@ -67,8 +67,9 @@ export function useActiveRequests(): ReadonlySet<string> {
   return useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
 }
 
-export function useConversationActive(): boolean {
-  return useActiveRequests().size > 0;
+export function useConversationActive(scope: ConversationScope): boolean {
+  useActiveRequests();
+  return conversation.activeIn(scope);
 }
 
 export const STREAM_KEY = "shore.stream";

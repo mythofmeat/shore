@@ -106,7 +106,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   const active = useActiveRequests();
   const view = state.segmentView;
   const ready = state.status === "ready";
-  const busy = active.size > 0 || state.streams.some((stream) => !stream.final && stream.subagent === null);
+  const busy = conversation.activeIn({ character: state.character, thread: state.thread }) || state.streams.some((stream) => !stream.final && stream.subagent === null);
   const scroller = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const [away, setAway] = useState(false);
