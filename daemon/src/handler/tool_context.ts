@@ -23,6 +23,7 @@ import type { StartThreadRequest } from "../tools/start_thread.ts";
 export interface ToolConversation {
   thread: string;
   conversation: readonly Message[];
+  recordWorkspaceWrite?: ToolContext["recordWorkspaceWrite"];
 }
 
 export interface ToolContextDeps extends Partial<ToolConversation> {

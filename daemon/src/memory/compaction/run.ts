@@ -1,6 +1,5 @@
 import { withConversation } from "../../engine/lifecycle.ts";
 import { threadDataDir } from "../../config/dirs.ts";
-import { required } from "../../util/required.ts";
 
 import { shoreLog } from "../../log.ts";
 
@@ -85,6 +84,7 @@ export interface CompactionRunDeps {
   newId?: () => string;
   emit?: FrameSink;
   signal?: AbortSignal;
+  afterArchive?: (thread: string) => Promise<void>;
 }
 
 export interface CompactionRunOptions {
@@ -106,7 +106,7 @@ export async function runCompaction(
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
   if (outcome.kind === "paused") {
     const why = outcome.detail ?? outcome.reason;
-    if (outcome.held !== true) deps.notify?.(`Shore - ${character}`, pauseNotice(outcome.toolRounds, outcome.reason, why));
+    if (outcome.held !== true && outcome.reason !== "cancelled") deps.notify?.(`Shore - ${character}`, pauseNotice(outcome.toolRounds, outcome.reason, why));
     throw new CompactionPaused(outcome.checkpointId, why, outcome.resumeAt);
   }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
@@ -129,13 +129,28 @@ export async function rotateWithoutMemoryWrite(
   note = "archive-only rotation; automatic memory writes disabled",
 ): Promise<CompactionOutcome | undefined> {
   const dryRun = options.dryRun ?? false;
+  if (dryRun) return await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note, plan.sourceContent);
+  return await underThread(deps, character, thread)(async () => {
+    const outcome = await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note,
+      await readLiveSource(effective.dirs.data, character, thread, plan.sourceContent));
+    if (outcome !== undefined) await settleArchive(deps, character, thread)();
+    return outcome;
+  });
+}
+
+async function rotate(
+  character: string,
+  thread: string,
+  deps: CompactionRunDeps,
+  effective: LoadedConfig,
+  plan: ArchivalPlan,
+  conversationDir: string,
+  dryRun: boolean,
+  note: string,
+  liveContent: string,
+): Promise<CompactionOutcome | undefined> {
   const dataDir = effective.dirs.data;
-  const commit = openArchivalCommit(
-    plan,
-    dryRun
-      ? plan.sourceContent
-      : await readLiveSource(dataDir, character, thread, plan.sourceContent),
-  );
+  const commit = openArchivalCommit(plan, liveContent);
   if (commit === undefined) {
     shoreLog.warn(
       `shore: not rotating ${character}/${thread}: the conversation was rewritten under the ` +
@@ -183,37 +198,48 @@ export async function runCompactionPass(
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
 
-  return await withConversation(threadDataDir(dataDir, character, thread), "update", async (scope) => {
-    deps.signal?.throwIfAborted();
-    const guard = tryBeginCompaction(dataDir, character);
-    if (guard === undefined) throw CompactionError.busy(character);
+  const guard = tryBeginCompaction(dataDir, character);
+  if (guard === undefined) throw CompactionError.busy(character);
 
-    const trigger = options.trigger ?? "manual";
-    if (trigger !== "manual") {
-      const held = await compactionHeld(dataDir, character, thread);
-      if (held !== undefined) {
-        guard.release();
-        return heldOutcome(character, held);
-      }
-    }
-    const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, stoppedWith(deps.signal, scope));
-    try {
-      const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
-      pass.finish(outcome);
-      return outcome;
-    } catch (e) {
-      pass.fail(e);
+  const trigger = options.trigger ?? "manual";
+  if (trigger !== "manual") {
+    const held = await compactionHeld(dataDir, character, thread).catch((e: unknown) => {
+      guard.release();
       throw e;
+    });
+    if (held !== undefined) {
+      guard.release();
+      return heldOutcome(character, held);
     }
-  });
+  }
+  const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
+  try {
+    const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
+    pass.finish(outcome);
+    return outcome;
+  } catch (e) {
+    pass.fail(e);
+    throw e;
+  }
 }
 
-function stoppedWith(signal: AbortSignal | undefined, scope: AbortSignal): AbortSignal {
-  const turn = new AbortController();
-  const stop = () => turn.abort(new DOMException("the chat turn it ran after was cancelled", "AbortError"));
-  if (scope.aborted) stop();
-  else scope.addEventListener("abort", stop, { once: true });
-  return signal === undefined ? turn.signal : AbortSignal.any([signal, turn.signal]);
+function underThread(deps: CompactionRunDeps, character: string, thread: string): <T>(run: () => Promise<T>) => Promise<T> {
+  return async (run) => await withConversation(threadDataDir(deps.config.dirs.data, character, thread), "update", async () => await run());
+}
+
+function settleArchive(deps: CompactionRunDeps, character: string, thread: string): () => Promise<void> {
+  return async () => {
+    try {
+      await applyDeferredEdits(characterDataDir(deps.config.dirs.data, character), characterWorkspace(deps.config, character), thread);
+    } catch (e) {
+      shoreLog.warn(`shore: failed to apply deferred edits after compacting ${character}/${thread}: ${String(e)}`);
+    }
+    try {
+      await deps.afterArchive?.(thread);
+    } catch (e) {
+      shoreLog.warn(`shore: failed to repoint the cached request after compacting ${character}/${thread}: ${String(e)}`);
+    }
+  };
 }
 
 function heldOutcome(character: string, checkpoint: CompactionCheckpoint): CompactionOutcome {
@@ -241,7 +267,7 @@ async function passUnderGuard(
   const dataDir = deps.config.dirs.data;
   let coverage: CompactionCoverage | undefined;
   try {
-    const loaded = await loadMessagesForCompaction(dataDir, character, thread);
+    const loaded = await underThread(deps, character, thread)(async () => await loadMessagesForCompaction(dataDir, character, thread));
     if (loaded.messages.length === 0) return undefined;
 
     const effective = effectiveConfig(character, deps.config);
@@ -339,6 +365,8 @@ async function passUnderGuard(
           : { maxToolIterations: resolved.maxToolIterations }),
         ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
         ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+        commitUnder: underThread(deps, character, thread),
+        afterArchive: settleArchive(deps, character, thread),
       },
       { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
     );
@@ -732,29 +760,20 @@ export function compactionRunner(
     rebuild: RebuildDeps;
   },
 ): CompactionRunner {
+  const { cache, rebuild, ...rest } = deps;
   return {
-    run: (character, config, thread) => {
-      const { cache: _cache, rebuild: _rebuild, ...rest } = deps;
-      return runCompaction(character, {
-        ...rest,
-        config,
-      }, "turn", thread === undefined ? {} : { thread });
-    },
+    run: (character, config, thread) => runCompaction(character, {
+      ...rest,
+      config,
+      ...(cache === undefined ? {} : {
+        afterArchive: async (compacted: string) => {
+          if (compacted !== await homeThreadOf(config.dirs.data, character)) return;
+          cache.invalidate(character, "compaction");
+          await cache.reprimeFromDisk(character, config.dirs.data, config, { ...rebuild, ...(deps.env === undefined ? {} : { env: deps.env }) });
+        },
+      }),
+    }, "turn", thread === undefined ? {} : { thread }),
     applyDeferredEdits: (charDataDir, workspace, thread) =>
       applyDeferredEdits(charDataDir, workspace, thread),
-    ...(deps.cache === undefined
-      ? {}
-      : {
-          repoint: async (character: string, config: LoadedConfig, thread?: string) => {
-            if (thread !== undefined && thread !== await homeThreadOf(config.dirs.data, character)) return;
-            required(deps.cache).invalidate(character, "compaction");
-            await required(deps.cache).reprimeFromDisk(
-              character,
-              config.dirs.data,
-              config,
-              { ...deps.rebuild, ...(deps.env === undefined ? {} : { env: deps.env }) },
-            );
-          },
-        }),
   };
 }

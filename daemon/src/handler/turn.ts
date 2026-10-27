@@ -1,22 +1,21 @@
-import type { CompactionCompletion } from "../memory/compaction/background.ts";
+import { compactLater, type CompactionCompletion } from "../memory/compaction/background.ts";
+import { runningPass } from "../memory/compaction/activity.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
-import { characterDataDir } from "../config/dirs.ts";
 import type { Message } from "../engine/types.ts";
 import type { PendingAlt } from "../engine/message_store.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
-import { beginCompaction } from "../memory/compaction/manager.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
 import { homeThread, homeThreadOf, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
 import { threadFile } from "../storage/files.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
-import { characterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
+import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
@@ -230,7 +229,6 @@ export interface CompactionRunner {
     workspace: CharacterWorkspace,
     thread?: string,
   ): Promise<void>;
-  repoint?(charName: string, config: LoadedConfig, thread?: string): Promise<void>;
 }
 
 export async function maybeCompact(
@@ -240,40 +238,30 @@ export async function maybeCompact(
   config: LoadedConfig,
   dataDir: string,
   result: StreamResult,
-  rid: string | undefined,
   runner: CompactionRunner,
   crowded = false,
 ): Promise<boolean> {
   const turnCount = engine.turnCount();
   const contextTokens = contextTokensFor(result.context_usage ?? result.usage);
-  if (await compactionHeld(dataDir, charName, engine.thread ?? await homeThreadOf(dataDir, charName))) return false;
+  const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
+  if (await compactionHeld(dataDir, charName, thread)) return false;
+  if (runningPass(dataDir, charName)?.thread === thread) return false;
   if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return false;
-
-  await runInlineCompaction(ctx, engine, charName, config, dataDir, rid, runner);
-  return true;
+  return compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
 }
 
-async function runInlineCompaction(
+async function compactAfterTurn(
   ctx: TurnContext,
-  engine: TurnEngine,
   charName: string,
   config: LoadedConfig,
-  dataDir: string,
-  rid: string | undefined,
+  thread: string,
   runner: CompactionRunner,
 ): Promise<void> {
-  ctx.sendDirect({
-    type: "phase",
-    rid: rid ?? null,
-    phase: "compacting",
-    model: null,
-  });
-
   let completion: CompactionCompletion;
   try {
-    completion = await runner.run(charName, config, engine.thread);
+    completion = await runner.run(charName, config, thread);
   } catch (e) {
-    shoreLog.warn(`shore: inline compaction failed for ${charName}: ${String(e)}`);
+    shoreLog.warn(`shore: compaction after a turn failed for ${charName}/${thread}: ${String(e)}`);
     ctx.autonomy.onCompactionFailed(
       charName,
       e instanceof CompactionPaused && e.resumeAt !== undefined
@@ -282,39 +270,9 @@ async function runInlineCompaction(
     );
     return;
   }
-
   if (completion.kind !== "completed") {
     ctx.autonomy.onCompactionFailed(charName, completion.retryAt);
     return;
   }
-
-  const guard = await beginCompaction(dataDir, charName);
-  try {
-    try {
-      await engine.reload();
-    } catch (e) {
-      shoreLog.warn(`shore: inline compaction engine reload failed for ${charName}: ${String(e)}`);
-      ctx.autonomy.onCompactionFailed(charName);
-      return;
-    }
-
-    try {
-      await runner.applyDeferredEdits(
-        characterDataDir(dataDir, charName),
-        characterWorkspace(config, charName),
-        engine.thread,
-      );
-    } catch (e) {
-      shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
-    }
-    try {
-      await runner.repoint?.(charName, config, engine.thread);
-    } catch (e) {
-      shoreLog.warn(`shore: failed to repoint cached request after compaction: ${String(e)}`);
-    }
-  } finally {
-    guard.release();
-  }
-
   ctx.autonomy.onCompactionComplete(charName, completion.retained);
 }

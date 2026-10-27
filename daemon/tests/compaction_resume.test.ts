@@ -414,3 +414,44 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
     "one more thing while you were busy",
   ]);
 });
+
+test("regenerating the newest reply while a pass runs still archives the planned turns", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-regenerated-"));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const lines = conversation().map(activeLine);
+  const activePath = join(characterDir, "threads", "main", "active.jsonl");
+  writeDurable(activePath, lines.join("\n") + "\n");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+
+  const reordered = lines.slice(0, 3).map((line) => {
+    const fields = JSON.parse(line) as Record<string, unknown>;
+    return JSON.stringify(Object.fromEntries(Object.entries(fields).reverse()));
+  });
+  writeDurable(activePath, [...reordered, activeLine(conversationMessage("assistant", "a regenerated answer"))].join("\n") + "\n");
+
+  const outcome = await compact(
+    options(dataDir, workspace, memoryStore, plan, tools, scripted([response("end_turn", [{ type: "text", text: "done" }])])),
+    { keepRecentTurns: 1 },
+  );
+
+  expect(outcome).toMatchObject({ kind: "compacted", messageCount: 2, retainedCount: 2 });
+  const kept = (await readFile(activePath, "utf8"))
+    .trim()
+    .split("\n")
+    .map((line) => (JSON.parse(line) as { content: string }).content);
+  expect(kept).toEqual(["recent question", "a regenerated answer"]);
+});

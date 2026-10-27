@@ -16,8 +16,9 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
 import { testTmp } from "./support/tmp.ts";
-import { recordedTurns, recordTurn, snapshotTree, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
+import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { until } from "./support/until.ts";
 
 afterAll(restoreTestEnv);
 
@@ -91,6 +92,7 @@ interface Turn {
   toolRound?: ContentBlock[];
   seed?: (turns: WorkspaceTurns) => Promise<void>;
   during?: (turns: WorkspaceTurns) => Promise<void>;
+  compaction?: GenerationDeps["compaction"];
 }
 
 async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }> {
@@ -118,14 +120,23 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
   const round = turn.toolRound;
   if (round !== undefined) {
     provider.streamWithTools = async function* (_req, phase) {
+      await turn.during?.(turns);
       await phase.recordTurn("assistant", round);
+      for (const block of round) {
+        if (block.type === "tool_use") await phase.runTool({ id: block.id, name: block.name, input: block.input });
+      }
       yield* turn.events;
     };
   }
 
   const engine = generationEngine(await ConversationEngine.load("ada", config.dirs.data, undefined));
   try {
-    await runGeneration(deps(config, engine, provider, []), {
+    const generation = deps(config, engine, provider, []);
+    if (turn.compaction !== undefined) {
+      generation.compaction = turn.compaction;
+      generation.autonomy = { ...generation.autonomy, shouldCompactNow: () => true };
+    }
+    await runGeneration(generation, {
       meta: { session: { clientId: 1, sessionId: 1, clientType: "test-client", clientName: "test-1", capabilities: ["streaming"], selectedCharacter: "ada" }, rid: null, kind: "message" } as never,
       body: { rid: null, text: turn.regen ? "" : "Leave me a note", stream: true, images: [], image_data: [] },
       regen: turn.regen,
@@ -162,9 +173,9 @@ describe("workspace turns", () => {
     { type: "done", content: "Here you go.", finish_reason: "end_turn", usage, timing },
   ];
   const seedOldNote = async (turns: WorkspaceTurns): Promise<void> => {
-    const before = await snapshotTree(turns);
-    await writeFile(join(turns.workspace, "note.md"), "from the old reply\n");
-    await recordTurn(turns, "main", "mv_old", before);
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => await writeFile(join(turns.workspace, "note.md"), "from the old reply\n"));
+    await recorder.settle("main", "mv_old");
   };
 
   test("a regenerate undoes the old reply's files before the new reply runs", async () => {
@@ -175,10 +186,11 @@ describe("workspace turns", () => {
       regen: true,
       events: reply,
       seed: seedOldNote,
+      tools: ["bash"],
+      toolRound: [{ type: "tool_use", id: "tool_write", name: "bash", input: { command: "printf 'from the new reply' > other.md" } }],
       during: async (turns) => {
         workspace = turns.workspace;
         sawOldNote = existsSync(join(turns.workspace, "note.md"));
-        await writeFile(join(turns.workspace, "other.md"), "from the new reply\n");
       },
     });
     expect(run.error).toBeUndefined();
@@ -265,4 +277,31 @@ test("a turn with no model configured leaves the conversation untouched", async 
   expect(engine.messages()).toEqual([]);
   expect(emitted).toEqual([]);
   expect(sent).toEqual([]);
+});
+
+test("a reply finishes without waiting for the compaction it starts", async () => {
+  const pass = Promise.withResolvers<void>();
+  const started: string[] = [];
+  const run = await runTurn({
+    history: [],
+    regen: false,
+    events: [
+      { type: "start", model: "claude-fixture" },
+      { type: "text", text: "Here you go." },
+      { type: "done", content: "Here you go.", finish_reason: "end_turn", usage, timing },
+    ],
+    compaction: {
+      run: async (_character, _config, thread) => {
+        started.push(thread ?? "");
+        await pass.promise;
+        return { kind: "completed", retained: 1 };
+      },
+      applyDeferredEdits: async () => {},
+    },
+  });
+  expect(run.error).toBeUndefined();
+  await until(() => started.length === 1, "the compaction to start");
+  expect(started).toEqual(["main"]);
+  expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user", "assistant"]);
+  pass.resolve();
 });

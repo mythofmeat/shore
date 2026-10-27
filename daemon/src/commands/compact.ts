@@ -1,13 +1,8 @@
 import { homeThreadOf } from "../engine/threads.ts";
-import { threadDataDir } from "../config/dirs.ts";
-import { withConversation } from "../engine/lifecycle.ts";
 import { shoreLog } from "../log.ts";
 
-import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
-import { applyDeferredEdits } from "../memory/deferred_edits.ts";
-import { characterWorkspace } from "../tools/character_workspace.ts";
 import { runCompactionPass, runSegmentCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import {
   CompactionError,
@@ -78,31 +73,32 @@ export async function compact(
     if (ended !== undefined) return watchedReport(ended);
   }
 
-  return await withConversation(threadDataDir(ctx.config.dirs.data, character, engine.thread ?? "main"), "rewrite", async () => {
-    let outcome: CompactionOutcome | undefined;
-    try {
-      outcome = await runCompactionPass(
-        character,
-        {
-          ...ctx.run,
-          config: ctx.config,
+  let outcome: CompactionOutcome | undefined;
+  try {
+    outcome = await runCompactionPass(
+      character,
+      {
+        ...ctx.run,
+        config: ctx.config,
+        afterArchive: async (thread) => {
+          if (thread === await homeThreadOf(ctx.config.dirs.data, character)) await ctx.repoint?.(character, ctx.config);
         },
-        {
-          dryRun,
-          restart,
-          trigger: "manual",
-          ...(engine.thread === undefined ? {} : { thread: engine.thread }),
-          ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
-        },
-      );
-    } catch (e) {
-      throw compactionError(e);
-    }
+      },
+      {
+        dryRun,
+        restart,
+        trigger: "manual",
+        ...(engine.thread === undefined ? {} : { thread: engine.thread }),
+        ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
+      },
+    );
+  } catch (e) {
+    throw compactionError(e);
+  }
 
-    if (outcome === undefined) throw invalidRequest("No messages to compact");
+  if (outcome === undefined) throw invalidRequest("No messages to compact");
 
-    return await buildCompactionResponse(engine, ctx, character, outcome);
-  });
+  return await buildCompactionResponse(engine, ctx, character, outcome);
 }
 
 async function compactSegmentCommand(
@@ -341,27 +337,5 @@ async function completeCompaction(
   character: string,
   retainedTurns: number,
 ): Promise<void> {
-  try {
-    await engine.reload();
-  } catch (e) {
-    throw internalError(e instanceof Error ? e.message : String(e));
-  }
-
-  try {
-    await applyDeferredEdits(
-      join(ctx.config.dirs.data, character),
-      characterWorkspace(ctx.config, character),
-      engine.thread,
-    );
-  } catch (e) {
-    shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
-  }
-
-  try {
-    if (engine.thread === undefined || engine.thread === await homeThreadOf(ctx.config.dirs.data, character)) await ctx.repoint?.(character, ctx.config);
-  } catch (e) {
-    throw internalError(e instanceof Error ? e.message : String(e));
-  }
-
   if (engine.thread === undefined || engine.thread === await homeThreadOf(ctx.config.dirs.data, character)) ctx.autonomy.onCompactionComplete(character, retainedTurns);
 }

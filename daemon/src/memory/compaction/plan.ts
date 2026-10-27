@@ -123,21 +123,29 @@ function resumesCheckpoint(
   settings: ArchivalPlanSettings,
 ): checkpoint is CompactionCheckpoint {
   if (checkpoint === undefined || settings.restart === true) return false;
-  if (!sourceIsCurrent(checkpoint.sourceContent, checkpoint.sourceHash, liveContent)) return false;
+  if (!archivedRangeIsCurrent(checkpoint, liveContent)) return false;
   if (settings.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return false;
   return true;
 }
 
-function sourceIsCurrent(
-  sourceContent: string,
-  sourceHash: string,
+export function archivedRangeIsCurrent(
+  source: { sourceContent: string; sourceHash: string; splitAt: number },
   liveContent: string,
 ): boolean {
-  return hashCompactionSource(sourceContent) === sourceHash && liveContent.startsWith(sourceContent);
+  if (hashCompactionSource(source.sourceContent) !== source.sourceHash) return false;
+  if (liveContent.startsWith(source.sourceContent)) return true;
+  const planned = messagesFromJsonl(source.sourceContent).slice(0, source.splitAt);
+  const live = messagesFromJsonl(liveContent);
+  if (planned.length !== source.splitAt || live.length < source.splitAt) return false;
+  if (rustLines(liveContent).filter((line) => rustTrim(line) !== "").length !== live.length) return false;
+  return planned.every((message, index) => stableJson(message) === stableJson(live[index]));
 }
 
-function planSourceIsCurrent(plan: ArchivalPlan, liveContent: string): boolean {
-  return sourceIsCurrent(plan.sourceContent, plan.sourceHash, liveContent);
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, field: unknown) =>
+    field !== null && typeof field === "object" && !Array.isArray(field)
+      ? Object.fromEntries(Object.entries(field as Record<string, unknown>).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : field);
 }
 
 export async function resolveArchivalPlan(
@@ -211,7 +219,7 @@ export function openArchivalCommit(
   plan: ArchivalPlan,
   liveContent: string,
 ): ArchivalCommit | undefined {
-  if (!planSourceIsCurrent(plan, liveContent)) return undefined;
+  if (!archivedRangeIsCurrent(plan, liveContent)) return undefined;
   const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
   return {
     liveContent,

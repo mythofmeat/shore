@@ -45,6 +45,10 @@ export async function refreshConversation(path: string): Promise<void> {
   if (set.size === 0) readers.delete(key);
 }
 
+export function outsideConversation<T>(run: () => T): T {
+  return context.exit(run);
+}
+
 export async function withConversation<T>(
   path: string,
   kind: "turn" | "rewrite" | "update",

@@ -91,7 +91,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         });
         const exec: ToolExecution = {
           sendDirect: () => {},
-          ctx: await toolCtx,
+          ctx: { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) },
           limits: toolLimitsFrom(config.app.tools, config.app.subagents),
           ...(imageLimits === undefined ? {} : { imageLimits }),
           now: () => new Date().toISOString(),

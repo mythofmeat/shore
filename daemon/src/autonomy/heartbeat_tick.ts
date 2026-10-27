@@ -15,7 +15,7 @@ import type { AutonomyActionResult } from "./runner.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
-import { recordTurn, snapshotTree, workspaceTurnsFor } from "../tools/workspace_turns.ts";
+import { WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { budgetStopIn, describeError } from "../llm/errors.ts";
@@ -189,10 +189,10 @@ export async function runHeartbeatTick(
 
     const workspace = characterWorkspace(config, character);
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
-    const before = await snapshotTree(workspaceTurns);
+    const recorder = new WorkspaceRecorder(workspaceTurns);
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
-      dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, prepared),
+      dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...prepared, recordWorkspaceWrite: recorder.track }),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
       character,
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
@@ -203,7 +203,8 @@ export async function runHeartbeatTick(
 
     signal.throwIfAborted();
     const sent = await persistHeartbeatMessage(character, prepared.request, loop, deps, note, { workspace, dir: sentPicturesDir(config.dirs.data, character) });
-    if (sent?.version !== undefined) await recordTurn(workspaceTurns, thread, sent.version, before);
+    if (sent?.version !== undefined) await recorder.settle(thread, sent.version);
+    else await recorder.discard();
 
     return { events };
   });

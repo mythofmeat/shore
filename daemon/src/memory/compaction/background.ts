@@ -2,7 +2,9 @@ import { threadFile } from "../../storage/files.ts";
 import { shoreLog } from "../../log.ts";
 
 
-import { threadDataDir } from "../../config/dirs.ts";
+import { characterDataDir, threadDataDir } from "../../config/dirs.ts";
+import { outsideConversation } from "../../engine/lifecycle.ts";
+import { cancelAllPasses, passEnded } from "./activity.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
 import type { Message } from "../../engine/types";
@@ -114,4 +116,45 @@ export async function pushAfterCompaction(
 ): Promise<void> {
   if (!gitPushEnabled || (outcome.kind !== "compacted" && outcome.kind !== "segment")) return;
   await push();
+}
+
+const queuedPasses = new Set<string>();
+const characterQueues = new Map<string, Promise<void>>();
+const backgroundPasses = new Set<Promise<void>>();
+const stopping = new Set<string>();
+
+export function compactLater(dataDir: string, character: string, thread: string, run: () => Promise<void>): boolean {
+  const key = JSON.stringify([characterDataDir(dataDir, character), thread]);
+  if (stopping.has(dataDir) || queuedPasses.has(key)) return false;
+  queuedPasses.add(key);
+  const queue = characterDataDir(dataDir, character);
+  const previous = characterQueues.get(queue) ?? Promise.resolve();
+  const work: Promise<void> = outsideConversation(async () => {
+    await previous;
+    try {
+      await passEnded(dataDir, character);
+      if (!stopping.has(dataDir)) await run();
+    } catch (e) {
+      shoreLog.warn(`shore: background compaction for ${character}/${thread} failed: ${String(e)}`);
+    } finally {
+      queuedPasses.delete(key);
+    }
+  });
+  characterQueues.set(queue, work);
+  backgroundPasses.add(work);
+  void work.then(() => {
+    backgroundPasses.delete(work);
+    if (characterQueues.get(queue) === work) characterQueues.delete(queue);
+  });
+  return true;
+}
+
+export async function stopBackgroundCompactions(dataDir: string, reason: string): Promise<void> {
+  stopping.add(dataDir);
+  try {
+    await cancelAllPasses(dataDir, reason);
+    while (backgroundPasses.size > 0) await Promise.allSettled(backgroundPasses);
+  } finally {
+    stopping.delete(dataDir);
+  }
 }

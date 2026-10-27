@@ -9,11 +9,11 @@ import {
   aliasTurn,
   pruneTurns,
   recordedTurns,
-  recordTurn,
   redoTurns,
   replyVersions,
-  snapshotTree,
   undoTurns,
+  withWriteWindow,
+  WorkspaceRecorder,
   workspaceTurnsFor,
   type WorkspaceTurns,
 } from "../src/tools/workspace_turns.ts";
@@ -37,9 +37,9 @@ const gitIn = (turns: WorkspaceTurns, ...args: string[]): string =>
   execFileSync("git", args, { cwd: turns.workspace, encoding: "utf8" }).trim();
 
 async function turn(turns: WorkspaceTurns, version: string, change: () => void, thread = "main"): Promise<void> {
-  const before = await snapshotTree(turns);
-  change();
-  await recordTurn(turns, thread, version, before);
+  const recorder = new WorkspaceRecorder(turns);
+  await recorder.track(async () => change());
+  await recorder.settle(thread, version);
 }
 
 function reply(version: string, alternatives: string[] = []): Message {
@@ -245,8 +245,52 @@ describe("workspace turns", () => {
   test("a missing workspace records nothing", async () => {
     const turns = setup();
     rmSync(turns.workspace, { recursive: true });
-    expect(await snapshotTree(turns)).toBeUndefined();
+    await turn(turns, "mv_1", () => undefined);
+    expect(await recordedTurns(turns, "main", ["mv_1"])).toEqual([]);
     expect(await undoTurns(turns, "main", ["mv_1"])).toEqual({ restored: [], skipped: [] });
+  });
+
+  test("undoing a reply leaves files another reply changed while its tool call ran", async () => {
+    const turns = setup();
+    write(turns, "a.md", "a0\n");
+    write(turns, "b.md", "b0\n");
+    const first = new WorkspaceRecorder(turns);
+    const second = new WorkspaceRecorder(turns);
+    await first.track(async () => {
+      write(turns, "a.md", "a1\n");
+      await second.track(async () => write(turns, "b.md", "b1 from the other thread\n"));
+    });
+    await first.settle("main", "mv_1");
+    await second.settle("side", "mv_2");
+
+    const undone = await undoTurns(turns, "main", ["mv_1"]);
+    expect(undone).toEqual({ restored: ["a.md"], skipped: ["b.md"] });
+    expect(read(turns, "a.md")).toBe("a0\n");
+    expect(read(turns, "b.md")).toBe("b1 from the other thread\n");
+  });
+
+  test("undoing a reply keeps a compaction commit made while its tool call ran", async () => {
+    const turns = setup();
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => {
+      write(turns, "a.md", "a\n");
+      await withWriteWindow(turns, {}, async () => {
+        write(turns, "memory/fact.md", "remembered\n");
+        gitIn(turns, "add", "memory");
+        gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "-m", "memory");
+        return { value: undefined, paths: ["memory/fact.md"], head: true };
+      });
+    });
+    await recorder.settle("main", "mv_1");
+    const compacted = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(existsSync(file(turns, "a.md"))).toBe(false);
+    expect(read(turns, "memory/fact.md")).toBe("remembered\n");
+    expect(await gitHead(turns.workspace)).toBe(compacted);
   });
 
   test("reply versions follow merged tool loops", () => {

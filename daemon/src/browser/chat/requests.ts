@@ -45,6 +45,7 @@ export class ConversationRequests {
     this.#set(new Set([...this.#active, rid]));
     try { return await finished; } finally { this.#regens.delete(rid); this.#started.delete(rid); this.#scopes.delete(rid); this.#accepted.delete(rid); this.#set(new Set([...this.#active].filter((item) => item !== rid))); }
   }
+  activeIn(scope: ConversationScope): boolean { return [...this.#active].some((rid) => this.#within(rid, scope)); }
   awaitingStream(scope?: ConversationScope): string | undefined { return [...this.#active].find((rid) => !this.#started.has(rid) && this.#within(rid, scope)); }
   regens(scope?: ConversationScope): readonly string[] { return [...this.#regens].filter((rid) => this.#within(rid, scope)); }
   pendingRegens(scope?: ConversationScope): readonly string[] { return this.regens(scope).filter((rid) => !this.#started.has(rid)); }

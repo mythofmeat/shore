@@ -37,7 +37,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
     return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
   }, []);
-  const busy = useConversationActive();
+  const busy = useConversationActive({ character: state.character, thread: state.thread });
   const character = state.characters.find((item) => item.name === state.character);
   const thread = state.threads.find((item) => item.id === state.thread);
   const ready = state.status === "ready";

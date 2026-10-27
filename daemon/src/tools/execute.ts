@@ -26,6 +26,7 @@ import {
   resultCharsFor,
   timeoutFor,
   windowToolResult,
+  writesWorkspace,
   type ToolContext,
   type ToolLimitsView,
   type ToolResultWindow,
@@ -113,12 +114,14 @@ export async function runToolUse(
   let okValue: unknown;
   let payload: ToolResultPayload | undefined;
   try {
-    const value = await dispatchWithinDeadline(
+    const dispatch = async () => await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
       { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
+    const record = exec.ctx.recordWorkspaceWrite;
+    const value = record !== undefined && writesWorkspace(toolUse.name) ? await record(dispatch) : await dispatch();
     payload = toolMediaOf(value);
     okValue = payload === undefined ? value : payload.value;
     rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);
