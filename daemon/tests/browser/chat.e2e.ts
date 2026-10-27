@@ -35,6 +35,40 @@ test("sending clears the message box at once and regenerating replaces the reply
   await check();
 });
 
+test("a message whose reply was stopped can be edited and then answered from the browser", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "lumen");
+  const box = page.getByLabel("Message", { exact: true });
+  const replies = page.locator("article.message.assistant:not(.streaming)");
+  await box.fill("A question answered first");
+  await box.press("Enter");
+  await expect(replies).toContainText("A question answered first");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await box.fill("Please hold this request");
+  await box.press("Enter");
+  await expect(page.locator("article.message.assistant.streaming")).toBeVisible();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await replies.hover();
+  await expect(replies.getByRole("button", { name: "Regenerate", exact: true })).toHaveCount(0);
+  await expect(replies.getByRole("button", { name: "Generate another response" })).toHaveCount(0);
+  const mine = page.locator("article.message.user").last();
+  await mine.hover();
+  await mine.getByRole("button", { name: "Edit", exact: true }).click();
+  await mine.getByLabel("Edit message").fill("Edited after stopping");
+  await mine.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(mine).toContainText("Edited after stopping");
+  await mine.hover();
+  await mine.getByRole("button", { name: "Generate reply", exact: true }).click();
+  await expect(replies.last()).toContainText("Edited after stopping");
+  await expect(replies).toHaveCount(2);
+  await expect(page.locator("article.message.user")).toHaveCount(2);
+  await mine.hover();
+  await expect(mine.getByRole("button", { name: "Generate reply", exact: true })).toHaveCount(0);
+  await check();
+});
+
 test("regenerating, swiping and deleting take the reply's workspace changes with them", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);

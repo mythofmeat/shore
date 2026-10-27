@@ -37,7 +37,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
     { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
     { label: "Rename…", icon: "label", onSelect: () => setDialog("rename"), disabled: !ready },
     { label: "Fork conversation…", icon: "branch", onSelect: () => setDialog("fork"), disabled: !ready },
-    { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role === "assistant") },
+    { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role !== "system") },
     { label: "Add system message…", icon: "info", onSelect: () => setDialog("system"), disabled: !ready },
     "separator",
     { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy },
