@@ -157,16 +157,6 @@ export async function compactionHeld(
   return heldAfterRefusal(checkpoint) ? checkpoint : undefined;
 }
 
-export function checkpointSourceIsCompatible(
-  checkpoint: CompactionCheckpoint,
-  activeContent: string,
-): boolean {
-  return (
-    hashCompactionSource(checkpoint.sourceContent) === checkpoint.sourceHash &&
-    activeContent.startsWith(checkpoint.sourceContent)
-  );
-}
-
 function withoutCredential(request: SidecarRequest): SidecarRequest {
   return { ...request, api_key: "" };
 }

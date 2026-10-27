@@ -27,6 +27,7 @@ export interface RunningPassView extends PassInfo {
 }
 
 interface RunningPass extends RunningPassView {
+  dataDir: string;
   frames: ServerMessage[];
   watchers: Set<FrameSink>;
   controller: AbortController;
@@ -44,6 +45,28 @@ export interface PassHandle {
 const running = new Map<string, RunningPass>();
 const lastEnded = new Map<string, EndedPass>();
 
+export type PassEvent =
+  | { kind: "phase"; pass: RunningPassView }
+  | { kind: "ended"; ended: EndedPass };
+
+type PassListener = (dataDir: string, event: PassEvent) => void;
+const listeners = new Set<PassListener>();
+
+export function observePasses(listener: PassListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function tell(dataDir: string, event: PassEvent): void {
+  for (const listener of listeners) {
+    try {
+      listener(dataDir, event);
+    } catch {
+      continue;
+    }
+  }
+}
+
 export function startPass(
   dataDir: string,
   info: PassInfo,
@@ -55,10 +78,11 @@ export function startPass(
   const controller = new AbortController();
   const { promise: ended, resolve: settle } = Promise.withResolvers<EndedPass>();
   const pass: RunningPass = {
-    ...info, phase: undefined, lastTool: undefined,
+    ...info, dataDir, phase: "compacting", lastTool: undefined,
     frames: [], watchers: new Set(), controller, ended, settle,
   };
   running.set(key, pass);
+  tell(dataDir, { kind: "phase", pass: passView(pass) });
   let closed = false;
   const close = (end: PassEnd): void => {
     if (closed) return;
@@ -67,6 +91,7 @@ export function startPass(
     const record = { ...info, endedAt: now(), end };
     if (end.kind === "failed" || end.outcome !== undefined) lastEnded.set(key, record);
     pass.settle(record);
+    tell(dataDir, { kind: "ended", ended: record });
   };
   return {
     emit: (frame) => {
@@ -80,7 +105,10 @@ export function startPass(
 }
 
 function publish(pass: RunningPass, frame: ServerMessage): void {
-  if (frame.type === "phase") pass.phase = frame.phase;
+  if (frame.type === "phase") {
+    pass.phase = frame.phase;
+    tell(pass.dataDir, { kind: "phase", pass: passView(pass) });
+  }
   if (frame.type === "tool_call") pass.lastTool = frame.tool_name;
   const previous = pass.frames.at(-1);
   if (
@@ -116,6 +144,20 @@ export async function cancelPass(dataDir: string, character: string, reason: str
   if (pass === undefined) return undefined;
   pass.controller.abort(new DOMException(reason, "AbortError"));
   return await pass.ended;
+}
+
+export async function passEnded(dataDir: string, character: string): Promise<void> {
+  for (let pass = running.get(characterDataDir(dataDir, character)); pass !== undefined; pass = running.get(characterDataDir(dataDir, character))) {
+    await pass.ended;
+  }
+}
+
+export async function cancelAllPasses(dataDir: string, reason: string): Promise<void> {
+  const passes = [...running].filter(([key, pass]) => key === characterDataDir(dataDir, pass.character)).map(([, pass]) => pass);
+  await Promise.all(passes.map(async (pass) => {
+    pass.controller.abort(new DOMException(reason, "AbortError"));
+    await pass.ended;
+  }));
 }
 
 export function runningPass(dataDir: string, character: string): RunningPassView | undefined {

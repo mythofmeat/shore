@@ -37,7 +37,6 @@ import {
   type MemoryFileOp,
 } from "./types";
 import {
-  checkpointSourceIsCompatible,
   loadCompactionCheckpoint,
   newCompactionCheckpoint,
   removeCompactionCheckpoint,
@@ -46,6 +45,7 @@ import {
   type CompactionCheckpoint,
 } from "./checkpoint.ts";
 import {
+  archivedRangeIsCurrent,
   conversationView,
   countTurns,
   openArchivalCommit,
@@ -583,6 +583,8 @@ export interface CompactOptions {
   coverage?: CompactionCoverage;
   emit?: FrameSink;
   signal?: AbortSignal;
+  commitUnder?: <T>(run: () => Promise<T>) => Promise<T>;
+  afterArchive?: () => Promise<void>;
 }
 
 async function preparePassWorkspace(
@@ -662,7 +664,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   if (opts.foreground !== true && checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
-  if (checkpointSourceIsCompatible(checkpoint, plan.sourceContent)) {
+  if (archivedRangeIsCurrent(checkpoint, plan.sourceContent)) {
     await adoptOutsideEdits(opts, checkpoint, workspaceOf(tools, workspaceDir), tools.turns);
   } else {
     shoreLog.warn(
@@ -757,40 +759,44 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     };
   }
 
-  const commit = openArchivalCommit(plan, await currentActiveContent(opts));
-  if (commit === undefined) {
-    checkpoint.state = "paused";
-    checkpoint.pauseReason = "source_conflict";
-    await persistCheckpoint(opts, checkpoint);
-    return pausedOutcome(opts, checkpoint);
-  }
-  const { retained, retainedTurns } = commit;
+  const memoryAfter = await tools.gitHead?.(workspaceDir);
+  const committed = await (opts.commitUnder ?? (async (run) => await run()))(async () => {
+    const commit = openArchivalCommit(plan, await currentActiveContent(opts));
+    if (commit === undefined) {
+      checkpoint.state = "paused";
+      checkpoint.pauseReason = "source_conflict";
+      await persistCheckpoint(opts, checkpoint);
+      return pausedOutcome(opts, checkpoint);
+    }
+    if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);
+    let id: string;
+    try {
+      id = await archiveCompactPrefix(
+        opts.conversationMgr,
+        opts.conversationId,
+        commit.retained,
+        commit.liveContent,
+        state.writesApplied,
+        workspaceDir,
+        opts.charName,
+        tools,
+        checkpoint.id,
+        checkpoint.memoryBefore,
+        memoryAfter,
+        opts.coverage?.claim,
+      );
+    } catch (e) {
+      await clearCheckpoint(opts);
+      throw e;
+    }
+    await clearCheckpoint(opts);
+    await opts.afterArchive?.();
+    return { id, retained: commit.retained, retainedTurns: commit.retainedTurns };
+  });
+  if ("kind" in committed) return committed;
+  const { id: newConversationId, retained, retainedTurns } = committed;
   const archivedCount = plan.splitAt;
   const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
-  const memoryAfter = await tools.gitHead?.(workspaceDir);
-  if (opts.signal?.aborted === true) return await pauseCompaction(opts, checkpoint, opts.signal.reason);
-
-  let newConversationId: string;
-  try {
-    newConversationId = await archiveCompactPrefix(
-      opts.conversationMgr,
-      opts.conversationId,
-      retained,
-      commit.liveContent,
-      state.writesApplied,
-      workspaceDir,
-      opts.charName,
-      tools,
-      checkpoint.id,
-      checkpoint.memoryBefore,
-      memoryAfter,
-      opts.coverage?.claim,
-    );
-  } catch (e) {
-    await clearCheckpoint(opts);
-    throw e;
-  }
-  await clearCheckpoint(opts);
 
   const markdownPaths = changedFilePaths(state.writesApplied);
 
@@ -939,7 +945,7 @@ async function recoverArchivedPass(
   );
   if (!archived) return undefined;
   const liveContent = await currentActiveContent(opts);
-  if (checkpointSourceIsCompatible(prior, liveContent)) return undefined;
+  if (archivedRangeIsCurrent(prior, liveContent)) return undefined;
 
   const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
   const markdownPaths = changedFilePaths(prior.loop.writesApplied);

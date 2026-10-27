@@ -430,7 +430,6 @@ async function runGenerationCore(
     config,
     deps.dataDir,
     result,
-    params.rid ?? undefined,
     deps.compaction,
     crowded,
   );

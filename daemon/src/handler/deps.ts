@@ -33,6 +33,9 @@ import type { Command } from "../protocol/Command.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { CompactionWatchResult } from "../protocol/CompactionWatchResult.ts";
+import { observePasses, runningPass } from "../memory/compaction/activity.ts";
+import { passEnd } from "../commands/compact.ts";
 import { commandCatalogue } from "../commands/registry.ts";
 import { changesState } from "../operations/policy.ts";
 import {
@@ -214,7 +217,7 @@ async function startCharacterThread(a: ToolAssembly, character: string, request:
 
 export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["compaction"] {
   const { runtime } = a;
-  return compactionRunner({
+  const runner = compactionRunner({
     ...(a.env === undefined ? {} : { env: a.env }),
     generate: compactionGenerate({
       providers: a.providers,
@@ -225,6 +228,10 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
     rebuild: { mcpRegistry: runtime.mcp.current },
     tools: runtimeToolDeps(a),
   });
+  return {
+    ...runner,
+    run: async (character, config, thread) => await runtime.snapshotGate.withActivity(async () => await runner.run(character, config, thread)),
+  };
 }
 
 export function usageBudgetWarnings(
@@ -295,6 +302,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     router: a.router,
     registry: handlerRegistry(a.runtime.registry),
     commandChangesState,
+    compactions: compactionViewers(a.runtime.config.dirs.data),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
@@ -693,6 +701,29 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       noteMutation: (character) => {
         runtime.historyIndex.noteMutation(character);
       },
+    },
+  };
+}
+
+function compactionPhase(phase: string | undefined): ServerMessage {
+  return { type: "phase", rid: null, phase: phase !== undefined && phase.startsWith("compacting") ? phase : "compacting", model: null };
+}
+
+function compactionViewers(dataDir: string): NonNullable<MessageHandlerDeps["compactions"]> {
+  return {
+    observe: (listener) => observePasses((from, event) => {
+      if (from !== dataDir) return;
+      if (event.kind === "phase") {
+        if (event.pass.phase?.startsWith("compacting") === true) listener(event.pass.character, event.pass.thread, compactionPhase(event.pass.phase));
+        return;
+      }
+      const { character, thread } = event.ended;
+      const data: CompactionWatchResult = { character, state: "finished", pass: passEnd(event.ended) };
+      listener(character, thread, { type: "command_output", rid: null, name: "compact_watch", data });
+    }),
+    running: (character) => {
+      const pass = runningPass(dataDir, character);
+      return pass === undefined ? undefined : { thread: pass.thread, frame: compactionPhase(pass.phase) };
     },
   };
 }

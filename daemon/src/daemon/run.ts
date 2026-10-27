@@ -36,6 +36,7 @@ import { describeWork, runningReport, type ShutdownWindowState } from "./running
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 import { findSentPicture } from "../storage/sent_pictures.ts";
 import { startCharacterInits } from "../tools/character_init.ts";
+import { stopBackgroundCompactions } from "../memory/compaction/background.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -387,7 +388,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         const requestedAt = Date.now();
         shutdownWindow = { requestedAt, deadline: requestedAt + graceMs };
         messages.close();
-        const idle = Promise.all([messages.drain(), runtime.autonomy.quiesce()]);
+        const idle = Promise.all([messages.drain(), runtime.autonomy.quiesce(), stopBackgroundCompactions(loaded.dirs.data, "the daemon is shutting down; the compaction resumes after it restarts")]);
         const work = running().work;
         if (work.length > 0) {
           log?.info?.("Waiting for running work to finish before stopping", {

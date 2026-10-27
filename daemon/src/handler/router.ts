@@ -127,6 +127,10 @@ export interface MessageHandlerDeps {
   readonly runGeneration: RunGeneration;
   readonly now?: () => number;
   readonly commandChangesState?: (cmd: Command) => boolean;
+  readonly compactions?: {
+    observe(listener: (character: string, thread: string, frame: ServerMessage) => void): () => void;
+    running(character: string): { thread: string; frame: ServerMessage } | undefined;
+  };
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     error?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -195,9 +199,11 @@ export class MessageHandler {
   readonly #queues = new Map<number, Promise<void>>();
   readonly #commands = new Set<ActiveCommand>();
   #closed = false;
+  readonly #unobserve: (() => void) | undefined;
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
+    this.#unobserve = deps.compactions?.observe((character, thread, frame) => this.#toViewers(character, thread, frame));
   }
 
   get generationCount(): number {
@@ -214,6 +220,16 @@ export class MessageHandler {
 
   close(): void {
     this.#closed = true;
+    this.#unobserve?.();
+  }
+
+  #toViewers(character: string, thread: string, frame: ServerMessage): void {
+    const scope = this.#scope(character, thread);
+    for (const [sessionId] of this.#deps.router.sessions()) {
+      if (this.#sessionScope(sessionId) !== scope) continue;
+      const send = this.#deps.router.senderFor(sessionId);
+      if (send !== undefined) void this.#deliver(send, frame, sessionId);
+    }
   }
 
   async run(routes: AsyncIterable<RoutedMessage>): Promise<void> {
@@ -281,7 +297,14 @@ export class MessageHandler {
     for (const generation of this.#generations.values()) generation.viewers.delete(sessionId);
     const send = this.#deps.router.senderFor(sessionId);
     if (send === undefined) return;
-    const generation = this.#generations.get(this.#sessionScope(sessionId));
+    const scope = this.#sessionScope(sessionId);
+    const character = this.#deps.router.characterFor(sessionId);
+    const resolved = this.#deps.registry.resolveCharacter(character);
+    const compacting = "name" in resolved ? this.#deps.compactions?.running(resolved.name) : undefined;
+    if (compacting !== undefined && "name" in resolved && this.#scope(resolved.name, compacting.thread) === scope) {
+      void this.#deliver(send, compacting.frame, sessionId);
+    }
+    const generation = this.#generations.get(scope);
     if (generation === undefined || generation.finished) return;
     generation.viewers.set(sessionId, this.#viewer(sessionId));
     for (const frame of generation.replay) void this.#deliver(send, frame, sessionId);
