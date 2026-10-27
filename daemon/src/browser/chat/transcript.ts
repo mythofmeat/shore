@@ -46,13 +46,13 @@ export function segmentDetail(segment: SegmentSummary, now = new Date()): string
   return [`${String(segment.message_count)} ${segment.message_count === 1 ? "message" : "messages"}`, ...(dates === "" ? [] : [dates]), ...(segment.excluded ? ["excluded from memory"] : [])].join(" · ");
 }
 
-export function lastAssistantIndex(messages: readonly Message[]): number {
-  return messages.findLastIndex((message) => message.role === "assistant");
+export function lastTurnIndex(messages: readonly Message[]): number {
+  return messages.findLastIndex((message) => message.role !== "system");
 }
 
 export function transcriptItems(messages: readonly Message[], now = new Date()): TranscriptItem[] {
   const items: TranscriptItem[] = [];
-  const lastAssistant = lastAssistantIndex(messages);
+  const lastTurn = lastTurnIndex(messages);
   let previousDay = "";
   messages.forEach((message, index) => {
     const date = new Date(message.timestamp);
@@ -60,7 +60,7 @@ export function transcriptItems(messages: readonly Message[], now = new Date()):
       const key = dayKey(date);
       if (key !== previousDay) { items.push({ kind: "day", key: `day:${key}:${message.msg_id}`, label: dayLabel(date, now) }); previousDay = key; }
     }
-    items.push({ kind: "message", key: message.msg_id, message, index, last: index === lastAssistant });
+    items.push({ kind: "message", key: message.msg_id, message, index, last: index === lastTurn });
   });
   return items;
 }

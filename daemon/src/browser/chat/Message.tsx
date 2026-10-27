@@ -209,11 +209,12 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   const assistant = message.role === "assistant";
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
+  const reply = last ? assistant ? { label: "Regenerate", icon: "regenerate" as const } : { label: "Generate reply", icon: "send" as const } : undefined;
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;
   const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },
     { label: "Edit", icon: "edit", onSelect: () => setMode("edit") },
-    ...(assistant && last ? [{ label: "Regenerate", icon: "regenerate" as const, onSelect: regenerate, disabled: busy }] : []),
+    ...(reply === undefined ? [] : [{ ...reply, onSelect: regenerate, disabled: busy }]),
     { label: "Delete", icon: "trash", onSelect: () => setMode("delete"), danger: true },
   ];
   const time = display.timestamps === "off" ? "" : timeLabel(message.timestamp);
@@ -223,7 +224,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
       <IconButton icon="copy" label="Copy" onClick={copy} />
       {readOnly ? null : <>
         <IconButton icon="edit" label="Edit" onClick={() => setMode("edit")} />
-        {assistant && last ? <IconButton icon="regenerate" label="Regenerate" disabled={busy} onClick={regenerate} /> : null}
+        {reply === undefined ? null : <IconButton icon={reply.icon} label={reply.label} disabled={busy} onClick={regenerate} />}
         <IconButton icon="trash" label="Delete" onClick={() => setMode("delete")} />
       </>}
     </div> : null}
