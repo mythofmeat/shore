@@ -7114,6 +7114,60 @@
       ]
     },
     {
+      "path": "shore ui thread",
+      "about": "Switch to another thread, in the order the thread menu lists them",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "target",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "`next` or `previous` to step through the threads, or `unread` to open the next one with messages you haven't seen",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [
+            "next",
+            "previous",
+            "unread"
+          ],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore ui images",
       "about": "Open the fullscreen image viewer on the nearest image",
       "long_about": null,
@@ -9374,6 +9428,18 @@
       [
         "ctrl+v",
         "ui image paste"
+      ],
+      [
+        "alt+up",
+        "ui thread previous"
+      ],
+      [
+        "alt+down",
+        "ui thread next"
+      ],
+      [
+        "alt+shift+down",
+        "ui thread unread"
       ]
     ],
     "normal": [

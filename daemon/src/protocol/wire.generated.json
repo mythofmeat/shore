@@ -521,6 +521,19 @@
         "required": [
           "type"
         ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "thread_unread"
+          }
+        },
+        "$ref": "#/$defs/ThreadUnread",
+        "required": [
+          "type"
+        ]
       }
     ],
     "$defs": {
@@ -1914,6 +1927,33 @@
         "required": [
           "character",
           "thread"
+        ]
+      },
+      "ThreadUnread": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "thread",
+          "unread"
         ]
       }
     }

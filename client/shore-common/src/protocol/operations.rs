@@ -2357,6 +2357,13 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct MarkThreadReadArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub through: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct ForkThreadArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2456,11 +2463,24 @@ wire_types! {
         #[ts(optional, type = "number")]
         pub turns: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        pub unread: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub warm: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub forked_from: Option<ThreadForkOrigin>,
+    }
+
+    pub struct ThreadUnread {
+        pub character: String,
+        pub thread: String,
+        #[ts(type = "number")]
+        pub unread: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last_active: Option<String>,
     }
 
     pub struct ThreadListing {
@@ -2632,6 +2652,7 @@ operations! {
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
     PinThreadModel: "thread_model" (ThreadModelArgs) => ThreadListing,
+    MarkThreadRead: "mark_thread_read" (MarkThreadReadArgs) => ThreadUnread,
 }
 
 #[cfg(test)]

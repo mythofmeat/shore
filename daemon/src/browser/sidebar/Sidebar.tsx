@@ -12,6 +12,13 @@ export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
 }
 
+function UnreadBadge({ count }: { count: number }) {
+  return <span className="sidebar-unread">
+    <span aria-hidden="true">{count > 99 ? "99+" : String(count)}</span>
+    <span className="sr-only">{count === 1 ? "(1 unread message)" : `(${String(count)} unread messages)`}</span>
+  </span>;
+}
+
 function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {
   const [text, tone] = status === "ready" ? ["Connected", "ok"] : status === "error" ? ["Offline", "bad"] : status === "reload_required" ? ["Update ready", "bad"] : ["Reconnecting…", "wait"];
   return <span className="connection" data-tone={tone} title={text}><span className="connection-dot" />{text}</span>;
@@ -56,8 +63,10 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
           {selected ? <div className="sidebar-threads" role="group" aria-label={`${character.name} conversations`}>
             {sortThreads(state.threads).map((thread) => {
               const current = thread.id === state.thread;
-              return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""}`} aria-current={current ? "page" : undefined} disabled={!ready} onClick={() => selectThread(thread.id)}>
+              const unread = current ? 0 : thread.unread ?? 0;
+              return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} disabled={!ready} onClick={() => selectThread(thread.id)}>
                 <Icon name={thread.home ? "home" : "chat"} size={14} /><span className="sidebar-name">{threadLabel(thread)}</span>
+                {unread > 0 ? <UnreadBadge count={unread} /> : null}
               </button>;
             })}
             <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New conversation</span></button>

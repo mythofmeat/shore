@@ -1548,6 +1548,25 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
             Color::Magenta,
         ));
     }
+    let unread = app.unread_elsewhere();
+    if !unread.is_empty() {
+        let shown = unread
+            .iter()
+            .take(3)
+            .map(|(thread, count)| format!("{thread} {count}"))
+            .collect::<Vec<_>>()
+            .join(" \u{b7} ");
+        let more = if unread.len() > 3 {
+            format!(" +{}", unread.len().saturating_sub(3))
+        } else {
+            String::new()
+        };
+        let key = app
+            .keymap
+            .key_for_command("ui thread unread")
+            .map_or_else(String::new, |key| format!(" \u{2014} {key}"));
+        indicators.push((format!("\u{25cf} {shown}{more}{key}"), Color::LightGreen));
+    }
     let running_subagents = app.running_subagent_count();
     if running_subagents > 0 {
         indicators.push((
@@ -2296,6 +2315,9 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
             PaletteMode::Submenu(s) if s.parent == "model" => app.is_active_model_candidate(c),
             PaletteMode::Submenu(s) if s.parent == "character" => {
                 !app.character_name.is_empty() && app.character_name == *c
+            }
+            PaletteMode::Submenu(s) if s.parent == "thread" => {
+                !app.thread_name.is_empty() && App::thread_id_from_row(c) == app.thread_name
             }
             PaletteMode::Submenu(s) if s.parent.starts_with("setting:") => s
                 .parent

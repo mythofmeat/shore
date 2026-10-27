@@ -12275,6 +12275,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -12570,6 +12578,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -12752,6 +12768,14 @@
               "type": "boolean"
             },
             "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
               "type": [
                 "integer",
                 "null"
@@ -12960,6 +12984,14 @@
               "type": "boolean"
             },
             "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
               "type": [
                 "integer",
                 "null"
@@ -13210,6 +13242,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -13405,6 +13445,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -13593,6 +13641,14 @@
               "type": "boolean"
             },
             "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
               "type": [
                 "integer",
                 "null"
@@ -13798,6 +13854,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -13993,6 +14057,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "warm": {
               "type": [
                 "boolean",
@@ -14061,6 +14133,58 @@
           ]
         }
       }
+    }
+  },
+  {
+    "name": "mark_thread_read",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "MarkThreadReadArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "through": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadUnread",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "unread": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "last_active": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "thread",
+        "unread"
+      ]
     }
   }
 ]

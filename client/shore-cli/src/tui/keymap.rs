@@ -17,10 +17,13 @@ impl Scope {
     }
 }
 
-pub(crate) const DEFAULT_GLOBAL_KEYS: [(&str, &str); 3] = [
+pub(crate) const DEFAULT_GLOBAL_KEYS: [(&str, &str); 6] = [
     ("alt+c", "ui cancel"),
     ("ctrl+q", "ui quit"),
     ("ctrl+v", "ui image paste"),
+    ("alt+up", "ui thread previous"),
+    ("alt+down", "ui thread next"),
+    ("alt+shift+down", "ui thread unread"),
 ];
 
 pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 24] = [

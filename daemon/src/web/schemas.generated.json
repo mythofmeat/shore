@@ -1588,6 +1588,22 @@
               "name",
               "data"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "mark_thread_read"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadUnread"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
           }
         ]
       },
@@ -8886,6 +8902,14 @@
             "format": "uint64",
             "minimum": 0
           },
+          "unread": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
           "warm": {
             "type": [
               "boolean",
@@ -9080,6 +9104,33 @@
         "enum": [
           "full",
           "last_turns"
+        ]
+      },
+      "ThreadUnread": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "thread",
+          "unread"
         ]
       },
       "Error": {
@@ -10270,6 +10321,22 @@
               "name",
               "data"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "mark_thread_read"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadUnread"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
           }
         ]
       },
@@ -17568,6 +17635,14 @@
             "format": "uint64",
             "minimum": 0
           },
+          "unread": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
           "warm": {
             "type": [
               "boolean",
@@ -17762,6 +17837,33 @@
         "enum": [
           "full",
           "last_turns"
+        ]
+      },
+      "ThreadUnread": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "thread",
+          "unread"
         ]
       },
       "Error": {

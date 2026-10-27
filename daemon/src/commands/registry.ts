@@ -20,7 +20,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, newThread, switchThread, threadFiles, threadHome, threadLabel, threadModel, threadPurpose } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadFiles, threadHome, threadLabel, threadModel, threadPurpose } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -376,6 +376,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Pin thread model", effects: ["model_selection"],
     fields: { name: threadName, model: { label: "Chat model", choices: "models", hint: "Leave empty to inherit the character default" } },
   }, async (context, args) => threadModel(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  mark_thread_read: register("mark_thread_read", {
+    ...threadPresentation, label: "Mark thread read", effects: ["runtime_write"],
+    fields: { name: threadName, through: { label: "Read through", hint: "Timestamp of the last message shown; omit for everything so far" } },
+  }, (context, args) => markRead(threadContext(context.deps, engineOf(context), context.session.signal), context.deps.reads, args)),
 };
 
 assertContractBindings(Object.keys(commandOperations));

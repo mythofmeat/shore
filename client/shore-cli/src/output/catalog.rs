@@ -442,6 +442,13 @@ fn thread_facts(row: &Value) -> String {
     if flag(row, "home") {
         parts.push("home".to_owned());
     }
+    if let Some(unread) = row
+        .get("unread")
+        .and_then(Value::as_u64)
+        .filter(|count| *count > 0)
+    {
+        parts.push(format!("{unread} new"));
+    }
     if let Some(turns) = row.get("turns").and_then(Value::as_u64) {
         parts.push(thread_turns(turns));
     }

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
 import { ConversationRequests } from "../chat/requests.ts";
+import { ReadMarks } from "../chat/read_marks.ts";
 import { conversationCharacter, droppedNotice } from "../chat/sending.ts";
 import { UnsentMessages } from "../chat/unsent.ts";
 import { Notifier, type NotifySnapshot } from "../notifications.ts";
@@ -29,6 +30,7 @@ export const workspace = new Workspace(new BrowserConnection({
   origin: location.origin, contract: SHORE_WEB_CONTRACT, protocol: SHORE_WEB_PROTOCOL, character: route[0] || null, thread: route[1] || null,
 }), (callback) => { requestAnimationFrame(callback); });
 export const conversation = new ConversationRequests(workspace.connection);
+export const readMarks = new ReadMarks(workspace, () => document.hasFocus());
 export const unsent = new UnsentMessages(workspace.connection, listRequests, (message, dropped) => {
   const character = conversationCharacter(message.conversation);
   toasts.show(`Your earlier message${character === undefined ? "" : ` to ${character}`} wasn’t saved, so it’s back in its message box.${droppedNotice(dropped)}`, "error");

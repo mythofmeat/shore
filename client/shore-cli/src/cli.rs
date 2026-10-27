@@ -809,6 +809,13 @@ pub(crate) enum UiCommand {
         target: SegmentTarget,
     },
 
+    /// Switch to another thread, in the order the thread menu lists them
+    Thread {
+        /// `next` or `previous` to step through the threads, or `unread` to
+        /// open the next one with messages you haven't seen
+        target: ThreadStep,
+    },
+
     /// Open the fullscreen image viewer on the nearest image
     Images,
 
@@ -875,6 +882,13 @@ pub(crate) enum UiCommand {
 
     /// Leave the TUI
     Quit,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ThreadStep {
+    Next,
+    Previous,
+    Unread,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

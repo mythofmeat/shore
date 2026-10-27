@@ -11,6 +11,7 @@ import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
+import { ThreadUnreadTracker } from "../handler/thread_unread.ts";
 import { ensureAndBackfillAutonomy } from "../handler/turn.ts";
 import { Instances, type InstanceInfo } from "./instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
@@ -233,6 +234,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     }
 
     const diagnostics = new Diagnostics();
+    const reads = new ThreadUnreadTracker({ dataDir: loaded.dirs.data, broadcast: (message) => { server.broadcast(message); } });
+    const broadcast = (message: ServerMessage): void => {
+      server.broadcast(message);
+      reads.observe(message);
+    };
 
     const runtime = await createRuntime({
       config: loaded,
@@ -243,7 +249,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       onHistory: (history) => server.broadcast({ type: "history", ...history }),
       emit: (character, revision, msg, thread) =>
         emitNewMessageEvent(
-          (message) => server.broadcast(message),
+          broadcast,
           character,
           msg.origin ?? "autonomous",
           revision,
@@ -272,7 +278,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       autonomy: new TurnAutonomyBridge(runtime.autonomy),
       router: server.sessionRouter,
       handshake,
-      emitEvent: (message: ServerMessage) => server.broadcast(message),
+      emitEvent: broadcast,
+      reads,
       diagnostics,
       env,
       running,

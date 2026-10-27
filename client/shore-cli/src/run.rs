@@ -442,6 +442,7 @@ async fn recv_compaction_stream(
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -863,6 +864,7 @@ async fn follow_log_stream(
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -2087,6 +2089,7 @@ async fn recv_streaming_response(
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -2152,6 +2155,7 @@ async fn recv_command_data(
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => {}
         }
     }

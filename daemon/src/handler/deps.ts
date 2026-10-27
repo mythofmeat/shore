@@ -6,6 +6,7 @@ import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import { ArchiveSpool } from "../commands/archive_spool.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
+import type { ThreadReads } from "../commands/threads.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
 import {
   characterConfigDir,
@@ -358,6 +359,7 @@ export interface CommandAssembly {
   diagnostics: Diagnostics;
   router: SessionRouter;
   handshake: HandshakeProvider;
+  reads?: ThreadReads;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   env?: NodeJS.ProcessEnv | undefined;
   running?: () => RunningStatusReport;
@@ -628,6 +630,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   const ledgerPath = rustJoin(runtime.config.dirs.data, "shore.db");
   return {
     threads: runtime.registry,
+    ...(a.reads === undefined ? {} : { reads: a.reads }),
     autonomy: runtime.autonomy,
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,

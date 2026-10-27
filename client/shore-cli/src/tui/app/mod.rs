@@ -1,5 +1,5 @@
 use ratatui::text::Line;
-use shore_common::protocol::operations::SegmentSummary;
+use shore_common::protocol::operations::{SegmentSummary, ThreadUnread};
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::tui::images::ImageCache;
@@ -82,10 +82,37 @@ pub(crate) enum ValueEditorKind {
 pub(crate) struct ThreadRow {
     pub id: String,
     pub label: Option<String>,
+    pub purpose: Option<String>,
     pub model: Option<String>,
     pub home: bool,
     pub turns: Option<u64>,
+    pub unread: Option<u64>,
     pub warm: bool,
+    pub created_at: String,
+    pub last_active: Option<String>,
+    pub by_character: bool,
+}
+
+impl ThreadRow {
+    fn recency(&self) -> &str {
+        self.last_active.as_deref().unwrap_or(&self.created_at)
+    }
+
+    pub(crate) fn unread_count(&self) -> u64 {
+        self.unread.unwrap_or(0)
+    }
+}
+
+fn active_ago(at: &str) -> Option<String> {
+    let then = chrono::DateTime::parse_from_rfc3339(at).ok()?;
+    let seconds = chrono::Utc::now()
+        .signed_duration_since(then)
+        .num_seconds()
+        .max(0);
+    Some(format!(
+        "{} ago",
+        crate::output::autonomy::format_duration_compact(seconds)
+    ))
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -324,6 +351,14 @@ pub(crate) struct App {
     pub home_thread: String,
     pub threads: Vec<ThreadRow>,
     pub pending_thread_refresh_rid: Option<String>,
+    pub threads_known_for: Option<String>,
+    pub pending_thread_create: Option<String>,
+    pub unread_seq: u64,
+    pub unread_listing_from: u64,
+    pub unread_updates: std::collections::HashMap<String, (u64, ThreadUnread)>,
+    pub focused: bool,
+    pub read_mark_sent: Option<String>,
+    pub pending_read_mark_rid: Option<String>,
     pub model_names: Vec<String>,
     pub favorite_model_names: Vec<String>,
     pub subscription_model_names: Vec<String>,
@@ -410,6 +445,14 @@ impl Default for App {
             home_thread: String::new(),
             threads: Vec::new(),
             pending_thread_refresh_rid: None,
+            threads_known_for: None,
+            pending_thread_create: None,
+            unread_seq: 0,
+            unread_listing_from: 0,
+            unread_updates: std::collections::HashMap::new(),
+            focused: true,
+            read_mark_sent: None,
+            pending_read_mark_rid: None,
             model_names: Vec::new(),
             favorite_model_names: Vec::new(),
             subscription_model_names: Vec::new(),
@@ -1327,6 +1370,81 @@ impl App {
         }
     }
 
+    pub(crate) fn thread_order(&self) -> Vec<&ThreadRow> {
+        let mut rows: Vec<&ThreadRow> = self.threads.iter().collect();
+        rows.sort_by(|a, b| {
+            b.home
+                .cmp(&a.home)
+                .then_with(|| b.recency().cmp(a.recency()))
+        });
+        rows
+    }
+
+    pub(crate) fn thread_after(&self, step: crate::cli::ThreadStep) -> Option<String> {
+        let order = self.thread_order();
+        let count = order.len();
+        if count == 0 {
+            return None;
+        }
+        let current = order.iter().position(|row| row.id == self.thread_name);
+        let start = current.unwrap_or(count.saturating_sub(1));
+        let offset = |distance: usize| {
+            start
+                .saturating_add(distance)
+                .checked_rem(count)
+                .and_then(|index| order.get(index))
+        };
+        match step {
+            crate::cli::ThreadStep::Next => offset(1).map(|row| row.id.clone()),
+            crate::cli::ThreadStep::Previous => {
+                offset(count.saturating_sub(1)).map(|row| row.id.clone())
+            }
+            crate::cli::ThreadStep::Unread => (1..=count)
+                .filter_map(offset)
+                .find(|row| row.id != self.thread_name && row.unread_count() > 0)
+                .map(|row| row.id.clone()),
+        }
+    }
+
+    pub(crate) fn unread_elsewhere(&self) -> Vec<(&str, u64)> {
+        self.thread_order()
+            .into_iter()
+            .filter(|row| row.id != self.thread_name && row.unread_count() > 0)
+            .map(|row| (row.id.as_str(), row.unread_count()))
+            .collect()
+    }
+
+    pub(crate) fn apply_thread_unread(&mut self, update: &ThreadUnread) {
+        if let Some(row) = self.threads.iter_mut().find(|row| row.id == update.thread) {
+            row.unread = Some(update.unread);
+            if let Some(at) = &update.last_active {
+                row.last_active = Some(at.clone());
+            }
+        }
+    }
+
+    pub(crate) fn record_thread_unread(&mut self, update: ThreadUnread) {
+        self.unread_seq = self.unread_seq.wrapping_add(1);
+        self.apply_thread_unread(&update);
+        let _previous = self
+            .unread_updates
+            .insert(update.thread.clone(), (self.unread_seq, update));
+        self.sync_thread_catalog();
+    }
+
+    pub(crate) fn reapply_later_unread(&mut self) {
+        let since = self.unread_listing_from;
+        let later: Vec<ThreadUnread> = self
+            .unread_updates
+            .values()
+            .filter(|(seq, _)| *seq > since)
+            .map(|(_, update)| update.clone())
+            .collect();
+        for update in &later {
+            self.apply_thread_unread(update);
+        }
+    }
+
     pub(crate) fn in_side_thread(&self) -> bool {
         !self.thread_name.is_empty()
             && !self.home_thread.is_empty()
@@ -1915,9 +2033,21 @@ impl App {
     }
 
     pub(crate) fn thread_row_label(row: &ThreadRow) -> String {
+        let facts = Self::thread_row_facts(row);
+        if facts.is_empty() {
+            row.id.clone()
+        } else {
+            format!("{} \u{2014} {facts}", row.id)
+        }
+    }
+
+    fn thread_row_facts(row: &ThreadRow) -> String {
         let mut facts: Vec<String> = Vec::new();
         if row.home {
             facts.push("home".to_owned());
+        }
+        if row.unread_count() > 0 {
+            facts.push(format!("{} new", row.unread_count()));
         }
         if let Some(turns) = row.turns {
             facts.push(match turns {
@@ -1925,6 +2055,9 @@ impl App {
                 1 => "1 turn".to_owned(),
                 n => format!("{n} turns"),
             });
+        }
+        if let Some(ago) = row.last_active.as_deref().and_then(active_ago) {
+            facts.push(ago);
         }
         if row.warm {
             facts.push("warm".to_owned());
@@ -1935,11 +2068,22 @@ impl App {
         if let Some(label) = row.label.as_deref() {
             facts.push(label.to_owned());
         }
-        if facts.is_empty() {
-            row.id.clone()
-        } else {
-            format!("{} \u{2014} {}", row.id, facts.join(" \u{b7} "))
-        }
+        facts.join(" \u{b7} ")
+    }
+
+    pub(crate) fn sync_thread_catalog(&mut self) {
+        let values: Vec<crate::cli::PaletteValue> = self
+            .thread_order()
+            .into_iter()
+            .map(|row| {
+                let facts = Self::thread_row_facts(row);
+                crate::cli::PaletteValue {
+                    value: row.id.clone(),
+                    help: (!facts.is_empty()).then_some(facts),
+                }
+            })
+            .collect();
+        self.palette_catalog.threads = values;
     }
 
     pub(crate) fn thread_id_from_row(row: &str) -> &str {
@@ -1995,12 +2139,30 @@ impl App {
                     .collect();
             }
             "thread" => {
-                self.completion.candidates = self
-                    .threads
-                    .iter()
-                    .filter(|t| filter.is_empty() || t.id.to_lowercase().starts_with(&filter))
-                    .map(Self::thread_row_label)
+                let rows: Vec<(String, Option<String>)> = self
+                    .thread_order()
+                    .into_iter()
+                    .filter(|t| {
+                        filter.is_empty()
+                            || t.id.to_lowercase().contains(&filter)
+                            || t.label
+                                .as_deref()
+                                .is_some_and(|label| label.to_lowercase().contains(&filter))
+                    })
+                    .map(|t| {
+                        (
+                            Self::thread_row_label(t),
+                            t.purpose.as_deref().map(|purpose| {
+                                purpose.split_whitespace().collect::<Vec<_>>().join(" ")
+                            }),
+                        )
+                    })
                     .collect();
+                self.completion.descriptions = rows
+                    .iter()
+                    .filter_map(|(label, purpose)| Some((label.clone(), purpose.clone()?)))
+                    .collect();
+                self.completion.candidates = rows.into_iter().map(|(label, _)| label).collect();
             }
             "setting" => {
                 let visible = self.visible_setting_keys();
