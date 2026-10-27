@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::error::ErrorCode;
-use crate::protocol::operations::{ClaudePlanWindow, SegmentSummary};
+use crate::protocol::operations::{ClaudePlanWindow, SegmentSummary, ThreadUnread};
 use crate::protocol::types::{CharacterInfo, ContentBlock, ImageRef, Message, StreamMetadata};
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]
@@ -351,6 +351,7 @@ pub enum ServerMessage {
     RequestAccepted(RequestAccepted),
     RequestFinished(RequestFinished),
     ThreadsChanged(ThreadsChanged),
+    ThreadUnread(ThreadUnread),
     #[serde(other)]
     #[ts(skip)]
     #[schemars(skip)]
@@ -383,6 +384,7 @@ impl ServerMessage {
             | Self::NewMessage(_)
             | Self::CacheWarning(_)
             | Self::ThreadsChanged(_)
+            | Self::ThreadUnread(_)
             | Self::Unknown => None,
         }
     }
@@ -413,6 +415,7 @@ impl ServerMessage {
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => None,
         }
     }
@@ -443,6 +446,7 @@ impl ServerMessage {
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => None,
         }
     }

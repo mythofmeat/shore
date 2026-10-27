@@ -308,6 +308,7 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::ThreadsChanged(_)
+        | ServerMessage::ThreadUnread(_)
         | ServerMessage::Unknown => {}
     }
 }

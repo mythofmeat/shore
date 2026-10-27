@@ -19,7 +19,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, poll, read};
+use crossterm::event::{
+    DisableBracketedPaste, DisableFocusChange, EnableBracketedPaste, EnableFocusChange, poll, read,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     DisableLineWrap, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
@@ -30,8 +32,8 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
 use shore_common::protocol::operations::{
-    ConfigReloadArgs, ConfigReloadResult, ConversationPage, Operation, ReloadConfiguration,
-    UsageArgs, UsageReport,
+    ConfigReloadArgs, ConfigReloadResult, ConversationPage, MarkThreadRead, MarkThreadReadArgs,
+    Operation, ReloadConfiguration, ThreadUnread, UsageArgs, UsageReport,
 };
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
@@ -557,7 +559,12 @@ fn strip_editor_fence(contents: &str) -> String {
 
 fn with_cooked_terminal<T, F: FnOnce() -> io::Result<T>>(operation: F) -> io::Result<T> {
     let result = (|| {
-        execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
+        execute!(
+            io::stdout(),
+            DisableFocusChange,
+            DisableBracketedPaste,
+            EnableLineWrap
+        )?;
         disable_raw_mode()?;
         execute!(io::stdout(), LeaveAlternateScreen)?;
         operation()
@@ -567,7 +574,8 @@ fn with_cooked_terminal<T, F: FnOnce() -> io::Result<T>>(operation: F) -> io::Re
         io::stdout(),
         EnterAlternateScreen,
         DisableLineWrap,
-        EnableBracketedPaste
+        EnableBracketedPaste,
+        EnableFocusChange
     )?;
     result
 }
@@ -678,6 +686,9 @@ fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&st
     app.image_index.clear();
     app.conv_cache = app::ConvCache::default();
     app.history_version = app.history_version.wrapping_add(1);
+    if app.character_name != next_character {
+        app.unread_updates.clear();
+    }
     app.character_name = next_character;
     app.thread_name = next_thread;
     persist_conversation(app);
@@ -877,6 +888,11 @@ async fn send_conn_command(
         }
     }
     if let ConnCommand::Send(ClientMessage::Command(cmd)) = &command
+        && cmd.name == "list_threads"
+    {
+        app.unread_listing_from = app.unread_seq;
+    }
+    if let ConnCommand::Send(ClientMessage::Command(cmd)) = &command
         && matches!(cmd.name.as_str(), "switch_thread" | "switch_character")
     {
         if let Some(previous) = app.pending_navigation.take() {
@@ -955,37 +971,54 @@ fn thread_refresh_command(app: &mut App) -> ConnCommand {
     }))
 }
 
+fn listing_text(row: &serde_json::Value, key: &str) -> Option<String> {
+    row.get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
+fn listing_flag(row: &serde_json::Value, key: &str) -> bool {
+    row.get(key)
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
 fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
-    app.palette_catalog.threads = named_palette_values(data, "threads");
-    let Some(rows) = data.get("threads").and_then(|v| v.as_array()) else {
+    let Some(listed) = data.get("threads").and_then(|v| v.as_array()) else {
+        app.palette_catalog.threads.clear();
         return;
     };
-    app.threads = rows
+    let rows: Vec<app::ThreadRow> = listed
         .iter()
         .filter_map(|row| {
             let id = row.get("id").and_then(serde_json::Value::as_str)?;
             Some(app::ThreadRow {
                 id: id.to_owned(),
-                label: row
-                    .get("label")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned),
-                model: row
-                    .get("chat_model")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned),
-                home: row
-                    .get("home")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
+                label: listing_text(row, "label"),
+                purpose: listing_text(row, "purpose"),
+                model: listing_text(row, "chat_model"),
+                home: listing_flag(row, "home"),
                 turns: row.get("turns").and_then(serde_json::Value::as_u64),
-                warm: row
-                    .get("warm")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
+                unread: row.get("unread").and_then(serde_json::Value::as_u64),
+                warm: listing_flag(row, "warm"),
+                created_at: listing_text(row, "created_at").unwrap_or_default(),
+                last_active: listing_text(row, "last_active"),
+                by_character: listing_text(row, "created_by").as_deref() == Some("character"),
             })
         })
         .collect();
+    let character = data
+        .get("character")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(&app.character_name)
+        .to_owned();
+    if app.threads_known_for.as_deref() == Some(character.as_str()) {
+        announce_started_threads(app, &rows);
+    }
+    app.threads_known_for = Some(character);
+    app.threads = rows;
+    app.reapply_later_unread();
+    app.sync_thread_catalog();
     if let Some(home) = data.get("home").and_then(serde_json::Value::as_str) {
         app.home_thread = home.to_owned();
     }
@@ -994,15 +1027,99 @@ fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
     }
 }
 
-fn thread_listing_text(app: &App) -> String {
-    app.threads
+fn announce_started_threads(app: &mut App, rows: &[app::ThreadRow]) {
+    let notes: Vec<String> = rows
         .iter()
+        .filter(|row| row.by_character && !app.threads.iter().any(|known| known.id == row.id))
+        .map(|row| {
+            let mut note = format!("{} started a thread: {}", app.character_name, row.id);
+            if let Some(label) = &row.label {
+                note.push_str(&format!(" \u{2014} {label}"));
+            }
+            if let Some(purpose) = &row.purpose {
+                note.push_str(&format!("\n  {purpose}"));
+            }
+            note.push_str(&format!("\n  :thread use {} opens it", row.id));
+            note
+        })
+        .collect();
+    if notes.is_empty() {
+        return;
+    }
+    for content in notes {
+        app.entries.push(ConversationEntry::System {
+            msg_id: None,
+            content,
+            count: 1,
+            timestamp: String::new(),
+        });
+    }
+    if app.auto_scroll {
+        app.scroll_to_bottom();
+    }
+}
+
+fn thread_listing_text(app: &App) -> String {
+    app.thread_order()
+        .into_iter()
         .map(|row| {
             let mark = if row.id == app.thread_name { "*" } else { " " };
             format!("  {mark} {}", App::thread_row_label(row))
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn read_mark_command(app: &mut App) -> Option<ConnCommand> {
+    if !app.focused
+        || app.segment_view.is_some()
+        || app.thread_name.is_empty()
+        || app.connection_status != ConnectionStatus::Connected
+    {
+        return None;
+    }
+    let unread = app
+        .threads
+        .iter()
+        .find(|row| row.id == app.thread_name)?
+        .unread_count();
+    if unread == 0 {
+        return None;
+    }
+    let through = app.entries.iter().rev().find_map(|entry| {
+        let stamp = match entry {
+            ConversationEntry::Turn(turn) if !turn.is_streaming() => turn.timestamp.as_str(),
+            ConversationEntry::Turn(_) => return None,
+            ConversationEntry::System { timestamp, .. } => timestamp.as_str(),
+        };
+        chrono::DateTime::parse_from_rfc3339(stamp)
+            .is_ok()
+            .then(|| stamp.to_owned())
+    })?;
+    let key = format!("{}/{}/{through}", app.character_name, app.thread_name);
+    if app.read_mark_sent.as_deref() == Some(key.as_str()) {
+        return None;
+    }
+    let rid = app.next_request_id("read");
+    let command = MarkThreadRead::command(
+        MarkThreadReadArgs {
+            name: app.thread_name.clone(),
+            through: Some(through),
+        },
+        Some(rid.clone()),
+    )
+    .ok()?;
+    app.read_mark_sent = Some(key);
+    app.pending_read_mark_rid = Some(rid);
+    Some(ConnCommand::Send(ClientMessage::Command(command)))
+}
+
+fn switch_thread_command(name: &str) -> ConnCommand {
+    ConnCommand::Send(ClientMessage::Command(Command {
+        rid: None,
+        name: "switch_thread".into(),
+        args: serde_json::json!({ "name": name }),
+    }))
 }
 
 fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
@@ -1077,7 +1194,8 @@ async fn handle_conn_event_and_send(
     cmd_tx: &tokio::sync::mpsc::Sender<ConnCommand>,
     event: ConnEvent,
 ) -> UiEffect {
-    let effect = handle_conn_event(app, event);
+    let mut effect = handle_conn_event(app, event);
+    effect.cmds.extend(read_mark_command(app));
     send_conn_commands(app, cmd_tx, effect.cmds).await;
     UiEffect {
         cmds: vec![],
@@ -1140,6 +1258,8 @@ fn mark_connection_task_exited(app: &mut App, conn_events_open: &mut bool) {
 
 fn prepare_for_reconnect(app: &mut App) {
     app.connection_status = ConnectionStatus::Connecting;
+    app.read_mark_sent = None;
+    app.pending_read_mark_rid = None;
     app.retire_operations();
     app.effective_sampler = None;
     app.sampler_settings_loading = false;
@@ -1257,13 +1377,15 @@ impl TerminalSession {
             io::stdout(),
             EnterAlternateScreen,
             DisableLineWrap,
-            EnableBracketedPaste
+            EnableBracketedPaste,
+            EnableFocusChange
         )?;
         Ok(session)
     }
 }
 
 fn restore_terminal(was_raw: bool) {
+    let _focus = execute!(io::stdout(), DisableFocusChange);
     let _paste = execute!(io::stdout(), DisableBracketedPaste);
     let _wrap = execute!(io::stdout(), EnableLineWrap);
     let _screen = execute!(io::stdout(), LeaveAlternateScreen, crossterm::cursor::Show);
@@ -1426,6 +1548,9 @@ async fn run_tui(
                                     action,
                                     !fixture_mode,
                                 ).await?;
+                                if !fixture_mode && let Some(mark) = read_mark_command(&mut app) {
+                                    send_conn_command(&mut app, &cmd_tx, mark).await;
+                                }
                             }
                             Err(e) => return Err(e),
                         },
@@ -2082,6 +2207,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::ThreadsChanged(_)
+        | ServerMessage::ThreadUnread(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2242,6 +2368,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::ThreadsChanged(_)
+        | ServerMessage::ThreadUnread(_)
         | ServerMessage::Unknown => false,
     }
 }
@@ -2303,6 +2430,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::RequestAccepted(_)
         | ServerMessage::RequestFinished(_)
         | ServerMessage::ThreadsChanged(_)
+        | ServerMessage::ThreadUnread(_)
         | ServerMessage::Unknown => {}
     }
 
@@ -2679,6 +2807,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
             let mut refresh_usage = false;
+            let mut follow_up: Vec<ConnCommand> = Vec::new();
             match co.name.as_str() {
                 "history_page" => {
                     let Some((rid, request)) = app.pending_segment_page.take() else {
@@ -2763,9 +2892,30 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         }
                     }
                 }
-                "create_thread" | "archive_thread" | "thread_home" | "thread_label"
-                | "thread_purpose" | "thread_files" => {
+                "create_thread" => {
                     absorb_thread_listing(app, &co.data);
+                    if let Some(name) = app.pending_thread_create.take()
+                        && app.threads.iter().any(|row| row.id == name)
+                    {
+                        follow_up.push(switch_thread_command(&name));
+                    }
+                }
+                "archive_thread" | "thread_home" | "thread_label" | "thread_purpose"
+                | "thread_files" => {
+                    absorb_thread_listing(app, &co.data);
+                }
+                "mark_thread_read" => {
+                    if app.pending_read_mark_rid.is_some()
+                        && app.pending_read_mark_rid.as_deref() == co.rid.as_deref()
+                    {
+                        app.pending_read_mark_rid = None;
+                    }
+                    if let Ok(update) = serde_json::from_value::<ThreadUnread>(co.data.clone())
+                        && update.character == app.character_name
+                    {
+                        app.record_thread_unread(update);
+                    }
+                    return UiEffect::redraw(RedrawEffect::Immediate);
                 }
                 "thread_model" => {
                     absorb_thread_listing(app, &co.data);
@@ -3175,8 +3325,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.push_command_text(&command, rendered);
             }
             if refresh_usage {
+                follow_up.extend(usage_budget_conn_commands(app));
+            }
+            if !follow_up.is_empty() {
                 return UiEffect {
-                    cmds: usage_budget_conn_commands(app),
+                    cmds: follow_up,
                     redraw: RedrawEffect::Immediate,
                 };
             }
@@ -3184,6 +3337,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::Error(err) => {
+            if err.rid.is_some() && app.pending_read_mark_rid.as_deref() == err.rid.as_deref() {
+                app.pending_read_mark_rid = None;
+                return UiEffect::redraw(RedrawEffect::None);
+            }
             let generation_error = app.stream.active
                 && match (app.stream.rid.as_deref(), err.rid.as_deref()) {
                     (Some(active), Some(received)) => active == received,
@@ -3398,6 +3555,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 cmds: vec![thread_refresh_command(app)],
                 redraw: RedrawEffect::None,
             };
+        }
+
+        ServerMessage::ThreadUnread(update) => {
+            if update.character != app.character_name {
+                return UiEffect::redraw(RedrawEffect::None);
+            }
+            app.record_thread_unread(update);
+            RedrawEffect::Immediate
         }
 
         ServerMessage::Hello(_)

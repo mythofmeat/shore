@@ -100,6 +100,13 @@ export const TERMINAL_LOCAL_COMMANDS = {
   "segment": {
     "target": []
   },
+  "thread": {
+    "target": [
+      "next",
+      "previous",
+      "unread"
+    ]
+  },
   "images": {},
   "subagents": {},
   "editor": {},

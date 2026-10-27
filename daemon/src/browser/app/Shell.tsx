@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Sidebar } from "../sidebar/Sidebar.tsx";
+import { sortThreads } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
@@ -8,7 +9,7 @@ import { Toasts, toasts } from "../ui/toast.tsx";
 import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, useRoute } from "./route.ts";
-import { adjacent, globalAction } from "./shortcuts.ts";
+import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
 import { perform, useNotifications, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: WorkspaceSnapshot }) {
@@ -55,9 +56,15 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
         case "settings": navigate({ view: "settings", page: "models" }); break;
         case "help": navigate({ view: "settings", page: "keyboard" }); break;
         case "previous-thread": case "next-thread": {
-          const ids = state.threads.map((thread) => thread.id);
+          const ids = sortThreads(state.threads).map((thread) => thread.id);
           const next = adjacent(ids, state.thread ?? undefined, action === "next-thread" ? 1 : -1);
           if (next !== undefined && next !== state.thread && state.status === "ready") perform(() => workspace.actions.run("switch_thread", { name: next, resync: true }));
+          break;
+        }
+        case "next-unread-thread": {
+          const next = nextUnread(sortThreads(state.threads), state.thread);
+          if (next === undefined) toasts.show("No unread messages in other conversations");
+          else if (state.status === "ready") perform(() => workspace.actions.run("switch_thread", { name: next, resync: true }));
           break;
         }
       }

@@ -12,7 +12,7 @@ import {
   threadsIndexIn,
 } from "../config/dirs.ts";
 import { HISTORY_DB_FILE } from "./history_store.ts";
-import { isToolResultOnly } from "./message_store.ts";
+import { deriveContentFromBlocks, isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
@@ -106,6 +106,7 @@ export interface ThreadActivity {
   turns: number;
   last_active?: string;
   last_user?: string;
+  unread?: number;
 }
 
 function messageTime(raw: unknown): number {
@@ -114,20 +115,50 @@ function messageTime(raw: unknown): number {
   return typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
 }
 
-export async function threadActivity(
-  data: string,
-  character: string,
-  id: string,
-): Promise<ThreadActivity> {
+function isReplyLine(raw: unknown): boolean {
+  if (typeof raw !== "object" || raw === null) return false;
+  const msg = raw as Partial<Message>;
+  return msg.role === "assistant" && Array.isArray(msg.content_blocks) && deriveContentFromBlocks(msg.content_blocks, false) !== "";
+}
+
+const READ_MARK_FILE = "read.json";
+
+export function threadReadMark(data: string, character: string, id: string): number | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readDurable(threadFile(data, character, id, READ_MARK_FILE)));
+  } catch {
+    return undefined;
+  }
+  const through = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>)["through"] : undefined;
+  const time = typeof through === "string" ? Date.parse(through) : Number.NaN;
+  return Number.isNaN(time) ? undefined : time;
+}
+
+function writeReadMark(data: string, character: string, id: string, through: number): void {
+  writeDurable(threadFile(data, character, id, READ_MARK_FILE), `${JSON.stringify({ through: new Date(through).toISOString() })}\n`);
+}
+
+export function markThreadRead(data: string, character: string, id: string, through: number): void {
+  const current = threadReadMark(data, character, id);
+  if (current === undefined || current < through) writeReadMark(data, character, id, through);
+}
+
+export function startReadMarkBefore(data: string, character: string, id: string, first: number): void {
+  if (threadReadMark(data, character, id) === undefined) writeReadMark(data, character, id, first - 1);
+}
+
+export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
   let raw: string;
   try {
     raw = readDurable(threadFile(data, character, id, "active.jsonl"));
   } catch {
-    return { turns: 0 };
+    return { turns: 0, unread: 0 };
   }
   let turns = 0;
   let latest = -Infinity;
   let latestUser = -Infinity;
+  const replies: number[] = [];
   for (const line of raw.split("\n")) {
     if (line.trim() === "") continue;
     let parsed: unknown;
@@ -141,13 +172,25 @@ export async function threadActivity(
       turns += 1;
       if (time > latestUser) latestUser = time;
     }
+    if (isReplyLine(parsed)) replies.push(time);
     if (time > latest) latest = time;
   }
+  const mark = threadReadMark(data, character, id);
+  const seen = mark === undefined ? Infinity : Math.max(mark, latestUser);
   return {
     turns,
     ...(latest === -Infinity ? {} : { last_active: new Date(latest).toISOString() }),
     ...(latestUser === -Infinity ? {} : { last_user: new Date(latestUser).toISOString() }),
+    unread: replies.filter((time) => time > seen).length,
   };
+}
+
+export async function threadActivity(
+  data: string,
+  character: string,
+  id: string,
+): Promise<ThreadActivity> {
+  return threadActivityNow(data, character, id);
 }
 
 export async function threadActivities(

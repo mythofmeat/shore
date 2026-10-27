@@ -11,6 +11,7 @@ import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { ConversationPage } from "../protocol/ConversationPage.ts";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
@@ -40,7 +41,7 @@ export const EVENT_POLICIES = {
   phase: "activity", command_output: "result", error: "warning",
   cache_warning: "warning", provider_warning: "warning", provider_fallback_warning: "warning",
   usage_warning: "warning", plan_limit_warning: "warning", config_warning: "warning", request_accepted: "completion", request_finished: "completion",
-  ping: "connection", shutdown: "connection", threads_changed: "navigation",
+  ping: "connection", shutdown: "connection", threads_changed: "navigation", thread_unread: "navigation",
 } satisfies Record<ServerMessage["type"], string>;
 
 export function mergeHistory(previous: readonly Message[], history: History): Message[] | undefined {
@@ -55,6 +56,10 @@ export function touchThread(threads: ThreadView[], character: string | null, mes
   if (message.character !== character || Number.isNaN(time)) return threads;
   const thread = message.thread ?? "main";
   return threads.map((item) => item.id === thread ? { ...item, last_active: new Date(time).toISOString() } : item);
+}
+
+export function applyThreadUnread(threads: ThreadView[], update: ThreadUnread): ThreadView[] {
+  return threads.map((item) => item.id === update.thread ? { ...item, unread: update.unread, ...(update.last_active === undefined ? {} : { last_active: update.last_active }) } : item);
 }
 
 function retainImages(messages: readonly Message[], previous: readonly Message[], live: readonly SendImage[] = []): Message[] {
@@ -80,6 +85,8 @@ export class Workspace {
   #eventId = 0;
   #segmentEpoch = 0;
   #loadingEarlier = false;
+  #unreadSeq = 0;
+  #unread = new Map<string, { seq: number; update: ThreadUnread }>();
   #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [] };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
@@ -151,12 +158,18 @@ export class Workspace {
   }
   async refreshNavigation(): Promise<void> {
     const generation = ++this.#navigation;
+    const since = this.#unreadSeq;
     try {
       const catalogue = await this.actions.run("discover_operations", {});
       const characters = await this.actions.run("list_characters", {});
       const threads = catalogue.operations.find((operation) => operation.name === "list_threads")?.available === true ? (await this.actions.run("list_threads", {})).threads : [];
-      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters, threads });
+      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters, threads: this.#laterUnread(threads, since) });
     } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
+  }
+  #laterUnread(threads: ThreadView[], since: number): ThreadView[] {
+    let merged = threads;
+    for (const { seq, update } of this.#unread.values()) if (seq > since) merged = applyThreadUnread(merged, update);
+    return merged;
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
     const manual = this.actions.pendingOperation(message.rid) === "run_tool";
@@ -242,6 +255,7 @@ export class Workspace {
         const previousSegment = full ? message.previous_segment ?? null : this.#state.previousSegment;
         const moved = previousSegment?.index !== this.#state.previousSegment?.index;
         if (changed) this.#segmentEpoch += 1;
+        if (character !== this.#state.character) this.#unread.clear();
         this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
           character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void this.refreshNavigation();
@@ -278,6 +292,12 @@ export class Workspace {
         this.#activity(message.type, message); break;
       case "threads_changed":
         if (message.character === this.#state.character && this.connection.status === "ready") void this.refreshNavigation();
+        this.#activity(message.type, message); break;
+      case "thread_unread":
+        if (message.character === this.#state.character) {
+          this.#unread.set(message.thread, { seq: ++this.#unreadSeq, update: message });
+          this.#patch({ threads: applyThreadUnread(this.#state.threads, message) });
+        }
         this.#activity(message.type, message); break;
       case "ping": break;
     }

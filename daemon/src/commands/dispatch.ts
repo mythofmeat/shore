@@ -19,7 +19,7 @@ import type { SessionActivateContext } from "./activate.ts";
 import type { KeepalivePingContext } from "./keepalive.ts";
 import type { RunToolContext } from "./run_tool.ts";
 
-import type { ThreadRegistry } from "./threads.ts";
+import type { ThreadReads, ThreadRegistry } from "./threads.ts";
 import { commandOperations, isRegisteredOperation, runRegisteredOperation } from "./registry.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
@@ -43,6 +43,7 @@ export interface CommandSession {
 
 export interface CommandDeps {
   threads?: ThreadRegistry;
+  reads?: ThreadReads;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;

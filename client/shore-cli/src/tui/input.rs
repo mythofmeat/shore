@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::cli::{
     CharacterCommand, CliCommand, ConfigCommand, MsgCommand, PaletteScope, ScrollDirection,
-    SegmentTarget, SegmentsCommand, UiCommand, ViewKey,
+    SegmentTarget, SegmentsCommand, ThreadCommand, ThreadStep, UiCommand, ViewKey,
 };
 use crate::tui::app::{App, ConversationEntry, InputMode, PaletteMode, SegmentRequest};
 use crate::tui::connection::ConnCommand;
@@ -34,7 +34,15 @@ pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
         Event::Key(key) => handle_key(app, key),
         Event::Paste(text) => handle_paste(app, &text),
         Event::Resize(_, _) => Action::Redraw,
-        Event::FocusGained | Event::FocusLost | Event::Mouse(_) => Action::None,
+        Event::FocusGained => {
+            app.focused = true;
+            Action::None
+        }
+        Event::FocusLost => {
+            app.focused = false;
+            Action::None
+        }
+        Event::Mouse(_) => Action::None,
     }
 }
 
@@ -1135,6 +1143,8 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
 
         UiCommand::Segment { target } => run_segment_command(app, *target),
 
+        UiCommand::Thread { target } => run_thread_step(app, *target),
+
         UiCommand::Images => {
             let Some(index) = nearest_image(app) else {
                 app.set_status("no images in view");
@@ -1222,6 +1232,21 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
 
         UiCommand::Quit => Action::Quit,
     }
+}
+
+fn run_thread_step(app: &mut App, step: ThreadStep) -> Action {
+    let Some(name) = app.thread_after(step) else {
+        app.set_status(match step {
+            ThreadStep::Unread => "no unread messages in other threads",
+            ThreadStep::Next | ThreadStep::Previous => "no other thread to switch to",
+        });
+        return Action::Redraw;
+    };
+    if name == app.thread_name {
+        app.set_status("no other thread to switch to");
+        return Action::Redraw;
+    }
+    Action::Send(super::switch_thread_command(&name))
 }
 
 const fn scope_of(global: bool) -> Scope {
@@ -1515,6 +1540,12 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             if *follow {
                 app.set_status("the TUI already follows this conversation live");
             }
+        }
+        CliCommand::Thread {
+            subcommand: Some(ThreadCommand::New { name, .. }),
+            ..
+        } => {
+            app.pending_thread_create = Some(name.clone());
         }
         CliCommand::Msg { .. }
         | CliCommand::Compact { .. }

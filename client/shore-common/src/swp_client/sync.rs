@@ -112,6 +112,7 @@ impl SyncState {
             | ServerMessage::RequestAccepted(_)
             | ServerMessage::RequestFinished(_)
             | ServerMessage::ThreadsChanged(_)
+            | ServerMessage::ThreadUnread(_)
             | ServerMessage::Unknown => SyncDecision::Deliver,
         }
     }

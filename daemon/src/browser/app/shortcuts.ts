@@ -5,6 +5,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ["Mod", "/"], description: "Focus the message box", where: "Anywhere" },
   { keys: ["Mod", "Shift", "O"], description: "New conversation", where: "Anywhere" },
   { keys: ["Alt", "↑ / ↓"], description: "Previous or next conversation", where: "Anywhere" },
+  { keys: ["Alt", "Shift", "↓"], description: "Next conversation with unread messages", where: "Anywhere" },
   { keys: ["Mod", "\\"], description: "Show or hide the sidebar", where: "Anywhere" },
   { keys: ["Mod", ","], description: "Open settings", where: "Anywhere" },
   { keys: ["?"], description: "Show keyboard shortcuts", where: "Anywhere" },
@@ -36,7 +37,7 @@ export function keyLabel(key: string): string {
   return key === "Mod" ? IS_MAC ? "⌘" : "Ctrl" : key;
 }
 
-export type GlobalAction = "palette" | "focus" | "new-thread" | "previous-thread" | "next-thread" | "sidebar" | "settings" | "help";
+export type GlobalAction = "palette" | "focus" | "new-thread" | "previous-thread" | "next-thread" | "next-unread-thread" | "sidebar" | "settings" | "help";
 
 export interface KeyInput { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }
 
@@ -49,7 +50,17 @@ export function globalAction(event: KeyInput, typing: boolean): GlobalAction | u
   if (mod && !event.shiftKey && event.key === ",") return "settings";
   if (event.altKey && !mod && !event.shiftKey && event.key === "ArrowUp") return "previous-thread";
   if (event.altKey && !mod && !event.shiftKey && event.key === "ArrowDown") return "next-thread";
+  if (event.altKey && !mod && event.shiftKey && event.key === "ArrowDown") return "next-unread-thread";
   if (!typing && !mod && !event.altKey && event.key === "?") return "help";
+  return undefined;
+}
+
+export function nextUnread(threads: readonly { id: string; unread?: number }[], current: string | null): string | undefined {
+  const start = threads.findIndex((thread) => thread.id === current);
+  for (let step = 1; step <= threads.length; step += 1) {
+    const thread = threads[(start + step + threads.length) % threads.length];
+    if (thread !== undefined && thread.id !== current && (thread.unread ?? 0) > 0) return thread.id;
+  }
   return undefined;
 }
 

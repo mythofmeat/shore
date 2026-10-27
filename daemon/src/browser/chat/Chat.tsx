@@ -6,7 +6,7 @@ import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { useConversationActive } from "../app/state.ts";
+import { readMarks, useConversationActive } from "../app/state.ts";
 import { makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
@@ -16,9 +16,17 @@ import { ModelPicker, shortModel, useModelListing } from "./models.tsx";
 import { QuoteButton } from "./QuoteButton.tsx";
 import { Transcript } from "./Transcript.tsx";
 
-function SidebarToggle({ open, mobile, toggle }: { open: boolean; mobile: boolean; toggle: () => void }) {
+export function unreadElsewhere(state: Pick<WorkspaceSnapshot, "threads" | "thread">): boolean {
+  return state.threads.some((thread) => thread.id !== state.thread && (thread.unread ?? 0) > 0);
+}
+
+function SidebarToggle({ open, mobile, toggle, unread }: { open: boolean; mobile: boolean; toggle: () => void; unread: boolean }) {
   if (open) return null;
-  return <IconButton icon={mobile ? "menu" : "panel"} label={mobile ? "Open sidebar" : "Expand sidebar"} onClick={toggle} />;
+  const label = mobile ? "Open sidebar" : "Expand sidebar";
+  return <span className="sidebar-toggle">
+    <IconButton icon={mobile ? "menu" : "panel"} label={unread ? `${label} (unread messages in another conversation)` : label} onClick={toggle} />
+    {unread ? <span className="unread-dot" aria-hidden="true" /> : null}
+  </span>;
 }
 
 function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
@@ -47,7 +55,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
     { label: "Archive conversation…", icon: "archive", onSelect: () => setDialog("archive"), disabled: !ready || thread?.home === true, danger: true },
   ];
   return <header className="topbar">
-    <SidebarToggle open={sidebarOpen} mobile={mobile} toggle={toggleSidebar} />
+    <SidebarToggle open={sidebarOpen} mobile={mobile} toggle={toggleSidebar} unread={unreadElsewhere(state)} />
     {state.character === null ? <div className="topbar-title"><span className="topbar-name">Shore</span></div> : <>
       <Avatar name={state.character} avatar={character?.avatar} size={30} />
       <div className="topbar-title">
@@ -72,6 +80,15 @@ function NoCharacter({ state }: { state: WorkspaceSnapshot }) {
 }
 
 export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
+  useEffect(() => { readMarks.check(); });
+  useEffect(() => {
+    addEventListener("focus", readMarks.check);
+    document.addEventListener("visibilitychange", readMarks.check);
+    return () => {
+      removeEventListener("focus", readMarks.check);
+      document.removeEventListener("visibilitychange", readMarks.check);
+    };
+  }, []);
   return <>
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />

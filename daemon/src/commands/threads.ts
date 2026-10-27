@@ -2,9 +2,10 @@ import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
 import type { ThreadForkResult } from "../protocol/ThreadForkResult.ts";
+import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
 export type { ThreadListing, ThreadForkResult };
 import type { Args } from "./navigation.ts";
-import { busy, invalidRequest, notFound } from "./errors.ts";
+import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
 import {
   ThreadError,
   type ArchiveThreadOptions,
@@ -103,7 +104,7 @@ function view(ctx: ThreadContext, record: ThreadRecord, home: string, current: s
     ...record,
     home: record.id === home,
     current: record.id === current,
-    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0 }),
+    ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0, unread: activity?.unread ?? 0 }),
     ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
     ...(ctx.warm === record.id ? { warm: true } : {}),
   };
@@ -218,6 +219,22 @@ export async function threadModel(ctx: ThreadContext, args: Args): Promise<Threa
   } catch (e) {
     throw threadCommandError(e);
   }
+}
+
+export interface ThreadReads {
+  markRead(character: string, thread: string, through: number): ThreadUnread;
+}
+
+export function markRead(ctx: ThreadContext, reads: ThreadReads | undefined, args: Args): ThreadUnread {
+  const id = requiredId(args);
+  if (!ctx.registry.listThreads(ctx.character).some((t) => t.id === id)) {
+    throw notFound(`Thread not found: ${id}`);
+  }
+  const through = optionalText(args["through"], "through");
+  const at = through === undefined ? Number.POSITIVE_INFINITY : Date.parse(through);
+  if (Number.isNaN(at)) throw invalidRequest("through must be a timestamp, like the one on the last message read");
+  if (reads === undefined) throw internalError("this daemon keeps no read state for threads");
+  return reads.markRead(ctx.character, id, at);
 }
 
 function requestedTurns(value: unknown): number | undefined {

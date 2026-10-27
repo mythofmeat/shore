@@ -83,6 +83,7 @@ export function eventMatchesSession(
     return msg.selected_character === selectedCharacter && threadMatches(msg.selected_thread, selectedThread);
   }
   if (msg.type === "new_message") return msg.character === selectedCharacter && threadMatches(msg.thread ?? "main", selectedThread);
+  if (msg.type === "thread_unread") return msg.character === selectedCharacter;
   return true;
 }
 
