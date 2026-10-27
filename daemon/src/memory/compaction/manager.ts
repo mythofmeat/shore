@@ -1,5 +1,5 @@
 import { sameWorkspaceEntry } from "../../tools/workspace_snapshot.ts";
-import { restorePaths, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../../tools/workspace_turns.ts";
+import { restorePaths, withWriteWindow, workspaceChanges, workspaceTree, type WorkspaceChange, type WorkspaceTurns } from "../../tools/workspace_turns.ts";
 import { CharacterWorkspace } from "../../tools/character_workspace.ts";
 import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
@@ -173,10 +173,19 @@ async function tracked<T>(tools: CompactionTools, read: () => Promise<T>): Promi
   }
 }
 
-async function recordChanges(tools: CompactionTools, workspaceDir: string, state: ToolLoopState, before: string): Promise<void> {
-  const after = await tracked(tools, () => workspaceChanges(tools.turns, before));
-  if (after === undefined) return;
+async function recordChanges(
+  tools: CompactionTools,
+  workspaceDir: string,
+  state: ToolLoopState,
+  before: string,
+  after: { tree: string; changes: WorkspaceChange[] },
+  foreign: ReadonlySet<string>,
+): Promise<void> {
   for (const change of after.changes) {
+    if (foreign.has(change.path)) {
+      shoreLog.warn(`shore: another writer changed ${change.path} while a compaction tool call ran, so a rollback leaves it alone`);
+      continue;
+    }
     state.writesApplied.push({
       displayPath: change.path, resolvedPath: join(workspaceDir, change.path), previousTree: before, resultingTree: after.tree,
       ...(change.deleted ? { deleted: true } : {}),
@@ -194,12 +203,22 @@ async function dispatchCompactionTool(
 ): Promise<import("./types.ts").ToolOutput> {
   if (["bash", "edit", "apply_patch", "save_picture"].includes(name)) {
     if (state.dryRun) return { output: `${name} blocked: dry-run compaction does not modify files`, isError: true };
-    const before = await tracked(tools, () => workspaceTree(tools.turns));
-    try {
-      return await tools.dispatch(name, input);
-    } finally {
-      if (before !== undefined) await recordChanges(tools, workspaceDir, state, before);
+    let before: string | undefined;
+    const call = await withWriteWindow(tools.turns, state, async () => {
+      before = await tracked(tools, () => workspaceTree(tools.turns));
+      const settled = await tools.dispatch(name, input).then(
+        (output) => ({ output }),
+        (error: unknown) => ({ error }),
+      );
+      const after = before === undefined ? undefined : await tracked(tools, async () => await workspaceChanges(tools.turns, required(before)));
+      return { value: { settled, after }, paths: after?.changes.map((change) => change.path) ?? [], head: name === "bash" };
+    });
+    const { settled, after } = call.value;
+    if (before !== undefined && after !== undefined) {
+      await recordChanges(tools, workspaceDir, state, before, after, (await call.foreign()).paths);
     }
+    if ("error" in settled) throw settled.error;
+    return settled.output;
   }
 
   if (name === "git" && state.dryRun) {

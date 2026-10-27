@@ -50,6 +50,7 @@ export interface ToolContext {
 
   deferEdit?: (path: string) => Promise<void> | void;
   trackWorkspaceWrite?: (name: string, input: unknown, write: () => Promise<unknown>) => Promise<unknown>;
+  recordWorkspaceWrite?: <T>(run: () => Promise<T>) => Promise<T>;
 
   runSubagent?: (
     name: string,
@@ -115,6 +116,10 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
     ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
     ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
   };
+}
+
+export function writesWorkspace(name: string): boolean {
+  return ["bash", "edit", "apply_patch", "save_picture"].includes(name) || name.startsWith("mcp__");
 }
 
 export async function dispatchTool(

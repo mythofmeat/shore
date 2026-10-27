@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { deleteMessages } from "../src/commands/conversation.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { Message, MessageAlternative } from "../src/engine/types.ts";
-import { recordTurn, snapshotTree, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
+import { WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { testTmp } from "./support/tmp.ts";
 
 function user(id: string, text: string): Message {
@@ -35,9 +35,9 @@ async function world(history: Message[]): Promise<{ engine: ConversationEngine; 
 }
 
 async function wrote(turns: WorkspaceTurns, version: string, path: string): Promise<void> {
-  const before = await snapshotTree(turns);
-  writeFileSync(join(turns.workspace, path), `${version}\n`);
-  await recordTurn(turns, "main", version, before);
+  const recorder = new WorkspaceRecorder(turns);
+  await recorder.track(async () => writeFileSync(join(turns.workspace, path), `${version}\n`));
+  await recorder.settle("main", version);
 }
 
 const there = (turns: WorkspaceTurns, path: string): boolean => existsSync(join(turns.workspace, path));

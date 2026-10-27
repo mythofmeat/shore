@@ -43,7 +43,7 @@ import { imageTierForModel } from "../llm/image_tokens.ts";
 import { nearMessageBudget } from "../engine/prompt.ts";
 import { canArchiveTurns } from "../memory/compaction/plan.ts";
 import { toolPhase } from "../tools/execute.ts";
-import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
+import { toolLimitsFrom, type ToolContext, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
 import {
   buildGenerationRequest,
@@ -75,7 +75,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
-import { pruneTurns, recordTurn, redoTurns, replyVersions, snapshotTree, undoTurns, workspaceTurnsFor } from "../tools/workspace_turns.ts";
+import { pruneTurns, redoTurns, replyVersions, undoTurns, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 
@@ -275,16 +275,17 @@ async function runGenerationCore(
   const replaced = regen ? replyVersions(engine.messagesAfterLastUserTurn()) : [];
   if (replaced.length > 0) await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
   const known = new Set(replyVersions(engine.messages()));
-  const before = await snapshotTree(workspaceTurns);
+  const recorder = new WorkspaceRecorder(workspaceTurns);
   const settleWorkspace = async (): Promise<void> => {
     const messages = engine.messages();
     const newest = replyVersions(messages).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) {
-      await recordTurn(workspaceTurns, engine.thread, newest, before);
+      await recorder.settle(engine.thread, newest);
       await pruneTurns(workspaceTurns, engine.thread, messages);
-    } else if (replaced.length > 0) {
-      await redoTurns(workspaceTurns, engine.thread, replaced);
+      return;
     }
+    await recorder.discard();
+    if (replaced.length > 0) await redoTurns(workspaceTurns, engine.thread, replaced);
   };
 
   let result: StreamResult;
@@ -363,6 +364,7 @@ async function runGenerationCore(
       now,
       newMessageId,
       persistIntermediate,
+      recordWorkspaceWrite: recorder.track,
     }).catch((e: unknown) => {
       if (imageSupport !== false && isImageRejection(e)) {
         recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
@@ -578,6 +580,7 @@ interface StreamTurnParams {
   now: () => string;
   newMessageId: () => string;
   persistIntermediate: (message: Message) => Promise<void>;
+  recordWorkspaceWrite: NonNullable<ToolContext["recordWorkspaceWrite"]>;
 }
 
 async function streamTurn(
@@ -603,6 +606,7 @@ async function streamTurn(
         }), signal: params.signal, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
       )
     : undefined;
+  if (toolCtx !== undefined) toolCtx.recordWorkspaceWrite = params.recordWorkspaceWrite;
 
   let intermediate: Message[] = [];
 

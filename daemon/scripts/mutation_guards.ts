@@ -244,7 +244,7 @@ export const GUARDS: readonly Guard[] = [
     tests: ["workspace_turns.test.ts", "workspace_rewind_commands.test.ts", "generation.test.ts"],
     floor: 0.75,
     functions: [
-      ...fns("tools/workspace_turns.ts", ["replyVersions", "recordTurn", "undoTurns", "redoTurns", "aliasTurn", "pruneTurns", "replay", "isComplete", "move"]),
+      ...fns("tools/workspace_turns.ts", ["replyVersions", "WorkspaceRecorder.settle", "WorkspaceRecorder.#finish", "foreignTo", "undoTurns", "redoTurns", "aliasTurn", "pruneTurns", "replay", "completeSegments", "headChains", "move"]),
       ...fns("commands/conversation.ts", ["rewindDeleted"]),
     ],
   },

@@ -16,7 +16,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
 import { testTmp } from "./support/tmp.ts";
-import { recordedTurns, recordTurn, snapshotTree, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
+import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 afterAll(restoreTestEnv);
@@ -118,7 +118,11 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
   const round = turn.toolRound;
   if (round !== undefined) {
     provider.streamWithTools = async function* (_req, phase) {
+      await turn.during?.(turns);
       await phase.recordTurn("assistant", round);
+      for (const block of round) {
+        if (block.type === "tool_use") await phase.runTool({ id: block.id, name: block.name, input: block.input });
+      }
       yield* turn.events;
     };
   }
@@ -162,9 +166,9 @@ describe("workspace turns", () => {
     { type: "done", content: "Here you go.", finish_reason: "end_turn", usage, timing },
   ];
   const seedOldNote = async (turns: WorkspaceTurns): Promise<void> => {
-    const before = await snapshotTree(turns);
-    await writeFile(join(turns.workspace, "note.md"), "from the old reply\n");
-    await recordTurn(turns, "main", "mv_old", before);
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => await writeFile(join(turns.workspace, "note.md"), "from the old reply\n"));
+    await recorder.settle("main", "mv_old");
   };
 
   test("a regenerate undoes the old reply's files before the new reply runs", async () => {
@@ -175,10 +179,11 @@ describe("workspace turns", () => {
       regen: true,
       events: reply,
       seed: seedOldNote,
+      tools: ["bash"],
+      toolRound: [{ type: "tool_use", id: "tool_write", name: "bash", input: { command: "printf 'from the new reply' > other.md" } }],
       during: async (turns) => {
         workspace = turns.workspace;
         sawOldNote = existsSync(join(turns.workspace, "note.md"));
-        await writeFile(join(turns.workspace, "other.md"), "from the new reply\n");
       },
     });
     expect(run.error).toBeUndefined();

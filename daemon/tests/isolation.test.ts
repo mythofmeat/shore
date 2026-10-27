@@ -23,7 +23,7 @@ import {
 } from "../src/tools/character_workspace.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/workspace.ts";
-import { recordTurn, redoTurns, restorePaths, snapshotTree, undoTurns, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
+import { redoTurns, restorePaths, undoTurns, WorkspaceRecorder, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -218,10 +218,9 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const user = await ownUser();
     const workspace = await freshWorkspace();
     const turns: WorkspaceTurns = { workspace: workspace.dir, repo: join(await privateDir("isolation-turns"), "unused.git"), character: workspace, name: basename(workspace.dir) };
-    const before = await snapshotTree(turns);
-    expect(before).toMatch(/^[0-9a-f]{40}$/);
-    await bash(workspace, "mkdir -p made && printf turn > made/by-turn.txt");
-    await recordTurn(turns, "main", "v1", before);
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => await bash(workspace, "mkdir -p made && printf turn > made/by-turn.txt"));
+    await recorder.settle("main", "v1");
     expect(await undoTurns(turns, "main", ["v1"])).toEqual({ restored: ["made/by-turn.txt"], skipped: [] });
     expect(existsSync(join(workspace.dir, "made"))).toBe(false);
     expect(await redoTurns(turns, "main", ["v1"])).toEqual({ restored: ["made/by-turn.txt"], skipped: [] });
