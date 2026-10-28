@@ -10,6 +10,7 @@ import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
 import { limitImageBlocks } from "../prepare_images.ts";
 import { MANY_IMAGES_MAX_EDGE } from "../image_settings.ts";
+import { RESUME_PROMPT } from "./claude_agent_injections.ts";
 
 export function nativeHistoryStore(book: string, conversation: string): SessionStore {
   const data = dirname(book);
@@ -61,13 +62,16 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
   if (current?.role !== "user") {
     throw new Error("Claude Agent SDK: native history must end with a user turn to continue.");
   }
+  const results = current.content.filter((block) => block.type === "tool_result");
+  const rest = current.content.filter((block) => block.type !== "tool_result");
+  const history = results.length === 0 ? req.messages.slice(0, -1) : [...req.messages.slice(0, -1), { ...current, content: results }];
   const sessionId = randomUUID();
   const assistantUuids = new Map<number, string>();
   const names = new ToolNames(req.tools ?? []);
   const timestamp = new Date().toISOString();
   let parentUuid: string | null = null;
   const entries: SessionStoreEntry[] = [];
-  for (const [index, message] of req.messages.slice(0, -1).entries()) {
+  for (const [index, message] of history.entries()) {
     const uuid = randomUUID();
     const content = (await limitImageBlocks(message.content, MANY_IMAGES_MAX_EDGE)).map((block) => block.type === "tool_use"
       ? { ...block, name: names.wireOf(block.name) ?? block.name } : block);
@@ -101,7 +105,7 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
   return {
     sessionId,
     assistantUuids,
-    promptContent: current.content,
+    promptContent: results.length === 0 ? current.content : rest.length > 0 ? rest : [{ type: "text", text: RESUME_PROMPT }],
     sessionStore,
   };
 }

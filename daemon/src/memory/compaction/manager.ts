@@ -16,7 +16,7 @@ import type { GenerateResponse, SidecarRequest } from "../../llm/types";
 import type { ToolUseEvent } from "../../engine/tool_loop";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
-import { budgetStopIn, describeError } from "../../llm/errors.ts";
+import { budgetStopIn, describeError, resetAtIn } from "../../llm/errors.ts";
 import type { ContentBlock, Message } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
@@ -1125,8 +1125,9 @@ async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheck
     ? describeAbort(opts.signal?.reason)
     : refused ? error.message
     : stop?.summary ?? stop?.message ?? (error instanceof Error ? error.message : String(error));
-  if (stop?.resetAt === undefined) delete checkpoint.resumeAt;
-  else checkpoint.resumeAt = stop.resetAt;
+  const resumeAt = stop?.resetAt ?? (cancelled || refused ? undefined : resetAtIn(error));
+  if (resumeAt === undefined) delete checkpoint.resumeAt;
+  else checkpoint.resumeAt = resumeAt;
   await persistCheckpoint(opts, checkpoint);
   return pausedOutcome(opts, checkpoint);
 }

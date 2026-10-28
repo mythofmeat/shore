@@ -222,6 +222,22 @@ export function claudeAccountOrder(now: number = Date.now()): ClaudeAccount[] {
   return [claudeAccountInUse(), ...rest];
 }
 
+export function nextClaudeAccount(refused: ReadonlySet<string>, now: number = Date.now()): ClaudeAccount | undefined {
+  return claudeAccountOrder(now).find((account) => !refused.has(account.name));
+}
+
+export function claudeAccountSignedOut(name: string): void {
+  const plan = planOf(name);
+  if (plan !== undefined) plan.login = "logged_out";
+}
+
+export function claudeAccountsFreeAt(now: number = Date.now()): string | undefined {
+  const assessments = plans.map((plan) => assessClaudeAccount(standingOf(plan), now));
+  if (assessments.some((a) => a.state === "ok" || a.state === "unknown")) return undefined;
+  const free = assessments.flatMap((a) => (a.state === "limited" && a.availableAt !== null ? [a.availableAt] : []));
+  return free.length === 0 ? undefined : toRfc3339(Math.min(...free));
+}
+
 export function useClaudeAccount(name: string, reason: string): void {
   if (name === inUse || planOf(name) === undefined) return;
   shoreLog.info(`shore: Claude account ${inUse} → ${name}: ${reason}`);

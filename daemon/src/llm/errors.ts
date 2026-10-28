@@ -97,20 +97,20 @@ export function budgetStopIn(e: unknown): BudgetStop | undefined {
   const blocked = chain.find((part) => part.name === "BudgetBlocked");
   if (blocked === undefined) return undefined;
 
-  let resetAt: string | undefined;
-  for (const part of chain) {
-    const value = (part as Error & { resetAt?: unknown }).resetAt;
-    if (typeof value === "string") {
-      resetAt = value;
-      break;
-    }
-  }
   const summary = (blocked as Error & { summary?: unknown }).summary;
   return {
     message: blocked.message,
     summary: typeof summary === "string" ? summary : undefined,
-    resetAt,
+    resetAt: resetAtIn(e),
   };
+}
+
+export function resetAtIn(e: unknown): string | undefined {
+  for (const part of errorChain(e)) {
+    const value = (part as Error & { resetAt?: unknown }).resetAt;
+    if (typeof value === "string") return value;
+  }
+  return undefined;
 }
 
 function messageOf(err: unknown): string {

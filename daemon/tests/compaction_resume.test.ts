@@ -120,6 +120,35 @@ test("a resumed pass keeps files changed while it was paused and rolls back the 
   expect(await readFile(join(workspace, "memory/reverted.md"), "utf8")).toBe("original reverted");
 });
 
+test("a pass every Claude account refuses waits until the first one frees up instead of retrying sooner", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-accounts-out-"));
+  const dataDir = join(root, "data");
+  const workspace = join(root, "workspace");
+  await mkdir(join(dataDir, "ada", "threads", "main"), { recursive: true });
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  writeDurable(join(dataDir, "ada", "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    turns: { workspace, repo: join(dirname(workspace), "turns.git") },
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const freeAt = new Date(Date.now() + 3_600_000).toISOString();
+  const plan = async () => await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+  const first = await compact(options(dataDir, workspace, memoryStore, await plan(), tools, scripted([
+    response("tool_use", [{ type: "tool_use", id: "look", name: "bash", input: { command: "ls" } }]),
+    Object.assign(new Error("claude_agent: usage limit reached: You've hit your session limit"), { resetAt: freeAt }),
+  ])), { keepRecentTurns: 1 });
+  expect(first).toMatchObject({ kind: "paused", resumeAt: freeAt });
+
+  const early = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  const retried = await compact(options(dataDir, workspace, memoryStore, await plan(), tools, early), { keepRecentTurns: 1 });
+  expect(retried).toMatchObject({ kind: "paused", resumeAt: freeAt });
+  expect(early.calls).toBe(0);
+});
+
 test("compaction resumes without repeating writes and commits only after archive", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
   const dataDir = join(root, "data");

@@ -45,7 +45,7 @@ function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
-function addUsage(total: Usage, one: Usage): Usage {
+export function addUsage(total: Usage, one: Usage): Usage {
   return {
     input_tokens: total.input_tokens + one.input_tokens,
     output_tokens: total.output_tokens + one.output_tokens,

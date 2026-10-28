@@ -1,6 +1,7 @@
 import { limitRequestImages } from "../prepare_images.ts";
 import { recordProviderEvent } from "../provider_events.ts";
 import { retryToolStream } from "../tool_loop.ts";
+import { addUsage } from "./generic_loop.ts";
 import { ToolLoopStop } from "../tool_loop_control.ts";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -47,7 +48,16 @@ import { anchorKeys, contextFilterEnvironment, resultAnchor, type SystemNote } f
 import { currentWireScope } from "../wire_capture.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
-import { claudeAccountInUse, claudeAccountNamed, observeClaudeRateLimit, type ClaudePlanCheck } from "../../ledger/plan_limits.ts";
+import {
+  claudeAccountInUse,
+  claudeAccountNamed,
+  claudeAccountSignedOut,
+  claudeAccountsFreeAt,
+  nextClaudeAccount,
+  observeClaudeRateLimit,
+  useClaudeAccount,
+  type ClaudePlanCheck,
+} from "../../ledger/plan_limits.ts";
 import type { ClaudeAccount } from "../claude_accounts.ts";
 import { claudePlanUsageEnvironment, fetchClaudePlanLimits, type ClaudePlanUsageQuery } from "../claude_plan_limits.ts";
 import { cacheTtlTier } from "../cache_capability.ts";
@@ -458,6 +468,7 @@ const ACCOUNT_REFUSALS: Partial<Record<SDKAssistantMessageError, { status: numbe
 class ClaudeAccountRefusal extends Error {
   readonly status: number;
   readonly body: string;
+  resetAt?: string;
 
   constructor(status: number, type: string, message: string) {
     super(`claude_agent: ${message}`);
@@ -465,6 +476,12 @@ class ClaudeAccountRefusal extends Error {
     this.status = status;
     this.body = JSON.stringify({ type: "error", error: { type, message } });
   }
+}
+
+function noteWhenAccountsFree(e: unknown): void {
+  if (!(e instanceof ClaudeAccountRefusal)) return;
+  const free = claudeAccountsFreeAt();
+  if (free !== undefined) e.resetAt = free;
 }
 
 function accountRefusal(error: SDKAssistantMessageError, message: BetaMessage): ClaudeAccountRefusal | undefined {
@@ -484,6 +501,7 @@ interface SdkTurnFacts {
   usage?: Usage;
   sawStopReason?: boolean;
   warnedNested?: boolean;
+  refusal?: ClaudeAccountRefusal;
 }
 
 function finishReasonOf(seen: SdkTurnFacts, streamed: string): string {
@@ -583,7 +601,7 @@ async function* rawEventsOf(
     yield event;
     if (event.type === "message_stop") await onRoundEnd?.();
   }
-  for await (const msg of run) {
+  for await (const msg of refusedAtEnd(run, seen)) {
     captureAgentEvent(msg, seen.account);
     const sid = (msg as { session_id?: string }).session_id;
     if (sid !== undefined) seen.sessionId = sid;
@@ -599,7 +617,11 @@ async function* rawEventsOf(
     if (msg.type === "assistant") {
       noteAssistant(seen, msg.message.id, msg.uuid);
       const refusal = msg.error === undefined ? undefined : accountRefusal(msg.error, msg.message);
-      if (refusal !== undefined) throw refusal;
+      if (refusal !== undefined) {
+        if (msg.error === "authentication_failed") claudeAccountSignedOut(seen.account);
+        seen.refusal = refusal;
+        continue;
+      }
       if (!startedMessages.has(msg.message.id) && msg.error === undefined && msg.message.model !== SYNTHETIC_MODEL) {
         startedMessages.add(msg.message.id);
         for (const event of unstreamedEvents(msg.message)) yield* emit(event as RawMessageStreamEvent);
@@ -654,6 +676,15 @@ async function* rawEventsOf(
       }
     }
   }
+}
+
+async function* refusedAtEnd(run: AsyncIterable<SDKMessage>, seen: SdkTurnFacts): AsyncIterable<SDKMessage> {
+  try {
+    yield* run;
+  } catch (e) {
+    throw seen.refusal ?? e;
+  }
+  if (seen.refusal !== undefined) throw seen.refusal;
 }
 
 function noteAssistant(seen: SdkTurnFacts, messageId: string, uuid: string): void {
@@ -912,6 +943,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
       abort.abort();
       discardMissingAnchor(path, key, record, plan, e);
       const launch = claudeCodeLaunchFailure(e);
+      noteWhenAccountsFree(e);
       const cause = launch ?? (e instanceof ClaudeAccountRefusal ? e : undefined);
       yield {
         ...streamErrorEvent(launch ?? e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now),
@@ -1143,6 +1175,18 @@ class RoundLog {
     return assistantUuids.slice(this.#recordedAssistantRounds);
   }
 
+  get betweenRounds(): boolean {
+    return this.#turn === undefined || this.#finished;
+  }
+
+  handOff(): WireMessage[] {
+    const finished = this.#nativeMessages.map(({ message }) => message);
+    this.#nativeMessages = [];
+    this.#assistantRounds = 0;
+    this.#recordedAssistantRounds = 0;
+    return finished;
+  }
+
   async close(acc: TurnAccumulator): Promise<void> {
     if (this.#turn !== undefined) {
       if (!this.#finished) {
@@ -1171,6 +1215,10 @@ class RoundLog {
   }
 }
 
+function onAccount(req: SidecarRequest, name: string): SidecarRequest {
+  return req.context === undefined ? req : { ...req, context: { ...req.context, api_key_name: name } };
+}
+
 export async function* claudeAgentToolLoopEvents(
   req: SidecarRequest,
   tools: ToolPhase,
@@ -1188,7 +1236,10 @@ export async function* claudeAgentToolLoopEvents(
   const startedAt = Date.now();
   let firstTokenAt = 0;
   const acc = newTurnAccumulator();
-  const seen: SdkTurnFacts = { account: accountFor(req).name, subtype: "success", assistantUuids: [] };
+  let seen: SdkTurnFacts = { account: accountFor(req).name, subtype: "success", assistantUuids: [] };
+  let spent = emptyUsage();
+  const usageSoFar = (): Usage => addUsage(spent, seen.usage ?? acc.usage);
+  let current = req;
 
   const path = (deps.bookPath ?? bookPath)();
   const key = conversationKey(req);
@@ -1225,7 +1276,7 @@ export async function* claudeAgentToolLoopEvents(
     if (cap !== undefined && round.iterations >= cap) {
       return Promise.resolve({ behavior: "deny", message: TOOL_BUDGET_SPENT });
     }
-    const blocked = budgetBlockFor(req);
+    const blocked = budgetBlockFor(current);
     if (blocked !== undefined) {
       return Promise.resolve({ behavior: "deny", message: blocked.message });
     }
@@ -1238,33 +1289,64 @@ export async function* claudeAgentToolLoopEvents(
     const prepared = splitSystemNotes(await limitRequestImages(req));
     Object.assign(req, prepared.request);
     plan = planTurn(record, req.messages);
-    const native = await withNativeHistory(plan, req, path, key, record);
+    let native = await withNativeHistory(plan, req, path, key, record);
     plan = native;
     notes.push(...turnNotes(record, native, req.messages, prepared.notes));
-    const run = (deps.runQuery ?? query)({
-      prompt: agentPrompt(native),
-      options: buildOptions(req, native, abort, {
-        instance,
-        canUseTool,
-        maxTurns: cap === undefined ? undefined : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
-        timeoutMs: MCP_TOOL_TIMEOUT_MS,
-      }, notes),
-    });
+    const refused = new Set<string>();
+    for (;;) {
+      const leg = new AbortController();
+      const stopLeg = (): void => { leg.abort(); };
+      if (abort.signal.aborted) stopLeg();
+      abort.signal.addEventListener("abort", stopLeg, { once: true });
+      try {
+        const run = (deps.runQuery ?? query)({
+          prompt: agentPrompt(native),
+          options: buildOptions(current, native, leg, {
+            instance,
+            canUseTool,
+            maxTurns: cap === undefined ? undefined : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
+            timeoutMs: MCP_TOOL_TIMEOUT_MS,
+          }, notes),
+        });
 
-    const events = anthropicContentEvents(
-      rawEventsOf(run, seen, async () => {
-        if (round.stopped || (options.capBehavior === "stop_after_dispatch" && cap !== undefined && round.iterations >= cap)) {
-          throw new ToolLoopStop();
+        const events = anthropicContentEvents(
+          rawEventsOf(run, seen, async () => {
+            if (round.stopped || (options.capBehavior === "stop_after_dispatch" && cap !== undefined && round.iterations >= cap)) {
+              throw new ToolLoopStop();
+            }
+            await round.close(acc);
+          }, () => round.modelFinished(acc)),
+          acc,
+        );
+        for await (const streamed of events) {
+          const event = withBareName(streamed, names);
+          if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
+          round.absorb(event);
+          yield event;
         }
+        break;
+      } catch (e) {
+        if (!(e instanceof ClaudeAccountRefusal) || toolFailure !== undefined || !round.betweenRounds) throw e;
+        refused.add(seen.account);
+        let next = nextClaudeAccount(refused);
+        while (next !== undefined && budgetBlockFor(onAccount(current, next.name)) !== undefined) {
+          refused.add(next.name);
+          next = nextClaudeAccount(refused);
+        }
+        if (next === undefined) throw e;
+        abort.signal.removeEventListener("abort", stopLeg);
+        stopLeg();
+        const why = e.message.replace(/^claude_agent: /, "");
+        useClaudeAccount(next.name, `"${seen.account}" refused a call partway through a turn: ${why}`);
+        yield { type: "provider_warning", message: `Claude account ${seen.account} refused to go on (${why}); carrying on with ${next.name}` };
+        spent = usageSoFar();
         await round.close(acc);
-      }, () => round.modelFinished(acc)),
-      acc,
-    );
-    for await (const streamed of events) {
-      const event = withBareName(streamed, names);
-      if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
-      round.absorb(event);
-      yield event;
+        acc.usage = emptyUsage();
+        current = { ...onAccount(current, next.name), messages: [...current.messages, ...round.handOff()] };
+        seen = { account: next.name, subtype: "success", assistantUuids: [] };
+        native = await withNativeHistory(planTurn(record, current.messages), current, path, key, record);
+        plan = native;
+      }
     }
 
     if (toolFailure !== undefined) throw toolFailure;
@@ -1300,7 +1382,7 @@ export async function* claudeAgentToolLoopEvents(
       finish_reason: options.capBehavior === "stop_after_dispatch" && cap !== undefined && round.iterations >= cap
         ? "tool_use" : finishReasonOf(seen, acc.stopReason),
       content_blocks: round.finalBlocks(),
-      usage: seen.usage ?? acc.usage,
+      usage: usageSoFar(),
       ...(context === undefined ? {} : { context_usage: context }),
       timing: {
         total_ms: total,
@@ -1312,15 +1394,16 @@ export async function* claudeAgentToolLoopEvents(
       yield {
         type: "done", content: acc.text, content_blocks: round.finalBlocks(),
         finish_reason: options.capBehavior === "stop_after_dispatch" ? "tool_use" : "end_turn",
-        usage: seen.usage ?? acc.usage,
+        usage: usageSoFar(),
         timing: { total_ms: Date.now() - startedAt, time_to_first_token_ms: firstTokenAt === 0 ? Date.now() - startedAt : firstTokenAt - startedAt },
       };
       return;
     }
     await round.finish();
     discardMissingAnchor(path, key, record, plan, e);
+    noteWhenAccountsFree(e);
     const failure = claudeCodeLaunchFailure(e) ?? e;
-    yield { ...streamErrorEvent(failure, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now), cause: toolFailure ?? failure };
+    yield { ...streamErrorEvent(failure, usageSoFar(), startedAt, firstTokenAt, Date.now), cause: toolFailure ?? failure };
   } finally {
     abort.abort();
   }
