@@ -248,6 +248,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       env,
       diagnostics,
       onHistory: (history) => server.broadcast({ type: "history", ...history }),
+      emitEvent: broadcast,
       emit: (character, revision, msg, thread) =>
         emitNewMessageEvent(
           broadcast,

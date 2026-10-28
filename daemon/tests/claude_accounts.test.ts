@@ -49,7 +49,7 @@ function sessionLimitFor(refusing: readonly string[]) {
         headers: {
           "anthropic-ratelimit-unified-status": "rejected",
           "anthropic-ratelimit-unified-representative-claim": "five_hour",
-          "anthropic-ratelimit-unified-reset": String(Math.round(Date.now() / 1000) + 3600),
+          "anthropic-ratelimit-unified-reset": String(Math.floor(Date.now() / 1000) + 3600),
         },
       }
     : { text: "Hello from the next account." };
