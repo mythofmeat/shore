@@ -11,6 +11,7 @@ import { StartupError } from "../src/daemon/startup.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { compactionFixture } from "./support/memory_fixture.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -436,6 +437,66 @@ describe("going down", () => {
       release();
     } finally {
       client.close();
+    }
+  });
+
+  test("a compaction a shutdown paused carries on from its checkpoint when the daemon starts again", async () => {
+    const place = await layout(`${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n`);
+    const compactions: string[] = [];
+    const chat = scriptedProvider("noted");
+    const stalled = {
+      async *stream(req: SidecarRequest, signal?: AbortSignal) {
+        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
+        compactions.push("stalled");
+        yield { type: "start", model: req.model };
+        await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+        throw new Error("stopped");
+      },
+    } as unknown as SidecarProvider;
+    const memory = compactionFixture();
+    const finishing = {
+      async *stream(req: SidecarRequest, signal?: AbortSignal) {
+        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
+        compactions.push("resumed");
+        yield* memory(req, signal);
+      },
+    } as unknown as SidecarProvider;
+
+    const first = await start(place, [], { anthropic: stalled });
+    const client = await Client.open(first.port, "ada");
+    await client.awaitFrame("hello");
+    for (const text of ["one", "two", "three"]) {
+      client.frames.length = 0;
+      client.send({ type: "message", text, stream: true, images: [] });
+      await client.awaitFrame("new_message");
+      await client.awaitFrame("stream_end");
+    }
+    client.send({ type: "command", name: "compact", args: { keep_turns: 1 } });
+    for (let i = 0; compactions.length === 0; i += 1) {
+      if (i > 500) throw new Error("the compaction never reached the provider");
+      await Bun.sleep(10);
+    }
+    client.close();
+    await first.shutdown();
+    await first.done;
+    running.length = 0;
+
+    const second = await start(place, [], { anthropic: finishing });
+    const watcher = await Client.open(second.port, "ada");
+    try {
+      await watcher.awaitFrame("hello");
+      for (let i = 0; ; i += 1) {
+        watcher.frames.length = 0;
+        watcher.send({ type: "command", name: "compact_watch", args: {} });
+        const output = await watcher.awaitFrame("command_output");
+        const pass = (output["data"] as { pass: { report: { status: string } | null } | null }).pass;
+        if (pass?.report?.status === "compacted") break;
+        if (i > 200) throw new Error(`the paused compaction never finished: ${JSON.stringify(output)}`);
+        await Bun.sleep(25);
+      }
+      expect([...new Set(compactions)]).toEqual(["stalled", "resumed"]);
+    } finally {
+      watcher.close();
     }
   });
 

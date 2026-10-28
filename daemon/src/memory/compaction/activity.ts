@@ -4,6 +4,7 @@ import type { FrameSink } from "../../llm/stream.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
 import type { ServerMessage } from "../../protocol/ServerMessage.ts";
 import type { CompactionOutcome } from "./types.ts";
+import { DaemonStopping } from "./checkpoint.ts";
 
 export type PassEnd =
   | { kind: "outcome"; outcome: CompactionOutcome | undefined }
@@ -155,7 +156,7 @@ export async function passEnded(dataDir: string, character: string): Promise<voi
 export async function cancelAllPasses(dataDir: string, reason: string): Promise<void> {
   const passes = [...running].filter(([key, pass]) => key === characterDataDir(dataDir, pass.character)).map(([, pass]) => pass);
   await Promise.all(passes.map(async (pass) => {
-    pass.controller.abort(new DOMException(reason, "AbortError"));
+    pass.controller.abort(new DaemonStopping(reason));
     await pass.ended;
   }));
 }

@@ -37,6 +37,18 @@ async function resync(state: WorkspaceSnapshot): Promise<void> {
   if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true });
 }
 
+function viewing(state: WorkspaceSnapshot): boolean {
+  const now = workspace.getSnapshot();
+  return now.character === state.character && now.thread === state.thread;
+}
+
+async function compactInBackground(state: WorkspaceSnapshot, label: string, work: () => Promise<string>): Promise<void> {
+  try {
+    const message = await work();
+    toasts.show(viewing(state) ? message : `“${label}”: ${message}`);
+  } catch (failure) { toasts.show(errorText(failure), "error"); }
+}
+
 export function ConversationDialogs({ dialog, state, close }: { dialog: ConversationDialog; state: WorkspaceSnapshot; close: () => void }) {
   const thread = state.threads.find((item) => item.id === state.thread);
   const { busy, error, run } = useSubmit(close);
@@ -71,13 +83,17 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>New conversation name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field"><span>Copy only the last turns <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="All turns" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
     </Form>;
-    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action={{ compact: "Compact", watch: "Follow", cancel: "Stop" }[running]} danger={running === "cancel"} submit={() => run(async () => {
-      if (running === "watch") return compactionWatchSummary(await workspace.actions.run("compact_watch", {}));
-      if (running === "cancel") return compactionWatchSummary(await workspace.actions.run("compact_cancel", {}));
-      const report = await workspace.actions.run("compact", { ...(turns === "" ? {} : { keep_turns: Number(turns) }), ...(restart ? { restart: true } : {}) });
-      await resync(state); return compactionSummary(report);
-    })}>
-      <p className="form-text">Summarizes older turns into memory so the conversation fits the model’s context. Recent turns stay as they are. The compaction runs on the daemon, so closing this tab doesn’t stop it.</p>
+    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action={{ compact: "Compact", watch: "Follow", cancel: "Stop" }[running]} danger={running === "cancel"} submit={() => {
+      if (running === "cancel") { run(async () => compactionWatchSummary(await workspace.actions.run("compact_cancel", {}))); return; }
+      close();
+      void compactInBackground(state, label, async () => {
+        if (running === "watch") return compactionWatchSummary(await workspace.actions.run("compact_watch", {}));
+        const report = await workspace.actions.run("compact", { ...(turns === "" ? {} : { keep_turns: Number(turns) }), ...(restart ? { restart: true } : {}) });
+        if (viewing(state)) await resync(state);
+        return compactionSummary(report);
+      });
+    }}>
+      <p className="form-text">Summarizes older turns into memory so the conversation fits the model’s context. Recent turns stay as they are. It runs in the background, so you can keep chatting in other conversations, and closing this tab doesn’t stop it.</p>
       <label className="field"><span>What to do</span><select className="select" value={running} onChange={(event) => setRunning(event.target.value as "compact" | "watch" | "cancel")}>
         <option value="compact">Compact now</option><option value="watch">Follow the compaction already running</option><option value="cancel">Stop the running compaction</option>
       </select></label>

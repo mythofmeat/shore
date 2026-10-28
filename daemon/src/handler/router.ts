@@ -139,6 +139,8 @@ export interface MessageHandlerDeps {
 
 export { sanitiseRid } from "../swp/admission.ts";
 
+const UNQUEUED_COMMANDS: ReadonlySet<string> = new Set(["compact", "compact_watch"]);
+
 const REPLAYED: ReadonlySet<string> = new Set([
   "stream_start",
   "stream_chunk",
@@ -257,8 +259,9 @@ export class MessageHandler {
       }),
     );
 
-    this.#queues.set(sessionId, settled);
     this.#track(settled);
+    if (routed.kind === "command" && UNQUEUED_COMMANDS.has(routed.cmd.name)) return;
+    this.#queues.set(sessionId, settled);
     void settled.then(() => {
       if (this.#queues.get(sessionId) === settled) this.#queues.delete(sessionId);
     });
@@ -346,7 +349,7 @@ export class MessageHandler {
       if (result.type === "error") { outcome = "failed"; failure = result; }
       this.#deps.router.reportRequest(sessionId, result);
       await this.#deps.router.sendToSession(sessionId, result);
-      if (this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);
+      if (!UNQUEUED_COMMANDS.has(cmd.name) && this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);
     } catch (error) {
       outcome = controller.signal.aborted ? "cancelled" : "failed";
       failure = { code: "internal_error", message: describeError(error) };

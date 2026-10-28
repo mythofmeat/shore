@@ -304,4 +304,21 @@ describe("per-session routing queues", () => {
     await handler.drain();
     expect(names(required(frames.get(1)))).toEqual(["first", "second", "third"]);
   });
+
+  test("a compaction leaves the session free to switch threads while it runs", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("switch_thread"), meta: meta("ada", 1, null, "command") });
+    gate("switch_thread").resolve();
+    await settle();
+
+    expect(started).toEqual(["compact", "switch_thread"]);
+    expect(names(required(frames.get(1)))).toEqual(["switch_thread"]);
+
+    gate("compact").resolve();
+    await handler.drain();
+    expect(names(required(frames.get(1)))).toEqual(["switch_thread", "compact"]);
+  });
 });

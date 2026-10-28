@@ -250,8 +250,8 @@ export async function maybeCompact(
   return compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
 }
 
-async function compactAfterTurn(
-  ctx: TurnContext,
+export async function compactAfterTurn(
+  ctx: Pick<TurnContext, "autonomy">,
   charName: string,
   config: LoadedConfig,
   thread: string,

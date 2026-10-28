@@ -35,6 +35,9 @@ import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { CompactionWatchResult } from "../protocol/CompactionWatchResult.ts";
 import { observePasses, runningPass } from "../memory/compaction/activity.ts";
+import { compactLater } from "../memory/compaction/background.ts";
+import { resumesOnStart } from "../memory/compaction/checkpoint.ts";
+import { compactAfterTurn } from "./turn.ts";
 import { passEnd } from "../commands/compact.ts";
 import { commandCatalogue } from "../commands/registry.ts";
 import { changesState } from "../operations/policy.ts";
@@ -232,6 +235,19 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
     ...runner,
     run: async (character, config, thread) => await runtime.snapshotGate.withActivity(async () => await runner.run(character, config, thread)),
   };
+}
+
+export async function resumeStoppedCompactions(a: GenerationAssembly): Promise<void> {
+  const { runtime } = a;
+  const dataDir = runtime.config.dirs.data;
+  const runner = chatCompactionRunner(a);
+  for (const character of runtime.registry.availableCharacters()) {
+    for (const { id: thread } of runtime.registry.listThreads(character)) {
+      if (!await resumesOnStart(dataDir, character, thread)) continue;
+      shoreLog.info(`shore: resuming the compaction of ${character}/${thread} that the last shutdown paused`);
+      compactLater(dataDir, character, thread, async () => await compactAfterTurn(a, character, runtime.registry.effectiveConfig(character), thread, runner));
+    }
+  }
 }
 
 export function usageBudgetWarnings(
