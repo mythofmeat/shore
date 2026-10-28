@@ -17,11 +17,12 @@ import {
   type ClaudePlanCheck,
 } from "../src/ledger/plan_limits.ts";
 import { claudeAccountsRoot } from "../src/llm/claude_accounts.ts";
+import { resetAtIn } from "../src/llm/errors.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import type { WireMessage } from "../src/llm/types.ts";
 import { startMockAnthropic, type AnthropicRequestRecord, type MockAnthropic } from "../src/testing/mock_anthropic.ts";
-import { outcomeOf } from "./support/outcome.ts";
+import { required } from "../src/util/required.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -102,7 +103,65 @@ test("a reply one account refuses for its usage limit is answered by the next, w
   }
 }, 60_000);
 
-test("a reply every account refuses fails with the refusal instead of arriving empty", async () => {
+test("a tool-using reply whose account hits its limit partway through carries on with the next account from the rounds already done", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  configureClaudePlanLimits({ home, cacheDir: home });
+  const toolResultsSent = (request: AnthropicRequestRecord): boolean => JSON.stringify(request.body.messages).includes("noted: groceries");
+  const mock = await startMockAnthropic({
+    fallback: (request) => {
+      if (request.headers["authorization"] === "Bearer token-second") return { text: "Done on the next account." };
+      if (!toolResultsSent(request)) return { toolUses: [{ name: "mcp__shore__note", input: { text: "groceries" } }], usage: { output_tokens: 40 } };
+      return sessionLimitFor(["first"])(request);
+    },
+  });
+  const ran: unknown[] = [];
+  const warnings: string[] = [];
+  try {
+    const provider = new ClaudeAgentProvider({
+      bookPath: () => join(home, "sessions.json"),
+      runQuery: (params) => query({ ...params, options: { ...params.options, env: { ...params.options.env, HOME: home } } }),
+    });
+    const { result } = await runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "claude-opus-5-5",
+      messages: [{ role: "user", content: [{ type: "text", text: "Note groceries, then tell me." }] }],
+      max_tokens: 256, replay_prior_thinking: "all",
+      tools: [{ name: "note", description: "Write a note.", input_schema: { type: "object", properties: { text: { type: "string" } } } }],
+      context: { character: "ada", workspace_dir: home, thinking_enabled: false, call_type: "message" },
+    }, { providerKey: "claude_agent" }, {
+      config: {
+        app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+        dirs: { config: home, data: home, cache: home, runtime: home },
+      },
+      providers: { claude_agent: provider },
+      retry: { maxRetries: 0, backoffBaseMs: 0 },
+    }, {
+      signal: AbortSignal.timeout(30_000),
+      sink: (frame) => { if (frame.type === "provider_warning") warnings.push(frame.message); },
+      tools: {
+        messages: [],
+        runTool: (use) => {
+          ran.push(use.input);
+          return Promise.resolve({ type: "tool_result", tool_use_id: use.id, content: "noted: groceries" });
+        },
+        recordTurn: () => {},
+      },
+    });
+
+    expect(result.content).toBe("Done on the next account.");
+    expect(ran).toEqual([{ text: "groceries" }]);
+    expect(tokensSeen(mock)).toEqual(["Bearer token-first", "Bearer token-first", "Bearer token-second"]);
+    expect(toolResultsSent(required(mock.requests[2]))).toBe(true);
+    expect(result.usage.output_tokens).toBeGreaterThanOrEqual(40);
+    expect(warnings.join("\n")).toContain("carrying on with second@example.com");
+    expect((await readFile(claudeAccountInUsePath(home), "utf8")).trim()).toBe("second@example.com");
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);
+
+test("a reply every account refuses fails with the refusal, saying when the first account frees up", async () => {
   const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
   await signIn(home, "qwfp", "first");
   await signIn(home, "arst", "second");
@@ -110,8 +169,13 @@ test("a reply every account refuses fails with the refusal instead of arriving e
   const mock = await startMockAnthropic({ fallback: sessionLimitFor(["first", "second"]) });
   try {
     const say = conversation(home, mock);
-    expect(await outcomeOf(say("Hello?"))).toThrow(/usage limit reached: You've hit your session limit/);
+    const failure = await say("Hello?").catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/usage limit reached: You've hit your session limit/);
     expect(tokensSeen(mock)).toEqual(["Bearer token-first", "Bearer token-second"]);
+    const freeAt = Date.parse(resetAtIn(failure) ?? "");
+    expect(freeAt).toBeGreaterThan(Date.now());
+    expect(freeAt).toBeLessThanOrEqual(Date.now() + HOUR);
   } finally {
     await mock.stop();
   }

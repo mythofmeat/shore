@@ -7,6 +7,7 @@ const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
+export const RESUME_PROMPT = "[Carry on from the tool results above.]";
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
 const SAFETY_STOP = "Your response above was stopped by a safety classifier \u2014 this is not a tool or API error. " +
   "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";
@@ -129,6 +130,7 @@ function injectedKind(role: unknown, block: Block): string | undefined {
   if (text.startsWith(REMINDER)) return SYSTEM_REMINDER;
   if (IMAGE_SOURCE.test(text)) return "image source note";
   if (CLI_INTERRUPTIONS.has(text)) return "interruption note";
+  if (text === RESUME_PROMPT) return "resume prompt";
   return CLI_NUDGES.has(text) ? "retry nudge" : undefined;
 }
 
