@@ -2546,7 +2546,7 @@
     },
     {
       "path": "shore thread new",
-      "about": "Start a new thread. It begins empty and does not compact on a schedule",
+      "about": "Start a new thread. It begins empty, and when it gets long it trims its oldest turns into the archive, unless --compaction is set",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -2658,7 +2658,7 @@
           "long": "compaction",
           "aliases": [],
           "short_aliases": [],
-          "help": "Let the idle timer compact this thread, as it does the home thread",
+          "help": "When this thread gets long, compact it into memory as the home thread does, instead of trimming its oldest turns into the archive. `shore compact` works either way",
           "long_help": null,
           "action": "SetTrue",
           "required": false,

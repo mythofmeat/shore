@@ -459,7 +459,7 @@ fn thread_facts(row: &Value) -> String {
         if flag(row, "compaction") {
             "compacts"
         } else {
-            "on demand"
+            "trims"
         }
         .to_owned(),
     );

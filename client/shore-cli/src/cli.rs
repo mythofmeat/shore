@@ -1350,7 +1350,7 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
-    /// Start a new thread. It begins empty and does not compact on a schedule
+    /// Start a new thread. It begins empty, and when it gets long it trims its oldest turns into the archive, unless --compaction is set
     New {
         /// Thread id: letters, digits, dot, dash or underscore
         name: String,
@@ -1371,7 +1371,7 @@ pub(crate) enum ThreadCommand {
         #[arg(long)]
         model: Option<String>,
 
-        /// Let the idle timer compact this thread, as it does the home thread
+        /// When this thread gets long, compact it into memory as the home thread does, instead of trimming its oldest turns into the archive. `shore compact` works either way
         #[arg(long)]
         compaction: bool,
     },

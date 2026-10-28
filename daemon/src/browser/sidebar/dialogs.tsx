@@ -43,7 +43,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
   const [purpose, setPurpose] = useState("");
   const [files, setFiles] = useState("");
   const [model, setModel] = useState("");
-  const [compaction, setCompaction] = useState<"default" | "on" | "off">("default");
+  const [compaction, setCompaction] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submit = async () => {
@@ -51,7 +51,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
     try {
       const id = name.trim();
       const paths = threadFileList(files);
-      await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(paths.length === 0 ? {} : { files: paths }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction === "default" ? {} : { compaction: compaction === "on" }) });
+      await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(paths.length === 0 ? {} : { files: paths }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
       await workspace.actions.run("switch_thread", { name: id, resync: true });
       await workspace.refreshNavigation();
       navigate({ view: "chat" });
@@ -67,7 +67,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>
           <label className="field"><span>Files in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
-          <label className="field"><span>Automatic compaction</span><select className="select" value={compaction} onChange={(event) => setCompaction(event.target.value as "default" | "on" | "off")}><option value="default">Use the configured default</option><option value="on">On</option><option value="off">Off</option></select></label>
+          <label className="field"><span>When it gets long</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Trim its oldest turns into the archive</option><option value="compact">Compact it into memory, as the home thread does</option></select></label>
         </div>
       </details>
       {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
