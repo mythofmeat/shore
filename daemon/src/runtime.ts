@@ -31,7 +31,9 @@ import { mcpBearerToken, type McpServerConfig } from "./config/app.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
+import type { ServerMessage } from "./protocol/ServerMessage.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
+import { startCharacterThread } from "./handler/start_thread.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
 import { closeWorkspaceHelpers } from "./tools/character_workspace.ts";
@@ -78,6 +80,7 @@ export interface RuntimeOptions {
   env?: NodeJS.ProcessEnv | undefined;
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message, thread: string) => void) | undefined;
+  emitEvent?: ((message: ServerMessage) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
   mcpRegistryOptions?: Omit<McpRegistryOptions, "onToolsChanged"> | undefined;
   diagnostics?: Diagnostics | undefined;
@@ -201,16 +204,23 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       registry,
       cache,
       providers,
-      tools: sharedToolDeps(config, mcp, {
-        activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
-        heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
-        scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
-      }, {
-        providers,
-        registry,
-        ...(callStore === undefined ? {} : { callStore }),
-        ...(options.env === undefined ? {} : { env: options.env }),
-      }),
+      tools: {
+        ...sharedToolDeps(config, mcp, {
+          activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
+          heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
+          scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
+        }, {
+          providers,
+          registry,
+          ...(callStore === undefined ? {} : { callStore }),
+          ...(options.env === undefined ? {} : { env: options.env }),
+        }),
+        startThread: (character, request) => startCharacterThread(
+          { registry, dataDir: config.dirs.data, emitEvent: options.emitEvent },
+          character,
+          request,
+        ),
+      },
       rebuild: {
         ...(options.env === undefined ? {} : { env: options.env }),
         mcpRegistry: {
