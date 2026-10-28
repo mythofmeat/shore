@@ -37,6 +37,7 @@ import {
   type MemoryFileOp,
 } from "./types";
 import {
+  DaemonStopping,
   loadCompactionCheckpoint,
   newCompactionCheckpoint,
   removeCompactionCheckpoint,
@@ -689,6 +690,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   delete checkpoint.pauseReason;
   delete checkpoint.pauseDetail;
   delete checkpoint.resumeAt;
+  delete checkpoint.resumeOnStart;
   await persistCheckpoint(opts, checkpoint);
 
   const request = checkpoint.request;
@@ -1128,6 +1130,8 @@ async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheck
   const resumeAt = stop?.resetAt ?? (cancelled || refused ? undefined : resetAtIn(error));
   if (resumeAt === undefined) delete checkpoint.resumeAt;
   else checkpoint.resumeAt = resumeAt;
+  if (cancelled && opts.signal?.reason instanceof DaemonStopping) checkpoint.resumeOnStart = true;
+  else delete checkpoint.resumeOnStart;
   await persistCheckpoint(opts, checkpoint);
   return pausedOutcome(opts, checkpoint);
 }

@@ -9,7 +9,7 @@ import { emitNewMessageEvent } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
 import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
-import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
+import { buildMessageHandlerDeps, configReloader, resumeStoppedCompactions } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { ThreadUnreadTracker } from "../handler/thread_unread.ts";
 import { ensureAndBackfillAutonomy } from "../handler/turn.ts";
@@ -293,6 +293,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     rollback.push(() => { clocks.stop(); });
 
     handler = new MessageHandler(buildMessageHandlerDeps(assembly));
+    void resumeStoppedCompactions(assembly).catch((e: unknown) => { shoreLog.warn(`shore: could not resume compactions paused by the last shutdown: ${String(e)}`); });
     const messages = handler;
     server.setControlHandler((routed) => messages.handleControl(routed));
 

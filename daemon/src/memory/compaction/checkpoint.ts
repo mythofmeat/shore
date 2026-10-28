@@ -13,6 +13,12 @@ export type CompactionPauseReason =
   | "source_conflict"
   | "workspace_conflict";
 
+export class DaemonStopping extends DOMException {
+  constructor(message: string) {
+    super(message, "AbortError");
+  }
+}
+
 export interface CheckpointLoopState {
   writesApplied: AppliedCompactionWrite[];
   toolsCalled: string[];
@@ -36,6 +42,7 @@ export interface CompactionCheckpoint {
   pauseReason?: CompactionPauseReason;
   pauseDetail?: string;
   resumeAt?: string;
+  resumeOnStart?: boolean;
   sourceContent: string;
   sourceHash: string;
   splitAt: number;
@@ -146,6 +153,11 @@ export function heldAfterRefusal(
   checkpoint: CompactionCheckpoint | undefined,
 ): checkpoint is CompactionCheckpoint {
   return checkpoint?.state === "paused" && checkpoint.pauseReason === "refusal";
+}
+
+export async function resumesOnStart(dataDir: string, character: string, thread: string): Promise<boolean> {
+  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
+  return checkpoint?.state === "paused" && checkpoint.resumeOnStart === true;
 }
 
 export async function compactionHeld(
