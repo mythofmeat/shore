@@ -212,7 +212,8 @@ export function compactionPhase(activity: readonly { id: number; type: string; d
   for (const item of activity) {
     const value = item.data !== null && typeof item.data === "object" ? (item.data as { phase?: unknown }).phase : undefined;
     const name = item.data !== null && typeof item.data === "object" ? (item.data as { name?: unknown }).name : undefined;
-    if (item.type === "phase" && typeof value === "string" && value.startsWith("compacting")) phase = { id: item.id, text: value };
+    const rid = item.data !== null && typeof item.data === "object" ? (item.data as { rid?: unknown }).rid : undefined;
+    if (item.type === "phase" && (rid ?? null) === null && typeof value === "string" && value.startsWith("compacting")) phase = { id: item.id, text: value };
     if (item.type === "command_output" && (name === "compact" || name === "compact_watch" || name === "compact_cancel")) finished = item.id;
   }
   if (phase === null || phase.id < finished) return null;

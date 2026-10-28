@@ -61,9 +61,9 @@ export function Dialog({ title, close, children, footer, wide = false, described
     const dialog = ref.current;
     if (dialog === null || dialog.open) return;
     dialog.showModal();
-    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    (dialog.querySelector<HTMLElement>("[data-autofocus]") ?? dialog.querySelector<HTMLElement>("button[type=submit]:not(:disabled), .form-actions .button.primary:not(:disabled)") ?? dialog).focus();
   }, []);
-  return <dialog ref={ref} className={`dialog ${wide ? "wide" : ""}`} aria-labelledby={titleId} aria-describedby={describedBy} onCancel={(event) => { event.preventDefault(); close(); }}
+  return <dialog ref={ref} tabIndex={-1} className={`dialog ${wide ? "wide" : ""}`} aria-labelledby={titleId} aria-describedby={describedBy} onCancel={(event) => { event.preventDefault(); close(); }}
     onClick={(event) => { if (event.target === event.currentTarget) close(); }}
     onKeyDown={(event) => { if (event.key === "Escape" && isSearchBox(event.target)) { event.preventDefault(); close(); } }}>
     <div className="dialog-body">

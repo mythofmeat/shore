@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { createCharacter, signIn, watchPage } from "./helpers.ts";
+import { createCharacter, send, signIn, watchPage } from "./helpers.ts";
 
 test("sending clears the message box at once and regenerating replaces the reply in place", async ({ page }) => {
   const check = await watchPage(page);
@@ -257,5 +257,44 @@ test("vim mode edits with vim keys, keeps the draft over a reload, attaches past
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.locator("article.message.user")).toHaveCount(2);
   await expect(page.locator("article.message.user").last()).toContainText(/two\s*lines/);
+  await check();
+});
+
+test("compacting from the palette starts on Enter and leaves other conversations usable while it runs", async ({ page }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "wren");
+  await send(page, "cancel memory once");
+  await send(page, "Keep the recent turn");
+
+  await page.keyboard.press("Control+k");
+  await page.getByLabel("Search commands").fill("Compact context");
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Compact context" });
+  await expect(dialog.getByRole("button", { name: "Compact", exact: true })).toBeFocused();
+  await dialog.getByLabel("Turns to keep").fill("1");
+  await dialog.getByLabel("Turns to keep").press("Enter");
+  await expect(dialog).toBeHidden();
+  const compacting = page.getByRole("status").filter({ hasText: "Compacting context" });
+  await expect(compacting).toBeVisible();
+
+  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  const create = page.getByRole("dialog", { name: "New conversation with wren" });
+  await create.getByLabel("Name").fill("side");
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.locator(".topbar-thread")).toHaveText("side");
+  await expect(compacting).toBeHidden();
+  await send(page, "Chatting while main compacts");
+
+  await page.getByRole("group", { name: "wren conversations" }).getByRole("button", { name: "main", exact: true }).click();
+  await expect(page.locator(".topbar-thread")).toHaveText("main");
+  await expect(compacting).toBeVisible();
+  await page.keyboard.press("Control+k");
+  await page.getByLabel("Search commands").fill("Compact context");
+  await page.keyboard.press("Enter");
+  await dialog.getByLabel("What to do").selectOption("cancel");
+  await dialog.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByText(/Compaction paused/).first()).toBeVisible();
+  await expect(compacting).toBeHidden();
   await check();
 });

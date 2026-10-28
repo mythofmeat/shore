@@ -147,6 +147,10 @@
   box-shadow: 0 24px 60px var(--shadow);
 }
 
+.dialog:focus {
+  outline: none;
+}
+
 .dialog.wide {
   width: min(720px, calc(100vw - 2 * var(--gutter)));
 }
