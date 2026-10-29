@@ -8,14 +8,15 @@ import {
   type ImageRef,
   type ToolUse,
 } from "./heartbeat_shape.ts";
-import { budgetDecision, appendWrapUpNudge, generatedImageRef } from "./heartbeat_shape.ts";
+import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase, wrapUpNudgeText } from "./heartbeat_shape.ts";
 import type { GenerateResponse, SidecarRequest, ToolDefinition } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
 export type { CapturedTool };
 
-const HEARTBEAT_LOOP_DEADLINE_MS = 30 * 60 * 1000;
+export const HEARTBEAT_TIME_LIMIT_MS = 30 * 60 * 1000;
+export const HEARTBEAT_WRAP_UP_MS = 5 * 60 * 1000;
 
 export interface HeartbeatToolResult {
   output: string;
@@ -44,8 +45,6 @@ export interface HeartbeatLoopDeps {
   recordTranscript?: (round: TranscriptRound) => void;
   wrapUpGrace: number;
   maxToolIterations: number | undefined;
-  deadlineMs?: number;
-  monotonicMs?: () => number;
   checkPictures?: (text: string) => Promise<string[]>;
 }
 
@@ -55,6 +54,7 @@ export interface HeartbeatLoopResult {
   thinking?: ContentBlock[];
   failedRound?: number | undefined;
   failure?: unknown;
+  timedOut?: boolean;
 }
 
 export function pictureRetryText(problems: readonly string[]): string {
@@ -143,10 +143,10 @@ export async function runHeartbeatToolLoop(
   const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
   let iteration = 0;
   let captured: CapturedTool[] = [];
-  const clock = deps.monotonicMs ?? Date.now;
-  const deadline = clock() + (deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
+  const deadline = performance.now() + HEARTBEAT_TIME_LIMIT_MS;
   const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
-  let wrapUpNudged = false;
+  const offersWake = request.tools?.some((tool) => tool.name === "set_next_wake") === true;
+  let wrapUpEnd: number | undefined;
   const observe = (blocks: ContentBlock[]): void => {
     const text = blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
     const sent = captured.filter((tool) => !tool.isError)
@@ -178,13 +178,16 @@ export async function runHeartbeatToolLoop(
     messages: [],
     parallel: false,
     beforeTurn: (call) => {
-      const action = budgetDecision(clock() >= deadline, iteration >= normalCap, deps.wrapUpGrace, wrapUpNudged);
-      if (action === "break" || iteration >= normalCap + deps.wrapUpGrace) throw new ToolLoopStop();
-      if (action === "nudge") {
-        appendWrapUpNudge(call.messages);
-        wrapUpNudged = true;
-        deps.note("Wrap-up nudge: budget reached, model asked to summarize");
+      if (wrapUpEnd !== undefined) {
+        if (iteration >= wrapUpEnd) throw new ToolLoopStop();
+        return;
       }
+      const left = deadline - performance.now();
+      if (left > HEARTBEAT_WRAP_UP_MS && iteration < normalCap) return;
+      if (deps.wrapUpGrace === 0) throw new ToolLoopStop();
+      wrapUpEnd = iteration + deps.wrapUpGrace;
+      appendWrapUpNudge(call.messages, wrapUpNudgeText(left, deps.wrapUpGrace, offersWake));
+      deps.note(`Wrap-up nudge on round ${String(iteration)}, with ${timeLeftPhrase(left)} left`);
     },
     onTurn: (turn) => { observe(turn.content_blocks); },
     afterTurn: record,
@@ -201,14 +204,14 @@ export async function runHeartbeatToolLoop(
     recordTurn: () => {},
   };
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
+  const timer = setTimeout(() => abort.abort(), deadline - performance.now());
   const run = async () => await deps.generate({
     ...request,
     ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations + deps.wrapUpGrace }),
   }, phase, abort.signal);
   try {
     const response = await run();
-    if (response !== undefined && !response.finish_reason.startsWith("error")) await retryPictures(request, result, deps, run, () => clock() < deadline);
+    if (response !== undefined && !response.finish_reason.startsWith("error")) await retryPictures(request, result, deps, run, () => performance.now() < deadline);
     if (response === undefined) {
       result.failedRound = iteration;
     } else if (response.finish_reason.startsWith("error")) {
@@ -221,5 +224,6 @@ export async function runHeartbeatToolLoop(
   } finally {
     clearTimeout(timer);
   }
+  if (result.failedRound !== undefined && abort.signal.aborted) result.timedOut = true;
   return result;
 }
