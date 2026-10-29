@@ -64,36 +64,27 @@ export function captureToolSendMessage(toolUses: readonly ToolUse[]): string | u
   return found;
 }
 
-export type BudgetAction =
-  | "continue"
-  | "nudge"
-  | "break";
-
-export function budgetDecision(
-  deadlineReached: boolean,
-  normalCapReached: boolean,
-  wrapUpGrace: number,
-  wrapUpNudged: boolean,
-): BudgetAction {
-  if ((deadlineReached || normalCapReached) && !wrapUpNudged) {
-    return wrapUpGrace === 0 ? "break" : "nudge";
-  }
-  if (deadlineReached && wrapUpNudged) return "break";
-  return "continue";
+export function timeLeftPhrase(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "less than a minute";
+  return minutes === 1 ? "about a minute" : `about ${String(minutes)} minutes`;
 }
 
-export const WRAP_UP_NUDGE_TEXT =
-  "[System nudge: heartbeat tool-use budget reached. Wrap up now — " +
-  "if you have unfinished work, note it in MEMORY.md with today's date so future-you can pick it up " +
-  "where you left off. Then either send a final <sendMessage> or respond HEARTBEAT_OK and stop.]";
+export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: boolean): string {
+  const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
+  return `[System nudge: this heartbeat stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
+    "Wrap up now: note any unfinished work in HEARTBEAT.md so future-you can pick it up, " +
+    (offersWake ? "call set_next_wake if you haven't yet, " : "") +
+    "then either send your message in <sendMessage> tags or reply HEARTBEAT_OK.]";
+}
 
-export function appendWrapUpNudge(messages: WireMessageLike[]): void {
+export function appendWrapUpNudge(messages: WireMessageLike[], text: string): void {
   const last = messages[messages.length - 1];
   if (last !== undefined && last.role === "user") {
-    last.content.push({ type: "text", text: WRAP_UP_NUDGE_TEXT });
+    last.content.push({ type: "text", text });
     return;
   }
-  messages.push({ role: "user", content: [{ type: "text", text: WRAP_UP_NUDGE_TEXT }] });
+  messages.push({ role: "user", content: [{ type: "text", text }] });
 }
 
 export interface ImageRef {
@@ -151,26 +142,25 @@ function deriveContentFromBlocks(blocks: readonly ContentBlock[]): string {
 
 export const DEFAULT_HEARTBEAT_TEMPLATE = heartbeatTemplateRaw.trimEnd();
 
-export function renderHeartbeatPrompt(
-  template: string,
-  now: string,
-  userName: string,
-  defaultInterval: string,
-): string {
+export interface HeartbeatPromptVars {
+  now: string;
+  userName: string;
+  defaultInterval: string;
+  timeLimit: string;
+  wrapUpAfter: string;
+  maxRounds: number | undefined;
+}
+
+export function renderHeartbeatPrompt(template: string, vars: HeartbeatPromptVars): string {
   return renderTemplate(
     template,
     new Map([
-      ["now", now],
-      ["user", userName],
-      ["default_interval", defaultInterval],
+      ["now", vars.now],
+      ["user", vars.userName],
+      ["default_interval", vars.defaultInterval],
+      ["time_limit", vars.timeLimit],
+      ["wrap_up_after", vars.wrapUpAfter],
+      ["max_rounds", vars.maxRounds === undefined ? "" : String(vars.maxRounds)],
     ]),
   );
-}
-
-export function buildHeartbeatPrompt(
-  now: string,
-  userName: string,
-  defaultInterval: string,
-): string {
-  return renderHeartbeatPrompt(DEFAULT_HEARTBEAT_TEMPLATE, now, userName, defaultInterval);
 }

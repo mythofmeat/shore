@@ -1,15 +1,17 @@
 import { withConversation } from "../engine/lifecycle.ts";
-import { threadDataDir } from "../config/dirs.ts";
+import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { homeThreadOf } from "../engine/threads.ts";
 import { shoreLog } from "../log.ts";
 
 import { buildAutonomousMessage } from "./heartbeat_shape.ts";
 import {
+  HEARTBEAT_TIME_LIMIT_MS,
   runHeartbeatToolLoop,
   type HeartbeatLoopDeps,
   type HeartbeatLoopResult,
 } from "./heartbeat_loop.ts";
-import { prepareHeartbeatRequest, type PrepareHeartbeatDeps } from "./heartbeat_request.ts";
+import { prepareHeartbeatRequest, type HeartbeatCutOff, type PrepareHeartbeatDeps } from "./heartbeat_request.ts";
+import { deleteCharacterState, readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -53,12 +55,43 @@ function shortPreview(text: string): string {
   return Array.from(text).slice(0, 80).join("");
 }
 
+const CUT_OFF_STATE = "heartbeat_cut_off.json";
+
+function readCutOff(characterDir: string): HeartbeatCutOff | undefined {
+  try {
+    const raw = readCharacterState(characterDir, CUT_OFF_STATE);
+    if (raw === undefined) return undefined;
+    const { at, rounds, sent } = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof at !== "number" || typeof rounds !== "number" || typeof sent !== "boolean") return undefined;
+    return { at, rounds, sent };
+  } catch (error) {
+    shoreLog.error(`shore: could not read the last heartbeat's cut-off at ${characterDir}: ${String(error)}`);
+    return undefined;
+  }
+}
+
+function settleCutOff(characterDir: string, cutOff: HeartbeatCutOff | undefined): void {
+  try {
+    if (cutOff === undefined) deleteCharacterState(characterDir, CUT_OFF_STATE);
+    else writeCharacterState(characterDir, CUT_OFF_STATE, JSON.stringify(cutOff));
+  } catch (error) {
+    shoreLog.error(`shore: could not record the heartbeat's cut-off at ${characterDir}: ${String(error)}`);
+  }
+}
+
 function noteTickFailure(
   character: string,
   loop: HeartbeatLoopResult,
   note: (kind: HeartbeatEventKind, detail: string) => void,
 ): void {
   const round = loop.failedRound ?? 0;
+
+  if (loop.timedOut === true) {
+    const limit = `${String(HEARTBEAT_TIME_LIMIT_MS / 60_000)}-minute limit`;
+    shoreLog.warn(`shore: heartbeat for ${character} reached its ${limit} and was stopped on round ${round}`);
+    note("timeout", `Heartbeat reached its ${limit} and was stopped on round ${round}`);
+    return;
+  }
 
   const stop = budgetStopIn(loop.failure);
   if (stop !== undefined) {
@@ -178,7 +211,9 @@ export async function runHeartbeatTick(
       events.push({ kind, detail });
     };
 
-    const prepared = await prepareHeartbeatRequest(character, config, { ...deps, thread });
+    const characterDir = characterDataDir(config.dirs.data, character);
+    const cutOff = readCutOff(characterDir);
+    const prepared = await prepareHeartbeatRequest(character, config, { ...deps, thread, ...(cutOff === undefined ? {} : { cutOff }) });
     if (prepared === undefined) return { events };
 
     const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
@@ -205,6 +240,11 @@ export async function runHeartbeatTick(
     const sent = await persistHeartbeatMessage(character, prepared.request, loop, deps, note, { workspace, dir: sentPicturesDir(config.dirs.data, character) });
     if (sent?.version !== undefined) await recorder.settle(thread, sent.version);
     else await recorder.discard();
+    if (loop.timedOut === true) {
+      settleCutOff(characterDir, { at: deps.now?.() ?? Date.now(), rounds: loop.failedRound ?? 0, sent: sent !== undefined });
+    } else if (cutOff !== undefined && loop.failedRound !== 0) {
+      settleCutOff(characterDir, undefined);
+    }
 
     return { events };
   });

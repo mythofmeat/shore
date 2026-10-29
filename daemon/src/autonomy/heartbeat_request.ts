@@ -19,6 +19,7 @@ import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { DEFAULT_HEARTBEAT_TEMPLATE, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
+import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "../cache/rebuild.ts";
 
@@ -142,6 +143,22 @@ export async function elsewhereNote(
   return `[${userName} last wrote to you ${sinceText(nowMs - latest.at)}, in the side thread ${name}. That conversation isn't shown here, so a quiet home thread doesn't mean ${userName} has been away.]`;
 }
 
+export interface HeartbeatCutOff {
+  at: number;
+  rounds: number;
+  sent: boolean;
+}
+
+export function cutOffNote(cutOff: HeartbeatCutOff, userName: string, timeZone: string): string {
+  const rounds = cutOff.rounds === 1 ? "1 round" : `${String(cutOff.rounds)} rounds`;
+  const sent = cutOff.sent
+    ? `The message it had already written was still sent to ${userName}.`
+    : `Nothing from it was sent to ${userName}.`;
+  return `[Your last heartbeat reached its ${String(HEARTBEAT_TIME_LIMIT_MS / 60_000)}-minute limit and was stopped at ` +
+    `${formatWallClock(cutOff.at, timeZone)}, after ${rounds}, before it had finished. ${sent} ` +
+    "Whatever it had already changed with its tools is still in place.]";
+}
+
 export interface PrepareHeartbeatDeps {
   thread?: string;
   cache: LastRequestCache;
@@ -149,6 +166,7 @@ export interface PrepareHeartbeatDeps {
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   timeZone?: string;
+  cutOff?: HeartbeatCutOff;
 }
 
 export interface PreparedHeartbeat extends ToolConversation {
@@ -216,14 +234,17 @@ export async function prepareHeartbeatRequest(
     resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
     DEFAULT_HEARTBEAT_TEMPLATE;
   const userName = resolveDisplayName(config.app.defaults, deps.env);
-  const rendered = renderHeartbeatPrompt(
-    template,
-    formatWallClock(nowMs, timeZone),
+  const rendered = renderHeartbeatPrompt(template, {
+    now: formatWallClock(nowMs, timeZone),
     userName,
-    fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
-  );
+    defaultInterval: fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
+    timeLimit: fallbackIntervalPhrase(BigInt(HEARTBEAT_TIME_LIMIT_MS / 1000)),
+    wrapUpAfter: fallbackIntervalPhrase(BigInt((HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS) / 1000)),
+    maxRounds: maxToolIterations,
+  });
   const elsewhere = await elsewhereNote(config.dirs.data, character, thread, userName, nowMs).catch(() => undefined);
-  const prompt = elsewhere === undefined ? rendered : `${elsewhere}\n\n${rendered}`;
+  const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
+  const prompt = [cutOff, elsewhere, rendered].filter((part) => part !== undefined).join("\n\n");
 
   const marker = heartbeatMarker(nowMs, config.app.behavior.user_message_timestamps, timeZone);
   request.messages.push({ role: "user", content: [{ type: "text", text: marker }] });
