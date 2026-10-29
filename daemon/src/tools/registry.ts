@@ -10,6 +10,7 @@ import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.m
 import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
 import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
+import editThreadDesc from "../../prompts/tools/threads/edit_thread.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
 import readChatLogsDesc from "../../prompts/tools/history/read_chat_logs.md" with { type: "text" };
 import searchChatLogsDesc from "../../prompts/tools/history/search_chat_logs.md" with { type: "text" };
@@ -234,6 +235,21 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
+    name: "edit_thread",
+    description: stripOneTrailingNewline(editThreadDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 64, description: "Id of the side thread to change, as `list_threads` shows it." },
+        label: { type: "string", description: "New name for the thread list, or an empty string to clear it." },
+        purpose: { type: "string", description: "New line or two on what the thread is for, or an empty string to clear it." },
+        files: { type: "array", items: { type: "string" }, description: "The thread's whole new list of files to keep in its prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`. An empty list clears it." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "set_next_wake",
     description: stripOneTrailingNewline(setNextWakeDesc),
     parameters: {
@@ -269,12 +285,18 @@ export function templateVars(charName: string, userName: string): Map<string, st
   ]);
 }
 
+export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string): Map<string, string> {
+  const vars = templateVars(charName, userName);
+  for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
+  return vars;
+}
+
 export function renderToolDefs(
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
 ): ToolDefinition[] {
-  const vars = templateVars(charName, userName);
+  const vars = toolTemplateVars(cfg, charName, userName);
   return availableTools(cfg).map((t) => ({
     name: t.name,
     description: renderTemplate(t.description, vars),

@@ -24,7 +24,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -67,6 +67,7 @@ export interface ThreadRecord {
   created_by?: "character";
   chat_model?: string;
   compaction: boolean;
+  locked?: true;
   forked_from?: ThreadForkOrigin;
 }
 
@@ -387,7 +388,14 @@ export async function setHomeThread(
   return next;
 }
 
-async function setThreadField<K extends "label" | "purpose" | "files" | "chat_model">(
+type ThreadSetting = "label" | "purpose" | "files" | "chat_model" | "locked";
+
+function withSetting<K extends ThreadSetting>(record: ThreadRecord, key: K, value: ThreadRecord[K] | undefined): ThreadRecord {
+  const { [key]: _dropped, ...rest } = record;
+  return (value === undefined ? rest : { ...rest, [key]: value }) as ThreadRecord;
+}
+
+async function setThreadField<K extends ThreadSetting>(
   data: string,
   character: string,
   id: string,
@@ -396,9 +404,7 @@ async function setThreadField<K extends "label" | "purpose" | "files" | "chat_mo
   now: string,
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
-  const { [key]: _dropped, ...rest } = requireThread(index, character, id);
-  const record = (value === undefined ? rest : { ...rest, [key]: value }) as ThreadRecord;
-  const next = replaceThread(index, record);
+  const next = replaceThread(index, withSetting(requireThread(index, character, id), key, value));
   await writeThreadsIndex(data, character, next);
   return next;
 }
@@ -442,6 +448,56 @@ export async function setThreadModel(
   now: string,
 ): Promise<ThreadsIndex> {
   return await setThreadField(data, character, id, "chat_model", model, now);
+}
+
+export async function setThreadLocked(
+  data: string,
+  character: string,
+  id: string,
+  locked: boolean,
+  now: string,
+): Promise<ThreadsIndex> {
+  return await setThreadField(data, character, id, "locked", locked ? true : undefined, now);
+}
+
+export interface ThreadEdit {
+  label?: string | null;
+  purpose?: string | null;
+  files?: readonly string[];
+}
+
+export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
+  const record = requireThread(index, character, id);
+  if (record.id === homeThread(index)) {
+    throw new ThreadError(
+      "is_home",
+      `thread ${JSON.stringify(id)} is the home thread for ${character}, and the home thread's prompt shows no purpose or files`,
+    );
+  }
+  if (record.locked === true) {
+    throw new ThreadError("locked", `thread ${JSON.stringify(id)} is locked, so only the user changes its label, purpose and files`);
+  }
+  return record;
+}
+
+export async function editThreadAsCharacter(
+  data: string,
+  character: string,
+  id: string,
+  edit: ThreadEdit,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  let record = requireEditableByCharacter(index, character, id);
+  if (edit.label !== undefined) record = withSetting(record, "label", edit.label ?? undefined);
+  if (edit.purpose !== undefined) record = withSetting(record, "purpose", edit.purpose ?? undefined);
+  if (edit.files !== undefined) {
+    const files = threadFilePaths(edit.files);
+    record = withSetting(record, "files", files.length === 0 ? undefined : files);
+  }
+  const next = replaceThread(index, record);
+  await writeThreadsIndex(data, character, next);
+  return next;
 }
 
 export async function threadChatModel(

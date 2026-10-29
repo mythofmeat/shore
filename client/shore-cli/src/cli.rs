@@ -1403,6 +1403,18 @@ pub(crate) enum ThreadCommand {
         files: Vec<String>,
     },
 
+    /// Lock a thread's label, purpose and files, so only you change them. The character can still edit the files themselves
+    Lock {
+        /// Thread id
+        name: String,
+    },
+
+    /// Unlock a thread, so the character can change its label, purpose and files again with edit_thread
+    Unlock {
+        /// Thread id
+        name: String,
+    },
+
     /// Pin a thread to its own chat model, or clear the pin to inherit the character's
     #[command(hide = true)]
     Model {
@@ -1851,7 +1863,7 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
         })
         .mut_subcommand("thread", |mut subcommand| {
             for name in [
-                "use", "label", "purpose", "files", "home", "archive", "model",
+                "use", "label", "purpose", "files", "lock", "unlock", "home", "archive", "model",
             ] {
                 subcommand = subcommand.mut_subcommand(name, |leaf| {
                     with_palette_values(leaf, "name", &catalog.threads)
@@ -2407,6 +2419,12 @@ pub(crate) fn to_swp_command(
             )),
             ThreadCommand::Files { name, files } => {
                 Some(("thread_files", json!({ "name": name, "files": files })))
+            }
+            ThreadCommand::Lock { name } => {
+                Some(("thread_lock", json!({ "name": name, "locked": true })))
+            }
+            ThreadCommand::Unlock { name } => {
+                Some(("thread_lock", json!({ "name": name, "locked": false })))
             }
             ThreadCommand::Model { name, model } => {
                 Some(("thread_model", json!({ "name": name, "model": model })))
@@ -3008,6 +3026,17 @@ mod tests {
                 Some((
                     "thread_files",
                     json!({"name": "lighthouse", "files": ["stories/lighthouse.md"]}),
+                )),
+            ),
+            (
+                &["thread", "lock", "lighthouse"],
+                Some(("thread_lock", json!({"name": "lighthouse", "locked": true}))),
+            ),
+            (
+                &["thread", "unlock", "lighthouse"],
+                Some((
+                    "thread_lock",
+                    json!({"name": "lighthouse", "locked": false}),
                 )),
             ),
             (

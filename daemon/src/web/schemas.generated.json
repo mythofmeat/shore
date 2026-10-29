@@ -1578,6 +1578,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_lock"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -8887,6 +8903,12 @@
           },
           "compaction": {
             "type": "boolean"
+          },
+          "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "home": {
             "type": "boolean"
@@ -10311,6 +10333,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_lock"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -17620,6 +17658,12 @@
           },
           "compaction": {
             "type": "boolean"
+          },
+          "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "home": {
             "type": "boolean"

@@ -37,6 +37,7 @@ const ICONS = {
   refresh: stroke(<><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></>),
   compact: stroke(<path d="M4 7h16M7 12h10M10 17h4" />),
   label: stroke(<><path d="M4 12V5h7l9 9-7 7z" /><circle cx="8" cy="9" r="1.2" /></>),
+  lock: stroke(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>),
   info: stroke(<><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8v.01" /></>),
   expand: stroke(<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />),
 } as const;

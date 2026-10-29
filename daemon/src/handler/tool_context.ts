@@ -19,6 +19,8 @@ import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { Message } from "../engine/types.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
+import type { EditThreadRequest } from "../tools/edit_thread.ts";
+import type { ThreadRecord } from "../engine/threads.ts";
 
 export interface ToolConversation {
   thread: string;
@@ -38,6 +40,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
+  editThread?: (character: string, request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 }
 
 export async function buildToolContext(
@@ -71,6 +74,7 @@ export async function buildToolContext(
   const activityStats = deps.activityStats;
   const scheduleNextWake = deps.scheduleNextWake;
   const startThread = deps.startThread;
+  const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
@@ -102,6 +106,9 @@ export async function buildToolContext(
     ...(startThread === undefined
       ? {}
       : { startThread: (request: StartThreadRequest) => startThread(charName, request) }),
+    ...(editThread === undefined
+      ? {}
+      : { editThread: (request: EditThreadRequest) => editThread(charName, request) }),
     ...(mcp === undefined
       ? {}
       : {

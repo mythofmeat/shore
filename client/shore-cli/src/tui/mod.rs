@@ -1004,6 +1004,7 @@ fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
                 created_at: listing_text(row, "created_at").unwrap_or_default(),
                 last_active: listing_text(row, "last_active"),
                 by_character: listing_text(row, "created_by").as_deref() == Some("character"),
+                locked: listing_flag(row, "locked"),
             })
         })
         .collect();
@@ -2901,7 +2902,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                 }
                 "archive_thread" | "thread_home" | "thread_label" | "thread_purpose"
-                | "thread_files" => {
+                | "thread_files" | "thread_lock" => {
                     absorb_thread_listing(app, &co.data);
                 }
                 "mark_thread_read" => {

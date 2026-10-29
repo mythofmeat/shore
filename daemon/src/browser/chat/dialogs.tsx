@@ -55,6 +55,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
   const [text, setText] = useState(dialog === "rename" ? thread?.label ?? "" : "");
   const [purpose, setPurpose] = useState(thread?.purpose ?? "");
   const [files, setFiles] = useState((thread?.files ?? []).join("\n"));
+  const [locked, setLocked] = useState(thread?.locked === true);
   const [name, setName] = useState("");
   const [turns, setTurns] = useState("");
   const [restart, setRestart] = useState(false);
@@ -67,6 +68,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       if (paths.join("\n") !== (thread?.files ?? []).join("\n")) await workspace.actions.run("thread_files", { name: id, files: paths });
       if (text.trim() !== (thread?.label ?? "")) await workspace.actions.run("thread_label", { name: id, label: text.trim() === "" ? null : text.trim() });
       if (purpose.trim() !== (thread?.purpose ?? "")) await workspace.actions.run("thread_purpose", { name: id, purpose: purpose.trim() === "" ? null : purpose.trim() });
+      if (locked !== (thread?.locked === true)) await workspace.actions.run("thread_lock", { name: id, locked });
       await workspace.refreshNavigation(); return undefined;
     })}>
       <label className="field"><span>Label</span><input className="input" data-autofocus value={text} placeholder={state.thread ?? ""} onChange={(event) => setText(event.target.value)} /></label>
@@ -74,6 +76,8 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
       <label className="field"><span>Files in the prompt <span className="muted">(optional)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
       <p className="form-hint">The character sees the purpose and these workspace files in this conversation’s prompt. One path or [[link]] per line.</p>
+      <label className="check"><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Lock the label, purpose and files</label>
+      <p className="form-hint">Only you can change a locked conversation’s label, purpose and files. {state.character ?? "The character"} can still edit the files themselves.</p>
     </Form>;
     case "fork": return <Form title={`Fork “${label}”`} close={close} busy={busy} error={error} action="Fork" disabled={name.trim() === "" || (turns !== "" && !(Number(turns) >= 1))} submit={() => run(async () => {
       const result = await workspace.actions.run("fork_thread", { name: name.trim(), from: state.thread, ...(turns === "" ? {} : { turns: Number(turns) }) });

@@ -173,6 +173,12 @@
   flex-shrink: 0;
 }
 
+.sidebar-locked {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
 .sidebar-replying .spinner {
   width: 12px;
   height: 12px;

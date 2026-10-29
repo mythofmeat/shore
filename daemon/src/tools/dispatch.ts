@@ -15,12 +15,14 @@ import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleSavePicture } from "./save_picture.ts";
 import { handleListThreads } from "./list_threads.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
+import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { ImageRef, Message } from "../engine/types.ts";
+import type { ThreadRecord } from "../engine/threads.ts";
 
 export interface ToolContext {
   thread?: string;
@@ -67,6 +69,8 @@ export interface ToolContext {
   scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
+
+  editThread?: (request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
@@ -127,7 +131,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "start_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "start_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -193,6 +197,9 @@ export async function dispatchTool(
 
     case "start_thread":
       return await handleStartThread(args, ctx.startThread, ctx.userName ?? "the user");
+
+    case "edit_thread":
+      return await handleEditThread(args, ctx.editThread, ctx.userName ?? "the user");
 
     case "set_next_wake": {
       if (ctx.scheduleNextWake === undefined) {

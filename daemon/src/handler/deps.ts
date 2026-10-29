@@ -50,6 +50,7 @@ import {
 import { McpRegistry } from "../tools/mcp_registry.ts";
 import { pluginsDir } from "../config/dirs.ts";
 import { startCharacterThread } from "./start_thread.ts";
+import { editCharacterThread } from "./edit_thread.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
@@ -182,6 +183,11 @@ export function chatToolDeps(
     ),
     startThread: (character, request) => startCharacterThread(
       { registry: runtime.registry, dataDir: runtime.config.dirs.data, emitEvent: a.emitEvent },
+      character,
+      request,
+    ),
+    editThread: (character, request) => editCharacterThread(
+      { registry: runtime.registry, emitEvent: a.emitEvent },
       character,
       request,
     ),

@@ -52,6 +52,7 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const shown = threads.map((record) => described(record, activity.get(record.id), [
     ...(record.id === home ? ["home"] : []),
     ...(record.id === current ? ["you're here"] : []),
+    ...(record.locked === true ? ["locked"] : []),
   ], options, zone, nowMs));
   const where = current === home ? `You're in it.` : `You're in "${current}".`;
   return [`Your home thread is "${home}", where heartbeats happen. ${where}`, ...shown].join("\n\n");

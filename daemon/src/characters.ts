@@ -21,18 +21,22 @@ import { KeyedMutex } from "./util/keyed_mutex.ts";
 import {
   archiveThread,
   createThread,
+  editThreadAsCharacter,
   ensureThreads,
   homeThread,
+  requireEditableByCharacter,
   resolveThreadFiles,
   setHomeThread,
   setThreadFiles,
   setThreadLabel,
+  setThreadLocked,
   setThreadModel,
   setThreadPurpose,
   threadRecord,
   ThreadError,
   type ArchiveThreadOptions,
   type NewThread,
+  type ThreadEdit,
   type ThreadRecord,
   type ThreadsIndex,
 } from "./engine/threads.ts";
@@ -369,6 +373,46 @@ export class CharacterRegistry {
         this.#remember(
           name,
           await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadLocked(
+    name: string,
+    id: string,
+    locked: boolean,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadLocked(this.#dataDir, name, id, locked, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async editThreadAsCharacter(
+    name: string,
+    id: string,
+    edit: ThreadEdit,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    const known = this.#threads.get(name);
+    if (known !== undefined) requireEditableByCharacter(known, name, id);
+    const files = edit.files === undefined ? undefined : await this.#threadFiles(name, edit.files, signal);
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await editThreadAsCharacter(this.#dataDir, name, id, {
+            ...edit,
+            ...(files === undefined ? {} : { files }),
+          }, new Date().toISOString()),
         ),
       signal,
     );
