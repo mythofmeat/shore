@@ -18,7 +18,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "compact", "compact.keep_turns", "compact.restart", "compact.segment", "compact_watch", "compact_cancel", "@compaction_watch", "@compaction_cancel", "clear", "clear.exclude", "clear.note",
     "list_characters", "create_character", "create_character.name",
     "list_threads", "create_thread", "create_thread.name", "create_thread.label", "create_thread.model", "create_thread.compaction", "create_thread.purpose", "create_thread.files",
-    "thread_label", "thread_label.name", "thread_label.label", "thread_purpose", "thread_purpose.name", "thread_purpose.purpose", "thread_files", "thread_files.name", "thread_files.files", "thread_model", "thread_model.name", "thread_model.model",
+    "thread_label", "thread_label.name", "thread_label.label", "thread_purpose", "thread_purpose.name", "thread_purpose.purpose", "thread_files", "thread_files.name", "thread_files.files", "thread_lock", "thread_lock.name", "thread_lock.locked", "thread_model", "thread_model.name", "thread_model.model",
     "thread_home", "thread_home.name", "archive_thread", "archive_thread.name",
     "fork_thread", "fork_thread.name", "fork_thread.from", "fork_thread.turns",
     "switch_model", "switch_model.name", "@chat_role", "list_models", "list_models.include_hidden", "list_models.favorites_only", "favorite_model", "favorite_model.name",

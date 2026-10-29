@@ -91,6 +91,7 @@ pub(crate) struct ThreadRow {
     pub created_at: String,
     pub last_active: Option<String>,
     pub by_character: bool,
+    pub locked: bool,
 }
 
 impl ThreadRow {
@@ -2064,6 +2065,9 @@ impl App {
         }
         if let Some(model) = row.model.as_deref() {
             facts.push(model.to_owned());
+        }
+        if row.locked {
+            facts.push("locked".to_owned());
         }
         if let Some(label) = row.label.as_deref() {
             facts.push(label.to_owned());

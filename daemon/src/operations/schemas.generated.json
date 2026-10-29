@@ -12261,6 +12261,12 @@
             "compaction": {
               "type": "boolean"
             },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "home": {
               "type": "boolean"
             },
@@ -12564,6 +12570,12 @@
             "compaction": {
               "type": "boolean"
             },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "home": {
               "type": "boolean"
             },
@@ -12760,6 +12772,12 @@
             },
             "compaction": {
               "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "home": {
               "type": "boolean"
@@ -12976,6 +12994,12 @@
             },
             "compaction": {
               "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "home": {
               "type": "boolean"
@@ -13228,6 +13252,12 @@
             "compaction": {
               "type": "boolean"
             },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "home": {
               "type": "boolean"
             },
@@ -13431,6 +13461,12 @@
             "compaction": {
               "type": "boolean"
             },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "home": {
               "type": "boolean"
             },
@@ -13633,6 +13669,12 @@
             },
             "compaction": {
               "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "home": {
               "type": "boolean"
@@ -13840,6 +13882,219 @@
             "compaction": {
               "type": "boolean"
             },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_lock",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadLockArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "locked"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "home": {
               "type": "boolean"
             },
@@ -14042,6 +14297,12 @@
             },
             "compaction": {
               "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "home": {
               "type": "boolean"

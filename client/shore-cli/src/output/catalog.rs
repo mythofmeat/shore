@@ -482,6 +482,9 @@ fn thread_facts(row: &Value) -> String {
     if files > 0 {
         parts.push(format!("{files} file{}", if files == 1 { "" } else { "s" }));
     }
+    if flag(row, "locked") {
+        parts.push("locked".to_owned());
+    }
     parts.join(" \u{b7} ")
 }
 
@@ -553,6 +556,12 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
         note(
             out,
             "warm is the thread holding the cache slot; a turn anywhere else pays to rebuild it",
+        );
+    }
+    if threads.iter().any(|thread| flag(thread, "locked")) {
+        note(
+            out,
+            "a locked thread's label, purpose and files change only when you change them",
         );
     }
 }

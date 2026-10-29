@@ -20,7 +20,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadFiles, threadHome, threadLabel, threadModel, threadPurpose } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadFiles, threadHome, threadLabel, threadLock, threadModel, threadPurpose } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -372,6 +372,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Set thread files", effects: ["history_write"],
     fields: { name: threadName, files: { label: "Files in the prompt", hint: "Workspace paths or [[links]]; leave empty to clear" } },
   }, async (context, args) => threadFiles(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_lock: register("thread_lock", {
+    ...threadPresentation, label: "Lock thread", effects: ["history_write"],
+    fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and files; the character's edit_thread can't" } },
+  }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_model: register("thread_model", {
     ...threadPresentation, label: "Pin thread model", effects: ["model_selection"],
     fields: { name: threadName, model: { label: "Chat model", choices: "models", hint: "Leave empty to inherit the character default" } },

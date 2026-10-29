@@ -34,6 +34,7 @@ import type { Message } from "./engine/types.ts";
 import type { ServerMessage } from "./protocol/ServerMessage.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
 import { startCharacterThread } from "./handler/start_thread.ts";
+import { editCharacterThread } from "./handler/edit_thread.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
 import { closeWorkspaceHelpers } from "./tools/character_workspace.ts";
@@ -217,6 +218,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         }),
         startThread: (character, request) => startCharacterThread(
           { registry, dataDir: config.dirs.data, emitEvent: options.emitEvent },
+          character,
+          request,
+        ),
+        editThread: (character, request) => editCharacterThread(
+          { registry, emitEvent: options.emitEvent },
           character,
           request,
         ),

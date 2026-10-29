@@ -68,6 +68,7 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
               const replying = !current && conversation.activeIn({ character: state.character, thread: thread.id });
               return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} disabled={!ready} onClick={() => selectThread(thread.id)}>
                 <Icon name={thread.home ? "home" : "chat"} size={14} /><span className="sidebar-name">{threadLabel(thread)}</span>
+                {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
                 {replying ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(replying)</span></span> : null}
                 {unread > 0 ? <UnreadBadge count={unread} /> : null}
               </button>;

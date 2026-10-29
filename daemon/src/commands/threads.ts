@@ -73,6 +73,12 @@ export interface ThreadRegistry {
     files: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
+  setThreadLocked(
+    character: string,
+    id: string,
+    locked: boolean,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
   forkThread(
     character: string,
     source: string,
@@ -206,6 +212,17 @@ export async function threadFiles(ctx: ThreadContext, args: Args): Promise<Threa
   const files = fileList(args["files"]) ?? [];
   try {
     return listing(ctx, await ctx.registry.setThreadFiles(ctx.character, id, files, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadLock(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  const locked = args["locked"];
+  if (typeof locked !== "boolean") throw invalidRequest("locked must be true or false");
+  try {
+    return listing(ctx, await ctx.registry.setThreadLocked(ctx.character, id, locked, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }

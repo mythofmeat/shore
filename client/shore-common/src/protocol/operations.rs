@@ -2350,6 +2350,12 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct ThreadLockArgs {
+        pub name: String,
+        pub locked: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct ThreadModelArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2457,6 +2463,9 @@ wire_types! {
         #[ts(optional)]
         pub chat_model: Option<String>,
         pub compaction: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub locked: Option<bool>,
         pub home: bool,
         pub current: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2651,6 +2660,7 @@ operations! {
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
+    LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     PinThreadModel: "thread_model" (ThreadModelArgs) => ThreadListing,
     MarkThreadRead: "mark_thread_read" (MarkThreadReadArgs) => ThreadUnread,
 }
