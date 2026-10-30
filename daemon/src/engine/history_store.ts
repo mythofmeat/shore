@@ -435,6 +435,7 @@ export class HistoryStore {
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
          WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
+           AND (m.origin IS NULL OR m.origin <> 'autonomous')
          ORDER BY m.display_seq DESC
          LIMIT 1`,
       )

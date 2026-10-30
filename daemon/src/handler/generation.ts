@@ -1,14 +1,7 @@
 import { withConversation } from "../engine/lifecycle.ts";
-import { archiveKey, characterDataDir, threadDataDir } from "../config/dirs.ts";
-import { join } from "node:path";
-import { readDurable, threadFile } from "../storage/files.ts";
-import { HISTORY_DB_FILE } from "../engine/history_store.ts";
+import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
-import { archivalPlanInput, archiveSplitIndex } from "../memory/compaction/plan.ts";
-import { conversationManager } from "../memory/compaction/archive.ts";
-import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { parseDurationMs } from "../llm/request.ts";
-import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { keepaliveWindowSecs } from "../config/keepalive.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -47,6 +40,7 @@ import { toolLimitsFrom, type ToolContext, type ToolLimitsView } from "../tools/
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
 import {
   buildGenerationRequest,
+  HeartbeatThreadError,
   ImagesUnsupportedError,
   resolveGenerationModel,
   type SetupEngine,
@@ -61,9 +55,12 @@ import { homeThreadOf, threadActivities, threadModelOf, type ThreadRecord } from
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
+  archiveTrimmedTurns,
   bodyHasContent,
+  contextTokensFor,
   emitPostPersistStreamEnd,
   maybeCompact,
+  threadShouldCompact,
   notifyUserMessageIfFresh,
   ensureAndBackfillAutonomy,
   type CompactionRunner,
@@ -104,6 +101,7 @@ export interface GenerationRegistry {
   getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
   listThreads(name: string): readonly ThreadRecord[];
+  heartbeatThread?(name: string): string | undefined;
 }
 
 interface GenerationDiagnostics {
@@ -190,6 +188,7 @@ export async function runGeneration(
   const engine = await deps.registry.getOrCreate(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
+  if (engine.thread === deps.registry.heartbeatThread?.(params.charName)) throw new HeartbeatThreadError(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
   const delivery = new OrderedDelivery(params.send);
@@ -420,7 +419,7 @@ async function runGenerationCore(
   const crowded = nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
     canArchiveTurns(active, compaction.keep_recent_turns);
   if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) {
-    if (crowded) await archiveTrimmedTurns(deps, engine, charName, workspace, compaction.keep_recent_turns, now);
+    if (crowded) await archiveTrimmedTurns(deps.dataDir, engine, charName, workspace, compaction.keep_recent_turns, now, deps.compaction);
     return;
   }
   await maybeCompact(
@@ -429,7 +428,7 @@ async function runGenerationCore(
     charName,
     config,
     deps.dataDir,
-    result,
+    contextTokensFor(result.context_usage ?? result.usage),
     deps.compaction,
     crowded,
   );
@@ -472,7 +471,8 @@ async function sideThreadLastUser(
   afterMs: number,
   beforeMs: number,
 ): Promise<Message["last_elsewhere"]> {
-  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home);
+  const heartbeat = deps.registry.heartbeatThread?.(charName);
+  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home && id !== heartbeat);
   let latest: { thread: string; at: string; ms: number } | undefined;
   for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
     const at = activity.last_user;
@@ -519,41 +519,6 @@ async function threadArrival(
     cold: engine.thread !== home && gapSecs >= cacheTtlSecs(resolved),
     annotations: elsewhere === undefined ? {} : { last_elsewhere: elsewhere },
   };
-}
-
-async function archiveTrimmedTurns(
-  deps: GenerationDeps,
-  engine: GenerationEngine,
-  charName: string,
-  workspace: CharacterWorkspace,
-  keepTurns: number,
-  now: () => string,
-): Promise<void> {
-  const guard = tryBeginCompaction(deps.dataDir, charName);
-  if (guard === undefined) return;
-  try {
-    const raw = readDurable(threadFile(deps.dataDir, charName, engine.thread, "active.jsonl"));
-    const input = archivalPlanInput(raw);
-    const splitAt = archiveSplitIndex([...input.messages], keepTurns, false);
-    if (splitAt === 0) return;
-    await conversationManager(
-      threadDataDir(deps.dataDir, charName, engine.thread),
-      { dbPath: join(deps.dataDir, HISTORY_DB_FILE), archiveKey: archiveKey(charName, engine.thread) },
-      now,
-      () => crypto.randomUUID(),
-    ).archiveAndRetain("trim", { keepLastN: input.messages.length - splitAt, activeContent: raw });
-  } catch (e) {
-    deps.log?.warn?.("could not archive the turns a thread without compaction trimmed", { error: String(e) });
-    return;
-  } finally {
-    guard.release();
-  }
-  await engine.reload();
-  try {
-    await deps.compaction.applyDeferredEdits(characterDataDir(deps.dataDir, charName), workspace, engine.thread);
-  } catch (e) {
-    deps.log?.warn?.("could not refresh a thread's prompt files after archiving", { error: String(e) });
-  }
 }
 
 export interface SubagentTurn {
@@ -764,11 +729,6 @@ function sideThreadAutonomy(config: LoadedConfig, home: GenerationDeps["autonomy
     onCompactionFailed: () => {},
     notifyAssistantMessage: () => {},
     notifyLastRequest: () => {},
-    shouldCompactNow: (_character, turns, tokens, crowded) => {
-      const c = config.app.memory.compaction;
-      return c.enabled && (crowded === true || (turns >= c.min_turns &&
-        ((c.max_turns > 0 && turns >= c.max_turns) ||
-         (c.max_context_tokens > 0 && tokens >= c.max_context_tokens))));
-    },
+    shouldCompactNow: (_character, turns, tokens, crowded) => threadShouldCompact(config, turns, tokens, crowded === true),
   };
 }

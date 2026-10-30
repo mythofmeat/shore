@@ -1425,7 +1425,7 @@ pub(crate) enum ThreadCommand {
         model: Option<String>,
     },
 
-    /// Point the heartbeat at a thread. This is where unprompted messages arrive
+    /// Make a thread home. This is where the messages the character sends from heartbeats arrive
     Home {
         /// Thread id
         name: String,

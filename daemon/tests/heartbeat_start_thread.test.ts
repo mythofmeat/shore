@@ -111,6 +111,7 @@ test("a thread started and edited on a heartbeat opens with her message, takes t
     ]);
     expect(events.filter((event) => event.type === "new_message" && event.thread === "lighthouse")).toHaveLength(1);
     expect(events.filter((event) => event.type === "threads_changed")).toEqual([
+      { type: "threads_changed", character: "ada", thread: "heartbeat" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
     ]);

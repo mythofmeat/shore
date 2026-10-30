@@ -10,29 +10,29 @@ import {
 } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from "../config/models.ts";
-import { resolveDisplayName, type HeartbeatConfig } from "../config/app.ts";
-import { resolvePromptTemplate } from "../config/dirs.ts";
+import { resolveDisplayName, toolGrants, type HeartbeatConfig } from "../config/app.ts";
+import { characterDataDir, resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
-import { formatWallClock, heartbeatMarker } from "../engine/prompt.ts";
-import { homeThreadOf, readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
+import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
+import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
+import { readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
+import type { Message } from "../engine/types.ts";
 import { hostZone } from "../ledger/zoned.ts";
-import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
+import { buildRequestWithProviderKeys, parseDurationMs } from "../llm/request.ts";
+import { applyDeferredEdits } from "../memory/deferred_edits.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { DEFAULT_HEARTBEAT_TEMPLATE, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
-import type { LastRequestCache } from "../cache/last_request.ts";
-import { rebuildRequestFromDisk, type RebuildDeps } from "../cache/rebuild.ts";
+import { HEARTBEAT_OPENER, homeDigest, readHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
+import type { RebuildDeps } from "../cache/rebuild.ts";
 
 const SECONDS_PER_MINUTE = 60n;
 const SECONDS_PER_HOUR = 3600n;
+const DEFAULT_CACHE_TTL_MS = 3_600_000;
 
-function copyForTick(request: SidecarRequest): SidecarRequest {
-  const copy: SidecarRequest = { ...request, messages: [...request.messages] };
-  if (copy.context !== undefined) {
-    const { rid: _rid, ...rest } = copy.context;
-    copy.context = { ...rest, call_type: "heartbeat" };
-  }
-  return copy;
+function cacheTtlMs(model: ResolvedModel): number {
+  return (model.cacheTtl === undefined ? undefined : parseDurationMs(model.cacheTtl)) ?? DEFAULT_CACHE_TTL_MS;
 }
 
 export function fallbackIntervalPhrase(secs: bigint): string {
@@ -59,15 +59,10 @@ export interface HeartbeatModelDeps {
   env?: NodeJS.ProcessEnv;
 }
 
-export function applyHeartbeatModelOverride(
-  request: SidecarRequest,
-  config: LoadedConfig,
-  character: string,
-  deps: HeartbeatModelDeps = {},
-): HeartbeatModelChoice {
+export function heartbeatModel(config: LoadedConfig, character: string): ResolvedModel | undefined {
   const view = configView(config);
   const configuredName = view.app.defaults.backgroundModelName("heartbeat");
-  if (configuredName === undefined) return { request, override: undefined };
+  if (configuredName === undefined) return undefined;
 
   try {
     findEffectiveModel(view, config.dirs.cache, configuredName, true);
@@ -76,12 +71,21 @@ export function applyHeartbeatModelOverride(
       `shore: heartbeat model "${configuredName}" not found in catalog for ${character}; ` +
         `keeping chat model: ${String(e)}`,
     );
-    return { request, override: undefined };
+    return undefined;
   }
 
-  const resolved = resolveBackgroundModel(view, "heartbeat", character, (v, c, n, h) =>
+  return resolveBackgroundModel(view, "heartbeat", character, (v, c, n, h) =>
     findEffectiveModel(v, c, n, h),
   );
+}
+
+export function applyHeartbeatModelOverride(
+  request: SidecarRequest,
+  config: LoadedConfig,
+  character: string,
+  deps: HeartbeatModelDeps = {},
+  resolved: ResolvedModel | undefined = heartbeatModel(config, character),
+): HeartbeatModelChoice {
   if (resolved === undefined) return { request, override: undefined };
 
   const entry = config.providers.get(resolved.providerKey);
@@ -110,37 +114,29 @@ export function applyHeartbeatModelOverride(
   }
 }
 
-const ELSEWHERE_WINDOW_MS = 86_400_000;
-
-function sinceText(ms: number): string {
-  const minutes = Math.max(1, Math.round(ms / 60_000));
-  if (minutes < 90) return minutes === 1 ? "a minute ago" : `${String(minutes)} minutes ago`;
-  return `${String(Math.round(minutes / 60))} hours ago`;
-}
-
-export async function elsewhereNote(
+export async function lastWroteNote(
   dataDir: string,
   character: string,
+  heartbeat: string,
   home: string,
   userName: string,
   nowMs: number,
 ): Promise<string | undefined> {
   const index = await readThreadsIndex(dataDir, character);
   if (index === undefined) return undefined;
-  const activity = await threadActivities(dataDir, character, index.threads.map((thread) => thread.id));
-  const lastIn = (id: string) => Date.parse(activity.get(id)?.last_user ?? "");
-  const homeAt = lastIn(home);
+  const threads = index.threads.filter((thread) => thread.id !== heartbeat);
+  const activity = await threadActivities(dataDir, character, threads.map((thread) => thread.id));
   let latest: { id: string; label: string | undefined; at: number } | undefined;
-  for (const thread of index.threads) {
-    if (thread.id === home) continue;
-    const at = lastIn(thread.id);
+  for (const thread of threads) {
+    const at = Date.parse(activity.get(thread.id)?.last_user ?? "");
     if (Number.isNaN(at) || (latest !== undefined && at <= latest.at)) continue;
     latest = { id: thread.id, label: thread.label, at };
   }
-  if (latest === undefined || nowMs - latest.at > ELSEWHERE_WINDOW_MS) return undefined;
-  if (!Number.isNaN(homeAt) && homeAt >= latest.at) return undefined;
+  if (latest === undefined) return undefined;
+  const ago = agoPhrase(Math.max(0, (nowMs - latest.at) / 1000));
+  if (latest.id === home) return `[${userName} last wrote to you ${ago}, in your home thread "${home}".]`;
   const name = latest.label === undefined ? `"${latest.id}"` : `"${latest.id}" (${latest.label})`;
-  return `[${userName} last wrote to you ${sinceText(nowMs - latest.at)}, in the side thread ${name}. That conversation isn't shown here, so a quiet home thread doesn't mean ${userName} has been away.]`;
+  return `[${userName} last wrote to you ${ago}, in the side thread ${name}, which isn't shown here.]`;
 }
 
 export interface HeartbeatCutOff {
@@ -160,17 +156,27 @@ export function cutOffNote(cutOff: HeartbeatCutOff, userName: string, timeZone: 
 }
 
 export interface PrepareHeartbeatDeps {
-  thread?: string;
-  cache: LastRequestCache;
   rebuild: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   timeZone?: string;
   cutOff?: HeartbeatCutOff;
+  newId?: () => string;
+}
+
+export interface HeartbeatConversation {
+  thread: string;
+  home: string;
+  history: HomeReader;
+  homeThread: HomeReader;
 }
 
 export interface PreparedHeartbeat extends ToolConversation {
   request: SidecarRequest;
+  opener: Message;
+  instructions: Message;
+  messageBudget: number;
+  modelId: string;
   maxToolIterations: number | undefined;
   override: ResolvedModel | undefined;
 }
@@ -178,34 +184,87 @@ export interface PreparedHeartbeat extends ToolConversation {
 export async function prepareHeartbeatRequest(
   character: string,
   config: LoadedConfig,
+  conversation: HeartbeatConversation,
   deps: PrepareHeartbeatDeps,
 ): Promise<PreparedHeartbeat | undefined> {
-  const thread = deps.thread ?? await homeThreadOf(config.dirs.data, character);
-  const rebuilt = await rebuildRequestFromDisk(
+  const { thread, home } = conversation;
+  const resolved = resolveChatModelForCharacter(
+    configView(config),
     character,
-    config.dirs.data,
-    config,
-    { ...deps.rebuild, thread },
+    (v, c, n, h) => findEffectiveModel(v, c, n, h),
+    await threadChatModel(config.dirs.data, character, thread),
   );
-  if (rebuilt === undefined) {
-    shoreLog.info(
-      `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,
-    );
+  if (resolved === undefined) {
+    shoreLog.info(`shore: heartbeat skipping tick for ${character} (no chat model resolves)`);
     return undefined;
   }
-  const source = rebuilt.request;
-  if (deps.cache.get(character) === undefined) {
-    deps.cache.set(character, source, {
-      intervalMs: rebuilt.keepalive_interval_ms,
-      pings: rebuilt.keepalive_pings,
-    }, false, thread);
+
+  const nowMs = deps.now?.() ?? Date.now();
+  const timeZone = deps.timeZone ?? hostZone();
+  const userName = resolveDisplayName(config.app.defaults, deps.env);
+  const characterDir = characterDataDir(config.dirs.data, character);
+  const history = conversation.history.messages();
+  const archived = conversation.history.segments().segmentCount();
+  const since = history.length === 0 && archived === 0 ? undefined : readHomeThrough(characterDir);
+  const configured = heartbeatModel(config, character);
+  const maxToolIterations = (configured ?? resolved).maxToolIterations;
+  const lastAt = Date.parse(history.at(-1)?.timestamp ?? "");
+  if (!Number.isNaN(lastAt) && nowMs - lastAt >= cacheTtlMs(configured ?? resolved)) {
+    try {
+      await applyDeferredEdits(characterDir, characterWorkspace(config, character), thread);
+    } catch (e) {
+      shoreLog.warn(`shore: could not refresh the heartbeat thread's prompt files for ${character} after a pause: ${String(e)}`);
+    }
+  }
+  const template =
+    resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
+    DEFAULT_HEARTBEAT_TEMPLATE;
+  const rendered = renderHeartbeatPrompt(template, {
+    now: formatWallClock(nowMs, timeZone),
+    userName,
+    defaultInterval: fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
+    timeLimit: fallbackIntervalPhrase(BigInt(HEARTBEAT_TIME_LIMIT_MS / 1000)),
+    wrapUpAfter: fallbackIntervalPhrase(BigInt((HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS) / 1000)),
+    maxRounds: maxToolIterations,
+  });
+  const wrote = await lastWroteNote(config.dirs.data, character, thread, home, userName, nowMs).catch(() => undefined);
+  const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
+  const newId = deps.newId ?? (() => `m_${crypto.randomUUID()}`);
+  const timestamp = new Date(nowMs).toISOString();
+  const note = (role: "user" | "system", text: string): Message => ({
+    msg_id: newId(),
+    role,
+    origin: "autonomous",
+    content: text,
+    images: [],
+    content_blocks: [{ type: "text", text }],
+    alternatives: [],
+    timestamp,
+  });
+  const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
+  const instructions = note("system", [cutOff, wrote, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const messages = [...history, opener, instructions];
+
+  let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
+  try {
+    built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, messages, archived > 0, {
+      mcpToolDefs: deps.rebuild.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools)),
+      thread,
+      activeConversation: true,
+      timeZone,
+      ...(deps.env === undefined ? {} : { env: deps.env }),
+    });
+  } catch (e) {
+    shoreLog.warn(`shore: heartbeat for ${character} could not build its request: ${String(e)}`);
+    return undefined;
   }
 
   const { request, override } = applyHeartbeatModelOverride(
-    copyForTick(source),
+    built.request,
     config,
     character,
     deps.env === undefined ? {} : { env: deps.env },
+    configured,
   );
 
   request.context = {
@@ -218,43 +277,15 @@ export async function prepareHeartbeatRequest(
     thinking_enabled: request.context?.thinking_enabled ?? false,
   };
 
-  const maxToolIterations =
-    override !== undefined
-      ? override.maxToolIterations
-      : resolveChatModelForCharacter(
-          configView(config),
-          character,
-          (v, c, n, h) => findEffectiveModel(v, c, n, h),
-          await threadChatModel(config.dirs.data, character, thread),
-        )?.maxToolIterations;
-
-  const nowMs = deps.now?.() ?? Date.now();
-  const timeZone = deps.timeZone ?? hostZone();
-  const template =
-    resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
-    DEFAULT_HEARTBEAT_TEMPLATE;
-  const userName = resolveDisplayName(config.app.defaults, deps.env);
-  const rendered = renderHeartbeatPrompt(template, {
-    now: formatWallClock(nowMs, timeZone),
-    userName,
-    defaultInterval: fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
-    timeLimit: fallbackIntervalPhrase(BigInt(HEARTBEAT_TIME_LIMIT_MS / 1000)),
-    wrapUpAfter: fallbackIntervalPhrase(BigInt((HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS) / 1000)),
-    maxRounds: maxToolIterations,
-  });
-  const elsewhere = await elsewhereNote(config.dirs.data, character, thread, userName, nowMs).catch(() => undefined);
-  const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
-  const prompt = [cutOff, elsewhere, rendered].filter((part) => part !== undefined).join("\n\n");
-
-  const marker = heartbeatMarker(nowMs, config.app.behavior.user_message_timestamps, timeZone);
-  request.messages.push({ role: "user", content: [{ type: "text", text: marker }] });
-  pushInlineSystem(request, prompt);
-
   return {
     request,
-    thread: rebuilt.thread,
-    conversation: rebuilt.conversation,
-    maxToolIterations,
+    opener,
+    instructions,
+    thread,
+    conversation: messages,
+    messageBudget: built.messageBudget,
+    modelId: (override ?? resolved).modelId,
+    maxToolIterations: (override ?? resolved).maxToolIterations,
     override,
   };
 }

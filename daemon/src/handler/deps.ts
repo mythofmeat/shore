@@ -117,6 +117,7 @@ export function generationRegistry(registry: CharacterRegistry): GenerationRegis
       generationEngine(await registry.getOrCreate(name, thread)),
     effectiveConfig: (name) => registry.effectiveConfig(name),
     listThreads: (name) => registry.listThreads(name),
+    heartbeatThread: (name) => registry.heartbeatThread(name),
   };
 }
 

@@ -442,6 +442,9 @@ fn thread_facts(row: &Value) -> String {
     if flag(row, "home") {
         parts.push("home".to_owned());
     }
+    if flag(row, "heartbeat") {
+        parts.push("heartbeats".to_owned());
+    }
     if let Some(unread) = row
         .get("unread")
         .and_then(Value::as_u64)

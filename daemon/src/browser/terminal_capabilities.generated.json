@@ -3232,7 +3232,7 @@
     },
     {
       "path": "shore thread home",
-      "about": "Point the heartbeat at a thread. This is where unprompted messages arrive",
+      "about": "Make a thread home. This is where the messages the character sends from heartbeats arrive",
       "long_about": null,
       "hidden": false,
       "aliases": [],

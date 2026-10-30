@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { characterCacheDir } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
+import { isAutonomousNote } from "../engine/threads.ts";
 import { pictureText } from "../engine/embeds.ts";
 import { pictureLabel } from "../engine/picture_ids.ts";
 import type { Message } from "../engine/types.ts";
@@ -144,7 +145,7 @@ function shownPictures(message: Message): string[] {
   });
 }
 
-function messageText(message: Message): string {
+export function messageText(message: Message): string {
   const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
   return [...shownPictures(message), ...(text === "" ? [] : [text])].join("\n");
 }
@@ -170,6 +171,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
         continue;
       }
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
+        if (isAutonomousNote(message)) continue;
         const text = messageText(message);
         if (text === "") continue;
         const key = messageKey(message, text);
@@ -329,6 +331,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
       for (const live of threads) {
         const cursor = cursors.get(live.thread) ?? { seq: 0, run: 0, ts: 0 };
         for (const message of live.messages) {
+          if (isAutonomousNote(message)) continue;
           const text = messageText(message);
           if (text === "") continue;
           const key = messageKey(message, text);

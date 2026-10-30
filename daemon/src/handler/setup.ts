@@ -50,6 +50,15 @@ export class ImagesUnsupportedError extends Error {
   }
 }
 
+export class HeartbeatThreadError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
+  constructor(character: string, thread: string) {
+    super(`"${thread}" is where ${character}'s heartbeats run, so you can read it but not write there. Write to ${character} in another thread.`);
+    this.name = "HeartbeatThreadError";
+  }
+}
+
 export function resolveGenerationModel(
   activeModel: ResolvedModel | undefined,
   config: LoadedConfig,

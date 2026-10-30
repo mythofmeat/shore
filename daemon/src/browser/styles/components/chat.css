@@ -696,6 +696,15 @@ button.chip:hover {
   font-size: var(--text-md);
 }
 
+.heartbeat-note summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.heartbeat-note[open] summary {
+  margin-bottom: 6px;
+}
+
 .typing {
   display: inline-flex;
   gap: 4px;
@@ -840,6 +849,11 @@ button.chip:hover {
   width: 100%;
   padding: 8px 6px 6px 12px;
   border-radius: 20px;
+}
+
+.composer-note {
+  color: var(--text-2);
+  font-size: var(--text-md);
 }
 
 .composer:focus-within {

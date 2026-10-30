@@ -43,11 +43,29 @@ describe("the configured bounds apply to every wake, whoever set it", () => {
     expect(clock.nextWakeAt).toBe(48 * HOUR);
   });
 
-  test("a user message pushes any sooner wake back to the floor", () => {
-    const clock = new HeartbeatClock(config({ minIntervalMs: 2 * HOUR }), 0);
-    clock.schedule(2 * HOUR, 0);
-    clock.onUserMessage(HOUR);
-    expect(clock.nextWakeAt).toBe(3 * HOUR);
+});
+
+describe("messages from the user don't move a heartbeat", () => {
+  test("a wake stays where it was set, however close the user writes to it", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 2 * HOUR }), T0);
+    clock.schedule(T0 + 2 * HOUR, T0);
+    clock.onUserMessage(T0 + HOUR);
+    clock.onUserMessage(T0 + 2 * HOUR - 1);
+    expect(clock.nextWakeAt).toBe(T0 + 2 * HOUR);
+    expect(clock.tick(T0 + 2 * HOUR)).toBe("run_tick");
+  });
+
+  test("coming back to a dormant character starts the default interval once, and later messages leave it", () => {
+    const clock = new HeartbeatClock(config({ maxIdleTicks: 1, defaultIntervalMs: 3 * HOUR }), T0);
+    clock.schedule(T0 + HOUR, T0);
+    expect(clock.tick(T0 + HOUR)).toBe("run_tick");
+    expect(clock.tick(T0 + 10 * HOUR)).toBe("none");
+    expect(clock.nextWakeAt).toBeUndefined();
+
+    clock.onUserMessage(T0 + 20 * HOUR);
+    clock.onUserMessage(T0 + 22 * HOUR);
+    expect(clock.nextWakeAt).toBe(T0 + 23 * HOUR);
+    expect(clock.tick(T0 + 23 * HOUR)).toBe("run_tick");
   });
 });
 

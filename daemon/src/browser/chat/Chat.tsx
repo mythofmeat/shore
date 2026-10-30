@@ -94,7 +94,9 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Wor
     <ConnectionBanner state={state} />
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} state={state} character={state.character} mobile={mobile} />
-      <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />
+      {state.threads.find((thread) => thread.id === state.thread)?.heartbeat === true
+        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`${state.character}'s heartbeats run here. You can read along, and write to ${state.character} in another conversation.`}</p></div>
+        : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
       <QuoteButton />
     </>}
   </>;

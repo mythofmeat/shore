@@ -158,28 +158,28 @@ export class HeartbeatClock {
   }
 
   onUserMessage(now: number): void {
+    const returning = this.#isAbandoned(now);
     this.#forcedDormant = false;
     this.#ticksWithoutUser = 0;
     this.#lastUserAt = now;
-
-    const floor = now + this.#config.minIntervalMs;
-    const existing = this.#nextWakeAt;
-    this.#nextWakeAt = existing !== undefined && existing > floor ? existing : floor;
-    this.#defaultWake = false;
+    if (!returning || this.#nextWakeAt !== undefined) return;
+    this.#nextWakeAt = now + this.#bounded(this.#config.defaultIntervalMs);
+    this.#lastAnchor = now;
+    this.#defaultWake = true;
+    this.#defaultFloor = undefined;
   }
 
-  boundWake(now: number, ensureScheduled = false): void {
+  boundWake(now: number): void {
     const existing = this.#nextWakeAt;
-    if (existing === undefined && !ensureScheduled) return;
-    const bounded = now + this.#bounded((existing ?? now) - now);
+    if (existing === undefined) return;
+    const bounded = now + this.#bounded(existing - now);
     if (existing === bounded) return;
     this.#nextWakeAt = bounded;
-    if (this.#defaultWake && existing !== undefined && !ensureScheduled) {
+    if (this.#defaultWake) {
       if (bounded > existing) this.#defaultFloor = bounded;
       return;
     }
     this.#lastAnchor = now;
-    this.#defaultWake = false;
   }
 
   restore(snapshot: HeartbeatSnapshot): void {

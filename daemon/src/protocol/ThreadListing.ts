@@ -2,4 +2,4 @@
 import type { CacheInvalidation } from "./CacheInvalidation";
 import type { ThreadView } from "./ThreadView";
 
-export type ThreadListing = { character: string, threads: Array<ThreadView>, home: string, current: string, invalidated?: CacheInvalidation, };
+export type ThreadListing = { character: string, threads: Array<ThreadView>, home: string, heartbeat?: string, current: string, invalidated?: CacheInvalidation, };

@@ -25,7 +25,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -75,8 +75,13 @@ export interface ThreadRecord {
 export interface ThreadsIndex {
   version: 1;
   home: string;
+  heartbeat?: string;
   threads: ThreadRecord[];
 }
+
+const HEARTBEAT_THREAD = "heartbeat";
+
+const HEARTBEAT_THREAD_LABEL = "Heartbeats";
 
 export function defaultThreadsIndex(now: string): ThreadsIndex {
   return {
@@ -102,6 +107,14 @@ function isUserTurnLine(raw: unknown): boolean {
   const msg = raw as Message;
   if (msg.role !== "user") return false;
   return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);
+}
+
+export function isAutonomousNote(message: Pick<Message, "role" | "origin">): boolean {
+  return message.role !== "assistant" && message.origin === "autonomous";
+}
+
+export function isHeartbeatOpener(message: Pick<Message, "role" | "origin">): boolean {
+  return message.role === "user" && isAutonomousNote(message);
 }
 
 export interface ThreadActivity {
@@ -183,7 +196,7 @@ export function threadActivityNow(data: string, character: string, id: string): 
     const time = messageTime(parsed);
     if (isUserTurnLine(parsed)) {
       turns += 1;
-      if (time > latestUser) latestUser = time;
+      if (time > latestUser && !isHeartbeatOpener(parsed as Message)) latestUser = time;
     }
     if (isReplyLine(parsed)) replies.push(time);
     if (time > latest) latest = time;
@@ -221,6 +234,12 @@ export async function threadActivities(
 export function homeThread(index: ThreadsIndex | undefined): string {
   if (index === undefined) return MAIN_THREAD;
   return threadRecord(index, index.home) === undefined ? MAIN_THREAD : index.home;
+}
+
+export function heartbeatThread(index: ThreadsIndex | undefined): string | undefined {
+  const id = index?.heartbeat;
+  if (index === undefined || id === undefined || threadRecord(index, id) === undefined) return undefined;
+  return id === homeThread(index) ? undefined : id;
 }
 
 function isThreadRecord(raw: unknown): raw is ThreadRecord {
@@ -376,6 +395,25 @@ export async function createThread(
   return next;
 }
 
+export async function ensureHeartbeatThread(
+  data: string,
+  character: string,
+  now: string,
+): Promise<{ index: ThreadsIndex; created: boolean }> {
+  const index = await ensureThreads(data, character, now);
+  if (heartbeatThread(index) !== undefined) return { index, created: false };
+  let id = HEARTBEAT_THREAD;
+  for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${HEARTBEAT_THREAD}-${String(n)}`;
+  await mkdir(threadDataDir(data, character, id), { recursive: true });
+  const next: ThreadsIndex = {
+    ...index,
+    heartbeat: id,
+    threads: [...index.threads, { id, label: HEARTBEAT_THREAD_LABEL, created_at: now, compaction: true }],
+  };
+  await writeThreadsIndex(data, character, next);
+  return { index: next, created: true };
+}
+
 function requireThread(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const found = threadRecord(index, id);
   if (found === undefined) {
@@ -396,6 +434,9 @@ export async function setHomeThread(
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   requireThread(index, character, id);
+  if (id === heartbeatThread(index)) {
+    throw new ThreadError("is_heartbeat", `thread ${JSON.stringify(id)} is where ${character}'s heartbeats run, so it can't be home`);
+  }
   const next: ThreadsIndex = { ...index, home: id };
   await writeThreadsIndex(data, character, next);
   return next;
@@ -541,7 +582,7 @@ export async function archiveThread(
     if (index.home === id) {
       throw new ThreadError(
         "is_home",
-        `thread ${JSON.stringify(id)} is the heartbeat home for ${character} — ` +
+        `thread ${JSON.stringify(id)} is the home thread for ${character} — ` +
           "point home at another thread first",
       );
     }
@@ -572,8 +613,10 @@ export async function archiveThread(
     await rm(dir, { recursive: true, force: true });
     deleteThreadState(data, character, id);
     forgetThreadSessions(data, character, id);
+    const { heartbeat, ...rest } = index;
     const next: ThreadsIndex = {
-      ...index,
+      ...rest,
+      ...(heartbeat === undefined || heartbeat === id ? {} : { heartbeat }),
       threads: index.threads.filter((t) => t.id !== id),
     };
     await writeThreadsIndex(data, character, next);

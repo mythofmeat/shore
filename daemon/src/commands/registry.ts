@@ -358,7 +358,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     return result;
   }),
   thread_home: register("thread_home", {
-    ...threadPresentation, label: "Set heartbeat home", effects: ["history_write"], fields: { name: threadName },
+    ...threadPresentation, label: "Set home thread", effects: ["history_write"], fields: { name: threadName },
   }, async (context, args) => threadHome(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_label: register("thread_label", {
     ...threadPresentation, label: "Label thread", effects: ["history_write"],

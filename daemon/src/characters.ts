@@ -22,7 +22,9 @@ import {
   archiveThread,
   createThread,
   editThreadAsCharacter,
+  ensureHeartbeatThread,
   ensureThreads,
+  heartbeatThread,
   homeThread,
   requireEditableByCharacter,
   resolveThreadFiles,
@@ -192,6 +194,19 @@ export class CharacterRegistry {
 
   listThreads(name: string): readonly ThreadRecord[] {
     return this.#threads.get(name)?.threads ?? [];
+  }
+
+  heartbeatThread(name: string): string | undefined {
+    return heartbeatThread(this.#threads.get(name));
+  }
+
+  async ensureHeartbeatThread(name: string): Promise<{ thread: string; created: boolean }> {
+    return await this.#withThreadIndex(name, async () => {
+      const { index, created } = await ensureHeartbeatThread(this.#dataDir, name, new Date().toISOString());
+      const thread = heartbeatThread(this.#remember(name, index));
+      if (thread === undefined) throw new Error(`no heartbeat thread could be made for ${name}`);
+      return { thread, created };
+    });
   }
 
   async getOrCreate(name: string, thread?: string): Promise<ConversationEngine> {

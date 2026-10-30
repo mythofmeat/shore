@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { elsewhereNote } from "../src/autonomy/heartbeat_request.ts";
+import { lastWroteNote } from "../src/autonomy/heartbeat_request.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { CharacterRegistry } from "../src/characters.ts";
 import { archiveKey, characterDataDir, threadDataDir } from "../src/config/dirs.ts";
@@ -227,7 +227,7 @@ describe("listing threads", () => {
       timeZone: "UTC",
       now: () => Date.parse(NOW),
     });
-    expect(listed).toContain('Your home thread is "main", where heartbeats happen. You\'re in "lighthouse".');
+    expect(listed).toContain('Your home thread is "main", where the messages you send from heartbeats arrive. You\'re in "lighthouse".');
     expect(listed).toContain("main (home) · compaction on");
     expect(listed).toContain([
       'lighthouse "The lighthouse" (you\'re here) · compaction on',
@@ -240,7 +240,7 @@ describe("listing threads", () => {
 });
 
 describe("a thread whose messages were archived", () => {
-  test("still knows when the user last wrote there, for list_threads and the heartbeat's note about side threads", async () => {
+  test("still knows when the user last wrote there, for list_threads and the heartbeat's note on where the user last wrote", async () => {
     const config = await setup();
     const data = config.dirs.data;
     const at = (day: number, time: string) => `2026-11-0${String(day)}T${time}:00Z`;
@@ -266,12 +266,11 @@ describe("a thread whose messages were archived", () => {
       "  started by sam on Sunday 2026-11-01 · 10:00 AM",
       "  sam last wrote here Sunday 2026-11-01 · 5:58 PM, 13 hours ago",
     ].join("\n"));
-    expect(await elsewhereNote(data, "frank", "main", "sam", nowMs)).toBeUndefined();
+    expect(await lastWroteNote(data, "frank", "heartbeat", "main", "sam", nowMs)).toBe('[sam last wrote to you 5 hours ago, in your home thread "main".]');
 
     await archive(data, "lighthouse", [message("u4", "one more page", at(2, "05:00")), message("a4", "just one", at(2, "05:01"))]);
-    expect(await elsewhereNote(data, "frank", "main", "sam", nowMs)).toBe(
-      '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse). ' +
-        "That conversation isn't shown here, so a quiet home thread doesn't mean sam has been away.]",
+    expect(await lastWroteNote(data, "frank", "heartbeat", "main", "sam", nowMs)).toBe(
+      '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
     );
   });
 });

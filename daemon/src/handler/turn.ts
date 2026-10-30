@@ -10,10 +10,16 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
-import { homeThread, homeThreadOf, readThreadsIndex } from "../engine/threads.ts";
+import { heartbeatThread, homeThread, homeThreadOf, isHeartbeatOpener, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
-import { threadFile } from "../storage/files.ts";
+import { readDurable, threadFile } from "../storage/files.ts";
+import { archiveKey, characterDataDir, threadDataDir } from "../config/dirs.ts";
+import { HISTORY_DB_FILE } from "../engine/history_store.ts";
+import { archivalPlanInput, archiveSplitIndex } from "../memory/compaction/plan.ts";
+import { conversationManager } from "../memory/compaction/archive.ts";
+import { tryBeginCompaction } from "../memory/compaction/manager.ts";
+import { join } from "node:path";
 import { CompactionPaused } from "../memory/compaction/types.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
@@ -133,7 +139,7 @@ export async function ensureAndBackfillAutonomy(
   const collect = (msgs: readonly Message[]): number => {
     let kept = 0;
     for (const msg of msgs) {
-      if (msg.role !== "user" || isToolResultOnly(msg)) continue;
+      if (msg.role !== "user" || isToolResultOnly(msg) || isHeartbeatOpener(msg)) continue;
       const at = new Date(msg.timestamp);
       if (Number.isNaN(at.getTime()) || at < cutoff) continue;
       timestamps.push(at);
@@ -161,7 +167,7 @@ export async function ensureAndBackfillAutonomy(
   const index = await readThreadsIndex(dataDir, charName);
   const current = engine.thread ?? homeThread(index);
   for (const thread of index?.threads ?? []) {
-    if (thread.id === current) continue;
+    if (thread.id === current || thread.id === heartbeatThread(index)) continue;
     try {
       const store = await MessageStore.load(threadFile(dataDir, charName, thread.id, "active.jsonl"));
       const segments = await SegmentReader.load(conversationRef(dataDir, charName, thread.id, false));
@@ -231,18 +237,26 @@ export interface CompactionRunner {
   ): Promise<void>;
 }
 
+type CompactionAutonomy = Pick<TurnAutonomy, "shouldCompactNow" | "onCompactionComplete" | "onCompactionFailed">;
+
+export function threadShouldCompact(config: LoadedConfig, turns: number, tokens: number, crowded: boolean): boolean {
+  const c = config.app.memory.compaction;
+  return c.enabled && (crowded || (turns >= c.min_turns &&
+    ((c.max_turns > 0 && turns >= c.max_turns) ||
+     (c.max_context_tokens > 0 && tokens >= c.max_context_tokens))));
+}
+
 export async function maybeCompact(
-  ctx: TurnContext,
-  engine: TurnEngine,
+  ctx: { autonomy: CompactionAutonomy },
+  engine: Pick<TurnEngine, "thread" | "turnCount">,
   charName: string,
   config: LoadedConfig,
   dataDir: string,
-  result: StreamResult,
+  contextTokens: number,
   runner: CompactionRunner,
   crowded = false,
 ): Promise<boolean> {
   const turnCount = engine.turnCount();
-  const contextTokens = contextTokensFor(result.context_usage ?? result.usage);
   const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
   if (await compactionHeld(dataDir, charName, thread)) return false;
   if (runningPass(dataDir, charName)?.thread === thread) return false;
@@ -251,7 +265,7 @@ export async function maybeCompact(
 }
 
 export async function compactAfterTurn(
-  ctx: Pick<TurnContext, "autonomy">,
+  ctx: { autonomy: CompactionAutonomy },
   charName: string,
   config: LoadedConfig,
   thread: string,
@@ -275,4 +289,40 @@ export async function compactAfterTurn(
     return;
   }
   ctx.autonomy.onCompactionComplete(charName, completion.retained);
+}
+
+export async function archiveTrimmedTurns(
+  dataDir: string,
+  engine: { readonly thread: string; reload(): Promise<void> },
+  charName: string,
+  workspace: CharacterWorkspace,
+  keepTurns: number,
+  now: () => string,
+  runner: Pick<CompactionRunner, "applyDeferredEdits">,
+): Promise<void> {
+  const guard = tryBeginCompaction(dataDir, charName);
+  if (guard === undefined) return;
+  try {
+    const raw = readDurable(threadFile(dataDir, charName, engine.thread, "active.jsonl"));
+    const input = archivalPlanInput(raw);
+    const splitAt = archiveSplitIndex([...input.messages], keepTurns, false);
+    if (splitAt === 0) return;
+    await conversationManager(
+      threadDataDir(dataDir, charName, engine.thread),
+      { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: archiveKey(charName, engine.thread) },
+      now,
+      () => crypto.randomUUID(),
+    ).archiveAndRetain("trim", { keepLastN: input.messages.length - splitAt, activeContent: raw });
+  } catch (e) {
+    shoreLog.warn(`shore: could not archive the turns ${charName}/${engine.thread} trimmed without compaction: ${String(e)}`);
+    return;
+  } finally {
+    guard.release();
+  }
+  await engine.reload();
+  try {
+    await runner.applyDeferredEdits(characterDataDir(dataDir, charName), workspace, engine.thread);
+  } catch (e) {
+    shoreLog.warn(`shore: could not refresh the prompt files of ${charName}/${engine.thread} after archiving: ${String(e)}`);
+  }
 }

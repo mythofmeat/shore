@@ -85,6 +85,7 @@ pub(crate) struct ThreadRow {
     pub purpose: Option<String>,
     pub model: Option<String>,
     pub home: bool,
+    pub heartbeat: bool,
     pub turns: Option<u64>,
     pub unread: Option<u64>,
     pub warm: bool,
@@ -2046,6 +2047,9 @@ impl App {
         let mut facts: Vec<String> = Vec::new();
         if row.home {
             facts.push("home".to_owned());
+        }
+        if row.heartbeat {
+            facts.push("heartbeats".to_owned());
         }
         if row.unread_count() > 0 {
             facts.push(format!("{} new", row.unread_count()));

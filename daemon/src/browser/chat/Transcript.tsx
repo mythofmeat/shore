@@ -114,6 +114,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   const anchor = useRef<{ height: number; top: number; first: string | undefined } | null>(null);
   const [loading, setLoading] = useState(false);
   const live = view === null;
+  const heartbeats = state.threads.find((thread) => thread.id === state.thread)?.heartbeat === true;
   const streams = live ? visibleStreams(state.streams, state.messages, active) : [];
   const scope = { character: state.character, thread: state.thread };
   const replaced = live ? regenReplaces(state.messages, streams, conversation.pendingRegens(scope).length > 0).join("\n") : "";
@@ -178,7 +179,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
           switch (item.kind) {
             case "day": return <div key={item.key} className="divider" role="separator">{item.label}</div>;
             case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={live && item.last && streams.length === 0 && waiting === undefined} lastUser={item.message.msg_id === lastUser}
-              metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} readOnly={!live} />;
+              metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} readOnly={!live || heartbeats} />;
           }
         })}
         {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}

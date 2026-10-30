@@ -25,6 +25,7 @@ const ICONS = {
   alert: stroke(<><path d="M12 4l9 16H3z" /><path d="M12 10v4M12 17.5v.01" /></>),
   terminal: stroke(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 10l3 2-3 2M12 15h5" /></>),
   home: stroke(<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" />),
+  heartbeat: stroke(<path d="M3 12h4l3-7 4 14 3-7h4" />),
   chat: stroke(<path d="M5 5h14v10H9l-4 4z" />),
   settings: stroke(<><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>),
   back: stroke(<path d="M19 12H5M11 6l-6 6 6 6" />),
