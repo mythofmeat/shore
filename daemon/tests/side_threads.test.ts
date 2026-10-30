@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { elsewhereNote } from "../src/autonomy/heartbeat_request.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { CharacterRegistry } from "../src/characters.ts";
-import { characterDataDir, threadDataDir } from "../src/config/dirs.ts";
+import { archiveKey, characterDataDir, threadDataDir } from "../src/config/dirs.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -14,6 +15,7 @@ import { assemblePrompt } from "../src/engine/prompt.ts";
 import { createThread, readThreadsIndex } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
+import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { applyDeferredEdits } from "../src/memory/deferred_edits.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
@@ -37,6 +39,11 @@ function message(id: string, text: string, timestamp: string, extra: Partial<Mes
     timestamp,
     ...extra,
   };
+}
+
+async function archive(data: string, thread: string, messages: Message[], keep = 0): Promise<void> {
+  const history = { dbPath: join(data, HISTORY_DB_FILE), archiveKey: archiveKey("frank", thread) };
+  await archiveAndRetain(threadDataDir(data, "frank", thread), history, keep, serializeMessages(messages));
 }
 
 async function setup(): Promise<LoadedConfig> {
@@ -229,6 +236,43 @@ describe("listing threads", () => {
       "  started by you on Sunday 2026-11-01 · 10:00 AM",
       "  sam last wrote here Sunday 2026-11-01 · 9:57 AM, 3 minutes ago",
     ].join("\n"));
+  });
+});
+
+describe("a thread whose messages were archived", () => {
+  test("still knows when the user last wrote there, for list_threads and the heartbeat's note about side threads", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    const at = (day: number, time: string) => `2026-11-0${String(day)}T${time}:00Z`;
+    await createThread(data, "frank", "lighthouse", NOW, { label: "The lighthouse" });
+    await createThread(data, "frank", "harbor", NOW);
+    await archive(data, "lighthouse", [message("u1", "the keeper sleeps", at(1, "17:58")), message("a1", "so does the light", at(1, "17:59"))]);
+    writeDurable(threadFile(data, "frank", "harbor", "active.jsonl"), serializeMessages([message("u2", "fish market tomorrow", at(1, "18:04"))]));
+    await archive(data, "main", [
+      message("u3", "goodnight", at(2, "02:16")),
+      message("a3", "sleep well", at(2, "02:17")),
+      message("h1", "the house is quiet", at(2, "03:30"), { origin: "autonomous" }),
+    ], 1);
+    const nowMs = Date.parse(at(2, "06:50"));
+
+    const listed = await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
+    expect(listed).toContain([
+      "main (home, you're here) · compaction on",
+      "  started by sam on Sunday 2026-11-01 · 10:00 AM",
+      "  sam last wrote here Monday 2026-11-02 · 2:16 AM, 5 hours ago",
+    ].join("\n"));
+    expect(listed).toContain([
+      'lighthouse "The lighthouse" · compaction off',
+      "  started by sam on Sunday 2026-11-01 · 10:00 AM",
+      "  sam last wrote here Sunday 2026-11-01 · 5:58 PM, 13 hours ago",
+    ].join("\n"));
+    expect(await elsewhereNote(data, "frank", "main", "sam", nowMs)).toBeUndefined();
+
+    await archive(data, "lighthouse", [message("u4", "one more page", at(2, "05:00")), message("a4", "just one", at(2, "05:01"))]);
+    expect(await elsewhereNote(data, "frank", "main", "sam", nowMs)).toBe(
+      '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse). ' +
+        "That conversation isn't shown here, so a quiet home thread doesn't mean sam has been away.]",
+    );
   });
 });
 

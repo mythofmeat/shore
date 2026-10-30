@@ -428,6 +428,20 @@ export class HistoryStore {
     return row?.display_seq ?? 0;
   }
 
+  lastUserTurnAt(character: string): string | undefined {
+    const row = this.#db
+      .query(
+        `SELECT m.timestamp
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
+         ORDER BY m.display_seq DESC
+         LIMIT 1`,
+      )
+      .get(character) as { timestamp: string } | null;
+    return row?.timestamp;
+  }
+
   archiveDigest(character: string): string {
     const row = this.#db
       .query("SELECT revision FROM history_archive_revision WHERE character = ?1")
