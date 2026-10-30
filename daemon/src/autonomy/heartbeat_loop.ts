@@ -9,7 +9,7 @@ import {
   type ToolUse,
 } from "./heartbeat_shape.ts";
 import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase, wrapUpNudgeText } from "./heartbeat_shape.ts";
-import type { GenerateResponse, SidecarRequest, ToolDefinition } from "../llm/types.ts";
+import type { GenerateResponse, SidecarRequest, ToolDefinition, Usage } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
@@ -32,6 +32,12 @@ export interface TranscriptRound {
   captured: CapturedTool[];
 }
 
+export interface HeartbeatRound {
+  role: "user" | "assistant" | "system";
+  blocks: ContentBlock[];
+  model?: string;
+}
+
 export interface HeartbeatLoopDeps {
   character: string;
   generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
@@ -46,25 +52,22 @@ export interface HeartbeatLoopDeps {
   wrapUpGrace: number;
   maxToolIterations: number | undefined;
   checkPictures?: (text: string) => Promise<string[]>;
+  persist?: (round: HeartbeatRound) => Promise<void>;
 }
 
 export interface HeartbeatLoopResult {
   sendMessageText: string | undefined;
   images: ImageRef[];
-  thinking?: ContentBlock[];
   failedRound?: number | undefined;
   failure?: unknown;
   timedOut?: boolean;
+  usage?: Usage;
 }
 
 export function pictureRetryText(problems: readonly string[]): string {
   return `[Your message has not been sent yet. These pictures in it could not be sent:\n${problems.map((problem) => `- ${problem}`).join("\n")}\n` +
     "Send the message again the same way, with the names fixed. If you do not send it again, it will be delivered " +
     "as it is, with only the names of those pictures shown.]";
-}
-
-function thinkingOf(blocks: readonly ContentBlock[]): ContentBlock[] {
-  return blocks.filter((b) => b.type === "thinking" || b.type === "redacted_thinking");
 }
 
 export async function dispatchHeartbeatTools(
@@ -127,7 +130,9 @@ async function retryPictures(
   }
   if (problems.length === 0) return;
   deps.note(`Pictures not found, asked to fix them before sending: ${truncateSummary(problems.join("; "), 160)}`);
-  request.messages.push({ role: "user", content: [{ type: "text", text: pictureRetryText(problems) }] });
+  const retry: ContentBlock[] = [{ type: "text", text: pictureRetryText(problems) }];
+  request.messages.push({ role: "user", content: retry });
+  await deps.persist?.({ role: "user", blocks: retry });
   try {
     const retried = await run();
     if (retried === undefined || retried.finish_reason.startsWith("error")) deps.note("The retry to fix pictures failed; sending the message as it was");
@@ -147,21 +152,17 @@ export async function runHeartbeatToolLoop(
   const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
   const offersWake = request.tools?.some((tool) => tool.name === "set_next_wake") === true;
   let wrapUpEnd: number | undefined;
+  let model: string | undefined;
+  let persisted = false;
   const observe = (blocks: ContentBlock[]): void => {
     const text = blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
     const sent = captured.filter((tool) => !tool.isError)
       .map((tool): ToolUse => ["", tool.name, tool.input]);
     const message = captureToolSendMessage(sent) ?? extractSendMessage(text);
-    if (message !== undefined) {
-      result.sendMessageText = message;
-      result.thinking = thinkingOf(blocks);
-    }
+    if (message !== undefined) result.sendMessageText = message;
   };
   const record = (response: GenerateResponse): void => {
     observe(response.content_blocks);
-    if (captured.some((tool) => tool.name === "generate_image" && !tool.isError) && result.sendMessageText === undefined) {
-      result.thinking = thinkingOf(response.content_blocks);
-    }
     if (response.finish_reason !== "tool_use") {
       request.messages.push({ role: "assistant", content: response.content_blocks });
     }
@@ -177,7 +178,7 @@ export async function runHeartbeatToolLoop(
   const phase: ToolPhase = {
     messages: [],
     parallel: false,
-    beforeTurn: (call) => {
+    beforeTurn: async (call) => {
       if (wrapUpEnd !== undefined) {
         if (iteration >= wrapUpEnd) throw new ToolLoopStop();
         return;
@@ -186,11 +187,22 @@ export async function runHeartbeatToolLoop(
       if (left > HEARTBEAT_WRAP_UP_MS && iteration < normalCap) return;
       if (deps.wrapUpGrace === 0) throw new ToolLoopStop();
       wrapUpEnd = iteration + deps.wrapUpGrace;
-      appendWrapUpNudge(call.messages, wrapUpNudgeText(left, deps.wrapUpGrace, offersWake));
+      const nudge = wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
+      appendWrapUpNudge(call.messages, nudge);
+      await deps.persist?.({ role: "system", blocks: [{ type: "text", text: nudge }] });
       deps.note(`Wrap-up nudge on round ${String(iteration)}, with ${timeLeftPhrase(left)} left`);
     },
-    onTurn: (turn) => { observe(turn.content_blocks); },
-    afterTurn: record,
+    onTurn: (turn) => {
+      model = turn.model;
+      observe(turn.content_blocks);
+    },
+    afterTurn: async (response) => {
+      const recorded = persisted;
+      persisted = false;
+      result.usage = response.usage;
+      record(response);
+      if (!recorded) await deps.persist?.({ role: "assistant", blocks: response.content_blocks, model: response.model });
+    },
     runTool: async (use) => {
       const round = await dispatchHeartbeatTools([[use.id, use.name, use.input]], deps, request.tools);
       captured.push(...round.captured);
@@ -201,7 +213,10 @@ export async function runHeartbeatToolLoop(
       if (block === undefined) throw new Error("Heartbeat tool returned no result");
       return block;
     },
-    recordTurn: () => {},
+    recordTurn: async (role, blocks) => {
+      if (role === "assistant") persisted = true;
+      await deps.persist?.({ role, blocks, ...(role === "assistant" && model !== undefined ? { model } : {}) });
+    },
   };
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), deadline - performance.now());

@@ -163,10 +163,7 @@ export class AutonomyService {
       released = true;
       const remaining = (this.#foreground.get(character) ?? 1) - 1;
       if (remaining > 0) this.#foreground.set(character, remaining);
-      else {
-        this.#foreground.delete(character);
-        this.#entries.get(character)?.runner.deferHeartbeat(this.#now());
-      }
+      else this.#foreground.delete(character);
     };
   }
 
@@ -197,14 +194,14 @@ export class AutonomyService {
     const due: [string, Entry][] = [];
     for (const pair of this.#entries) {
       pair[1].runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(pair[0])));
-      if (pair[1].inFlight || this.#foreground.has(pair[0])) continue;
+      if (pair[1].inFlight) continue;
       pair[1].inFlight = true;
       due.push(pair);
     }
     await Promise.all(
       due.map(async ([character, entry]) => {
         try {
-          await entry.runner.tick();
+          await entry.runner.tick(this.#foreground.has(character));
         } catch (err) {
           shoreLog.error(`shore: autonomy tick failed for ${character}: ${String(err)}`);
         } finally {

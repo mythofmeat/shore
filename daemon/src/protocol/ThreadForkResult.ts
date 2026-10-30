@@ -3,4 +3,4 @@ import type { CacheInvalidation } from "./CacheInvalidation";
 import type { ThreadForkDetails } from "./ThreadForkDetails";
 import type { ThreadView } from "./ThreadView";
 
-export type ThreadForkResult = { fork: ThreadForkDetails, character: string, threads: Array<ThreadView>, home: string, current: string, invalidated?: CacheInvalidation, };
+export type ThreadForkResult = { fork: ThreadForkDetails, character: string, threads: Array<ThreadView>, home: string, heartbeat?: string, current: string, invalidated?: CacheInvalidation, };

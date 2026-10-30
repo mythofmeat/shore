@@ -38,6 +38,11 @@ function textOf(request: SidecarRequest): string {
   return request.messages.flatMap((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : [])).join("\n");
 }
 
+function instructionsOf(request: SidecarRequest): string {
+  const instructions = request.messages.findLast((message) => message.role === "system");
+  return instructions?.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n") ?? "";
+}
+
 function nudged(request: SidecarRequest): boolean {
   return request.messages.at(-1)?.content.some((block) => block.type === "text" && block.text.startsWith("[System nudge")) === true;
 }
@@ -173,11 +178,11 @@ test("a heartbeat stopped at its 30-minute limit is logged as such, and only the
       await run();
       const opening = seen.filter((request) => request.context?.call_type === "heartbeat");
       expect(opening).toHaveLength(3);
-      const told = textOf(required(opening[1]));
+      const told = instructionsOf(required(opening[1]));
       expect(told).toContain("reached its 30-minute limit");
       expect(told).toContain("after 4 rounds");
       expect(told).toContain("Nothing from it was sent");
-      expect(textOf(required(opening[2]))).not.toContain("30-minute limit and was stopped");
+      expect(instructionsOf(required(opening[2]))).not.toContain("30-minute limit and was stopped");
     },
   );
 });

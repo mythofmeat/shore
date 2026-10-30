@@ -7,6 +7,7 @@ export type { ThreadListing, ThreadForkResult };
 import type { Args } from "./navigation.ts";
 import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
 import {
+  heartbeatThread,
   ThreadError,
   type ArchiveThreadOptions,
   type NewThread,
@@ -36,6 +37,7 @@ function optionalText(value: unknown, field: string): string | undefined {
 export interface ThreadRegistry {
   listThreads(character: string): readonly ThreadRecord[];
   homeThread(character: string): string;
+  heartbeatThread?(character: string): string | undefined;
   createThread(
     character: string,
     id: string,
@@ -104,11 +106,12 @@ function threadCommandError(e: unknown): unknown {
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);
 }
 
-function view(ctx: ThreadContext, record: ThreadRecord, home: string, current: string): ThreadView {
+function view(ctx: ThreadContext, record: ThreadRecord, home: string, heartbeat: string | undefined, current: string): ThreadView {
   const activity = ctx.activity?.get(record.id);
   return {
     ...record,
     home: record.id === home,
+    ...(record.id === heartbeat ? { heartbeat: true } : {}),
     current: record.id === current,
     ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0, unread: activity?.unread ?? 0 }),
     ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
@@ -118,12 +121,14 @@ function view(ctx: ThreadContext, record: ThreadRecord, home: string, current: s
 
 function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
   const home = index?.home ?? ctx.registry.homeThread(ctx.character);
+  const heartbeat = index === undefined ? ctx.registry.heartbeatThread?.(ctx.character) : heartbeatThread(index);
   const records = index?.threads ?? ctx.registry.listThreads(ctx.character);
   const current = records.some((t) => t.id === ctx.current) ? ctx.current : home;
   return {
     character: ctx.character,
-    threads: records.map((record) => view(ctx, record, home, current)),
+    threads: records.map((record) => view(ctx, record, home, heartbeat, current)),
     home,
+    ...(heartbeat === undefined ? {} : { heartbeat }),
     current,
   };
 }

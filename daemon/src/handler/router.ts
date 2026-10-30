@@ -10,7 +10,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { Error as ProtocolError } from "../protocol/Error.ts";
 import type { RequestOutcome } from "../protocol/RequestOutcome.ts";
 import { sanitiseRid } from "../swp/admission.ts";
-import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
+import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError } from "./setup.ts";
 import {
   isControlRoutedMessage,
   REQUEST_LIFECYCLE_CAPABILITY,
@@ -42,7 +42,8 @@ function generationErrorCode(error: unknown): ErrorCode {
   if (
     error instanceof NoModelError ||
     error instanceof CharacterConfigError ||
-    error instanceof ImagesUnsupportedError
+    error instanceof ImagesUnsupportedError ||
+    error instanceof HeartbeatThreadError
   ) {
     return error.code;
   }

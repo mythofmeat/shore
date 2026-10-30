@@ -998,6 +998,7 @@ fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
                 purpose: listing_text(row, "purpose"),
                 model: listing_text(row, "chat_model"),
                 home: listing_flag(row, "home"),
+                heartbeat: listing_flag(row, "heartbeat"),
                 turns: row.get("turns").and_then(serde_json::Value::as_u64),
                 unread: row.get("unread").and_then(serde_json::Value::as_u64),
                 warm: listing_flag(row, "warm"),

@@ -121,10 +121,8 @@ export function buildAutonomousMessage(
   images: ImageRef[],
   providerKey: string | undefined,
   model: string | undefined,
-  thinking: readonly ContentBlock[] = [],
 ): AutonomousMessageShape {
-  const contentBlocks: ContentBlock[] = [...thinking];
-  if (text.length > 0) contentBlocks.push({ type: "text", text });
+  const contentBlocks: ContentBlock[] = text.length > 0 ? [{ type: "text", text }] : [];
   return {
     role: "assistant",
     origin: "autonomous",

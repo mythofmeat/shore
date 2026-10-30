@@ -245,7 +245,7 @@ function describeOption(path: readonly string[]): string {
     mcp: "MCP servers granted by name; each grants every tool of that [mcp.<name>] server.",
     bearer_token_env: "Environment variable holding a bearer token sent as the Authorization header; HTTP servers only.",
     default_interval: "Time until the next heartbeat when the character does not schedule one.",
-    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat, message, or daemon start.",
+    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat or daemon start. Messages don't move a heartbeat.",
     max_interval: "Longest time the character may schedule its next heartbeat.",
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",

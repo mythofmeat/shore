@@ -25,12 +25,16 @@ import { recordTranscript } from "../transcript_capture.ts";
 import { runToolUse, type ToolExecution, type ToolPhase } from "../tools/execute.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
+import type { CompactionRunner } from "../handler/turn.ts";
+import { compactionRunner } from "../memory/compaction/run.ts";
+import type { ServerMessage } from "../protocol/ServerMessage.ts";
 
 export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
   cache: LastRequestCache;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
+  emitEvent?: ((message: ServerMessage) => void) | undefined;
   notifyAutonomousMessage?: (title: string, body: string) => void;
   notifyCompactionComplete?: (title: string, body: string) => void;
   callStore?: Pick<CallStore, "recordTranscript">;
@@ -55,7 +59,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       let imageLimits: ImageLimits | undefined;
 
       return await runHeartbeatTick(character, config, {
-        cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
@@ -128,7 +131,12 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
             },
           }),
 
-      engine: async (name, thread) => await this.#deps.registry.getOrCreate(name, thread),
+      threads: {
+        ensure: async (name) => await this.#deps.registry.ensureHeartbeatThread(name),
+        engine: async (name, thread) => await this.#deps.registry.getOrCreate(name, thread),
+      },
+      threadsChanged: (name, thread) => { this.#deps.emitEvent?.({ type: "threads_changed", character: name, thread }); },
+      compaction: this.#threadCompaction(config),
       ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
       ...(this.#deps.notifyAutonomousMessage === undefined
         ? {}
@@ -185,6 +193,17 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       }
     };
     return await (this.#deps.runActivity?.(foreground) ?? foreground());
+  }
+
+  #threadCompaction(config: LoadedConfig): CompactionRunner {
+    const runner = compactionRunner({ ...this.#compactionDeps(config), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
+    return {
+      ...runner,
+      run: async (character, effective, thread) => {
+        const pass = async () => await runner.run(character, effective, thread);
+        return await (this.#deps.runActivity?.(pass) ?? pass());
+      },
+    };
   }
 
   #engineReloader(): PostArchiveEngine {

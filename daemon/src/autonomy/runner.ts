@@ -154,12 +154,6 @@ export class CharacterAutonomy {
     this.#state.dirty = true;
   }
 
-  deferHeartbeat(now: number): void {
-    this.#clock.boundWake(now, true);
-    this.#state.lastActivityAt = now;
-    this.#state.dirty = true;
-  }
-
   onAssistantMessage(turnCount: number, now: number): void {
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;
@@ -301,9 +295,10 @@ export class CharacterAutonomy {
     };
   }
 
-  async tick(): Promise<TickOutcome> {
+  async tick(foreground = false): Promise<TickOutcome> {
     const now = this.#now();
-    const decision = tickDecision(this.inputs(now));
+    const decided = tickDecision(this.inputs(now));
+    const decision = foreground ? { ...decided, compaction: undefined, deepArchive: false } : decided;
     const abandoned: "deep_archive"[] = [];
 
     if (decision.compaction !== undefined || decision.deepArchive) {

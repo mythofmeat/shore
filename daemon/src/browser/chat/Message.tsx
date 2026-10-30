@@ -17,6 +17,13 @@ import { conversation, errorText, streamReplies, workspace } from "../app/state.
 import { activityHeadline, blockViews, bodyItems, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
+const HEARTBEAT_OPENER = "[heartbeat]";
+
+function truncatedLine(text: string): string {
+  const line = Array.from(text.trim().split("\n")[0] ?? "");
+  return line.length <= 80 ? line.join("") : `${line.slice(0, 79).join("")}…`;
+}
+
 export type OpenImage = (source: string, caption: string) => void;
 
 function ReasoningChip({ text, redacted = false, live = false }: { text: string; redacted?: boolean; live?: boolean }) {
@@ -210,6 +217,15 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const reply = last ? assistant ? { label: "Regenerate", icon: "regenerate" as const } : { label: "Generate reply", icon: "send" as const } : undefined;
+  if (message.origin === "autonomous" && !assistant) {
+    const opener = message.role === "user" && message.content.startsWith(HEARTBEAT_OPENER);
+    const when = timeLabel(message.timestamp);
+    const summary = opener ? when === "" ? "Heartbeat" : `Heartbeat · ${when}` : truncatedLine(message.content);
+    return <details className="system-note heartbeat-note">
+      <summary>{summary}</summary>
+      <Markdown text={opener ? message.content.slice(HEARTBEAT_OPENER.length).trim() : message.content} />
+    </details>;
+  }
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;
   const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },

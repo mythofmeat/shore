@@ -13,7 +13,7 @@ import {
   type ResolvedModel,
 } from "../config/models.ts";
 import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
-import { homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
+import { heartbeatThread, homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
@@ -84,6 +84,7 @@ async function threadPrompt(
   return {
     id: record.id,
     home,
+    heartbeat: record.id === heartbeatThread(index),
     created_at: record.created_at,
     started_by_you: record.created_by === "character",
     label: record.label,
@@ -194,7 +195,7 @@ export async function buildChatShapeRequestFromDisk(
     activeConversation?: boolean;
     env?: NodeJS.ProcessEnv;
   } = {},
-): Promise<BuiltRequest> {
+): Promise<BuiltRequest & { messageBudget: number }> {
   const prepared = await prepareChatContext({
     ...(options.thread === undefined ? {} : { thread: options.thread }),
     character,
@@ -211,18 +212,21 @@ export async function buildChatShapeRequestFromDisk(
   });
 
   const entry = config.providers.get(resolved.providerKey);
-  return buildRequestWithProviderKeys(
-    toRequestModel(resolved),
-    entry === undefined ? undefined : toCredentialsEntry(entry),
-    {
-      messages: prepared.llmMessages,
-      system: prepared.system,
-      ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
-      replay: resolvedReplayPriorThinking(
-        resolved,
-        config.app.memory.thinking.replay_prior_thinking,
-      ),
-    },
-    options.env,
-  );
+  return {
+    ...buildRequestWithProviderKeys(
+      toRequestModel(resolved),
+      entry === undefined ? undefined : toCredentialsEntry(entry),
+      {
+        messages: prepared.llmMessages,
+        system: prepared.system,
+        ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
+        replay: resolvedReplayPriorThinking(
+          resolved,
+          config.app.memory.thinking.replay_prior_thinking,
+        ),
+      },
+      options.env,
+    ),
+    messageBudget: prepared.prompt.messageBudget,
+  };
 }
