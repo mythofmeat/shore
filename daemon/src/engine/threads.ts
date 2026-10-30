@@ -1,5 +1,6 @@
 import { withConversation } from "./lifecycle.ts";
 import { threadFile, readDurable, writeDurable, deleteThreadState } from "../storage/files.ts";
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -11,7 +12,7 @@ import {
   threadDataDir,
   threadsIndexIn,
 } from "../config/dirs.ts";
-import { HISTORY_DB_FILE } from "./history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "./history_store.ts";
 import { deriveContentFromBlocks, isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
@@ -149,12 +150,23 @@ export function startReadMarkBefore(data: string, character: string, id: string,
   if (threadReadMark(data, character, id) === undefined) writeReadMark(data, character, id, first - 1);
 }
 
+function archivedUserTurnAt(data: string, character: string, id: string): number {
+  const dbPath = join(data, HISTORY_DB_FILE);
+  if (!existsSync(dbPath)) return Number.NaN;
+  const store = HistoryStore.open(dbPath);
+  try {
+    return Date.parse(store.lastUserTurnAt(archiveKey(character, id)) ?? "");
+  } finally {
+    store.close();
+  }
+}
+
 export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
   let raw: string;
   try {
     raw = readDurable(threadFile(data, character, id, "active.jsonl"));
   } catch {
-    return { turns: 0, unread: 0 };
+    raw = "";
   }
   let turns = 0;
   let latest = -Infinity;
@@ -178,10 +190,11 @@ export function threadActivityNow(data: string, character: string, id: string): 
   }
   const mark = threadReadMark(data, character, id);
   const seen = mark === undefined ? Infinity : Math.max(mark, latestUser);
+  const lastUser = latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : latestUser;
   return {
     turns,
     ...(latest === -Infinity ? {} : { last_active: new Date(latest).toISOString() }),
-    ...(latestUser === -Infinity ? {} : { last_user: new Date(latestUser).toISOString() }),
+    ...(Number.isNaN(lastUser) ? {} : { last_user: new Date(lastUser).toISOString() }),
     unread: replies.filter((time) => time > seen).length,
   };
 }
