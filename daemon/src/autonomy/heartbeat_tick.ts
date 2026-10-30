@@ -305,22 +305,16 @@ export async function runHeartbeatTick(
     await engine.appendMessage(prepared.opener);
     await engine.appendMessage(prepared.instructions);
     recordHomeThrough(characterDir, Date.parse(prepared.opener.timestamp));
-    deps.emit?.(character, engine.currentRevision(), prepared.opener, thread);
 
     const workspace = characterWorkspace(config, character);
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set(replyVersions(engine.messages()));
-    let reply: Message | undefined;
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...prepared, recordWorkspaceWrite: recorder.track }),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
-      persist: async (round) => {
-        const message = roundMessage(round, prepared.request, deps);
-        await engine.appendMessage(message);
-        if (message.role === "assistant") reply = message;
-      },
+      persist: async (round) => { await engine.appendMessage(roundMessage(round, prepared.request, deps)); },
       character,
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
@@ -330,7 +324,6 @@ export async function runHeartbeatTick(
     if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop();
 
     signal.throwIfAborted();
-    if (reply !== undefined) deps.emit?.(character, engine.currentRevision(), { ...reply, origin: "assistant_reply" }, thread);
     const sent = await persistHeartbeatMessage(
       character,
       prepared.request,

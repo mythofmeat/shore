@@ -8,6 +8,8 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
+import type { History } from "../src/engine/conversation.ts";
+import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
@@ -80,10 +82,12 @@ interface Emitted {
 interface Harness {
   runtime: ShoreRuntime;
   script: Script;
+  data: string;
+  emitted: Emitted[];
   say: (text: string, thread?: string) => Promise<void>;
   heartbeat: () => Promise<void>;
   thread: (id: string) => Promise<readonly Message[]>;
-  emitted: (match: (event: Emitted) => boolean) => Promise<void>;
+  shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
 }
 
 async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> {
@@ -110,15 +114,16 @@ async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> 
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
   const script: Script = { heartbeats: [], held: undefined };
-  const seen: Emitted[] = [];
-  const waiting: { match: (event: Emitted) => boolean; resolve: () => void }[] = [];
+  const emitted: Emitted[] = [];
+  const histories: History[] = [];
+  const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
   const env = { [KEY_ENV]: "fixture-key" };
   const runtime = await createRuntime({
     config, providers: { anthropic: scriptedProvider(script) }, env,
-    emit: (_character, _revision, msg, thread) => {
-      const event = { thread, msg: structuredClone(msg) };
-      seen.push(event);
-      for (const waiter of waiting.filter((entry) => entry.match(event))) waiter.resolve();
+    emit: (_character, _revision, msg, thread) => { emitted.push({ thread, msg: structuredClone(msg) }); },
+    onHistory: (history) => {
+      histories.push(history);
+      for (const waiter of waiting) if (history.selected_thread === waiter.thread && history.messages.some(waiter.match)) waiter.resolve();
     },
   });
   try {
@@ -129,10 +134,12 @@ async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> 
     await run({
       runtime,
       script,
-      emitted: async (match) => {
-        if (seen.some(match)) return;
+      data: config.dirs.data,
+      emitted,
+      shown: async (thread, match) => {
+        if (histories.some((history) => history.selected_thread === thread && history.messages.some(match))) return;
         const { promise, resolve } = Promise.withResolvers<void>();
-        waiting.push({ match, resolve });
+        waiting.push({ thread, match, resolve });
         await promise;
       },
       say: async (text, thread = "main") => {
@@ -164,7 +171,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> 
 }
 
 test("a heartbeat runs while a reply in home is still generating, and its message lands in home after that reply", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread, emitted }) => {
+  await withCharacter(async ({ runtime, script, say, heartbeat, thread, shown }) => {
     await say("hello");
     const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
     script.held = held;
@@ -174,7 +181,7 @@ test("a heartbeat runs while a reply in home is still generating, and its messag
 
     at(2);
     const ticking = heartbeat();
-    await emitted((event) => event.thread === "heartbeat" && event.msg.role === "assistant");
+    await shown("heartbeat", (message) => message.role === "assistant" && message.content.includes("I found the keeper's log."));
     expect(script.heartbeats).toHaveLength(2);
     expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
 
@@ -224,6 +231,26 @@ test("the heartbeat's own turn stays in its thread, and the next one opens with 
     expect(opener).toContain("reply to: she keeps a cat too");
     expect(opener).not.toContain("the keeper's name is Mara");
     expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).toContain("the keeper's name is Mara");
+  });
+});
+
+test("a heartbeat's own turn notifies nobody and leaves its thread with nothing unread, while its message counts in home", async () => {
+  await withCharacter(async ({ data, emitted, say, heartbeat, thread }) => {
+    await say("hello");
+    at(5);
+    await heartbeat();
+    markThreadRead(data, "ada", "heartbeat", T0 + 6 * MINUTE);
+    markThreadRead(data, "ada", "main", T0 + 6 * MINUTE);
+
+    at(10);
+    await heartbeat();
+    expect((await thread("heartbeat")).filter((message) => message.role === "assistant" && message.content.includes("I found the keeper's log."))).toHaveLength(2);
+    expect(emitted.map((event) => [event.thread, event.msg.role, event.msg.content])).toEqual([
+      ["main", "assistant", "I found the keeper's log."],
+      ["main", "assistant", "I found the keeper's log."],
+    ]);
+    expect(threadActivityNow(data, "ada", "heartbeat").unread).toBe(0);
+    expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
   });
 });
 

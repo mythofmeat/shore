@@ -184,6 +184,7 @@ export function threadActivityNow(data: string, character: string, id: string): 
   let turns = 0;
   let latest = -Infinity;
   let latestUser = -Infinity;
+  let heartbeatTurn = false;
   const replies: number[] = [];
   for (const line of raw.split("\n")) {
     if (line.trim() === "") continue;
@@ -196,9 +197,10 @@ export function threadActivityNow(data: string, character: string, id: string): 
     const time = messageTime(parsed);
     if (isUserTurnLine(parsed)) {
       turns += 1;
-      if (time > latestUser && !isHeartbeatOpener(parsed as Message)) latestUser = time;
+      heartbeatTurn = isHeartbeatOpener(parsed as Message);
+      if (time > latestUser && !heartbeatTurn) latestUser = time;
     }
-    if (isReplyLine(parsed)) replies.push(time);
+    if (isReplyLine(parsed) && !heartbeatTurn) replies.push(time);
     if (time > latest) latest = time;
   }
   const mark = threadReadMark(data, character, id);
