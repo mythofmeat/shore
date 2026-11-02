@@ -13,10 +13,11 @@ import {
 import {
   fetchNanoGptSubscription,
   nanoGptSubscriptionPath,
+  readNanoGptSubscriptionSync,
   writeNanoGptSubscription,
   type NanoGptSubscriptionState,
 } from "../llm/nanogpt_subscription.ts";
-import { isNanoGptProvider } from "../llm/providers/nanogpt_config.ts";
+import { isNanoGptProvider, NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
 import { defaultBaseUrl } from "../llm/request.ts";
 import { readLearnedImageSupport } from "../llm/image_support.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
@@ -129,12 +130,18 @@ async function discoverProviderModels(
     : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);
 }
 
-function firstUsableKey(provider: string, entry: ProviderEntry): string | undefined {
-  for (const candidate of resolveKeyCandidates(provider, toCredentialsEntry(entry))) {
+function firstUsableKey(provider: string, entry: ProviderEntry | undefined): string | undefined {
+  for (const candidate of resolveKeyCandidates(provider, entry === undefined ? undefined : toCredentialsEntry(entry))) {
     const value = readCandidateEnv(candidate);
     if (value !== undefined && (value !== "" || candidate.none === true)) return value;
   }
   return undefined;
+}
+
+export function reportedNanoGptSubscription(config: LoadedConfig): NanoGptSubscriptionState | undefined {
+  if (firstUsableKey(NANOGPT_PROVIDER, config.providers.get(NANOGPT_PROVIDER)) === undefined) return undefined;
+  const state = readNanoGptSubscriptionSync(nanoGptSubscriptionPath(config.dirs.cache));
+  return state?.state === "active" || state?.state === "grace" ? state : undefined;
 }
 
 export async function refreshProviderModels(ctx: ProvidersContext, args: OperationInput<"refresh_provider_models">): Promise<OperationResult<"refresh_provider_models">> {

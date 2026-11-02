@@ -3,11 +3,12 @@ import type { UsageConfig } from "../ledger/budget.ts";
 import { usageReport, UsageArgumentError } from "../ledger/usage.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import type { Args } from "./conversation.ts";
+import type { NanoGptSubscriptionState } from "../llm/nanogpt_subscription.ts";
 import type { UsageResult } from "../protocol/UsageResult.ts";
 
 export interface UsageContext {
   ledger: string;
-  cacheDir?: string;
+  nanoGptSubscription?: () => NanoGptSubscriptionState | undefined;
   usage: UsageConfig;
   callStore?: CallStore | undefined;
   claudePlanLimits?: boolean;
@@ -18,7 +19,7 @@ export async function usage(ctx: UsageContext, args: Args): Promise<UsageResult>
     const store = ctx.callStore;
     return await usageReport({
       ledger: ctx.ledger,
-      ...(ctx.cacheDir === undefined ? {} : { cacheDir: ctx.cacheDir }),
+      ...(ctx.nanoGptSubscription === undefined ? {} : { nanoGptSubscription: ctx.nanoGptSubscription }),
       args,
       usage: ctx.usage,
       ...(store === undefined ? {} : { rateLimits: () => store.latestRateLimits() }),

@@ -167,7 +167,7 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
 
     if let Some(subscription) = data
         .get("nanogpt_subscription")
-        .filter(|value| value.is_object())
+        .filter(|value| value.is_object() && text(value, "state") != "inactive")
     {
         blank(out);
         write_nanogpt_subscription(out, subscription);
@@ -689,5 +689,38 @@ pub(crate) fn print(data: &Value, view: View) {
             View::Anomalies => write_anomalies(&mut out, data),
             View::Limits => write_limits(&mut out, data),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::output::set_color_enabled;
+    use serde_json::json;
+
+    fn summary_with_state(state: &str) -> String {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_summary(
+            &mut buf,
+            &json!({"nanogpt_subscription": {
+                "state": state,
+                "weeklyInputTokens": {"remaining": 60_000_000, "limit": 60_000_000},
+            }}),
+        );
+        String::from_utf8(buf).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_subscription_in_force_is_shown() {
+        assert!(summary_with_state("active").contains("NanoGPT subscription  active"));
+        assert!(summary_with_state("grace").contains("NanoGPT subscription  grace"));
+    }
+
+    #[test]
+    fn an_inactive_subscription_is_not_shown_even_if_an_older_daemon_sends_one() {
+        let printed = summary_with_state("inactive");
+        assert!(!printed.contains("NanoGPT"), "{printed}");
+        assert!(!printed.contains("weekly input"), "{printed}");
     }
 }
