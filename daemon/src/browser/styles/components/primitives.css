@@ -89,6 +89,11 @@
   bottom: calc(100% + 6px);
 }
 
+.menu-list.point {
+  position: fixed;
+  top: auto;
+}
+
 .menu-list button {
   display: flex;
   align-items: center;

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
 import { navigate } from "../app/route.ts";
-import { workspace } from "../app/state.ts";
+import { perform, workspace } from "../app/state.ts";
 import { NewCharacterDialog } from "../sidebar/dialogs.tsx";
 import { SettingsSection } from "./layout.tsx";
 import { useAction, useOperation } from "./shared.tsx";
@@ -19,7 +19,7 @@ function DeleteCharacterDialog({ name, close }: { name: string; close: () => voi
       close();
       return result.archive === null ? `Deleted ${name}` : `Deleted ${name}; archive saved to ${result.archive}`;
     }); }}>
-      <p className="form-text">This removes {name}’s definition, conversations and memory from the daemon. It can’t be undone unless you save an archive first.</p>
+      <p className="form-text">This removes {name}’s definition, threads and memory from the daemon. It can’t be undone unless you save an archive first.</p>
       <label className="field"><span>Save an archive first <span className="muted">(optional path on the daemon’s machine)</span></span><input className="input mono" value={archive} placeholder="e.g. ~/backups/nova.shore" onChange={(event) => setArchive(event.target.value)} /></label>
       <label className="field"><span>Type <strong>{name}</strong> to confirm</span><input className="input" autoComplete="off" value={confirm} onChange={(event) => setConfirm(event.target.value)} /></label>
       <div className="form-actions"><button type="button" className="button" onClick={close}>Cancel</button><button type="submit" className="button danger" disabled={busy || confirm !== name}>{busy ? "Deleting…" : "Delete character"}</button></div>
@@ -27,7 +27,7 @@ function DeleteCharacterDialog({ name, close }: { name: string; close: () => voi
   </Dialog>;
 }
 
-function CharacterDetails({ state, name }: { state: WorkspaceSnapshot; name: string }) {
+function CharacterDetails({ state, name }: { state: ChromeSnapshot; name: string }) {
   const info = useOperation(state, "character_info", { name }, [name]);
   const [deleting, setDeleting] = useState(false);
   const details = info.data;
@@ -45,7 +45,7 @@ function CharacterDetails({ state, name }: { state: WorkspaceSnapshot; name: str
       </dl>
       {details.definition_preview === null ? null : <><div className="tool-label">Definition preview</div><pre className="readout">{details.definition_preview}</pre></>}
       <div className="actions-row">
-        {state.character === name ? null : <button type="button" className="button" onClick={() => { void workspace.actions.run("switch_character", { name }).then(() => navigate({ view: "chat" })); }}>Open conversations</button>}
+        {state.character === name ? null : <button type="button" className="button" onClick={() => { navigate({ view: "chat" }); perform(() => workspace.openCharacter(name)); }}>Open threads</button>}
         <button type="button" className="button danger-outline" onClick={() => setDeleting(true)}>Delete…</button>
       </div>
     </>}
@@ -53,7 +53,7 @@ function CharacterDetails({ state, name }: { state: WorkspaceSnapshot; name: str
   </div>;
 }
 
-export function CharactersPage({ state }: { state: WorkspaceSnapshot }) {
+export function CharactersPage({ state }: { state: ChromeSnapshot }) {
   const [selected, setSelected] = useState(state.character ?? state.characters[0]?.name ?? null);
   const [creating, setCreating] = useState(false);
   const current = state.characters.some((item) => item.name === selected) ? selected : state.characters[0]?.name ?? null;

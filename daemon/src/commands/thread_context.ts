@@ -1,5 +1,8 @@
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { threadActivities } from "../engine/threads.ts";
+import { toRfc3339 } from "../ledger/zoned.ts";
+import { runningPass, type RunningPassView } from "../memory/compaction/activity.ts";
+import type { RunningCompaction } from "../protocol/RunningCompaction.ts";
 import { internalError } from "./errors.ts";
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import type { ThreadContext } from "./threads.ts";
@@ -43,6 +46,7 @@ export async function threadListingContext(
 ): Promise<ThreadContext> {
   const base = threadContext(deps, engine, session.signal);
   const warm = deps.keepalive?.keepalive.warmThread(base.character);
+  const pass = runningPass(session.dataDir, base.character);
   const archive = deps.archive;
   return {
     ...base,
@@ -60,6 +64,18 @@ export async function threadListingContext(
       base.registry.listThreads(base.character).map((t) => t.id),
     ),
     ...(warm === undefined ? {} : { warm }),
+    ...(pass === undefined ? {} : { compaction: runningCompaction(pass) }),
+  };
+}
+
+function runningCompaction(pass: RunningPassView): RunningCompaction {
+  return {
+    thread: pass.thread,
+    trigger: pass.trigger,
+    started_at: toRfc3339(pass.startedAt),
+    ...(pass.scope === undefined ? {} : { turns: pass.scope.turns }),
+    ...(pass.scope?.firstAt === undefined ? {} : { first_at: pass.scope.firstAt }),
+    ...(pass.scope?.lastAt === undefined ? {} : { last_at: pass.scope.lastAt }),
   };
 }
 

@@ -30,9 +30,10 @@ export interface KeepaliveArming {
 
 export type KeepaliveReprime =
   | { kind: "push"; request: SidecarRequest; keepalive: KeepaliveArming }
-  | { kind: "disarm" };
+  | { kind: "disarm" }
+  | { kind: "superseded" };
 
-export function reprimeDecision(rebuilt: BuiltRequest | undefined): KeepaliveReprime {
+export function reprimeDecision(rebuilt: BuiltRequest | undefined): Exclude<KeepaliveReprime, { kind: "superseded" }> {
   return rebuilt === undefined
     ? { kind: "disarm" }
     : {
@@ -47,6 +48,7 @@ export function reprimeDecision(rebuilt: BuiltRequest | undefined): KeepaliveRep
 
 export class LastRequestCache {
   readonly #bodies = new Map<string, SidecarRequest>();
+  readonly #changes = new Map<string, number>();
   readonly #keepalive: KeepaliveService | undefined;
 
   constructor(keepalive?: KeepaliveService) {
@@ -61,6 +63,14 @@ export class LastRequestCache {
     return [...this.#bodies.keys()];
   }
 
+  changesTo(character: string): number {
+    return this.#changes.get(character) ?? 0;
+  }
+
+  #changed(character: string): void {
+    this.#changes.set(character, this.changesTo(character) + 1);
+  }
+
   set(
     character: string,
     request: SidecarRequest,
@@ -68,11 +78,13 @@ export class LastRequestCache {
     warm = true,
     thread?: string,
   ): void {
+    this.#changed(character);
     this.#bodies.set(character, request);
     this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED, thread), warm);
   }
 
   invalidate(character: string, reason: InvalidationReason): void {
+    this.#changed(character);
     const had = this.#bodies.delete(character);
     this.#keepalive?.forgetMisses(character);
     shoreLog.debug(
@@ -86,10 +98,12 @@ export class LastRequestCache {
     config: LoadedConfig,
     deps: RebuildDeps,
   ): Promise<KeepaliveReprime> {
+    const started = this.changesTo(character);
     const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
     const decision = reprimeDecision(
       await rebuildRequestFromDisk(character, dataDir, config, { ...deps, thread }),
     );
+    if (this.changesTo(character) !== started) return { kind: "superseded" };
     if (decision.kind === "push") {
       this.#bodies.set(character, decision.request);
       this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive, thread));

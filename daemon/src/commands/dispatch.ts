@@ -61,6 +61,7 @@ export interface CommandDeps {
   running?: () => RunningStatusReport;
   archive?: ArchiveContext;
   onCharacterCreated?: (character: string) => Promise<void>;
+  threadsChanged?: (character: string, thread: string) => void;
 }
 
 export async function runCommand(

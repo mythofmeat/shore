@@ -17232,6 +17232,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -17306,6 +17331,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -17389,6 +17428,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -17553,6 +17657,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -17627,6 +17756,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -17710,6 +17853,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -17768,6 +17976,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -17842,6 +18075,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -17925,6 +18172,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -17997,6 +18309,31 @@
         },
         "current": {
           "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "invalidated": {
           "anyOf": [
@@ -18077,6 +18414,20 @@
                 "null"
               ]
             },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "home": {
               "type": "boolean"
             },
@@ -18159,6 +18510,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18271,6 +18687,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18345,6 +18786,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -18428,6 +18883,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18492,6 +19012,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18566,6 +19111,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -18649,6 +19208,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18713,6 +19337,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18787,6 +19436,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -18870,6 +19533,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18937,6 +19665,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19011,6 +19764,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -19094,6 +19861,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19156,6 +19988,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19230,6 +20087,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -19313,6 +20184,2653 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_compaction",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadCompactionArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "compaction": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "compaction"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_move",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadMoveArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "folder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_sort",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadSortArgs",
+      "type": "object",
+      "properties": {
+        "by_activity": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "by_activity"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_folder_create",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_folder_rename",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadFolderRenameArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "to"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_folder_delete",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_folder_move",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadFolderMoveArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_folder_sort",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadFolderSortArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "by_activity": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "by_activity"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "heartbeat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "files": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "heartbeat": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "messages": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "messages",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19377,6 +22895,31 @@
         "current": {
           "type": "string"
         },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19451,6 +22994,20 @@
                 "boolean",
                 "null"
               ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "home": {
               "type": "boolean"
@@ -19534,6 +23091,71 @@
             "created_at",
             "messages",
             "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {

@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
+import { toasts } from "../ui/toast.tsx";
+import { makeHome } from "../chat/actions.ts";
+import { sortThreads } from "../sidebar/order.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { openConversationDialog, openEffortMenu, requestConfigSearch } from "./intents.ts";
+import { openCompactionView, openConversationDialog, openEffortMenu, openThreadDialog, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
 import { keyLabel, paletteMatches, shortcutsFor } from "./shortcuts.ts";
-import { enterSends, perform, workspace } from "./state.ts";
+import { compactionWatch, enterSends, errorText, perform, workspace } from "./state.ts";
 
 export type PaletteScope = "full" | "shortcuts" | "config";
 interface Command { id: string; label: string; detail?: string; icon: IconName; group: string; run: () => void }
 
 
-export function Palette({ state, close, newThread, newCharacter, initialScope = "full" }: { state: WorkspaceSnapshot; close: () => void; newThread: () => void; newCharacter: () => void; initialScope?: PaletteScope }) {
+export function Palette({ state, close, newThread, newCharacter, initialScope = "full" }: { state: ChromeSnapshot; close: () => void; newThread: () => void; newCharacter: () => void; initialScope?: PaletteScope }) {
   const [scope, setScope] = useState<PaletteScope>(initialScope);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -26,22 +29,31 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
     const run = (work: () => void) => () => { close(); work(); };
     if (scope === "shortcuts") return shortcutsFor(enterSends()).map((item, index) => ({ id: `shortcut:${String(index)}`, label: item.description, detail: item.keys.map(keyLabel).join(" "), icon: "info", group: item.where, run: run(() => navigate({ view: "settings", page: "keyboard" })) }));
     if (scope === "config") return keys.map((key) => ({ id: `config:${key}`, label: key, icon: "settings", group: "Settings keys", run: run(() => { requestConfigSearch(key); navigate({ view: "settings", page: "configuration" }); }) }));
+    const current = state.thread;
+    const openThread = state.threads.find((thread) => thread.id === current);
     const conversation = state.character === null ? [] : [
-      { id: "new-thread", label: "New conversation", icon: "plus" as const, group: "Conversation", run: run(newThread) },
-      ...(["rename", "fork", "guidance", "system", "compact", "clear", "gallery", "model"] as const).map((name) => ({
-        id: `dialog:${name}`, icon: "chat" as const, group: "Conversation", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
-        label: { rename: "Rename conversation", fork: "Fork conversation", guidance: "Regenerate with guidance", system: "Add a system message", compact: "Compact context", clear: "Clear context", gallery: "Show images", model: "Choose a model" }[name],
+      { id: "new-thread", label: "New thread", icon: "plus" as const, group: "Thread", run: run(newThread) },
+      ...(current === null ? [] : (["settings", "fork", "archive"] as const).map((kind) => ({
+        id: `thread-dialog:${kind}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openThreadDialog(kind, current); }),
+        label: { settings: "Thread settings", fork: "Fork thread", archive: "Archive thread" }[kind],
+      }))),
+      ...(openThread === undefined || openThread.home || openThread.heartbeat === true ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
+      ...(["guidance", "system", "compact", "clear", "gallery", ...(openThread?.heartbeat === true ? [] : ["model"] as const)] as const).map((name) => ({
+        id: `dialog:${name}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
+        label: { guidance: "Regenerate with guidance", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
       })),
-      { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Conversation", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
-      ...state.threads.map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Conversations", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.actions.run("switch_thread", { name: thread.id, resync: true })); }) })),
+      { id: "compaction-view", label: "Show the compaction", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openCompactionView(); }) },
+      ...(state.compaction === null ? [] : [{ id: "compaction-stop", label: "Stop the compaction", icon: "stop" as const, group: "Thread", run: run(() => { compactionWatch.stop().then((summary) => toasts.show(summary)).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
+      ...(openThread?.heartbeat === true ? [] : [{ id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) }]),
+      ...sortThreads(state.threads, state.folders).map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
     ];
     return [
       ...conversation,
-      ...state.characters.map((character) => ({ id: `character:${character.name}`, label: `Go to ${character.name}`, icon: "person" as const, group: "Characters", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.actions.run("switch_character", { name: character.name })); }) })),
+      ...state.characters.map((character) => ({ id: `character:${character.name}`, label: `Go to ${character.name}`, icon: "person" as const, group: "Characters", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openCharacter(character.name)); }) })),
       { id: "new-character", label: "New character", icon: "plus", group: "Characters", run: run(newCharacter) },
       ...SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, label: page.label, detail: `Settings · ${page.group}`, icon: "settings" as const, group: "Settings", run: run(() => navigate({ view: "settings", page: page.id })) })),
     ];
-  }, [scope, keys, state.characters, state.threads, state.character, close, newThread, newCharacter]);
+  }, [scope, keys, state.characters, state.threads, state.folders, state.character, state.thread, state.compaction, close, newThread, newCharacter]);
   const visible = paletteMatches(commands, query).map((index) => commands[index]).filter((item): item is Command => item !== undefined).slice(0, 60);
   const current = Math.min(active, Math.max(visible.length - 1, 0));
   useEffect(() => { list.current?.querySelector(`[data-index="${String(current)}"]`)?.scrollIntoView({ block: "nearest" }); }, [current]);

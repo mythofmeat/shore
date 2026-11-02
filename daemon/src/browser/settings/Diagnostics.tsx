@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { StatusReport } from "../../protocol/StatusReport.ts";
 import type { WebRequestList } from "../../protocol/WebRequestList.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { errorText, workspace } from "../app/state.ts";
 import { listRequests, requestHistory } from "../request_history.ts";
 import { fieldLabel } from "../ui/Field.tsx";
@@ -11,7 +11,7 @@ import { Tree } from "./tree.tsx";
 import { requestStatus } from "./format.ts";
 
 
-function RequestHistory({ state }: { state: WorkspaceSnapshot }) {
+function RequestHistory({ state }: { state: ChromeSnapshot }) {
   const [listing, setListing] = useState<WebRequestList>();
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
@@ -71,7 +71,7 @@ function StatusView({ report }: { report: StatusReport }) {
   </>;
 }
 
-export function DiagnosticsPage({ state }: { state: WorkspaceSnapshot }) {
+export function DiagnosticsPage({ state }: { state: ChromeSnapshot }) {
   const status = useOperation(state, "status", {}, [state.thread], state.character !== null);
   if (state.character === null) return <><NeedsCharacter /><RequestHistory state={state} /></>;
   return <>

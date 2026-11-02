@@ -52,17 +52,16 @@ export function NewThreadDialog({ character, close }: { character: string; close
       const id = name.trim();
       const paths = threadFileList(files);
       await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(paths.length === 0 ? {} : { files: paths }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
-      await workspace.actions.run("switch_thread", { name: id, resync: true });
-      await workspace.refreshNavigation();
+      await workspace.openThread(id);
       navigate({ view: "chat" });
       close();
     } catch (failure) { setError(errorText(failure)); } finally { setBusy(false); }
   };
-  return <Dialog title={`New conversation with ${character}`} close={close}>
+  return <Dialog title={`New thread with ${character}`} close={close}>
     <form className="form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <label className="field"><span>Name</span><input className="input" data-autofocus placeholder="e.g. lighthouse" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field"><span>Label <span className="muted">(optional)</span></span><input className="input" placeholder="Shown in the sidebar" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-      <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} placeholder={`What this conversation is for; ${character} sees it here`} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
+      <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} placeholder={`What this thread is for; ${character} sees it here`} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
       <details className="disclosure"><summary>More options</summary>
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>

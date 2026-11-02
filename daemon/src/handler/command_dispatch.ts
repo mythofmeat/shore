@@ -23,7 +23,7 @@ export interface DispatchRuntime {
     character: string,
     reason?: InvalidationReason,
     thread?: string,
-  ): Promise<void>;
+  ): void;
 
   homeThread(character: string): string;
 
@@ -82,13 +82,13 @@ async function annotations(
     case "switch_model":
     case "reset_model":
     case "set_model_setting":
-      return await afterChatModelChange(name, args, data, ctx);
+      return afterChatModelChange(name, args, data, ctx);
     case "switch_character":
       return await afterSwitchCharacter(data, ctx);
     case "switch_thread":
       return await afterSwitchThread(args, data, ctx);
     case "thread_model":
-      return await afterThreadModelChange(args, data, ctx);
+      return afterThreadModelChange(args, data, ctx);
     case "archive_thread":
       await afterArchiveThread(args, ctx);
       return undefined;
@@ -97,12 +97,12 @@ async function annotations(
   }
 }
 
-async function afterChatModelChange(
+function afterChatModelChange(
   name: string,
   args: unknown,
   data: unknown,
   ctx: DispatchContext,
-): Promise<Record<string, unknown> | undefined> {
+): Record<string, unknown> | undefined {
   if (!isRecord(args)) return undefined;
   if (name === "switch_model" && typeof args["name"] !== "string") return undefined;
   if (
@@ -111,14 +111,14 @@ async function afterChatModelChange(
   ) return undefined;
 
   const reason = name === "set_model_setting" ? "model_setting_change" : "model_change";
-  await ctx.runtime.refreshCachedRequest(
+  ctx.runtime.refreshCachedRequest(
     ctx.character, reason,
     ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character),
   );
   const chatSetting = args["background_task"] === undefined && args["subagent"] === undefined;
   if (name === "set_model_setting" && args["scope"] === "global" && chatSetting) {
     for (const other of ctx.runtime.cachedCharacters()) {
-      if (other !== ctx.character) await ctx.runtime.refreshCachedRequest(other, reason, ctx.runtime.warmThread(other));
+      if (other !== ctx.character) ctx.runtime.refreshCachedRequest(other, reason, ctx.runtime.warmThread(other));
     }
   }
   return invalidated(data, { cached_request: true });
@@ -206,7 +206,7 @@ async function afterSwitchThread(
 
   await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));
   if (!changed) return undefined;
-  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);
+  ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);
 
   return {
     selected_thread: selected,
@@ -225,7 +225,7 @@ async function afterArchiveThread(args: unknown, ctx: DispatchContext): Promise<
 
   if (viewers.length > 0) await showHomeToMovedViewers(viewers, home, ctx);
   if (ctx.runtime.warmThread(ctx.character) === archived) {
-    await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", home);
+    ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", home);
   }
   ctx.runtime.threadsChanged(ctx.character, archived);
 }
@@ -247,11 +247,11 @@ async function showHomeToMovedViewers(viewers: readonly number[], home: string, 
   }
 }
 
-async function afterThreadModelChange(
+function afterThreadModelChange(
   args: unknown,
   data: unknown,
   ctx: DispatchContext,
-): Promise<Record<string, unknown> | undefined> {
+): Record<string, unknown> | undefined {
   const pinned = isRecord(args) ? args["name"] : undefined;
   if (typeof pinned !== "string") return undefined;
 
@@ -259,7 +259,7 @@ async function afterThreadModelChange(
     ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character);
   if (pinned !== live) return undefined;
 
-  await ctx.runtime.refreshCachedRequest(ctx.character, "model_change", pinned);
+  ctx.runtime.refreshCachedRequest(ctx.character, "model_change", pinned);
   return invalidated(data, { cached_request: true });
 }
 

@@ -31,11 +31,13 @@ import {
   setHomeThread,
   setThreadFiles,
   setThreadLabel,
+  setThreadCompaction,
   setThreadLocked,
   setThreadModel,
   setThreadPurpose,
   threadRecord,
   ThreadError,
+  writeThreadsIndex,
   type ArchiveThreadOptions,
   type NewThread,
   type ThreadEdit,
@@ -406,6 +408,39 @@ export class CharacterRegistry {
           name,
           await setThreadLocked(this.#dataDir, name, id, locked, new Date().toISOString()),
         ),
+      signal,
+    );
+  }
+
+  async setThreadCompaction(
+    name: string,
+    id: string,
+    compaction: boolean,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadCompaction(this.#dataDir, name, id, compaction, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async changeThreadLayout(
+    name: string,
+    change: (index: ThreadsIndex) => ThreadsIndex,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () => {
+        const next = change(await ensureThreads(this.#dataDir, name, new Date().toISOString()));
+        await writeThreadsIndex(this.#dataDir, name, next);
+        return this.#remember(name, next);
+      },
       signal,
     );
   }

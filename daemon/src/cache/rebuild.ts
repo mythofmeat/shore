@@ -91,6 +91,7 @@ export async function rebuildRequestFromDisk(
   config: LoadedConfig,
   deps: RebuildDeps,
 ): Promise<(BuiltRequest & ToolConversation) | undefined> {
+  const started = performance.now();
   const characterDir = characterDataDir(dataDir, character);
   const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
   const conversationDir = threadDataDir(dataDir, character, thread);
@@ -138,7 +139,7 @@ export async function rebuildRequestFromDisk(
         ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }),
       },
     );
-    shoreLog.info(`shore: rebuilt the request for ${character} from disk (thread=${thread})`);
+    shoreLog.info(`shore: rebuilt the request for ${character} from disk (thread=${thread}, took=${String(Math.round(performance.now() - started))}ms)`);
     return { ...built, thread, conversation: [...store.messages()] };
   } catch (e) {
     shoreLog.warn(`shore: request rebuild for ${character} failed: ${String(e)}`);

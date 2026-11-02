@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { CallInspection } from "../../protocol/CallInspection.ts";
 import type { Role } from "../../protocol/Role.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Markdown } from "../markdown.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
 import { workspace } from "../app/state.ts";
@@ -10,7 +10,7 @@ import { formatNumber, formatTime, Loading, NeedsCharacter, useAction, useOperat
 import { Tree } from "./tree.tsx";
 
 type Tab = "calls" | "log" | "heartbeat" | "events" | "errors" | "subagents";
-const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Conversation log"], ["heartbeat", "Heartbeat transcript"], ["events", "Heartbeat events"], ["errors", "Errors"], ["subagents", "Subagents"]];
+const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["heartbeat", "Heartbeat transcript"], ["events", "Heartbeat events"], ["errors", "Errors"], ["subagents", "Subagents"]];
 
 function Count({ value, change }: { value: number; change: (value: number) => void }) {
   return <select className="select" aria-label="Entries to show" value={value} onChange={(event) => change(Number(event.target.value))}>{[10, 25, 50, 100].map((count) => <option key={count} value={count}>Last {count}</option>)}</select>;
@@ -60,7 +60,7 @@ function CallDialog({ id, close }: { id: number; close: () => void }) {
   </Dialog>;
 }
 
-function Calls({ state }: { state: WorkspaceSnapshot }) {
+function Calls({ state }: { state: ChromeSnapshot }) {
   const [count, setCount] = useState(25);
   const [callType, setCallType] = useState("");
   const [open, setOpen] = useState<number>();
@@ -85,7 +85,7 @@ function Calls({ state }: { state: WorkspaceSnapshot }) {
   </>;
 }
 
-function ConversationLog({ state }: { state: WorkspaceSnapshot }) {
+function ConversationLog({ state }: { state: ChromeSnapshot }) {
   const [turns, setTurns] = useState(10);
   const [role, setRole] = useState<Role | "">("");
   const log = useOperation(state, "log", { turns, ...(role === "" ? {} : { role }) }, [state.thread]);
@@ -101,7 +101,7 @@ function ConversationLog({ state }: { state: WorkspaceSnapshot }) {
   </>;
 }
 
-function Diagnostic({ state, tab }: { state: WorkspaceSnapshot; tab: "heartbeat" | "events" | "errors" | "subagents" }) {
+function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "heartbeat" | "events" | "errors" | "subagents" }) {
   const [count, setCount] = useState(25);
   const [ids, setIds] = useState("");
   const heartbeat = useOperation(state, "transcript", { count }, [], tab === "heartbeat");
@@ -140,7 +140,7 @@ function Diagnostic({ state, tab }: { state: WorkspaceSnapshot; tab: "heartbeat"
   </>;
 }
 
-export function TracesPage({ state }: { state: WorkspaceSnapshot }) {
+export function TracesPage({ state }: { state: ChromeSnapshot }) {
   const [tab, setTab] = useState<Tab>("calls");
   if (state.character === null) return <NeedsCharacter />;
   return <>

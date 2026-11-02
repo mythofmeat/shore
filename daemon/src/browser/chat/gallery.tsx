@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
 import { conversationImages, imageFilename, mediaSource } from "../media.ts";
 import { FullPicture } from "../pictures.tsx";
 import { Dialog, Spinner } from "../ui/controls.tsx";
-import { perform, workspace } from "../app/state.ts";
+import { perform, useWorkspace, workspace } from "../app/state.ts";
 import { segmentName } from "./transcript.ts";
 
-export function GalleryDialog({ state, close }: { state: WorkspaceSnapshot; close: () => void }) {
+export function GalleryDialog({ close }: { close: () => void }) {
+  const state = useWorkspace();
   const view = state.segmentView;
   const images = useMemo(() => (view === null ? conversationImages(state.messages, state.streams, state.media) : conversationImages(view.messages, [], [])).flatMap((image) => {
     const source = mediaSource(image.data, image.mime);

@@ -40,7 +40,7 @@ import { resumesOnStart } from "../memory/compaction/checkpoint.ts";
 import { compactAfterTurn } from "./turn.ts";
 import { passEnd } from "../commands/compact.ts";
 import { commandCatalogue } from "../commands/registry.ts";
-import { changesState } from "../operations/policy.ts";
+import { changesState, operationPolicy } from "../operations/policy.ts";
 import {
   applySubscriptionProviders,
   mcpConfigView,
@@ -298,7 +298,8 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     router: a.router,
     registry: handlerRegistry(a.runtime.registry),
     commandChangesState,
-    compactions: compactionViewers(a.runtime.config.dirs.data),
+    commandOnlyReads,
+    compactions: compactionViewers(a.runtime.config.dirs.data, a.emitEvent),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
@@ -345,6 +346,13 @@ export function commandChangesState(cmd: Command): boolean {
   if (descriptor === undefined) return true;
   const input = typeof cmd.args === "object" && cmd.args !== null && !Array.isArray(cmd.args) ? cmd.args as Record<string, unknown> : {};
   return changesState(descriptor, input);
+}
+
+export function commandOnlyReads(cmd: Command): boolean {
+  const descriptor = commandDescriptors.get(cmd.name);
+  if (descriptor === undefined) return false;
+  const input = typeof cmd.args === "object" && cmd.args !== null && !Array.isArray(cmd.args) ? cmd.args as Record<string, unknown> : {};
+  return operationPolicy(descriptor, input).effects.every((effect) => effect === "read");
 }
 
 export function handlerNotifier(
@@ -437,31 +445,14 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
 
     cachedCharacters: () => runtime.cache.cachedCharacters(),
 
-    warmThread: (character) => runtime.keepalive.warmThread(character),
+    warmThread: (character) => runtime.cacheRefresh.targetThread(character) ?? runtime.keepalive.warmThread(character),
 
     threadsChanged: (character, thread) => {
       a.emitEvent?.({ type: "threads_changed", character, thread });
     },
 
-    refreshCachedRequest: async (character, reason = "model_change", thread) => {
-      runtime.keepalive.disarm(character);
-      runtime.cache.invalidate(character, reason);
-      try {
-        await runtime.cache.reprimeFromDisk(
-          character,
-          runtime.config.dirs.data,
-          runtime.registry.effectiveConfig(character),
-          {
-            mcpRegistry: runtime.mcp.current,
-            ...(thread === undefined ? {} : { thread }),
-            ...(a.env === undefined ? {} : { env: a.env }),
-          },
-        );
-      } catch (e) {
-        shoreLog.warn(
-          `shore: request cache refresh after model change failed for ${character}: ${String(e)}`,
-        );
-      }
+    refreshCachedRequest: (character, reason = "model_change", thread) => {
+      runtime.cacheRefresh.refresh(character, reason, thread);
     },
 
     applyReloadedConfig: async (config) => await applyReloadedConfig(a, config),
@@ -697,6 +688,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     mcpStatus: () => runtime.mcp.current.serverStatus(),
     ...(a.running === undefined ? {} : { running: a.running }),
+    ...(a.emitEvent === undefined ? {} : { threadsChanged: (character: string, thread: string) => a.emitEvent?.({ type: "threads_changed", character, thread }) }),
     historyIndex: {
       progressFor: (character) => runtime.historyIndex.progress(character),
       noteMutation: (character) => {
@@ -710,10 +702,14 @@ function compactionPhase(phase: string | undefined): ServerMessage {
   return { type: "phase", rid: null, phase: phase !== undefined && phase.startsWith("compacting") ? phase : "compacting", model: null };
 }
 
-function compactionViewers(dataDir: string): NonNullable<MessageHandlerDeps["compactions"]> {
+function compactionViewers(dataDir: string, emitEvent: (message: ServerMessage) => void): NonNullable<MessageHandlerDeps["compactions"]> {
   return {
     observe: (listener) => observePasses((from, event) => {
       if (from !== dataDir) return;
+      if (event.kind === "started" || event.kind === "described") {
+        emitEvent({ type: "threads_changed", character: event.pass.character, thread: event.pass.thread });
+        return;
+      }
       if (event.kind === "phase") {
         if (event.pass.phase?.startsWith("compacting") === true) listener(event.pass.character, event.pass.thread, compactionPhase(event.pass.phase));
         return;
@@ -721,6 +717,7 @@ function compactionViewers(dataDir: string): NonNullable<MessageHandlerDeps["com
       const { character, thread } = event.ended;
       const data: CompactionWatchResult = { character, state: "finished", pass: passEnd(event.ended) };
       listener(character, thread, { type: "command_output", rid: null, name: "compact_watch", data });
+      emitEvent({ type: "threads_changed", character, thread });
     }),
     running: (character) => {
       const pass = runningPass(dataDir, character);

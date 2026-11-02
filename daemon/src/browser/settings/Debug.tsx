@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { workspace } from "../app/state.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
 import { NeedsCharacter, useAction } from "./shared.tsx";
 import { Tree } from "./tree.tsx";
 
-export function DebugPage({ state }: { state: WorkspaceSnapshot }) {
+export function DebugPage({ state }: { state: ChromeSnapshot }) {
   const { busy, run } = useAction();
   const [result, setResult] = useState<{ title: string; value: unknown }>();
   if (state.character === null) return <NeedsCharacter />;

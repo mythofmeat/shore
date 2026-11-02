@@ -108,6 +108,8 @@ pub(crate) struct ThreadRow {
     pub last_active: Option<String>,
     pub by_character: bool,
     pub locked: bool,
+    pub folder: Option<String>,
+    pub position: Option<u64>,
 }
 
 impl ThreadRow {
@@ -367,6 +369,7 @@ pub(crate) struct App {
     pub thread_name: String,
     pub home_thread: String,
     pub threads: Vec<ThreadRow>,
+    pub thread_folders: Vec<String>,
     pub pending_thread_refresh_rid: Option<String>,
     pub threads_known_for: Option<String>,
     pub pending_thread_create: Option<String>,
@@ -465,6 +468,7 @@ impl Default for App {
             thread_name: String::new(),
             home_thread: String::new(),
             threads: Vec::new(),
+            thread_folders: Vec::new(),
             pending_thread_refresh_rid: None,
             threads_known_for: None,
             pending_thread_create: None,
@@ -1396,11 +1400,27 @@ impl App {
     }
 
     pub(crate) fn thread_order(&self) -> Vec<&ThreadRow> {
+        let section = |row: &ThreadRow| {
+            let folder = row
+                .folder
+                .as_ref()
+                .and_then(|name| self.thread_folders.iter().position(|known| known == name));
+            (
+                !row.home,
+                !row.heartbeat,
+                folder.map_or(0, |index| index.saturating_add(1)),
+            )
+        };
         let mut rows: Vec<&ThreadRow> = self.threads.iter().collect();
         rows.sort_by(|a, b| {
-            b.home
-                .cmp(&a.home)
-                .then_with(|| b.recency().cmp(a.recency()))
+            section(a)
+                .cmp(&section(b))
+                .then_with(|| match (a.position, b.position) {
+                    (Some(left), Some(right)) => left.cmp(&right),
+                    (None, Some(_)) => std::cmp::Ordering::Less,
+                    (Some(_), None) => std::cmp::Ordering::Greater,
+                    (None, None) => b.recency().cmp(a.recency()),
+                })
         });
         rows
     }
@@ -2073,6 +2093,9 @@ impl App {
         }
         if row.heartbeat {
             facts.push("heartbeats".to_owned());
+        }
+        if let Some(folder) = &row.folder {
+            facts.push(format!("in {folder}"));
         }
         if row.unread_count() > 0 {
             facts.push(format!("{} new", row.unread_count()));

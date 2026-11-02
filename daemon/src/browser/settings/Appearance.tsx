@@ -1,4 +1,4 @@
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { VIEW_CONTROLS, type ViewKey } from "../preferences.ts";
 import type { NotifyPermission } from "../notifications.ts";
 import { FONT_SIZES } from "../font_size.ts";
@@ -15,7 +15,7 @@ const TOGGLES: readonly { key: ViewKey; description: string }[] = [
   { key: "subagent", description: "Show subagents working while a reply streams." },
   { key: "images", description: "Show images attached to messages and returned by tools." },
   { key: "metadata", description: "Show the model, token counts and timing under replies." },
-  { key: "compaction", description: "Show a notice while the conversation is being compacted." },
+  { key: "compaction", description: "Show a notice while the thread is being compacted." },
 ];
 
 const NOTIFY_DESCRIPTION = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, heartbeat messages and errors.";
@@ -25,7 +25,7 @@ const NOTIFY_NOTES: Partial<Record<NotifyPermission, string>> = {
 };
 const NOTIFY_UNDECIDED = "The browser hasn’t allowed desktop notifications for this site yet, so only the tab title count is shown. Turn this off and on again to be asked.";
 
-export function AppearancePage(_: { state: WorkspaceSnapshot }) {
+export function AppearancePage(_: { state: ChromeSnapshot }) {
   const theme = useTheme();
   const fontSize = useFontSize();
   const values = useDisplay();
@@ -50,7 +50,7 @@ export function AppearancePage(_: { state: WorkspaceSnapshot }) {
       </div>
       {fontSizes.error === "" ? null : <p className="form-error" role="alert">{fontSizes.error}</p>}
     </SettingsSection>
-    <SettingsSection title="Conversation display" description="Saved in this browser.">
+    <SettingsSection title="Thread display" description="Saved in this browser.">
       <div className="rows">
         <SettingRow label="Stream replies" description="Show replies as they’re written instead of all at once.">
           <Switch label="Stream replies" checked={stream} change={setStream} />

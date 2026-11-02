@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WebArchiveInfo } from "../../protocol/WebArchiveInfo.ts";
 import type { WebArchiveList } from "../../protocol/WebArchiveList.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { validWebArchiveInfo, validWebArchiveList } from "../validators.generated.js";
 import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
@@ -28,7 +28,7 @@ async function archiveInfo(response: Response): Promise<WebArchiveInfo> {
 }
 
 
-function PathTools({ state }: { state: WorkspaceSnapshot }) {
+function PathTools({ state }: { state: ChromeSnapshot }) {
   const [character, setCharacter] = useState(state.character ?? "");
   const [output, setOutput] = useState("");
   const [archive, setArchive] = useState("");
@@ -53,7 +53,7 @@ function PathTools({ state }: { state: WorkspaceSnapshot }) {
   </div>;
 }
 
-export function ArchivesPage({ state }: { state: WorkspaceSnapshot }) {
+export function ArchivesPage({ state }: { state: ChromeSnapshot }) {
   const [listing, setListing] = useState<WebArchiveList>();
   const [selected, setSelected] = useState(state.character ?? "");
   const [confirm, setConfirm] = useState<WebArchiveInfo>();
@@ -96,7 +96,7 @@ export function ArchivesPage({ state }: { state: WorkspaceSnapshot }) {
     return `Downloaded ${archive.filename}`;
   });
   return <>
-    <p className="settings-description">Move a character between Shore installations. An archive holds the character’s configuration, workspace, conversations, media, usage and diagnostics.</p>
+    <p className="settings-description">Move a character between Shore installations. An archive holds the character’s configuration, workspace, threads, media, usage and diagnostics.</p>
     <SettingsSection title="From this computer" description={listing === undefined ? undefined : `Up to ${mib(listing.max_upload_bytes)} per archive.`}>
       <div className="rows padded">
         <div className="inline-form wrap">

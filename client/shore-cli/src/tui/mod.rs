@@ -1006,9 +1006,21 @@ fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
                 last_active: listing_text(row, "last_active"),
                 by_character: listing_text(row, "created_by").as_deref() == Some("character"),
                 locked: listing_flag(row, "locked"),
+                folder: listing_text(row, "folder"),
+                position: row.get("position").and_then(serde_json::Value::as_u64),
             })
         })
         .collect();
+    app.thread_folders = data
+        .get("folders")
+        .and_then(serde_json::Value::as_array)
+        .map(|folders| {
+            folders
+                .iter()
+                .filter_map(|folder| listing_text(folder, "name"))
+                .collect()
+        })
+        .unwrap_or_default();
     let character = data
         .get("character")
         .and_then(serde_json::Value::as_str)
@@ -2930,8 +2942,20 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         follow_up.push(switch_thread_command(&name));
                     }
                 }
-                "archive_thread" | "thread_home" | "thread_label" | "thread_purpose"
-                | "thread_files" | "thread_lock" => {
+                "archive_thread"
+                | "thread_home"
+                | "thread_label"
+                | "thread_purpose"
+                | "thread_files"
+                | "thread_lock"
+                | "thread_compaction"
+                | "thread_move"
+                | "thread_sort"
+                | "thread_folder_create"
+                | "thread_folder_rename"
+                | "thread_folder_delete"
+                | "thread_folder_move"
+                | "thread_folder_sort" => {
                     absorb_thread_listing(app, &co.data);
                 }
                 "start_sign_in" => {

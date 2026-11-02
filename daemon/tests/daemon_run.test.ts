@@ -297,12 +297,18 @@ describe("archiving a conversation", () => {
       await runCommand(client, "create_thread", { name: "side" });
       await runCommand(client, "switch_thread", { name: "side" });
       await finishTurn(client, "over here");
-      expect(keepalive.warmThread("ada")).toBe("side");
+      await until(() => keepalive.warmThread("ada") === "side", "the side thread to get the cache slot");
       expect(keepalive.nextPingAt("ada")).toBeDefined();
 
       await runCommand(client, "archive_thread", { name: "side" });
-      expect(keepalive.warmThread("ada")).toBe("main");
+      await until(() => keepalive.warmThread("ada") === "main", "home to get the cache slot back");
       expect(keepalive.nextPingAt("ada")).toBeUndefined();
+
+      await runCommand(client, "create_thread", { name: "brief" });
+      await runCommand(client, "switch_thread", { name: "brief" });
+      await runCommand(client, "archive_thread", { name: "brief" });
+      await Bun.sleep(400);
+      await until(() => keepalive.warmThread("ada") === "main", "home to keep the slot after a thread archived before its rebuild ran");
     } finally {
       client.close();
     }

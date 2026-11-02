@@ -19,3 +19,27 @@ export const EFFORT_MENU_EVENT = "shore:effort-menu";
 export function openEffortMenu(): void {
   dispatchEvent(new CustomEvent(EFFORT_MENU_EVENT));
 }
+
+export const THREAD_DIALOG_EVENT = "shore:thread-dialog";
+
+export type ThreadDialogKind = "settings" | "fork" | "archive" | "move";
+
+export interface ThreadDialogRequest { kind: ThreadDialogKind; thread: string }
+
+export function openThreadDialog(kind: ThreadDialogKind, thread: string): void {
+  dispatchEvent(new CustomEvent<ThreadDialogRequest>(THREAD_DIALOG_EVENT, { detail: { kind, thread } }));
+}
+
+export const FOLDER_DIALOG_EVENT = "shore:folder-dialog";
+
+export type FolderDialogRequest = { kind: "new" } | { kind: "rename" | "delete"; folder: string };
+
+export function openFolderDialog(request: FolderDialogRequest): void {
+  dispatchEvent(new CustomEvent<FolderDialogRequest>(FOLDER_DIALOG_EVENT, { detail: request }));
+}
+
+export const COMPACTION_VIEW_EVENT = "shore:compaction-view";
+
+export function openCompactionView(): void {
+  dispatchEvent(new CustomEvent(COMPACTION_VIEW_EVENT));
+}

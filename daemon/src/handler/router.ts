@@ -128,6 +128,7 @@ export interface MessageHandlerDeps {
   readonly runGeneration: RunGeneration;
   readonly now?: () => number;
   readonly commandChangesState?: (cmd: Command) => boolean;
+  readonly commandOnlyReads?: (cmd: Command) => boolean;
   readonly compactions?: {
     observe(listener: (character: string, thread: string, frame: ServerMessage) => void): () => void;
     running(character: string): { thread: string; frame: ServerMessage } | undefined;
@@ -140,7 +141,15 @@ export interface MessageHandlerDeps {
 
 export { sanitiseRid } from "../swp/admission.ts";
 
-const UNQUEUED_COMMANDS: ReadonlySet<string> = new Set(["compact", "compact_watch"]);
+const UNQUEUED_COMMANDS: ReadonlySet<string> = new Set(["compact", "compact_watch", "compact_cancel"]);
+
+const SLOW_INDEPENDENT_COMMANDS: ReadonlySet<string> = new Set([
+  "refresh_provider_models",
+  "refresh_all_provider_models",
+  "test_credential",
+  "keepalive_ping_now",
+  "run_tool",
+]);
 
 const REPLAYED: ReadonlySet<string> = new Set([
   "stream_start",
@@ -177,6 +186,7 @@ interface ActiveCommand {
   readonly sessionId: number;
   readonly scope: string;
   readonly changesState: boolean;
+  readonly outlivesStop: boolean;
 }
 
 function recordReplay(generation: ActiveGeneration, msg: ServerMessage): void {
@@ -255,7 +265,7 @@ export class MessageHandler {
 
     const sessionId = routed.meta.session.sessionId;
     const command = routed.kind === "command" ? this.#registerCommand(routed.cmd, routed.meta) : undefined;
-    const tail = this.#queues.get(sessionId) ?? Promise.resolve();
+    const tail = routed.kind === "command" && this.#overtakes(routed.cmd, routed.meta) ? Promise.resolve() : this.#queues.get(sessionId) ?? Promise.resolve();
     const settled = this.#guard(
       tail.then(async () => {
         if (routed.kind === "command") { await this.#runCommand(routed.cmd, routed.meta, command); return; }
@@ -264,11 +274,17 @@ export class MessageHandler {
     );
 
     this.#track(settled);
-    if (routed.kind === "command" && UNQUEUED_COMMANDS.has(routed.cmd.name)) return;
+    if (routed.kind === "command" && this.#overtakes(routed.cmd, routed.meta)) return;
     this.#queues.set(sessionId, settled);
     void settled.then(() => {
       if (this.#queues.get(sessionId) === settled) this.#queues.delete(sessionId);
     });
+  }
+
+  #overtakes(cmd: Command, meta: RequestMeta): boolean {
+    if (UNQUEUED_COMMANDS.has(cmd.name)) return true;
+    if (!meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY)) return false;
+    return SLOW_INDEPENDENT_COMMANDS.has(cmd.name) || this.#deps.commandOnlyReads?.(cmd) === true;
   }
 
   async handleRouted(routed: RoutedMessage): Promise<void> {
@@ -335,6 +351,7 @@ export class MessageHandler {
       sessionId: meta.session.sessionId,
       scope: this.#scope(meta.session.selectedCharacter, meta.session.selectedThread),
       changesState: this.#deps.commandChangesState?.(cmd) ?? true,
+      outlivesStop: UNQUEUED_COMMANDS.has(cmd.name) && meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY),
     };
     this.#commands.add(command);
     return command;
@@ -353,7 +370,7 @@ export class MessageHandler {
       if (result.type === "error") { outcome = "failed"; failure = result; }
       this.#deps.router.reportRequest(sessionId, result);
       await this.#deps.router.sendToSession(sessionId, result);
-      if (!UNQUEUED_COMMANDS.has(cmd.name) && this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);
+      if (!this.#overtakes(cmd, meta) && this.#deps.router.has(sessionId) && this.#sessionScope(sessionId) !== before) this.#join(sessionId);
     } catch (error) {
       outcome = controller.signal.aborted ? "cancelled" : "failed";
       failure = { code: "internal_error", message: describeError(error) };
@@ -407,8 +424,8 @@ export class MessageHandler {
   async #cancel(sessionId: number, rid: string | null): Promise<void> {
     const scope = this.#sessionScope(sessionId);
     this.#abortCommands(
-      (command) => command.sessionId === sessionId ||
-        (command.changesState && command.scope === scope && !this.#deps.router.has(command.sessionId)),
+      (command) => (command.sessionId === sessionId && !command.outlivesStop) ||
+        (command.changesState && !command.outlivesStop && command.scope === scope && !this.#deps.router.has(command.sessionId)),
       "User requested cancellation",
     );
     await this.cancelGeneration(sessionId, rid, "user cancelled");

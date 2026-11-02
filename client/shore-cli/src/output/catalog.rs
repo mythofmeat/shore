@@ -770,6 +770,10 @@ fn thread_facts(row: &Value) -> String {
     if flag(row, "heartbeat") {
         parts.push("heartbeats".to_owned());
     }
+    let folder = text(row, "folder");
+    if !folder.is_empty() {
+        parts.push(format!("in {folder}"));
+    }
     if let Some(unread) = row
         .get("unread")
         .and_then(Value::as_u64)
@@ -875,6 +879,23 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
     blank(out);
     if let Some(forked) = fork_note(data) {
         note(out, &forked);
+    }
+    let empty_folders: Vec<&str> = rows_of(data, "folders")
+        .iter()
+        .map(|folder| text(folder, "name"))
+        .filter(|name| !threads.iter().any(|thread| text(thread, "folder") == *name))
+        .collect();
+    if !empty_folders.is_empty() {
+        note(out, &format!("empty folders: {}", empty_folders.join(", ")));
+    }
+    if let Some(compaction) = data.get("compaction") {
+        note(
+            out,
+            &format!(
+                "{} is compacting; `shore compact --watch` follows it",
+                text(compaction, "thread")
+            ),
+        );
     }
     note(
         out,

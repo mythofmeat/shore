@@ -1,5 +1,6 @@
 import { withConversation } from "./lifecycle.ts";
-import { threadFile, readDurable, writeDurable, deleteThreadState } from "../storage/files.ts";
+import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark, durablePrefixUnchanged } from "../storage/files.ts";
+import type { StateMark } from "../storage/store.ts";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,7 +26,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -72,11 +73,19 @@ export interface ThreadRecord {
   forked_from?: ThreadForkOrigin;
 }
 
+export interface ThreadFolder {
+  name: string;
+  threads: string[];
+  by_activity?: true;
+}
+
 export interface ThreadsIndex {
   version: 1;
   home: string;
   heartbeat?: string;
   threads: ThreadRecord[];
+  order?: string[];
+  folders?: ThreadFolder[];
 }
 
 const HEARTBEAT_THREAD = "heartbeat";
@@ -179,22 +188,31 @@ interface ActiveScan {
   latest: number;
   latestUser: number;
   replies: { at: number; time: number }[];
+  heartbeatTurn: boolean;
+  seen: number;
 }
 
-function scanActive(lines: readonly unknown[]): ActiveScan {
-  const scan: ActiveScan = { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [] };
-  let heartbeatTurn = false;
-  for (const [at, line] of lines.entries()) {
+function emptyScan(): ActiveScan {
+  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], heartbeatTurn: false, seen: 0 };
+}
+
+function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
+  for (const line of lines) {
+    const at = scan.seen++;
     const time = messageTime(line);
     if (isUserTurnLine(line)) {
       scan.turns += 1;
-      heartbeatTurn = isHeartbeatOpener(line as Message);
-      if (time > scan.latestUser && !heartbeatTurn) scan.latestUser = time;
+      scan.heartbeatTurn = isHeartbeatOpener(line as Message);
+      if (time > scan.latestUser && !scan.heartbeatTurn) scan.latestUser = time;
     }
-    if (isReplyLine(line) && !heartbeatTurn) scan.replies.push({ at, time });
+    if (isReplyLine(line) && !scan.heartbeatTurn) scan.replies.push({ at, time });
     if (time > scan.latest) scan.latest = time;
   }
   return scan;
+}
+
+function scanActive(lines: readonly unknown[]): ActiveScan {
+  return scanInto(emptyScan(), lines);
 }
 
 function unreadReplies(scan: ActiveScan, mark: number | undefined): number[] {
@@ -207,15 +225,9 @@ export function firstUnreadReply(data: string, character: string, id: string, me
   return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0];
 }
 
-function activeLines(data: string, character: string, id: string): unknown[] {
-  let raw: string;
-  try {
-    raw = readDurable(threadFile(data, character, id, "active.jsonl"));
-  } catch {
-    raw = "";
-  }
+function parsedLines(raw: readonly string[]): unknown[] {
   const lines: unknown[] = [];
-  for (const line of raw.split("\n")) {
+  for (const line of raw) {
     if (line.trim() === "") continue;
     try {
       lines.push(JSON.parse(line));
@@ -226,8 +238,37 @@ function activeLines(data: string, character: string, id: string): unknown[] {
   return lines;
 }
 
+interface RememberedScan {
+  mark: StateMark;
+  scan: ActiveScan;
+}
+
+const rememberedScans = new Map<string, RememberedScan>();
+
+function sameMark(a: StateMark, b: StateMark): boolean {
+  return a.stored === b.stored && a.lines === b.lines && a.last === b.last && a.bytes === b.bytes;
+}
+
+function currentScan(data: string, character: string, id: string): RememberedScan {
+  const file = threadFile(data, character, id, "active.jsonl");
+  const key = JSON.stringify([data, character, id]);
+  const mark = durableMark(file);
+  if (mark === undefined) {
+    rememberedScans.delete(key);
+    return { mark: { stored: 0, lines: 0, last: -1, bytes: 0 }, scan: emptyScan() };
+  }
+  const known = rememberedScans.get(key);
+  if (known !== undefined && sameMark(known.mark, mark)) return known;
+  const scan = known !== undefined && known.mark.stored === mark.stored && known.mark.lines > 0 && durablePrefixUnchanged(file, known.mark)
+    ? scanInto(known.scan, parsedLines(durableLinesAfter(file, known.mark.last)))
+    : scanActive(parsedLines(readDurable(file).split("\n")));
+  const remembered: RememberedScan = { mark, scan };
+  rememberedScans.set(key, remembered);
+  return remembered;
+}
+
 export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
-  const scan = scanActive(activeLines(data, character, id));
+  const { scan } = currentScan(data, character, id);
   const lastUser = scan.latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : scan.latestUser;
   return {
     turns: scan.turns,
@@ -546,6 +587,23 @@ export async function setThreadLocked(
   return await setThreadField(data, character, id, "locked", locked ? true : undefined, now);
 }
 
+export async function setThreadCompaction(
+  data: string,
+  character: string,
+  id: string,
+  compaction: boolean,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const record = requireThread(index, character, id);
+  if (compaction && id === heartbeatThread(index)) {
+    throw new ThreadError("is_heartbeat", `thread ${JSON.stringify(id)} is where ${character}'s heartbeats run, and a heartbeat thread never compacts`);
+  }
+  const next = replaceThread(index, { ...record, compaction });
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
 export interface ThreadEdit {
   label?: string | null;
   purpose?: string | null;
@@ -594,6 +652,12 @@ export async function threadChatModel(
   const index = await readThreadsIndex(data, character);
   if (index === undefined) return undefined;
   return threadRecord(index, thread ?? homeThread(index))?.chat_model;
+}
+
+function withoutThread(index: ThreadsIndex, id: string): ThreadsIndex {
+  const folders = index.folders?.map((folder) => ({ ...folder, threads: folder.threads.filter((other) => other !== id) }));
+  const order = index.order?.filter((other) => other !== id);
+  return { ...index, ...(folders === undefined ? {} : { folders }), ...(order === undefined ? {} : { order }) };
 }
 
 export interface ArchiveThreadOptions {
@@ -645,7 +709,7 @@ export async function archiveThread(
     await rm(dir, { recursive: true, force: true });
     deleteThreadState(data, character, id);
     forgetThreadSessions(data, character, id);
-    const { heartbeat, ...rest } = index;
+    const { heartbeat, ...rest } = withoutThread(index, id);
     const next: ThreadsIndex = {
       ...rest,
       ...(heartbeat === undefined || heartbeat === id ? {} : { heartbeat }),

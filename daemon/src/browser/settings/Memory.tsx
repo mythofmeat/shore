@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { SegmentSummary } from "../../protocol/SegmentSummary.ts";
 import type { SegmentInspection } from "../../protocol/SegmentInspection.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Markdown } from "../markdown.tsx";
 import { Spinner } from "../ui/controls.tsx";
 import { perform, workspace } from "../app/state.ts";
@@ -46,7 +46,7 @@ function Segment({ segment, changed }: { segment: SegmentSummary; changed: () =>
     </div>
     <div className="actions-row tight">
       <button type="button" className="button" aria-expanded={open} onClick={show}>{open ? "Hide" : "View"}</button>
-      <button type="button" className="button ghost" onClick={() => perform(async () => { await workspace.openSegment(segment.index); navigate({ view: "chat" }); })}>Open in conversation</button>
+      <button type="button" className="button ghost" onClick={() => perform(async () => { await workspace.openSegment(segment.index); navigate({ view: "chat" }); })}>Open in chat</button>
       <button type="button" className="button ghost" disabled={busy} onClick={() => act(segment.excluded ? "include" : "exclude")}>{segment.excluded ? "Include in memory" : "Exclude from memory"}</button>
       <TextEdit label="Label" value={segment.label} busy={busy} save={(value) => act("label", value)} />
       <TextEdit label="Note" value={segment.note} busy={busy} save={(value) => act("note", value)} />
@@ -58,15 +58,15 @@ function Segment({ segment, changed }: { segment: SegmentSummary; changed: () =>
   </div>;
 }
 
-export function MemoryPage({ state }: { state: WorkspaceSnapshot }) {
+export function MemoryPage({ state }: { state: ChromeSnapshot }) {
   const listing = useOperation(state, "segments", {}, [state.thread], state.character !== null);
   if (state.character === null) return <NeedsCharacter />;
   const data = listing.data !== undefined && "segments" in listing.data ? listing.data : undefined;
   return <>
-    <p className="settings-description">When a conversation is compacted or cleared, the older messages become a segment. Excluded segments stay stored but aren’t used for memory.</p>
+    <p className="settings-description">When a thread is compacted or cleared, the older messages become a segment. Excluded segments stay stored but aren’t used for memory.</p>
     <SettingsSection title={`Segments in ${state.character} / ${state.thread ?? "main"}`}>
       <Loading error={listing.error} ready={data !== undefined}>
-        {data?.segments.length === 0 ? <p className="settings-empty">No segments yet. They appear after the conversation is compacted or cleared.</p> : null}
+        {data?.segments.length === 0 ? <p className="settings-empty">No segments yet. They appear after the thread is compacted or cleared.</p> : null}
         <div className="segment-list">{data?.segments.map((segment) => <Segment key={segment.index} segment={segment} changed={listing.refresh} />)}</div>
       </Loading>
     </SettingsSection>

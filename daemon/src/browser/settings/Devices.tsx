@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { WebLoginCode } from "../../protocol/WebLoginCode.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { copyText } from "../clipboard.ts";
 import { deviceOrigin, loginLink, loopbackOrigin } from "../login_link.ts";
 import { useStoredText } from "../ui/hooks.ts";
@@ -17,7 +17,7 @@ function countdown(ms: number): string {
   return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function DevicesPage(_: { state: WorkspaceSnapshot }) {
+export function DevicesPage(_: { state: ChromeSnapshot }) {
   const [address, setAddress] = useStoredText(ADDRESS_KEY, () => loopbackOrigin(location.origin) ? "" : location.origin);
   const [code, setCode] = useState<WebLoginCode>();
   const [now, setNow] = useState(() => Date.now());

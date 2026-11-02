@@ -3139,6 +3139,787 @@
       ]
     },
     {
+      "path": "shore thread compaction",
+      "about": "Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Thread id",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "mode",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "`on` compacts into memory, as the home thread does; `off` trims into the archive",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [
+            "on",
+            "off"
+          ],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread move",
+      "about": "Move a thread to another place in the list, or into or out of a folder. The home and heartbeat threads stay at the top",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Thread id",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "folder",
+          "short": null,
+          "long": "folder",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder to put it in",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [
+            "no_folder"
+          ],
+          "env": null
+        },
+        {
+          "id": "no_folder",
+          "short": null,
+          "long": "no-folder",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Take it out of its folder",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "before",
+          "short": null,
+          "long": "before",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Thread to place it above; omit for the end of the list",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread sort",
+      "about": "Choose how threads outside folders are listed: by last activity, or in the order you put them",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "mode",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": null,
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [
+            "activity",
+            "manual"
+          ],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder",
+      "about": "Named groups of threads",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": true,
+      "arguments": [
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder new",
+      "about": "Make a folder. It starts empty, at the end of the list",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder rename",
+      "about": "Rename a folder",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "to",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "New name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder delete",
+      "about": "Delete a folder. Its threads go back to the list outside folders; none is archived",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder move",
+      "about": "Move a folder to another place among the folders",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "before",
+          "short": null,
+          "long": "before",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder to place it above; omit for the end",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore thread folder sort",
+      "about": "Choose how a folder lists its threads: by last activity, or in the order you put them",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Folder name",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "mode",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": null,
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [
+            "activity",
+            "manual"
+          ],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore thread model",
       "about": "Pin a thread to its own chat model, or clear the pin to inherit the character's",
       "long_about": null,
@@ -8714,6 +9495,146 @@
         "args": {
           "name": "work",
           "label": null
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "compaction",
+        "work",
+        "on"
+      ],
+      "mapping": {
+        "name": "thread_compaction",
+        "args": {
+          "name": "work",
+          "compaction": true
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "move",
+        "work",
+        "--folder",
+        "Stories",
+        "--before",
+        "other"
+      ],
+      "mapping": {
+        "name": "thread_move",
+        "args": {
+          "name": "work",
+          "folder": "Stories",
+          "before": "other"
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "move",
+        "work",
+        "--no-folder"
+      ],
+      "mapping": {
+        "name": "thread_move",
+        "args": {
+          "name": "work",
+          "folder": "",
+          "before": null
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "sort",
+        "activity"
+      ],
+      "mapping": {
+        "name": "thread_sort",
+        "args": {
+          "by_activity": true
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "folder",
+        "new",
+        "Stories"
+      ],
+      "mapping": {
+        "name": "thread_folder_create",
+        "args": {
+          "name": "Stories"
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "folder",
+        "rename",
+        "Stories",
+        "Tales"
+      ],
+      "mapping": {
+        "name": "thread_folder_rename",
+        "args": {
+          "name": "Stories",
+          "to": "Tales"
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "folder",
+        "delete",
+        "Stories"
+      ],
+      "mapping": {
+        "name": "thread_folder_delete",
+        "args": {
+          "name": "Stories"
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "folder",
+        "move",
+        "Stories",
+        "--before",
+        "Other"
+      ],
+      "mapping": {
+        "name": "thread_folder_move",
+        "args": {
+          "name": "Stories",
+          "before": "Other"
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "folder",
+        "sort",
+        "Stories",
+        "activity"
+      ],
+      "mapping": {
+        "name": "thread_folder_sort",
+        "args": {
+          "name": "Stories",
+          "by_activity": true
         }
       }
     },

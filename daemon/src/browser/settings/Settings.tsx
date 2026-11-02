@@ -1,4 +1,4 @@
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { useMediaQuery } from "../ui/hooks.ts";
@@ -9,7 +9,7 @@ import { SETTINGS_PAGE_VIEWS } from "./pages.tsx";
 
 const GROUPS = ["Chat", "Daemon", "Advanced"] as const;
 
-export function Settings({ state, page, sidebarOpen, toggleSidebar }: { state: WorkspaceSnapshot; page: SettingsPage; sidebarOpen: boolean; toggleSidebar: () => void }) {
+export function Settings({ state, page, sidebarOpen, toggleSidebar }: { state: ChromeSnapshot; page: SettingsPage; sidebarOpen: boolean; toggleSidebar: () => void }) {
   const narrow = useMediaQuery("(max-width: 700px)");
   const View = SETTINGS_PAGE_VIEWS[page];
   const label = SETTINGS_PAGES.find((item) => item.id === page)?.label ?? "Settings";
