@@ -95,7 +95,14 @@ export function embedsIn(text: string): Embed[] {
   return found;
 }
 
+const VIDEO_FILE = /\.(?:mp4|webm)$/i;
+
+export function isVideoFile(path: string): boolean {
+  return VIDEO_FILE.test(path);
+}
+
 export interface Sent {
+  path?: string | null | undefined;
   embed?: string | null | undefined;
   name?: string | null | undefined;
   problem?: string | null | undefined;
@@ -124,8 +131,8 @@ export function pictureText(text: string, images: readonly Sent[]): string {
     const image = sentFor(sent, embed);
     if (image === undefined || embed.at < cursor) continue;
     result += text.slice(cursor, embed.at) + (typeof image.name === "string" && (image.problem === undefined || image.problem === null)
-      ? `[picture: ${image.name}]`
-      : `[picture not sent: ${embedName(embed)}]`);
+      ? `[${isVideoFile(image.path ?? "") ? "video" : "picture"}: ${image.name}]`
+      : `[${isVideoFile(embedName(embed)) ? "video" : "picture"} not sent: ${embedName(embed)}]`);
     cursor = embed.at + embed.source.length;
   }
   return result + text.slice(cursor);

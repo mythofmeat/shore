@@ -556,4 +556,17 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
   expect((await picture(basename(kept), { cookie, "sec-fetch-site": "cross-site" })).status).toBe(403);
   expect((await picture(`${"b".repeat(64)}.png`)).status).toBe(404);
   expect((await picture("..%2F..%2Fshore.db")).status).toBe(404);
+
+  const video = `${"c".repeat(64)}.mp4`;
+  await writeFile(join(sentPicturesDir(data, "qifei"), video), "0123456789");
+  const whole = await picture(video);
+  expect(whole.status).toBe(200);
+  expect(whole.headers.get("content-type")).toBe("video/mp4");
+  expect(whole.headers.get("content-security-policy")).toContain("media-src 'self'");
+  const probe = await picture(video, { cookie, range: "bytes=0-1" });
+  expect(probe.status).toBe(206);
+  expect(probe.headers.get("content-range")).toBe("bytes 0-1/10");
+  expect(probe.headers.get("content-type")).toBe("video/mp4");
+  expect(await probe.text()).toBe("01");
+  expect((await picture(video, { range: "bytes=0-1" })).status).toBe(401);
 });

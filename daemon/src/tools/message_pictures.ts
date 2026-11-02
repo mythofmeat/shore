@@ -3,7 +3,9 @@ import { relative, resolve, sep } from "node:path";
 import { MAX_LISTED_MEDIA_NOTES } from "./media.ts";
 import { openRegularFile } from "./file_access.ts";
 import { imageMime, MAX_READ_IMAGE_BYTES } from "./read_image.ts";
-import { embeddedPicture, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
+import { MEDIA_HEADER_BYTES, videoMime } from "./video.ts";
+import { embeddedPicture, PICTURES_AND_VIDEOS, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
+import { MAX_SENT_VIDEO_BYTES } from "../storage/sent_pictures.ts";
 
 export interface PictureTarget {
   target: string;
@@ -11,6 +13,8 @@ export interface PictureTarget {
 }
 
 export type PictureLookup = { path: string } | { problem: string } | null;
+
+export const CANNOT_BE_SENT = "it is not a PNG, JPEG, GIF or WebP picture, or an MP4 or WebM video";
 
 function inside(root: string, path: string): boolean {
   const rel = relative(root, path);
@@ -30,10 +34,13 @@ async function checked(path: string): Promise<{ path: string }> {
   const file = await openRegularFile(path);
   try {
     const size = (await file.stat()).size;
-    if (size > MAX_READ_IMAGE_BYTES) throw new Error(`it is ${String(size)} bytes, over the ${String(MAX_READ_IMAGE_BYTES)}-byte limit for pictures`);
-    const header = Buffer.alloc(12);
+    const header = Buffer.alloc(MEDIA_HEADER_BYTES);
     const head = await file.read(header, 0, header.length, 0);
-    if (imageMime(header.subarray(0, head.bytesRead)) === undefined) throw new Error("it is not a PNG, JPEG, GIF or WebP picture");
+    const sniffed = header.subarray(0, head.bytesRead);
+    const video = videoMime(sniffed) !== undefined;
+    const limit = video ? MAX_SENT_VIDEO_BYTES : MAX_READ_IMAGE_BYTES;
+    if (size > limit) throw new Error(`it is ${String(size)} bytes, over the ${String(limit)}-byte limit for ${video ? "videos" : "pictures"}`);
+    if (!video && imageMime(sniffed) === undefined) throw new Error(CANNOT_BE_SENT);
     return { path };
   } finally {
     await file.close();
@@ -58,7 +65,7 @@ export async function lookUpPictures(
         results.push(await checked(real));
         continue;
       }
-      const path = await embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES);
+      const path = await embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES, PICTURES_AND_VIDEOS);
       results.push(path === undefined ? null : await checked(path));
     } catch (error) {
       signal?.throwIfAborted();

@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Wrap};
 use shore_common::duration::format_duration_ms;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
-use shore_common::protocol::types::Role;
+use shore_common::protocol::types::{Role, is_video_file};
 
 use crate::tui::app::{
     AltChoice, App, Block as TurnBlock, CompactionRun, ConversationEntry, InputMode, PaletteMode,
@@ -1264,7 +1264,11 @@ fn with_picture_names<'blocks>(
             Some((
                 embed,
                 match (&image.problem, &image.name) {
+                    (None, Some(name)) if image.is_video() => format!("[video: {name}]"),
                     (None, Some(name)) => format!("[picture: {name}]"),
+                    _ if is_video_file(embed_name(embed)) => {
+                        format!("[video not sent: {}]", embed_name(embed))
+                    }
                     _ => format!("[picture not sent: {}]", embed_name(embed)),
                 },
             ))
@@ -1333,8 +1337,9 @@ fn render_images(
             continue;
         }
 
+        let kind = if img.is_video() { "video" } else { "image" };
         lines.push(Line::from(Span::styled(
-            format!("  [image: {display}]"),
+            format!("  [{kind}: {display}]"),
             Style::default().fg(Color::Magenta),
         )));
     }
@@ -2662,6 +2667,54 @@ pub(crate) mod scenario_tests {
                 self.app.scroll_to_bottom();
             }
         }
+    }
+
+    #[test]
+    fn a_sent_video_is_named_as_a_video_inline_and_below_the_message() {
+        use shore_common::protocol::types::ImageRef;
+        let video = ImageRef {
+            path: "/data/media/ada/sent/abc.mp4".into(),
+            embed: Some("![[clip]]".into()),
+            name: Some("clip.bin".into()),
+            ..ImageRef::default()
+        };
+        let images = vec![
+            video.clone(),
+            ImageRef {
+                embed: Some("![[too-big.webm]]".into()),
+                problem: Some("over the limit".into()),
+                ..ImageRef::default()
+            },
+            ImageRef {
+                path: "/data/media/ada/sent/abc.png".into(),
+                embed: Some("![[lamp]]".into()),
+                name: Some("lamp.png".into()),
+                ..ImageRef::default()
+            },
+        ];
+        let blocks = vec![TurnBlock::Text(
+            "![[clip]] ![[too-big.webm]] ![[lamp]]".into(),
+        )];
+        let named = with_picture_names(&blocks, &images);
+        let Some(TurnBlock::Text(text)) = named.first() else {
+            panic!("the text block stays text");
+        };
+        assert_eq!(
+            text,
+            "[video: clip.bin] [video not sent: too-big.webm] [picture: lamp.png]"
+        );
+
+        let mut lines = Vec::new();
+        let cache = images::ImageCache::new();
+        render_images(
+            &mut lines,
+            std::slice::from_ref(&video),
+            &cache,
+            true,
+            &mut Vec::new(),
+        );
+        let shown: String = lines.iter().map(ToString::to_string).collect();
+        assert!(shown.contains("[video: clip.bin]"), "{shown}");
     }
 
     #[test]

@@ -2,11 +2,12 @@ import { basename, extname } from "node:path";
 
 import { embedsIn, type Embed } from "../engine/embeds.ts";
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
-import { keepSentPicture, shownPicturePath } from "../storage/sent_pictures.ts";
+import { isSentVideo, keepSentPicture, keepSentVideo, shownPicturePath } from "../storage/sent_pictures.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
-import type { PictureLookup } from "../tools/message_pictures.ts";
+import { CANNOT_BE_SENT, type PictureLookup } from "../tools/message_pictures.ts";
 import type { NotificationPicture } from "../notifications.ts";
 import { imageMime } from "../tools/read_image.ts";
+import { videoMime } from "../tools/video.ts";
 
 export const MAX_SENT_PICTURES = 10;
 
@@ -44,14 +45,30 @@ function unsent(embed: Embed, problem: string): ImageRef {
   return { path: "", embed: embed.source, problem };
 }
 
+async function firstFrame(path: string, sender: PictureSender, signal?: AbortSignal): Promise<Buffer | undefined> {
+  try {
+    const frame = await sender.workspace.call("firstFrame", { path }, signal);
+    return frame === null ? undefined : Buffer.from(frame, "base64");
+  } catch {
+    signal?.throwIfAborted();
+    return undefined;
+  }
+}
+
+async function keepBytes(path: string, bytes: Buffer, sender: PictureSender, signal?: AbortSignal): Promise<string> {
+  const video = videoMime(bytes);
+  if (video !== undefined) return await keepSentVideo(sender.dir, bytes, video, async () => await firstFrame(path, sender, signal));
+  const mime = imageMime(bytes.subarray(0, 12));
+  if (mime === undefined) throw new Error(CANNOT_BE_SENT);
+  return await keepSentPicture(sender.dir, bytes, mime);
+}
+
 async function keep(embed: Embed, path: string, sender: PictureSender, signal?: AbortSignal): Promise<ImageRef> {
   const [read] = await sender.workspace.call("readFiles", { paths: [path] }, signal);
   if (read === undefined || "error" in read) throw new Error(read?.error.message ?? "it could not be read");
   const bytes = Buffer.from(read.data, "base64");
-  const mime = imageMime(bytes.subarray(0, 12));
-  if (mime === undefined) throw new Error("it is not a PNG, JPEG, GIF or WebP picture");
   return {
-    path: await keepSentPicture(sender.dir, bytes, mime),
+    path: await keepBytes(path, bytes, sender, signal),
     embed: embed.source,
     name: basename(path),
     ...(embed.label === undefined ? {} : { caption: embed.label }),
@@ -99,9 +116,12 @@ export function isSent(image: ImageRef): boolean {
 }
 
 export function firstSentPicture(images: readonly ImageRef[]): NotificationPicture | undefined {
-  const first = images.find(isSent);
-  if (first === undefined) return undefined;
-  const path = shownPicturePath(first.path);
-  const name = first.name ?? basename(path);
-  return { path, name: `${name.replace(/\.[^.]*$/, "")}${extname(path)}` };
+  for (const image of images) {
+    if (!isSent(image)) continue;
+    const path = shownPicturePath(image.path);
+    if (isSentVideo(path)) continue;
+    const name = image.name ?? basename(path);
+    return { path, name: `${name.replace(/\.[^.]*$/, "")}${extname(path)}` };
+  }
+  return undefined;
 }

@@ -66,6 +66,10 @@ export function withTextChunk(png: Buffer, bytes: number): Buffer {
   return Buffer.concat([png.subarray(0, 33), text, png.subarray(33)]);
 }
 
+export function animatedPng(png: Buffer): Buffer {
+  return Buffer.concat([png.subarray(0, 33), chunk("acTL", Buffer.from([0, 0, 0, 2, 0, 0, 0, 0])), png.subarray(33)]);
+}
+
 export function rotatedJpeg(jpeg: Buffer): Buffer {
   const tiff = Buffer.from([
     0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01,

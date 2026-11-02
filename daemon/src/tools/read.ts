@@ -3,7 +3,8 @@ import { extname, join, relative, sep } from "node:path";
 import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES, toolMediaOf } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { filePath, openRegularFile } from "./file_access.ts";
-import { IMAGE_EXTENSIONS, imageMime, readImage } from "./read_image.ts";
+import { IMAGE_EXTENSIONS, imageMime, readImage, readVideoFrame } from "./read_image.ts";
+import { MEDIA_HEADER_BYTES, videoMime } from "./video.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { readFolder } from "./read_folder.ts";
 import { byteSize, MAX_THREAD_FILE_BYTES, MAX_THREAD_FILES_BYTES, threadFileText } from "./thread_file_text.ts";
@@ -164,14 +165,16 @@ export async function handleRead(
   }
   const file = await openRegularFile(path);
   try {
-    const header = Buffer.alloc(12);
+    const header = Buffer.alloc(MEDIA_HEADER_BYTES);
     const head = await file.read(header, 0, header.length, 0);
-    const mime = imageMime(header.subarray(0, head.bytesRead));
+    const sniffed = header.subarray(0, head.bytesRead);
+    const video = videoMime(sniffed);
+    const mime = imageMime(sniffed) ?? video;
     if (mime !== undefined || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) {
       if (mime === undefined) throw new ToolIoError(`${path}: invalid or unsupported image data`);
       if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs("offset and limit apply only to text files");
       if (original && !images.read.allow_original) throw new InvalidArgs("original is turned off by images.read.allow_original; images are sent at the configured size");
-      const { description, image } = await readImage(file, path, mime, signal);
+      const { description, image } = await (video === undefined ? readImage : readVideoFrame)(file, path, mime, signal);
       return withNote(carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] }), note);
     }
     if (original) throw new InvalidArgs("original applies only to image files");

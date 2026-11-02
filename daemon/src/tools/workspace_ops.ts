@@ -8,6 +8,7 @@ import { InvalidArgs, NotImplemented, ToolIoError } from "./errors.ts";
 import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "./media.ts";
 import { handleRead, locateWorkspaceFiles } from "./read.ts";
 import { lookUpPictures, type PictureLookup, type PictureTarget } from "./message_pictures.ts";
+import { firstVideoFrame } from "./video.ts";
 import { indexTree, type IndexedEntry } from "./tree_index.ts";
 import { restoreWorkspaceEntry, workspaceEntry, type WorkspaceEntry } from "./workspace_snapshot.ts";
 
@@ -19,6 +20,7 @@ export interface WorkspaceOpTable {
   read: (args: { input: Record<string, unknown>; workspaceDir: string; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
   edit: (args: { input: Record<string, unknown>; workspaceDir: string }, signal?: AbortSignal) => Promise<string>;
   pictures: (args: { workspaceDir: string; targets: PictureTarget[] }, signal?: AbortSignal) => Promise<PictureLookup[]>;
+  firstFrame: (args: { path: string }, signal?: AbortSignal) => Promise<string | null>;
   locateFiles: (args: { workspaceDir: string; files: string[] }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
   readFiles: (args: { paths: string[] }) => Promise<FileRead[]>;
   exists: (args: { paths: string[] }) => Promise<boolean[]>;
@@ -65,6 +67,7 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
     encodeToolValue(await handleRead(input, workspaceDir, signal, maxChars, maxImageBytes, images)),
   edit: async ({ input, workspaceDir }, signal) => await handleEdit(input, workspaceDir, signal),
   pictures: async (args, signal) => await lookUpPictures(args, signal),
+  firstFrame: async ({ path }, signal) => (await firstVideoFrame(path, signal))?.toString("base64") ?? null,
   locateFiles: async ({ workspaceDir, files }, signal) => await locateWorkspaceFiles(files, workspaceDir, signal),
   readFiles: async ({ paths }) => await Promise.all(paths.map(async (path): Promise<FileRead> => {
     try {

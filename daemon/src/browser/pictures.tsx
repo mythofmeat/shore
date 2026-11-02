@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import type { ImageRef } from "../protocol/ImageRef.ts";
-import { embedName, embedsIn, sentFor, type Embed } from "../engine/embeds.ts";
+import { embedName, embedsIn, isVideoFile, sentFor, type Embed } from "../engine/embeds.ts";
 import { mediaSource, pictureUrl } from "./media.ts";
 import { Icon } from "./ui/icons.tsx";
 
@@ -28,7 +28,32 @@ export function unplacedPictures(images: readonly ImageRef[], texts: readonly st
   return images.filter((image) => isSentPicture(image) && !placed.has(image.embed ?? ""));
 }
 
+interface SoundControls {
+  muted: boolean;
+  play: () => Promise<void>;
+}
+
+function SentVideo({ image }: { image: ImageRef }) {
+  const caption = pictureCaption(image);
+  const player = useRef<HTMLVideoElement & SoundControls>(null);
+  const [muted, setMuted] = useState(true);
+  const [failed, setFailed] = useState(false);
+  if (failed) return <NamedPicture name={image.name ?? caption} title="This video can’t play here" video />;
+  const toggleSound = () => {
+    const video = player.current;
+    if (video === null) return;
+    video.muted = !video.muted;
+    setMuted(video.muted);
+    void video.play().catch(() => undefined);
+  };
+  return <button type="button" className="picture picture-video" title={caption} aria-pressed={!muted} aria-label={`${muted ? "Turn on the sound of" : "Turn off the sound of"} ${caption}`} onClick={toggleSound}>
+    <video ref={player} src={pictureUrl(image.path)} poster={mediaSource(image.data)} autoPlay loop muted={muted} playsInline preload="metadata" onError={() => setFailed(true)} />
+    <span className="picture-sound"><Icon name={muted ? "soundOff" : "soundOn"} size={14} /></span>
+  </button>;
+}
+
 export function SentPicture({ image, open }: { image: ImageRef; open: OpenPicture }) {
+  if (isVideoFile(image.path)) return <SentVideo image={image} />;
   const caption = pictureCaption(image);
   const source = mediaSource(image.data);
   return <button type="button" className="picture" onClick={() => open(pictureUrl(image.path), image.name ?? caption)} aria-label={`Open ${caption}`}>
@@ -45,8 +70,8 @@ export function FullPicture({ source, caption }: { source: string; caption: stri
   </div>;
 }
 
-function NamedPicture({ name, title }: { name: string; title: string }) {
-  return <span className="picture-name" title={title}><Icon name="image" size={14} /><span>{name}</span></span>;
+function NamedPicture({ name, title, video = false }: { name: string; title: string; video?: boolean }) {
+  return <span className="picture-name" title={title}><Icon name={video ? "video" : "image"} size={14} /><span>{name}</span></span>;
 }
 
 export function EmbeddedPicture({ embed }: { embed: Embed }): ReactNode {
@@ -55,9 +80,10 @@ export function EmbeddedPicture({ embed }: { embed: Embed }): ReactNode {
   const image = sentFor(pictures.images, embed);
   const name = embed.label ?? embedName(embed);
   if (image === undefined || !isSentPicture(image)) {
-    const why = image?.problem ?? (pictures.live ? "Sending…" : "This picture was not sent");
-    return <NamedPicture name={name} title={why} />;
+    const video = isVideoFile(embedName(embed));
+    const why = image?.problem ?? (pictures.live ? "Sending…" : video ? "This video was not sent" : "This picture was not sent");
+    return <NamedPicture name={name} title={why} video={video} />;
   }
-  if (!pictures.shown) return <NamedPicture name={image.name ?? name} title={pictureCaption(image)} />;
+  if (!pictures.shown) return <NamedPicture name={image.name ?? name} title={pictureCaption(image)} video={isVideoFile(image.path)} />;
   return <SentPicture image={image} open={pictures.open} />;
 }

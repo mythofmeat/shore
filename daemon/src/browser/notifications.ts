@@ -114,7 +114,7 @@ export class Notifier {
     const message = update.message;
     if (message.type === "new_message") {
       if (message.role !== "assistant" || message.origin === "user_input" || message.content.trim() === "") return;
-      const picture = message.images.find((image) => typeof image.embed === "string" && (image.problem === undefined || image.problem === null) && image.path !== "");
+      const picture = message.images.find((image) => typeof image.embed === "string" && (image.problem === undefined || image.problem === null) && typeof image.data === "string");
       this.#alert(message.character ?? selection.character, message.thread ?? selection.thread, pictureText(message.content, message.images), mediaSource(picture?.data));
     } else if (message.type === "error") this.#alert(selection.character, selection.thread, message.message);
   }

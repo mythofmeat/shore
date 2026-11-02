@@ -330,11 +330,12 @@ pub(crate) fn print_image_refs(refs: &[ImageRef]) {
         .iter()
         .filter(|img| img.problem.is_none() && !img.path.is_empty())
     {
-        terminal_images::render_image(
-            &img.path,
-            img.caption.as_deref().or(img.name.as_deref()),
-            img.data.as_deref(),
-        );
+        let label = img.caption.as_deref().or(img.name.as_deref());
+        if img.is_video() {
+            cli_out!("[video: {}]", label.unwrap_or(&img.path));
+            continue;
+        }
+        terminal_images::render_image(&img.path, label, img.data.as_deref());
     }
 }
 
