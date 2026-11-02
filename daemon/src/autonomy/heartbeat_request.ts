@@ -18,7 +18,7 @@ import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
 import { readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { hostZone } from "../ledger/zoned.ts";
-import { buildRequestWithProviderKeys, parseDurationMs } from "../llm/request.ts";
+import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -29,11 +29,6 @@ import type { RebuildDeps } from "../cache/rebuild.ts";
 
 const SECONDS_PER_MINUTE = 60n;
 const SECONDS_PER_HOUR = 3600n;
-const DEFAULT_CACHE_TTL_MS = 3_600_000;
-
-function cacheTtlMs(model: ResolvedModel): number {
-  return (model.cacheTtl === undefined ? undefined : parseDurationMs(model.cacheTtl)) ?? DEFAULT_CACHE_TTL_MS;
-}
 
 export function fallbackIntervalPhrase(secs: bigint): string {
   if (secs >= SECONDS_PER_HOUR && secs % SECONDS_PER_HOUR === 0n) {
@@ -167,7 +162,6 @@ export interface PrepareHeartbeatDeps {
 export interface HeartbeatConversation {
   thread: string;
   home: string;
-  history: HomeReader;
   homeThread: HomeReader;
 }
 
@@ -192,7 +186,7 @@ export async function prepareHeartbeatRequest(
     configView(config),
     character,
     (v, c, n, h) => findEffectiveModel(v, c, n, h),
-    await threadChatModel(config.dirs.data, character, thread),
+    await threadChatModel(config.dirs.data, character, home),
   );
   if (resolved === undefined) {
     shoreLog.info(`shore: heartbeat skipping tick for ${character} (no chat model resolves)`);
@@ -203,18 +197,13 @@ export async function prepareHeartbeatRequest(
   const timeZone = deps.timeZone ?? hostZone();
   const userName = resolveDisplayName(config.app.defaults, deps.env);
   const characterDir = characterDataDir(config.dirs.data, character);
-  const history = conversation.history.messages();
-  const archived = conversation.history.segments().segmentCount();
-  const since = history.length === 0 && archived === 0 ? undefined : readHomeThrough(characterDir);
+  const since = readHomeThrough(characterDir);
   const configured = heartbeatModel(config, character);
   const maxToolIterations = (configured ?? resolved).maxToolIterations;
-  const lastAt = Date.parse(history.at(-1)?.timestamp ?? "");
-  if (!Number.isNaN(lastAt) && nowMs - lastAt >= cacheTtlMs(configured ?? resolved)) {
-    try {
-      await applyDeferredEdits(characterDir, characterWorkspace(config, character), thread);
-    } catch (e) {
-      shoreLog.warn(`shore: could not refresh the heartbeat thread's prompt files for ${character} after a pause: ${String(e)}`);
-    }
+  try {
+    await applyDeferredEdits(characterDir, characterWorkspace(config, character), thread);
+  } catch (e) {
+    shoreLog.warn(`shore: could not refresh the heartbeat thread's prompt files for ${character}: ${String(e)}`);
   }
   const template =
     resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
@@ -243,11 +232,11 @@ export async function prepareHeartbeatRequest(
   });
   const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
   const instructions = note("system", [cutOff, wrote, rendered].filter((part) => part !== undefined).join("\n\n"));
-  const messages = [...history, opener, instructions];
+  const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
   try {
-    built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, messages, archived > 0, {
+    built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, messages, false, {
       mcpToolDefs: deps.rebuild.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools)),
       thread,
       activeConversation: true,

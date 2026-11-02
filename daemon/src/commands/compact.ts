@@ -181,7 +181,7 @@ export function compactionError(e: unknown): CommandError {
   if (e instanceof CommandError) return e;
   if (e instanceof CompactionError) {
     if (e.kind === "busy") return new CommandError("busy", e.message);
-    if (e.kind === "insufficient_messages") return invalidRequest(e.message);
+    if (e.kind === "insufficient_messages" || e.kind === "heartbeat_thread") return invalidRequest(e.message);
     if (e.kind === "not_found") return notFound(e.message);
     return internalError(e.message);
   }

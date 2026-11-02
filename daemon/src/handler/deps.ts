@@ -137,6 +137,9 @@ export function turnAutonomy(
     onUserActivityElsewhere: (character) => {
       bridge.onUserActivityElsewhere(character);
     },
+    onReplyElsewhere: (character) => {
+      bridge.onReplyElsewhere(character);
+    },
     shouldCompactNow: (character, turnCount, contextTokens, crowded) =>
       bridge.shouldCompactNow(character, turnCount, contextTokens, crowded),
     onCompactionComplete: (character, retained) => {

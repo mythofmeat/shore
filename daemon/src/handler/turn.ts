@@ -44,6 +44,7 @@ export interface TurnAutonomy {
   backfillActivity(character: string, timestamps: readonly Date[]): void;
   onUserMessage(character: string, turnCount: number): void;
   onUserActivityElsewhere?(character: string): void;
+  onReplyElsewhere?(character: string): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded?: boolean): boolean;
   onCompactionComplete(character: string, retained: number): void;
   onCompactionFailed(character: string, retryAt?: number): void;

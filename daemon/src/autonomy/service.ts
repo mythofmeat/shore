@@ -241,6 +241,10 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.onAssistantMessage(turnCount, this.#now());
   }
 
+  onReplyElsewhere(character: string): void {
+    this.#entries.get(character)?.runner.onReplyElsewhere(this.#now());
+  }
+
   onCompactionComplete(character: string, turnCount: number): void {
     this.#entries.get(character)?.runner.onCompactionComplete(turnCount, this.#now());
   }

@@ -8,6 +8,7 @@ export interface HeartbeatClockConfig {
   maxSilentMs: number;
   minIntervalMs: number;
   maxIntervalMs: number;
+  deferOnActivity?: boolean;
 }
 
 export interface HeartbeatSnapshot {
@@ -162,11 +163,24 @@ export class HeartbeatClock {
     this.#forcedDormant = false;
     this.#ticksWithoutUser = 0;
     this.#lastUserAt = now;
-    if (!returning || this.#nextWakeAt !== undefined) return;
-    this.#nextWakeAt = now + this.#bounded(this.#config.defaultIntervalMs);
+    if (returning && this.#nextWakeAt === undefined) {
+      this.#nextWakeAt = now + this.#bounded(this.#config.defaultIntervalMs);
+      this.#lastAnchor = now;
+      this.#defaultWake = true;
+      this.#defaultFloor = undefined;
+    }
+    this.onActivity(now);
+  }
+
+  onActivity(now: number): void {
+    if (this.#config.deferOnActivity !== true) return;
+    const floor = now + this.#config.minIntervalMs;
+    const due = this.#nextWakeAt ??
+      (this.#isAbandoned(now) ? undefined : this.#lastAnchor + this.#bounded(this.#config.defaultIntervalMs));
+    if (due === undefined || due >= floor) return;
+    this.#nextWakeAt = floor;
     this.#lastAnchor = now;
-    this.#defaultWake = true;
-    this.#defaultFloor = undefined;
+    this.#defaultWake = false;
   }
 
   boundWake(now: number): void {

@@ -1,6 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
-import { homeThreadOf, readThreadsIndex, threadRecord } from "../engine/threads.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { shoreLog } from "../log.ts";
 
@@ -29,11 +29,11 @@ import { imageTierForModel } from "../llm/image_tokens.ts";
 import { truncateSummary, type NotificationPicture } from "../notifications.ts";
 import { pictureText } from "../engine/embeds.ts";
 import { firstSentPicture, pictureProblems, sendPictures, type PictureSender } from "../handler/pictures.ts";
-import { archiveTrimmedTurns, maybeCompact, threadShouldCompact, type CompactionRunner } from "../handler/turn.ts";
+import { archiveTrimmedTurns, type CompactionRunner } from "../handler/turn.ts";
 import { canArchiveTurns } from "../memory/compaction/plan.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import type { CallBlock } from "../ledger/budget.ts";
-import type { SidecarRequest, Usage } from "../llm/types.ts";
+import type { SidecarRequest } from "../llm/types.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
 
 export interface HeartbeatEngine extends HomeReader {
@@ -221,44 +221,19 @@ function roundMessage(round: HeartbeatRound, request: SidecarRequest, deps: Pick
   };
 }
 
-function contextTokensOf(usage: Usage | undefined): number {
-  return usage === undefined ? 0 : usage.input_tokens + usage.cache_read_tokens + usage.cache_creation_tokens;
-}
+const HEARTBEATS_KEPT_ON_TRIM = 1;
 
-async function tidyHeartbeatThread(
+async function trimHeartbeatThread(
   character: string,
   config: LoadedConfig,
   engine: HeartbeatEngine,
   prepared: PreparedHeartbeat,
-  usage: Usage | undefined,
   runner: CompactionRunner,
 ): Promise<void> {
-  const compaction = config.app.memory.compaction;
   const active = engine.messages();
-  const crowded = nearMessageBudget(active, prepared.messageBudget, imageTierForModel(prepared.modelId)) &&
-    canArchiveTurns(active, compaction.keep_recent_turns);
-  const index = await readThreadsIndex(config.dirs.data, character);
-  const record = index === undefined ? undefined : threadRecord(index, engine.thread);
-  if (record?.compaction === false) {
-    if (crowded) await archiveTrimmedTurns(config.dirs.data, engine, character, characterWorkspace(config, character), compaction.keep_recent_turns, () => new Date().toISOString(), runner);
-    return;
-  }
-  await maybeCompact(
-    {
-      autonomy: {
-        shouldCompactNow: (_character, turns, tokens, full) => threadShouldCompact(config, turns, tokens, full === true),
-        onCompactionComplete: () => {},
-        onCompactionFailed: () => {},
-      },
-    },
-    engine,
-    character,
-    config,
-    config.dirs.data,
-    contextTokensOf(usage),
-    runner,
-    crowded,
-  );
+  if (!nearMessageBudget(active, prepared.messageBudget, imageTierForModel(prepared.modelId))) return;
+  if (!canArchiveTurns(active, HEARTBEATS_KEPT_ON_TRIM)) return;
+  await archiveTrimmedTurns(config.dirs.data, engine, character, characterWorkspace(config, character), HEARTBEATS_KEPT_ON_TRIM, () => new Date().toISOString(), runner);
 }
 
 export async function runHeartbeatTick(
@@ -291,7 +266,7 @@ export async function runHeartbeatTick(
     const prepared = await prepareHeartbeatRequest(
       character,
       config,
-      { thread, home: home.thread, history: engine, homeThread: home },
+      { thread, home: home.thread, homeThread: home },
       { ...deps, ...(cutOff === undefined ? {} : { cutOff }) },
     );
     if (prepared === undefined) return { events };
@@ -347,9 +322,9 @@ export async function runHeartbeatTick(
 
     if (deps.compaction !== undefined) {
       try {
-        await tidyHeartbeatThread(character, config, engine, prepared, loop.usage, deps.compaction);
+        await trimHeartbeatThread(character, config, engine, prepared, deps.compaction);
       } catch (error) {
-        shoreLog.warn(`shore: could not compact the heartbeat thread for ${character}: ${String(error)}`);
+        shoreLog.warn(`shore: could not trim the heartbeat thread for ${character}: ${String(error)}`);
       }
     }
 

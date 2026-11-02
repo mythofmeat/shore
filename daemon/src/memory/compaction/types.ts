@@ -126,7 +126,8 @@ export type CompactionErrorKind =
   | "conversation"
   | "markdown_store"
   | "not_found"
-  | "busy";
+  | "busy"
+  | "heartbeat_thread";
 
 export class CompactionError extends Error {
   readonly kind: CompactionErrorKind;
@@ -155,6 +156,13 @@ export class CompactionError extends Error {
 
   static busy(character: string): CompactionError {
     return new CompactionError("busy", `Compaction already running for ${character}`);
+  }
+
+  static heartbeatThread(character: string, thread: string): CompactionError {
+    return new CompactionError(
+      "heartbeat_thread",
+      `"${thread}" is where ${character}'s heartbeats run. It only keeps a log of them, so it is never compacted`,
+    );
   }
 }
 

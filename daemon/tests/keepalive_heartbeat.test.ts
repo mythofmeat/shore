@@ -117,8 +117,6 @@ async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Pro
   }
 }
 
-const ANTHROPIC_LOOKBACK_BLOCKS = 20;
-
 function wireBlocks(messages: readonly { role: string; content: unknown }[]): { block: unknown; marked: boolean }[] {
   return messages.flatMap((message) =>
     (Array.isArray(message.content) ? message.content : [{ type: "text", text: message.content }]).map((block) => {
@@ -132,30 +130,21 @@ function wireOf(seen: SidecarRequest[], callType: string) {
   return buildAnthropicPlan(structuredClone(required(seen.find((request) => request.context?.call_type === callType)))).params;
 }
 
-test("a heartbeat repeats the last heartbeat's whole exchange on the wire, so it can read that heartbeat's cache", async () => {
+test("a heartbeat starts from a fresh context: none of the last heartbeat's exchange is on its wire, under the same tools and system prompt", async () => {
   await afterOneChat(CHAT_PREFIX_TOKENS, async ({ seen, heartbeatAt }) => {
     await heartbeatAt(20);
     await heartbeatAt(50);
     const opening = seen.filter((request) => request.context?.call_type === "heartbeat");
-    const closing = seen.filter((request) => request.context?.call_type === "heartbeat_tool_loop");
     expect(opening).toHaveLength(2);
-    expect(closing).toHaveLength(2);
     const chat = wireOf(seen, "message");
-    const last = buildAnthropicPlan(structuredClone(required(closing[0]))).params;
+    const first = buildAnthropicPlan(structuredClone(required(opening[0]))).params;
     const next = buildAnthropicPlan(structuredClone(required(opening[1]))).params;
     expect(next.tools).toEqual(chat.tools);
-    expect(wireBlocks([{ role: "system", content: next.system }])).toEqual(wireBlocks([{ role: "system", content: last.system }]));
+    expect(wireBlocks([{ role: "system", content: next.system }])).toEqual(wireBlocks([{ role: "system", content: first.system }]));
+    expect(next.messages.map((message) => message.role)).toEqual(first.messages.map((message) => message.role));
 
-    const sent = wireBlocks(last.messages);
-    const replayed = wireBlocks(next.messages);
-    expect(replayed.slice(0, sent.length + 1).map((entry) => entry.block)).toEqual([
-      ...sent.map((entry) => entry.block),
-      { role: "assistant", type: "text", text: "HEARTBEAT_OK" },
-    ]);
-
-    const sentMark = sent.findLastIndex((entry) => entry.marked);
-    expect(sentMark).toBeGreaterThanOrEqual(0);
-    const marks = replayed.flatMap((entry, at) => (entry.marked ? [at] : []));
-    expect(marks.some((at) => at >= sentMark && at - sentMark < ANTHROPIC_LOOKBACK_BLOCKS)).toBe(true);
+    const sent = wireBlocks(next.messages).map((entry) => entry.block as { type?: string; text?: string });
+    expect(sent.filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
+    expect(sent.some((block) => block.text === "HEARTBEAT_OK")).toBe(false);
   });
 });

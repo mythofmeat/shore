@@ -33,6 +33,7 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
     dormant_after_heartbeat_turns: "max_idle_turns",
     dormant_after_idle_time: "idle_timeout",
     wrap_up_grace_rounds: "max_wrap_up_rounds",
+    defer_on_activity: "defer_on_activity",
   }).map(([old, key]) => field(`behavior.autonomy.heartbeat.${old}`, `heartbeat.${key}`)),
   ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
   field("memory.compaction.idle_trigger", "compaction.idle_after"),
