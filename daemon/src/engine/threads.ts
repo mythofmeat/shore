@@ -174,43 +174,66 @@ function archivedUserTurnAt(data: string, character: string, id: string): number
   }
 }
 
-export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
+interface ActiveScan {
+  turns: number;
+  latest: number;
+  latestUser: number;
+  replies: { at: number; time: number }[];
+}
+
+function scanActive(lines: readonly unknown[]): ActiveScan {
+  const scan: ActiveScan = { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [] };
+  let heartbeatTurn = false;
+  for (const [at, line] of lines.entries()) {
+    const time = messageTime(line);
+    if (isUserTurnLine(line)) {
+      scan.turns += 1;
+      heartbeatTurn = isHeartbeatOpener(line as Message);
+      if (time > scan.latestUser && !heartbeatTurn) scan.latestUser = time;
+    }
+    if (isReplyLine(line) && !heartbeatTurn) scan.replies.push({ at, time });
+    if (time > scan.latest) scan.latest = time;
+  }
+  return scan;
+}
+
+function unreadReplies(scan: ActiveScan, mark: number | undefined): number[] {
+  if (mark === undefined) return [];
+  const seen = Math.max(mark, scan.latestUser);
+  return scan.replies.filter((reply) => reply.time > seen).map((reply) => reply.at);
+}
+
+export function firstUnreadReply(data: string, character: string, id: string, messages: readonly Message[]): number | undefined {
+  return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0];
+}
+
+function activeLines(data: string, character: string, id: string): unknown[] {
   let raw: string;
   try {
     raw = readDurable(threadFile(data, character, id, "active.jsonl"));
   } catch {
     raw = "";
   }
-  let turns = 0;
-  let latest = -Infinity;
-  let latestUser = -Infinity;
-  let heartbeatTurn = false;
-  const replies: number[] = [];
+  const lines: unknown[] = [];
   for (const line of raw.split("\n")) {
     if (line.trim() === "") continue;
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(line);
+      lines.push(JSON.parse(line));
     } catch {
       continue;
     }
-    const time = messageTime(parsed);
-    if (isUserTurnLine(parsed)) {
-      turns += 1;
-      heartbeatTurn = isHeartbeatOpener(parsed as Message);
-      if (time > latestUser && !heartbeatTurn) latestUser = time;
-    }
-    if (isReplyLine(parsed) && !heartbeatTurn) replies.push(time);
-    if (time > latest) latest = time;
   }
-  const mark = threadReadMark(data, character, id);
-  const seen = mark === undefined ? Infinity : Math.max(mark, latestUser);
-  const lastUser = latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : latestUser;
+  return lines;
+}
+
+export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
+  const scan = scanActive(activeLines(data, character, id));
+  const lastUser = scan.latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : scan.latestUser;
   return {
-    turns,
-    ...(latest === -Infinity ? {} : { last_active: new Date(latest).toISOString() }),
+    turns: scan.turns,
+    ...(scan.latest === -Infinity ? {} : { last_active: new Date(scan.latest).toISOString() }),
     ...(Number.isNaN(lastUser) ? {} : { last_user: new Date(lastUser).toISOString() }),
-    unread: replies.filter((time) => time > seen).length,
+    unread: unreadReplies(scan, threadReadMark(data, character, id)).length,
   };
 }
 

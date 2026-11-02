@@ -6,13 +6,14 @@ import { shoreLog } from "../log.ts";
 import { join } from "node:path";
 
 import { archiveKey, threadDataDir } from "../config/dirs.ts";
-import { homeThreadOf } from "../engine/threads.ts";
+import { firstUnreadReply, homeThreadOf } from "../engine/threads.ts";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
+import { archiveSplitIndex, conversationView } from "../memory/compaction/plan.ts";
 import { effectiveConfig, runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
@@ -27,15 +28,10 @@ export type DeepArchivePlan =
 export function deepArchivePlan(
   messages: readonly Message[],
   coveredTurnCount: number,
+  firstUnread?: number,
 ): DeepArchivePlan {
-  let tail = 0;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i];
-    if (m === undefined || m.role !== "assistant" || m.origin !== "autonomous") break;
-    tail += 1;
-  }
-
-  const archivable = Math.max(messages.length - tail, 0);
+  const archivable = archiveSplitIndex(conversationView(messages), 0, true, firstUnread);
+  const tail = messages.length - archivable;
   if (archivable === 0) return { arm: "quiesce", tail };
 
   const userTurns = messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;
@@ -85,7 +81,8 @@ export async function runDeepIdleArchive(
       };
     }
 
-    const plan = deepArchivePlan(loaded.store.messages(), coveredTurnCount);
+    const messages = loaded.store.messages();
+    const plan = deepArchivePlan(messages, coveredTurnCount, firstUnreadReply(dataDir, character, thread, messages));
 
     if (plan.arm === "quiesce") {
       shoreLog.debug(
